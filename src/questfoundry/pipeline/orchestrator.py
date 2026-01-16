@@ -21,7 +21,10 @@ from questfoundry.graph import (
 from questfoundry.graph.mutations import SeedMutationError
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import generate_run_id, set_pipeline_run_id
-from questfoundry.pipeline.config import ProjectConfigError, load_project_config
+from questfoundry.pipeline.config import (
+    ProjectConfigError,
+    load_project_config,
+)
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
 from questfoundry.providers.base import ProviderError
 from questfoundry.providers.factory import create_chat_model, get_default_model
@@ -138,13 +141,20 @@ class PipelineOrchestrator:
         self._writer = ArtifactWriter(project_path)
         self._validator = ArtifactValidator()
 
-        # Chat model will be lazily initialized
-        self._chat_model: BaseChatModel | None = None
-        self._provider_name: str | None = None
-        self._model_name: str | None = None
+        # Chat models will be lazily initialized (one per phase for hybrid support)
+        self._chat_model: BaseChatModel | None = None  # Default/discuss model
+        self._summarize_model: BaseChatModel | None = None
+        self._serialize_model: BaseChatModel | None = None
+
+        # Provider/model names for each phase
+        self._provider_name: str | None = None  # Discuss phase provider
+        self._model_name: str | None = None  # Discuss phase model
+        self._summarize_provider_name: str | None = None
+        self._summarize_model_name: str | None = None
+        self._serialize_provider_name: str | None = None
+        self._serialize_model_name: str | None = None
 
         # Model info (set when model is created)
-
         self._model_info: ModelInfo | None = None
 
         # LLM logger and callbacks (enabled via --log flag)
@@ -153,8 +163,53 @@ class PipelineOrchestrator:
         self._llm_logger = LLMLogger(project_path, enabled=enable_llm_logging)
         self._callbacks: list[BaseCallbackHandler] | None = None  # Set when model is created
 
+    def _parse_provider_string(self, provider_string: str) -> tuple[str, str]:
+        """Parse a provider string into (provider_name, model) tuple.
+
+        Args:
+            provider_string: Provider string like "ollama/qwen3:8b" or "openai".
+
+        Returns:
+            Tuple of (provider_name, model_name).
+
+        Raises:
+            ProviderError: If provider requires explicit model but none given.
+        """
+        if "/" in provider_string:
+            provider_name, model = provider_string.split("/", 1)
+        else:
+            provider_name = provider_string
+            default_model = get_default_model(provider_name)
+            if default_model is None:
+                raise ProviderError(
+                    provider_name,
+                    f"Provider '{provider_name}' requires explicit model. "
+                    f"Use --provider {provider_name}/<model-name>",
+                )
+            model = default_model
+        return provider_name, model
+
+    def _create_model_for_provider(self, provider_string: str) -> tuple[BaseChatModel, str, str]:
+        """Create a chat model from a provider string.
+
+        Args:
+            provider_string: Provider string like "ollama/qwen3:8b".
+
+        Returns:
+            Tuple of (chat_model, provider_name, model_name).
+        """
+        provider_name, model = self._parse_provider_string(provider_string)
+
+        chat_model = create_chat_model(provider_name, model)
+
+        # Add callbacks for logging if enabled
+        if self._callbacks:
+            chat_model = chat_model.with_config(callbacks=self._callbacks)  # type: ignore[assignment]
+
+        return chat_model, provider_name, model
+
     def _get_chat_model(self) -> BaseChatModel:
-        """Get or create the LangChain chat model.
+        """Get or create the LangChain chat model for discuss phase.
 
         Provider resolution order (highest priority first):
         1. CLI --provider flag (provider_override)
@@ -168,58 +223,127 @@ class PipelineOrchestrator:
         if self._chat_model is not None:
             return self._chat_model
 
-        # Determine provider string from override, env, or config
-        provider_string = (
-            self._provider_override
-            or os.environ.get("QF_PROVIDER")
-            or f"{self.config.provider.name}/{self.config.provider.model}"
-        )
-
-        if "/" in provider_string:
-            provider_name, model = provider_string.split("/", 1)
-        else:
-            provider_name = provider_string
-            default_model = get_default_model(provider_name)
-            if default_model is None:
-                raise ProviderError(
-                    provider_name,
-                    f"Provider '{provider_name}' requires explicit model. "
-                    f"Use --provider {provider_name}/<model-name>",
-                )
-            model = default_model
-
-        self._provider_name = provider_name
-        self._model_name = model
-
-        # If logging enabled, configure LangChain callbacks
-        callbacks = None
-        if self._enable_llm_logging:
+        # Initialize callbacks first (only once)
+        if self._callbacks is None and self._enable_llm_logging:
             from questfoundry.observability.langchain_callbacks import (
                 create_logging_callbacks,
             )
 
-            callbacks = create_logging_callbacks(self._llm_logger)
+            self._callbacks = create_logging_callbacks(self._llm_logger)
 
-        chat_model = create_chat_model(provider_name, model)
+        # Determine provider string from override, env, or config
+        provider_string = (
+            self._provider_override
+            or os.environ.get("QF_PROVIDER")
+            or self.config.providers.get_discuss_provider()
+        )
+
+        chat_model, provider_name, model = self._create_model_for_provider(provider_string)
+
+        self._provider_name = provider_name
+        self._model_name = model
 
         # Store model info for context budget awareness
         self._model_info = get_model_info(provider_name, model)
 
-        # Store callbacks for explicit passing to phases (agents, structured output)
-        # Note: with_config() binding doesn't propagate through create_agent() or
-        # with_structured_output() wrappers, so we pass callbacks explicitly via
-        # RunnableConfig to all ainvoke() calls in phases.
-        self._callbacks = callbacks
-
-        # Add callbacks to the model for direct model calls
-        if callbacks:
-            # with_config returns RunnableBinding which wraps the chat model.
-            # It preserves all BaseChatModel functionality (invoke, ainvoke, etc.)
-            # but static type is Runnable. Runtime behavior is correct.
-            chat_model = chat_model.with_config(callbacks=callbacks)  # type: ignore[assignment]
-
         self._chat_model = chat_model
         return self._chat_model
+
+    def _get_summarize_model(self) -> BaseChatModel:
+        """Get or create the LangChain chat model for summarize phase.
+
+        Uses the summarize-specific provider if configured, otherwise falls
+        back to the discuss model.
+
+        Returns:
+            Configured BaseChatModel for summarize phase.
+        """
+        # Check if a different summarize provider is configured
+        summarize_provider = self.config.providers.get_summarize_provider()
+        discuss_provider = (
+            self._provider_override
+            or os.environ.get("QF_PROVIDER")
+            or self.config.providers.get_discuss_provider()
+        )
+
+        # If same as discuss provider, reuse discuss model
+        if summarize_provider == discuss_provider:
+            return self._get_chat_model()
+
+        # Create/return cached summarize model
+        if self._summarize_model is not None:
+            return self._summarize_model
+
+        # Initialize callbacks first (only once)
+        if self._callbacks is None and self._enable_llm_logging:
+            from questfoundry.observability.langchain_callbacks import (
+                create_logging_callbacks,
+            )
+
+            self._callbacks = create_logging_callbacks(self._llm_logger)
+
+        chat_model, provider_name, model = self._create_model_for_provider(summarize_provider)
+
+        self._summarize_provider_name = provider_name
+        self._summarize_model_name = model
+        self._summarize_model = chat_model
+
+        log.info(
+            "hybrid_model_created",
+            phase="summarize",
+            provider=provider_name,
+            model=model,
+        )
+
+        return self._summarize_model
+
+    def _get_serialize_model(self) -> BaseChatModel:
+        """Get or create the LangChain chat model for serialize phase.
+
+        Uses the serialize-specific provider if configured, otherwise falls
+        back to the discuss model.
+
+        Returns:
+            Configured BaseChatModel for serialize phase.
+        """
+        # Check if a different serialize provider is configured
+        serialize_provider = self.config.providers.get_serialize_provider()
+        discuss_provider = (
+            self._provider_override
+            or os.environ.get("QF_PROVIDER")
+            or self.config.providers.get_discuss_provider()
+        )
+
+        # If same as discuss provider, reuse discuss model
+        if serialize_provider == discuss_provider:
+            return self._get_chat_model()
+
+        # Create/return cached serialize model
+        if self._serialize_model is not None:
+            return self._serialize_model
+
+        # Initialize callbacks first (only once)
+        if self._callbacks is None and self._enable_llm_logging:
+            from questfoundry.observability.langchain_callbacks import (
+                create_logging_callbacks,
+            )
+
+            self._callbacks = create_logging_callbacks(self._llm_logger)
+
+        chat_model, provider_name, model = self._create_model_for_provider(serialize_provider)
+
+        self._serialize_provider_name = provider_name
+        self._serialize_model_name = model
+        self._serialize_model = chat_model
+
+        log.info(
+            "hybrid_model_created",
+            phase="serialize",
+            provider=provider_name,
+            model=model,
+        )
+
+        return self._serialize_model
 
     @property
     def model_info(self) -> ModelInfo | None:
@@ -288,8 +412,10 @@ class PipelineOrchestrator:
                     "Pass context={'user_prompt': 'your prompt here'} to run_stage()",
                 )
 
-            # Get chat model (with LangChain callbacks for logging if enabled)
+            # Get chat models for each phase (with LangChain callbacks for logging if enabled)
             model = self._get_chat_model()
+            summarize_model = self._get_summarize_model()
+            serialize_model = self._get_serialize_model()
             if self._enable_llm_logging:
                 log.debug("llm_logging_enabled", stage=stage_name)
 
@@ -314,6 +440,11 @@ class PipelineOrchestrator:
                 on_llm_end=on_llm_end,
                 project_path=self.project_path,
                 callbacks=self._callbacks,
+                # Hybrid model support: pass phase-specific models
+                summarize_model=summarize_model,
+                serialize_model=serialize_model,
+                summarize_provider_name=self._summarize_provider_name,
+                serialize_provider_name=self._serialize_provider_name,
             )
 
             # Validate artifact

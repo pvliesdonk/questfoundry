@@ -21,6 +21,8 @@ class Stage(Protocol):
     - Discuss: Explore with research tools
     - Summarize: Condense discussion into brief
     - Serialize: Convert brief to structured artifact
+
+    Each phase can optionally use a different LLM provider (hybrid model support).
     """
 
     name: str
@@ -36,18 +38,26 @@ class Stage(Protocol):
         on_assistant_message: AssistantMessageFn | None = None,
         on_llm_start: LLMCallbackFn | None = None,
         on_llm_end: LLMCallbackFn | None = None,
+        summarize_model: BaseChatModel | None = None,
+        serialize_model: BaseChatModel | None = None,
+        summarize_provider_name: str | None = None,
+        serialize_provider_name: str | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the stage.
 
         Args:
-            model: LangChain chat model for all phases.
+            model: LangChain chat model for discuss phase (and default for others).
             user_prompt: The user's creative input.
-            provider_name: Provider name for structured output strategy.
+            provider_name: Provider name for discuss phase (and default for others).
             interactive: Enable interactive multi-turn discussion mode.
             user_input_fn: Async function to get user input (for interactive mode).
             on_assistant_message: Callback when assistant responds.
             on_llm_start: Callback when LLM call starts.
             on_llm_end: Callback when LLM call ends.
+            summarize_model: Optional LLM model for summarize phase (defaults to model).
+            serialize_model: Optional LLM model for serialize phase (defaults to model).
+            summarize_provider_name: Provider name for summarize phase.
+            serialize_provider_name: Provider name for serialize phase.
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).

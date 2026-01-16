@@ -67,13 +67,17 @@ class DreamStage:
         on_llm_end: LLMCallbackFn | None = None,
         project_path: Path | None = None,  # noqa: ARG002 - API consistency
         callbacks: list[BaseCallbackHandler] | None = None,
+        summarize_model: BaseChatModel | None = None,
+        serialize_model: BaseChatModel | None = None,
+        summarize_provider_name: str | None = None,  # noqa: ARG002 - for future use
+        serialize_provider_name: str | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the DREAM stage using the 3-phase pattern.
 
         Args:
-            model: LangChain chat model for all phases.
+            model: LangChain chat model for discuss phase (and default for others).
             user_prompt: The user's story idea.
-            provider_name: Provider name for structured output strategy selection.
+            provider_name: Provider name for discuss phase.
             interactive: Enable interactive multi-turn discussion mode.
             user_input_fn: Async function to get user input (for interactive mode).
             on_assistant_message: Callback when assistant responds.
@@ -81,6 +85,10 @@ class DreamStage:
             on_llm_end: Callback when LLM call ends.
             project_path: Path to project directory (unused by DREAM, for API consistency).
             callbacks: LangChain callback handlers for logging LLM calls.
+            summarize_model: Optional model for summarize phase (defaults to model).
+            serialize_model: Optional model for serialize phase (defaults to model).
+            summarize_provider_name: Provider name for summarize phase (for future use).
+            serialize_provider_name: Provider name for serialize phase.
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
@@ -122,23 +130,23 @@ class DreamStage:
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
-        # Phase 2: Summarize
+        # Phase 2: Summarize (use summarize_model if provided)
         log.debug("dream_phase", phase="summarize")
         brief, summarize_tokens = await summarize_discussion(
-            model=model,
+            model=summarize_model or model,
             messages=messages,
             callbacks=callbacks,
         )
         total_llm_calls += 1  # Summarize is a single call
         total_tokens += summarize_tokens
 
-        # Phase 3: Serialize
+        # Phase 3: Serialize (use serialize_model if provided)
         log.debug("dream_phase", phase="serialize")
         artifact, serialize_tokens = await serialize_to_artifact(
-            model=model,
+            model=serialize_model or model,
             brief=brief,
             schema=DreamArtifact,
-            provider_name=provider_name,
+            provider_name=serialize_provider_name or provider_name,
             callbacks=callbacks,
         )
         total_llm_calls += 1  # Count as 1 even with retries (simplification)
