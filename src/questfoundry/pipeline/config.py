@@ -31,11 +31,13 @@ class ProvidersConfig:
     LLM providers. Each phase (discuss, summarize, serialize) can optionally
     override the default provider.
 
-    Resolution order for each phase:
-    1. CLI flag (e.g., --provider-serialize)
-    2. Environment variable (e.g., QF_PROVIDER_SERIALIZE)
-    3. Project config (e.g., providers.serialize)
-    4. Default provider (from providers.default or QF_PROVIDER)
+    Resolution order for each phase (within this class):
+    1. Environment variable (e.g., QF_PROVIDER_SERIALIZE)
+    2. Project config (e.g., providers.serialize)
+    3. Default provider (from providers.default)
+
+    Note: CLI flags and QF_PROVIDER are handled by the orchestrator for
+    backward compatibility, not by this class.
 
     Attributes:
         default: Default provider string (e.g., "ollama/qwen3:8b"). Required.
@@ -178,7 +180,11 @@ class ProjectConfig:
         if "/" in default_provider:
             provider_name, model = default_provider.split("/", 1)
         else:
-            provider_name, model = default_provider, DEFAULT_MODEL
+            # Use provider-specific default model, not hardcoded DEFAULT_MODEL
+            from questfoundry.providers.factory import get_default_model
+
+            provider_name = default_provider
+            model = get_default_model(provider_name) or DEFAULT_MODEL
         provider = ProviderConfig(name=provider_name, model=model)
 
         # Parse stages
@@ -269,7 +275,11 @@ def create_default_config(
     if "/" in provider_string:
         provider_name, model = provider_string.split("/", 1)
     else:
-        provider_name, model = provider_string, DEFAULT_MODEL
+        # Use provider-specific default model, not hardcoded DEFAULT_MODEL
+        from questfoundry.providers.factory import get_default_model
+
+        provider_name = provider_string
+        model = get_default_model(provider_name) or DEFAULT_MODEL
 
     return ProjectConfig(
         name=name,

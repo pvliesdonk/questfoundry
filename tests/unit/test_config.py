@@ -183,7 +183,7 @@ class TestProjectConfigHybridProviders:
         assert config.providers.serialize == "openai/o1-mini"
 
     def test_from_dict_provider_without_model(self) -> None:
-        """Provider string without model uses default model."""
+        """Provider string without model uses provider-specific default model."""
         data = {
             "name": "test",
             "providers": {
@@ -192,8 +192,22 @@ class TestProjectConfigHybridProviders:
         }
         config = ProjectConfig.from_dict(data)
 
-        # Should use DEFAULT_MODEL
+        # Should use provider-specific default (gpt-4o for openai), not DEFAULT_MODEL
         assert config.provider.name == "openai"
+        assert config.provider.model == "gpt-4o"  # OpenAI's default model
+
+    def test_from_dict_unknown_provider_without_model_uses_default(self) -> None:
+        """Unknown provider without model falls back to DEFAULT_MODEL."""
+        data = {
+            "name": "test",
+            "providers": {
+                "default": "custom-llm",  # Unknown provider, no model
+            },
+        }
+        config = ProjectConfig.from_dict(data)
+
+        # Unknown providers fall back to DEFAULT_MODEL
+        assert config.provider.name == "custom-llm"
         assert config.provider.model == DEFAULT_MODEL
 
 
@@ -222,9 +236,19 @@ class TestCreateDefaultConfig:
         assert config.providers.default == "openai/gpt-4o"
 
     def test_create_default_config_provider_without_model(self) -> None:
-        """Create config with provider but no model uses default model."""
+        """Create config with provider but no model uses provider-specific default."""
         config = create_default_config("test-project", provider="anthropic")
 
+        # Should use provider-specific default (claude-sonnet-4), not DEFAULT_MODEL
         assert config.provider.name == "anthropic"
-        assert config.provider.model == DEFAULT_MODEL
+        assert config.provider.model == "claude-sonnet-4-20250514"  # Anthropic's default
         assert config.providers.default == "anthropic"
+
+    def test_create_default_config_unknown_provider_uses_default_model(self) -> None:
+        """Unknown provider without model falls back to DEFAULT_MODEL."""
+        config = create_default_config("test-project", provider="custom-provider")
+
+        # Unknown providers without a model fall back to DEFAULT_MODEL
+        assert config.provider.name == "custom-provider"
+        assert config.provider.model == DEFAULT_MODEL
+        assert config.providers.default == "custom-provider"
