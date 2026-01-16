@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path  # noqa: TC003 - used at runtime
 from typing import Any
@@ -16,10 +17,83 @@ DEFAULT_STAGES = ["dream", "brainstorm", "seed", "grow", "fill", "ship"]
 
 @dataclass
 class ProviderConfig:
-    """Configuration for LLM provider."""
+    """Configuration for LLM provider (legacy single-provider format)."""
 
     name: str = DEFAULT_PROVIDER
     model: str = DEFAULT_MODEL
+
+
+@dataclass
+class ProvidersConfig:
+    """Configuration for LLM providers with phase-specific overrides.
+
+    Supports hybrid model configurations where different phases use different
+    LLM providers. Each phase (discuss, summarize, serialize) can optionally
+    override the default provider.
+
+    Resolution order for each phase:
+    1. CLI flag (e.g., --provider-serialize)
+    2. Environment variable (e.g., QF_PROVIDER_SERIALIZE)
+    3. Project config (e.g., providers.serialize)
+    4. Default provider (from providers.default or QF_PROVIDER)
+
+    Attributes:
+        default: Default provider string (e.g., "ollama/qwen3:8b"). Required.
+        discuss: Optional provider override for the discuss phase.
+        summarize: Optional provider override for the summarize phase.
+        serialize: Optional provider override for the serialize phase.
+    """
+
+    default: str
+    discuss: str | None = None
+    summarize: str | None = None
+    serialize: str | None = None
+
+    def get_discuss_provider(self) -> str:
+        """Get the effective provider for the discuss phase.
+
+        Checks environment variable QF_PROVIDER_DISCUSS, then config,
+        then falls back to default.
+        """
+        return os.getenv("QF_PROVIDER_DISCUSS") or self.discuss or self.default
+
+    def get_summarize_provider(self) -> str:
+        """Get the effective provider for the summarize phase.
+
+        Checks environment variable QF_PROVIDER_SUMMARIZE, then config,
+        then falls back to default.
+        """
+        return os.getenv("QF_PROVIDER_SUMMARIZE") or self.summarize or self.default
+
+    def get_serialize_provider(self) -> str:
+        """Get the effective provider for the serialize phase.
+
+        Checks environment variable QF_PROVIDER_SERIALIZE, then config,
+        then falls back to default.
+        """
+        return os.getenv("QF_PROVIDER_SERIALIZE") or self.serialize or self.default
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> ProvidersConfig:
+        """Create config from dictionary.
+
+        Args:
+            data: Dictionary with provider configuration. Can have:
+                - default: Required default provider string
+                - discuss: Optional discuss phase provider
+                - summarize: Optional summarize phase provider
+                - serialize: Optional serialize phase provider
+
+        Returns:
+            ProvidersConfig instance.
+        """
+        default = data.get("default", f"{DEFAULT_PROVIDER}/{DEFAULT_MODEL}")
+        return cls(
+            default=default,
+            discuss=data.get("discuss"),
+            summarize=data.get("summarize"),
+            serialize=data.get("serialize"),
+        )
 
 
 @dataclass
@@ -78,6 +152,9 @@ class ProjectConfig:
     name: str
     version: int = 1
     provider: ProviderConfig = field(default_factory=ProviderConfig)
+    providers: ProvidersConfig = field(
+        default_factory=lambda: ProvidersConfig(default=f"{DEFAULT_PROVIDER}/{DEFAULT_MODEL}")
+    )
     stages: list[str] = field(default_factory=lambda: list(DEFAULT_STAGES))
     gates: list[GateConfig] = field(default_factory=list)
     research_tools: ResearchToolsConfig = field(default_factory=ResearchToolsConfig)
@@ -92,14 +169,16 @@ class ProjectConfig:
         Returns:
             ProjectConfig instance.
         """
-        # Parse provider
+        # Parse providers (new format with hybrid support)
         provider_data = data.get("providers", {})
-        default_provider = provider_data.get("default", f"{DEFAULT_PROVIDER}/{DEFAULT_MODEL}")
+        providers_config = ProvidersConfig.from_dict(provider_data)
+
+        # Also populate legacy provider field for backward compatibility
+        default_provider = providers_config.default
         if "/" in default_provider:
             provider_name, model = default_provider.split("/", 1)
         else:
             provider_name, model = default_provider, DEFAULT_MODEL
-
         provider = ProviderConfig(name=provider_name, model=model)
 
         # Parse stages
@@ -121,6 +200,7 @@ class ProjectConfig:
             name=data.get("name", "unnamed"),
             version=data.get("version", 1),
             provider=provider,
+            providers=providers_config,
             stages=stages,
             gates=gates,
             research_tools=research_tools,
@@ -168,13 +248,31 @@ def load_project_config(project_path: Path) -> ProjectConfig:
         raise ProjectConfigError(config_path, str(e)) from e
 
 
-def create_default_config(name: str) -> ProjectConfig:
+def create_default_config(
+    name: str,
+    provider: str | None = None,
+) -> ProjectConfig:
     """Create a default project configuration.
 
     Args:
         name: Project name.
+        provider: Optional default provider string (e.g., "ollama/qwen3:8b").
+            If not provided, uses the system default.
 
     Returns:
         ProjectConfig with default values.
     """
-    return ProjectConfig(name=name)
+    # Determine provider string
+    provider_string = provider or f"{DEFAULT_PROVIDER}/{DEFAULT_MODEL}"
+
+    # Parse into legacy ProviderConfig
+    if "/" in provider_string:
+        provider_name, model = provider_string.split("/", 1)
+    else:
+        provider_name, model = provider_string, DEFAULT_MODEL
+
+    return ProjectConfig(
+        name=name,
+        provider=ProviderConfig(name=provider_name, model=model),
+        providers=ProvidersConfig(default=provider_string),
+    )
