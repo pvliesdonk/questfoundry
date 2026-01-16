@@ -158,13 +158,17 @@ class BrainstormStage:
         on_llm_end: LLMCallbackFn | None = None,
         project_path: Path | None = None,
         callbacks: list[BaseCallbackHandler] | None = None,
+        summarize_model: BaseChatModel | None = None,
+        serialize_model: BaseChatModel | None = None,
+        summarize_provider_name: str | None = None,  # noqa: ARG002 - for future use
+        serialize_provider_name: str | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the BRAINSTORM stage using the 3-phase pattern.
 
         Args:
-            model: LangChain chat model for all phases.
+            model: LangChain chat model for discuss phase (and default for others).
             user_prompt: Additional guidance for brainstorming (optional).
-            provider_name: Provider name for structured output strategy selection.
+            provider_name: Provider name for discuss phase.
             interactive: Enable interactive multi-turn discussion mode.
             user_input_fn: Async function to get user input (for interactive mode).
             on_assistant_message: Callback when assistant responds.
@@ -172,6 +176,10 @@ class BrainstormStage:
             on_llm_end: Callback when LLM call ends.
             project_path: Override for project path (uses self.project_path if None).
             callbacks: LangChain callback handlers for logging LLM calls.
+            summarize_model: Optional model for summarize phase (defaults to model).
+            serialize_model: Optional model for serialize phase (defaults to model).
+            summarize_provider_name: Provider name for summarize phase (for future use).
+            serialize_provider_name: Provider name for serialize phase.
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
@@ -236,11 +244,11 @@ class BrainstormStage:
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
-        # Phase 2: Summarize
+        # Phase 2: Summarize (use summarize_model if provided)
         log.debug("brainstorm_phase", phase="summarize")
         summarize_prompt = get_brainstorm_summarize_prompt()
         brief, summarize_tokens = await summarize_discussion(
-            model=model,
+            model=summarize_model or model,
             messages=messages,
             system_prompt=summarize_prompt,
             stage_name="brainstorm",
@@ -249,14 +257,14 @@ class BrainstormStage:
         total_llm_calls += 1
         total_tokens += summarize_tokens
 
-        # Phase 3: Serialize (with semantic validation for internal consistency)
+        # Phase 3: Serialize (use serialize_model if provided)
         log.debug("brainstorm_phase", phase="serialize")
         serialize_prompt = get_brainstorm_serialize_prompt()
         artifact, serialize_tokens = await serialize_to_artifact(
-            model=model,
+            model=serialize_model or model,
             brief=brief,
             schema=BrainstormOutput,
-            provider_name=provider_name,
+            provider_name=serialize_provider_name or provider_name,
             system_prompt=serialize_prompt,
             callbacks=callbacks,
             semantic_validator=validate_brainstorm_mutations,
