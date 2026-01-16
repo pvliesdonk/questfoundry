@@ -16,7 +16,7 @@ Three models were tested on the full DREAM→BRAINSTORM→SEED pipeline using id
 | run-2-ni | gpt-4o | Dense | ~200B (est.) | OpenAI API |
 | run-3-ni | gpt-oss-20b | MoE | 3.6B | Ollama (local) |
 
-All runs used the same user prompt (classic murder mystery theme) and non-interactive mode (`-ni` flag).
+All runs used the same user prompt (classic murder mystery theme) and non-interactive mode (`--no-interactive` or `-I` flag).
 
 ### Performance Metrics
 
@@ -475,19 +475,19 @@ themes:
 
 ```bash
 # Run 1: qwen3:4b-instruct
-uv run qf dream -ni --provider ollama/qwen3:4b-instruct --project run-1-ni "classic murder mystery"
-uv run qf brainstorm -ni --provider ollama/qwen3:4b-instruct --project run-1-ni
-uv run qf seed -ni --provider ollama/qwen3:4b-instruct --project run-1-ni
+uv run qf dream --no-interactive --provider ollama/qwen3:4b-instruct --project run-1-ni "classic murder mystery"
+uv run qf brainstorm --no-interactive --provider ollama/qwen3:4b-instruct --project run-1-ni
+uv run qf seed --no-interactive --provider ollama/qwen3:4b-instruct --project run-1-ni
 
 # Run 2: gpt-4o
-uv run qf dream -ni --provider openai/gpt-4o --project run-2-ni "classic murder mystery"
-uv run qf brainstorm -ni --provider openai/gpt-4o --project run-2-ni
-uv run qf seed -ni --provider openai/gpt-4o --project run-2-ni
+uv run qf dream --no-interactive --provider openai/gpt-4o --project run-2-ni "classic murder mystery"
+uv run qf brainstorm --no-interactive --provider openai/gpt-4o --project run-2-ni
+uv run qf seed --no-interactive --provider openai/gpt-4o --project run-2-ni
 
 # Run 3: gpt-oss-20b
-uv run qf dream -ni --provider ollama/gpt-oss:20b --project run-3-ni "classic murder mystery"
-uv run qf brainstorm -ni --provider ollama/gpt-oss:20b --project run-3-ni
-uv run qf seed -ni --provider ollama/gpt-oss:20b --project run-3-ni
+uv run qf dream --no-interactive --provider ollama/gpt-oss:20b --project run-3-ni "classic murder mystery"
+uv run qf brainstorm --no-interactive --provider ollama/gpt-oss:20b --project run-3-ni
+uv run qf seed --no-interactive --provider ollama/gpt-oss:20b --project run-3-ni
 ```
 
 ## Conclusions

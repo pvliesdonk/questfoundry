@@ -40,9 +40,9 @@ run-X-{ni,int}/
 
 ```bash
 # Non-interactive runs
-uv run qf dream -ni --provider ollama/qwen3:4b-instruct --project run-1-ni "classic murder mystery"
-uv run qf brainstorm -ni --provider ollama/qwen3:4b-instruct --project run-1-ni
-uv run qf seed -ni --provider ollama/qwen3:4b-instruct --project run-1-ni
+uv run qf dream --no-interactive --provider ollama/qwen3:4b-instruct --project run-1-ni "classic murder mystery"
+uv run qf brainstorm --no-interactive --provider ollama/qwen3:4b-instruct --project run-1-ni
+uv run qf seed --no-interactive --provider ollama/qwen3:4b-instruct --project run-1-ni
 
 # Interactive runs (requires human interaction)
 uv run qf dream --provider ollama/qwen3:4b-instruct --project run-1-int "classic murder mystery"
