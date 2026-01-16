@@ -193,6 +193,24 @@ def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
     return chat_model
 
 
+def _is_reasoning_model(model: str) -> bool:
+    """Check if model is an OpenAI reasoning model (o1/o3 families).
+
+    Reasoning models have different API constraints:
+    - No temperature parameter (they control their own reasoning)
+    - No tool/function calling support
+    - Use max_completion_tokens instead of max_tokens
+
+    Args:
+        model: Model name to check.
+
+    Returns:
+        True if model is from the o1 or o3 family (e.g., o1, o1-mini, o3).
+    """
+    model_lower = model.lower()
+    return model_lower.startswith("o1") or model_lower.startswith("o3")
+
+
 def _create_openai_base_model(model: str, **kwargs: Any) -> BaseChatModel:
     """Create base OpenAI chat model (unstructured)."""
     try:
@@ -212,11 +230,19 @@ def _create_openai_base_model(model: str, **kwargs: Any) -> BaseChatModel:
             "API key required. Set OPENAI_API_KEY environment variable.",
         )
 
-    return ChatOpenAI(
-        model=model,
-        api_key=api_key,  # type: ignore[arg-type]
-        temperature=kwargs.get("temperature", 0.7),
-    )
+    # Build model kwargs
+    model_kwargs: dict[str, Any] = {
+        "model": model,
+        "api_key": api_key,
+    }
+
+    # Reasoning models (o1, o1-mini, o3, etc.) don't support temperature
+    if not _is_reasoning_model(model):
+        model_kwargs["temperature"] = kwargs.get("temperature", 0.7)
+    else:
+        log.debug("reasoning_model_detected", model=model, note="skipping temperature parameter")
+
+    return ChatOpenAI(**model_kwargs)
 
 
 def _create_anthropic_base_model(model: str, **kwargs: Any) -> BaseChatModel:

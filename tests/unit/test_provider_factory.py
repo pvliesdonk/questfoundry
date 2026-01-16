@@ -474,3 +474,85 @@ def test_model_info_is_frozen() -> None:
 
     with pytest.raises(FrozenInstanceError):
         info.context_window = 2000  # type: ignore[misc]
+
+
+# --- Tests for o1 / reasoning model support ---
+
+
+@pytest.mark.parametrize(
+    ("model_name", "expected"),
+    [
+        # o1 family
+        ("o1", True),
+        ("o1-mini", True),
+        ("o1-preview", True),
+        ("O1", True),
+        ("O1-MINI", True),
+        # o3 family
+        ("o3", True),
+        ("o3-mini", True),
+        # Non-reasoning models
+        ("gpt-4o", False),
+        ("gpt-4o-mini", False),
+        ("gpt-4-turbo", False),
+        ("gpt-3.5-turbo", False),
+    ],
+)
+def test_is_reasoning_model(model_name: str, expected: bool) -> None:
+    """_is_reasoning_model correctly identifies reasoning models."""
+    from questfoundry.providers.factory import _is_reasoning_model
+
+    assert _is_reasoning_model(model_name) is expected
+
+
+@pytest.mark.parametrize("model_name", ["o1", "o1-mini", "o1-preview", "o3", "o3-mini"])
+def test_create_chat_model_reasoning_model_no_temperature(model_name: str) -> None:
+    """Factory creates reasoning models without temperature parameter."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("openai", model_name)
+
+    call_kwargs = mock_class.call_args[1]
+    assert call_kwargs["model"] == model_name
+    assert "temperature" not in call_kwargs
+
+
+def test_create_chat_model_gpt4o_has_temperature() -> None:
+    """Factory creates GPT-4o model with temperature parameter (control case)."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("openai", "gpt-4o")
+
+    call_kwargs = mock_class.call_args[1]
+    # GPT-4o should have temperature
+    assert "temperature" in call_kwargs
+    assert call_kwargs["temperature"] == 0.7
+
+
+@pytest.mark.parametrize(
+    ("model_name", "expected_context", "expected_tools", "expected_vision"),
+    [
+        ("o1", 200_000, False, False),
+        ("o1-mini", 128_000, False, False),
+        ("o1-preview", 128_000, False, False),
+        ("o3", 200_000, False, False),
+        ("o3-mini", 200_000, False, False),
+    ],
+)
+def test_get_model_info_reasoning_models_no_tools(
+    model_name: str, expected_context: int, expected_tools: bool, expected_vision: bool
+) -> None:
+    """get_model_info returns correct properties for reasoning models."""
+    info = get_model_info("openai", model_name)
+
+    assert info.context_window == expected_context
+    assert info.supports_tools is expected_tools
+    assert info.supports_vision is expected_vision
