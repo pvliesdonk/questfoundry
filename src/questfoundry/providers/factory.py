@@ -194,7 +194,7 @@ def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
 
 
 def _is_reasoning_model(model: str) -> bool:
-    """Check if model is an OpenAI reasoning model (o1 family).
+    """Check if model is an OpenAI reasoning model (o1/o3 families).
 
     Reasoning models have different API constraints:
     - No temperature parameter (they control their own reasoning)
@@ -205,7 +205,7 @@ def _is_reasoning_model(model: str) -> bool:
         model: Model name to check.
 
     Returns:
-        True if model is o1, o1-mini, o1-preview, or similar.
+        True if model is from the o1 or o3 family (e.g., o1, o1-mini, o3).
     """
     model_lower = model.lower()
     return model_lower.startswith("o1") or model_lower.startswith("o3")
