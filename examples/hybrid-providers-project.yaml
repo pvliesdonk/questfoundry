@@ -1,0 +1,39 @@
+---
+# Example project.yaml demonstrating hybrid provider configuration
+#
+# This configuration uses different LLM providers for each pipeline phase:
+# - discuss: Local model for tool-enabled exploration (cost-effective)
+# - summarize: GPT-4o for creative narrative distillation
+# - serialize: o1-mini for precise structured JSON output
+#
+# See ADR-010 in docs/architecture/decisions.md for design rationale.
+
+name: hybrid-adventure
+
+providers:
+  # Default provider used when no phase-specific config exists
+  default: ollama/qwen3:8b
+
+  # Discussion phase: needs tool support for research and exploration
+  # Use a model that supports function calling
+  discuss: ollama/qwen3:8b
+
+  # Summarize phase: needs creative writing ability
+  # Use a conversational model with strong narrative skills
+  summarize: openai/gpt-4o
+
+  # Serialize phase: needs precise JSON output generation
+  # Reasoning models excel here (o1-mini supports JSON but not tools)
+  # WARNING: Do not use o1/o3 models for discuss phase - they will fail when tools are invoked
+  serialize: openai/o1-mini
+
+# Note: You can override any of these at runtime:
+#
+# CLI flags (highest precedence):
+#   qf seed --provider-serialize openai/o1
+#
+# Environment variables:
+#   QF_PROVIDER_SUMMARIZE=anthropic/claude-3 qf seed
+#
+# See CLAUDE.md "Hybrid Provider Configuration" for the full
+# 6-level precedence chain.

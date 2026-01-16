@@ -309,6 +309,64 @@ Replace custom agent infrastructure with **LangChain-native patterns**:
 
 ---
 
+## ADR-010: Hybrid Provider Configuration
+
+**Date**: 2026-01-16
+**Status**: Accepted
+
+### Context
+
+Different LLM providers excel at different tasks. Our model comparison analysis showed:
+- GPT-4o excels at creative discussion (22 entities, 8 tensions) but fails at JSON serialization (6 beats vs 10 expected)
+- Smaller local models (qwen3:8b) can handle structured output but may lack creative depth
+- Reasoning models (o1/o1-mini) are designed for structured output but don't support tools
+
+The pipeline has three distinct phases with different requirements:
+- **Discuss**: Needs tool support for exploration and research
+- **Summarize**: Conversational, needs creative writing ability
+- **Serialize**: Needs precise JSON output generation
+
+A single provider/model cannot optimally serve all three phases.
+
+### Decision
+
+Support **phase-specific provider configuration** with a 6-level precedence chain:
+
+```yaml
+# project.yaml
+providers:
+  default: ollama/qwen3:8b        # Required, used when no phase-specific config
+  discuss: ollama/qwen3:8b        # Optional: override for discuss phase
+  summarize: openai/gpt-4o        # Optional: override for summarize phase
+  serialize: openai/o1-mini       # Optional: override for serialize phase
+```
+
+Precedence (highest to lowest):
+1. Phase-specific CLI flag (`--provider-discuss`)
+2. General CLI flag (`--provider`)
+3. Phase-specific env var (`QF_PROVIDER_DISCUSS`)
+4. General env var (`QF_PROVIDER`)
+5. Phase-specific config (`providers.discuss`)
+6. Default config (`providers.default`)
+
+### Rationale
+
+- **Play to each model's strengths**: Use creative models for discussion, reasoning models for serialization
+- **Backward compatible**: Existing configs with only `providers.default` work unchanged
+- **CI/CD friendly**: Environment variables allow per-phase overrides without config file changes
+- **Testable**: CLI flags provide highest precedence for ad-hoc testing
+- **o1 model support**: o1/o1-mini don't support tools; they will fail at runtime if used for discuss phase (no validation yet, see #176)
+
+### Consequences
+
+- `ProvidersConfig` gains `discuss`, `summarize`, `serialize` optional fields
+- Orchestrator maintains three separate model resolution methods
+- Validation prevents o1 models from being used for discuss phase (no tool support)
+- Documentation and examples need to show hybrid provider patterns
+- Three additional CLI flags per stage command (`--provider-discuss`, `--provider-summarize`, `--provider-serialize`)
+
+---
+
 ## Template
 
 ```markdown
