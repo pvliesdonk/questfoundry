@@ -355,7 +355,7 @@ Precedence (highest to lowest):
 - **Backward compatible**: Existing configs with only `providers.default` work unchanged
 - **CI/CD friendly**: Environment variables allow per-phase overrides without config file changes
 - **Testable**: CLI flags provide highest precedence for ad-hoc testing
-- **o1 model support**: o1/o1-mini don't support tools, so they can only be used for serialize phase
+- **o1 model support**: o1/o1-mini don't support tools; they will fail at runtime if used for discuss phase (no validation yet, see #176)
 
 ### Consequences
 

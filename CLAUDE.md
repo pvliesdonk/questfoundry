@@ -482,19 +482,19 @@ qf seed --provider-discuss ollama/qwen3:8b \
         --provider-serialize openai/o1-mini
 ```
 
-**Note**: o1/o1-mini models don't support tools, so they can only be used for serialize phase.
+**Note**: o1/o1-mini models don't support tools. While you can configure them for any phase, they will fail at runtime if tools are invoked. They are best suited for the serialize phase only.
 
 ### Environment Variables
 
 ```bash
 # Provider configuration
-QF_PROVIDER=ollama/qwen3:8b              # Override default provider
-QF_PROVIDER_DISCUSS=ollama/qwen3:8b      # Override discuss phase
-QF_PROVIDER_SUMMARIZE=openai/gpt-4o      # Override summarize phase
-QF_PROVIDER_SERIALIZE=openai/o1-mini     # Override serialize phase
+QF_PROVIDER=ollama/qwen3:8b                       # Override default provider
+QF_PROVIDER_DISCUSS=ollama/qwen3:8b               # Override discuss phase
+QF_PROVIDER_SUMMARIZE=openai/gpt-4o               # Override summarize phase
+QF_PROVIDER_SERIALIZE=openai/o1-mini              # Override serialize phase
 
 # Required for providers
-OLLAMA_HOST=http://athena.int.liesdonk.nl:11434  # Required for Ollama
+OLLAMA_HOST=http://athena.int.liesdonk.nl:11434   # Required for Ollama
 OPENAI_API_KEY=sk-...                             # Required for OpenAI
 
 # Optional observability

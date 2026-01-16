@@ -1,3 +1,4 @@
+---
 # Example project.yaml demonstrating hybrid provider configuration
 #
 # This configuration uses different LLM providers for each pipeline phase:
@@ -23,6 +24,7 @@ providers:
 
   # Serialize phase: needs precise JSON output generation
   # Reasoning models excel here (o1-mini supports JSON but not tools)
+  # WARNING: Do not use o1/o3 models for discuss phase - they will fail when tools are invoked
   serialize: openai/o1-mini
 
 # Note: You can override any of these at runtime:
