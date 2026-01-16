@@ -208,6 +208,33 @@ class PipelineOrchestrator:
 
         return chat_model, provider_name, model
 
+    def _ensure_callbacks_initialized(self) -> None:
+        """Initialize logging callbacks if needed and enabled.
+
+        This method is idempotent - safe to call multiple times.
+        Only creates callbacks once if LLM logging is enabled.
+        """
+        if self._callbacks is None and self._enable_llm_logging:
+            from questfoundry.observability.langchain_callbacks import (
+                create_logging_callbacks,
+            )
+
+            self._callbacks = create_logging_callbacks(self._llm_logger)
+
+    def _get_resolved_discuss_provider(self) -> str:
+        """Get the final resolved provider string for discuss phase.
+
+        Applies full precedence chain: CLI override > env var > config default.
+
+        Returns:
+            The resolved provider string (e.g., "ollama/qwen3:8b").
+        """
+        return (
+            self._provider_override
+            or os.environ.get("QF_PROVIDER")
+            or self.config.providers.get_discuss_provider()
+        )
+
     def _get_chat_model(self) -> BaseChatModel:
         """Get or create the LangChain chat model for discuss phase.
 
@@ -223,31 +250,78 @@ class PipelineOrchestrator:
         if self._chat_model is not None:
             return self._chat_model
 
-        # Initialize callbacks first (only once)
-        if self._callbacks is None and self._enable_llm_logging:
-            from questfoundry.observability.langchain_callbacks import (
-                create_logging_callbacks,
-            )
+        self._ensure_callbacks_initialized()
 
-            self._callbacks = create_logging_callbacks(self._llm_logger)
-
-        # Determine provider string from override, env, or config
-        provider_string = (
-            self._provider_override
-            or os.environ.get("QF_PROVIDER")
-            or self.config.providers.get_discuss_provider()
-        )
-
+        provider_string = self._get_resolved_discuss_provider()
         chat_model, provider_name, model = self._create_model_for_provider(provider_string)
 
         self._provider_name = provider_name
         self._model_name = model
 
-        # Store model info for context budget awareness
+        # Store model info for context budget awareness (discuss phase only)
+        # Note: summarize/serialize phases use fixed-size inputs where context
+        # budgeting is less critical
         self._model_info = get_model_info(provider_name, model)
 
         self._chat_model = chat_model
         return self._chat_model
+
+    def _get_phase_model(
+        self,
+        phase: Literal["summarize", "serialize"],
+    ) -> BaseChatModel:
+        """Get or create the LangChain chat model for a specific phase.
+
+        Uses the phase-specific provider if configured, otherwise falls
+        back to the discuss model. Models are lazily created and cached.
+
+        Args:
+            phase: The pipeline phase ("summarize" or "serialize").
+
+        Returns:
+            Configured BaseChatModel for the specified phase.
+        """
+        # Get phase-specific provider from config
+        if phase == "summarize":
+            phase_provider = self.config.providers.get_summarize_provider()
+            cached_model = self._summarize_model
+        else:  # serialize
+            phase_provider = self.config.providers.get_serialize_provider()
+            cached_model = self._serialize_model
+
+        # Compare against resolved discuss provider (with full precedence chain)
+        discuss_provider = self._get_resolved_discuss_provider()
+
+        # If same as discuss provider, reuse discuss model
+        if phase_provider == discuss_provider:
+            return self._get_chat_model()
+
+        # Return cached model if available
+        if cached_model is not None:
+            return cached_model
+
+        # Create new model for this phase
+        self._ensure_callbacks_initialized()
+        chat_model, provider_name, model = self._create_model_for_provider(phase_provider)
+
+        # Cache the model and metadata
+        if phase == "summarize":
+            self._summarize_provider_name = provider_name
+            self._summarize_model_name = model
+            self._summarize_model = chat_model
+        else:  # serialize
+            self._serialize_provider_name = provider_name
+            self._serialize_model_name = model
+            self._serialize_model = chat_model
+
+        log.info(
+            "hybrid_model_created",
+            phase=phase,
+            provider=provider_name,
+            model=model,
+        )
+
+        return chat_model
 
     def _get_summarize_model(self) -> BaseChatModel:
         """Get or create the LangChain chat model for summarize phase.
@@ -258,44 +332,7 @@ class PipelineOrchestrator:
         Returns:
             Configured BaseChatModel for summarize phase.
         """
-        # Check if a different summarize provider is configured
-        summarize_provider = self.config.providers.get_summarize_provider()
-        discuss_provider = (
-            self._provider_override
-            or os.environ.get("QF_PROVIDER")
-            or self.config.providers.get_discuss_provider()
-        )
-
-        # If same as discuss provider, reuse discuss model
-        if summarize_provider == discuss_provider:
-            return self._get_chat_model()
-
-        # Create/return cached summarize model
-        if self._summarize_model is not None:
-            return self._summarize_model
-
-        # Initialize callbacks first (only once)
-        if self._callbacks is None and self._enable_llm_logging:
-            from questfoundry.observability.langchain_callbacks import (
-                create_logging_callbacks,
-            )
-
-            self._callbacks = create_logging_callbacks(self._llm_logger)
-
-        chat_model, provider_name, model = self._create_model_for_provider(summarize_provider)
-
-        self._summarize_provider_name = provider_name
-        self._summarize_model_name = model
-        self._summarize_model = chat_model
-
-        log.info(
-            "hybrid_model_created",
-            phase="summarize",
-            provider=provider_name,
-            model=model,
-        )
-
-        return self._summarize_model
+        return self._get_phase_model("summarize")
 
     def _get_serialize_model(self) -> BaseChatModel:
         """Get or create the LangChain chat model for serialize phase.
@@ -306,44 +343,7 @@ class PipelineOrchestrator:
         Returns:
             Configured BaseChatModel for serialize phase.
         """
-        # Check if a different serialize provider is configured
-        serialize_provider = self.config.providers.get_serialize_provider()
-        discuss_provider = (
-            self._provider_override
-            or os.environ.get("QF_PROVIDER")
-            or self.config.providers.get_discuss_provider()
-        )
-
-        # If same as discuss provider, reuse discuss model
-        if serialize_provider == discuss_provider:
-            return self._get_chat_model()
-
-        # Create/return cached serialize model
-        if self._serialize_model is not None:
-            return self._serialize_model
-
-        # Initialize callbacks first (only once)
-        if self._callbacks is None and self._enable_llm_logging:
-            from questfoundry.observability.langchain_callbacks import (
-                create_logging_callbacks,
-            )
-
-            self._callbacks = create_logging_callbacks(self._llm_logger)
-
-        chat_model, provider_name, model = self._create_model_for_provider(serialize_provider)
-
-        self._serialize_provider_name = provider_name
-        self._serialize_model_name = model
-        self._serialize_model = chat_model
-
-        log.info(
-            "hybrid_model_created",
-            phase="serialize",
-            provider=provider_name,
-            model=model,
-        )
-
-        return self._serialize_model
+        return self._get_phase_model("serialize")
 
     @property
     def model_info(self) -> ModelInfo | None:
