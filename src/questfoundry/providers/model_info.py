@@ -31,6 +31,7 @@ class ModelProperties:
 
     context_window: int
     supports_vision: bool = False
+    supports_tools: bool = True  # Most models support tools; o1 family doesn't
 
 
 # Known model properties by provider and model name.
@@ -50,8 +51,12 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
         "gpt-4-turbo": ModelProperties(context_window=128_000, supports_vision=True),
         "gpt-4": ModelProperties(context_window=8_192),
         "gpt-3.5-turbo": ModelProperties(context_window=16_385),
-        "o1": ModelProperties(context_window=200_000),
-        "o1-mini": ModelProperties(context_window=128_000),
+        # Reasoning models: no tool support, no temperature parameter
+        "o1": ModelProperties(context_window=200_000, supports_tools=False),
+        "o1-mini": ModelProperties(context_window=128_000, supports_tools=False),
+        "o1-preview": ModelProperties(context_window=128_000, supports_tools=False),
+        "o3": ModelProperties(context_window=200_000, supports_tools=False),
+        "o3-mini": ModelProperties(context_window=200_000, supports_tools=False),
     },
     "anthropic": {
         "claude-sonnet-4-20250514": ModelProperties(context_window=200_000, supports_vision=True),
@@ -85,12 +90,14 @@ def get_model_info(provider: str, model: str) -> ModelInfo:
     if props is not None:
         context_window = props.context_window
         supports_vision = props.supports_vision
+        supports_tools = props.supports_tools
     else:
         context_window = DEFAULT_CONTEXT_WINDOW
         supports_vision = False
+        supports_tools = True  # Default to True for unknown models
 
     return ModelInfo(
         context_window=context_window,
-        supports_tools=True,  # All supported providers have tool support
+        supports_tools=supports_tools,
         supports_vision=supports_vision,
     )

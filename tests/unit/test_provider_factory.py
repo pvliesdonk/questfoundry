@@ -474,3 +474,107 @@ def test_model_info_is_frozen() -> None:
 
     with pytest.raises(FrozenInstanceError):
         info.context_window = 2000  # type: ignore[misc]
+
+
+# --- Tests for o1 / reasoning model support ---
+
+
+def test_is_reasoning_model_o1() -> None:
+    """_is_reasoning_model detects o1 models."""
+    from questfoundry.providers.factory import _is_reasoning_model
+
+    assert _is_reasoning_model("o1") is True
+    assert _is_reasoning_model("o1-mini") is True
+    assert _is_reasoning_model("o1-preview") is True
+    assert _is_reasoning_model("O1") is True  # Case insensitive
+    assert _is_reasoning_model("O1-MINI") is True
+
+
+def test_is_reasoning_model_o3() -> None:
+    """_is_reasoning_model detects o3 models."""
+    from questfoundry.providers.factory import _is_reasoning_model
+
+    assert _is_reasoning_model("o3") is True
+    assert _is_reasoning_model("o3-mini") is True
+
+
+def test_is_reasoning_model_gpt_models_false() -> None:
+    """_is_reasoning_model returns False for GPT models."""
+    from questfoundry.providers.factory import _is_reasoning_model
+
+    assert _is_reasoning_model("gpt-4o") is False
+    assert _is_reasoning_model("gpt-4o-mini") is False
+    assert _is_reasoning_model("gpt-4-turbo") is False
+    assert _is_reasoning_model("gpt-3.5-turbo") is False
+
+
+def test_create_chat_model_o1_no_temperature() -> None:
+    """Factory creates o1 model without temperature parameter."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("openai", "o1-mini")
+
+    call_kwargs = mock_class.call_args[1]
+    assert call_kwargs["model"] == "o1-mini"
+    assert call_kwargs["api_key"] == "sk-test"
+    # Critically: no temperature parameter
+    assert "temperature" not in call_kwargs
+
+
+def test_create_chat_model_o3_no_temperature() -> None:
+    """Factory creates o3 model without temperature parameter."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("openai", "o3")
+
+    call_kwargs = mock_class.call_args[1]
+    assert "temperature" not in call_kwargs
+
+
+def test_create_chat_model_gpt4o_has_temperature() -> None:
+    """Factory creates GPT-4o model with temperature parameter (control case)."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("openai", "gpt-4o")
+
+    call_kwargs = mock_class.call_args[1]
+    # GPT-4o should have temperature
+    assert "temperature" in call_kwargs
+    assert call_kwargs["temperature"] == 0.7
+
+
+def test_get_model_info_o1_no_tools() -> None:
+    """get_model_info returns supports_tools=False for o1 models."""
+    info = get_model_info("openai", "o1")
+
+    assert info.context_window == 200_000
+    assert info.supports_tools is False
+    assert info.supports_vision is False
+
+
+def test_get_model_info_o1_mini_no_tools() -> None:
+    """get_model_info returns supports_tools=False for o1-mini."""
+    info = get_model_info("openai", "o1-mini")
+
+    assert info.context_window == 128_000
+    assert info.supports_tools is False
+
+
+def test_get_model_info_o3_no_tools() -> None:
+    """get_model_info returns supports_tools=False for o3 models."""
+    info = get_model_info("openai", "o3")
+
+    assert info.context_window == 200_000
+    assert info.supports_tools is False
