@@ -1,0 +1,28 @@
+audience: adult
+content_notes:
+  excludes: []
+  includes:
+    - A single location setting (The Grand Manor on Raven's Isle)
+    - A confined group of characters/suspects
+    - Hidden passageways, secret identities, and plot twists
+genre: Mystery and Detective Fiction
+scope:
+  branching_depth: Include decision points affecting the story's outcome
+  estimated_passages: 11
+  estimated_playtime_minutes:
+  target_word_count: 1000
+style_notes: 'Narrative Style: Third-person perspective or first-person from the detective.
+  Language: Clear and concise, with attention to detail for clue discovery.'
+subgenre: Agatha Christie-style murder mystery
+themes:
+  - Justice
+  - Duality of human nature
+  - Deception
+  - Quest for truth
+tone:
+  - Suspenseful
+  - Intriguing
+  - Not overly dark
+  - Touch of elegance and sophistication
+type: dream
+version: 1

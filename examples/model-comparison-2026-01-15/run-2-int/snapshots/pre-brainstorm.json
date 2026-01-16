@@ -1,0 +1,50 @@
+{
+  "version": "5.0",
+  "meta": {
+    "project_name": null,
+    "last_stage": "dream",
+    "last_modified": "2026-01-15T20:45:45.198884+00:00",
+    "stage_history": [
+      {
+        "stage": "dream",
+        "completed": "2026-01-15T20:43:25.467412+00:00"
+      }
+    ]
+  },
+  "nodes": {
+    "vision": {
+      "type": "vision",
+      "genre": "Mystery and Detective Fiction",
+      "subgenre": "Agatha Christie-style murder mystery",
+      "tone": [
+        "Suspenseful",
+        "Intriguing",
+        "Not overly dark",
+        "Touch of elegance and sophistication"
+      ],
+      "themes": [
+        "Justice",
+        "Duality of human nature",
+        "Deception",
+        "Quest for truth"
+      ],
+      "audience": "adult",
+      "style_notes": "Narrative Style: Third-person perspective or first-person from the detective. Language: Clear and concise, with attention to detail for clue discovery.",
+      "scope": {
+        "branching_depth": "Include decision points affecting the story's outcome",
+        "estimated_passages": 11,
+        "estimated_playtime_minutes": null,
+        "target_word_count": 1000
+      },
+      "content_notes": {
+        "excludes": [],
+        "includes": [
+          "A single location setting (The Grand Manor on Raven's Isle)",
+          "A confined group of characters/suspects",
+          "Hidden passageways, secret identities, and plot twists"
+        ]
+      }
+    }
+  },
+  "edges": []
+}

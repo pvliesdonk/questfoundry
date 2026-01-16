@@ -1,0 +1,208 @@
+entities:
+  - entity_id: detective_chase
+    entity_category: character
+    concept: Seasoned private investigator with a sharp wit and moral code.
+    notes: Loves classical music and maintains an impeccable appearance.
+  - entity_id: lord_pembroke
+    entity_category: character
+    concept: Enigmatic and wealthy host with a mysterious past.
+    notes: Charming and aloof; central tension about his true intentions.
+  - entity_id: lady_pembroke
+    entity_category: character
+    concept: Graceful wife of Lord Pembroke, fiercely protective of her family.
+    notes: Harbors a hidden sorrow and her diary contains secrets.
+  - entity_id: butler_quinton
+    entity_category: character
+    concept: Loyal and discreet servant, knowledgeable about family secrets.
+    notes: His loyalty is questioned, adding to the theme of deception.
+  - entity_id: miss_ridgeway
+    entity_category: character
+    concept: Clever young writer and family friend, often observing others.
+    notes: Relationship with Detective Chase explores collaboration vs.
+      competition.
+  - entity_id: dr_wilcox
+    entity_category: character
+    concept: Calm family doctor with knowledge of family's health histories.
+    notes: Holds secrets crucial to understanding the family's dynamics.
+  - entity_id: inspector_harding
+    entity_category: character
+    concept: Local law enforcement officer and ally to Detective Chase.
+    notes: Respects and collaborates with Chase on cases.
+  - entity_id: victor_hawthorne
+    entity_category: character
+    concept: Business associate with interest in art collecting and ruthless
+      tactics.
+    notes: Adds tension to social dynamics.
+  - entity_id: margaret_thorne
+    entity_category: character
+    concept: Distant relative known for uncovering secrets and enjoying gossip.
+    notes: Has a sharp tongue and mind.
+  - entity_id: edward_pembroke
+    entity_category: character
+    concept: Rebellious teenage son exploring the manor grounds.
+    notes: His explorations lead to the mysterious chapel ruins.
+  - entity_id: pembroke_manor
+    entity_category: location
+    concept: Sprawling estate with lush gardens and hidden passageways.
+    notes: Central to the story with secrets and hidden places.
+  - entity_id: library
+    entity_category: location
+    concept: Room with rare books and maps, favored by Lord Pembroke and Miss
+      Ridgeway.
+    notes: Houses the mysterious letter hinting at a scandalous secret.
+  - entity_id: conservatory
+    entity_category: location
+    concept: Glass-walled room with exotic plants and a grand piano.
+    notes: Used for intimate gatherings.
+  - entity_id: secret_passage
+    entity_category: location
+    concept: Hidden corridor connecting various parts of the manor.
+    notes: Known only to a few.
+  - entity_id: wine_cellar
+    entity_category: location
+    concept: Dimly lit room storing rare wines, used for clandestine meetings.
+    notes:
+  - entity_id: chapel_ruins
+    entity_category: location
+    concept: Old, crumbling chapel on estate grounds, rumored to be haunted.
+    notes: Used for secret meetings.
+  - entity_id: heirloom_necklace
+    entity_category: object
+    concept: Rumored-to-be-cursed piece of jewelry recently gone missing.
+    notes: Fuelling superstitions among characters.
+  - entity_id: mysterious_letter
+    entity_category: object
+    concept: Unsigned letter hinting at a scandalous secret.
+    notes: Found in the library.
+  - entity_id: antique_dagger
+    entity_category: object
+    concept: Ceremonial dagger missing from its display case.
+    notes: Potentially the weapon used in the murder.
+  - entity_id: family_portrait
+    entity_category: object
+    concept: Imposing painting of the Pembroke family holding a hidden clue.
+    notes: Eyes seem to follow visitors.
+  - entity_id: missing_diary
+    entity_category: object
+    concept: Lady Agnes Pembroke's diary with personal reflections and secrets.
+    notes: Contains potentially damaging information.
+  - entity_id: silver_watch
+    entity_category: object
+    concept: Heirloom found stopped at the exact time of the murder.
+    notes:
+tensions:
+  - tension_id: pembroke_charm
+    question: Is Lord Pembroke's charm genuine or a facade for darker
+      intentions?
+    alternatives:
+      - alternative_id: genuine_charm
+        description: His charm is genuine, masking a tragic past.
+        is_default_path: true
+      - alternative_id: facade_for_darkness
+        description: His charm is a facade for darker intentions.
+        is_default_path: false
+    central_entity_ids:
+      - lord_pembroke
+      - detective_chase
+    why_it_matters: Explores human duality and deceptive appearances.
+  - tension_id: butler_loyalty
+    question: Is the butler, Mr. Quinton, loyal or complicit in the crime?
+    alternatives:
+      - alternative_id: loyal_butler
+        description: Mr. Quinton is loyal, though his silence conceals family
+          secrets.
+        is_default_path: true
+      - alternative_id: complicit_butler
+        description: Mr. Quinton is complicit in the crime.
+        is_default_path: false
+    central_entity_ids:
+      - butler_quinton
+      - detective_chase
+    why_it_matters: Challenges stereotypes of a 'guilty servant.'
+  - tension_id: necklace_curse
+    question: Does the heirloom necklace hold a genuine curse, or is it merely
+      superstition?
+    alternatives:
+      - alternative_id: superstition
+        description: The necklace's curse is mere superstition, influencing
+          actions.
+        is_default_path: true
+      - alternative_id: genuine_curse
+        description: The necklace holds a genuine curse.
+        is_default_path: false
+    central_entity_ids:
+      - heirloom_necklace
+      - lady_pembroke
+    why_it_matters: Delves into belief versus reality.
+  - tension_id: chase_integrity
+    question: Can Detective Chase solve the mystery without compromising her
+      moral code?
+    alternatives:
+      - alternative_id: maintain_integrity
+        description: Detective Chase maintains her integrity, complicating the
+          investigation.
+        is_default_path: true
+      - alternative_id: compromise_integrity
+        description: Detective Chase compromises her moral code to solve the
+          mystery.
+        is_default_path: false
+    central_entity_ids:
+      - detective_chase
+      - inspector_harding
+    why_it_matters: Addresses justice and the personal cost of truth-seeking.
+  - tension_id: ridgeway_ally
+    question: Is Miss Clara Ridgeway an ally or a rival to Detective Chase?
+    alternatives:
+      - alternative_id: ally_ridgeway
+        description: Miss Ridgeway is an ally, aiding with insights.
+        is_default_path: true
+      - alternative_id: rival_ridgeway
+        description: Miss Ridgeway is a rival, complicating the investigation.
+        is_default_path: false
+    central_entity_ids:
+      - miss_ridgeway
+      - detective_chase
+    why_it_matters: Explores collaboration versus competition.
+  - tension_id: murder_location
+    question: Did the murder take place in the manor, or was it staged
+      elsewhere?
+    alternatives:
+      - alternative_id: manor_murder
+        description: The murder occurred in the manor.
+        is_default_path: true
+      - alternative_id: staged_elsewhere
+        description: The murder was staged elsewhere.
+        is_default_path: false
+    central_entity_ids:
+      - pembroke_manor
+      - detective_chase
+    why_it_matters: Challenges perceptions of the crime scene's significance.
+  - tension_id: chapel_ruins_nature
+    question: Is the chapel ruins a place of refuge or a dangerous trap?
+    alternatives:
+      - alternative_id: refuge
+        description: The chapel ruins are a refuge, holding clues to the
+          family's past.
+        is_default_path: true
+      - alternative_id: dangerous_trap
+        description: The chapel ruins are a dangerous trap.
+        is_default_path: false
+    central_entity_ids:
+      - chapel_ruins
+      - edward_pembroke
+    why_it_matters: Highlights hidden truths and dual nature of seemingly
+      abandoned places.
+  - tension_id: portrait_clue
+    question: Does the family portrait hold a clue, or is it a mere distraction?
+    alternatives:
+      - alternative_id: holds_clue
+        description: The portrait holds a clue, revealing a hidden message.
+        is_default_path: true
+      - alternative_id: mere_distraction
+        description: The portrait is a mere distraction.
+        is_default_path: false
+    central_entity_ids:
+      - family_portrait
+      - detective_chase
+    why_it_matters: Emphasizes observation and potential of overlooked details
+      to uncover truth.

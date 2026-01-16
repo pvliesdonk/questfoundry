@@ -1,0 +1,42 @@
+{
+  "version": "5.0",
+  "meta": {
+    "project_name": null,
+    "last_stage": "dream",
+    "last_modified": "2026-01-15T19:16:48.168128+00:00",
+    "stage_history": [
+      {
+        "stage": "dream",
+        "completed": "2026-01-15T19:14:41.065947+00:00"
+      }
+    ]
+  },
+  "nodes": {
+    "vision": {
+      "type": "vision",
+      "genre": "classic detective mystery",
+      "tone": [
+        "gilded",
+        "elegant",
+        "slightly eerie",
+        "1940s English country house",
+        "tea parties",
+        "subtle tension",
+        "social intrigue"
+      ],
+      "themes": [
+        "deduction over action",
+        "identity and trust",
+        "social dynamics",
+        "hidden motives",
+        "locked room",
+        "single pivotal clue",
+        "reconstructed timeline",
+        "false alibi"
+      ],
+      "audience": "adults 18+",
+      "style_notes": "elegant, descriptive prose with period detail; natural, witty dialogue with subtle hints; clues revealed as discoveries; slow, deliberate pacing"
+    }
+  },
+  "edges": []
+}

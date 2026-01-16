@@ -1,0 +1,1188 @@
+{
+  "version": "5.0",
+  "meta": {
+    "project_name": null,
+    "last_stage": "seed",
+    "last_modified": "2026-01-15T19:20:17.545408+00:00",
+    "stage_history": [
+      {
+        "stage": "dream",
+        "completed": "2026-01-15T19:14:41.065947+00:00"
+      },
+      {
+        "stage": "brainstorm",
+        "completed": "2026-01-15T19:16:48.168311+00:00"
+      },
+      {
+        "stage": "seed",
+        "completed": "2026-01-15T19:20:17.545399+00:00"
+      }
+    ]
+  },
+  "nodes": {
+    "vision": {
+      "type": "vision",
+      "genre": "classic detective mystery",
+      "tone": [
+        "gilded",
+        "elegant",
+        "slightly eerie",
+        "1940s English country house",
+        "tea parties",
+        "subtle tension",
+        "social intrigue"
+      ],
+      "themes": [
+        "deduction over action",
+        "identity and trust",
+        "social dynamics",
+        "hidden motives",
+        "locked room",
+        "single pivotal clue",
+        "reconstructed timeline",
+        "false alibi"
+      ],
+      "audience": "adults 18+",
+      "style_notes": "elegant, descriptive prose with period detail; natural, witty dialogue with subtle hints; clues revealed as discoveries; slow, deliberate pacing"
+    },
+    "entity::the_host": {
+      "type": "entity",
+      "raw_id": "the_host",
+      "entity_type": "character",
+      "concept": "The reclusive, impeccably dressed host of the estate, known for hosting tea parties with a veneer of charm.",
+      "notes": "Speaks in measured, elegant phrases. Their presence is both soothing and subtly ominous. Alters tea rituals and invites only select guests, suggesting a hidden agenda.",
+      "disposition": "retained"
+    },
+    "entity::the_butler": {
+      "type": "entity",
+      "raw_id": "the_butler",
+      "entity_type": "character",
+      "concept": "A stoic, silent figure who manages all operations of the house.",
+      "notes": "Wears a dark suit, carries a silver cane. Observes everything with quiet intensity. Silence is a form of power; actions are precise and mechanical. Tension over whether they are loyal or a silent observer with hidden purpose.",
+      "disposition": "retained"
+    },
+    "entity::the_viscount": {
+      "type": "entity",
+      "raw_id": "the_viscount",
+      "entity_type": "character",
+      "concept": "A distant, aristocratic relative with a history of eccentric behavior.",
+      "notes": "Appears at tea parties with sharp wit and cryptic remarks. Words contain subtle hints or contradictions ignored by others. Represents the family\u2019s past.",
+      "disposition": "cut"
+    },
+    "entity::the_lady_of_the_garden": {
+      "type": "entity",
+      "raw_id": "the_lady_of_the_garden",
+      "entity_type": "character",
+      "concept": "A mysterious woman who tends the estate\u2019s garden.",
+      "notes": "Rarely speaks, but movements are precise and deliberate. Often seen pruning roses at twilight. Suggests knowledge of a secret tied to the garden\u2019s hidden path.",
+      "disposition": "retained"
+    },
+    "entity::the_young_mistress": {
+      "type": "entity",
+      "raw_id": "the_young_mistress",
+      "entity_type": "character",
+      "concept": "The host\u2019s niece, a bright, observant young woman with a sharp intellect.",
+      "notes": "Only one who notices inconsistencies in tea party rituals. Recognizes a false alibi, making her pivotal to solving the mystery. Intelligence is subtle and becomes crucial.",
+      "disposition": "retained"
+    },
+    "entity::the_caretaker": {
+      "type": "entity",
+      "raw_id": "the_caretaker",
+      "entity_type": "character",
+      "concept": "A man who maintains the estate\u2019s outbuildings.",
+      "notes": "Speaks in hushed tones, avoids eye contact. Silence and careful movements suggest he is guarding or knows something.",
+      "disposition": "retained"
+    },
+    "entity::the_maid": {
+      "type": "entity",
+      "raw_id": "the_maid",
+      "entity_type": "character",
+      "concept": "A young woman who serves tea and delivers messages.",
+      "notes": "Polite demeanor, eyes betray nervousness. Her small details\u2014like a dropped note\u2014may be the first real clue. Window into hidden routines.",
+      "disposition": "cut"
+    },
+    "entity::the_gardener": {
+      "type": "entity",
+      "raw_id": "the_gardener",
+      "entity_type": "character",
+      "concept": "A man with deep knowledge of plants.",
+      "notes": "Claims to have seen a 'shadow' in the garden at night. Words are dismissed initially but echo the idea that the garden is a living, breathing space with hidden logic.",
+      "disposition": "cut"
+    },
+    "entity::the_hall": {
+      "type": "entity",
+      "raw_id": "the_hall",
+      "entity_type": "location",
+      "concept": "The grand entrance hall, lined with portraits and chandeliers.",
+      "notes": "Sets the tone\u2014elegant, formal, yet subtly oppressive. Guests' entry mirrors tea party rituals, establishing order and control.",
+      "disposition": "cut"
+    },
+    "entity::the_library": {
+      "type": "entity",
+      "raw_id": "the_library",
+      "entity_type": "location",
+      "concept": "A vaulted room filled with antique books, maps, and a large mahogany desk.",
+      "notes": "Center of intellectual life. Holds secrets and history. Mirror distorts reflection, symbolizing that truth is not always visible.",
+      "disposition": "retained"
+    },
+    "entity::the_garden": {
+      "type": "entity",
+      "raw_id": "the_garden",
+      "entity_type": "location",
+      "concept": "A sprawling, overgrown garden with stone paths and a hidden path leading to the west wing.",
+      "notes": "Setting for private moments. Beautiful and unsettling. Curtain swings in wind; when pulled, reveals a hidden compartment. Suggests it is a living, breathing space with hidden logic.",
+      "disposition": "retained"
+    },
+    "entity::the_balcony": {
+      "type": "entity",
+      "raw_id": "the_balcony",
+      "entity_type": "location",
+      "concept": "A high, narrow balcony overlooking the estate.",
+      "notes": "Used for quiet conversations and late-night observations. Space of intimacy and surveillance where characters speak without being heard.",
+      "disposition": "cut"
+    },
+    "entity::the_study": {
+      "type": "entity",
+      "raw_id": "the_study",
+      "entity_type": "location",
+      "concept": "A private room with a large window and a writing desk.",
+      "notes": "The host\u2019s domain. Decisions are made here. Private thoughts revealed through object placement and lighting.",
+      "disposition": "cut"
+    },
+    "entity::the_kitchen": {
+      "type": "entity",
+      "raw_id": "the_kitchen",
+      "entity_type": "location",
+      "concept": "A warm, cluttered room where tea is prepared.",
+      "notes": "Source of the tea ritual. Every detail\u2014pouring, cup order\u2014is part of a carefully constructed routine that may be a trap.",
+      "disposition": "retained"
+    },
+    "entity::the_west_wing": {
+      "type": "entity",
+      "raw_id": "the_west_wing",
+      "entity_type": "location",
+      "concept": "A sealed, unopened wing with no recorded access.",
+      "notes": "Appears in the garden\u2019s shadow. Existence is never confirmed but referenced in garden history, suggesting it may be the site of a past incident.",
+      "disposition": "retained"
+    },
+    "entity::the_tea_set": {
+      "type": "entity",
+      "raw_id": "the_tea_set",
+      "entity_type": "object",
+      "concept": "A vintage porcelain set with a chipped teacup, used at every tea party.",
+      "notes": "Centerpiece of the ritual. Chipped cup appears in one room but not another\u2014suggests deliberate inconsistency noticed by the young mistress.",
+      "disposition": "retained"
+    },
+    "entity::the_golden_key": {
+      "type": "entity",
+      "raw_id": "the_golden_key",
+      "entity_type": "object",
+      "concept": "A small, ornate key hidden in the library\u2019s bookshelf.",
+      "notes": "Only one such key in estate history. Opens the family diary. Presented as central artifact, but true function revealed only upon opening the diary.",
+      "disposition": "retained"
+    },
+    "entity::the_silver_candlestick": {
+      "type": "entity",
+      "raw_id": "the_silver_candlestick",
+      "entity_type": "object",
+      "concept": "A candlestick with a cracked handle, found in the garden.",
+      "notes": "Matches description from a 1930s journal. Physical link to past. Appearance in garden suggests continuity between present and past.",
+      "disposition": "retained"
+    },
+    "entity::the_family_diary": {
+      "type": "entity",
+      "raw_id": "the_family_diary",
+      "entity_type": "object",
+      "concept": "A leather-bound journal from the 1920s, detailing the family\u2019s history and secrets.",
+      "notes": "Locked behind a false panel. Contains truth about the incident that began the tea party rituals\u2014what happened that night and why it was hidden.",
+      "disposition": "retained"
+    },
+    "entity::the_mirror_in_the_library": {
+      "type": "entity",
+      "raw_id": "the_mirror_in_the_library",
+      "entity_type": "object",
+      "concept": "A large, ornate mirror with a faint crack.",
+      "notes": "Reflects not just the face, but a distorted version of the room. Symbolizes fragility of perception\u2014what we see may not be real.",
+      "disposition": "retained"
+    },
+    "entity::the_curtain_in_the_garden": {
+      "type": "entity",
+      "raw_id": "the_curtain_in_the_garden",
+      "entity_type": "object",
+      "concept": "A heavy, old curtain that swings in the wind.",
+      "notes": "When pulled, reveals a hidden compartment. Literal and symbolic gateway to hidden truth\u2014the garden is a place of revelation.",
+      "disposition": "retained"
+    },
+    "entity::the_tea_party_circle": {
+      "type": "entity",
+      "raw_id": "the_tea_party_circle",
+      "entity_type": "faction",
+      "concept": "A group of guests who attend weekly tea parties.",
+      "notes": "Interactions are ritualistic and follow unspoken rules. Believe in tradition, but compliance may be complicity.",
+      "disposition": "cut"
+    },
+    "entity::the_garden_watch": {
+      "type": "entity",
+      "raw_id": "the_garden_watch",
+      "entity_type": "faction",
+      "concept": "A secret group of caretakers and gardeners who monitor the estate\u2019s hidden spaces.",
+      "notes": "Believe the garden holds a hidden truth. Communicate in hushed tones and share coded observations.",
+      "disposition": "cut"
+    },
+    "entity::the_archive_wardens": {
+      "type": "entity",
+      "raw_id": "the_archive_wardens",
+      "entity_type": "faction",
+      "concept": "A small, elite group responsible for guarding the library and its contents.",
+      "notes": "Enforce strict rules about access and silence. Create sense of institutional control\u2014knowledge is power and is tightly guarded.",
+      "disposition": "cut"
+    },
+    "tension::host_benevolent_or_self_serving": {
+      "type": "tension",
+      "raw_id": "host_benevolent_or_self_serving",
+      "question": "Is the host benevolent or self-serving?",
+      "central_entity_ids": [
+        "entity::the_host"
+      ],
+      "why_it_matters": "Defines the moral center of the story. If benevolent, the mystery is a social puzzle; if self-serving, it becomes a power play.",
+      "explored": [
+        "benevolent"
+      ],
+      "implicit": [
+        "self_serving"
+      ]
+    },
+    "tension::host_benevolent_or_self_serving::alt::benevolent": {
+      "type": "alternative",
+      "raw_id": "benevolent",
+      "description": "The host is benevolent. Their actions are consistent with social grace and tradition.",
+      "is_default_path": true
+    },
+    "tension::host_benevolent_or_self_serving::alt::self_serving": {
+      "type": "alternative",
+      "raw_id": "self_serving",
+      "description": "The host is self-serving. Their actions\u2014such as altering tea rituals and selecting guests\u2014mask a deeper motive of power or control.",
+      "is_default_path": false
+    },
+    "tension::library_knowledge_salvation_or_corruption": {
+      "type": "tension",
+      "raw_id": "library_knowledge_salvation_or_corruption",
+      "question": "Is the library\u2019s knowledge salvation or corruption?",
+      "central_entity_ids": [
+        "entity::the_library",
+        "entity::the_family_diary"
+      ],
+      "why_it_matters": "Explores the cost of knowledge. Access to truth may offer clarity or lead to moral collapse.",
+      "explored": [
+        "salvation"
+      ],
+      "implicit": [
+        "corruption"
+      ]
+    },
+    "tension::library_knowledge_salvation_or_corruption::alt::salvation": {
+      "type": "alternative",
+      "raw_id": "salvation",
+      "description": "The knowledge is salvation. The diary reveals a truth that resolves the mystery without violence.",
+      "is_default_path": true
+    },
+    "tension::library_knowledge_salvation_or_corruption::alt::corruption": {
+      "type": "alternative",
+      "raw_id": "corruption",
+      "description": "The knowledge is corruption. It may have been used to manipulate the guests, unraveling the estate\u2019s foundation.",
+      "is_default_path": false
+    },
+    "tension::garden_sanctuary_or_trap": {
+      "type": "tension",
+      "raw_id": "garden_sanctuary_or_trap",
+      "question": "Is the garden a sanctuary or a trap?",
+      "central_entity_ids": [
+        "entity::the_garden",
+        "entity::the_lady_of_the_garden",
+        "entity::the_curtain_in_the_garden"
+      ],
+      "why_it_matters": "Establishes emotional and physical stakes. The garden is both a setting and a place of revelation.",
+      "explored": [
+        "sanctuary"
+      ],
+      "implicit": [
+        "trap"
+      ]
+    },
+    "tension::garden_sanctuary_or_trap::alt::sanctuary": {
+      "type": "alternative",
+      "raw_id": "sanctuary",
+      "description": "The garden is a sanctuary. It offers refuge and truth, with the curtain revealing a safe space where the truth is shared.",
+      "is_default_path": true
+    },
+    "tension::garden_sanctuary_or_trap::alt::trap": {
+      "type": "alternative",
+      "raw_id": "trap",
+      "description": "The garden is a trap. It may conceal danger or deception, and the hidden path could be a site of violence or manipulation.",
+      "is_default_path": false
+    },
+    "tension::can_butler_be_trusted": {
+      "type": "tension",
+      "raw_id": "can_butler_be_trusted",
+      "question": "Can the butler be trusted?",
+      "central_entity_ids": [
+        "entity::the_butler"
+      ],
+      "why_it_matters": "Challenges reader assumptions about loyalty. The butler is the only one who sees everything.",
+      "explored": [
+        "trusted"
+      ],
+      "implicit": [
+        "untrusted"
+      ]
+    },
+    "tension::can_butler_be_trusted::alt::trusted": {
+      "type": "alternative",
+      "raw_id": "trusted",
+      "description": "The butler is trusted. Their actions align with the established rules of the estate.",
+      "is_default_path": true
+    },
+    "tension::can_butler_be_trusted::alt::untrusted": {
+      "type": "alternative",
+      "raw_id": "untrusted",
+      "description": "The butler is not trusted. Their silence and precision suggest they are hiding something and may be the true culprit.",
+      "is_default_path": false
+    },
+    "tension::did_young_mistress_notice_false_alibi": {
+      "type": "tension",
+      "raw_id": "did_young_mistress_notice_false_alibi",
+      "question": "Did the young mistress notice the false alibi?",
+      "central_entity_ids": [
+        "entity::the_young_mistress"
+      ],
+      "why_it_matters": "Centers on perception and intelligence. The young mistress is the only character with sharp observational skills.",
+      "explored": [
+        "did_not_notice"
+      ],
+      "implicit": [
+        "noticed"
+      ]
+    },
+    "tension::did_young_mistress_notice_false_alibi::alt::noticed": {
+      "type": "alternative",
+      "raw_id": "noticed",
+      "description": "The young mistress noticed the false alibi. Her insight becomes the pivotal clue.",
+      "is_default_path": true
+    },
+    "tension::did_young_mistress_notice_false_alibi::alt::did_not_notice": {
+      "type": "alternative",
+      "raw_id": "did_not_notice",
+      "description": "The young mistress did not notice the false alibi. The solution remains hidden.",
+      "is_default_path": false
+    },
+    "tension::golden_key_real_clue_or_red_herring": {
+      "type": "tension",
+      "raw_id": "golden_key_real_clue_or_red_herring",
+      "question": "Is the golden key the real clue or a red herring?",
+      "central_entity_ids": [
+        "entity::the_golden_key"
+      ],
+      "why_it_matters": "Tests the player\u2019s ability to discern significance. The key is presented as central but may be misleading.",
+      "explored": [
+        "real_clue"
+      ],
+      "implicit": [
+        "red_herring"
+      ]
+    },
+    "tension::golden_key_real_clue_or_red_herring::alt::real_clue": {
+      "type": "alternative",
+      "raw_id": "real_clue",
+      "description": "The golden key is the real clue. It leads to the family diary and unlocks the solution.",
+      "is_default_path": true
+    },
+    "tension::golden_key_real_clue_or_red_herring::alt::red_herring": {
+      "type": "alternative",
+      "raw_id": "red_herring",
+      "description": "The golden key is a red herring. It distracts the player from the true clue.",
+      "is_default_path": false
+    },
+    "tension::tea_ritual_tradition_or_trap": {
+      "type": "tension",
+      "raw_id": "tea_ritual_tradition_or_trap",
+      "question": "Is the tea ritual a tradition or a trap?",
+      "central_entity_ids": [
+        "entity::the_tea_set",
+        "entity::the_kitchen"
+      ],
+      "why_it_matters": "Explores the illusion of normalcy. The ritual appears harmless but may conceal deeper manipulation.",
+      "explored": [
+        "tradition"
+      ],
+      "implicit": [
+        "trap"
+      ]
+    },
+    "tension::tea_ritual_tradition_or_trap::alt::tradition": {
+      "type": "alternative",
+      "raw_id": "tradition",
+      "description": "The tea ritual is a tradition. It reflects the estate\u2019s values and history and appears harmless.",
+      "is_default_path": true
+    },
+    "tension::tea_ritual_tradition_or_trap::alt::trap": {
+      "type": "alternative",
+      "raw_id": "trap",
+      "description": "The tea ritual is a trap. It may be designed to mislead or control guests, undermining the illusion of normalcy.",
+      "is_default_path": false
+    },
+    "tension::did_caretaker_witness_incident": {
+      "type": "tension",
+      "raw_id": "did_caretaker_witness_incident",
+      "question": "Did the caretaker witness the night of the incident?",
+      "central_entity_ids": [
+        "entity::the_caretaker"
+      ],
+      "why_it_matters": "Introduces a gap in the timeline. The caretaker has access to outbuildings where the incident may have occurred.",
+      "explored": [
+        "did_not_witness"
+      ],
+      "implicit": [
+        "witnessed"
+      ]
+    },
+    "tension::did_caretaker_witness_incident::alt::did_not_witness": {
+      "type": "alternative",
+      "raw_id": "did_not_witness",
+      "description": "The caretaker did not witness the incident. Their account is unreliable and the truth remains obscured.",
+      "is_default_path": true
+    },
+    "tension::did_caretaker_witness_incident::alt::witnessed": {
+      "type": "alternative",
+      "raw_id": "witnessed",
+      "description": "The caretaker did witness the incident. They may hold a vital piece of evidence.",
+      "is_default_path": false
+    },
+    "thread::host_motive": {
+      "type": "thread",
+      "raw_id": "host_motive",
+      "name": "The Host\u2019s Benevolence",
+      "tension_id": "tension::host_benevolent_or_self_serving",
+      "alternative_id": "self_serving",
+      "unexplored_alternative_ids": [],
+      "thread_importance": "major",
+      "description": "Is the host hosting tea parties to preserve tradition\u2014or to maintain control?",
+      "consequence_ids": [
+        "consequence_host_self_serving"
+      ]
+    },
+    "thread::library_knowledge": {
+      "type": "thread",
+      "raw_id": "library_knowledge",
+      "name": "The Diary\u2019s Truth",
+      "tension_id": "tension::library_knowledge_salvation_or_corruption",
+      "alternative_id": "corruption",
+      "unexplored_alternative_ids": [],
+      "thread_importance": "major",
+      "description": "Does the diary reveal a solution\u2014or a dangerous truth that corrupts the estate?",
+      "consequence_ids": [
+        "consequence_diary_corruption"
+      ]
+    },
+    "thread::garden_nature": {
+      "type": "thread",
+      "raw_id": "garden_nature",
+      "name": "The Garden\u2019s Sanctuary",
+      "tension_id": "tension::garden_sanctuary_or_trap",
+      "alternative_id": "sanctuary",
+      "unexplored_alternative_ids": [],
+      "thread_importance": "major",
+      "description": "Is the garden a safe space of truth\u2014or a trap hiding danger?",
+      "consequence_ids": [
+        "consequence_garden_sanctuary"
+      ]
+    },
+    "thread::butler_loyalty": {
+      "type": "thread",
+      "raw_id": "butler_loyalty",
+      "name": "The Butler\u2019s Silence",
+      "tension_id": "tension::can_butler_be_trusted",
+      "alternative_id": "untrusted",
+      "unexplored_alternative_ids": [],
+      "thread_importance": "major",
+      "description": "Can the butler be trusted? Is their silence loyalty\u2014or a cover for guilt?",
+      "consequence_ids": [
+        "consequence_butler_untrusted"
+      ]
+    },
+    "consequence::host_motive_benevolent_to_self_serving": {
+      "type": "consequence",
+      "raw_id": "host_motive_benevolent_to_self_serving",
+      "thread_id": "thread::host_motive",
+      "description": "If the host is self-serving, the tea ritual is manipulated to maintain control over guests, revealing the host's true motive is power, not tradition.",
+      "narrative_effects": [
+        "Establishes the host as morally ambiguous",
+        "Shifts the story from a social puzzle to a power struggle",
+        "Creates tension between appearance and reality"
+      ]
+    },
+    "consequence::library_knowledge_salvation_to_corruption": {
+      "type": "consequence",
+      "raw_id": "library_knowledge_salvation_to_corruption",
+      "thread_id": "thread::library_knowledge",
+      "description": "The diary reveals a hidden truth about a past fire, which corrupts the estate's history and causes moral collapse among the guests.",
+      "narrative_effects": [
+        "Introduces a dangerous truth that undermines trust",
+        "Creates emotional conflict and personal risk for characters",
+        "Shifts the resolution from peace to tragedy"
+      ]
+    },
+    "consequence::garden_sanctuary_to_trap": {
+      "type": "consequence",
+      "raw_id": "garden_sanctuary_to_trap",
+      "thread_id": "thread::garden_nature",
+      "description": "The garden is not a safe space but a trap that hides the true incident, with the curtain revealing a hidden compartment containing evidence of violence.",
+      "narrative_effects": [
+        "Transforms the garden from a symbol of peace to a site of danger",
+        "Introduces physical and emotional stakes in the garden",
+        "Creates a climax where the truth is hidden behind natural forms"
+      ]
+    },
+    "consequence::butler_loyalty_trusted_to_untrusted": {
+      "type": "consequence",
+      "raw_id": "butler_loyalty_trusted_to_untrusted",
+      "thread_id": "thread::butler_loyalty",
+      "description": "The butler's silence is not loyalty but a cover for guilt, and the removal of the chipped cup suggests they are hiding evidence of the incident.",
+      "narrative_effects": [
+        "Raises suspense about the butler's role in the incident",
+        "Challenges the audience's assumptions about trust and service",
+        "Makes the butler a potential culprit"
+      ]
+    },
+    "consequence::tea_ritual_altered_by_host": {
+      "type": "consequence",
+      "raw_id": "tea_ritual_altered_by_host",
+      "thread_id": "thread::host_motive",
+      "description": "The tea ritual is changed in height and timing, signaling the host's manipulation of tradition to assert control.",
+      "narrative_effects": [
+        "Shows the host's active interference in social rituals",
+        "Establishes a pattern of subtle control",
+        "Creates a sense of unease in the tea party dynamics"
+      ]
+    },
+    "consequence::young_mistress_discovered_chipped_cup_missing": {
+      "type": "consequence",
+      "raw_id": "young_mistress_discovered_chipped_cup_missing",
+      "thread_id": "thread::host_motive",
+      "description": "The young mistress notices the chipped cup is missing from the tea set, indicating a deliberate alteration of the ritual.",
+      "narrative_effects": [
+        "Introduces a key inconsistency in the tea ritual",
+        "Highlights the young mistress's sharp observational skills",
+        "Sets up a false alibi for the host"
+      ]
+    },
+    "consequence::butler_repositions_tea_set_after_guest": {
+      "type": "consequence",
+      "raw_id": "butler_repositions_tea_set_after_guest",
+      "thread_id": "thread::butler_loyalty",
+      "description": "The butler silently repositions the tea set after the guest leaves, suggesting awareness of the ritual's manipulation.",
+      "narrative_effects": [
+        "Implies the butler is aware of the host's deception",
+        "Creates a sense of silent surveillance",
+        "Builds tension around the butler's role in the estate"
+      ]
+    },
+    "consequence::garden_curtain_swings_in_wind": {
+      "type": "consequence",
+      "raw_id": "garden_curtain_swings_in_wind",
+      "thread_id": "thread::garden_nature",
+      "description": "The young mistress sees the curtain in the garden swing in the wind, indicating hidden movement within the garden space.",
+      "narrative_effects": [
+        "Introduces the garden as a place of active, unseen action",
+        "Establishes the garden as a living, responsive environment",
+        "Sets up the possibility of danger or memory"
+      ]
+    },
+    "beat::1.1": {
+      "type": "beat",
+      "raw_id": "1.1",
+      "summary": "The host invites a new guest to tea. The tea ritual is altered\u2014tea is poured from a different height.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::host_benevolent_or_self_serving",
+          "effect": "advances",
+          "note": "Shows the ritual is not fixed, indicating the host has control over tradition, suggesting self-serving motives."
+        }
+      ],
+      "entities": [
+        "entity::the_host",
+        "entity::the_tea_set",
+        "entity::the_kitchen"
+      ],
+      "location": "entity::the_kitchen",
+      "location_alternatives": [
+        "entity::the_garden"
+      ]
+    },
+    "beat::1.2": {
+      "type": "beat",
+      "raw_id": "1.2",
+      "summary": "The young mistress notices the chipped cup is missing from the tea set.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::can_butler_be_trusted",
+          "effect": "advances",
+          "note": "Reveals an inconsistency in the tea ritual, setting up a false alibi and suggesting the butler may have altered the scene."
+        },
+        {
+          "tension_id": "tension::did_young_mistress_notice_false_alibi",
+          "effect": "reveals",
+          "note": "The young mistress observes the anomaly, confirming her sharp observational skills and establishing her role as a key narrator."
+        }
+      ],
+      "entities": [
+        "entity::the_young_mistress",
+        "entity::the_tea_set"
+      ],
+      "location": "entity::the_kitchen",
+      "location_alternatives": [
+        "entity::the_garden"
+      ]
+    },
+    "beat::1.3": {
+      "type": "beat",
+      "raw_id": "1.3",
+      "summary": "The butler silently repositions the tea set after the guest leaves.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::can_butler_be_trusted",
+          "effect": "complicates",
+          "note": "The butler's action suggests awareness of the ritual's manipulation, raising doubt about their loyalty and intentions."
+        }
+      ],
+      "entities": [
+        "entity::the_butler",
+        "entity::the_tea_set"
+      ],
+      "location": "entity::the_kitchen",
+      "location_alternatives": [
+        "entity::the_garden"
+      ]
+    },
+    "beat::1.4": {
+      "type": "beat",
+      "raw_id": "1.4",
+      "summary": "The host comments: \u2018Tradition is not about rules\u2014it\u2019s about what we choose to preserve.\u2019",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::host_benevolent_or_self_serving",
+          "effect": "commits",
+          "note": "The host\u2019s words reveal a self-serving motive\u2014preserving control over the estate, not tradition or benevolence."
+        }
+      ],
+      "entities": [
+        "entity::the_host"
+      ],
+      "location": "entity::the_kitchen",
+      "location_alternatives": [
+        "entity::the_garden"
+      ]
+    },
+    "beat::2.1": {
+      "type": "beat",
+      "raw_id": "2.1",
+      "summary": "The young mistress finds a note in the library: \u2018Do not open the diary.\u2019",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::library_knowledge_salvation_or_corruption",
+          "effect": "advances",
+          "note": "Introduces the diary as a forbidden object, setting up the possibility of dangerous truths being hidden."
+        }
+      ],
+      "entities": [
+        "entity::the_young_mistress",
+        "entity::the_library",
+        "entity::the_family_diary"
+      ],
+      "location": "entity::the_library",
+      "location_alternatives": [
+        "entity::the_garden"
+      ]
+    },
+    "beat::2.2": {
+      "type": "beat",
+      "raw_id": "2.2",
+      "summary": "The mirror in the library shows a distorted version of the room\u2014like a memory.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::library_knowledge_salvation_or_corruption",
+          "effect": "reveals",
+          "note": "Suggests the diary contains fragmented truths, implying the knowledge is corrupted or distorted."
+        }
+      ],
+      "entities": [
+        "entity::the_mirror_in_the_library"
+      ],
+      "location": "entity::the_library",
+      "location_alternatives": [
+        "entity::the_garden"
+      ]
+    },
+    "beat::2.3": {
+      "type": "beat",
+      "raw_id": "2.3",
+      "summary": "The caretaker recalls seeing a man in the west wing at night.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::did_caretaker_witness_incident",
+          "effect": "complicates",
+          "note": "Introduces a timeline gap and suggests the incident occurred, raising questions about what happened in the west wing."
+        },
+        {
+          "tension_id": "tension::garden_sanctuary_or_trap",
+          "effect": "complicates",
+          "note": "The west wing is linked to the garden, suggesting danger may be present there."
+        }
+      ],
+      "entities": [
+        "entity::the_caretaker",
+        "entity::the_west_wing"
+      ],
+      "location": "entity::the_west_wing",
+      "location_alternatives": [
+        "entity::the_garden"
+      ]
+    },
+    "beat::2.4": {
+      "type": "beat",
+      "raw_id": "2.4",
+      "summary": "The diary reveals the incident: a fire that killed a guest. The host was present.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::library_knowledge_salvation_or_corruption",
+          "effect": "commits",
+          "note": "The diary contains a dangerous truth\u2014corruption\u2014showing the host covered up a fatal incident."
+        }
+      ],
+      "entities": [
+        "entity::the_family_diary",
+        "entity::the_host"
+      ],
+      "location": "entity::the_library",
+      "location_alternatives": [
+        "entity::the_west_wing"
+      ]
+    },
+    "beat::3.1": {
+      "type": "beat",
+      "raw_id": "3.1",
+      "summary": "The young mistress sees the curtain in the garden swing in the wind.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::garden_sanctuary_or_trap",
+          "effect": "advances",
+          "note": "Introduces the garden as a place of active movement, suggesting hidden actions or life within it."
+        }
+      ],
+      "entities": [
+        "entity::the_young_mistress",
+        "entity::the_garden",
+        "entity::the_curtain_in_the_garden"
+      ],
+      "location": "entity::the_garden",
+      "location_alternatives": [
+        "entity::the_kitchen"
+      ]
+    },
+    "beat::3.2": {
+      "type": "beat",
+      "raw_id": "3.2",
+      "summary": "The lady of the garden prunes a rose that has no bloom.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::garden_sanctuary_or_trap",
+          "effect": "reveals",
+          "note": "Suggests the garden is alive and aware, implying it may be a living space of memory or danger."
+        }
+      ],
+      "entities": [
+        "entity::the_lady_of_the_garden",
+        "entity::the_garden"
+      ],
+      "location": "entity::the_garden",
+      "location_alternatives": [
+        "entity::the_library"
+      ]
+    },
+    "beat::3.3": {
+      "type": "beat",
+      "raw_id": "3.3",
+      "summary": "The caretaker says: \u2018I saw a shadow in the garden at night\u2014like a man.\u2019",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::garden_sanctuary_or_trap",
+          "effect": "complicates",
+          "note": "Introduces a physical threat in the garden, suggesting it may be a trap hiding danger."
+        }
+      ],
+      "entities": [
+        "entity::the_caretaker",
+        "entity::the_garden"
+      ],
+      "location": "entity::the_garden",
+      "location_alternatives": [
+        "entity::the_west_wing"
+      ]
+    },
+    "beat::3.4": {
+      "type": "beat",
+      "raw_id": "3.4",
+      "summary": "Pulling the curtain reveals a hidden compartment with a silver candlestick.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::garden_sanctuary_or_trap",
+          "effect": "commits",
+          "note": "The garden is revealed as a sanctuary\u2014its hidden compartment contains a physical link to the past, confirming its role as a place of preservation."
+        },
+        {
+          "tension_id": "tension::library_knowledge_salvation_or_corruption",
+          "effect": "complicates",
+          "note": "The silver candlestick is a physical artifact tied to the past, suggesting the knowledge is preserved, not corrupted."
+        }
+      ],
+      "entities": [
+        "entity::the_curtain_in_the_garden",
+        "entity::the_silver_candlestick"
+      ],
+      "location": "entity::the_garden",
+      "location_alternatives": [
+        "entity::the_west_wing"
+      ]
+    },
+    "beat::4.1": {
+      "type": "beat",
+      "raw_id": "4.1",
+      "summary": "The butler serves tea with perfect timing\u2014every second is correct.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::can_butler_be_trusted",
+          "effect": "advances",
+          "note": "Demonstrates the butler\u2019s precision and control, suggesting deep understanding of the ritual and possibly its manipulation."
+        }
+      ],
+      "entities": [
+        "entity::the_butler",
+        "entity::the_kitchen"
+      ],
+      "location": "entity::the_kitchen",
+      "location_alternatives": [
+        "entity::the_garden"
+      ]
+    },
+    "beat::4.2": {
+      "type": "beat",
+      "raw_id": "4.2",
+      "summary": "The young mistress notices the butler never speaks to the guests.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::can_butler_be_trusted",
+          "effect": "advances",
+          "note": "Highlights the butler\u2019s silence as a form of power, raising suspicion about their true intentions."
+        }
+      ],
+      "entities": [
+        "entity::the_young_mistress",
+        "entity::the_butler"
+      ],
+      "location": "entity::the_kitchen",
+      "location_alternatives": [
+        "entity::the_library"
+      ]
+    },
+    "beat::4.3": {
+      "type": "beat",
+      "raw_id": "4.3",
+      "summary": "The butler removes a tea cup from the set and places it in a drawer.",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::can_butler_be_trusted",
+          "effect": "complicates",
+          "note": "Suggests the butler is hiding evidence, challenging the idea of their loyalty and creating suspense."
+        }
+      ],
+      "entities": [
+        "entity::the_butler",
+        "entity::the_tea_set"
+      ],
+      "location": "entity::the_kitchen",
+      "location_alternatives": [
+        "entity::the_west_wing"
+      ]
+    },
+    "beat::4.4": {
+      "type": "beat",
+      "raw_id": "4.4",
+      "summary": "The host says: \u2018He is not a servant. He is a guardian.\u2019",
+      "tension_impacts": [
+        {
+          "tension_id": "tension::can_butler_be_trusted",
+          "effect": "commits",
+          "note": "The host defends the butler, implying loyalty and a protective role, but the action is ambiguous\u2014leaving room for doubt."
+        }
+      ],
+      "entities": [
+        "entity::the_host",
+        "entity::the_butler"
+      ],
+      "location": "entity::the_kitchen",
+      "location_alternatives": [
+        "entity::the_garden"
+      ]
+    },
+    "convergence_sketch": {
+      "type": "convergence_sketch",
+      "convergence_points": [
+        "The garden\u2019s hidden compartment (Beat 3.4) contains the silver candlestick.",
+        "The family diary (Beat 2.4) reveals the incident occurred in the west wing.",
+        "The tea set (Beat 1.2) and chipped cup are found in the kitchen, but the butler moved it.",
+        "The mirror in the library reflects a distorted version of the garden and west wing."
+      ],
+      "residue_notes": [
+        "The garden remains a place of mystery\u2014its full truth is not known.",
+        "The butler\u2019s loyalty is never fully confirmed\u2014only implied.",
+        "The host\u2019s words are elegant, but their actions reveal a quiet control."
+      ]
+    }
+  },
+  "edges": [
+    {
+      "type": "has_alternative",
+      "from": "tension::host_benevolent_or_self_serving",
+      "to": "tension::host_benevolent_or_self_serving::alt::benevolent"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::host_benevolent_or_self_serving",
+      "to": "tension::host_benevolent_or_self_serving::alt::self_serving"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::library_knowledge_salvation_or_corruption",
+      "to": "tension::library_knowledge_salvation_or_corruption::alt::salvation"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::library_knowledge_salvation_or_corruption",
+      "to": "tension::library_knowledge_salvation_or_corruption::alt::corruption"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::garden_sanctuary_or_trap",
+      "to": "tension::garden_sanctuary_or_trap::alt::sanctuary"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::garden_sanctuary_or_trap",
+      "to": "tension::garden_sanctuary_or_trap::alt::trap"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::can_butler_be_trusted",
+      "to": "tension::can_butler_be_trusted::alt::trusted"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::can_butler_be_trusted",
+      "to": "tension::can_butler_be_trusted::alt::untrusted"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::did_young_mistress_notice_false_alibi",
+      "to": "tension::did_young_mistress_notice_false_alibi::alt::noticed"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::did_young_mistress_notice_false_alibi",
+      "to": "tension::did_young_mistress_notice_false_alibi::alt::did_not_notice"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::golden_key_real_clue_or_red_herring",
+      "to": "tension::golden_key_real_clue_or_red_herring::alt::real_clue"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::golden_key_real_clue_or_red_herring",
+      "to": "tension::golden_key_real_clue_or_red_herring::alt::red_herring"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::tea_ritual_tradition_or_trap",
+      "to": "tension::tea_ritual_tradition_or_trap::alt::tradition"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::tea_ritual_tradition_or_trap",
+      "to": "tension::tea_ritual_tradition_or_trap::alt::trap"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::did_caretaker_witness_incident",
+      "to": "tension::did_caretaker_witness_incident::alt::did_not_witness"
+    },
+    {
+      "type": "has_alternative",
+      "from": "tension::did_caretaker_witness_incident",
+      "to": "tension::did_caretaker_witness_incident::alt::witnessed"
+    },
+    {
+      "type": "explores",
+      "from": "thread::host_motive",
+      "to": "tension::host_benevolent_or_self_serving::alt::self_serving"
+    },
+    {
+      "type": "explores",
+      "from": "thread::library_knowledge",
+      "to": "tension::library_knowledge_salvation_or_corruption::alt::corruption"
+    },
+    {
+      "type": "explores",
+      "from": "thread::garden_nature",
+      "to": "tension::garden_sanctuary_or_trap::alt::sanctuary"
+    },
+    {
+      "type": "explores",
+      "from": "thread::butler_loyalty",
+      "to": "tension::can_butler_be_trusted::alt::untrusted"
+    },
+    {
+      "type": "has_consequence",
+      "from": "thread::host_motive",
+      "to": "consequence::host_motive_benevolent_to_self_serving"
+    },
+    {
+      "type": "has_consequence",
+      "from": "thread::library_knowledge",
+      "to": "consequence::library_knowledge_salvation_to_corruption"
+    },
+    {
+      "type": "has_consequence",
+      "from": "thread::garden_nature",
+      "to": "consequence::garden_sanctuary_to_trap"
+    },
+    {
+      "type": "has_consequence",
+      "from": "thread::butler_loyalty",
+      "to": "consequence::butler_loyalty_trusted_to_untrusted"
+    },
+    {
+      "type": "has_consequence",
+      "from": "thread::host_motive",
+      "to": "consequence::tea_ritual_altered_by_host"
+    },
+    {
+      "type": "has_consequence",
+      "from": "thread::host_motive",
+      "to": "consequence::young_mistress_discovered_chipped_cup_missing"
+    },
+    {
+      "type": "has_consequence",
+      "from": "thread::butler_loyalty",
+      "to": "consequence::butler_repositions_tea_set_after_guest"
+    },
+    {
+      "type": "has_consequence",
+      "from": "thread::garden_nature",
+      "to": "consequence::garden_curtain_swings_in_wind"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::1.1",
+      "to": "thread::host_motive"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::1.2",
+      "to": "thread::host_motive"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::1.3",
+      "to": "thread::host_motive"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::1.3",
+      "to": "thread::butler_loyalty"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::1.4",
+      "to": "thread::host_motive"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::2.1",
+      "to": "thread::library_knowledge"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::2.2",
+      "to": "thread::library_knowledge"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::2.3",
+      "to": "thread::library_knowledge"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::2.3",
+      "to": "thread::garden_nature"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::2.4",
+      "to": "thread::library_knowledge"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::3.1",
+      "to": "thread::garden_nature"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::3.2",
+      "to": "thread::garden_nature"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::3.3",
+      "to": "thread::garden_nature"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::3.4",
+      "to": "thread::garden_nature"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::3.4",
+      "to": "thread::library_knowledge"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::4.1",
+      "to": "thread::butler_loyalty"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::4.2",
+      "to": "thread::butler_loyalty"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::4.3",
+      "to": "thread::butler_loyalty"
+    },
+    {
+      "type": "belongs_to",
+      "from": "beat::4.4",
+      "to": "thread::butler_loyalty"
+    }
+  ]
+}
