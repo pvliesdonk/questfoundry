@@ -255,6 +255,87 @@ This suggests the problem is in the serialize phase specifically, not the discus
 - Explicit minimum beat counts with validation rejection
 - Or simply use local models for SEED stage
 
+## Over-Helpfulness Analysis
+
+Deeper analysis of the interactive run outputs revealed that GPT-4o exhibits "chat assistant" behaviors that hurt structured generation.
+
+### Observed Anti-Patterns
+
+| Anti-Pattern | GPT-4o Example | Impact |
+|--------------|----------------|--------|
+| **Prose backstories** | "known for her sharp wit and keen observational skills. She has a penchant for classical music..." | Doesn't fit schema fields, wastes tokens |
+| **Assistant pleasantries** | "Good luck with your story!" | Breaks task focus, not serializable |
+| **Feedback solicitation** | "Let me know if you need any further refinements" | Not actionable in pipeline |
+| **Creative writing mode** | "rich tapestry of mystery and intrigue" | Wrong task framing |
+| **Skipping structure** | Discusses themes but barely mentions beats | Under-produces required elements |
+
+### Beat Discussion Frequency
+
+| Model | "beat" mentions in SEED discuss | Final beat count |
+|-------|--------------------------------|------------------|
+| qwen3:4b | 35 (18 + 17 across calls) | 16 |
+| gpt-4o | 1 | 6 |
+
+GPT-4o barely engages with the beat requirements during discussion, then under-produces during serialization.
+
+### Output Style Comparison
+
+**GPT-4o BRAINSTORM output** — Prose paragraphs with backstories:
+```
+1. **Detective Eleanor Chase (ID: detective_chase)**
+   - A seasoned private investigator known for her sharp wit and keen
+     observational skills. She has a penchant for classical music and
+     is always impeccably dressed.
+```
+
+**qwen3:4b BRAINSTORM output** — Structured table format:
+```
+| ID | Name | Type | Notes |
+|----|------|------|-------|
+| the_host | Lady Evelyn Hartwell | Character | Elegant hostess with mysterious past. Presence both comforting and commanding. |
+```
+
+**GPT-4o SEED ending** — Chat assistant mode:
+```
+...feel free to reach out. Good luck with your story!
+```
+
+**qwen3:4b SEED ending** — Task execution mode:
+```
+🟢 **This is a fully committed, playable structure** — ready for prose development.
+➡️ **Next Step:** Proceed to *BEAT EXPANSION* phase.
+**End of SEED Stage Output** ✅
+```
+
+### Root Cause
+
+GPT-4o's RLHF training optimizes for being a helpful chat assistant:
+- Provide rich, engaging responses (→ prose backstories)
+- Be concise and not overwhelming (→ fewer beats)
+- Offer to help further (→ pleasantries)
+- Frame responses as collaborative (→ "let me know")
+
+These behaviors are desirable in a chat assistant but counterproductive for constrained structured generation.
+
+### Recommended Prompt Additions
+
+The current prompts specify what TO do but not what NOT to do. Adding explicit anti-pattern guidance may help:
+
+```yaml
+## What NOT to Do
+- Do NOT write prose paragraphs with backstories - use concise notes
+- Do NOT end with "let me know if you need..." - this is not a chat
+- Do NOT include "Good luck!" or similar pleasantries
+- Do NOT skip beat creation - beats are REQUIRED, count them before finishing
+- Do NOT stop at 2 beats per thread - aim for 3-4
+
+## Output Format
+BAD: "Detective Chase is a seasoned investigator known for her sharp wit..."
+GOOD: "Concept: Seasoned detective. Notes: Sharp wit, classical music lover."
+```
+
+See issue #169 for implementation details.
+
 ---
 
 ## Appendix A: YAML Excerpts
