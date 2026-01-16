@@ -1071,21 +1071,31 @@ def test_run_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> None
     assert call_kwargs["provider_serialize_override"] == "openai/o1-mini"
 
 
+def _strip_ansi(text: str) -> str:
+    """Strip ANSI escape codes from text."""
+    import re
+
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 def test_dream_help_shows_phase_provider_flags() -> None:
     """Test dream --help shows all phase-specific provider flags."""
     result = runner.invoke(app, ["dream", "--help"])
+    output = _strip_ansi(result.stdout)
 
     assert result.exit_code == 0
-    assert "--provider-discuss" in result.stdout
-    assert "--provider-summarize" in result.stdout
-    assert "--provider-serialize" in result.stdout
+    assert "--provider-discuss" in output
+    assert "--provider-summarize" in output
+    assert "--provider-serialize" in output
 
 
 def test_run_help_shows_phase_provider_flags() -> None:
     """Test run --help shows all phase-specific provider flags."""
     result = runner.invoke(app, ["run", "--help"])
+    output = _strip_ansi(result.stdout)
 
     assert result.exit_code == 0
-    assert "--provider-discuss" in result.stdout
-    assert "--provider-summarize" in result.stdout or "--provider-summari" in result.stdout
-    assert "--provider-serialize" in result.stdout or "--provider-seriali" in result.stdout
+    assert "--provider-discuss" in output
+    # Rich may truncate long option names in help
+    assert "--provider-summari" in output or "--provider-summarize" in output
+    assert "--provider-seriali" in output or "--provider-serialize" in output
