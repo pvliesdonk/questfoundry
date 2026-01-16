@@ -265,11 +265,8 @@ class PipelineOrchestrator:
     def _get_chat_model(self) -> BaseChatModel:
         """Get or create the LangChain chat model for discuss phase.
 
-        Provider resolution order (highest priority first):
-        1. CLI --provider flag (provider_override)
-        2. QF_PROVIDER environment variable
-        3. project.yaml providers.default
-        4. Default: ollama/qwen3:8b
+        Uses `_get_resolved_discuss_provider()` for provider resolution.
+        See that method for the full 6-level precedence chain.
 
         Returns:
             Configured BaseChatModel.
