@@ -578,3 +578,161 @@ async def test_orchestrator_no_validation_without_mutation_handler(
     # Neither apply_mutations nor validate_invariants should be called
     mock_apply.assert_not_called()
     mock_validate.assert_not_called()
+
+
+# --- Phase-Specific Provider Override Tests ---
+
+
+def test_orchestrator_stores_phase_overrides(tmp_path: Path) -> None:
+    """Orchestrator stores phase-specific CLI overrides."""
+    # Create project config
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text("name: override_test\n")
+
+    orchestrator = PipelineOrchestrator(
+        tmp_path,
+        provider_override="ollama/default",
+        provider_discuss_override="ollama/discuss",
+        provider_summarize_override="openai/gpt-4o",
+        provider_serialize_override="openai/o1-mini",
+    )
+
+    assert orchestrator._provider_override == "ollama/default"
+    assert orchestrator._provider_discuss_override == "ollama/discuss"
+    assert orchestrator._provider_summarize_override == "openai/gpt-4o"
+    assert orchestrator._provider_serialize_override == "openai/o1-mini"
+
+
+def test_orchestrator_discuss_override_precedence(tmp_path: Path) -> None:
+    """Phase-specific discuss CLI override takes precedence over general override."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text("name: precedence_test\n")
+
+    orchestrator = PipelineOrchestrator(
+        tmp_path,
+        provider_override="ollama/general",
+        provider_discuss_override="openai/specific",
+    )
+
+    # Phase-specific should win over general
+    resolved = orchestrator._get_resolved_discuss_provider()
+    assert resolved == "openai/specific"
+
+
+def test_orchestrator_discuss_fallback_to_general(tmp_path: Path) -> None:
+    """Discuss falls back to general override when phase-specific not set."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text("name: fallback_test\n")
+
+    orchestrator = PipelineOrchestrator(
+        tmp_path,
+        provider_override="ollama/general",
+        # No provider_discuss_override
+    )
+
+    resolved = orchestrator._get_resolved_discuss_provider()
+    assert resolved == "ollama/general"
+
+
+def test_orchestrator_phase_provider_precedence(tmp_path: Path) -> None:
+    """Phase-specific CLI overrides take precedence for summarize/serialize."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: phase_test
+providers:
+  default: ollama/config-default
+  summarize: ollama/config-summarize
+  serialize: ollama/config-serialize
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(
+        tmp_path,
+        provider_override="ollama/cli-general",
+        provider_summarize_override="openai/cli-summarize",
+        provider_serialize_override="openai/cli-serialize",
+    )
+
+    # Phase-specific CLI should win
+    assert orchestrator._get_resolved_phase_provider("summarize") == "openai/cli-summarize"
+    assert orchestrator._get_resolved_phase_provider("serialize") == "openai/cli-serialize"
+
+
+def test_orchestrator_phase_provider_env_precedence(tmp_path: Path) -> None:
+    """Phase-specific env vars take precedence over config but not CLI."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: env_test
+providers:
+  default: ollama/config-default
+  summarize: ollama/config-summarize
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    # Test env var precedence (no CLI override)
+    with patch.dict("os.environ", {"QF_PROVIDER_SUMMARIZE": "anthropic/env-summarize"}):
+        resolved = orchestrator._get_resolved_phase_provider("summarize")
+        assert resolved == "anthropic/env-summarize"
+
+
+def test_orchestrator_phase_provider_full_precedence_chain(tmp_path: Path) -> None:
+    """Full 6-level precedence chain for phase providers."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: chain_test
+providers:
+  default: ollama/level6
+  serialize: ollama/level5
+"""
+    )
+
+    # Level 1: Phase CLI wins
+    orchestrator = PipelineOrchestrator(
+        tmp_path,
+        provider_override="ollama/level2",
+        provider_serialize_override="ollama/level1",
+    )
+    with patch.dict(
+        "os.environ",
+        {"QF_PROVIDER_SERIALIZE": "ollama/level3", "QF_PROVIDER": "ollama/level4"},
+    ):
+        assert orchestrator._get_resolved_phase_provider("serialize") == "ollama/level1"
+
+    # Level 2: General CLI wins (no phase CLI)
+    orchestrator = PipelineOrchestrator(
+        tmp_path,
+        provider_override="ollama/level2",
+    )
+    with patch.dict(
+        "os.environ",
+        {"QF_PROVIDER_SERIALIZE": "ollama/level3", "QF_PROVIDER": "ollama/level4"},
+    ):
+        assert orchestrator._get_resolved_phase_provider("serialize") == "ollama/level2"
+
+    # Level 3: Phase env wins (no CLI)
+    orchestrator = PipelineOrchestrator(tmp_path)
+    with patch.dict(
+        "os.environ",
+        {"QF_PROVIDER_SERIALIZE": "ollama/level3", "QF_PROVIDER": "ollama/level4"},
+    ):
+        assert orchestrator._get_resolved_phase_provider("serialize") == "ollama/level3"
+
+    # Level 4: General env wins (no phase env)
+    orchestrator = PipelineOrchestrator(tmp_path)
+    with patch.dict("os.environ", {"QF_PROVIDER": "ollama/level4"}, clear=False):
+        # Need to ensure QF_PROVIDER_SERIALIZE is not set
+        import os
+
+        orig = os.environ.pop("QF_PROVIDER_SERIALIZE", None)
+        try:
+            assert orchestrator._get_resolved_phase_provider("serialize") == "ollama/level4"
+        finally:
+            if orig:
+                os.environ["QF_PROVIDER_SERIALIZE"] = orig
+
+    # Level 5 & 6: Config (tested in test_config.py)

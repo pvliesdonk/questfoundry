@@ -202,13 +202,20 @@ def _require_project(project_path: Path) -> None:
 
 
 def _get_orchestrator(
-    project_path: Path, provider_override: str | None = None
+    project_path: Path,
+    provider_override: str | None = None,
+    provider_discuss_override: str | None = None,
+    provider_summarize_override: str | None = None,
+    provider_serialize_override: str | None = None,
 ) -> PipelineOrchestrator:
     """Get a pipeline orchestrator for the project.
 
     Args:
         project_path: Path to the project directory.
         provider_override: Optional provider string (e.g., "openai/gpt-4o") to override config.
+        provider_discuss_override: Optional provider override for discuss phase.
+        provider_summarize_override: Optional provider override for summarize phase.
+        provider_serialize_override: Optional provider override for serialize phase.
 
     Returns:
         Configured PipelineOrchestrator.
@@ -218,6 +225,9 @@ def _get_orchestrator(
     return PipelineOrchestrator(
         project_path,
         provider_override=provider_override,
+        provider_discuss_override=provider_discuss_override,
+        provider_summarize_override=provider_summarize_override,
+        provider_serialize_override=provider_serialize_override,
         enable_llm_logging=_log_enabled,
     )
 
@@ -308,6 +318,9 @@ async def _run_stage_async(
     project_path: Path,
     context: dict[str, Any],
     provider: str | None,
+    provider_discuss: str | None = None,
+    provider_summarize: str | None = None,
+    provider_serialize: str | None = None,
 ) -> StageResult:
     """Run a stage asynchronously and close orchestrator.
 
@@ -315,13 +328,22 @@ async def _run_stage_async(
         stage_name: Name of the stage to run.
         project_path: Path to the project directory.
         context: Context dict for the stage.
-        provider: Optional provider override.
+        provider: Optional provider override for all phases.
+        provider_discuss: Optional provider override for discuss phase.
+        provider_summarize: Optional provider override for summarize phase.
+        provider_serialize: Optional provider override for serialize phase.
 
     Returns:
         StageResult from the stage execution.
     """
     log = get_logger(__name__)
-    orchestrator = _get_orchestrator(project_path, provider_override=provider)
+    orchestrator = _get_orchestrator(
+        project_path,
+        provider_override=provider,
+        provider_discuss_override=provider_discuss,
+        provider_summarize_override=provider_summarize,
+        provider_serialize_override=provider_serialize,
+    )
     log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
     try:
         return await orchestrator.run_stage(stage_name, context)
@@ -339,6 +361,9 @@ def _run_stage_command(
     default_noninteractive_prompt: str | None,
     preview_fn: PreviewFn | None,
     next_step_hint: str | None = None,
+    provider_discuss: str | None = None,
+    provider_summarize: str | None = None,
+    provider_serialize: str | None = None,
 ) -> None:
     """Common logic for running a stage command.
 
@@ -349,13 +374,16 @@ def _run_stage_command(
         stage_name: Name of the stage (e.g., "dream", "brainstorm", "seed").
         project_path: Path to the project directory.
         prompt: User-provided prompt, or None to use defaults.
-        provider: Optional provider override string.
+        provider: Optional provider override string for all phases.
         interactive: Explicit interactive mode flag, or None for auto-detect.
         default_interactive_prompt: Default prompt for interactive mode.
         default_noninteractive_prompt: Default prompt for non-interactive mode.
             If None, non-interactive mode requires an explicit prompt.
         preview_fn: Optional function to display artifact preview.
         next_step_hint: Optional hint about next step (e.g., "qf brainstorm").
+        provider_discuss: Optional provider override for discuss phase.
+        provider_summarize: Optional provider override for summarize phase.
+        provider_serialize: Optional provider override for serialize phase.
     """
     log = get_logger(__name__)
 
@@ -394,7 +422,17 @@ def _run_stage_command(
         console.print("[dim]The AI will discuss with you.[/dim]")
         console.print("[dim]Type [bold]/done[/bold] or press Enter on empty line to finish.[/dim]")
         console.print()
-        result = asyncio.run(_run_stage_async(stage_name, project_path, context, provider))
+        result = asyncio.run(
+            _run_stage_async(
+                stage_name,
+                project_path,
+                context,
+                provider,
+                provider_discuss,
+                provider_summarize,
+                provider_serialize,
+            )
+        )
     else:
         # Non-interactive: use progress spinner
         with Progress(
@@ -404,7 +442,17 @@ def _run_stage_command(
             transient=True,
         ) as progress:
             progress.add_task(f"Running {stage_name.upper()} stage...", total=None)
-            result = asyncio.run(_run_stage_async(stage_name, project_path, context, provider))
+            result = asyncio.run(
+                _run_stage_async(
+                    stage_name,
+                    project_path,
+                    context,
+                    provider,
+                    provider_discuss,
+                    provider_summarize,
+                    provider_serialize,
+                )
+            )
 
     if result.status == "failed":
         log.error("stage_failed", stage=stage_name, errors=result.errors)
@@ -619,7 +667,19 @@ def dream(
     ] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
+        typer.Option("--provider", help="LLM provider for all phases (e.g., ollama/qwen3:8b)"),
+    ] = None,
+    provider_discuss: Annotated[
+        str | None,
+        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+    ] = None,
+    provider_summarize: Annotated[
+        str | None,
+        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+    ] = None,
+    provider_serialize: Annotated[
+        str | None,
+        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
     ] = None,
     interactive: Annotated[
         bool | None,
@@ -653,6 +713,9 @@ def dream(
         default_noninteractive_prompt=None,  # DREAM requires explicit prompt
         preview_fn=_preview_dream_artifact,
         next_step_hint="qf brainstorm",
+        provider_discuss=provider_discuss,
+        provider_summarize=provider_summarize,
+        provider_serialize=provider_serialize,
     )
 
 
@@ -669,7 +732,19 @@ def brainstorm(
     ] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
+        typer.Option("--provider", help="LLM provider for all phases (e.g., ollama/qwen3:8b)"),
+    ] = None,
+    provider_discuss: Annotated[
+        str | None,
+        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+    ] = None,
+    provider_summarize: Annotated[
+        str | None,
+        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+    ] = None,
+    provider_serialize: Annotated[
+        str | None,
+        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
     ] = None,
     interactive: Annotated[
         bool | None,
@@ -706,6 +781,9 @@ def brainstorm(
         default_noninteractive_prompt=DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT,
         preview_fn=_preview_brainstorm_artifact,
         next_step_hint="qf seed",
+        provider_discuss=provider_discuss,
+        provider_summarize=provider_summarize,
+        provider_serialize=provider_serialize,
     )
 
 
@@ -722,7 +800,19 @@ def seed(
     ] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
+        typer.Option("--provider", help="LLM provider for all phases (e.g., ollama/qwen3:8b)"),
+    ] = None,
+    provider_discuss: Annotated[
+        str | None,
+        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+    ] = None,
+    provider_summarize: Annotated[
+        str | None,
+        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+    ] = None,
+    provider_serialize: Annotated[
+        str | None,
+        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
     ] = None,
     interactive: Annotated[
         bool | None,
@@ -760,6 +850,9 @@ def seed(
         default_interactive_prompt=DEFAULT_INTERACTIVE_SEED_PROMPT,
         default_noninteractive_prompt=DEFAULT_NONINTERACTIVE_SEED_PROMPT,
         preview_fn=_preview_seed_artifact,
+        provider_discuss=provider_discuss,
+        provider_summarize=provider_summarize,
+        provider_serialize=provider_serialize,
     )
 
     # SEED-specific message about thread freeze
@@ -801,7 +894,19 @@ def run(
     ] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="LLM provider (e.g., ollama/qwen3:8b, openai/gpt-4o)"),
+        typer.Option("--provider", help="LLM provider for all phases (e.g., ollama/qwen3:8b)"),
+    ] = None,
+    provider_discuss: Annotated[
+        str | None,
+        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+    ] = None,
+    provider_summarize: Annotated[
+        str | None,
+        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+    ] = None,
+    provider_serialize: Annotated[
+        str | None,
+        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
     ] = None,
     interactive: Annotated[
         bool | None,
@@ -910,6 +1015,9 @@ def run(
                 default_noninteractive_prompt=default_noninteractive_prompt,
                 preview_fn=STAGE_PREVIEW_FNS.get(stage_name),
                 next_step_hint=next_step_hint,
+                provider_discuss=provider_discuss,
+                provider_summarize=provider_summarize,
+                provider_serialize=provider_serialize,
             )
 
             # SEED-specific message

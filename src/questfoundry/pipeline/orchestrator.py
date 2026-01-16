@@ -107,6 +107,9 @@ class PipelineOrchestrator:
         project_path: Path,
         gate: GateHook | None = None,
         provider_override: str | None = None,
+        provider_discuss_override: str | None = None,
+        provider_summarize_override: str | None = None,
+        provider_serialize_override: str | None = None,
         enable_llm_logging: bool = False,
     ) -> None:
         """Initialize the orchestrator.
@@ -116,15 +119,31 @@ class PipelineOrchestrator:
             gate: Optional gate hook for stage transitions.
                 Defaults to AutoApproveGate.
             provider_override: Optional provider string (e.g., "openai/gpt-4o")
-                to override the project config.
+                to override the project config for all phases.
+            provider_discuss_override: Optional provider override for discuss phase.
+            provider_summarize_override: Optional provider override for summarize phase.
+            provider_serialize_override: Optional provider override for serialize phase.
             enable_llm_logging: If True, log LLM calls to logs/llm_calls.jsonl.
 
         Raises:
             ProjectConfigError: If project.yaml cannot be loaded.
+
+        Note:
+            Phase-specific overrides take precedence over provider_override.
+            Resolution order for each phase:
+            1. Phase-specific CLI flag (e.g., --provider-discuss)
+            2. General CLI flag (--provider)
+            3. Phase-specific env var (e.g., QF_PROVIDER_DISCUSS)
+            4. General env var (QF_PROVIDER)
+            5. Phase-specific config (e.g., providers.discuss)
+            6. Default config (providers.default)
         """
         self.project_path = project_path
         self._gate = gate or AutoApproveGate()
         self._provider_override = provider_override
+        self._provider_discuss_override = provider_discuss_override
+        self._provider_summarize_override = provider_summarize_override
+        self._provider_serialize_override = provider_serialize_override
         self._enable_llm_logging = enable_llm_logging
 
         # Load configuration
@@ -224,13 +243,21 @@ class PipelineOrchestrator:
     def _get_resolved_discuss_provider(self) -> str:
         """Get the final resolved provider string for discuss phase.
 
-        Applies full precedence chain: CLI override > env var > config default.
+        Applies full precedence chain:
+        1. --provider-discuss CLI flag
+        2. --provider CLI flag
+        3. QF_PROVIDER_DISCUSS env var
+        4. QF_PROVIDER env var
+        5. providers.discuss config
+        6. providers.default config
 
         Returns:
             The resolved provider string (e.g., "ollama/qwen3:8b").
         """
         return (
-            self._provider_override
+            self._provider_discuss_override
+            or self._provider_override
+            or os.environ.get("QF_PROVIDER_DISCUSS")
             or os.environ.get("QF_PROVIDER")
             or self.config.providers.get_discuss_provider()
         )
@@ -238,11 +265,8 @@ class PipelineOrchestrator:
     def _get_chat_model(self) -> BaseChatModel:
         """Get or create the LangChain chat model for discuss phase.
 
-        Provider resolution order (highest priority first):
-        1. CLI --provider flag (provider_override)
-        2. QF_PROVIDER environment variable
-        3. project.yaml providers.default
-        4. Default: ollama/qwen3:8b
+        Uses `_get_resolved_discuss_provider()` for provider resolution.
+        See that method for the full 6-level precedence chain.
 
         Returns:
             Configured BaseChatModel.
@@ -266,6 +290,40 @@ class PipelineOrchestrator:
         self._chat_model = chat_model
         return self._chat_model
 
+    def _get_resolved_phase_provider(self, phase: Literal["summarize", "serialize"]) -> str:
+        """Get the final resolved provider string for a specific phase.
+
+        Applies full precedence chain:
+        1. Phase-specific CLI flag (e.g., --provider-summarize)
+        2. General CLI flag (--provider)
+        3. Phase-specific env var (e.g., QF_PROVIDER_SUMMARIZE)
+        4. General env var (QF_PROVIDER)
+        5. Phase-specific config (e.g., providers.summarize)
+        6. Default config (providers.default)
+
+        Args:
+            phase: The pipeline phase ("summarize" or "serialize").
+
+        Returns:
+            The resolved provider string (e.g., "openai/gpt-4o").
+        """
+        if phase == "summarize":
+            cli_override = self._provider_summarize_override
+            config_provider = self.config.providers.get_summarize_provider()
+            env_var = "QF_PROVIDER_SUMMARIZE"
+        else:  # serialize
+            cli_override = self._provider_serialize_override
+            config_provider = self.config.providers.get_serialize_provider()
+            env_var = "QF_PROVIDER_SERIALIZE"
+
+        return (
+            cli_override
+            or self._provider_override
+            or os.environ.get(env_var)
+            or os.environ.get("QF_PROVIDER")
+            or config_provider
+        )
+
     def _get_phase_model(
         self,
         phase: Literal["summarize", "serialize"],
@@ -281,20 +339,16 @@ class PipelineOrchestrator:
         Returns:
             Configured BaseChatModel for the specified phase.
         """
-        # Get phase-specific provider from config
-        if phase == "summarize":
-            phase_provider = self.config.providers.get_summarize_provider()
-            cached_model = self._summarize_model
-        else:  # serialize
-            phase_provider = self.config.providers.get_serialize_provider()
-            cached_model = self._serialize_model
-
-        # Compare against resolved discuss provider (with full precedence chain)
+        # Get resolved providers for both phase and discuss
+        phase_provider = self._get_resolved_phase_provider(phase)
         discuss_provider = self._get_resolved_discuss_provider()
 
         # If same as discuss provider, reuse discuss model
         if phase_provider == discuss_provider:
             return self._get_chat_model()
+
+        # Check cached model
+        cached_model = self._summarize_model if phase == "summarize" else self._serialize_model
 
         # Return cached model if available
         if cached_model is not None:

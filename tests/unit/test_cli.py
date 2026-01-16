@@ -861,3 +861,241 @@ def test_run_command_all_completed_no_force(tmp_path: Path) -> None:
     assert result.exit_code == 0
     assert "All stages already completed" in result.stdout
     assert "--force" in result.stdout
+
+
+# --- Phase-Specific Provider Flag Tests ---
+
+
+def test_dream_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> None:
+    """Test dream command passes phase-specific provider flags to orchestrator."""
+    from questfoundry.pipeline import StageResult
+
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    mock_result = StageResult(
+        stage="dream",
+        status="completed",
+        artifact_path=project_path / "artifacts" / "dream.yaml",
+        llm_calls=1,
+        tokens_used=500,
+        duration_seconds=1.5,
+    )
+
+    # Create mock artifact
+    import yaml
+
+    artifact = {"type": "dream", "version": 1, "genre": "fantasy"}
+    with (project_path / "artifacts" / "dream.yaml").open("w") as f:
+        yaml.safe_dump(artifact, f)
+
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+        mock_orchestrator.run_stage = AsyncMock(return_value=mock_result)
+        mock_orchestrator.close = AsyncMock()
+        mock_orchestrator.config.provider.name = "test"
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            [
+                "dream",
+                "A story",
+                "--project",
+                str(project_path),
+                "--provider-discuss",
+                "ollama/qwen3:8b",
+                "--provider-summarize",
+                "openai/gpt-4o",
+                "--provider-serialize",
+                "openai/o1-mini",
+            ],
+        )
+
+    assert result.exit_code == 0
+    # Verify orchestrator was called with phase-specific overrides
+    mock_get.assert_called_once()
+    call_kwargs = mock_get.call_args[1]
+    assert call_kwargs["provider_discuss_override"] == "ollama/qwen3:8b"
+    assert call_kwargs["provider_summarize_override"] == "openai/gpt-4o"
+    assert call_kwargs["provider_serialize_override"] == "openai/o1-mini"
+
+
+def test_brainstorm_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> None:
+    """Test brainstorm command passes phase-specific provider flags to orchestrator."""
+    from questfoundry.pipeline import StageResult
+
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    mock_result = StageResult(
+        stage="brainstorm",
+        status="completed",
+        artifact_path=project_path / "artifacts" / "brainstorm.yaml",
+        llm_calls=1,
+        tokens_used=500,
+        duration_seconds=1.5,
+    )
+
+    # Create mock artifact
+    import yaml
+
+    artifact = {"type": "brainstorm", "version": 1, "entities": [], "tensions": []}
+    with (project_path / "artifacts" / "brainstorm.yaml").open("w") as f:
+        yaml.safe_dump(artifact, f)
+
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+        mock_orchestrator.run_stage = AsyncMock(return_value=mock_result)
+        mock_orchestrator.close = AsyncMock()
+        mock_orchestrator.config.provider.name = "test"
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            [
+                "brainstorm",
+                "--project",
+                str(project_path),
+                "--provider-serialize",
+                "openai/o1-mini",
+            ],
+        )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_get.call_args[1]
+    assert call_kwargs["provider_serialize_override"] == "openai/o1-mini"
+
+
+def test_seed_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> None:
+    """Test seed command passes phase-specific provider flags to orchestrator."""
+    from questfoundry.pipeline import StageResult
+
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    mock_result = StageResult(
+        stage="seed",
+        status="completed",
+        artifact_path=project_path / "artifacts" / "seed.yaml",
+        llm_calls=1,
+        tokens_used=500,
+        duration_seconds=1.5,
+    )
+
+    # Create mock artifact
+    import yaml
+
+    artifact = {"type": "seed", "version": 1, "entities": [], "threads": [], "initial_beats": []}
+    with (project_path / "artifacts" / "seed.yaml").open("w") as f:
+        yaml.safe_dump(artifact, f)
+
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+        mock_orchestrator.run_stage = AsyncMock(return_value=mock_result)
+        mock_orchestrator.close = AsyncMock()
+        mock_orchestrator.config.provider.name = "test"
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            [
+                "seed",
+                "--project",
+                str(project_path),
+                "--provider-discuss",
+                "anthropic/claude-3",
+            ],
+        )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_get.call_args[1]
+    assert call_kwargs["provider_discuss_override"] == "anthropic/claude-3"
+
+
+def test_run_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> None:
+    """Test run command passes phase-specific provider flags to each stage."""
+    from questfoundry.pipeline import StageResult
+
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    # Create mock artifacts directory
+    import yaml
+
+    # Create dream artifact
+    artifact = {"type": "dream", "version": 1, "genre": "fantasy"}
+    with (project_path / "artifacts" / "dream.yaml").open("w") as f:
+        yaml.safe_dump(artifact, f)
+
+    def make_result(stage: str) -> StageResult:
+        artifact_file = project_path / "artifacts" / f"{stage}.yaml"
+        artifact_file.write_text(f"type: {stage}\nversion: 1\n")
+        return StageResult(
+            stage=stage,
+            status="completed",
+            artifact_path=artifact_file,
+            llm_calls=1,
+            tokens_used=100,
+            duration_seconds=0.5,
+        )
+
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+        mock_status = MagicMock()
+        mock_status.stages = {}  # No completed stages
+        mock_orchestrator.get_status.return_value = mock_status
+        mock_orchestrator.run_stage = AsyncMock(side_effect=lambda s, _: make_result(s))
+        mock_orchestrator.close = AsyncMock()
+        mock_orchestrator.config.provider.name = "test"
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            [
+                "run",
+                "--to",
+                "dream",
+                "--project",
+                str(project_path),
+                "--prompt",
+                "A story",
+                "--provider-serialize",
+                "openai/o1-mini",
+            ],
+        )
+
+    assert result.exit_code == 0
+    # Check that phase-specific flags were passed through
+    call_kwargs = mock_get.call_args[1]
+    assert call_kwargs["provider_serialize_override"] == "openai/o1-mini"
+
+
+def _strip_ansi(text: str) -> str:
+    """Strip ANSI escape codes from text."""
+    import re
+
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
+def test_dream_help_shows_phase_provider_flags() -> None:
+    """Test dream --help shows all phase-specific provider flags."""
+    result = runner.invoke(app, ["dream", "--help"])
+    output = _strip_ansi(result.stdout)
+
+    assert result.exit_code == 0
+    assert "--provider-discuss" in output
+    assert "--provider-summarize" in output
+    assert "--provider-serialize" in output
+
+
+def test_run_help_shows_phase_provider_flags() -> None:
+    """Test run --help shows all phase-specific provider flags."""
+    result = runner.invoke(app, ["run", "--help"])
+    output = _strip_ansi(result.stdout)
+
+    assert result.exit_code == 0
+    assert "--provider-discuss" in output
+    # Rich may truncate long option names in help
+    assert "--provider-summari" in output or "--provider-summarize" in output
+    assert "--provider-seriali" in output or "--provider-serialize" in output
