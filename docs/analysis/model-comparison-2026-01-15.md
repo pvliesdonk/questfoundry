@@ -508,4 +508,4 @@ uv run qf seed -ni --provider ollama/gpt-oss:20b --project run-3-ni
 
 ---
 
-*Analysis performed on artifacts in `projects/run-{1,2,3}-ni/`*
+*Analysis performed on artifacts in [`examples/model-comparison-2026-01-15/`](../../examples/model-comparison-2026-01-15/)*

@@ -1,0 +1,12 @@
+name: run-1-int
+version: 1
+pipeline:
+  stages:
+  - dream
+  - brainstorm
+  - seed
+  - grow
+  - fill
+  - ship
+providers:
+  default: ollama/qwen3:8b

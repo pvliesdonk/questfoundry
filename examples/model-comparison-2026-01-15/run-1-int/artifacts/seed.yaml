@@ -1,0 +1,509 @@
+entities:
+  - entity_id: lady_evelyn_hartwell
+    entity_type: character
+    concept: The host of Hartwell House, elegant and reserved, who invites
+      guests to evening tea.
+    notes: Present in the foyer; her presence is implied but not directly shown
+      in the scene.
+    disposition: retained
+  - entity_id: lady_eleanor_hartwell
+    entity_type: character
+    concept: The deceased matriarch, whose mourning gown matches the gray dress
+      in the mirror.
+    notes: Her death is central to the mystery; the mirror shows her in a gray
+      dress, suggesting she may not be dead.
+    disposition: retained
+  - entity_id: vane_manor
+    entity_type: location
+    concept: The grand estate where the story unfolds, with a mysterious history
+      and hidden spaces.
+    notes: Hartwell House is referenced; likely a variant or misstatement of
+      'Vane Manor'.
+    disposition: cut
+  - entity_id: study
+    entity_type: location
+    concept: A room with a clock that ticks backward, indicating temporal
+      anomaly.
+    notes: The clock in the study strikes three, then four, then back to three.
+    disposition: retained
+  - entity_id: library
+    entity_type: location
+    concept: A room containing records that may reveal the truth about Lady
+      Eleanor.
+    notes: Linked to the hidden chamber and the portrait truth tension.
+    disposition: retained
+  - entity_id: garden
+    entity_type: location
+    concept: The rose garden, shadowed and silent, where the path may hold
+      clues.
+    notes: The woman in the mirror may have been present that night in the
+      garden.
+    disposition: retained
+  - entity_id: large_ornerate_mirror
+    entity_type: object
+    concept: A central mirror in the foyer with a cracked edge, distorting
+      reflections.
+    notes: Cracked edge; distorts when someone hesitates or looks away; shows a
+      woman in gray dress.
+    disposition: retained
+  - entity_id: caretaker
+    entity_type: character
+    concept: A staff member who notes anomalies in the mirror and the house.
+    notes: "Said: 'Some things don’t show up in mirrors. Not because they’re hidden.
+      Because they’re already real.'"
+    disposition: retained
+  - entity_id: clock_in_study
+    entity_type: object
+    concept: A clock in the study that ticks backward for one second.
+    notes: Ticks backward — a temporal anomaly that aligns with the mirror's
+      distortion.
+    disposition: retained
+  - entity_id: hidden_chamber
+    entity_type: location
+    concept: A concealed room in the library, possibly holding records of Lady
+      Eleanor.
+    notes: May contain evidence that Lady Eleanor was never truly dead.
+    disposition: retained
+  - entity_id: portrait
+    entity_type: object
+    concept: A painting that may reveal the truth about Lady Eleanor’s fate.
+    notes: Linked to Tension 15 — the truth of the portrait.
+    disposition: retained
+  - entity_id: river_memory
+    entity_type: location
+    concept: A river path in the garden, possibly tied to a memory or event from
+      the past.
+    notes: The woman in the mirror may have been in the garden that night.
+    disposition: retained
+tensions:
+  - tension_id: clock_anomaly
+    explored:
+      - time_distorted
+    implicit:
+      - clock_broken
+  - tension_id: garden_path
+    explored:
+      - woman_in_garden
+    implicit:
+      - woman_not_in_garden
+  - tension_id: hidden_chamber
+    explored:
+      - chamber_exists
+    implicit:
+      - chamber_fabricated
+  - tension_id: mirror_distortion
+    explored:
+      - hidden_truth
+    implicit:
+      - reflected_reality
+  - tension_id: portrait_truth
+    explored:
+      - portrait_truth
+    implicit:
+      - portrait_falsity
+  - tension_id: river_memory
+    explored:
+      - memory_in_river
+    implicit:
+      - no_memory_in_river
+threads:
+  - thread_id: thread_mirror_distortion
+    name: The Reflection That Wasn’t There
+    tension_id: mirror_distortion
+    alternative_id: hidden_truth
+    unexplored_alternative_ids:
+      - reflected_reality
+    thread_importance: major
+    description: The woman in the mirror is real — a preserved memory of Lady
+      Eleanor. The mirror distorts to show her because she is real and present.
+    consequence_ids:
+      - consequence_mirror_distortion_1
+  - thread_id: thread_clock_anomaly
+    name: Time That Ticks Backward
+    tension_id: clock_anomaly
+    alternative_id: time_distorted
+    unexplored_alternative_ids:
+      - clock_broken
+    thread_importance: major
+    description: The clock shows a real temporal anomaly — time loops. This
+      creates a shared instability in the house.
+    consequence_ids:
+      - consequence_clock_anomaly_1
+  - thread_id: thread_hidden_chamber
+    name: The Chamber Beneath the Library
+    tension_id: hidden_chamber
+    alternative_id: chamber_exists
+    unexplored_alternative_ids:
+      - chamber_fabricated
+    thread_importance: major
+    description: The hidden chamber exists and contains documents proving Lady
+      Eleanor faked her death.
+    consequence_ids:
+      - consequence_hidden_chamber_1
+  - thread_id: thread_portrait_truth
+    name: The Portrait That Wasn’t Painted
+    tension_id: portrait_truth
+    alternative_id: portrait_truth
+    unexplored_alternative_ids:
+      - portrait_falsity
+    thread_importance: major
+    description: The portrait shows Lady Eleanor alive, standing beside the
+      woman in the mirror — they are one person.
+    consequence_ids:
+      - consequence_portrait_truth_1
+  - thread_id: thread_garden_path
+    name: The Path That Wasn’t There
+    tension_id: garden_path
+    alternative_id: woman_in_garden
+    unexplored_alternative_ids:
+      - woman_not_in_garden
+    thread_importance: minor
+    description: The woman in the mirror was in the garden that night — she
+      walked the path.
+    consequence_ids:
+      - consequence_garden_path_1
+  - thread_id: thread_river_memory
+    name: The River That Remembers
+    tension_id: river_memory
+    alternative_id: memory_in_river
+    unexplored_alternative_ids:
+      - no_memory_in_river
+    thread_importance: minor
+    description: The river path is a portal to memory — standing on it shows the
+      true night of the accident.
+    consequence_ids:
+      - consequence_river_memory_1
+consequences:
+  - consequence_id: consequence_mirror_distortion_1
+    thread_id: thread_mirror_distortion
+    description: The mirror is not a trick of light — it reveals hidden truths.
+    narrative_effects:
+      - The protagonist begins to see the house as a living memory space.
+      - The emotional core of the story shifts from doubt to tangible presence
+        of memory.
+  - consequence_id: consequence_clock_anomaly_1
+    thread_id: thread_clock_anomaly
+    description: Time flows backward in loops.
+    narrative_effects:
+      - The protagonist experiences déjà vu and time loops.
+      - The house warps time, creating a sense of instability and non-linearity.
+  - consequence_id: consequence_hidden_chamber_1
+    thread_id: thread_hidden_chamber
+    description: The chamber exists and contains evidence of Eleanor’s survival.
+    narrative_effects:
+      - The truth is accessible; the narrative shifts from mystery to
+        revelation.
+      - The protagonist must choose between truth and silence, deepening moral
+        stakes.
+  - consequence_id: consequence_portrait_truth_1
+    thread_id: thread_portrait_truth
+    description: The portrait shows Eleanor alive with the mirror woman.
+    narrative_effects:
+      - The truth is visual and emotional.
+      - The resolution hinges on the portrait’s authenticity and the identity of
+        the woman in the mirror.
+  - consequence_id: consequence_garden_path_1
+    thread_id: thread_garden_path
+    description: A footprint in the garden matches the gray dress.
+    narrative_effects:
+      - Physical evidence confirms the woman was present.
+      - Supports the physical reality of the woman in the mirror and garden.
+  - consequence_id: consequence_river_memory_1
+    thread_id: thread_river_memory
+    description: The river shows the accident as it truly happened — the woman
+      was not in the car.
+    narrative_effects:
+      - The accident was staged; the truth is revealed through memory.
+      - The river becomes a symbolic and sensory portal to the real past.
+initial_beats:
+  - beat_id: '1'
+    summary: The protagonist enters Hartwell House for tea. In the foyer, the
+      large ornerate mirror shows a woman in a gray dress. The caretaker says,
+      "Some things don’t show up in mirrors. Not because they’re hidden. Because
+      they’re already real."
+    threads:
+      - thread_mirror_distortion
+    tension_impacts:
+      - tension_id: mirror_distortion
+        effect: advances
+        note: The mirror distorts to show a real presence, establishing the core
+          tension of hidden truth.
+    entities:
+      - lady_evelyn_hartwell
+      - large_ornerate_mirror
+      - caretaker
+    location: garden
+    location_alternatives:
+      - study
+      - library
+  - beat_id: '2'
+    summary: The protagonist hesitates to look away from the mirror. The
+      reflection flickers — the woman in the gray dress turns slightly. The
+      mirror distorts when the protagonist blinks.
+    threads:
+      - thread_mirror_distortion
+    tension_impacts:
+      - tension_id: mirror_distortion
+        effect: complicates
+        note: The distortion becomes unstable, suggesting the presence is not
+          just visual but reactive, deepening the mystery.
+    entities:
+      - large_ornerate_mirror
+      - lady_evelyn_hartwell
+    location: garden
+    location_alternatives:
+      - library
+      - garden
+  - beat_id: '3'
+    summary: The protagonist asks the caretaker if the woman is a ghost. The
+      caretaker replies, "Ghosts don’t walk through mirrors. They walk through
+      time."
+    threads:
+      - thread_mirror_distortion
+    tension_impacts:
+      - tension_id: mirror_distortion
+        effect: reveals
+        note: The caretaker introduces a thematic framework — the woman is not a
+          ghost, but a real person moving through time.
+    entities:
+      - caretaker
+      - large_ornerate_mirror
+    location: garden
+    location_alternatives:
+      - study
+      - library
+  - beat_id: '4'
+    summary: The protagonist enters the study. The clock ticks backward for one
+      second — from 3 to 2, then back to 3.
+    threads:
+      - thread_clock_anomaly
+    tension_impacts:
+      - tension_id: clock_anomaly
+        effect: advances
+        note: The clock exhibits a temporal anomaly, introducing the idea of
+          time loops in the house.
+    entities:
+      - clock_in_study
+      - study
+    location: study
+    location_alternatives:
+      - library
+      - garden
+  - beat_id: '5'
+    summary: The protagonist watches the clock. It ticks backward again — this
+      time, the hands move slowly, like a loop.
+    threads:
+      - thread_clock_anomaly
+    tension_impacts:
+      - tension_id: clock_anomaly
+        effect: complicates
+        note: The anomaly becomes more complex, suggesting a repeating cycle
+          rather than a single event.
+    entities:
+      - clock_in_study
+    location: study
+    location_alternatives:
+      - library
+      - garden
+  - beat_id: '6'
+    summary: 'The protagonist hears a whisper: "You were there." The clock stops.'
+    threads:
+      - thread_clock_anomaly
+    tension_impacts:
+      - tension_id: clock_anomaly
+        effect: commits
+        note: The whisper confirms a personal connection, and the clock's stop
+          suggests a moment of temporal freeze — a key narrative commitment.
+    entities:
+      - clock_in_study
+      - caretaker
+    location: study
+    location_alternatives:
+      - library
+      - garden
+  - beat_id: '7'
+    summary: The protagonist finds a loose floorboard in the library. Pushing
+      it, a hidden chamber opens.
+    threads:
+      - thread_hidden_chamber
+    tension_impacts:
+      - tension_id: hidden_chamber
+        effect: advances
+        note: The chamber is discovered, initiating the investigation into the
+          hidden truth of Eleanor’s survival.
+    entities:
+      - library
+      - hidden_chamber
+    location: library
+    location_alternatives:
+      - study
+      - garden
+  - beat_id: '8'
+    summary: Inside, the chamber contains a leather-bound journal. Pages show
+      Lady Eleanor writing about a secret society and a planned escape.
+    threads:
+      - thread_hidden_chamber
+    tension_impacts:
+      - tension_id: hidden_chamber
+        effect: reveals
+        note: The journal provides concrete evidence of Eleanor’s survival and
+          her intent to escape the house.
+    entities:
+      - hidden_chamber
+      - lady_eleanor_hartwell
+    location: hidden_chamber
+    location_alternatives:
+      - study
+      - garden
+  - beat_id: '9'
+    summary: 'The journal ends with a note: "I faked my death. I am still here. I
+      am in the mirror."'
+    threads:
+      - thread_hidden_chamber
+    tension_impacts:
+      - tension_id: hidden_chamber
+        effect: commits
+        note: The final entry confirms Eleanor’s survival and her connection to
+          the mirror, solidifying the truth of her presence.
+    entities:
+      - hidden_chamber
+      - lady_eleanor_hartwell
+    location: hidden_chamber
+    location_alternatives:
+      - study
+      - garden
+  - beat_id: '10'
+    summary: The protagonist examines the portrait in the library. It shows Lady
+      Eleanor in a gray dress, standing beside a woman with the same face.
+    threads:
+      - thread_portrait_truth
+    tension_impacts:
+      - tension_id: portrait_truth
+        effect: advances
+        note: The portrait reveals a duality — two women with identical faces,
+          suggesting a shared identity.
+    entities:
+      - portrait
+      - lady_eleanor_hartwell
+    location: library
+    location_alternatives:
+      - study
+      - garden
+  - beat_id: '11'
+    summary: The protagonist realizes the two women are identical — one is Lady
+      Eleanor, the other is the woman in the mirror.
+    threads:
+      - thread_portrait_truth
+    tension_impacts:
+      - tension_id: portrait_truth
+        effect: reveals
+        note: The identity is confirmed — the mirror woman is Lady Eleanor,
+          alive and present.
+    entities:
+      - portrait
+      - large_ornerate_mirror
+    location: library
+    location_alternatives:
+      - study
+      - garden
+  - beat_id: '12'
+    summary: 'The portrait is signed: "By Lady Eleanor, 1923." The date is wrong —
+      it should be 1924.'
+    threads:
+      - thread_portrait_truth
+    tension_impacts:
+      - tension_id: portrait_truth
+        effect: complicates
+        note: The date error introduces a temporal inconsistency, suggesting the
+          portrait may have been created after the event — adding narrative
+          ambiguity.
+    entities:
+      - portrait
+    location: library
+    location_alternatives:
+      - study
+      - garden
+  - beat_id: '13'
+    summary: The protagonist walks the rose garden. A path leads to the river.
+      The soil is damp, and there’s a footprint in the mud.
+    threads:
+      - thread_garden_path
+    tension_impacts:
+      - tension_id: garden_path
+        effect: advances
+        note: A physical trace is found — the footprint suggests the woman was
+          present in the garden that night.
+    entities:
+      - garden
+      - river_memory
+    location: garden
+    location_alternatives:
+      - study
+      - library
+  - beat_id: '14'
+    summary: The protagonist traces the footprint. It matches the shape of the
+      gray dress.
+    threads:
+      - thread_garden_path
+    tension_impacts:
+      - tension_id: garden_path
+        effect: complicates
+        note: The footprint is confirmed to match the dress, strengthening the
+          physical evidence of the woman’s presence.
+    entities:
+      - garden
+      - large_ornerate_mirror
+    location: garden
+    location_alternatives:
+      - study
+      - library
+  - beat_id: '15'
+    summary: The protagonist stands on the river path. The water is still. A
+      reflection shows a woman in a gray dress walking toward a car.
+    threads:
+      - thread_river_memory
+    tension_impacts:
+      - tension_id: river_memory
+        effect: advances
+        note: The river reflection shows the woman in motion, indicating she was
+          present during the accident.
+    entities:
+      - river_memory
+      - large_ornerate_mirror
+    location: garden
+    location_alternatives:
+      - study
+      - library
+  - beat_id: '16'
+    summary: The reflection shows the night of the accident — the car crashes,
+      but the woman is not in it.
+    threads:
+      - thread_river_memory
+    tension_impacts:
+      - tension_id: river_memory
+        effect: reveals
+        note: The accident was staged — the woman was not in the car, confirming
+          she survived and was present at the scene.
+    entities:
+      - river_memory
+      - portrait
+    location: garden
+    location_alternatives:
+      - study
+      - library
+convergence_sketch:
+  convergence_points:
+    - by act 2 climax, the garden path intersects with mirror distortion and
+      river memory — all point to the woman being in the garden that night
+    - by act 3 midpoint, the portrait merges with hidden chamber and mirror
+      distortion — all confirm Lady Eleanor was alive
+    - by act 3 climax, the clock anomaly intersects with hidden chamber — the
+      chamber only opens during time loops
+    - by final scene, the protagonist sees the full truth in the mirror — the
+      woman in the gray dress is Lady Eleanor, alive, and has been hiding in the
+      house since the night of the accident
+  residue_notes:
+    - 'the emotional design remains: grief, memory, and truth are intertwined'
+    - the temporal anomaly is resolved as a feature of the house — not a flaw
+    - the mystery is answered, but the mystery of the house remains — it
+      preserves the truth, not for the world, but for itself

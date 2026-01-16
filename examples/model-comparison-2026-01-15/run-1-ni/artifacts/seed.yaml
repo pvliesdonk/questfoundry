@@ -1,0 +1,594 @@
+entities:
+  - entity_id: the_host
+    entity_type: character
+    concept: The reclusive, impeccably dressed host of the estate, known for
+      hosting tea parties with a veneer of charm.
+    notes: Speaks in measured, elegant phrases. Their presence is both soothing
+      and subtly ominous. Alters tea rituals and invites only select guests,
+      suggesting a hidden agenda.
+    disposition: retained
+  - entity_id: the_butler
+    entity_type: character
+    concept: A stoic, silent figure who manages all operations of the house.
+    notes: Wears a dark suit, carries a silver cane. Observes everything with
+      quiet intensity. Silence is a form of power; actions are precise and
+      mechanical. Tension over whether they are loyal or a silent observer with
+      hidden purpose.
+    disposition: retained
+  - entity_id: the_viscount
+    entity_type: character
+    concept: A distant, aristocratic relative with a history of eccentric
+      behavior.
+    notes: Appears at tea parties with sharp wit and cryptic remarks. Words
+      contain subtle hints or contradictions ignored by others. Represents the
+      family’s past.
+    disposition: cut
+  - entity_id: the_lady_of_the_garden
+    entity_type: character
+    concept: A mysterious woman who tends the estate’s garden.
+    notes: Rarely speaks, but movements are precise and deliberate. Often seen
+      pruning roses at twilight. Suggests knowledge of a secret tied to the
+      garden’s hidden path.
+    disposition: retained
+  - entity_id: the_young_mistress
+    entity_type: character
+    concept: The host’s niece, a bright, observant young woman with a sharp
+      intellect.
+    notes: Only one who notices inconsistencies in tea party rituals. Recognizes
+      a false alibi, making her pivotal to solving the mystery. Intelligence is
+      subtle and becomes crucial.
+    disposition: retained
+  - entity_id: the_caretaker
+    entity_type: character
+    concept: A man who maintains the estate’s outbuildings.
+    notes: Speaks in hushed tones, avoids eye contact. Silence and careful
+      movements suggest he is guarding or knows something.
+    disposition: retained
+  - entity_id: the_maid
+    entity_type: character
+    concept: A young woman who serves tea and delivers messages.
+    notes: Polite demeanor, eyes betray nervousness. Her small details—like a
+      dropped note—may be the first real clue. Window into hidden routines.
+    disposition: cut
+  - entity_id: the_gardener
+    entity_type: character
+    concept: A man with deep knowledge of plants.
+    notes: Claims to have seen a 'shadow' in the garden at night. Words are
+      dismissed initially but echo the idea that the garden is a living,
+      breathing space with hidden logic.
+    disposition: cut
+  - entity_id: the_hall
+    entity_type: location
+    concept: The grand entrance hall, lined with portraits and chandeliers.
+    notes: Sets the tone—elegant, formal, yet subtly oppressive. Guests' entry
+      mirrors tea party rituals, establishing order and control.
+    disposition: cut
+  - entity_id: the_library
+    entity_type: location
+    concept: A vaulted room filled with antique books, maps, and a large
+      mahogany desk.
+    notes: Center of intellectual life. Holds secrets and history. Mirror
+      distorts reflection, symbolizing that truth is not always visible.
+    disposition: retained
+  - entity_id: the_garden
+    entity_type: location
+    concept: A sprawling, overgrown garden with stone paths and a hidden path
+      leading to the west wing.
+    notes: Setting for private moments. Beautiful and unsettling. Curtain swings
+      in wind; when pulled, reveals a hidden compartment. Suggests it is a
+      living, breathing space with hidden logic.
+    disposition: retained
+  - entity_id: the_balcony
+    entity_type: location
+    concept: A high, narrow balcony overlooking the estate.
+    notes: Used for quiet conversations and late-night observations. Space of
+      intimacy and surveillance where characters speak without being heard.
+    disposition: cut
+  - entity_id: the_study
+    entity_type: location
+    concept: A private room with a large window and a writing desk.
+    notes: The host’s domain. Decisions are made here. Private thoughts revealed
+      through object placement and lighting.
+    disposition: cut
+  - entity_id: the_kitchen
+    entity_type: location
+    concept: A warm, cluttered room where tea is prepared.
+    notes: Source of the tea ritual. Every detail—pouring, cup order—is part of
+      a carefully constructed routine that may be a trap.
+    disposition: retained
+  - entity_id: the_west_wing
+    entity_type: location
+    concept: A sealed, unopened wing with no recorded access.
+    notes: Appears in the garden’s shadow. Existence is never confirmed but
+      referenced in garden history, suggesting it may be the site of a past
+      incident.
+    disposition: retained
+  - entity_id: the_tea_set
+    entity_type: object
+    concept: A vintage porcelain set with a chipped teacup, used at every tea
+      party.
+    notes: Centerpiece of the ritual. Chipped cup appears in one room but not
+      another—suggests deliberate inconsistency noticed by the young mistress.
+    disposition: retained
+  - entity_id: the_golden_key
+    entity_type: object
+    concept: A small, ornate key hidden in the library’s bookshelf.
+    notes: Only one such key in estate history. Opens the family diary.
+      Presented as central artifact, but true function revealed only upon
+      opening the diary.
+    disposition: retained
+  - entity_id: the_silver_candlestick
+    entity_type: object
+    concept: A candlestick with a cracked handle, found in the garden.
+    notes: Matches description from a 1930s journal. Physical link to past.
+      Appearance in garden suggests continuity between present and past.
+    disposition: retained
+  - entity_id: the_family_diary
+    entity_type: object
+    concept: A leather-bound journal from the 1920s, detailing the family’s
+      history and secrets.
+    notes: Locked behind a false panel. Contains truth about the incident that
+      began the tea party rituals—what happened that night and why it was
+      hidden.
+    disposition: retained
+  - entity_id: the_mirror_in_the_library
+    entity_type: object
+    concept: A large, ornate mirror with a faint crack.
+    notes: Reflects not just the face, but a distorted version of the room.
+      Symbolizes fragility of perception—what we see may not be real.
+    disposition: retained
+  - entity_id: the_curtain_in_the_garden
+    entity_type: object
+    concept: A heavy, old curtain that swings in the wind.
+    notes: When pulled, reveals a hidden compartment. Literal and symbolic
+      gateway to hidden truth—the garden is a place of revelation.
+    disposition: retained
+  - entity_id: the_tea_party_circle
+    entity_type: faction
+    concept: A group of guests who attend weekly tea parties.
+    notes: Interactions are ritualistic and follow unspoken rules. Believe in
+      tradition, but compliance may be complicity.
+    disposition: cut
+  - entity_id: the_garden_watch
+    entity_type: faction
+    concept: A secret group of caretakers and gardeners who monitor the estate’s
+      hidden spaces.
+    notes: Believe the garden holds a hidden truth. Communicate in hushed tones
+      and share coded observations.
+    disposition: cut
+  - entity_id: the_archive_wardens
+    entity_type: faction
+    concept: A small, elite group responsible for guarding the library and its
+      contents.
+    notes: Enforce strict rules about access and silence. Create sense of
+      institutional control—knowledge is power and is tightly guarded.
+    disposition: cut
+tensions:
+  - tension_id: can_butler_be_trusted
+    explored:
+      - trusted
+    implicit:
+      - untrusted
+  - tension_id: did_caretaker_witness_incident
+    explored:
+      - did_not_witness
+    implicit:
+      - witnessed
+  - tension_id: did_young_mistress_notice_false_alibi
+    explored:
+      - did_not_notice
+    implicit:
+      - noticed
+  - tension_id: garden_sanctuary_or_trap
+    explored:
+      - sanctuary
+    implicit:
+      - trap
+  - tension_id: golden_key_real_clue_or_red_herring
+    explored:
+      - real_clue
+    implicit:
+      - red_herring
+  - tension_id: host_benevolent_or_self_serving
+    explored:
+      - benevolent
+    implicit:
+      - self_serving
+  - tension_id: library_knowledge_salvation_or_corruption
+    explored:
+      - salvation
+    implicit:
+      - corruption
+  - tension_id: tea_ritual_tradition_or_trap
+    explored:
+      - tradition
+    implicit:
+      - trap
+threads:
+  - thread_id: host_motive
+    name: The Host’s Benevolence
+    tension_id: host_benevolent_or_self_serving
+    alternative_id: self_serving
+    unexplored_alternative_ids: []
+    thread_importance: major
+    description: Is the host hosting tea parties to preserve tradition—or to
+      maintain control?
+    consequence_ids:
+      - consequence_host_self_serving
+  - thread_id: library_knowledge
+    name: The Diary’s Truth
+    tension_id: library_knowledge_salvation_or_corruption
+    alternative_id: corruption
+    unexplored_alternative_ids: []
+    thread_importance: major
+    description: Does the diary reveal a solution—or a dangerous truth that
+      corrupts the estate?
+    consequence_ids:
+      - consequence_diary_corruption
+  - thread_id: garden_nature
+    name: The Garden’s Sanctuary
+    tension_id: garden_sanctuary_or_trap
+    alternative_id: sanctuary
+    unexplored_alternative_ids: []
+    thread_importance: major
+    description: Is the garden a safe space of truth—or a trap hiding danger?
+    consequence_ids:
+      - consequence_garden_sanctuary
+  - thread_id: butler_loyalty
+    name: The Butler’s Silence
+    tension_id: can_butler_be_trusted
+    alternative_id: untrusted
+    unexplored_alternative_ids: []
+    thread_importance: major
+    description: Can the butler be trusted? Is their silence loyalty—or a cover
+      for guilt?
+    consequence_ids:
+      - consequence_butler_untrusted
+consequences:
+  - consequence_id: host_motive_benevolent_to_self_serving
+    thread_id: host_motive
+    description: If the host is self-serving, the tea ritual is manipulated to
+      maintain control over guests, revealing the host's true motive is power,
+      not tradition.
+    narrative_effects:
+      - Establishes the host as morally ambiguous
+      - Shifts the story from a social puzzle to a power struggle
+      - Creates tension between appearance and reality
+  - consequence_id: library_knowledge_salvation_to_corruption
+    thread_id: library_knowledge
+    description: The diary reveals a hidden truth about a past fire, which
+      corrupts the estate's history and causes moral collapse among the guests.
+    narrative_effects:
+      - Introduces a dangerous truth that undermines trust
+      - Creates emotional conflict and personal risk for characters
+      - Shifts the resolution from peace to tragedy
+  - consequence_id: garden_sanctuary_to_trap
+    thread_id: garden_nature
+    description: The garden is not a safe space but a trap that hides the true
+      incident, with the curtain revealing a hidden compartment containing
+      evidence of violence.
+    narrative_effects:
+      - Transforms the garden from a symbol of peace to a site of danger
+      - Introduces physical and emotional stakes in the garden
+      - Creates a climax where the truth is hidden behind natural forms
+  - consequence_id: butler_loyalty_trusted_to_untrusted
+    thread_id: butler_loyalty
+    description: The butler's silence is not loyalty but a cover for guilt, and
+      the removal of the chipped cup suggests they are hiding evidence of the
+      incident.
+    narrative_effects:
+      - Raises suspense about the butler's role in the incident
+      - Challenges the audience's assumptions about trust and service
+      - Makes the butler a potential culprit
+  - consequence_id: tea_ritual_altered_by_host
+    thread_id: host_motive
+    description: The tea ritual is changed in height and timing, signaling the
+      host's manipulation of tradition to assert control.
+    narrative_effects:
+      - Shows the host's active interference in social rituals
+      - Establishes a pattern of subtle control
+      - Creates a sense of unease in the tea party dynamics
+  - consequence_id: young_mistress_discovered_chipped_cup_missing
+    thread_id: host_motive
+    description: The young mistress notices the chipped cup is missing from the
+      tea set, indicating a deliberate alteration of the ritual.
+    narrative_effects:
+      - Introduces a key inconsistency in the tea ritual
+      - Highlights the young mistress's sharp observational skills
+      - Sets up a false alibi for the host
+  - consequence_id: butler_repositions_tea_set_after_guest
+    thread_id: butler_loyalty
+    description: The butler silently repositions the tea set after the guest
+      leaves, suggesting awareness of the ritual's manipulation.
+    narrative_effects:
+      - Implies the butler is aware of the host's deception
+      - Creates a sense of silent surveillance
+      - Builds tension around the butler's role in the estate
+  - consequence_id: garden_curtain_swings_in_wind
+    thread_id: garden_nature
+    description: The young mistress sees the curtain in the garden swing in the
+      wind, indicating hidden movement within the garden space.
+    narrative_effects:
+      - Introduces the garden as a place of active, unseen action
+      - Establishes the garden as a living, responsive environment
+      - Sets up the possibility of danger or memory
+initial_beats:
+  - beat_id: '1.1'
+    summary: The host invites a new guest to tea. The tea ritual is altered—tea
+      is poured from a different height.
+    threads:
+      - host_motive
+    tension_impacts:
+      - tension_id: host_benevolent_or_self_serving
+        effect: advances
+        note: Shows the ritual is not fixed, indicating the host has control
+          over tradition, suggesting self-serving motives.
+    entities:
+      - the_host
+      - the_tea_set
+      - the_kitchen
+    location: the_kitchen
+    location_alternatives:
+      - the_garden
+  - beat_id: '1.2'
+    summary: The young mistress notices the chipped cup is missing from the tea
+      set.
+    threads:
+      - host_motive
+    tension_impacts:
+      - tension_id: can_butler_be_trusted
+        effect: advances
+        note: Reveals an inconsistency in the tea ritual, setting up a false
+          alibi and suggesting the butler may have altered the scene.
+      - tension_id: did_young_mistress_notice_false_alibi
+        effect: reveals
+        note: The young mistress observes the anomaly, confirming her sharp
+          observational skills and establishing her role as a key narrator.
+    entities:
+      - the_young_mistress
+      - the_tea_set
+    location: the_kitchen
+    location_alternatives:
+      - the_garden
+  - beat_id: '1.3'
+    summary: The butler silently repositions the tea set after the guest leaves.
+    threads:
+      - host_motive
+      - butler_loyalty
+    tension_impacts:
+      - tension_id: can_butler_be_trusted
+        effect: complicates
+        note: The butler's action suggests awareness of the ritual's
+          manipulation, raising doubt about their loyalty and intentions.
+    entities:
+      - the_butler
+      - the_tea_set
+    location: the_kitchen
+    location_alternatives:
+      - the_garden
+  - beat_id: '1.4'
+    summary: 'The host comments: ‘Tradition is not about rules—it’s about what we
+      choose to preserve.’'
+    threads:
+      - host_motive
+    tension_impacts:
+      - tension_id: host_benevolent_or_self_serving
+        effect: commits
+        note: The host’s words reveal a self-serving motive—preserving control
+          over the estate, not tradition or benevolence.
+    entities:
+      - the_host
+    location: the_kitchen
+    location_alternatives:
+      - the_garden
+  - beat_id: '2.1'
+    summary: 'The young mistress finds a note in the library: ‘Do not open the diary.’'
+    threads:
+      - library_knowledge
+    tension_impacts:
+      - tension_id: library_knowledge_salvation_or_corruption
+        effect: advances
+        note: Introduces the diary as a forbidden object, setting up the
+          possibility of dangerous truths being hidden.
+    entities:
+      - the_young_mistress
+      - the_library
+      - the_family_diary
+    location: the_library
+    location_alternatives:
+      - the_garden
+  - beat_id: '2.2'
+    summary: The mirror in the library shows a distorted version of the
+      room—like a memory.
+    threads:
+      - library_knowledge
+    tension_impacts:
+      - tension_id: library_knowledge_salvation_or_corruption
+        effect: reveals
+        note: Suggests the diary contains fragmented truths, implying the
+          knowledge is corrupted or distorted.
+    entities:
+      - the_mirror_in_the_library
+    location: the_library
+    location_alternatives:
+      - the_garden
+  - beat_id: '2.3'
+    summary: The caretaker recalls seeing a man in the west wing at night.
+    threads:
+      - library_knowledge
+      - garden_nature
+    tension_impacts:
+      - tension_id: did_caretaker_witness_incident
+        effect: complicates
+        note: Introduces a timeline gap and suggests the incident occurred,
+          raising questions about what happened in the west wing.
+      - tension_id: garden_sanctuary_or_trap
+        effect: complicates
+        note: The west wing is linked to the garden, suggesting danger may be
+          present there.
+    entities:
+      - the_caretaker
+      - the_west_wing
+    location: the_west_wing
+    location_alternatives:
+      - the_garden
+  - beat_id: '2.4'
+    summary: 'The diary reveals the incident: a fire that killed a guest. The host
+      was present.'
+    threads:
+      - library_knowledge
+    tension_impacts:
+      - tension_id: library_knowledge_salvation_or_corruption
+        effect: commits
+        note: The diary contains a dangerous truth—corruption—showing the host
+          covered up a fatal incident.
+    entities:
+      - the_family_diary
+      - the_host
+    location: the_library
+    location_alternatives:
+      - the_west_wing
+  - beat_id: '3.1'
+    summary: The young mistress sees the curtain in the garden swing in the
+      wind.
+    threads:
+      - garden_nature
+    tension_impacts:
+      - tension_id: garden_sanctuary_or_trap
+        effect: advances
+        note: Introduces the garden as a place of active movement, suggesting
+          hidden actions or life within it.
+    entities:
+      - the_young_mistress
+      - the_garden
+      - the_curtain_in_the_garden
+    location: the_garden
+    location_alternatives:
+      - the_kitchen
+  - beat_id: '3.2'
+    summary: The lady of the garden prunes a rose that has no bloom.
+    threads:
+      - garden_nature
+    tension_impacts:
+      - tension_id: garden_sanctuary_or_trap
+        effect: reveals
+        note: Suggests the garden is alive and aware, implying it may be a
+          living space of memory or danger.
+    entities:
+      - the_lady_of_the_garden
+      - the_garden
+    location: the_garden
+    location_alternatives:
+      - the_library
+  - beat_id: '3.3'
+    summary: 'The caretaker says: ‘I saw a shadow in the garden at night—like a man.’'
+    threads:
+      - garden_nature
+    tension_impacts:
+      - tension_id: garden_sanctuary_or_trap
+        effect: complicates
+        note: Introduces a physical threat in the garden, suggesting it may be a
+          trap hiding danger.
+    entities:
+      - the_caretaker
+      - the_garden
+    location: the_garden
+    location_alternatives:
+      - the_west_wing
+  - beat_id: '3.4'
+    summary: Pulling the curtain reveals a hidden compartment with a silver
+      candlestick.
+    threads:
+      - garden_nature
+      - library_knowledge
+    tension_impacts:
+      - tension_id: garden_sanctuary_or_trap
+        effect: commits
+        note: The garden is revealed as a sanctuary—its hidden compartment
+          contains a physical link to the past, confirming its role as a place
+          of preservation.
+      - tension_id: library_knowledge_salvation_or_corruption
+        effect: complicates
+        note: The silver candlestick is a physical artifact tied to the past,
+          suggesting the knowledge is preserved, not corrupted.
+    entities:
+      - the_curtain_in_the_garden
+      - the_silver_candlestick
+    location: the_garden
+    location_alternatives:
+      - the_west_wing
+  - beat_id: '4.1'
+    summary: The butler serves tea with perfect timing—every second is correct.
+    threads:
+      - butler_loyalty
+    tension_impacts:
+      - tension_id: can_butler_be_trusted
+        effect: advances
+        note: Demonstrates the butler’s precision and control, suggesting deep
+          understanding of the ritual and possibly its manipulation.
+    entities:
+      - the_butler
+      - the_kitchen
+    location: the_kitchen
+    location_alternatives:
+      - the_garden
+  - beat_id: '4.2'
+    summary: The young mistress notices the butler never speaks to the guests.
+    threads:
+      - butler_loyalty
+    tension_impacts:
+      - tension_id: can_butler_be_trusted
+        effect: advances
+        note: Highlights the butler’s silence as a form of power, raising
+          suspicion about their true intentions.
+    entities:
+      - the_young_mistress
+      - the_butler
+    location: the_kitchen
+    location_alternatives:
+      - the_library
+  - beat_id: '4.3'
+    summary: The butler removes a tea cup from the set and places it in a
+      drawer.
+    threads:
+      - butler_loyalty
+    tension_impacts:
+      - tension_id: can_butler_be_trusted
+        effect: complicates
+        note: Suggests the butler is hiding evidence, challenging the idea of
+          their loyalty and creating suspense.
+    entities:
+      - the_butler
+      - the_tea_set
+    location: the_kitchen
+    location_alternatives:
+      - the_west_wing
+  - beat_id: '4.4'
+    summary: 'The host says: ‘He is not a servant. He is a guardian.’'
+    threads:
+      - butler_loyalty
+    tension_impacts:
+      - tension_id: can_butler_be_trusted
+        effect: commits
+        note: The host defends the butler, implying loyalty and a protective
+          role, but the action is ambiguous—leaving room for doubt.
+    entities:
+      - the_host
+      - the_butler
+    location: the_kitchen
+    location_alternatives:
+      - the_garden
+convergence_sketch:
+  convergence_points:
+    - The garden’s hidden compartment (Beat 3.4) contains the silver
+      candlestick.
+    - The family diary (Beat 2.4) reveals the incident occurred in the west
+      wing.
+    - The tea set (Beat 1.2) and chipped cup are found in the kitchen, but the
+      butler moved it.
+    - The mirror in the library reflects a distorted version of the garden and
+      west wing.
+  residue_notes:
+    - The garden remains a place of mystery—its full truth is not known.
+    - The butler’s loyalty is never fully confirmed—only implied.
+    - The host’s words are elegant, but their actions reveal a quiet control.
