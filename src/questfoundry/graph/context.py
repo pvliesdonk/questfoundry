@@ -28,7 +28,8 @@ def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
     if not threads:
         return ""
 
-    thread_ids = [t.get("thread_id", "") for t in threads if t.get("thread_id")]
+    # Sort for deterministic output across runs
+    thread_ids = sorted(tid for t in threads if (tid := t.get("thread_id")))
 
     if not thread_ids:
         return ""
