@@ -16,6 +16,7 @@ from questfoundry.agents.serialize import (
     SerializationError,
     serialize_seed_iteratively,
     serialize_to_artifact,
+    serialize_with_brief_repair,
 )
 from questfoundry.agents.summarize import summarize_discussion
 
@@ -34,5 +35,6 @@ __all__ = [
     "run_discuss_phase",
     "serialize_seed_iteratively",
     "serialize_to_artifact",
+    "serialize_with_brief_repair",
     "summarize_discussion",
 ]
