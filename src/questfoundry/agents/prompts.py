@@ -6,6 +6,7 @@ stored externally in YAML files under prompts/templates/.
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 from typing import Any
 
@@ -305,10 +306,9 @@ def _extract_entity_checklist(brainstorm_context: str) -> tuple[str, int]:
     Returns:
         Tuple of (checklist_text, entity_count).
     """
-    import re
-
     # Parse entity IDs from formatted context (lines like "- **entity_id** (type): concept")
-    pattern = r"\- \*\*([a-z_]+)\*\* \((\w+)\):"
+    # Pattern allows letters, digits, underscores, hyphens in IDs
+    pattern = r"\- \*\*([\w-]+)\*\* \((\w+)\):"
     matches = re.findall(pattern, brainstorm_context)
 
     if not matches:
@@ -344,21 +344,24 @@ def _count_tensions(brainstorm_context: str) -> int:
     Returns:
         Number of tensions found.
     """
-    import re
-
     # Tensions are formatted as "- **tension_id**: question"
-    pattern = r"\- \*\*([a-z_]+)\*\*:"
-    # Look in the tensions section only
+    # Pattern allows letters, digits, underscores, hyphens in IDs
+    pattern = r"\- \*\*([\w-]+)\*\*:"
+
+    # Look in the tensions section only, stopping at next section header
     tensions_section = ""
-    if "## Tensions from BRAINSTORM" in brainstorm_context:
-        start = brainstorm_context.find("## Tensions from BRAINSTORM")
-        tensions_section = brainstorm_context[start:]
+    start = brainstorm_context.find("## Tensions from BRAINSTORM")
+    if start != -1:
+        end = brainstorm_context.find("\n## ", start + 1)
+        tensions_section = (
+            brainstorm_context[start:end] if end != -1 else brainstorm_context[start:]
+        )
 
     matches = re.findall(pattern, tensions_section)
     return len(matches)
 
 
-def validate_entity_coverage(brief: str, expected_count: int) -> tuple[bool, int, list[str]]:
+def validate_entity_coverage(brief: str, expected_count: int) -> tuple[bool, int]:
     """Validate that brief contains decisions for all expected entities.
 
     External validation after summarize - LLMs cannot self-verify mid-generation.
@@ -369,24 +372,21 @@ def validate_entity_coverage(brief: str, expected_count: int) -> tuple[bool, int
         expected_count: Number of entities expected from brainstorm context.
 
     Returns:
-        Tuple of (is_complete, actual_count, missing_ids).
+        Tuple of (is_complete, actual_count).
         - is_complete: True if actual >= expected
         - actual_count: Number of entity decisions found
-        - missing_ids: List of entity IDs that should be present but weren't found
-          (currently returns empty list as we don't have expected IDs here)
     """
-    import re
-
     # Count entity decisions in brief
     # Format: "- id: entity_id" or "id: entity_id" at start of line
     # The summarize prompt asks for "id: entity_id_here" format
-    pattern = r"^\s*-?\s*id:\s*([a-z_]+)"
-    matches = re.findall(pattern, brief, re.MULTILINE)
+    # Pattern allows letters, digits, underscores, hyphens in IDs
+    pattern = r"^\s*-?\s*id:\s*([\w-]+)"
+    matches = re.findall(pattern, brief, re.MULTILINE | re.IGNORECASE)
 
     actual_count = len(matches)
     is_complete = actual_count >= expected_count
 
-    return is_complete, actual_count, []
+    return is_complete, actual_count
 
 
 def get_expected_entity_count(brainstorm_context: str) -> int:

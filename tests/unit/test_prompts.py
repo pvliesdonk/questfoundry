@@ -116,7 +116,7 @@ class TestValidateEntityCoverage:
 - id: archive
   disposition: cut
 """
-        is_complete, actual, _missing = validate_entity_coverage(brief, expected_count=3)
+        is_complete, actual = validate_entity_coverage(brief, expected_count=3)
 
         assert is_complete is True
         assert actual == 3
@@ -127,7 +127,7 @@ class TestValidateEntityCoverage:
 - id: kay
   disposition: retained
 """
-        is_complete, actual, _missing = validate_entity_coverage(brief, expected_count=3)
+        is_complete, actual = validate_entity_coverage(brief, expected_count=3)
 
         assert is_complete is False
         assert actual == 1
@@ -139,14 +139,14 @@ id: kay
 id: morgan
   - id: archive
 """
-        is_complete, actual, _missing = validate_entity_coverage(brief, expected_count=3)
+        is_complete, actual = validate_entity_coverage(brief, expected_count=3)
 
         assert is_complete is True
         assert actual == 3
 
     def test_empty_brief_returns_zero(self) -> None:
         """Should return 0 for empty brief."""
-        is_complete, actual, _missing = validate_entity_coverage("", expected_count=3)
+        is_complete, actual = validate_entity_coverage("", expected_count=3)
 
         assert is_complete is False
         assert actual == 0
@@ -158,7 +158,7 @@ id: morgan
 - id: c
 - id: d
 """
-        is_complete, actual, _missing = validate_entity_coverage(brief, expected_count=3)
+        is_complete, actual = validate_entity_coverage(brief, expected_count=3)
 
         assert is_complete is True
         assert actual == 4

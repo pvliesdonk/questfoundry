@@ -552,8 +552,8 @@ class TestSummarizeFeedbackLoop:
 
         messages = [HumanMessage(content="Test")]
 
-        def validator(_brief: str, _expected: int) -> tuple[bool, int, list[str]]:
-            return (True, 2, [])
+        def validator(_brief: str, _expected: int) -> tuple[bool, int]:
+            return (True, 2)
 
         summary, _result_messages, _tokens = await summarize_discussion(
             mock_model,
@@ -579,9 +579,9 @@ class TestSummarizeFeedbackLoop:
 
         messages = [HumanMessage(content="Test")]
 
-        def validator(brief: str, expected: int) -> tuple[bool, int, list[str]]:
+        def validator(brief: str, expected: int) -> tuple[bool, int]:
             count = brief.count("id:")
-            return (count >= expected, count, [])
+            return (count >= expected, count)
 
         summary, _result_messages, tokens = await summarize_discussion(
             mock_model,
@@ -607,9 +607,9 @@ class TestSummarizeFeedbackLoop:
 
         messages = [HumanMessage(content="Test")]
 
-        def validator(brief: str, expected: int) -> tuple[bool, int, list[str]]:
+        def validator(brief: str, expected: int) -> tuple[bool, int]:
             count = brief.count("id:")
-            return (count >= expected, count, [])
+            return (count >= expected, count)
 
         _summary, result_messages, _tokens = await summarize_discussion(
             mock_model,
@@ -634,8 +634,8 @@ class TestSummarizeFeedbackLoop:
 
         messages = [HumanMessage(content="Test")]
 
-        def validator(_brief: str, _expected: int) -> tuple[bool, int, list[str]]:
-            return (False, 1, [])  # Always fail
+        def validator(_brief: str, _expected: int) -> tuple[bool, int]:
+            return (False, 1)  # Always fail
 
         summary, _result_messages, _tokens = await summarize_discussion(
             mock_model,
@@ -661,9 +661,9 @@ class TestSummarizeFeedbackLoop:
 
         validator_called = []
 
-        def validator(_brief: str, _expected: int) -> tuple[bool, int, list[str]]:
+        def validator(_brief: str, _expected: int) -> tuple[bool, int]:
             validator_called.append(True)
-            return (False, 0, [])
+            return (False, 0)
 
         await summarize_discussion(
             mock_model,

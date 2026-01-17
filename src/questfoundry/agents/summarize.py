@@ -19,7 +19,7 @@ if TYPE_CHECKING:
     from questfoundry.graph.mutations import SeedValidationError
 
 # Type alias for entity validator function
-EntityValidator = Callable[[str, int], tuple[bool, int, list[str]]]
+EntityValidator = Callable[[str, int], tuple[bool, int]]
 
 log = get_logger(__name__)
 
@@ -105,6 +105,7 @@ async def summarize_discussion(
 
     total_tokens = 0
     summary = ""
+    attempt = 0  # Initialize to avoid UnboundLocalError
 
     # Main summarize loop with optional validation feedback
     for attempt in range(max_retries + 1):
@@ -122,7 +123,7 @@ async def summarize_discussion(
 
         # Validate if validator provided
         if entity_validator and expected_entity_count > 0:
-            is_complete, actual_count, _missing = entity_validator(summary, expected_entity_count)
+            is_complete, actual_count = entity_validator(summary, expected_entity_count)
 
             if is_complete:
                 log.info(
@@ -162,7 +163,7 @@ async def summarize_discussion(
         "summarize_completed",
         summary_length=len(summary),
         tokens=total_tokens,
-        attempts=min(attempt + 1, max_retries + 1) if entity_validator else 1,
+        attempts=attempt + 1 if entity_validator else 1,
     )
 
     return summary, summarize_messages, total_tokens
