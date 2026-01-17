@@ -877,3 +877,191 @@ class TestSerializeSeedIterativelySemanticValidation:
         # Retry should have BOTH thread IDs context AND validation errors
         assert "## VALID THREAD IDs" in retry_brief, "Retry lost thread IDs context"
         assert "VALIDATION ERRORS" in retry_brief, "Retry should have error feedback"
+
+
+class TestSerializeWithBriefRepair:
+    """Test two-level feedback loop wrapper."""
+
+    @pytest.mark.asyncio
+    async def test_succeeds_on_first_try_without_repair(self) -> None:
+        """Should return result without repair if first attempt succeeds."""
+        from unittest.mock import MagicMock
+
+        from questfoundry.agents.serialize import serialize_with_brief_repair
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_seed_iteratively",
+                return_value=(mock_result, 100),
+            ) as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize.repair_seed_brief",
+            ) as mock_repair,
+        ):
+            result, tokens = await serialize_with_brief_repair(
+                model=mock_model,
+                brief="Test brief",
+                graph=mock_graph,
+            )
+
+        assert result is mock_result
+        assert tokens == 100
+        mock_serialize.assert_called_once()
+        mock_repair.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_repairs_brief_on_semantic_error(self) -> None:
+        """Should call repair_seed_brief when semantic validation fails."""
+        from unittest.mock import MagicMock
+
+        from questfoundry.agents.serialize import serialize_with_brief_repair
+        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+
+        errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension not found",
+                available=["valid_tension"],
+                provided="invalid_tension",
+            )
+        ]
+
+        call_count = [0]
+
+        def serialize_side_effect(*_args, **_kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise SeedMutationError(errors)
+            return (mock_result, 50)
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_seed_iteratively",
+                side_effect=serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize.repair_seed_brief",
+                return_value=("Repaired brief", 25),
+            ) as mock_repair,
+            patch(
+                "questfoundry.agents.serialize.format_valid_ids_context",
+                return_value="Valid IDs context",
+            ),
+        ):
+            result, tokens = await serialize_with_brief_repair(
+                model=mock_model,
+                brief="Original brief",
+                graph=mock_graph,
+            )
+
+        assert result is mock_result
+        assert tokens == 25 + 50  # repair tokens + second serialize tokens
+        mock_repair.assert_called_once()
+        assert call_count[0] == 2
+
+    @pytest.mark.asyncio
+    async def test_raises_after_max_outer_retries(self) -> None:
+        """Should raise SeedMutationError after max_outer_retries."""
+        from unittest.mock import MagicMock
+
+        from questfoundry.agents.serialize import serialize_with_brief_repair
+        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        errors = [
+            SeedValidationError(
+                field_path="entities.0.id",
+                issue="Entity not found",
+                available=["valid_entity"],
+                provided="invalid_entity",
+            )
+        ]
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_seed_iteratively",
+                side_effect=SeedMutationError(errors),
+            ),
+            patch(
+                "questfoundry.agents.serialize.repair_seed_brief",
+                return_value=("Still broken brief", 25),
+            ),
+            patch(
+                "questfoundry.agents.serialize.format_valid_ids_context",
+                return_value="Valid IDs",
+            ),
+        ):
+            with pytest.raises(SeedMutationError) as exc_info:
+                await serialize_with_brief_repair(
+                    model=mock_model,
+                    brief="Test brief",
+                    graph=mock_graph,
+                    max_outer_retries=2,
+                )
+
+            assert len(exc_info.value.errors) == 1
+
+    @pytest.mark.asyncio
+    async def test_uses_repaired_brief_for_retry(self) -> None:
+        """Should pass repaired brief to second serialize attempt."""
+        from unittest.mock import MagicMock
+
+        from questfoundry.agents.serialize import serialize_with_brief_repair
+        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+
+        errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension not found",
+                available=["valid"],
+                provided="invalid",
+            )
+        ]
+
+        briefs_received: list[str] = []
+        call_count = [0]
+
+        def serialize_side_effect(*_args, **kwargs):
+            call_count[0] += 1
+            briefs_received.append(kwargs.get("brief", ""))
+            if call_count[0] == 1:
+                raise SeedMutationError(errors)
+            return (mock_result, 50)
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_seed_iteratively",
+                side_effect=serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize.repair_seed_brief",
+                return_value=("REPAIRED BRIEF CONTENT", 25),
+            ),
+            patch(
+                "questfoundry.agents.serialize.format_valid_ids_context",
+                return_value="Valid IDs",
+            ),
+        ):
+            await serialize_with_brief_repair(
+                model=mock_model,
+                brief="Original brief",
+                graph=mock_graph,
+            )
+
+        assert len(briefs_received) == 2
+        assert briefs_received[0] == "Original brief"
+        assert briefs_received[1] == "REPAIRED BRIEF CONTENT"
