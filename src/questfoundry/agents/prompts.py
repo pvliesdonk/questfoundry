@@ -254,3 +254,35 @@ def get_seed_serialize_prompt() -> str:
     loader = _get_loader()
     template = loader.load("serialize_seed")
     return template.system
+
+
+def get_repair_seed_brief_prompt(
+    valid_ids_context: str,
+    error_list: str,
+    brief: str,
+) -> tuple[str, str]:
+    """Build the repair SEED brief prompt.
+
+    This prompt instructs the model to surgically fix invalid ID references
+    in a brief without changing any other content.
+
+    Args:
+        valid_ids_context: Formatted list of valid IDs from BRAINSTORM.
+        error_list: Formatted list of semantic validation errors with suggestions.
+        brief: The original brief with invalid IDs to repair.
+
+    Returns:
+        Tuple of (system_prompt, user_prompt) for the repair call.
+    """
+    raw_data = _load_raw_template("repair_seed_brief")
+
+    system_template = raw_data.get("system", "")
+    user_template = raw_data.get("user", "")
+
+    system_prompt = ChatPromptTemplate.from_template(system_template)
+    user_prompt = ChatPromptTemplate.from_template(user_template)
+
+    return (
+        system_prompt.format(valid_ids_context=valid_ids_context, error_list=error_list),
+        user_prompt.format(brief=brief),
+    )
