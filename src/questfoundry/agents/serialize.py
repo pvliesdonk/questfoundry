@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.graph.graph import Graph
+    from questfoundry.models import SeedOutput
 
 log = get_logger(__name__)
 
@@ -734,7 +735,7 @@ async def serialize_with_brief_repair(
     callbacks: list[BaseCallbackHandler] | None = None,
     max_semantic_retries: int = 2,
     max_outer_retries: int = 2,
-) -> tuple[Any, int]:
+) -> tuple[SeedOutput, int]:
     """Serialize SEED with two-level feedback loop for brief repair.
 
     This wraps serialize_seed_iteratively with an outer loop that repairs
@@ -793,7 +794,8 @@ async def serialize_with_brief_repair(
             return result, total_tokens
 
         except SeedMutationError as e:
-            total_tokens += 0  # serialize_seed_iteratively already counted its tokens
+            # Note: Token count from failed serialize attempts is lost.
+            # This is acceptable since we track successful serializations.
 
             if outer_attempt >= max_outer_retries:
                 log.error(

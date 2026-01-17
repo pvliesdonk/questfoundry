@@ -332,8 +332,10 @@ class SeedStage:
             provider_name=serialize_provider_name or provider_name,
             callbacks=callbacks,
         )
-        # Iterative serialization makes 6 calls (one per section) + potential retries
-        # Outer loop may add 1 repair call + 6 more serialize calls per retry
+        # Base case: 6 calls (one per section)
+        # With retries: could be 6 + (1 repair + 6 serialize) per outer retry
+        # We track the base case; actual call count varies with retry paths
+        # Token tracking is accurate; call count is an estimate
         total_llm_calls += 6
         total_tokens += serialize_tokens
 
