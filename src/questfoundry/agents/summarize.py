@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from difflib import get_close_matches
+from typing import TYPE_CHECKING, Any
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
-from questfoundry.agents.prompts import get_summarize_prompt
+from questfoundry.agents.prompts import get_repair_seed_brief_prompt, get_summarize_prompt
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import build_runnable_config, traceable
 
@@ -122,3 +123,142 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
         formatted_parts.append(f"{prefix}: {content}")
 
     return "\n\n".join(formatted_parts)
+
+
+def get_fuzzy_id_suggestions(invalid_id: str, available_ids: list[str], n: int = 3) -> list[str]:
+    """Find closest matching IDs for an invalid ID.
+
+    Uses difflib's get_close_matches for fuzzy string matching.
+
+    Args:
+        invalid_id: The invalid ID to find matches for.
+        available_ids: List of valid IDs to match against.
+        n: Maximum number of suggestions to return.
+
+    Returns:
+        List of closest matching IDs, or empty list if no good matches.
+    """
+    return get_close_matches(invalid_id, available_ids, n=n, cutoff=0.4)
+
+
+def format_repair_errors(errors: list[Any]) -> str:
+    """Format semantic validation errors for brief repair.
+
+    Creates action-oriented error messages with fuzzy match suggestions
+    to guide the model in fixing invalid ID references.
+
+    Args:
+        errors: List of SeedValidationError objects (or similar with
+            field_path, issue, available, provided attributes).
+
+    Returns:
+        Formatted error list string for inclusion in repair prompt.
+    """
+    lines = []
+
+    for i, error in enumerate(errors, 1):
+        lines.append(f"### Error {i}")
+        lines.append(f"- **Location**: `{error.field_path}`")
+        lines.append(f"- **Invalid ID**: `{error.provided}`")
+        lines.append(f"- **Problem**: {error.issue}")
+
+        if error.available:
+            # Get fuzzy match suggestions
+            suggestions = get_fuzzy_id_suggestions(error.provided, error.available)
+            if suggestions:
+                lines.append(f"- **Suggested replacement**: `{suggestions[0]}`")
+
+            # Show available options (limit to 8 for readability)
+            display_available = error.available[:8]
+            lines.append(
+                f"- **Available options**: {', '.join(f'`{a}`' for a in display_available)}"
+            )
+            if len(error.available) > 8:
+                lines.append(f"  ... and {len(error.available) - 8} more")
+
+        lines.append("")
+
+    return "\n".join(lines)
+
+
+@traceable(name="Repair SEED Brief", run_type="chain", tags=["phase:repair", "stage:seed"])
+async def repair_seed_brief(
+    model: BaseChatModel,
+    brief: str,
+    errors: list[Any],
+    valid_ids_context: str,
+    callbacks: list[BaseCallbackHandler] | None = None,
+) -> tuple[str, int]:
+    """Repair invalid ID references in a SEED brief.
+
+    This function performs a surgical fix of invalid IDs without changing
+    the narrative content of the brief. It uses a focused prompt that
+    instructs the model to only replace specific invalid IDs with valid ones.
+
+    Args:
+        model: Chat model to use for repair.
+        brief: The original brief with invalid IDs.
+        errors: List of SeedValidationError objects with field_path, issue,
+            available, and provided attributes.
+        valid_ids_context: Pre-formatted valid IDs reference from BRAINSTORM.
+        callbacks: LangChain callback handlers for logging.
+
+    Returns:
+        Tuple of (repaired_brief, tokens_used).
+    """
+    log.info(
+        "repair_brief_started",
+        error_count=len(errors),
+        brief_length=len(brief),
+    )
+
+    # Format errors with suggestions
+    error_list = format_repair_errors(errors)
+
+    # Get the repair prompt
+    system_prompt, user_prompt = get_repair_seed_brief_prompt(
+        valid_ids_context=valid_ids_context,
+        error_list=error_list,
+        brief=brief,
+    )
+
+    # Build messages for the repair call
+    repair_messages: list[BaseMessage] = [
+        SystemMessage(content=system_prompt),
+        HumanMessage(content=user_prompt),
+    ]
+
+    # Build tracing config
+    config = build_runnable_config(
+        run_name="Repair Brief LLM Call",
+        tags=["seed", "repair", "llm"],
+        metadata={
+            "stage": "seed",
+            "phase": "repair",
+            "error_count": len(errors),
+        },
+        callbacks=callbacks,
+    )
+
+    response = await model.ainvoke(repair_messages, config=config)
+
+    # Extract the repaired brief
+    repaired_brief = str(response.content)
+
+    # Extract token usage
+    tokens = 0
+    if isinstance(response, AIMessage):
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            tokens = response.usage_metadata.get("total_tokens") or 0
+        elif hasattr(response, "response_metadata") and response.response_metadata:
+            metadata = response.response_metadata
+            if "token_usage" in metadata:
+                tokens = metadata["token_usage"].get("total_tokens") or 0
+
+    log.info(
+        "repair_brief_completed",
+        repaired_length=len(repaired_brief),
+        tokens=tokens,
+    )
+
+    return repaired_brief, tokens
