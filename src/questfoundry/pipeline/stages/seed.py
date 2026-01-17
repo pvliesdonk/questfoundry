@@ -18,11 +18,13 @@ from pathlib import Path  # noqa: TC003 - used at runtime for Graph.load()
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.agents import (
+    get_expected_entity_count,
     get_seed_discuss_prompt,
     get_seed_summarize_prompt,
     run_discuss_phase,
     serialize_with_brief_repair,
     summarize_discussion,
+    validate_entity_coverage,
 )
 from questfoundry.graph import Graph
 from questfoundry.observability.logging import get_logger
@@ -308,14 +310,19 @@ class SeedStage:
         total_tokens += discuss_tokens
 
         # Phase 2: Summarize (use summarize_model if provided)
+        # Uses entity coverage validation with feedback loop to ensure completeness
         log.debug("seed_phase", phase="summarize")
         summarize_prompt = get_seed_summarize_prompt(brainstorm_context=brainstorm_context)
+        expected_entities = get_expected_entity_count(brainstorm_context)
         brief, _summarize_messages, summarize_tokens = await summarize_discussion(
             model=summarize_model or model,
             messages=messages,
             system_prompt=summarize_prompt,
             stage_name="seed",
             callbacks=callbacks,
+            max_retries=2,
+            entity_validator=validate_entity_coverage,
+            expected_entity_count=expected_entities,
         )
         total_llm_calls += 1
         total_tokens += summarize_tokens
