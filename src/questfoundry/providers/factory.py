@@ -22,7 +22,7 @@ log = get_logger(__name__)
 # Provider default models - None means model must be explicitly specified
 PROVIDER_DEFAULTS: dict[str, str | None] = {
     "ollama": None,  # Require explicit model due to distribution issues
-    "openai": "gpt-4o",
+    "openai": "gpt-5-mini",
     "anthropic": "claude-sonnet-4-20250514",
 }
 
@@ -117,7 +117,7 @@ def create_model_for_structured_output(
 
         model = create_model_for_structured_output(
             "ollama",
-            model_name="qwen3:8b",
+            model_name="qwen3:4b-instruct-32k",
             schema=StoryOutline,
         )
         ```
@@ -128,7 +128,7 @@ def create_model_for_structured_output(
     resolved_model = model_name or get_default_model(provider_name_lower)
     # Fallback for providers where get_default_model returns None (e.g., ollama)
     if resolved_model is None:
-        fallback_models = {"ollama": "qwen3:8b"}
+        fallback_models = {"ollama": "qwen3:4b-instruct-32k"}
         resolved_model = fallback_models.get(provider_name_lower)
         if resolved_model is None:
             raise ProviderError(

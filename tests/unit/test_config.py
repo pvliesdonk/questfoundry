@@ -20,10 +20,10 @@ class TestProvidersConfig:
 
     def test_from_dict_default_only(self) -> None:
         """Parse config with only default provider."""
-        data = {"default": "ollama/qwen3:8b"}
+        data = {"default": "ollama/qwen3:4b-instruct-32k"}
         config = ProvidersConfig.from_dict(data)
 
-        assert config.default == "ollama/qwen3:8b"
+        assert config.default == "ollama/qwen3:4b-instruct-32k"
         assert config.discuss is None
         assert config.summarize is None
         assert config.serialize is None
@@ -31,16 +31,16 @@ class TestProvidersConfig:
     def test_from_dict_with_phase_overrides(self) -> None:
         """Parse config with phase-specific overrides."""
         data = {
-            "default": "ollama/qwen3:8b",
-            "discuss": "ollama/qwen3:8b",
-            "summarize": "openai/gpt-4o",
+            "default": "ollama/qwen3:4b-instruct-32k",
+            "discuss": "ollama/qwen3:4b-instruct-32k",
+            "summarize": "openai/gpt-5-mini",
             "serialize": "openai/o1-mini",
         }
         config = ProvidersConfig.from_dict(data)
 
-        assert config.default == "ollama/qwen3:8b"
-        assert config.discuss == "ollama/qwen3:8b"
-        assert config.summarize == "openai/gpt-4o"
+        assert config.default == "ollama/qwen3:4b-instruct-32k"
+        assert config.discuss == "ollama/qwen3:4b-instruct-32k"
+        assert config.summarize == "openai/gpt-5-mini"
         assert config.serialize == "openai/o1-mini"
 
     def test_from_dict_empty_uses_defaults(self) -> None:
@@ -55,25 +55,25 @@ class TestProvidersConfig:
     def test_get_discuss_provider_from_config(self) -> None:
         """get_discuss_provider returns config value when set."""
         config = ProvidersConfig(
-            default="ollama/qwen3:8b",
-            discuss="openai/gpt-4o",
+            default="ollama/qwen3:4b-instruct-32k",
+            discuss="openai/gpt-5-mini",
         )
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_discuss_provider() == "openai/gpt-4o"
+            assert config.get_discuss_provider() == "openai/gpt-5-mini"
 
     def test_get_discuss_provider_fallback_to_default(self) -> None:
         """get_discuss_provider falls back to default when not set."""
-        config = ProvidersConfig(default="ollama/qwen3:8b")
+        config = ProvidersConfig(default="ollama/qwen3:4b-instruct-32k")
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_discuss_provider() == "ollama/qwen3:8b"
+            assert config.get_discuss_provider() == "ollama/qwen3:4b-instruct-32k"
 
     def test_get_discuss_provider_env_override(self) -> None:
         """Environment variable overrides config value."""
         config = ProvidersConfig(
-            default="ollama/qwen3:8b",
-            discuss="openai/gpt-4o",
+            default="ollama/qwen3:4b-instruct-32k",
+            discuss="openai/gpt-5-mini",
         )
 
         with patch.dict("os.environ", {"QF_PROVIDER_DISCUSS": "anthropic/claude-3"}):
@@ -82,25 +82,25 @@ class TestProvidersConfig:
     def test_get_summarize_provider_from_config(self) -> None:
         """get_summarize_provider returns config value when set."""
         config = ProvidersConfig(
-            default="ollama/qwen3:8b",
-            summarize="openai/gpt-4o",
+            default="ollama/qwen3:4b-instruct-32k",
+            summarize="openai/gpt-5-mini",
         )
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_summarize_provider() == "openai/gpt-4o"
+            assert config.get_summarize_provider() == "openai/gpt-5-mini"
 
     def test_get_summarize_provider_fallback_to_default(self) -> None:
         """get_summarize_provider falls back to default when not set."""
-        config = ProvidersConfig(default="ollama/qwen3:8b")
+        config = ProvidersConfig(default="ollama/qwen3:4b-instruct-32k")
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_summarize_provider() == "ollama/qwen3:8b"
+            assert config.get_summarize_provider() == "ollama/qwen3:4b-instruct-32k"
 
     def test_get_summarize_provider_env_override(self) -> None:
         """Environment variable overrides config value."""
         config = ProvidersConfig(
-            default="ollama/qwen3:8b",
-            summarize="openai/gpt-4o",
+            default="ollama/qwen3:4b-instruct-32k",
+            summarize="openai/gpt-5-mini",
         )
 
         with patch.dict("os.environ", {"QF_PROVIDER_SUMMARIZE": "anthropic/claude-3"}):
@@ -109,7 +109,7 @@ class TestProvidersConfig:
     def test_get_serialize_provider_from_config(self) -> None:
         """get_serialize_provider returns config value when set."""
         config = ProvidersConfig(
-            default="ollama/qwen3:8b",
+            default="ollama/qwen3:4b-instruct-32k",
             serialize="openai/o1-mini",
         )
 
@@ -118,15 +118,15 @@ class TestProvidersConfig:
 
     def test_get_serialize_provider_fallback_to_default(self) -> None:
         """get_serialize_provider falls back to default when not set."""
-        config = ProvidersConfig(default="ollama/qwen3:8b")
+        config = ProvidersConfig(default="ollama/qwen3:4b-instruct-32k")
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_serialize_provider() == "ollama/qwen3:8b"
+            assert config.get_serialize_provider() == "ollama/qwen3:4b-instruct-32k"
 
     def test_get_serialize_provider_env_override(self) -> None:
         """Environment variable overrides config value."""
         config = ProvidersConfig(
-            default="ollama/qwen3:8b",
+            default="ollama/qwen3:4b-instruct-32k",
             serialize="openai/o1-mini",
         )
 
@@ -145,17 +145,17 @@ class TestProjectConfigHybridProviders:
         data = {
             "name": "test-project",
             "providers": {
-                "default": "ollama/qwen3:8b",
+                "default": "ollama/qwen3:4b-instruct-32k",
             },
         }
         config = ProjectConfig.from_dict(data)
 
         # Legacy field populated
         assert config.provider.name == "ollama"
-        assert config.provider.model == "qwen3:8b"
+        assert config.provider.model == "qwen3:4b-instruct-32k"
 
         # New field also populated
-        assert config.providers.default == "ollama/qwen3:8b"
+        assert config.providers.default == "ollama/qwen3:4b-instruct-32k"
         assert config.providers.discuss is None
         assert config.providers.serialize is None
 
@@ -164,9 +164,9 @@ class TestProjectConfigHybridProviders:
         data = {
             "name": "hybrid-project",
             "providers": {
-                "default": "ollama/qwen3:8b",
-                "discuss": "ollama/qwen3:8b",
-                "summarize": "openai/gpt-4o",
+                "default": "ollama/qwen3:4b-instruct-32k",
+                "discuss": "ollama/qwen3:4b-instruct-32k",
+                "summarize": "openai/gpt-5-mini",
                 "serialize": "openai/o1-mini",
             },
         }
@@ -174,12 +174,12 @@ class TestProjectConfigHybridProviders:
 
         # Legacy field uses default
         assert config.provider.name == "ollama"
-        assert config.provider.model == "qwen3:8b"
+        assert config.provider.model == "qwen3:4b-instruct-32k"
 
         # New field has all values
-        assert config.providers.default == "ollama/qwen3:8b"
-        assert config.providers.discuss == "ollama/qwen3:8b"
-        assert config.providers.summarize == "openai/gpt-4o"
+        assert config.providers.default == "ollama/qwen3:4b-instruct-32k"
+        assert config.providers.discuss == "ollama/qwen3:4b-instruct-32k"
+        assert config.providers.summarize == "openai/gpt-5-mini"
         assert config.providers.serialize == "openai/o1-mini"
 
     def test_from_dict_provider_without_model(self) -> None:
@@ -192,9 +192,9 @@ class TestProjectConfigHybridProviders:
         }
         config = ProjectConfig.from_dict(data)
 
-        # Should use provider-specific default (gpt-4o for openai), not DEFAULT_MODEL
+        # Should use provider-specific default (gpt-5-mini for openai), not DEFAULT_MODEL
         assert config.provider.name == "openai"
-        assert config.provider.model == "gpt-4o"  # OpenAI's default model
+        assert config.provider.model == "gpt-5-mini"  # OpenAI's default model
 
     def test_from_dict_unknown_provider_without_model_uses_default(self) -> None:
         """Unknown provider without model falls back to DEFAULT_MODEL."""
@@ -228,12 +228,12 @@ class TestCreateDefaultConfig:
 
     def test_create_default_config_with_provider(self) -> None:
         """Create config with explicit provider."""
-        config = create_default_config("test-project", provider="openai/gpt-4o")
+        config = create_default_config("test-project", provider="openai/gpt-5-mini")
 
         assert config.name == "test-project"
         assert config.provider.name == "openai"
-        assert config.provider.model == "gpt-4o"
-        assert config.providers.default == "openai/gpt-4o"
+        assert config.provider.model == "gpt-5-mini"
+        assert config.providers.default == "openai/gpt-5-mini"
 
     def test_create_default_config_provider_without_model(self) -> None:
         """Create config with provider but no model uses provider-specific default."""

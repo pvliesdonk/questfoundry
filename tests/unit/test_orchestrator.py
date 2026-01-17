@@ -45,7 +45,7 @@ def test_create_default_config() -> None:
     assert config.name == "test_project"
     assert config.version == 1
     assert config.provider.name == "ollama"
-    assert config.provider.model == "qwen3:8b"
+    assert config.provider.model == "qwen3:4b-instruct-32k"
     assert "dream" in config.stages
 
 
@@ -71,7 +71,7 @@ def test_config_from_dict_full() -> None:
             },
         },
         "providers": {
-            "default": "openai/gpt-4o",
+            "default": "openai/gpt-5-mini",
         },
     }
     config = ProjectConfig.from_dict(data)
@@ -79,7 +79,7 @@ def test_config_from_dict_full() -> None:
     assert config.name == "full"
     assert config.version == 2
     assert config.provider.name == "openai"
-    assert config.provider.model == "gpt-4o"
+    assert config.provider.model == "gpt-5-mini"
     assert config.stages == ["dream", "seed"]
     assert len(config.gates) == 2
     assert any(g.stage == "seed" and g.required for g in config.gates)
@@ -195,7 +195,7 @@ def test_orchestrator_with_config(tmp_path: Path) -> None:
         """
 name: test_project
 providers:
-  default: ollama/qwen3:8b
+  default: ollama/qwen3:4b-instruct-32k
 """
     )
 
@@ -218,15 +218,15 @@ def test_orchestrator_model_info_after_model_creation(tmp_path: Path) -> None:
     mock_model = MagicMock()
     orchestrator._chat_model = mock_model
     orchestrator._provider_name = "openai"
-    orchestrator._model_name = "gpt-4o"
+    orchestrator._model_name = "gpt-5-mini"
 
     # Manually populate model_info as _get_chat_model would
     from questfoundry.providers.model_info import get_model_info
 
-    orchestrator._model_info = get_model_info("openai", "gpt-4o")
+    orchestrator._model_info = get_model_info("openai", "gpt-5-mini")
 
     assert orchestrator.model_info is not None
-    assert orchestrator.model_info.context_window == 128_000
+    assert orchestrator.model_info.context_window == 1_000_000
     assert orchestrator.model_info.supports_vision is True
 
 
@@ -396,7 +396,7 @@ def project_with_graph(tmp_path: Path) -> Path:
         """
 name: validation_test
 providers:
-  default: ollama/qwen3:8b
+  default: ollama/qwen3:4b-instruct-32k
 """
     )
 
@@ -593,13 +593,13 @@ def test_orchestrator_stores_phase_overrides(tmp_path: Path) -> None:
         tmp_path,
         provider_override="ollama/default",
         provider_discuss_override="ollama/discuss",
-        provider_summarize_override="openai/gpt-4o",
+        provider_summarize_override="openai/gpt-5-mini",
         provider_serialize_override="openai/o1-mini",
     )
 
     assert orchestrator._provider_override == "ollama/default"
     assert orchestrator._provider_discuss_override == "ollama/discuss"
-    assert orchestrator._provider_summarize_override == "openai/gpt-4o"
+    assert orchestrator._provider_summarize_override == "openai/gpt-5-mini"
     assert orchestrator._provider_serialize_override == "openai/o1-mini"
 
 
