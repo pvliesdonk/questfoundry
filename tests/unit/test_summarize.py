@@ -96,23 +96,19 @@ class TestSummarizeDiscussion:
             AIMessage(content="Assistant response"),
         ]
 
-        await summarize_discussion(mock_model, messages)
+        _summary, result_messages, _tokens = await summarize_discussion(mock_model, messages)
 
-        # Check the call to ainvoke included proper message structure
-        # Note: mock captures list by reference, so response is appended after call
-        call_args = mock_model.ainvoke.call_args
-        invoke_messages = call_args[0][0]
-
-        # Should have: system, human, ai, summarize instruction, response (appended after)
-        assert len(invoke_messages) == 5
-        assert isinstance(invoke_messages[0], SystemMessage)  # System prompt
-        assert isinstance(invoke_messages[1], HumanMessage)  # User message
-        assert invoke_messages[1].content == "User message"
-        assert isinstance(invoke_messages[2], AIMessage)  # Assistant response
-        assert invoke_messages[2].content == "Assistant response"
-        assert isinstance(invoke_messages[3], HumanMessage)  # Summarize instruction
-        assert isinstance(invoke_messages[4], AIMessage)  # Response appended after call
-        assert invoke_messages[4].content == "Summary"
+        # Verify returned message history has proper structure
+        # Should have: system, human, ai, summarize instruction, response
+        assert len(result_messages) == 5
+        assert isinstance(result_messages[0], SystemMessage)  # System prompt
+        assert isinstance(result_messages[1], HumanMessage)  # User message
+        assert result_messages[1].content == "User message"
+        assert isinstance(result_messages[2], AIMessage)  # Assistant response
+        assert result_messages[2].content == "Assistant response"
+        assert isinstance(result_messages[3], HumanMessage)  # Summarize instruction
+        assert isinstance(result_messages[4], AIMessage)  # Response
+        assert result_messages[4].content == "Summary"
 
     @pytest.mark.asyncio
     async def test_summarize_handles_missing_metadata(self) -> None:
@@ -228,22 +224,20 @@ class TestSummarizeDiscussion:
             AIMessage(content="AI response"),
         ]
 
-        await summarize_discussion(mock_model, messages)
+        _summary, result_messages, _tokens = await summarize_discussion(mock_model, messages)
 
-        call_args = mock_model.ainvoke.call_args
-        invoke_messages = call_args[0][0]
-
+        # Verify returned message history has proper structure
         # Should have: our system prompt, human, ai, summarize instruction, response
-        # (original system message is filtered out; response appended after call)
-        assert len(invoke_messages) == 5
-        assert isinstance(invoke_messages[0], SystemMessage)  # Our system prompt
-        assert "System context" not in invoke_messages[0].content  # Not the input one
-        assert isinstance(invoke_messages[1], HumanMessage)
-        assert invoke_messages[1].content == "User input"
-        assert isinstance(invoke_messages[2], AIMessage)
-        assert invoke_messages[2].content == "AI response"
-        assert isinstance(invoke_messages[3], HumanMessage)  # Summarize instruction
-        assert isinstance(invoke_messages[4], AIMessage)  # Response appended after call
+        # (original system message is filtered out)
+        assert len(result_messages) == 5
+        assert isinstance(result_messages[0], SystemMessage)  # Our system prompt
+        assert "System context" not in result_messages[0].content  # Not the input one
+        assert isinstance(result_messages[1], HumanMessage)
+        assert result_messages[1].content == "User input"
+        assert isinstance(result_messages[2], AIMessage)
+        assert result_messages[2].content == "AI response"
+        assert isinstance(result_messages[3], HumanMessage)  # Summarize instruction
+        assert isinstance(result_messages[4], AIMessage)  # Response
 
 
 class TestGetFuzzyIdSuggestions:

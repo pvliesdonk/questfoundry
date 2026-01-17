@@ -70,11 +70,8 @@ async def summarize_discussion(
         SystemMessage(content=system_prompt),
     ]
 
-    # Add discuss messages with proper structure
-    # Filter out any system messages from discuss (we have our own)
-    for msg in messages:
-        if not isinstance(msg, SystemMessage):
-            summarize_messages.append(msg)
+    # Add discuss messages with proper structure, filtering out any system messages
+    summarize_messages.extend([msg for msg in messages if not isinstance(msg, SystemMessage)])
 
     # Add the summarize instruction
     summarize_messages.append(
@@ -99,38 +96,13 @@ async def summarize_discussion(
     # Extract token usage
     tokens = _extract_token_usage(response) if isinstance(response, AIMessage) else 0
 
-    # Add response to message history for potential feedback loops
-    summarize_messages.append(AIMessage(content=summary))
+    # Create full message history for potential feedback loops
+    # (avoid mutating summarize_messages after passing to ainvoke)
+    full_message_history = [*summarize_messages, AIMessage(content=summary)]
 
     log.info("summarize_completed", summary_length=len(summary), tokens=tokens)
 
-    return summary, summarize_messages, tokens
-
-
-def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
-    """Format conversation messages for the summary prompt.
-
-    Args:
-        messages: List of conversation messages
-
-    Returns:
-        Formatted string representation of the conversation
-    """
-    formatted_parts = []
-    for msg in messages:
-        if isinstance(msg, HumanMessage):
-            prefix = "User"
-        elif isinstance(msg, AIMessage):
-            prefix = "Assistant"
-        elif isinstance(msg, SystemMessage):
-            prefix = "System"
-        else:
-            prefix = "Message"
-
-        content = msg.content if isinstance(msg.content, str) else str(msg.content)
-        formatted_parts.append(f"{prefix}: {content}")
-
-    return "\n\n".join(formatted_parts)
+    return summary, full_message_history, tokens
 
 
 def _extract_token_usage(response: AIMessage) -> int:
