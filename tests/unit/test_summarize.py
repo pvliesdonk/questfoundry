@@ -520,3 +520,158 @@ class TestRepairSeedBrief:
         # System prompt should contain the error details
         assert "`invented_tension`" in system_message.content
         assert "Tension not found" in system_message.content
+
+
+class TestSummarizeFeedbackLoop:
+    """Test summarize_discussion with validation feedback loop."""
+
+    @pytest.mark.asyncio
+    async def test_no_validation_runs_once(self) -> None:
+        """Without validator, should run exactly once."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="Summary")
+        mock_response.usage_metadata = {"total_tokens": 100}
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        messages = [HumanMessage(content="Test")]
+
+        summary, _messages, _tokens = await summarize_discussion(
+            mock_model, messages, max_retries=2
+        )
+
+        assert summary == "Summary"
+        assert mock_model.ainvoke.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_validation_passes_first_try_runs_once(self) -> None:
+        """When validation passes first try, should not retry."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="id: kay\nid: morgan")
+        mock_response.usage_metadata = {"total_tokens": 100}
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        messages = [HumanMessage(content="Test")]
+
+        def validator(_brief: str, _expected: int) -> tuple[bool, int, list[str]]:
+            return (True, 2, [])
+
+        summary, _result_messages, _tokens = await summarize_discussion(
+            mock_model,
+            messages,
+            max_retries=2,
+            entity_validator=validator,
+            expected_entity_count=2,
+        )
+
+        assert mock_model.ainvoke.call_count == 1
+        assert "id: kay" in summary
+
+    @pytest.mark.asyncio
+    async def test_validation_fails_triggers_retry(self) -> None:
+        """When validation fails, should retry with feedback."""
+        mock_model = MagicMock()
+        # First response: incomplete, second response: complete
+        incomplete = AIMessage(content="id: kay")
+        incomplete.usage_metadata = {"total_tokens": 100}
+        complete = AIMessage(content="id: kay\nid: morgan")
+        complete.usage_metadata = {"total_tokens": 150}
+        mock_model.ainvoke = AsyncMock(side_effect=[incomplete, complete])
+
+        messages = [HumanMessage(content="Test")]
+
+        def validator(brief: str, expected: int) -> tuple[bool, int, list[str]]:
+            count = brief.count("id:")
+            return (count >= expected, count, [])
+
+        summary, _result_messages, tokens = await summarize_discussion(
+            mock_model,
+            messages,
+            max_retries=2,
+            entity_validator=validator,
+            expected_entity_count=2,
+        )
+
+        assert mock_model.ainvoke.call_count == 2
+        assert "id: morgan" in summary
+        assert tokens == 250  # 100 + 150
+
+    @pytest.mark.asyncio
+    async def test_retry_includes_feedback_message(self) -> None:
+        """Retry should include feedback about incomplete coverage."""
+        mock_model = MagicMock()
+        incomplete = AIMessage(content="id: kay")
+        incomplete.usage_metadata = {"total_tokens": 100}
+        complete = AIMessage(content="id: kay\nid: morgan")
+        complete.usage_metadata = {"total_tokens": 150}
+        mock_model.ainvoke = AsyncMock(side_effect=[incomplete, complete])
+
+        messages = [HumanMessage(content="Test")]
+
+        def validator(brief: str, expected: int) -> tuple[bool, int, list[str]]:
+            count = brief.count("id:")
+            return (count >= expected, count, [])
+
+        _summary, result_messages, _tokens = await summarize_discussion(
+            mock_model,
+            messages,
+            max_retries=2,
+            entity_validator=validator,
+            expected_entity_count=2,
+        )
+
+        # Result messages should include feedback
+        human_messages = [m for m in result_messages if isinstance(m, HumanMessage)]
+        feedback_found = any("incomplete" in m.content.lower() for m in human_messages)
+        assert feedback_found
+
+    @pytest.mark.asyncio
+    async def test_exhausted_retries_returns_last_summary(self) -> None:
+        """When retries exhausted, should return last summary."""
+        mock_model = MagicMock()
+        incomplete = AIMessage(content="id: kay")
+        incomplete.usage_metadata = {"total_tokens": 100}
+        mock_model.ainvoke = AsyncMock(return_value=incomplete)
+
+        messages = [HumanMessage(content="Test")]
+
+        def validator(_brief: str, _expected: int) -> tuple[bool, int, list[str]]:
+            return (False, 1, [])  # Always fail
+
+        summary, _result_messages, _tokens = await summarize_discussion(
+            mock_model,
+            messages,
+            max_retries=2,
+            entity_validator=validator,
+            expected_entity_count=3,
+        )
+
+        # Should attempt max_retries + 1 times
+        assert mock_model.ainvoke.call_count == 3
+        assert summary == "id: kay"  # Returns last attempt
+
+    @pytest.mark.asyncio
+    async def test_zero_expected_count_skips_validation(self) -> None:
+        """With expected_count=0, should skip validation even with validator."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="Summary")
+        mock_response.usage_metadata = {"total_tokens": 100}
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        messages = [HumanMessage(content="Test")]
+
+        validator_called = []
+
+        def validator(_brief: str, _expected: int) -> tuple[bool, int, list[str]]:
+            validator_called.append(True)
+            return (False, 0, [])
+
+        await summarize_discussion(
+            mock_model,
+            messages,
+            max_retries=2,
+            entity_validator=validator,
+            expected_entity_count=0,  # Zero expected
+        )
+
+        assert len(validator_called) == 0  # Validator never called
+        assert mock_model.ainvoke.call_count == 1
