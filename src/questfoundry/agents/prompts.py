@@ -208,8 +208,74 @@ def get_seed_discuss_prompt(
     )
 
 
+def _extract_entity_checklist(brainstorm_context: str) -> tuple[str, int]:
+    """Extract entity IDs from brainstorm context for explicit checklist.
+
+    Parses the "## Entities from BRAINSTORM" section and creates a
+    checkbox-style list for the LLM to complete. This ensures the
+    summarize phase accounts for ALL entities.
+
+    Args:
+        brainstorm_context: Formatted brainstorm context string containing
+            entities in the format "- **entity_id** (type): concept".
+
+    Returns:
+        Tuple of (checklist_text, entity_count).
+    """
+    import re
+
+    # Parse entity IDs from formatted context (lines like "- **entity_id** (type): concept")
+    pattern = r"\- \*\*([a-z_]+)\*\* \((\w+)\):"
+    matches = re.findall(pattern, brainstorm_context)
+
+    if not matches:
+        return "No entities found in brainstorm context.", 0
+
+    # Group by type for clearer presentation
+    by_type: dict[str, list[str]] = {}
+    for entity_id, entity_type in matches:
+        by_type.setdefault(entity_type, []).append(entity_id)
+
+    lines = ["Copy each ID exactly and assign: retained / cut"]
+    for entity_type in sorted(by_type.keys()):
+        ids = by_type[entity_type]
+        lines.append(f"\n**{entity_type.title()}s** ({len(ids)}):")
+        for eid in sorted(ids):
+            lines.append(f"  - [ ] `{eid}`")
+
+    lines.append(f"\n**Total: {len(matches)} entities - ALL must have a decision**")
+
+    return "\n".join(lines), len(matches)
+
+
+def _count_tensions(brainstorm_context: str) -> int:
+    """Count tensions in brainstorm context.
+
+    Args:
+        brainstorm_context: Formatted brainstorm context string.
+
+    Returns:
+        Number of tensions found.
+    """
+    import re
+
+    # Tensions are formatted as "- **tension_id**: question"
+    pattern = r"\- \*\*([a-z_]+)\*\*:"
+    # Look in the tensions section only
+    tensions_section = ""
+    if "## Tensions from BRAINSTORM" in brainstorm_context:
+        start = brainstorm_context.find("## Tensions from BRAINSTORM")
+        tensions_section = brainstorm_context[start:]
+
+    matches = re.findall(pattern, tensions_section)
+    return len(matches)
+
+
 def get_seed_summarize_prompt(brainstorm_context: str = "") -> str:
-    """Build the SEED summarize prompt.
+    """Build the SEED summarize prompt with entity checklist.
+
+    Parses brainstorm_context to extract entity IDs and creates an explicit
+    checklist the LLM must complete. This ensures complete coverage.
 
     Args:
         brainstorm_context: YAML representation of brainstorm entities/tensions.
@@ -220,10 +286,19 @@ def get_seed_summarize_prompt(brainstorm_context: str = "") -> str:
     """
     raw_data = _load_raw_template("summarize_seed")
 
-    # Render the system template with brainstorm context
+    # Extract entity checklist for explicit enumeration
+    entity_checklist, entity_count = _extract_entity_checklist(brainstorm_context)
+    tension_count = _count_tensions(brainstorm_context)
+
+    # Render the system template with all context
     system_template = raw_data.get("system", "")
     prompt = ChatPromptTemplate.from_template(system_template)
-    return prompt.format(brainstorm_context=brainstorm_context)
+    return prompt.format(
+        brainstorm_context=brainstorm_context,
+        entity_checklist=entity_checklist,
+        entity_count=entity_count,
+        tension_count=tension_count,
+    )
 
 
 def get_brainstorm_serialize_prompt() -> str:

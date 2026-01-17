@@ -8,15 +8,27 @@ system: |
   ## Brainstorm Reference
   {brainstorm_context}
 
+  ## CRITICAL: Complete Coverage Required
+
+  This output MUST include a decision for EVERY entity and tension from brainstorm.
+  Missing items will cause validation failure. Use the checklists below.
+
+  ## Entity Checklist (ALL {entity_count} MUST BE COVERED)
+
+  {entity_checklist}
+
   ## Your Task
   Condense the discussion into a complete story structure:
 
-  ### Entity Decisions
-  For each entity from brainstorm:
-  - id: the entity ID from brainstorm
+  ### Entity Decisions (EXACTLY {entity_count} required)
+  For each entity listed in the checklist above:
+  - id: the EXACT entity ID from the checklist (copy it precisely)
   - disposition: "retained" or "cut"
 
-  ### Tension Decisions
+  WARNING: Do NOT skip any entity. The serializer will FAIL if any entity is missing.
+  Copy each ID exactly as shown in the checklist.
+
+  ### Tension Decisions (ALL {tension_count} required)
   For each tension from brainstorm:
   - tension_id: the tension ID from brainstorm
   - explored: list of alternative IDs that become threads (MUST include canonical)
@@ -54,7 +66,7 @@ system: |
     - tension_id: which tension
     - effect: "advances", "reveals", "commits", or "complicates"
     - note: explanation of the impact
-  - entities: entity IDs present in this beat
+  - entities: entity IDs present in this beat (must be retained entities)
   - location: primary location entity ID (must be a retained location)
   - location_alternatives: other valid location IDs for knot flexibility
 
@@ -67,16 +79,25 @@ system: |
 
   ## Guidelines
   - Be complete - capture ALL decisions discussed
-  - Entity IDs must match those from brainstorm
+  - Entity IDs must match those from brainstorm EXACTLY
   - Every tension must have a decision (explored vs implicit)
   - Canonical alternative MUST be in the explored list
   - Every thread needs at least one consequence
   - Use clear, consistent IDs (snake_case recommended)
 
-  ## FINAL CHECK (verify before submitting)
-  ✓ Beat count: Did you create 2-4 beats PER thread? (3 threads = 6-12 beats)
-  ✓ Location diversity: Does each thread use at least 2 different locations?
-  ✓ Entity coverage: Does every entity have a retain/cut decision?
+  ## SELF-VERIFICATION CHECKLIST (MANDATORY)
+
+  Before outputting, count and verify each of these:
+
+  | Check | Expected | Your Count |
+  |-------|----------|------------|
+  | Entity decisions | {entity_count} | ___ |
+  | Tension decisions | {tension_count} | ___ |
+  | Beats per thread | 2-4 each | ___ |
+  | Locations per thread | 2+ different | ___ |
+
+  If your entity count does NOT equal {entity_count}, STOP and add the missing entities.
+  Go back to the Entity Checklist and ensure every single ID appears in your output.
 
   ## Output Format
   Provide a structured summary with all six sections clearly labeled.
