@@ -244,7 +244,7 @@ class TestOrchestratorIntegration:
 
         orchestrator = PipelineOrchestrator(
             integration_project,
-            provider_override="ollama/qwen3:8b",
+            provider_override="ollama/qwen3:4b-instruct-32k",
         )
         try:
             result = await orchestrator.run_stage(
@@ -276,7 +276,7 @@ class TestOrchestratorIntegration:
 
         orchestrator = PipelineOrchestrator(
             integration_project,
-            provider_override="ollama/qwen3:8b",
+            provider_override="ollama/qwen3:4b-instruct-32k",
             enable_llm_logging=True,
         )
         try:
@@ -315,7 +315,7 @@ class TestOrchestratorIntegration:
 
         orchestrator = PipelineOrchestrator(
             integration_project,
-            provider_override="ollama/qwen3:8b",
+            provider_override="ollama/qwen3:4b-instruct-32k",
         )
         try:
             _result = await orchestrator.run_stage(

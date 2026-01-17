@@ -11,7 +11,7 @@ from ruamel.yaml import YAML
 
 # Default configuration values
 DEFAULT_PROVIDER = "ollama"
-DEFAULT_MODEL = "qwen3:8b"
+DEFAULT_MODEL = "qwen3:4b-instruct-32k"
 DEFAULT_STAGES = ["dream", "brainstorm", "seed", "grow", "fill", "ship"]
 
 
@@ -40,7 +40,7 @@ class ProvidersConfig:
     backward compatibility, not by this class.
 
     Attributes:
-        default: Default provider string (e.g., "ollama/qwen3:8b"). Required.
+        default: Default provider string (e.g., "ollama/qwen3:4b-instruct-32k"). Required.
         discuss: Optional provider override for the discuss phase.
         summarize: Optional provider override for the summarize phase.
         serialize: Optional provider override for the serialize phase.
@@ -262,7 +262,7 @@ def create_default_config(
 
     Args:
         name: Project name.
-        provider: Optional default provider string (e.g., "ollama/qwen3:8b").
+        provider: Optional default provider string (e.g., "ollama/qwen3:4b-instruct-32k").
             If not provided, uses the system default.
 
     Returns:

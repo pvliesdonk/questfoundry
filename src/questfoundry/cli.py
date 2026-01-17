@@ -212,7 +212,7 @@ def _get_orchestrator(
 
     Args:
         project_path: Path to the project directory.
-        provider_override: Optional provider string (e.g., "openai/gpt-4o") to override config.
+        provider_override: Optional provider string (e.g., "openai/gpt-5-mini") to override config.
         provider_discuss_override: Optional provider override for discuss phase.
         provider_summarize_override: Optional provider override for summarize phase.
         provider_serialize_override: Optional provider override for serialize phase.
@@ -667,7 +667,9 @@ def dream(
     ] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="LLM provider for all phases (e.g., ollama/qwen3:8b)"),
+        typer.Option(
+            "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
+        ),
     ] = None,
     provider_discuss: Annotated[
         str | None,
@@ -732,7 +734,9 @@ def brainstorm(
     ] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="LLM provider for all phases (e.g., ollama/qwen3:8b)"),
+        typer.Option(
+            "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
+        ),
     ] = None,
     provider_discuss: Annotated[
         str | None,
@@ -800,7 +804,9 @@ def seed(
     ] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="LLM provider for all phases (e.g., ollama/qwen3:8b)"),
+        typer.Option(
+            "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
+        ),
     ] = None,
     provider_discuss: Annotated[
         str | None,
@@ -894,7 +900,9 @@ def run(
     ] = None,
     provider: Annotated[
         str | None,
-        typer.Option("--provider", help="LLM provider for all phases (e.g., ollama/qwen3:8b)"),
+        typer.Option(
+            "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
+        ),
     ] = None,
     provider_discuss: Annotated[
         str | None,

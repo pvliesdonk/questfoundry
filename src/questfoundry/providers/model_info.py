@@ -38,6 +38,7 @@ class ModelProperties:
 # Consolidates context window and capability information.
 KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
     "ollama": {
+        "qwen3:4b-instruct-32k": ModelProperties(context_window=32_768),
         "qwen3:8b": ModelProperties(context_window=32_768),
         "qwen2.5:7b": ModelProperties(context_window=32_768),
         "llama3:8b": ModelProperties(context_window=8_192),
@@ -46,6 +47,7 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
         "deepseek-coder:6.7b": ModelProperties(context_window=16_384),
     },
     "openai": {
+        "gpt-5-mini": ModelProperties(context_window=1_000_000, supports_vision=True),
         "gpt-4o": ModelProperties(context_window=128_000, supports_vision=True),
         "gpt-4o-mini": ModelProperties(context_window=128_000, supports_vision=True),
         "gpt-4-turbo": ModelProperties(context_window=128_000, supports_vision=True),
@@ -78,7 +80,7 @@ def get_model_info(provider: str, model: str) -> ModelInfo:
 
     Args:
         provider: Provider name (e.g., "ollama", "openai", "anthropic").
-        model: Model name (e.g., "gpt-4o", "qwen3:8b").
+        model: Model name (e.g., "gpt-5-mini", "qwen3:4b-instruct-32k").
 
     Returns:
         ModelInfo with context window and capabilities.

@@ -74,14 +74,14 @@ def ollama_model() -> Generator[BaseChatModel, None, None]:
     """Create an Ollama chat model for integration tests.
 
     Skipped if OLLAMA_HOST is not configured.
-    Uses qwen3:8b as the default model for consistency.
+    Uses qwen3:4b-instruct-32k as the default model for consistency.
     """
     if not _ollama_available():
         pytest.skip("OLLAMA_HOST not set or Ollama not reachable")
 
     from questfoundry.providers.factory import create_chat_model
 
-    model = create_chat_model("ollama", "qwen3:8b")
+    model = create_chat_model("ollama", "qwen3:4b-instruct-32k")
     yield model
 
 
@@ -90,14 +90,14 @@ def openai_model() -> Generator[BaseChatModel, None, None]:
     """Create an OpenAI chat model for integration tests.
 
     Skipped if OPENAI_API_KEY is not configured.
-    Uses gpt-4o-mini for cost efficiency.
+    Uses gpt-5-mini for cost efficiency.
     """
     if not _openai_available():
         pytest.skip("OPENAI_API_KEY not set")
 
     from questfoundry.providers.factory import create_chat_model
 
-    model = create_chat_model("openai", "gpt-4o-mini")
+    model = create_chat_model("openai", "gpt-5-mini")
     yield model
 
 
@@ -131,13 +131,13 @@ def any_model(request: pytest.FixtureRequest) -> Generator[BaseChatModel, None, 
             pytest.skip("OLLAMA_HOST not set or Ollama not reachable")
         from questfoundry.providers.factory import create_chat_model
 
-        yield create_chat_model("ollama", "qwen3:8b")
+        yield create_chat_model("ollama", "qwen3:4b-instruct-32k")
     elif provider == "openai":
         if not _openai_available():
             pytest.skip("OPENAI_API_KEY not set")
         from questfoundry.providers.factory import create_chat_model
 
-        yield create_chat_model("openai", "gpt-4o-mini")
+        yield create_chat_model("openai", "gpt-5-mini")
 
 
 @pytest.fixture
@@ -164,7 +164,7 @@ def integration_project(tmp_path: Path) -> Path:
 name: integration_test
 provider:
   name: ollama
-  model: qwen3:8b
+  model: qwen3:4b-instruct-32k
 stages:
   - dream
 """)

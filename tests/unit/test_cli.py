@@ -904,9 +904,9 @@ def test_dream_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> No
                 "--project",
                 str(project_path),
                 "--provider-discuss",
-                "ollama/qwen3:8b",
+                "ollama/qwen3:4b-instruct-32k",
                 "--provider-summarize",
-                "openai/gpt-4o",
+                "openai/gpt-5-mini",
                 "--provider-serialize",
                 "openai/o1-mini",
             ],
@@ -916,8 +916,8 @@ def test_dream_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> No
     # Verify orchestrator was called with phase-specific overrides
     mock_get.assert_called_once()
     call_kwargs = mock_get.call_args[1]
-    assert call_kwargs["provider_discuss_override"] == "ollama/qwen3:8b"
-    assert call_kwargs["provider_summarize_override"] == "openai/gpt-4o"
+    assert call_kwargs["provider_discuss_override"] == "ollama/qwen3:4b-instruct-32k"
+    assert call_kwargs["provider_summarize_override"] == "openai/gpt-5-mini"
     assert call_kwargs["provider_serialize_override"] == "openai/o1-mini"
 
 

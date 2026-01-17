@@ -118,7 +118,7 @@ class PipelineOrchestrator:
             project_path: Path to the project root directory.
             gate: Optional gate hook for stage transitions.
                 Defaults to AutoApproveGate.
-            provider_override: Optional provider string (e.g., "openai/gpt-4o")
+            provider_override: Optional provider string (e.g., "openai/gpt-5-mini")
                 to override the project config for all phases.
             provider_discuss_override: Optional provider override for discuss phase.
             provider_summarize_override: Optional provider override for summarize phase.
@@ -186,7 +186,7 @@ class PipelineOrchestrator:
         """Parse a provider string into (provider_name, model) tuple.
 
         Args:
-            provider_string: Provider string like "ollama/qwen3:8b" or "openai".
+            provider_string: Provider string like "ollama/qwen3:4b-instruct-32k" or "openai".
 
         Returns:
             Tuple of (provider_name, model_name).
@@ -212,7 +212,7 @@ class PipelineOrchestrator:
         """Create a chat model from a provider string.
 
         Args:
-            provider_string: Provider string like "ollama/qwen3:8b".
+            provider_string: Provider string like "ollama/qwen3:4b-instruct-32k".
 
         Returns:
             Tuple of (chat_model, provider_name, model_name).
@@ -252,7 +252,7 @@ class PipelineOrchestrator:
         6. providers.default config
 
         Returns:
-            The resolved provider string (e.g., "ollama/qwen3:8b").
+            The resolved provider string (e.g., "ollama/qwen3:4b-instruct-32k").
         """
         return (
             self._provider_discuss_override
@@ -305,7 +305,7 @@ class PipelineOrchestrator:
             phase: The pipeline phase ("summarize" or "serialize").
 
         Returns:
-            The resolved provider string (e.g., "openai/gpt-4o").
+            The resolved provider string (e.g., "openai/gpt-5-mini").
         """
         if phase == "summarize":
             cli_override = self._provider_summarize_override

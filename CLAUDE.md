@@ -41,7 +41,7 @@ DRESS stage (art direction) is deferred for later implementation.
 - **Async throughout** for LLM calls
 
 ### LLM Providers
-- Primary: **Ollama** (qwen3:8b) at `http://athena.int.liesdonk.nl:11434`
+- Primary: **Ollama** (qwen3:4b-instruct-32k) at `http://athena.int.liesdonk.nl:11434`
 - Secondary: **OpenAI** (API key in .env)
 - Provider interface via `LangChainProvider` adapter (supports any LangChain chat model)
 
@@ -444,10 +444,10 @@ qf status                     # Show pipeline state
 
 Configuration follows a strict precedence order (highest to lowest):
 
-1. **CLI flags** - `--provider ollama/qwen3:8b`
+1. **CLI flags** - `--provider ollama/qwen3:4b-instruct-32k`
 2. **Environment variables** - `QF_PROVIDER=openai/gpt-4o` (can be set in your shell or a `.env` file)
 3. **Project config** - `project.yaml` providers.default
-4. **Defaults** - `ollama/qwen3:8b`
+4. **Defaults** - `ollama/qwen3:4b-instruct-32k`
 
 ### Hybrid Provider Configuration (Phase-Specific)
 
@@ -465,8 +465,8 @@ Different providers can be used for each pipeline phase (discuss, summarize, ser
 ```yaml
 name: my-adventure
 providers:
-  default: ollama/qwen3:8b        # Fallback for all phases
-  discuss: ollama/qwen3:8b        # Tool-enabled model for exploration
+  default: ollama/qwen3:4b-instruct-32k        # Fallback for all phases
+  discuss: ollama/qwen3:4b-instruct-32k        # Tool-enabled model for exploration
   summarize: openai/gpt-4o        # Creative model for narrative
   serialize: openai/o1-mini       # Reasoning model for JSON output
 ```
@@ -477,7 +477,7 @@ providers:
 qf seed --provider-serialize openai/o1-mini
 
 # Full hybrid setup from CLI
-qf seed --provider-discuss ollama/qwen3:8b \
+qf seed --provider-discuss ollama/qwen3:4b-instruct-32k \
         --provider-summarize openai/gpt-4o \
         --provider-serialize openai/o1-mini
 ```
@@ -488,8 +488,8 @@ qf seed --provider-discuss ollama/qwen3:8b \
 
 ```bash
 # Provider configuration
-QF_PROVIDER=ollama/qwen3:8b                       # Override default provider
-QF_PROVIDER_DISCUSS=ollama/qwen3:8b               # Override discuss phase
+QF_PROVIDER=ollama/qwen3:4b-instruct-32k                       # Override default provider
+QF_PROVIDER_DISCUSS=ollama/qwen3:4b-instruct-32k               # Override discuss phase
 QF_PROVIDER_SUMMARIZE=openai/gpt-4o               # Override summarize phase
 QF_PROVIDER_SERIALIZE=openai/o1-mini              # Override serialize phase
 

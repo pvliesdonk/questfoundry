@@ -27,8 +27,8 @@ from questfoundry.providers.structured_output import StructuredOutputStrategy
 
 def test_get_default_model_openai() -> None:
     """OpenAI has a default model."""
-    assert get_default_model("openai") == "gpt-4o"
-    assert get_default_model("OpenAI") == "gpt-4o"  # Case insensitive
+    assert get_default_model("openai") == "gpt-5-mini"
+    assert get_default_model("OpenAI") == "gpt-5-mini"  # Case insensitive
 
 
 def test_get_default_model_anthropic() -> None:
@@ -70,7 +70,7 @@ def test_create_chat_model_unknown_provider() -> None:
 def test_create_chat_model_ollama_missing_host() -> None:
     """Factory raises error when OLLAMA_HOST not set."""
     with patch.dict("os.environ", {}, clear=True), pytest.raises(ProviderError) as exc_info:
-        create_chat_model("ollama", "qwen3:8b")
+        create_chat_model("ollama", "qwen3:4b-instruct-32k")
 
     assert "OLLAMA_HOST not configured" in str(exc_info.value)
     assert exc_info.value.provider == "ollama"
@@ -84,11 +84,11 @@ def test_create_chat_model_ollama_success() -> None:
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
         patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
     ):
-        result = create_chat_model("ollama", "qwen3:8b")
+        result = create_chat_model("ollama", "qwen3:4b-instruct-32k")
 
     assert result is mock_chat
     mock_class.assert_called_once_with(
-        model="qwen3:8b",
+        model="qwen3:4b-instruct-32k",
         base_url="http://test:11434",
         temperature=0.7,
         num_ctx=32768,
@@ -131,7 +131,7 @@ def test_create_chat_model_ollama_import_error() -> None:
 def test_create_chat_model_openai_missing_key() -> None:
     """Factory raises error when OPENAI_API_KEY not set."""
     with patch.dict("os.environ", {}, clear=True), pytest.raises(ProviderError) as exc_info:
-        create_chat_model("openai", "gpt-4o")
+        create_chat_model("openai", "gpt-5-mini")
 
     assert "API key required" in str(exc_info.value)
     assert exc_info.value.provider == "openai"
@@ -145,11 +145,11 @@ def test_create_chat_model_openai_success() -> None:
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
     ):
-        result = create_chat_model("openai", "gpt-4o")
+        result = create_chat_model("openai", "gpt-5-mini")
 
     assert result is mock_chat
     mock_class.assert_called_once_with(
-        model="gpt-4o",
+        model="gpt-5-mini",
         api_key="sk-test",
         temperature=0.7,
     )
@@ -160,7 +160,7 @@ def test_create_chat_model_openai_with_custom_key() -> None:
     mock_chat = MagicMock()
 
     with patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class:
-        create_chat_model("openai", "gpt-4o-mini", api_key="sk-custom")
+        create_chat_model("openai", "gpt-5-mini", api_key="sk-custom")
 
     call_kwargs = mock_class.call_args[1]
     assert call_kwargs["api_key"] == "sk-custom"
@@ -292,7 +292,7 @@ def test_create_model_structured_ollama_with_schema() -> None:
     ):
         result = create_model_for_structured_output(
             "ollama",
-            model_name="qwen3:8b",
+            model_name="qwen3:4b-instruct-32k",
             schema=SampleSchema,
         )
 
@@ -317,7 +317,7 @@ def test_create_model_structured_openai_with_schema() -> None:
     ):
         result = create_model_for_structured_output(
             "openai",
-            model_name="gpt-4o",
+            model_name="gpt-5-mini",
             schema=SampleSchema,
         )
 
@@ -337,7 +337,7 @@ def test_create_model_structured_without_schema() -> None:
     ):
         result = create_model_for_structured_output(
             "ollama",
-            model_name="qwen3:8b",
+            model_name="qwen3:4b-instruct-32k",
             schema=None,
         )
 
@@ -358,7 +358,7 @@ def test_create_model_structured_explicit_strategy() -> None:
         # Force tool strategy on OpenAI (normally would use JSON mode)
         result = create_model_for_structured_output(
             "openai",
-            model_name="gpt-4o",
+            model_name="gpt-5-mini",
             schema=SampleSchema,
             strategy=StructuredOutputStrategy.TOOL,
         )
@@ -379,7 +379,7 @@ def test_create_model_structured_default_model_ollama() -> None:
         create_model_for_structured_output("ollama")
 
     call_kwargs = mock_class.call_args[1]
-    assert call_kwargs["model"] == "qwen3:8b"
+    assert call_kwargs["model"] == "qwen3:4b-instruct-32k"
 
 
 def test_create_model_structured_default_model_openai() -> None:
@@ -393,7 +393,7 @@ def test_create_model_structured_default_model_openai() -> None:
         create_model_for_structured_output("openai")
 
     call_kwargs = mock_class.call_args[1]
-    assert call_kwargs["model"] == "gpt-4o"  # Uses PROVIDER_DEFAULTS
+    assert call_kwargs["model"] == "gpt-5-mini"  # Uses PROVIDER_DEFAULTS
 
 
 def test_create_model_structured_default_model_anthropic() -> None:
@@ -431,9 +431,9 @@ def test_create_model_structured_missing_config() -> None:
 
 def test_get_model_info_known_model() -> None:
     """get_model_info returns known context window for known models."""
-    info = get_model_info("openai", "gpt-4o")
+    info = get_model_info("openai", "gpt-5-mini")
 
-    assert info.context_window == 128_000
+    assert info.context_window == 1_000_000
     assert info.supports_tools is True
     assert info.supports_vision is True
 
@@ -448,7 +448,7 @@ def test_get_model_info_unknown_model() -> None:
 
 def test_get_model_info_ollama() -> None:
     """get_model_info works for Ollama models."""
-    info = get_model_info("ollama", "qwen3:8b")
+    info = get_model_info("ollama", "qwen3:4b-instruct-32k")
 
     assert info.context_window == 32_768
 
@@ -463,9 +463,9 @@ def test_get_model_info_anthropic() -> None:
 
 def test_get_model_info_case_insensitive_provider() -> None:
     """get_model_info is case insensitive for provider name."""
-    info = get_model_info("OPENAI", "gpt-4o")
+    info = get_model_info("OPENAI", "gpt-5-mini")
 
-    assert info.context_window == 128_000
+    assert info.context_window == 1_000_000
 
 
 def test_model_info_is_frozen() -> None:
@@ -492,8 +492,8 @@ def test_model_info_is_frozen() -> None:
         ("o3", True),
         ("o3-mini", True),
         # Non-reasoning models
-        ("gpt-4o", False),
-        ("gpt-4o-mini", False),
+        ("gpt-5-mini", False),
+        ("gpt-5-mini", False),
         ("gpt-4-turbo", False),
         ("gpt-3.5-turbo", False),
     ],
@@ -529,7 +529,7 @@ def test_create_chat_model_gpt4o_has_temperature() -> None:
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
     ):
-        create_chat_model("openai", "gpt-4o")
+        create_chat_model("openai", "gpt-5-mini")
 
     call_kwargs = mock_class.call_args[1]
     # GPT-4o should have temperature
