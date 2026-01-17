@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from questfoundry.graph import Graph, format_valid_ids_context
+from questfoundry.graph.context import format_thread_ids_context
 
 
 class TestFormatValidIdsContext:
@@ -237,3 +238,106 @@ class TestFormatValidIdsContext:
         assert "`castle`" in result
         assert "`quest`" in result
         assert "`accept` (default)" in result
+
+
+class TestFormatThreadIdsContext:
+    """Tests for format_thread_ids_context function."""
+
+    def test_returns_empty_for_empty_list(self) -> None:
+        """Empty threads list returns empty string."""
+        result = format_thread_ids_context([])
+        assert result == ""
+
+    def test_returns_empty_for_threads_without_thread_id(self) -> None:
+        """Threads missing thread_id field return empty string."""
+        threads = [
+            {"tension_id": "some_tension"},
+            {"name": "Some Thread"},
+        ]
+        result = format_thread_ids_context(threads)
+        assert result == ""
+
+    def test_single_thread_format(self) -> None:
+        """Single thread produces correct format."""
+        threads = [{"thread_id": "host_motive", "tension_id": "host_benevolent_or_self_serving"}]
+        result = format_thread_ids_context(threads)
+
+        assert "## VALID THREAD IDs" in result
+        assert "Allowed: `host_motive`" in result
+        assert "Rules:" in result
+        assert "WRONG" in result
+
+    def test_multiple_threads_pipe_delimited(self) -> None:
+        """Multiple threads are pipe-delimited."""
+        threads = [
+            {"thread_id": "host_motive"},
+            {"thread_id": "butler_fidelity"},
+            {"thread_id": "archive_secret"},
+        ]
+        result = format_thread_ids_context(threads)
+
+        # Should be sorted and pipe-delimited
+        assert "`archive_secret` | `butler_fidelity` | `host_motive`" in result
+
+    def test_threads_sorted_alphabetically(self) -> None:
+        """Thread IDs are sorted alphabetically for deterministic output."""
+        threads = [
+            {"thread_id": "zebra_thread"},
+            {"thread_id": "alpha_thread"},
+            {"thread_id": "middle_thread"},
+        ]
+        result = format_thread_ids_context(threads)
+
+        # Check order in the Allowed line
+        alpha_pos = result.find("`alpha_thread`")
+        middle_pos = result.find("`middle_thread`")
+        zebra_pos = result.find("`zebra_thread`")
+
+        assert alpha_pos < middle_pos < zebra_pos
+
+    def test_skips_threads_without_thread_id(self) -> None:
+        """Threads without thread_id are gracefully skipped."""
+        threads = [
+            {"thread_id": "valid_thread"},
+            {"tension_id": "missing_thread_id"},
+            {"thread_id": "another_valid"},
+        ]
+        result = format_thread_ids_context(threads)
+
+        assert "`another_valid`" in result
+        assert "`valid_thread`" in result
+        assert "missing_thread_id" not in result
+
+    def test_includes_wrong_examples(self) -> None:
+        """Output includes WRONG examples for LLM guidance."""
+        threads = [{"thread_id": "host_motive"}]
+        result = format_thread_ids_context(threads)
+
+        assert "WRONG (will fail validation):" in result
+        assert "`clock_distortion`" in result
+        assert "`the_host_motive`" in result
+
+    def test_includes_rules(self) -> None:
+        """Output includes rules for ID usage."""
+        threads = [{"thread_id": "host_motive"}]
+        result = format_thread_ids_context(threads)
+
+        assert "Rules:" in result
+        assert "ONLY IDs from the list above" in result
+        assert "Do NOT add prefixes" in result
+        assert "Do NOT derive IDs from tension concepts" in result
+
+    def test_handles_empty_thread_id_string(self) -> None:
+        """Empty string thread_id is treated as missing."""
+        threads = [
+            {"thread_id": "valid_thread"},
+            {"thread_id": ""},
+            {"thread_id": "another_valid"},
+        ]
+        result = format_thread_ids_context(threads)
+
+        # Empty string should be skipped
+        assert "`valid_thread`" in result
+        assert "`another_valid`" in result
+        # Should not have empty backticks
+        assert "``" not in result

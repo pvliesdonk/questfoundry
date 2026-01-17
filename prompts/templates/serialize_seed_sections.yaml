@@ -77,6 +77,21 @@ threads_prompt: |
   }
   ```
 
+  ## Thread ID Naming (CRITICAL)
+
+  Thread IDs must be DIFFERENT from tension IDs. Use short descriptive names.
+
+  GOOD examples:
+  - tension `host_benevolent_or_self_serving` → thread `host_motive`
+  - tension `butler_loyal_or_treacherous` → thread `butler_loyalty`
+  - tension `library_knowledge_salvation_or_corruption` → thread `library_secret`
+
+  BAD examples (will cause validation failures):
+  - tension `murder_intent` → thread `murder_intent` (same ID - WRONG!)
+  - Using the tension_id as the thread_id
+
+  Thread IDs should be short names for the storyline, NOT the binary question.
+
   ## Rules
   - thread_importance must be exactly "major" or "minor" (lowercase)
   - unexplored_alternative_ids: IDs of alternatives NOT explored (implicit ones)
@@ -118,25 +133,36 @@ consequences_prompt: |
 beats_prompt: |
   You are extracting INITIAL BEATS from a SEED stage brief.
 
+  ## CRITICAL: ID CONSTRAINTS (read first!)
+
+  The brief contains valid ID lists. You MUST copy IDs exactly from these lists:
+  - `## VALID THREAD IDs` - use ONLY these in `threads` arrays
+  - `### Entity IDs` - use ONLY these in `entities` and `location` fields
+
+  WRONG examples that WILL FAIL:
+  - `"clock_distortion"` - NOT a valid thread (derived from concept)
+  - `"the_garden"` - WRONG, use `"garden"` (no prefix)
+  - `"murder_intent"` - This is a tension ID, not a thread ID
+
   ## Schema
-  Return a JSON object with an "initial_beats" array. Each item is an InitialBeat:
+  Return a JSON object with an "initial_beats" array:
   ```json
   {
     "initial_beats": [
       {
         "beat_id": "unique_beat_id",
         "summary": "What happens in this beat",
-        "threads": ["thread_id_1", "thread_id_2"],
+        "threads": ["host_motive", "butler_fidelity"],
         "tension_impacts": [
           {
-            "tension_id": "which_tension",
+            "tension_id": "host_benevolent_or_self_serving",
             "effect": "advances",
             "note": "Explanation of the impact"
           }
         ],
-        "entities": ["entity_id_1", "entity_id_2"],
-        "location": "location_entity_id",
-        "location_alternatives": ["other_location_id"]
+        "entities": ["butler", "garden"],
+        "location": "garden",
+        "location_alternatives": ["library"]
       }
     ]
   }
@@ -144,10 +170,18 @@ beats_prompt: |
 
   ## Rules
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
-  - threads: Array of thread IDs this beat serves
-  - location: Primary location entity ID (can be null)
-  - location_alternatives: Other valid locations (can be empty array)
+  - threads: Array of thread IDs from the VALID THREAD IDs list ONLY
+  - entities: Array of entity IDs from the Entity IDs list ONLY
+  - location: Entity ID from locations list (can be null)
+  - location_alternatives: Other valid location IDs (can be empty array)
   - Include ALL initial beats mentioned in the Initial Beats section
+
+  ## FINAL CHECK (verify before output)
+  Before returning JSON, check each beat:
+  1. Every `threads` item appears in the ## VALID THREAD IDs list
+  2. Every `entities` item appears in the ### Entity IDs list
+  3. `location` appears in the Locations section
+  4. No invented IDs, no prefixes added
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array.
