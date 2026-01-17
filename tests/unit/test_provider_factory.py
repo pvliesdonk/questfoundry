@@ -493,7 +493,7 @@ def test_model_info_is_frozen() -> None:
         ("o3-mini", True),
         # Non-reasoning models
         ("gpt-5-mini", False),
-        ("gpt-5-mini", False),
+        ("gpt-4o-mini", False),
         ("gpt-4-turbo", False),
         ("gpt-3.5-turbo", False),
     ],
