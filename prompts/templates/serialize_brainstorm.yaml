@@ -24,7 +24,7 @@ system: |
   ## Tension Structure
 
   Tensions represent binary dramatic questions with exactly TWO alternatives:
-  - `tension_id`: Short snake_case identifier
+  - `tension_id`: Descriptive snake_case identifier showing the binary choice
   - `question`: The dramatic question (should end with "?")
   - `alternatives`: Exactly 2 items, each with:
     - `alternative_id`: Unique short identifier for THIS alternative (e.g., "guilty", "framed", "dagger", "poison")
@@ -32,6 +32,24 @@ system: |
     - `is_default_path`: true for ONE alternative (the default path), false for the other
   - `central_entity_ids`: List of entity_id values related to this tension
   - `why_it_matters`: Thematic stakes
+
+  ## Tension ID Naming (CRITICAL)
+
+  Use descriptive binary format that shows both options: `subject_optionA_or_optionB`
+
+  GOOD examples:
+  - `host_benevolent_or_self_serving`
+  - `butler_loyal_or_treacherous`
+  - `artifact_authentic_or_forgery`
+  - `library_knowledge_salvation_or_corruption`
+
+  BAD examples (will cause downstream failures):
+  - `t1`, `t2`, `tension_a` (too short, not descriptive)
+  - `host_motivation` (ambiguous, could be confused with thread name)
+  - `butler_trust` (too vague)
+  - `murder_intent` (could be mistaken for a thread ID)
+
+  The tension_id should clearly show the binary choice being made.
 
   ## Guidelines
 

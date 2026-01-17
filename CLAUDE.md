@@ -565,6 +565,43 @@ Since artifacts will be interpreted by other LLMs (not programmatic code), prefe
 This allows LLM-generated variations like "adults" or "extensive" to pass validation
 while still providing guidance through examples in the prompt template.
 
+### 6. Valid ID Injection Principle
+
+When serializing structured output that references IDs from earlier stages:
+
+> **Always provide an explicit `### Valid IDs` section listing every ID the model
+> is allowed to use. Never assume the model will correctly infer IDs from prose.**
+
+This is critical for preventing "phantom ID" errors where the model invents or
+misreferences IDs. Current implementation:
+
+- `graph/context.py`: `format_valid_ids_context()` builds entity and tension ID lists
+- `graph/context.py`: `format_thread_ids_context()` builds thread ID list after threads are serialized
+- `agents/serialize.py`: Injects valid IDs before each serialization call
+
+When adding new ID types that downstream sections reference:
+1. Collect IDs after their section is serialized
+2. Inject into context before downstream sections that reference them
+3. List with clear labels showing their purpose and valid values
+
+### 7. Defensive Prompt Patterns
+
+Use explicit good/bad examples to prevent common errors:
+
+```yaml
+## Tension ID Naming (CRITICAL)
+GOOD: `host_benevolent_or_self_serving` (binary pattern)
+BAD: `host_motivation` (ambiguous, could be confused with thread name)
+
+## What NOT to Do
+- Do NOT write prose paragraphs with backstories
+- Do NOT end with "Good luck!" or similar pleasantries
+- Do NOT reuse tension IDs as thread IDs
+```
+
+These patterns help chat-optimized models (like GPT-4o) avoid over-helpful behaviors
+that hurt structured output quality.
+
 ## DREAM Stage Implementation
 
 The DREAM stage is the reference implementation for new stages (see [ADR-009](docs/architecture/decisions.md#adr-009-langchain-native-dream-pipeline)). Key patterns:

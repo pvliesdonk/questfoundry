@@ -12,7 +12,7 @@ from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.prompts import get_serialize_prompt
 from questfoundry.artifacts.validator import strip_null_values
-from questfoundry.graph.context import format_valid_ids_context
+from questfoundry.graph.context import format_thread_ids_context, format_valid_ids_context
 from questfoundry.graph.mutations import (
     SeedMutationError,
     SeedValidationError,
@@ -559,13 +559,19 @@ async def serialize_seed_iteratively(
 
     collected: dict[str, Any] = {}
 
+    # Track brief with thread IDs injected (for beats section)
+    brief_with_threads = enhanced_brief
+
     for section_name, schema, output_field in sections:
         log.debug("serialize_section_started", section=section_name)
+
+        # Use brief with thread IDs for beats section (threads are known by then)
+        current_brief = brief_with_threads if section_name == "beats" else enhanced_brief
 
         section_prompt = prompts[section_name]
         section_result, section_tokens = await serialize_to_artifact(
             model=model,
-            brief=enhanced_brief,
+            brief=current_brief,
             schema=schema,
             provider_name=provider_name,
             max_retries=max_retries,
@@ -582,6 +588,14 @@ async def serialize_seed_iteratively(
                 f"Expected field '{output_field}', got: {list(section_data.keys())}"
             )
         collected[output_field] = section_data[output_field]
+
+        # After threads are serialized, inject thread IDs for subsequent sections
+        if section_name == "threads" and collected.get("threads"):
+            thread_ids_context = format_thread_ids_context(collected["threads"])
+            if thread_ids_context:
+                # Insert thread IDs after the valid IDs section
+                brief_with_threads = f"{enhanced_brief}\n\n{thread_ids_context}"
+                log.debug("thread_ids_context_injected", thread_count=len(collected["threads"]))
 
         log.debug(
             "serialize_section_completed",

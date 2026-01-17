@@ -77,6 +77,25 @@ system: |
   3. **Entity Coverage**: Every entity needs a retain/cut decision.
      - Characters, locations, objects, AND factions
      - No entity should be left undecided
+
+  ## Thread Naming
+
+  When creating threads from tensions:
+  - Thread IDs should be SHORT and distinct from tension IDs
+  - Example: tension `library_knowledge_salvation_or_corruption` → thread `library_secret`
+  - Example: tension `host_benevolent_or_self_serving` → thread `host_motive`
+
+  BAD: Using the same ID for thread and tension
+  GOOD: Thread ID summarizes the storyline, tension ID shows the binary choice
+
+  ## What NOT to Do
+
+  - Do NOT skip beat creation - beats are REQUIRED, not optional
+  - Do NOT end with "Good luck!" or similar pleasantries
+  - Do NOT write prose descriptions - use structured beat entries
+  - Do NOT stop at 2 beats per thread - aim for 3-4
+  - Do NOT reuse tension IDs as thread IDs - they must be different
+  - Do NOT ask clarifying questions in non-interactive mode
   {mode_section}
 
 non_interactive_section: |

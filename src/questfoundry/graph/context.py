@@ -12,6 +12,50 @@ if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
 
+def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
+    """Format thread IDs for beat serialization with inline constraints.
+
+    Uses pipe-delimited format for easy scanning by small models.
+    Small models don't "look back" at referenced sections, so we
+    embed constraints at the point of use.
+
+    Args:
+        threads: List of thread dicts from serialized ThreadsSection.
+
+    Returns:
+        Formatted context string with thread IDs, or empty string if none.
+    """
+    if not threads:
+        return ""
+
+    thread_ids = [t.get("thread_id", "") for t in threads if t.get("thread_id")]
+
+    if not thread_ids:
+        return ""
+
+    # Pipe-delimited for easy scanning
+    id_list = " | ".join(f"`{tid}`" for tid in thread_ids)
+
+    lines = [
+        "## VALID THREAD IDs (copy exactly, no modifications)",
+        "",
+        f"Allowed: {id_list}",
+        "",
+        "Rules:",
+        "- Use ONLY IDs from the list above in the `threads` array",
+        "- Do NOT add prefixes like 'the_'",
+        "- Do NOT derive IDs from tension concepts",
+        "- If a concept has no matching thread, omit it - do NOT invent an ID",
+        "",
+        "WRONG (will fail validation):",
+        "- `clock_distortion` - NOT a valid thread ID (derived from concept)",
+        "- `the_host_motive` - WRONG prefix, use `host_motive`",
+        "",
+    ]
+
+    return "\n".join(lines)
+
+
 def format_valid_ids_context(graph: Graph, stage: str) -> str:
     """Format valid IDs as context for LLM serialization.
 

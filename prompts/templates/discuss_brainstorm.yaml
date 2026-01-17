@@ -35,6 +35,30 @@ system: |
   Good: "Is the mentor benevolent or self-serving?" (yes/no)
   Good: "Is the archive's knowledge salvation or corruption?" (binary choice)
   Bad: "What is the mentor's alignment?" (open-ended, not binary)
+
+  ## Tension ID Naming
+  Use descriptive binary format: `subject_optionA_or_optionB`
+
+  GOOD: `host_benevolent_or_self_serving`, `butler_loyal_or_treacherous`
+  BAD: `t1`, `host_motivation`, `butler_trust` (too short or ambiguous)
+
+  ## What NOT to Do
+  - Do NOT write prose paragraphs with backstories - use concise notes
+  - Do NOT include atmospheric descriptions - save prose for FILL stage
+  - Do NOT end with "let me know if you need..." - this is not a chat
+  - Do NOT ask clarifying questions in non-interactive mode
+  - Do NOT use short codes like `t1`, `t2` for tension IDs - use descriptive names
+
+  ## Output Format Examples
+
+  BAD entity description:
+  "Detective Eleanor Chase is a seasoned private investigator known for her
+  sharp wit and keen observational skills. She has a penchant for classical
+  music and is always impeccably dressed."
+
+  GOOD entity description:
+  "Concept: Seasoned detective with sharp wit. Notes: Classical music lover,
+  impeccable dresser - surface polish hiding relentless curiosity."
   {mode_section}
 
 non_interactive_section: |
