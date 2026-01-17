@@ -565,8 +565,11 @@ async def serialize_seed_iteratively(
     for section_name, schema, output_field in sections:
         log.debug("serialize_section_started", section=section_name)
 
-        # Use brief with thread IDs for beats section (threads are known by then)
-        current_brief = brief_with_threads if section_name == "beats" else enhanced_brief
+        # Use brief with thread IDs for sections that reference threads
+        # (beats and consequences both have thread_id fields)
+        current_brief = (
+            brief_with_threads if section_name in ("beats", "consequences") else enhanced_brief
+        )
 
         section_prompt = prompts[section_name]
         section_result, section_tokens = await serialize_to_artifact(
@@ -639,8 +642,9 @@ async def serialize_seed_iteratively(
             )
 
             # Re-serialize problematic sections with feedback appended to brief
+            # Use brief_with_threads (not enhanced_brief) to preserve thread ID context
             brief_with_feedback = (
-                f"{enhanced_brief}\n\n## VALIDATION ERRORS - PLEASE FIX\n\n{feedback}"
+                f"{brief_with_threads}\n\n## VALIDATION ERRORS - PLEASE FIX\n\n{feedback}"
             )
 
             for section_name, schema, output_field in sections:
