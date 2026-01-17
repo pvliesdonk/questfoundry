@@ -48,8 +48,8 @@ class TestSummarizeDiscussion:
     """Test summarize_discussion function."""
 
     @pytest.mark.asyncio
-    async def test_summarize_returns_summary_and_tokens(self) -> None:
-        """summarize_discussion should return summary text and token count."""
+    async def test_summarize_returns_summary_messages_and_tokens(self) -> None:
+        """summarize_discussion should return summary, message history, and tokens."""
         mock_model = MagicMock()
         mock_response = AIMessage(content="Summary of discussion")
         # Token usage via usage_metadata attribute (Ollama-style)
@@ -61,10 +61,14 @@ class TestSummarizeDiscussion:
             AIMessage(content="Great! Tell me more about the setting."),
         ]
 
-        summary, tokens = await summarize_discussion(mock_model, messages)
+        summary, result_messages, tokens = await summarize_discussion(mock_model, messages)
 
         assert summary == "Summary of discussion"
         assert tokens == 100
+        # Message history should include: system, discuss messages, instruction, response
+        assert len(result_messages) >= 4
+        assert isinstance(result_messages[0], SystemMessage)
+        assert isinstance(result_messages[-1], AIMessage)  # Response added
 
     @pytest.mark.asyncio
     async def test_summarize_uses_model_directly(self) -> None:
@@ -81,8 +85,8 @@ class TestSummarizeDiscussion:
         mock_model.ainvoke.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_summarize_includes_conversation_in_prompt(self) -> None:
-        """summarize_discussion should include formatted conversation."""
+    async def test_summarize_includes_conversation_as_proper_messages(self) -> None:
+        """summarize_discussion should include conversation as proper message objects."""
         mock_model = MagicMock()
         mock_response = AIMessage(content="Summary")
         mock_model.ainvoke = AsyncMock(return_value=mock_response)
@@ -92,18 +96,19 @@ class TestSummarizeDiscussion:
             AIMessage(content="Assistant response"),
         ]
 
-        await summarize_discussion(mock_model, messages)
+        _summary, result_messages, _tokens = await summarize_discussion(mock_model, messages)
 
-        # Check the call to ainvoke included the conversation
-        call_args = mock_model.ainvoke.call_args
-        invoke_messages = call_args[0][0]
-
-        # Should have system message and human message with conversation
-        assert len(invoke_messages) == 2
-        assert isinstance(invoke_messages[0], SystemMessage)
-        assert isinstance(invoke_messages[1], HumanMessage)
-        assert "User message" in invoke_messages[1].content
-        assert "Assistant response" in invoke_messages[1].content
+        # Verify returned message history has proper structure
+        # Should have: system, human, ai, summarize instruction, response
+        assert len(result_messages) == 5
+        assert isinstance(result_messages[0], SystemMessage)  # System prompt
+        assert isinstance(result_messages[1], HumanMessage)  # User message
+        assert result_messages[1].content == "User message"
+        assert isinstance(result_messages[2], AIMessage)  # Assistant response
+        assert result_messages[2].content == "Assistant response"
+        assert isinstance(result_messages[3], HumanMessage)  # Summarize instruction
+        assert isinstance(result_messages[4], AIMessage)  # Response
+        assert result_messages[4].content == "Summary"
 
     @pytest.mark.asyncio
     async def test_summarize_handles_missing_metadata(self) -> None:
@@ -115,7 +120,7 @@ class TestSummarizeDiscussion:
 
         messages = [HumanMessage(content="Test")]
 
-        summary, tokens = await summarize_discussion(mock_model, messages)
+        summary, _messages, tokens = await summarize_discussion(mock_model, messages)
 
         assert summary == "Summary"
         assert tokens == 0
@@ -130,7 +135,7 @@ class TestSummarizeDiscussion:
 
         messages = [HumanMessage(content="Test")]
 
-        summary, tokens = await summarize_discussion(mock_model, messages)
+        summary, _messages, tokens = await summarize_discussion(mock_model, messages)
 
         assert summary == "Summary"
         assert tokens == 0
@@ -146,7 +151,7 @@ class TestSummarizeDiscussion:
 
         messages = [HumanMessage(content="Test")]
 
-        _summary, tokens = await summarize_discussion(mock_model, messages)
+        _summary, _messages, tokens = await summarize_discussion(mock_model, messages)
 
         assert tokens == 200
 
@@ -161,7 +166,7 @@ class TestSummarizeDiscussion:
 
         messages = [HumanMessage(content="Test")]
 
-        _summary, tokens = await summarize_discussion(mock_model, messages)
+        _summary, _messages, tokens = await summarize_discussion(mock_model, messages)
 
         assert tokens == 150
 
@@ -177,7 +182,7 @@ class TestSummarizeDiscussion:
 
         messages = [HumanMessage(content="Test")]
 
-        _summary, tokens = await summarize_discussion(mock_model, messages)
+        _summary, _messages, tokens = await summarize_discussion(mock_model, messages)
 
         assert tokens == 100  # From usage_metadata, not response_metadata
 
@@ -188,7 +193,7 @@ class TestSummarizeDiscussion:
         mock_response = AIMessage(content="Nothing to summarize")
         mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
-        summary, _tokens = await summarize_discussion(mock_model, [])
+        summary, _messages, _tokens = await summarize_discussion(mock_model, [])
 
         assert summary == "Nothing to summarize"
 
@@ -201,33 +206,38 @@ class TestSummarizeDiscussion:
 
         messages = [HumanMessage(content="Test")]
 
-        summary, _tokens = await summarize_discussion(mock_model, messages)
+        summary, _messages, _tokens = await summarize_discussion(mock_model, messages)
 
         # Should convert to string
         assert isinstance(summary, str)
 
     @pytest.mark.asyncio
-    async def test_summarize_formats_all_message_types(self) -> None:
-        """summarize_discussion should format different message types."""
+    async def test_summarize_passes_message_types_correctly(self) -> None:
+        """summarize_discussion should pass messages with proper types (filter system)."""
         mock_model = MagicMock()
         mock_response = AIMessage(content="Summary")
         mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         messages = [
-            SystemMessage(content="System context"),
+            SystemMessage(content="System context"),  # Should be filtered out
             HumanMessage(content="User input"),
             AIMessage(content="AI response"),
         ]
 
-        await summarize_discussion(mock_model, messages)
+        _summary, result_messages, _tokens = await summarize_discussion(mock_model, messages)
 
-        call_args = mock_model.ainvoke.call_args
-        invoke_messages = call_args[0][0]
-        conversation_text = invoke_messages[1].content
-
-        assert "System: System context" in conversation_text
-        assert "User: User input" in conversation_text
-        assert "Assistant: AI response" in conversation_text
+        # Verify returned message history has proper structure
+        # Should have: our system prompt, human, ai, summarize instruction, response
+        # (original system message is filtered out)
+        assert len(result_messages) == 5
+        assert isinstance(result_messages[0], SystemMessage)  # Our system prompt
+        assert "System context" not in result_messages[0].content  # Not the input one
+        assert isinstance(result_messages[1], HumanMessage)
+        assert result_messages[1].content == "User input"
+        assert isinstance(result_messages[2], AIMessage)
+        assert result_messages[2].content == "AI response"
+        assert isinstance(result_messages[3], HumanMessage)  # Summarize instruction
+        assert isinstance(result_messages[4], AIMessage)  # Response
 
 
 class TestGetFuzzyIdSuggestions:

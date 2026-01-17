@@ -50,7 +50,7 @@ async def test_execute_calls_all_three_phases() -> None:
             2,  # llm_calls
             500,  # tokens
         )
-        mock_summarize.return_value = ("Brief summary", 100)
+        mock_summarize.return_value = ("Brief summary", [], 100)  # summary, messages, tokens
         mock_artifact = DreamArtifact(
             genre="fantasy",
             tone=["epic"],
@@ -92,7 +92,7 @@ async def test_execute_passes_model_to_all_phases() -> None:
     ):
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Brief", 50)
+        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
         mock_artifact = DreamArtifact(
             genre="mystery",
             tone=["dark"],
@@ -122,7 +122,7 @@ async def test_execute_passes_user_prompt_to_discuss() -> None:
     ):
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Brief", 50)
+        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
         mock_artifact = DreamArtifact(
             genre="sci-fi",
             tone=["epic"],
@@ -154,7 +154,7 @@ async def test_execute_passes_messages_to_summarize() -> None:
     ):
         mock_tools.return_value = []
         mock_discuss.return_value = (discuss_messages, 2, 200)
-        mock_summarize.return_value = ("Brief", 50)
+        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
         mock_artifact = DreamArtifact(
             genre="fantasy",
             tone=["epic"],
@@ -181,7 +181,11 @@ async def test_execute_passes_brief_to_serialize() -> None:
     ):
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Detailed brief about fantasy story", 75)
+        mock_summarize.return_value = (
+            "Detailed brief about fantasy story",
+            [],
+            75,
+        )  # summary, messages, tokens
         mock_artifact = DreamArtifact(
             genre="fantasy",
             tone=["epic"],
@@ -208,7 +212,7 @@ async def test_execute_passes_provider_name_to_serialize() -> None:
     ):
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Brief", 50)
+        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
         mock_artifact = DreamArtifact(
             genre="horror",
             tone=["dark"],
@@ -239,7 +243,7 @@ async def test_execute_passes_dream_artifact_schema() -> None:
     ):
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Brief", 50)
+        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
         mock_artifact = DreamArtifact(
             genre="romance",
             tone=["sweet"],
@@ -266,7 +270,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
     ):
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Brief", 50)
+        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
         mock_artifact = DreamArtifact(
             genre="thriller",
             subgenre="psychological",
@@ -299,7 +303,7 @@ async def test_execute_uses_research_tools() -> None:
     ):
         mock_get_tools.return_value = mock_tools
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Brief", 50)
+        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
         mock_artifact = DreamArtifact(
             genre="mystery",
             tone=["suspenseful"],
