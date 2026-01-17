@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -15,6 +14,7 @@ from questfoundry.agents.summarize import (
     repair_seed_brief,
     summarize_discussion,
 )
+from questfoundry.graph.mutations import SeedValidationError
 
 
 class TestGetSummarizePrompt:
@@ -266,18 +266,9 @@ class TestGetFuzzyIdSuggestions:
 class TestFormatRepairErrors:
     """Test error formatting for repair prompt."""
 
-    @dataclass
-    class MockError:
-        """Mock error object for testing."""
-
-        field_path: str
-        issue: str
-        available: list[str]
-        provided: str
-
     def test_formats_single_error(self) -> None:
         """Should format a single error with all fields."""
-        error = self.MockError(
+        error = SeedValidationError(
             field_path="threads.0.tension_id",
             issue="Tension not found",
             available=["mentor_trust", "diary_truth"],
@@ -295,7 +286,7 @@ class TestFormatRepairErrors:
 
     def test_includes_fuzzy_suggestion(self) -> None:
         """Should include fuzzy match suggestion when available."""
-        error = self.MockError(
+        error = SeedValidationError(
             field_path="initial_beats.0.thread_id",
             issue="Thread not found",
             available=["archive_nature", "diary_truth"],
@@ -311,13 +302,13 @@ class TestFormatRepairErrors:
     def test_formats_multiple_errors(self) -> None:
         """Should format multiple errors with numbering."""
         errors = [
-            self.MockError(
+            SeedValidationError(
                 field_path="threads.0.tension_id",
                 issue="Tension not found",
                 available=["t1"],
                 provided="bad_id",
             ),
-            self.MockError(
+            SeedValidationError(
                 field_path="initial_beats.1.entities",
                 issue="Entity not found",
                 available=["e1", "e2"],
@@ -332,7 +323,7 @@ class TestFormatRepairErrors:
 
     def test_truncates_long_available_list(self) -> None:
         """Should truncate available list if longer than 8."""
-        error = self.MockError(
+        error = SeedValidationError(
             field_path="field",
             issue="Not found",
             available=[f"id_{i}" for i in range(15)],
@@ -346,7 +337,7 @@ class TestFormatRepairErrors:
 
     def test_handles_empty_available(self) -> None:
         """Should handle error with no available options."""
-        error = self.MockError(
+        error = SeedValidationError(
             field_path="field",
             issue="Not found",
             available=[],
@@ -408,15 +399,6 @@ class TestGetRepairSeedBriefPrompt:
 class TestRepairSeedBrief:
     """Test repair_seed_brief function."""
 
-    @dataclass
-    class MockError:
-        """Mock error for testing."""
-
-        field_path: str
-        issue: str
-        available: list[str]
-        provided: str
-
     @pytest.mark.asyncio
     async def test_repair_returns_repaired_brief_and_tokens(self) -> None:
         """repair_seed_brief should return repaired brief and token count."""
@@ -426,7 +408,7 @@ class TestRepairSeedBrief:
         mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         errors = [
-            self.MockError(
+            SeedValidationError(
                 field_path="threads.0.tension_id",
                 issue="Tension not found",
                 available=["mentor_trust"],
@@ -452,7 +434,7 @@ class TestRepairSeedBrief:
         mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         errors = [
-            self.MockError(
+            SeedValidationError(
                 field_path="field",
                 issue="Issue",
                 available=["valid"],
@@ -482,7 +464,7 @@ class TestRepairSeedBrief:
         mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         errors = [
-            self.MockError(
+            SeedValidationError(
                 field_path="f",
                 issue="i",
                 available=["a"],
@@ -507,7 +489,7 @@ class TestRepairSeedBrief:
         mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
         errors = [
-            self.MockError(
+            SeedValidationError(
                 field_path="threads.0.tension_id",
                 issue="Tension not found in BRAINSTORM",
                 available=["mentor_trust", "diary_truth"],

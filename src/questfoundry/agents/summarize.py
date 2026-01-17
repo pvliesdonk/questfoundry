@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from difflib import get_close_matches
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
 
@@ -15,7 +15,13 @@ if TYPE_CHECKING:
     from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
 
+    from questfoundry.graph.mutations import SeedValidationError
+
 log = get_logger(__name__)
+
+# Constants for fuzzy matching and display limits
+FUZZY_MATCH_CUTOFF = 0.4
+MAX_DISPLAY_OPTIONS = 8
 
 
 @traceable(name="Summarize Phase", run_type="chain", tags=["phase:summarize"])
@@ -80,19 +86,7 @@ async def summarize_discussion(
     summary = str(response.content)
 
     # Extract token usage
-    # LangChain tracks token usage in different places:
-    # - OpenAI: response_metadata["token_usage"]
-    # - Ollama: usage_metadata attribute on AIMessage
-    tokens = 0
-    if isinstance(response, AIMessage):
-        # First check usage_metadata attribute (Ollama, newer providers)
-        if hasattr(response, "usage_metadata") and response.usage_metadata:
-            tokens = response.usage_metadata.get("total_tokens") or 0
-        # Then check response_metadata (OpenAI)
-        elif hasattr(response, "response_metadata") and response.response_metadata:
-            metadata = response.response_metadata
-            if "token_usage" in metadata:
-                tokens = metadata["token_usage"].get("total_tokens") or 0
+    tokens = _extract_token_usage(response) if isinstance(response, AIMessage) else 0
 
     log.info("summarize_completed", summary_length=len(summary), tokens=tokens)
 
@@ -125,6 +119,34 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
     return "\n\n".join(formatted_parts)
 
 
+def _extract_token_usage(response: AIMessage) -> int:
+    """Extract token usage from an AIMessage response.
+
+    LangChain tracks token usage in different places depending on the provider:
+    - OpenAI: response_metadata["token_usage"]["total_tokens"]
+    - Ollama: usage_metadata["total_tokens"] attribute
+
+    Args:
+        response: The AIMessage response from the model.
+
+    Returns:
+        Total tokens used, or 0 if not available.
+    """
+    # First check usage_metadata attribute (Ollama, newer providers)
+    if hasattr(response, "usage_metadata") and response.usage_metadata:
+        tokens = response.usage_metadata.get("total_tokens")
+        if tokens is not None:
+            return tokens
+    # Then check response_metadata (OpenAI)
+    if hasattr(response, "response_metadata") and response.response_metadata:
+        metadata = response.response_metadata
+        if "token_usage" in metadata:
+            tokens = metadata["token_usage"].get("total_tokens")
+            if tokens is not None:
+                return tokens
+    return 0
+
+
 def get_fuzzy_id_suggestions(invalid_id: str, available_ids: list[str], n: int = 3) -> list[str]:
     """Find closest matching IDs for an invalid ID.
 
@@ -138,18 +160,18 @@ def get_fuzzy_id_suggestions(invalid_id: str, available_ids: list[str], n: int =
     Returns:
         List of closest matching IDs, or empty list if no good matches.
     """
-    return get_close_matches(invalid_id, available_ids, n=n, cutoff=0.4)
+    return get_close_matches(invalid_id, available_ids, n=n, cutoff=FUZZY_MATCH_CUTOFF)
 
 
-def format_repair_errors(errors: list[Any]) -> str:
+def format_repair_errors(errors: list[SeedValidationError]) -> str:
     """Format semantic validation errors for brief repair.
 
     Creates action-oriented error messages with fuzzy match suggestions
     to guide the model in fixing invalid ID references.
 
     Args:
-        errors: List of SeedValidationError objects (or similar with
-            field_path, issue, available, provided attributes).
+        errors: List of SeedValidationError objects with field_path, issue,
+            available, and provided attributes.
 
     Returns:
         Formatted error list string for inclusion in repair prompt.
@@ -168,13 +190,13 @@ def format_repair_errors(errors: list[Any]) -> str:
             if suggestions:
                 lines.append(f"- **Suggested replacement**: `{suggestions[0]}`")
 
-            # Show available options (limit to 8 for readability)
-            display_available = error.available[:8]
+            # Show available options (limit for readability)
+            display_available = error.available[:MAX_DISPLAY_OPTIONS]
             lines.append(
                 f"- **Available options**: {', '.join(f'`{a}`' for a in display_available)}"
             )
-            if len(error.available) > 8:
-                lines.append(f"  ... and {len(error.available) - 8} more")
+            if len(error.available) > MAX_DISPLAY_OPTIONS:
+                lines.append(f"  ... and {len(error.available) - MAX_DISPLAY_OPTIONS} more")
 
         lines.append("")
 
@@ -185,7 +207,7 @@ def format_repair_errors(errors: list[Any]) -> str:
 async def repair_seed_brief(
     model: BaseChatModel,
     brief: str,
-    errors: list[Any],
+    errors: list[SeedValidationError],
     valid_ids_context: str,
     callbacks: list[BaseCallbackHandler] | None = None,
 ) -> tuple[str, int]:
@@ -194,6 +216,9 @@ async def repair_seed_brief(
     This function performs a surgical fix of invalid IDs without changing
     the narrative content of the brief. It uses a focused prompt that
     instructs the model to only replace specific invalid IDs with valid ones.
+
+    Note: This function does not validate the repaired brief. Validation
+    happens in the two-level loop wrapper (serialize_with_brief_repair).
 
     Args:
         model: Chat model to use for repair.
@@ -246,14 +271,7 @@ async def repair_seed_brief(
     repaired_brief = str(response.content)
 
     # Extract token usage
-    tokens = 0
-    if isinstance(response, AIMessage):
-        if hasattr(response, "usage_metadata") and response.usage_metadata:
-            tokens = response.usage_metadata.get("total_tokens") or 0
-        elif hasattr(response, "response_metadata") and response.response_metadata:
-            metadata = response.response_metadata
-            if "token_usage" in metadata:
-                tokens = metadata["token_usage"].get("total_tokens") or 0
+    tokens = _extract_token_usage(response) if isinstance(response, AIMessage) else 0
 
     log.info(
         "repair_brief_completed",
