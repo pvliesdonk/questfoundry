@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage, ToolMessage
 
 from questfoundry.agents.prompts import get_summarize_prompt
 from questfoundry.observability.logging import get_logger
@@ -101,6 +102,17 @@ async def summarize_discussion(
 def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
     """Format conversation messages for the summary prompt.
 
+    Preserves tool call context by including tool invocations and their results.
+    This ensures research insights from tools (like corpus searches) are available
+    in the summarized output.
+
+    Output format:
+        - Human messages: "User: <content>"
+        - AI messages: "Assistant: <content>"
+        - Tool calls: "[Tool Call: <name>]\\n<json args>"
+        - Tool results: "[Tool Result: <name>]\\n<content>"
+        - System messages: "System: <content>"
+
     Args:
         messages: List of conversation messages
 
@@ -110,15 +122,33 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
     formatted_parts = []
     for msg in messages:
         if isinstance(msg, HumanMessage):
-            prefix = "User"
+            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            formatted_parts.append(f"User: {content}")
         elif isinstance(msg, AIMessage):
-            prefix = "Assistant"
+            # Include text content if present and non-empty
+            if msg.content:
+                content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                # Skip whitespace-only content to avoid noisy "Assistant:  " lines
+                if content.strip():
+                    formatted_parts.append(f"Assistant: {content}")
+            # Include tool calls if present (research decisions made by the model)
+            # tool_calls is a standard AIMessage attribute, but check type for safety
+            if msg.tool_calls and isinstance(msg.tool_calls, list):
+                for tc in msg.tool_calls:
+                    tool_name = tc.get("name", "unknown_tool")
+                    tool_args = tc.get("args", {})
+                    args_str = json.dumps(tool_args, indent=2)
+                    formatted_parts.append(f"[Tool Call: {tool_name}]\n{args_str}")
+        elif isinstance(msg, ToolMessage):
+            # Include tool results (research findings)
+            tool_name = msg.name or "unknown_tool"
+            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            formatted_parts.append(f"[Tool Result: {tool_name}]\n{content}")
         elif isinstance(msg, SystemMessage):
-            prefix = "System"
+            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            formatted_parts.append(f"System: {content}")
         else:
-            prefix = "Message"
-
-        content = msg.content if isinstance(msg.content, str) else str(msg.content)
-        formatted_parts.append(f"{prefix}: {content}")
+            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            formatted_parts.append(f"Message: {content}")
 
     return "\n\n".join(formatted_parts)
