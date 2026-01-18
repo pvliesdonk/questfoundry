@@ -480,5 +480,5 @@ class TestManifestCounts:
 
         result = format_valid_ids_context(graph, "seed")
         assert "Verification" in result
-        assert "entities array should have 1 items" in result
-        assert "tensions array should have 1 items" in result
+        assert "entities array should have 1 item" in result
+        assert "tensions array should have 1 item" in result

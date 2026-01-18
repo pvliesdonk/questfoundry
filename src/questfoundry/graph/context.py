@@ -89,6 +89,11 @@ def _format_seed_valid_ids(graph: Graph) -> str:
     Returns:
         Formatted context string with valid IDs and counts.
     """
+    # Get expected counts from canonical source (DRY principle)
+    counts = get_expected_counts(graph)
+    total_entity_count = counts["entities"]
+    tension_count = counts["tensions"]
+
     lines = [
         "## VALID IDS MANIFEST - GENERATE FOR ALL",
         "",
@@ -106,9 +111,6 @@ def _format_seed_valid_ids(graph: Graph) -> str:
         if raw_id:  # Only include entities with valid raw_id
             by_category.setdefault(cat, []).append(raw_id)
 
-    # Calculate total entity count
-    total_entity_count = sum(len(ids) for ids in by_category.values())
-
     if by_category:
         lines.append(f"### Entity IDs (TOTAL: {total_entity_count} - generate decision for ALL)")
         lines.append("Use these for `entity_id`, `entities`, and `location` fields:")
@@ -124,7 +126,6 @@ def _format_seed_valid_ids(graph: Graph) -> str:
 
     # Tensions with alternatives
     tensions = graph.get_nodes_by_type("tension")
-    tension_count = 0
     if tensions:
         # Pre-build alt edges map to avoid O(T*E) lookups
         alt_edges_by_tension: dict[str, list[dict[str, Any]]] = {}
@@ -132,9 +133,6 @@ def _format_seed_valid_ids(graph: Graph) -> str:
             from_id = edge.get("from")
             if from_id:
                 alt_edges_by_tension.setdefault(from_id, []).append(edge)
-
-        # Count valid tensions (those with raw_id)
-        tension_count = sum(1 for tdata in tensions.values() if tdata.get("raw_id"))
 
         lines.append(f"### Tension IDs (TOTAL: {tension_count} - generate decision for ALL)")
         lines.append("Format: tension_id → [alternative_ids]")
@@ -161,7 +159,10 @@ def _format_seed_valid_ids(graph: Graph) -> str:
 
         lines.append("")
 
-    # Generation requirements with counts
+    # Generation requirements with counts (handle singular/plural grammar)
+    entity_word = "item" if total_entity_count == 1 else "items"
+    tension_word = "item" if tension_count == 1 else "items"
+
     lines.extend(
         [
             "### Generation Requirements (CRITICAL)",
@@ -172,8 +173,8 @@ def _format_seed_valid_ids(graph: Graph) -> str:
             "",
             "### Verification",
             "Before submitting, COUNT your outputs:",
-            f"- entities array should have {total_entity_count} items",
-            f"- tensions array should have {tension_count} items",
+            f"- entities array should have {total_entity_count} {entity_word}",
+            f"- tensions array should have {tension_count} {tension_word}",
         ]
     )
 
