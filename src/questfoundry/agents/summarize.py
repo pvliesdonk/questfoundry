@@ -255,7 +255,6 @@ def format_repair_errors(errors: list[SeedValidationError]) -> str:
 
 def format_missing_items_feedback(
     errors: list[SeedValidationError],
-    brainstorm_context: str = "",  # noqa: ARG001
 ) -> str:
     """Format feedback for missing entity/tension decisions.
 
@@ -266,23 +265,13 @@ def format_missing_items_feedback(
 
     Args:
         errors: List of SeedValidationError objects with error_type="missing_item".
-        brainstorm_context: The formatted BRAINSTORM context string that contains
-            the full entity/tension information.
 
     Returns:
         Formatted feedback string to append to summarize messages.
     """
-    # Separate entity and tension errors
-    entity_errors = [
-        e for e in errors if e.error_type == "missing_item" and "entity" not in e.issue.lower()[:20]
-    ]
-    tension_errors = [
-        e for e in errors if e.error_type == "missing_item" and "tension" in e.issue.lower()
-    ]
-
-    # Actually, let's parse based on issue content more robustly
-    entity_errors = []
-    tension_errors = []
+    # Separate entity and tension errors based on issue content
+    entity_errors: list[SeedValidationError] = []
+    tension_errors: list[SeedValidationError] = []
     for e in errors:
         if e.error_type != "missing_item":
             continue

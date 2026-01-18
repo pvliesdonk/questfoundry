@@ -701,7 +701,7 @@ class TestFormatMissingItemsFeedback:
             ),
         ]
 
-        result = format_missing_items_feedback(errors, "## Entities from BRAINSTORM\n...")
+        result = format_missing_items_feedback(errors)
 
         assert "SUMMARY INCOMPLETE" in result
         assert "Missing Entity Decisions" in result
@@ -720,7 +720,7 @@ class TestFormatMissingItemsFeedback:
             ),
         ]
 
-        result = format_missing_items_feedback(errors, "## Tensions from BRAINSTORM\n...")
+        result = format_missing_items_feedback(errors)
 
         assert "SUMMARY INCOMPLETE" in result
         assert "Missing Tension Decisions" in result
@@ -745,7 +745,7 @@ class TestFormatMissingItemsFeedback:
             ),
         ]
 
-        result = format_missing_items_feedback(errors, "brainstorm context")
+        result = format_missing_items_feedback(errors)
 
         assert "Missing Entity Decisions" in result
         assert "Missing Tension Decisions" in result
@@ -764,7 +764,7 @@ class TestFormatMissingItemsFeedback:
             ),
         ]
 
-        result = format_missing_items_feedback(errors, "brainstorm context")
+        result = format_missing_items_feedback(errors)
 
         assert "SUMMARY INCOMPLETE" in result
         # wrong_id error should not appear in entity or tension sections
@@ -783,14 +783,14 @@ class TestFormatMissingItemsFeedback:
             ),
         ]
 
-        result = format_missing_items_feedback(errors, "brainstorm")
+        result = format_missing_items_feedback(errors)
 
         assert "regenerate" in result.lower()
         assert "ALL items from BRAINSTORM" in result
 
     def test_handles_empty_errors(self) -> None:
         """Should handle empty error list gracefully."""
-        result = format_missing_items_feedback([], "brainstorm")
+        result = format_missing_items_feedback([])
 
         assert "SUMMARY INCOMPLETE" in result
         # No specific error sections
