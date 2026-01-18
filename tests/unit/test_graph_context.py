@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 from questfoundry.graph import Graph, format_summarize_manifest, format_valid_ids_context
-from questfoundry.graph.context import format_thread_ids_context, get_expected_counts
+from questfoundry.graph.context import (
+    check_structural_completeness,
+    format_thread_ids_context,
+    get_expected_counts,
+)
 
 
 class TestFormatValidIdsContext:
@@ -705,3 +709,106 @@ class TestFormatSummarizeManifest:
 
         # Should have blank line after Characters section, before Locations
         assert "**Characters:**\n  - `hero`\n\n**Locations:**" in result["entity_manifest"]
+
+
+class TestCheckStructuralCompleteness:
+    """Tests for check_structural_completeness function."""
+
+    def test_returns_empty_when_counts_match(self) -> None:
+        """No errors when actual counts match expected."""
+        output = {
+            "entities": [{"entity_id": "a"}, {"entity_id": "b"}],
+            "tensions": [{"tension_id": "x"}],
+        }
+        expected = {"entities": 2, "tensions": 1}
+
+        errors = check_structural_completeness(output, expected)
+
+        assert errors == []
+
+    def test_detects_missing_entities(self) -> None:
+        """Reports error when entity count is less than expected."""
+        output = {
+            "entities": [{"entity_id": "a"}],
+            "tensions": [],
+        }
+        expected = {"entities": 3, "tensions": 0}
+
+        errors = check_structural_completeness(output, expected)
+
+        assert len(errors) == 1
+        assert errors[0][0] == "entities"
+        assert "Expected 3" in errors[0][1]
+        assert "got 1" in errors[0][1]
+
+    def test_detects_missing_tensions(self) -> None:
+        """Reports error when tension count is less than expected."""
+        output = {
+            "entities": [],
+            "tensions": [{"tension_id": "x"}],
+        }
+        expected = {"entities": 0, "tensions": 2}
+
+        errors = check_structural_completeness(output, expected)
+
+        assert len(errors) == 1
+        assert errors[0][0] == "tensions"
+        assert "Expected 2" in errors[0][1]
+        assert "got 1" in errors[0][1]
+
+    def test_detects_extra_entities(self) -> None:
+        """Reports error when entity count exceeds expected."""
+        output = {
+            "entities": [{"entity_id": "a"}, {"entity_id": "b"}, {"entity_id": "c"}],
+            "tensions": [],
+        }
+        expected = {"entities": 2, "tensions": 0}
+
+        errors = check_structural_completeness(output, expected)
+
+        assert len(errors) == 1
+        assert errors[0][0] == "entities"
+        assert "Expected 2" in errors[0][1]
+        assert "got 3" in errors[0][1]
+
+    def test_detects_multiple_errors(self) -> None:
+        """Reports errors for both entities and tensions."""
+        output = {
+            "entities": [],
+            "tensions": [],
+        }
+        expected = {"entities": 2, "tensions": 1}
+
+        errors = check_structural_completeness(output, expected)
+
+        assert len(errors) == 2
+        field_paths = {e[0] for e in errors}
+        assert field_paths == {"entities", "tensions"}
+
+    def test_handles_missing_output_keys(self) -> None:
+        """Handles output missing entities or tensions keys."""
+        output: dict[str, list[dict[str, str]]] = {}
+        expected = {"entities": 1, "tensions": 1}
+
+        errors = check_structural_completeness(output, expected)
+
+        assert len(errors) == 2
+
+    def test_handles_zero_expected(self) -> None:
+        """No error when both expected and actual are zero."""
+        output = {"entities": [], "tensions": []}
+        expected = {"entities": 0, "tensions": 0}
+
+        errors = check_structural_completeness(output, expected)
+
+        assert errors == []
+
+    def test_raises_on_negative_expected_count(self) -> None:
+        """Raises ValueError when expected count is negative."""
+        import pytest
+
+        output = {"entities": [], "tensions": []}
+        expected = {"entities": -1, "tensions": 0}
+
+        with pytest.raises(ValueError, match="cannot be negative"):
+            check_structural_completeness(output, expected)

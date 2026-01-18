@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -18,6 +19,33 @@ if TYPE_CHECKING:
 # Display limits for error messages
 _MAX_ERRORS_DISPLAY = 8
 _MAX_AVAILABLE_DISPLAY = 5
+
+# Error message patterns for categorization.
+# Using constants makes the categorization explicit and testable.
+# Future work: Replace string matching with structured error codes (see issue #216).
+# These patterns MUST match the error messages produced by validate_seed_mutations().
+_PATTERN_SEMANTIC_BRAINSTORM = "not in brainstorm"
+_PATTERN_SEMANTIC_SEED = "not defined in seed"
+_PATTERN_COMPLETENESS = "missing decision"
+
+
+class SeedErrorCategory(Enum):
+    """Categories of SEED validation errors for targeted retry strategies.
+
+    Different error types require different recovery approaches:
+    - INNER: Schema/type errors - retry with Pydantic feedback
+    - SEMANTIC: Invalid ID references - retry with valid ID list
+    - COMPLETENESS: Missing items - retry with manifest counts
+    - FATAL: Reserved for unrecoverable errors (corruption, impossible states)
+    """
+
+    INNER = auto()  # Schema/type error in a single section
+    SEMANTIC = auto()  # Invalid ID reference (phantom IDs)
+    COMPLETENESS = auto()  # Missing entity/tension decisions
+    # FATAL is reserved for future use - e.g., graph corruption that requires
+    # manual intervention. Currently no errors are classified as FATAL since
+    # all known error types can be retried with appropriate feedback.
+    FATAL = auto()
 
 
 class MutationError(ValueError):
@@ -92,6 +120,55 @@ class SeedValidationError:
     issue: str
     available: list[str] = field(default_factory=list)
     provided: str = ""
+
+
+def categorize_error(error: SeedValidationError) -> SeedErrorCategory:
+    """Categorize a SEED validation error for targeted retry strategy.
+
+    Error categories determine how to recover:
+    - SEMANTIC: Invalid ID reference → retry with valid ID list
+    - COMPLETENESS: Missing decisions → retry with manifest counts
+    - INNER: Everything else → retry with Pydantic feedback
+
+    Uses module-level pattern constants for testability and maintainability.
+    See _PATTERN_SEMANTIC_BRAINSTORM, _PATTERN_SEMANTIC_SEED, _PATTERN_COMPLETENESS.
+
+    Args:
+        error: SeedValidationError to categorize.
+
+    Returns:
+        SeedErrorCategory indicating the error type.
+    """
+    issue = error.issue.lower()
+
+    # Semantic errors: invalid ID references (phantom IDs)
+    if _PATTERN_SEMANTIC_BRAINSTORM in issue or _PATTERN_SEMANTIC_SEED in issue:
+        return SeedErrorCategory.SEMANTIC
+
+    # Completeness errors: missing decisions
+    if _PATTERN_COMPLETENESS in issue:
+        return SeedErrorCategory.COMPLETENESS
+
+    # Default to INNER (schema/structural errors)
+    return SeedErrorCategory.INNER
+
+
+def categorize_errors(
+    errors: list[SeedValidationError],
+) -> dict[SeedErrorCategory, list[SeedValidationError]]:
+    """Group errors by category for targeted retry strategies.
+
+    Args:
+        errors: List of SeedValidationError objects.
+
+    Returns:
+        Dict mapping categories to their errors.
+    """
+    by_category: dict[SeedErrorCategory, list[SeedValidationError]] = {}
+    for error in errors:
+        category = categorize_error(error)
+        by_category.setdefault(category, []).append(error)
+    return by_category
 
 
 class SeedMutationError(MutationError):
