@@ -1065,3 +1065,341 @@ class TestSerializeWithBriefRepair:
         assert len(briefs_received) == 2
         assert briefs_received[0] == "Original brief"
         assert briefs_received[1] == "REPAIRED BRIEF CONTENT"
+
+    @pytest.mark.asyncio
+    async def test_uses_resummarize_for_missing_items(self) -> None:
+        """Should use resummarize_with_feedback when missing_item errors exist."""
+        from unittest.mock import MagicMock
+
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        from questfoundry.agents.serialize import serialize_with_brief_repair
+        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+
+        # Missing item error (entity without decision)
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'mentor'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            )
+        ]
+
+        # Provide summarize messages to enable resummarization
+        summarize_messages = [
+            SystemMessage(content="System"),
+            HumanMessage(content="Discussion"),
+            AIMessage(content="Original incomplete brief"),
+        ]
+
+        call_count = [0]
+
+        def serialize_side_effect(*_args, **_kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise SeedMutationError(errors)
+            return (mock_result, 50)
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_seed_iteratively",
+                side_effect=serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize.resummarize_with_feedback",
+                return_value=("Complete brief with mentor", summarize_messages, 30),
+            ) as mock_resummarize,
+            patch(
+                "questfoundry.agents.serialize.repair_seed_brief",
+            ) as mock_repair,
+        ):
+            result, tokens = await serialize_with_brief_repair(
+                model=mock_model,
+                brief="Original brief",
+                graph=mock_graph,
+                summarize_messages=summarize_messages,
+                brainstorm_context="## Entities\n- mentor: character",
+            )
+
+        assert result is mock_result
+        assert tokens == 30 + 50  # resummarize + serialize
+        mock_resummarize.assert_called_once()
+        mock_repair.assert_not_called()  # Should NOT use surgical repair
+
+    @pytest.mark.asyncio
+    async def test_uses_surgical_repair_for_wrong_id_only(self) -> None:
+        """Should use surgical repair when only wrong_id errors exist."""
+        from unittest.mock import MagicMock
+
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        from questfoundry.agents.serialize import serialize_with_brief_repair
+        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+
+        # Only wrong ID error (no missing items)
+        errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension not found",
+                available=["valid_tension"],
+                provided="invalid_tension",
+                error_type="wrong_id",
+            )
+        ]
+
+        # Provide summarize messages
+        summarize_messages = [
+            SystemMessage(content="System"),
+            HumanMessage(content="Discussion"),
+            AIMessage(content="Brief with wrong tension ID"),
+        ]
+
+        call_count = [0]
+
+        def serialize_side_effect(*_args, **_kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise SeedMutationError(errors)
+            return (mock_result, 50)
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_seed_iteratively",
+                side_effect=serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize.resummarize_with_feedback",
+            ) as mock_resummarize,
+            patch(
+                "questfoundry.agents.serialize.repair_seed_brief",
+                return_value=("Repaired brief", 25),
+            ) as mock_repair,
+            patch(
+                "questfoundry.agents.serialize.format_valid_ids_context",
+                return_value="Valid IDs",
+            ),
+        ):
+            result, tokens = await serialize_with_brief_repair(
+                model=mock_model,
+                brief="Original brief",
+                graph=mock_graph,
+                summarize_messages=summarize_messages,
+            )
+
+        assert result is mock_result
+        assert tokens == 25 + 50  # repair + serialize
+        mock_repair.assert_called_once()
+        mock_resummarize.assert_not_called()  # Should NOT use resummarize
+
+    @pytest.mark.asyncio
+    async def test_uses_resummarize_for_mixed_errors(self) -> None:
+        """Should use resummarize when BOTH wrong_id AND missing_item errors exist."""
+        from unittest.mock import MagicMock
+
+        from langchain_core.messages import AIMessage, SystemMessage
+
+        from questfoundry.agents.serialize import serialize_with_brief_repair
+        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+
+        # Mixed errors: wrong ID + missing item
+        errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension not found",
+                available=["valid"],
+                provided="invalid",
+                error_type="wrong_id",
+            ),
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'mentor'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            ),
+        ]
+
+        summarize_messages = [
+            SystemMessage(content="System"),
+            AIMessage(content="Incomplete brief"),
+        ]
+
+        call_count = [0]
+
+        def serialize_side_effect(*_args, **_kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise SeedMutationError(errors)
+            return (mock_result, 50)
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_seed_iteratively",
+                side_effect=serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize.resummarize_with_feedback",
+                return_value=("Fixed brief", summarize_messages, 30),
+            ) as mock_resummarize,
+            patch(
+                "questfoundry.agents.serialize.repair_seed_brief",
+            ) as mock_repair,
+        ):
+            _result, _tokens = await serialize_with_brief_repair(
+                model=mock_model,
+                brief="Original brief",
+                graph=mock_graph,
+                summarize_messages=summarize_messages,
+            )
+
+        # Should prefer resummarize when ANY missing items exist
+        mock_resummarize.assert_called_once()
+        mock_repair.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_repair_when_no_messages(self) -> None:
+        """Should use surgical repair if no summarize_messages provided."""
+        from unittest.mock import MagicMock
+
+        from questfoundry.agents.serialize import serialize_with_brief_repair
+        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+
+        # Missing item error, but no summarize_messages
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'mentor'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            )
+        ]
+
+        call_count = [0]
+
+        def serialize_side_effect(*_args, **_kwargs):
+            call_count[0] += 1
+            if call_count[0] == 1:
+                raise SeedMutationError(errors)
+            return (mock_result, 50)
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_seed_iteratively",
+                side_effect=serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize.resummarize_with_feedback",
+            ) as mock_resummarize,
+            patch(
+                "questfoundry.agents.serialize.repair_seed_brief",
+                return_value=("Repaired brief", 25),
+            ) as mock_repair,
+            patch(
+                "questfoundry.agents.serialize.format_valid_ids_context",
+                return_value="Valid IDs",
+            ),
+        ):
+            _result, _tokens = await serialize_with_brief_repair(
+                model=mock_model,
+                brief="Original brief",
+                graph=mock_graph,
+                summarize_messages=None,  # No messages!
+            )
+
+        # Should fall back to surgical repair
+        mock_repair.assert_called_once()
+        mock_resummarize.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_resummarize_updates_messages_for_subsequent_retries(self) -> None:
+        """Should use updated messages from resummarize for subsequent retries."""
+        from unittest.mock import MagicMock
+
+        from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
+        from questfoundry.agents.serialize import serialize_with_brief_repair
+        from questfoundry.graph.mutations import SeedMutationError, SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+        mock_result = MagicMock()
+
+        original_messages = [
+            SystemMessage(content="System"),
+            AIMessage(content="First brief"),
+        ]
+
+        updated_messages = [
+            SystemMessage(content="System"),
+            AIMessage(content="First brief"),
+            HumanMessage(content="Feedback"),
+            AIMessage(content="Second brief"),
+        ]
+
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'mentor'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            )
+        ]
+
+        call_count = [0]
+
+        def serialize_side_effect(*_args, **_kwargs):
+            call_count[0] += 1
+            if call_count[0] <= 2:  # Fail first two attempts
+                raise SeedMutationError(errors)
+            return (mock_result, 50)
+
+        resummarize_calls: list[list] = []
+
+        def resummarize_side_effect(*_args, **kwargs):
+            resummarize_calls.append(kwargs.get("summarize_messages", []))
+            # Return updated messages each time
+            return ("New brief", updated_messages, 30)
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_seed_iteratively",
+                side_effect=serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize.resummarize_with_feedback",
+                side_effect=resummarize_side_effect,
+            ),
+        ):
+            await serialize_with_brief_repair(
+                model=mock_model,
+                brief="Original brief",
+                graph=mock_graph,
+                summarize_messages=original_messages,
+                max_outer_retries=3,
+            )
+
+        # First resummarize call should use original messages
+        assert len(resummarize_calls) == 2
+        assert len(resummarize_calls[0]) == 2  # Original messages
+        # Second resummarize call should use updated messages from first call
+        assert len(resummarize_calls[1]) == 4  # Updated messages

@@ -11,12 +11,17 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.prompts import get_serialize_prompt
-from questfoundry.agents.summarize import repair_seed_brief
+from questfoundry.agents.summarize import (
+    format_missing_items_feedback,
+    repair_seed_brief,
+    resummarize_with_feedback,
+)
 from questfoundry.artifacts.validator import strip_null_values
 from questfoundry.graph.context import format_thread_ids_context, format_valid_ids_context
 from questfoundry.graph.mutations import (
     SeedMutationError,
     SeedValidationError,
+    classify_seed_errors,
     validate_seed_mutations,
 )
 from questfoundry.observability.logging import get_logger
@@ -730,6 +735,8 @@ async def serialize_with_brief_repair(
     model: BaseChatModel,
     brief: str,
     graph: Graph,
+    summarize_messages: list[BaseMessage] | None = None,
+    brainstorm_context: str = "",
     provider_name: str | None = None,
     max_retries: int = 3,
     callbacks: list[BaseCallbackHandler] | None = None,
@@ -741,8 +748,11 @@ async def serialize_with_brief_repair(
     This wraps serialize_seed_iteratively with an outer loop that repairs
     the brief when semantic validation fails. The two-level structure:
 
-    - OUTER LOOP (max_outer_retries): On SeedMutationError, repair the brief
-      using surgical ID replacement, then retry serialization.
+    - OUTER LOOP (max_outer_retries): On SeedMutationError, choose strategy:
+      - If ANY missing_item errors AND summarize_messages available:
+        Use resummarize_with_feedback() (can fix both missing AND wrong IDs)
+      - Else (only wrong_id errors OR no message history):
+        Use repair_seed_brief() for surgical ID replacement
     - INNER LOOP (inside serialize_seed_iteratively): Handles Pydantic errors
       and per-section semantic retries.
 
@@ -753,6 +763,11 @@ async def serialize_with_brief_repair(
         model: Chat model to use for generation.
         brief: The summary brief from the Summarize phase.
         graph: Graph containing BRAINSTORM data for validation. Required.
+        summarize_messages: Message history from summarize phase. When provided,
+            enables resummarization for missing_item errors. The model can draw
+            from the full discussion context to add missing content.
+        brainstorm_context: Formatted BRAINSTORM context string for feedback.
+            Used when formatting missing items feedback.
         provider_name: Provider name for strategy auto-detection.
         max_retries: Maximum retries per section (Pydantic validation).
         callbacks: LangChain callback handlers for logging LLM calls.
@@ -767,6 +782,7 @@ async def serialize_with_brief_repair(
     """
     total_tokens = 0
     current_brief = brief
+    current_summarize_messages = summarize_messages
 
     for outer_attempt in range(1, max_outer_retries + 1):
         log.debug(
@@ -805,33 +821,64 @@ async def serialize_with_brief_repair(
                 )
                 raise
 
+            # Classify errors to determine repair strategy
+            wrong_ids, missing_items = classify_seed_errors(e.errors)
+
             log.warning(
                 "serialize_outer_loop_failed",
                 attempt=outer_attempt,
                 error_count=len(e.errors),
-                errors=[err.provided for err in e.errors[:5]],  # First 5 invalid IDs
+                wrong_id_count=len(wrong_ids),
+                missing_item_count=len(missing_items),
+                errors=[err.provided for err in wrong_ids[:5]],  # First 5 invalid IDs
             )
 
-            # Repair the brief with fuzzy ID suggestions
-            valid_ids_context = format_valid_ids_context(graph, stage="seed")
-            repaired_brief, repair_tokens = await repair_seed_brief(
-                model=model,
-                brief=current_brief,
-                errors=e.errors,
-                valid_ids_context=valid_ids_context,
-                callbacks=callbacks,
-            )
-            total_tokens += repair_tokens
+            # Choose repair strategy:
+            # - Resummarize can fix BOTH missing items AND wrong IDs (has full context)
+            # - Surgical repair can only fix wrong IDs
+            # So prioritize resummarize when there are ANY missing items
+            if missing_items and current_summarize_messages:
+                # Resummarize with feedback (can fix both error types)
+                feedback = format_missing_items_feedback(e.errors, brainstorm_context)
+                new_brief, updated_messages, resum_tokens = await resummarize_with_feedback(
+                    model=model,
+                    summarize_messages=current_summarize_messages,
+                    feedback=feedback,
+                    callbacks=callbacks,
+                )
+                total_tokens += resum_tokens
 
-            log.info(
-                "brief_repair_completed",
-                original_length=len(current_brief),
-                repaired_length=len(repaired_brief),
-                tokens=repair_tokens,
-            )
+                log.info(
+                    "resummarize_repair_completed",
+                    original_length=len(current_brief),
+                    new_length=len(new_brief),
+                    missing_items_count=len(missing_items),
+                    tokens=resum_tokens,
+                )
 
-            # Use repaired brief for next attempt
-            current_brief = repaired_brief
+                current_brief = new_brief
+                current_summarize_messages = updated_messages
+            else:
+                # Surgical ID repair (only wrong_id errors, or no message history)
+                valid_ids_context = format_valid_ids_context(graph, stage="seed")
+                repaired_brief, repair_tokens = await repair_seed_brief(
+                    model=model,
+                    brief=current_brief,
+                    errors=e.errors,
+                    valid_ids_context=valid_ids_context,
+                    callbacks=callbacks,
+                )
+                total_tokens += repair_tokens
+
+                log.info(
+                    "surgical_repair_completed",
+                    original_length=len(current_brief),
+                    repaired_length=len(repaired_brief),
+                    wrong_id_count=len(wrong_ids),
+                    tokens=repair_tokens,
+                )
+
+                current_brief = repaired_brief
 
     # Should not reach here due to raise in loop, but satisfy type checker
     raise SeedMutationError([])  # pragma: no cover
