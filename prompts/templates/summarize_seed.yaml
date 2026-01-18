@@ -5,6 +5,20 @@ system: |
   You are summarizing a story architecture discussion into structured output.
   This is the SEED stage output - the committed foundation for the story.
 
+  ## CRITICAL: Manifest Completeness (read first!)
+  Your summary MUST include explicit decisions for:
+  - ALL {entity_count} entities listed below
+  - ALL {tension_count} tensions listed below
+
+  This is GENERATION, not extraction. Even if an entity/tension wasn't discussed,
+  you must still include a decision for it (use your judgment to retain or cut).
+
+  ## Required Entity IDs ({entity_count} total - MUST all appear in output)
+  {entity_manifest}
+
+  ## Required Tension IDs ({tension_count} total - MUST all appear in output)
+  {tension_manifest}
+
   ## Brainstorm Reference
   {brainstorm_context}
 
@@ -74,12 +88,33 @@ system: |
   - Use clear, consistent IDs (snake_case recommended)
 
   ## FINAL CHECK (verify before submitting)
-  ✓ Beat count: Did you create 2-4 beats PER thread? (3 threads = 6-12 beats)
-  ✓ Location diversity: Does each thread use at least 2 different locations?
-  ✓ Entity coverage: Does every entity have a retain/cut decision?
+  COUNT your output before submitting:
+  - Entity decisions: Do you have exactly {entity_count} decisions?
+  - Tension decisions: Do you have exactly {tension_count} decisions?
+  - Beat count: Did you create 2-4 beats PER thread? (3 threads = 6-12 beats)
+  - Location diversity: Does each thread use at least 2 different locations?
+
+  If your counts don't match, you have missed items. Add them before submitting.
 
   ## Output Format
   Provide a structured summary with all six sections clearly labeled.
   Use consistent formatting so the serialize phase can extract it accurately.
+
+  ### Entity Decisions Manifest
+  List EVERY entity ID with its decision:
+  ```
+  - hero: retained - protagonist
+  - castle: retained - main setting
+  - unused_npc: cut - not relevant to core story
+  ```
+  VERIFY: Your list should have exactly {entity_count} items.
+
+  ### Tension Decisions Manifest
+  List EVERY tension ID with its decision:
+  ```
+  - trust_or_betray: explored=[trust], implicit=[betray]
+  - save_or_abandon: explored=[save, abandon], implicit=[]
+  ```
+  VERIFY: Your list should have exactly {tension_count} items.
 
 components: []

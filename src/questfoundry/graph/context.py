@@ -200,3 +200,47 @@ def get_expected_counts(graph: Graph) -> dict[str, int]:
         "entities": entity_count,
         "tensions": tension_count,
     }
+
+
+def format_summarize_manifest(graph: Graph) -> dict[str, str]:
+    """Format entity and tension manifests for SEED summarize prompt.
+
+    Returns simple bullet lists of IDs that the summarize phase must include
+    decisions for. This is simpler than the serialize manifest since summarize
+    just needs to know the IDs to reference.
+
+    Args:
+        graph: Graph containing BRAINSTORM data.
+
+    Returns:
+        Dict with 'entity_manifest' and 'tension_manifest' strings.
+    """
+    # Collect entity IDs grouped by category
+    entities = graph.get_nodes_by_type("entity")
+    by_category: dict[str, list[str]] = {}
+    for node in entities.values():
+        cat = node.get("entity_type", "unknown")
+        raw_id = node.get("raw_id", "")
+        if raw_id:
+            by_category.setdefault(cat, []).append(raw_id)
+
+    # Format entity manifest
+    entity_lines: list[str] = []
+    for category in ["character", "location", "object", "faction"]:
+        if category in by_category:
+            entity_lines.append(f"**{category.title()}s:**")
+            for raw_id in sorted(by_category[category]):
+                entity_lines.append(f"  - `{raw_id}`")
+
+    # Collect tension IDs
+    tensions = graph.get_nodes_by_type("tension")
+    tension_lines: list[str] = []
+    for _tid, tdata in sorted(tensions.items()):
+        raw_id = tdata.get("raw_id")
+        if raw_id:
+            tension_lines.append(f"- `{raw_id}`")
+
+    return {
+        "entity_manifest": "\n".join(entity_lines) if entity_lines else "(No entities)",
+        "tension_manifest": "\n".join(tension_lines) if tension_lines else "(No tensions)",
+    }

@@ -208,22 +208,41 @@ def get_seed_discuss_prompt(
     )
 
 
-def get_seed_summarize_prompt(brainstorm_context: str = "") -> str:
-    """Build the SEED summarize prompt.
+def get_seed_summarize_prompt(
+    brainstorm_context: str = "",
+    entity_count: int = 0,
+    tension_count: int = 0,
+    entity_manifest: str = "",
+    tension_manifest: str = "",
+) -> str:
+    """Build the SEED summarize prompt with manifest awareness.
+
+    The manifest parameters enable the summarizer to know exactly which IDs
+    it must include decisions for, enforcing completeness by construction.
 
     Args:
         brainstorm_context: YAML representation of brainstorm entities/tensions.
             Required for the summarizer to know what IDs to reference.
+        entity_count: Total number of entities requiring decisions.
+        tension_count: Total number of tensions requiring decisions.
+        entity_manifest: Formatted list of entity IDs for manifest.
+        tension_manifest: Formatted list of tension IDs for manifest.
 
     Returns:
         System prompt string for the SEED summarize call.
     """
     raw_data = _load_raw_template("summarize_seed")
 
-    # Render the system template with brainstorm context
+    # Render the system template with brainstorm context and manifest info
     system_template = raw_data.get("system", "")
     prompt = ChatPromptTemplate.from_template(system_template)
-    return prompt.format(brainstorm_context=brainstorm_context)
+    return prompt.format(
+        brainstorm_context=brainstorm_context,
+        entity_count=entity_count,
+        tension_count=tension_count,
+        entity_manifest=entity_manifest or "(No entities)",
+        tension_manifest=tension_manifest or "(No tensions)",
+    )
 
 
 def get_brainstorm_serialize_prompt() -> str:

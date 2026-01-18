@@ -25,6 +25,7 @@ from questfoundry.agents import (
     summarize_discussion,
 )
 from questfoundry.graph import Graph
+from questfoundry.graph.context import format_summarize_manifest, get_expected_counts
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
 from questfoundry.tools.langchain_tools import get_all_research_tools
@@ -307,9 +308,23 @@ class SeedStage:
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
+        # Load graph once for summarize manifest and serialize validation
+        graph = Graph.load(resolved_path)
+
         # Phase 2: Summarize (use summarize_model if provided)
         log.debug("seed_phase", phase="summarize")
-        summarize_prompt = get_seed_summarize_prompt(brainstorm_context=brainstorm_context)
+
+        # Get manifest info for summarize prompt (manifest-first freeze)
+        counts = get_expected_counts(graph)
+        manifests = format_summarize_manifest(graph)
+
+        summarize_prompt = get_seed_summarize_prompt(
+            brainstorm_context=brainstorm_context,
+            entity_count=counts["entities"],
+            tension_count=counts["tensions"],
+            entity_manifest=manifests["entity_manifest"],
+            tension_manifest=manifests["tension_manifest"],
+        )
         brief, summarize_tokens = await summarize_discussion(
             model=summarize_model or model,
             messages=messages,
@@ -321,9 +336,8 @@ class SeedStage:
         total_tokens += summarize_tokens
 
         # Phase 3: Serialize (use serialize_model if provided)
-        # Load graph for semantic validation against BRAINSTORM data
+        # Graph already loaded above for semantic validation against BRAINSTORM data
         log.debug("seed_phase", phase="serialize")
-        graph = Graph.load(resolved_path)
         artifact, serialize_tokens = await serialize_seed_iteratively(
             model=serialize_model or model,
             brief=brief,
