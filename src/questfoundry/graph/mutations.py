@@ -653,8 +653,13 @@ def classify_seed_errors(
     Returns:
         Tuple of (wrong_id_errors, missing_item_errors).
     """
-    wrong_ids = [e for e in errors if e.error_type == "wrong_id"]
-    missing = [e for e in errors if e.error_type == "missing_item"]
+    wrong_ids: list[SeedValidationError] = []
+    missing: list[SeedValidationError] = []
+    for e in errors:
+        if e.error_type == "wrong_id":
+            wrong_ids.append(e)
+        else:
+            missing.append(e)
     return wrong_ids, missing
 
 
