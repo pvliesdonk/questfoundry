@@ -120,6 +120,9 @@ async def run_seed_phase(
         callbacks=callbacks,
         semantic_validator=validator,
     )
+    # serialize_to_artifact handles its own retry loop and tokens.
+    # NOTE: It currently returns only (artifact, tokens), not call count.
+    # We assume at least 1 call was made. Actual calls may be higher if retries occurred.
     total_calls += 1
     total_tokens += ser_tokens
 
