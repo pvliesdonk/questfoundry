@@ -11,7 +11,6 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.prompts import get_serialize_prompt
-from questfoundry.agents.summarize import repair_seed_brief
 from questfoundry.artifacts.validator import strip_null_values
 from questfoundry.graph.context import format_thread_ids_context, format_valid_ids_context
 from questfoundry.graph.mutations import (
@@ -35,7 +34,6 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.graph.graph import Graph
-    from questfoundry.models import SeedOutput
 
 log = get_logger(__name__)
 
@@ -719,119 +717,3 @@ def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
             sections.add(field_to_section[top_level])
 
     return sections
-
-
-@traceable(
-    name="Serialize SEED with Brief Repair",
-    run_type="chain",
-    tags=["phase:serialize", "stage:seed", "outer-loop"],
-)
-async def serialize_with_brief_repair(
-    model: BaseChatModel,
-    brief: str,
-    graph: Graph,
-    provider_name: str | None = None,
-    max_retries: int = 3,
-    callbacks: list[BaseCallbackHandler] | None = None,
-    max_semantic_retries: int = 2,
-    max_outer_retries: int = 2,
-) -> tuple[SeedOutput, int]:
-    """Serialize SEED with two-level feedback loop for brief repair.
-
-    This wraps serialize_seed_iteratively with an outer loop that repairs
-    the brief when semantic validation fails. The two-level structure:
-
-    - OUTER LOOP (max_outer_retries): On SeedMutationError, repair the brief
-      using surgical ID replacement, then retry serialization.
-    - INNER LOOP (inside serialize_seed_iteratively): Handles Pydantic errors
-      and per-section semantic retries.
-
-    This addresses the "stuck brief" problem where semantic errors in the
-    summarize phase cause 0% correction rate in the serialize phase.
-
-    Args:
-        model: Chat model to use for generation.
-        brief: The summary brief from the Summarize phase.
-        graph: Graph containing BRAINSTORM data for validation. Required.
-        provider_name: Provider name for strategy auto-detection.
-        max_retries: Maximum retries per section (Pydantic validation).
-        callbacks: LangChain callback handlers for logging LLM calls.
-        max_semantic_retries: Maximum retries inside serialize_seed_iteratively.
-        max_outer_retries: Maximum outer loop retries for brief repair.
-
-    Returns:
-        Tuple of (SeedOutput, total_tokens).
-
-    Raises:
-        SeedMutationError: If validation fails after all outer retries.
-    """
-    total_tokens = 0
-    current_brief = brief
-
-    for outer_attempt in range(1, max_outer_retries + 1):
-        log.debug(
-            "serialize_outer_loop_attempt",
-            attempt=outer_attempt,
-            max_attempts=max_outer_retries,
-        )
-
-        try:
-            result, tokens = await serialize_seed_iteratively(
-                model=model,
-                brief=current_brief,
-                provider_name=provider_name,
-                max_retries=max_retries,
-                callbacks=callbacks,
-                graph=graph,
-                max_semantic_retries=max_semantic_retries,
-            )
-            total_tokens += tokens
-            log.info(
-                "serialize_outer_loop_succeeded",
-                attempt=outer_attempt,
-                tokens=total_tokens,
-            )
-            return result, total_tokens
-
-        except SeedMutationError as e:
-            # Note: Token count from failed serialize attempts is lost.
-            # This is acceptable since we track successful serializations.
-
-            if outer_attempt >= max_outer_retries:
-                log.error(
-                    "serialize_outer_loop_exhausted",
-                    attempt=outer_attempt,
-                    error_count=len(e.errors),
-                )
-                raise
-
-            log.warning(
-                "serialize_outer_loop_failed",
-                attempt=outer_attempt,
-                error_count=len(e.errors),
-                errors=[err.provided for err in e.errors[:5]],  # First 5 invalid IDs
-            )
-
-            # Repair the brief with fuzzy ID suggestions
-            valid_ids_context = format_valid_ids_context(graph, stage="seed")
-            repaired_brief, repair_tokens = await repair_seed_brief(
-                model=model,
-                brief=current_brief,
-                errors=e.errors,
-                valid_ids_context=valid_ids_context,
-                callbacks=callbacks,
-            )
-            total_tokens += repair_tokens
-
-            log.info(
-                "brief_repair_completed",
-                original_length=len(current_brief),
-                repaired_length=len(repaired_brief),
-                tokens=repair_tokens,
-            )
-
-            # Use repaired brief for next attempt
-            current_brief = repaired_brief
-
-    # Should not reach here due to raise in loop, but satisfy type checker
-    raise SeedMutationError([])  # pragma: no cover

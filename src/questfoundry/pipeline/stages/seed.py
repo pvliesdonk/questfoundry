@@ -21,7 +21,7 @@ from questfoundry.agents import (
     get_seed_discuss_prompt,
     get_seed_summarize_prompt,
     run_discuss_phase,
-    serialize_with_brief_repair,
+    serialize_seed_iteratively,
     summarize_discussion,
 )
 from questfoundry.graph import Graph
@@ -322,20 +322,16 @@ class SeedStage:
 
         # Phase 3: Serialize (use serialize_model if provided)
         # Load graph for semantic validation against BRAINSTORM data
-        # Uses two-level feedback loop: outer loop repairs brief on semantic failure
         log.debug("seed_phase", phase="serialize")
         graph = Graph.load(resolved_path)
-        artifact, serialize_tokens = await serialize_with_brief_repair(
+        artifact, serialize_tokens = await serialize_seed_iteratively(
             model=serialize_model or model,
             brief=brief,
-            graph=graph,  # Required for semantic validation
             provider_name=serialize_provider_name or provider_name,
             callbacks=callbacks,
+            graph=graph,  # Enables semantic validation
         )
-        # Base case: 6 calls (one per section)
-        # With retries: could be 6 + (1 repair + 6 serialize) per outer retry
-        # We track the base case; actual call count varies with retry paths
-        # Token tracking is accurate; call count is an estimate
+        # Iterative serialization makes 6 calls (one per section) + potential retries
         total_llm_calls += 6
         total_tokens += serialize_tokens
 
