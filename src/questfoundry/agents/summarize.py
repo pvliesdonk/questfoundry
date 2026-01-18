@@ -106,6 +106,13 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
     This ensures research insights from tools (like corpus searches) are available
     in the summarized output.
 
+    Output format:
+        - Human messages: "User: <content>"
+        - AI messages: "Assistant: <content>"
+        - Tool calls: "[Tool Call: <name>]\\n<json args>"
+        - Tool results: "[Tool Result: <name>]\\n<content>"
+        - System messages: "System: <content>"
+
     Args:
         messages: List of conversation messages
 
@@ -118,12 +125,15 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
             formatted_parts.append(f"User: {content}")
         elif isinstance(msg, AIMessage):
-            # Include text content if present
+            # Include text content if present and non-empty
             if msg.content:
                 content = msg.content if isinstance(msg.content, str) else str(msg.content)
-                formatted_parts.append(f"Assistant: {content}")
+                # Skip whitespace-only content to avoid noisy "Assistant:  " lines
+                if content.strip():
+                    formatted_parts.append(f"Assistant: {content}")
             # Include tool calls if present (research decisions made by the model)
-            if hasattr(msg, "tool_calls") and msg.tool_calls:
+            # tool_calls is a standard AIMessage attribute, but check type for safety
+            if msg.tool_calls and isinstance(msg.tool_calls, list):
                 for tc in msg.tool_calls:
                     tool_name = tc.get("name", "unknown_tool")
                     tool_args = tc.get("args", {})
@@ -131,7 +141,7 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
                     formatted_parts.append(f"[Tool Call: {tool_name}]\n{args_str}")
         elif isinstance(msg, ToolMessage):
             # Include tool results (research findings)
-            tool_name = msg.name if msg.name else "unknown_tool"
+            tool_name = msg.name or "unknown_tool"
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
             formatted_parts.append(f"[Tool Result: {tool_name}]\n{content}")
         elif isinstance(msg, SystemMessage):

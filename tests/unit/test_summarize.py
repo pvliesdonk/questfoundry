@@ -229,14 +229,16 @@ class TestFormatMessagesToolCalls:
 
     def test_format_messages_with_tool_calls(self) -> None:
         """Should include tool call name and arguments in formatted output."""
-        ai_message = AIMessage(content="Let me search for relevant information.")
-        ai_message.tool_calls = [
-            {
-                "name": "search_corpus",
-                "args": {"query": "mystery genre conventions"},
-                "id": "call_123",
-            }
-        ]
+        ai_message = AIMessage(
+            content="Let me search for relevant information.",
+            tool_calls=[
+                {
+                    "name": "search_corpus",
+                    "args": {"query": "mystery genre conventions"},
+                    "id": "call_123",
+                }
+            ],
+        )
         messages = [ai_message]
 
         result = _format_messages_for_summary(messages)
@@ -265,28 +267,25 @@ class TestFormatMessagesToolCalls:
         # Simulate a discuss phase with tool research
         messages = [
             HumanMessage(content="I want to write a mystery story"),
-            AIMessage(content="Let me research mystery conventions."),
-        ]
-        # Add tool call to the AI message
-        messages[1].tool_calls = [
-            {
-                "name": "search_corpus",
-                "args": {"query": "mystery tropes"},
-                "id": "call_456",
-            }
-        ]
-        messages.append(
+            AIMessage(
+                content="Let me research mystery conventions.",
+                tool_calls=[
+                    {
+                        "name": "search_corpus",
+                        "args": {"query": "mystery tropes"},
+                        "id": "call_456",
+                    }
+                ],
+            ),
             ToolMessage(
                 content='{"result": "success", "data": {"tropes": ["locked room", "red herring"]}}',
                 name="search_corpus",
                 tool_call_id="call_456",
-            )
-        )
-        messages.append(
+            ),
             AIMessage(
                 content="Based on my research, I found common mystery tropes include locked room mysteries and red herrings."
-            )
-        )
+            ),
+        ]
 
         result = _format_messages_for_summary(messages)
 
@@ -302,11 +301,13 @@ class TestFormatMessagesToolCalls:
 
     def test_format_messages_with_multiple_tool_calls(self) -> None:
         """Should include all tool calls from a single AI message."""
-        ai_message = AIMessage(content="")
-        ai_message.tool_calls = [
-            {"name": "search_corpus", "args": {"query": "genre"}, "id": "call_1"},
-            {"name": "get_example", "args": {"category": "mystery"}, "id": "call_2"},
-        ]
+        ai_message = AIMessage(
+            content="",
+            tool_calls=[
+                {"name": "search_corpus", "args": {"query": "genre"}, "id": "call_1"},
+                {"name": "get_example", "args": {"category": "mystery"}, "id": "call_2"},
+            ],
+        )
         messages = [ai_message]
 
         result = _format_messages_for_summary(messages)
@@ -318,24 +319,25 @@ class TestFormatMessagesToolCalls:
 
     def test_format_messages_ai_without_content_but_with_tool_calls(self) -> None:
         """Should handle AI message with only tool calls (no text content)."""
-        ai_message = AIMessage(content="")
-        ai_message.tool_calls = [{"name": "search", "args": {"q": "test"}, "id": "call_1"}]
+        ai_message = AIMessage(
+            content="",
+            tool_calls=[{"name": "search", "args": {"q": "test"}, "id": "call_1"}],
+        )
         messages = [ai_message]
 
         result = _format_messages_for_summary(messages)
 
-        # Should not have empty "Assistant: " prefix
-        assert "Assistant: " not in result or result.count("Assistant:") == 0
+        # No "Assistant:" prefix should appear when there's no content
+        assert "Assistant:" not in result
         assert "[Tool Call: search]" in result
 
     def test_format_messages_tool_message_without_name(self) -> None:
         """Should handle tool message without name attribute."""
+        # The 'name' attribute defaults to None when not provided
         tool_message = ToolMessage(
             content="some result",
             tool_call_id="call_123",
         )
-        # Ensure name is None/missing
-        tool_message.name = None
         messages = [tool_message]
 
         result = _format_messages_for_summary(messages)
@@ -344,9 +346,11 @@ class TestFormatMessagesToolCalls:
         assert "some result" in result
 
     def test_format_messages_tool_call_without_args(self) -> None:
-        """Should handle tool call with missing args."""
+        """Should handle tool call with missing args defensively."""
+        # LangChain validates tool_calls in constructor, so we assign after creation
+        # to test defensive handling of potentially malformed data
         ai_message = AIMessage(content="")
-        ai_message.tool_calls = [{"name": "simple_tool", "id": "call_1"}]
+        ai_message.tool_calls = [{"name": "simple_tool", "id": "call_1"}]  # type: ignore[list-item]
         messages = [ai_message]
 
         result = _format_messages_for_summary(messages)
@@ -354,3 +358,19 @@ class TestFormatMessagesToolCalls:
         assert "[Tool Call: simple_tool]" in result
         # Empty args should render as {}
         assert "{}" in result
+
+    def test_format_messages_skips_whitespace_only_content(self) -> None:
+        """Should skip AI messages with whitespace-only content."""
+        ai_message = AIMessage(
+            content="   ",  # Whitespace only
+            tool_calls=[{"name": "search", "args": {"q": "test"}, "id": "call_1"}],
+        )
+        messages = [ai_message]
+
+        result = _format_messages_for_summary(messages)
+
+        # No "Assistant:   " line should appear for whitespace-only content
+        assert "Assistant:" not in result
+        # Tool calls should still be included
+        assert "[Tool Call: search]" in result
+        assert '"q": "test"' in result
