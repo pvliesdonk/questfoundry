@@ -314,7 +314,7 @@ class SeedStage:
         log.debug("seed_phase", phase="summarize")
         summarize_prompt = get_seed_summarize_prompt(brainstorm_context=brainstorm_context)
         expected_entities = get_expected_entity_count(brainstorm_context)
-        brief, summarize_messages, summarize_tokens = await summarize_discussion(
+        brief, _summarize_messages, summarize_tokens = await summarize_discussion(
             model=summarize_model or model,
             messages=messages,
             system_prompt=summarize_prompt,
@@ -330,15 +330,12 @@ class SeedStage:
         # Phase 3: Serialize (use serialize_model if provided)
         # Load graph for semantic validation against BRAINSTORM data
         # Uses two-level feedback loop: outer loop repairs brief on semantic failure
-        # - If missing_item errors AND summarize_messages available: resummarize
-        # - Else (only wrong_id errors): surgical brief repair
         log.debug("seed_phase", phase="serialize")
         graph = Graph.load(resolved_path)
         artifact, serialize_tokens = await serialize_with_brief_repair(
             model=serialize_model or model,
             brief=brief,
             graph=graph,  # Required for semantic validation
-            summarize_messages=summarize_messages,  # For resummarization on missing items
             provider_name=serialize_provider_name or provider_name,
             callbacks=callbacks,
         )
