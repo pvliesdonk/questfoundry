@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
@@ -86,15 +86,12 @@ class SeedValidationError:
         issue: Description of what's wrong.
         available: List of valid IDs that could be used instead.
         provided: The value that was provided.
-        error_type: Classification of error - "wrong_id" for invalid references,
-            "missing_item" for entities/tensions without decisions.
     """
 
     field_path: str
     issue: str
     available: list[str] = field(default_factory=list)
     provided: str = ""
-    error_type: Literal["wrong_id", "missing_item"] = "wrong_id"
 
 
 class SeedMutationError(MutationError):
@@ -631,36 +628,10 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     issue=issue_msg,
                     available=[],
                     provided="",
-                    error_type="missing_item",  # Completeness error, not wrong ID
                 )
             )
 
     return errors
-
-
-def classify_seed_errors(
-    errors: list[SeedValidationError],
-) -> tuple[list[SeedValidationError], list[SeedValidationError]]:
-    """Split SEED validation errors into wrong_id and missing_item categories.
-
-    This classification guides the outer repair loop strategy:
-    - wrong_id errors can be fixed with surgical brief repair
-    - missing_item errors require resummarization with full context
-
-    Args:
-        errors: List of SeedValidationError objects from validate_seed_mutations().
-
-    Returns:
-        Tuple of (wrong_id_errors, missing_item_errors).
-    """
-    wrong_ids: list[SeedValidationError] = []
-    missing: list[SeedValidationError] = []
-    for e in errors:
-        if e.error_type == "wrong_id":
-            wrong_ids.append(e)
-        else:
-            missing.append(e)
-    return wrong_ids, missing
 
 
 def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
