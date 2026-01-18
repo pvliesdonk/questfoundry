@@ -3,7 +3,12 @@ description: Section-specific prompts for iterative SEED serialization
 
 # Section 1: Entity Decisions
 entities_prompt: |
-  You are extracting ENTITY DECISIONS from a SEED stage brief.
+  You are generating ENTITY DECISIONS for a SEED stage.
+
+  ## Generation Requirements (CRITICAL)
+  You MUST generate a decision for EVERY entity ID in the manifest below.
+  Missing items WILL cause validation failure. This is NOT extraction - you must
+  generate decisions for ALL entities, even if the brief doesn't mention them explicitly.
 
   ## Schema
   Return a JSON object with an "entities" array. Each item is an EntityDecision:
@@ -20,16 +25,25 @@ entities_prompt: |
 
   ## Rules
   - disposition must be exactly "retained" or "cut" (lowercase)
-  - entity_id must match the ID shown in the brief
-  - Include ALL entities mentioned in the Entity Decisions section
-  - Do NOT include entities not listed in Entity Decisions
+  - entity_id must match EXACTLY an ID from the Entity IDs manifest
+  - Generate a decision for EVERY entity in the manifest
+
+  ## What NOT to Do
+  - Do NOT skip entities because they aren't mentioned in the brief
+  - Do NOT invent entities not in the manifest
+  - Do NOT partially complete the list
 
   ## Output
   Return ONLY valid JSON with the "entities" array.
 
 # Section 2: Tension Decisions
 tensions_prompt: |
-  You are extracting TENSION DECISIONS from a SEED stage brief.
+  You are generating TENSION DECISIONS for a SEED stage.
+
+  ## Generation Requirements (CRITICAL)
+  You MUST generate a decision for EVERY tension ID in the manifest below.
+  Missing items WILL cause validation failure. This is NOT extraction - you must
+  generate decisions for ALL tensions, even if the brief doesn't mention them explicitly.
 
   ## Schema
   Return a JSON object with a "tensions" array. Each item is a TensionDecision:
@@ -46,17 +60,26 @@ tensions_prompt: |
   ```
 
   ## Rules
-  - tension_id must match the ID shown in the brief
+  - tension_id must match EXACTLY an ID from the Tension IDs manifest
   - explored: Alternative IDs that become threads (MUST include the default path)
   - implicit: Alternative IDs NOT explored (become shadows)
-  - Include ALL tensions mentioned in the Tension Decisions section
+  - Generate a decision for EVERY tension in the manifest
+
+  ## What NOT to Do
+  - Do NOT skip tensions because they aren't mentioned in the brief
+  - Do NOT invent tensions not in the manifest
+  - Do NOT partially complete the list
 
   ## Output
   Return ONLY valid JSON with the "tensions" array.
 
 # Section 3: Threads
 threads_prompt: |
-  You are extracting THREADS from a SEED stage brief.
+  You are generating THREADS for a SEED stage based on tension decisions.
+
+  ## Generation Requirements (CRITICAL)
+  For each "explored" alternative in the tension decisions, you MUST generate a thread.
+  Each thread represents one storyline path that will be developed in the story.
 
   ## Schema
   Return a JSON object with a "threads" array. Each item is a Thread:
@@ -96,14 +119,23 @@ threads_prompt: |
   - thread_importance must be exactly "major" or "minor" (lowercase)
   - unexplored_alternative_ids: IDs of alternatives NOT explored (implicit ones)
   - consequence_ids: References to consequences for this thread
-  - Include ALL threads mentioned in the Threads section
+  - Generate a thread for EACH explored alternative from tension decisions
+
+  ## What NOT to Do
+  - Do NOT reuse tension IDs as thread IDs
+  - Do NOT skip alternatives marked as "explored"
+  - Do NOT create threads for "implicit" alternatives (they become shadows, not threads)
 
   ## Output
   Return ONLY valid JSON with the "threads" array.
 
 # Section 4: Consequences
 consequences_prompt: |
-  You are extracting CONSEQUENCES from a SEED stage brief.
+  You are generating CONSEQUENCES for a SEED stage based on threads.
+
+  ## Generation Requirements (CRITICAL)
+  Every thread MUST have at least one consequence. Consequences describe the narrative
+  outcomes that result from following a particular thread's storyline.
 
   ## Schema
   Return a JSON object with a "consequences" array. Each item is a Consequence:
@@ -122,16 +154,25 @@ consequences_prompt: |
 
   ## Rules
   - consequence_id must be unique
-  - thread_id must reference a valid thread
+  - thread_id must reference a thread from the VALID THREAD IDs list
   - narrative_effects: Array of story effects this consequence implies
-  - Include ALL consequences mentioned in the Consequences section
+  - Generate at least one consequence for EACH thread
+
+  ## What NOT to Do
+  - Do NOT reference thread IDs that don't exist
+  - Do NOT leave any thread without consequences
+  - Do NOT invent consequence_ids that don't follow the naming convention
 
   ## Output
   Return ONLY valid JSON with the "consequences" array.
 
 # Section 5: Initial Beats
 beats_prompt: |
-  You are extracting INITIAL BEATS from a SEED stage brief.
+  You are generating INITIAL BEATS for a SEED stage.
+
+  ## Generation Requirements (CRITICAL)
+  Generate 2-4 initial beats PER THREAD. If there are 3 threads, expect 6-12 beats total.
+  Beats must use ONLY valid IDs from the manifest - no invented or derived IDs.
 
   ## CRITICAL: ID CONSTRAINTS (read first!)
 
@@ -174,7 +215,13 @@ beats_prompt: |
   - entities: Array of entity IDs from the Entity IDs list ONLY
   - location: Entity ID from locations list (can be null)
   - location_alternatives: Other valid location IDs (can be empty array)
-  - Include ALL initial beats mentioned in the Initial Beats section
+  - Generate 2-4 beats for EACH thread in the VALID THREAD IDs list
+
+  ## What NOT to Do
+  - Do NOT derive thread IDs from tension names or concepts
+  - Do NOT add prefixes like "the_" to entity IDs
+  - Do NOT generate fewer than 2 beats per thread
+  - Do NOT reference IDs not in the manifest lists
 
   ## FINAL CHECK (verify before output)
   Before returning JSON, check each beat:

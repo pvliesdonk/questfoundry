@@ -81,17 +81,24 @@ def _format_seed_valid_ids(graph: Graph) -> str:
 
     Groups entities by category and lists tensions with their alternatives,
     making it clear which IDs are valid for the SEED stage to reference.
+    Includes counts to enable completeness validation.
 
     Args:
         graph: Graph containing BRAINSTORM data.
 
     Returns:
-        Formatted context string with valid IDs.
+        Formatted context string with valid IDs and counts.
     """
+    # Get expected counts from canonical source (DRY principle)
+    counts = get_expected_counts(graph)
+    total_entity_count = counts["entities"]
+    tension_count = counts["tensions"]
+
     lines = [
-        "## VALID IDS - USE EXACTLY THESE",
+        "## VALID IDS MANIFEST - GENERATE FOR ALL",
         "",
-        "You MUST use these exact IDs. Any other ID will be rejected.",
+        "You MUST generate a decision for EVERY ID listed below.",
+        "Missing items WILL cause validation failure.",
         "",
     ]
 
@@ -105,13 +112,14 @@ def _format_seed_valid_ids(graph: Graph) -> str:
             by_category.setdefault(cat, []).append(raw_id)
 
     if by_category:
-        lines.append("### Entity IDs")
+        lines.append(f"### Entity IDs (TOTAL: {total_entity_count} - generate decision for ALL)")
         lines.append("Use these for `entity_id`, `entities`, and `location` fields:")
         lines.append("")
 
         for category in ["character", "location", "object", "faction"]:
             if category in by_category:
-                lines.append(f"**{category.title()}s:**")
+                cat_count = len(by_category[category])
+                lines.append(f"**{category.title()}s ({cat_count}):**")
                 for raw_id in sorted(by_category[category]):
                     lines.append(f"  - `{raw_id}`")
                 lines.append("")
@@ -119,16 +127,16 @@ def _format_seed_valid_ids(graph: Graph) -> str:
     # Tensions with alternatives
     tensions = graph.get_nodes_by_type("tension")
     if tensions:
-        lines.append("### Tension IDs with their Alternative IDs")
-        lines.append("Format: tension_id → [alternative_ids]")
-        lines.append("")
-
         # Pre-build alt edges map to avoid O(T*E) lookups
         alt_edges_by_tension: dict[str, list[dict[str, Any]]] = {}
         for edge in graph.get_edges(edge_type="has_alternative"):
             from_id = edge.get("from")
             if from_id:
                 alt_edges_by_tension.setdefault(from_id, []).append(edge)
+
+        lines.append(f"### Tension IDs (TOTAL: {tension_count} - generate decision for ALL)")
+        lines.append("Format: tension_id → [alternative_ids]")
+        lines.append("")
 
         for tid, tdata in sorted(tensions.items()):
             raw_id = tdata.get("raw_id")
@@ -151,15 +159,44 @@ def _format_seed_valid_ids(graph: Graph) -> str:
 
         lines.append("")
 
-    # Rules
+    # Generation requirements with counts (handle singular/plural grammar)
+    entity_word = "item" if total_entity_count == 1 else "items"
+    tension_word = "item" if tension_count == 1 else "items"
+
     lines.extend(
         [
-            "### Rules",
-            "- Every entity above needs a decision (retained/cut)",
-            "- Every tension above needs a decision (which alternative to explore)",
+            "### Generation Requirements (CRITICAL)",
+            f"- Generate EXACTLY {total_entity_count} entity decisions (one per entity above)",
+            f"- Generate EXACTLY {tension_count} tension decisions (one per tension above)",
             "- Thread `alternative_id` must be from that tension's alternatives list",
             "- Beat `entities` and `location` must use entity IDs from above",
+            "",
+            "### Verification",
+            "Before submitting, COUNT your outputs:",
+            f"- entities array should have {total_entity_count} {entity_word}",
+            f"- tensions array should have {tension_count} {tension_word}",
         ]
     )
 
     return "\n".join(lines)
+
+
+def get_expected_counts(graph: Graph) -> dict[str, int]:
+    """Get expected counts for SEED output validation.
+
+    Args:
+        graph: Graph containing BRAINSTORM data.
+
+    Returns:
+        Dict with expected counts for each section.
+    """
+    entities = graph.get_nodes_by_type("entity")
+    tensions = graph.get_nodes_by_type("tension")
+
+    entity_count = sum(1 for node in entities.values() if node.get("raw_id"))
+    tension_count = sum(1 for tdata in tensions.values() if tdata.get("raw_id"))
+
+    return {
+        "entities": entity_count,
+        "tensions": tension_count,
+    }

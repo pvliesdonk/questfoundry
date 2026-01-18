@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from questfoundry.graph import Graph, format_valid_ids_context
-from questfoundry.graph.context import format_thread_ids_context
+from questfoundry.graph.context import format_thread_ids_context, get_expected_counts
 
 
 class TestFormatValidIdsContext:
@@ -19,9 +19,9 @@ class TestFormatValidIdsContext:
         """Empty graph returns minimal context for seed stage."""
         graph = Graph.empty()
         result = format_valid_ids_context(graph, "seed")
-        # Should still have header and rules even with no entities
-        assert "VALID IDS" in result
-        assert "Rules" in result
+        # Should still have header and requirements even with no entities
+        assert "VALID IDS MANIFEST" in result
+        assert "Generation Requirements" in result
 
     def test_seed_includes_entities_by_category(self) -> None:
         """SEED context groups entities by category."""
@@ -53,11 +53,12 @@ class TestFormatValidIdsContext:
 
         result = format_valid_ids_context(graph, "seed")
 
-        assert "**Characters:**" in result
+        # Categories now include counts
+        assert "**Characters (1):**" in result
         assert "`hero`" in result
-        assert "**Locations:**" in result
+        assert "**Locations (1):**" in result
         assert "`tavern`" in result
-        assert "**Objects:**" in result
+        assert "**Objects (1):**" in result
         assert "`sword`" in result
 
     def test_seed_includes_tensions_with_alternatives(self) -> None:
@@ -97,12 +98,12 @@ class TestFormatValidIdsContext:
         assert "(default)" in result
         assert "`no`" in result
 
-    def test_seed_includes_rules(self) -> None:
-        """SEED context includes rules for ID usage."""
+    def test_seed_includes_generation_requirements(self) -> None:
+        """SEED context includes generation requirements for completeness."""
         graph = Graph.empty()
         result = format_valid_ids_context(graph, "seed")
 
-        assert "Rules" in result
+        assert "Generation Requirements" in result
         assert "entity" in result.lower()
         assert "tension" in result.lower()
         assert "alternative" in result.lower()
@@ -183,7 +184,7 @@ class TestFormatValidIdsContext:
 
         # Should not raise, just won't appear in standard categories
         result = format_valid_ids_context(graph, "seed")
-        assert "VALID IDS" in result
+        assert "VALID IDS MANIFEST" in result
 
     def test_full_context_format(self) -> None:
         """Test complete context format with entities and tensions."""
@@ -228,10 +229,10 @@ class TestFormatValidIdsContext:
         result = format_valid_ids_context(graph, "seed")
 
         # Verify structure
-        assert result.startswith("## VALID IDS")
+        assert result.startswith("## VALID IDS MANIFEST")
         assert "### Entity IDs" in result
         assert "### Tension IDs" in result
-        assert "### Rules" in result
+        assert "### Generation Requirements" in result
 
         # Verify content
         assert "`hero`" in result
@@ -341,3 +342,143 @@ class TestFormatThreadIdsContext:
         assert "`another_valid`" in result
         # Should not have empty backticks
         assert "``" not in result
+
+
+class TestGetExpectedCounts:
+    """Tests for get_expected_counts function."""
+
+    def test_returns_zero_for_empty_graph(self) -> None:
+        """Empty graph returns zero counts."""
+        graph = Graph.empty()
+        counts = get_expected_counts(graph)
+
+        assert counts["entities"] == 0
+        assert counts["tensions"] == 0
+
+    def test_counts_entities_with_raw_id(self) -> None:
+        """Only entities with raw_id are counted."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "entity_type": "character",
+            },
+        )
+        graph.create_node(
+            "entity::invalid",
+            {
+                "type": "entity",
+                "entity_type": "character",
+                # Missing raw_id
+            },
+        )
+        graph.create_node(
+            "entity::location",
+            {
+                "type": "entity",
+                "raw_id": "castle",
+                "entity_type": "location",
+            },
+        )
+
+        counts = get_expected_counts(graph)
+        assert counts["entities"] == 2  # Only hero and castle
+
+    def test_counts_tensions_with_raw_id(self) -> None:
+        """Only tensions with raw_id are counted."""
+        graph = Graph.empty()
+        graph.create_node(
+            "tension::trust",
+            {
+                "type": "tension",
+                "raw_id": "trust",
+            },
+        )
+        graph.create_node(
+            "tension::invalid",
+            {
+                "type": "tension",
+                # Missing raw_id
+            },
+        )
+
+        counts = get_expected_counts(graph)
+        assert counts["tensions"] == 1
+
+
+class TestManifestCounts:
+    """Tests for manifest counts in format_valid_ids_context."""
+
+    def test_context_includes_entity_count(self) -> None:
+        """Context should include total entity count."""
+        graph = Graph.empty()
+        for i in range(3):
+            graph.create_node(
+                f"entity::char{i}",
+                {
+                    "type": "entity",
+                    "raw_id": f"char{i}",
+                    "entity_type": "character",
+                },
+            )
+
+        result = format_valid_ids_context(graph, "seed")
+        assert "TOTAL: 3" in result
+        assert "Generate EXACTLY 3 entity decisions" in result
+
+    def test_context_includes_tension_count(self) -> None:
+        """Context should include total tension count."""
+        graph = Graph.empty()
+        for i in range(2):
+            graph.create_node(
+                f"tension::t{i}",
+                {
+                    "type": "tension",
+                    "raw_id": f"tension_{i}",
+                },
+            )
+
+        result = format_valid_ids_context(graph, "seed")
+        assert "TOTAL: 2" in result
+        assert "Generate EXACTLY 2 tension decisions" in result
+
+    def test_context_includes_category_counts(self) -> None:
+        """Context should include per-category counts."""
+        graph = Graph.empty()
+        # Add 2 characters
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::villain",
+            {"type": "entity", "raw_id": "villain", "entity_type": "character"},
+        )
+        # Add 1 location
+        graph.create_node(
+            "entity::castle",
+            {"type": "entity", "raw_id": "castle", "entity_type": "location"},
+        )
+
+        result = format_valid_ids_context(graph, "seed")
+        assert "Characters (2)" in result
+        assert "Locations (1)" in result
+
+    def test_context_includes_verification_section(self) -> None:
+        """Context should include verification counts for self-checking."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "tension::trust",
+            {"type": "tension", "raw_id": "trust"},
+        )
+
+        result = format_valid_ids_context(graph, "seed")
+        assert "Verification" in result
+        assert "entities array should have 1 item" in result
+        assert "tensions array should have 1 item" in result
