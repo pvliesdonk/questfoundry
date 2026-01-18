@@ -7,7 +7,11 @@ mutations through the runtime.
 See docs/architecture/graph-storage.md for architecture details.
 """
 
-from questfoundry.graph.context import format_summarize_manifest, format_valid_ids_context
+from questfoundry.graph.context import (
+    check_structural_completeness,
+    format_summarize_manifest,
+    format_valid_ids_context,
+)
 from questfoundry.graph.errors import (
     EdgeEndpointError,
     GraphCorruptionError,
@@ -21,12 +25,15 @@ from questfoundry.graph.mutations import (
     BrainstormMutationError,
     BrainstormValidationError,
     MutationError,
+    SeedErrorCategory,
     SeedMutationError,
     SeedValidationError,
     apply_brainstorm_mutations,
     apply_dream_mutations,
     apply_mutations,
     apply_seed_mutations,
+    categorize_error,
+    categorize_errors,
     has_mutation_handler,
     validate_brainstorm_mutations,
     validate_seed_mutations,
@@ -48,12 +55,16 @@ __all__ = [
     "NodeExistsError",
     "NodeNotFoundError",
     "NodeReferencedError",
+    "SeedErrorCategory",
     "SeedMutationError",
     "SeedValidationError",
     "apply_brainstorm_mutations",
     "apply_dream_mutations",
     "apply_mutations",
     "apply_seed_mutations",
+    "categorize_error",
+    "categorize_errors",
+    "check_structural_completeness",
     "format_summarize_manifest",
     "format_valid_ids_context",
     "has_mutation_handler",

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
+from enum import Enum, auto
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -18,6 +19,22 @@ if TYPE_CHECKING:
 # Display limits for error messages
 _MAX_ERRORS_DISPLAY = 8
 _MAX_AVAILABLE_DISPLAY = 5
+
+
+class SeedErrorCategory(Enum):
+    """Categories of SEED validation errors for targeted retry strategies.
+
+    Different error types require different recovery approaches:
+    - INNER: Schema/type errors - retry with Pydantic feedback
+    - SEMANTIC: Invalid ID references - retry with valid ID list
+    - COMPLETENESS: Missing items - retry with manifest counts
+    - FATAL: Unrecoverable errors - fail immediately
+    """
+
+    INNER = auto()  # Schema/type error in a single section
+    SEMANTIC = auto()  # Invalid ID reference (phantom IDs)
+    COMPLETENESS = auto()  # Missing entity/tension decisions
+    FATAL = auto()  # Unrecoverable (shouldn't happen with well-formed prompts)
 
 
 class MutationError(ValueError):
@@ -92,6 +109,52 @@ class SeedValidationError:
     issue: str
     available: list[str] = field(default_factory=list)
     provided: str = ""
+
+
+def categorize_error(error: SeedValidationError) -> SeedErrorCategory:
+    """Categorize a SEED validation error for targeted retry strategy.
+
+    Error categories determine how to recover:
+    - SEMANTIC: Invalid ID reference → retry with valid ID list
+    - COMPLETENESS: Missing decisions → retry with manifest counts
+    - INNER: Everything else → retry with Pydantic feedback
+
+    Args:
+        error: SeedValidationError to categorize.
+
+    Returns:
+        SeedErrorCategory indicating the error type.
+    """
+    issue = error.issue.lower()
+
+    # Semantic errors: invalid ID references (phantom IDs)
+    if "not in brainstorm" in issue or "not defined in seed" in issue:
+        return SeedErrorCategory.SEMANTIC
+
+    # Completeness errors: missing decisions
+    if "missing decision" in issue:
+        return SeedErrorCategory.COMPLETENESS
+
+    # Default to INNER (schema/structural errors)
+    return SeedErrorCategory.INNER
+
+
+def categorize_errors(
+    errors: list[SeedValidationError],
+) -> dict[SeedErrorCategory, list[SeedValidationError]]:
+    """Group errors by category for targeted retry strategies.
+
+    Args:
+        errors: List of SeedValidationError objects.
+
+    Returns:
+        Dict mapping categories to their errors.
+    """
+    by_category: dict[SeedErrorCategory, list[SeedValidationError]] = {}
+    for error in errors:
+        category = categorize_error(error)
+        by_category.setdefault(category, []).append(error)
+    return by_category
 
 
 class SeedMutationError(MutationError):

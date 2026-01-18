@@ -8,10 +8,14 @@ from questfoundry.graph import Graph, MutationError, SeedMutationError
 from questfoundry.graph.mutations import (
     BrainstormMutationError,
     BrainstormValidationError,
+    SeedErrorCategory,
+    SeedValidationError,
     apply_brainstorm_mutations,
     apply_dream_mutations,
     apply_mutations,
     apply_seed_mutations,
+    categorize_error,
+    categorize_errors,
     has_mutation_handler,
     validate_brainstorm_mutations,
     validate_seed_mutations,
@@ -1105,3 +1109,120 @@ class TestMutationIntegration:
         assert len(graph.get_nodes_by_type("alternative")) == 2
         assert len(graph.get_nodes_by_type("thread")) == 1
         assert len(graph.get_nodes_by_type("beat")) == 1
+
+
+class TestSeedErrorCategory:
+    """Tests for SeedErrorCategory enum."""
+
+    def test_has_inner_category(self) -> None:
+        """INNER category exists for schema errors."""
+        assert SeedErrorCategory.INNER is not None
+
+    def test_has_semantic_category(self) -> None:
+        """SEMANTIC category exists for invalid ID references."""
+        assert SeedErrorCategory.SEMANTIC is not None
+
+    def test_has_completeness_category(self) -> None:
+        """COMPLETENESS category exists for missing items."""
+        assert SeedErrorCategory.COMPLETENESS is not None
+
+    def test_has_fatal_category(self) -> None:
+        """FATAL category exists for unrecoverable errors."""
+        assert SeedErrorCategory.FATAL is not None
+
+
+class TestCategorizeError:
+    """Tests for categorize_error function."""
+
+    def test_semantic_not_in_brainstorm(self) -> None:
+        """'not in BRAINSTORM' errors are SEMANTIC."""
+        error = SeedValidationError(
+            field_path="threads.0.tension_id",
+            issue="Tension 'phantom' not in BRAINSTORM",
+            available=["real_tension"],
+            provided="phantom",
+        )
+        assert categorize_error(error) == SeedErrorCategory.SEMANTIC
+
+    def test_semantic_not_in_seed(self) -> None:
+        """'not defined in SEED' errors are SEMANTIC."""
+        error = SeedValidationError(
+            field_path="initial_beats.0.threads",
+            issue="Thread 'ghost' not defined in SEED threads",
+            available=["real_thread"],
+            provided="ghost",
+        )
+        assert categorize_error(error) == SeedErrorCategory.SEMANTIC
+
+    def test_completeness_missing_decision(self) -> None:
+        """'Missing decision' errors are COMPLETENESS."""
+        error = SeedValidationError(
+            field_path="entities",
+            issue="Missing decision for character 'hero'",
+            available=[],
+            provided="",
+        )
+        assert categorize_error(error) == SeedErrorCategory.COMPLETENESS
+
+    def test_inner_for_other_errors(self) -> None:
+        """Unrecognized errors default to INNER."""
+        error = SeedValidationError(
+            field_path="threads.0.name",
+            issue="Name must not be empty",
+            available=[],
+            provided="",
+        )
+        assert categorize_error(error) == SeedErrorCategory.INNER
+
+    def test_case_insensitive_matching(self) -> None:
+        """Issue matching is case-insensitive."""
+        error = SeedValidationError(
+            field_path="entities.0.entity_id",
+            issue="Entity 'hero' NOT IN BRAINSTORM",
+            available=[],
+            provided="hero",
+        )
+        assert categorize_error(error) == SeedErrorCategory.SEMANTIC
+
+
+class TestCategorizeErrors:
+    """Tests for categorize_errors function."""
+
+    def test_groups_by_category(self) -> None:
+        """Groups errors by their category."""
+        errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension 'x' not in BRAINSTORM",
+            ),
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'hero'",
+            ),
+            SeedValidationError(
+                field_path="threads.1.tension_id",
+                issue="Tension 'y' not in BRAINSTORM",
+            ),
+        ]
+
+        by_category = categorize_errors(errors)
+
+        assert len(by_category[SeedErrorCategory.SEMANTIC]) == 2
+        assert len(by_category[SeedErrorCategory.COMPLETENESS]) == 1
+        assert SeedErrorCategory.INNER not in by_category
+
+    def test_empty_list_returns_empty_dict(self) -> None:
+        """Empty error list returns empty dict."""
+        assert categorize_errors([]) == {}
+
+    def test_all_same_category(self) -> None:
+        """All errors of same category grouped together."""
+        errors = [
+            SeedValidationError(field_path="a", issue="Missing decision for x"),
+            SeedValidationError(field_path="b", issue="Missing decision for y"),
+        ]
+
+        by_category = categorize_errors(errors)
+
+        assert len(by_category) == 1
+        assert len(by_category[SeedErrorCategory.COMPLETENESS]) == 2

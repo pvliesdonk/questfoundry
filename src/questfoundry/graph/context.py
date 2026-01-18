@@ -252,3 +252,47 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
         "entity_manifest": "\n".join(entity_lines) if entity_lines else "(No entities)",
         "tension_manifest": "\n".join(tension_lines) if tension_lines else "(No tensions)",
     }
+
+
+def check_structural_completeness(
+    output: dict[str, Any],
+    expected: dict[str, int],
+) -> list[tuple[str, str]]:
+    """Check SEED output structural completeness using count-based validation.
+
+    This is a fast pre-check before expensive semantic validation. It catches
+    obvious completeness issues (wrong count of decisions) without parsing IDs.
+
+    Args:
+        output: SEED output dict with 'entities' and 'tensions' arrays.
+        expected: Dict from get_expected_counts() with expected counts.
+
+    Returns:
+        List of (field_path, issue) tuples for any completeness errors.
+        Empty list if counts match.
+    """
+    errors: list[tuple[str, str]] = []
+
+    # Check entity decisions count
+    actual_entities = len(output.get("entities", []))
+    expected_entities = expected.get("entities", 0)
+    if actual_entities != expected_entities:
+        errors.append(
+            (
+                "entities",
+                f"Expected {expected_entities} entity decisions, got {actual_entities}",
+            )
+        )
+
+    # Check tension decisions count
+    actual_tensions = len(output.get("tensions", []))
+    expected_tensions = expected.get("tensions", 0)
+    if actual_tensions != expected_tensions:
+        errors.append(
+            (
+                "tensions",
+                f"Expected {expected_tensions} tension decisions, got {actual_tensions}",
+            )
+        )
+
+    return errors
