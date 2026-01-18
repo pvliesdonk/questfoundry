@@ -736,7 +736,6 @@ async def serialize_with_brief_repair(
     brief: str,
     graph: Graph,
     summarize_messages: list[BaseMessage] | None = None,
-    brainstorm_context: str = "",
     provider_name: str | None = None,
     max_retries: int = 3,
     callbacks: list[BaseCallbackHandler] | None = None,
@@ -839,7 +838,7 @@ async def serialize_with_brief_repair(
             # So prioritize resummarize when there are ANY missing items
             if missing_items and current_summarize_messages:
                 # Resummarize with feedback (can fix both error types)
-                feedback = format_missing_items_feedback(e.errors, brainstorm_context)
+                feedback = format_missing_items_feedback(missing_items)
                 new_brief, updated_messages, resum_tokens = await resummarize_with_feedback(
                     model=model,
                     summarize_messages=current_summarize_messages,
@@ -858,13 +857,13 @@ async def serialize_with_brief_repair(
 
                 current_brief = new_brief
                 current_summarize_messages = updated_messages
-            else:
-                # Surgical ID repair (only wrong_id errors, or no message history)
+            elif wrong_ids:
+                # Surgical ID repair (only for wrong_id errors)
                 valid_ids_context = format_valid_ids_context(graph, stage="seed")
                 repaired_brief, repair_tokens = await repair_seed_brief(
                     model=model,
                     brief=current_brief,
-                    errors=e.errors,
+                    errors=wrong_ids,
                     valid_ids_context=valid_ids_context,
                     callbacks=callbacks,
                 )
@@ -879,6 +878,14 @@ async def serialize_with_brief_repair(
                 )
 
                 current_brief = repaired_brief
+            else:
+                # Only missing_items without message history - cannot repair
+                log.warning(
+                    "unrepairable_seed_errors",
+                    reason="Missing items found but cannot resummarize without message history",
+                    missing_item_count=len(missing_items),
+                )
+                # Continue loop to exhaust retries and raise the error
 
     # Should not reach here due to raise in loop, but satisfy type checker
     raise SeedMutationError([])  # pragma: no cover

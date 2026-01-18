@@ -339,7 +339,6 @@ class SeedStage:
             brief=brief,
             graph=graph,  # Required for semantic validation
             summarize_messages=summarize_messages,  # For resummarization on missing items
-            brainstorm_context=brainstorm_context,  # For feedback formatting
             provider_name=serialize_provider_name or provider_name,
             callbacks=callbacks,
         )

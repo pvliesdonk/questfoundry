@@ -1124,7 +1124,6 @@ class TestSerializeWithBriefRepair:
                 brief="Original brief",
                 graph=mock_graph,
                 summarize_messages=summarize_messages,
-                brainstorm_context="## Entities\n- mentor: character",
             )
 
         assert result is mock_result
@@ -1272,7 +1271,7 @@ class TestSerializeWithBriefRepair:
 
     @pytest.mark.asyncio
     async def test_falls_back_to_repair_when_no_messages(self) -> None:
-        """Should use surgical repair if no summarize_messages provided."""
+        """Should use surgical repair for wrong_id errors if no summarize_messages provided."""
         from unittest.mock import MagicMock
 
         from questfoundry.agents.serialize import serialize_with_brief_repair
@@ -1282,14 +1281,14 @@ class TestSerializeWithBriefRepair:
         mock_graph = MagicMock()
         mock_result = MagicMock()
 
-        # Missing item error, but no summarize_messages
+        # Wrong ID error (not missing_item) - surgical repair can handle this
         errors = [
             SeedValidationError(
-                field_path="entities",
-                issue="Missing decision for character 'mentor'",
-                available=[],
-                provided="",
-                error_type="missing_item",
+                field_path="entities.0.entity_id",
+                issue="Entity 'typo_id' not in BRAINSTORM",
+                available=["correct_id"],
+                provided="typo_id",
+                error_type="wrong_id",
             )
         ]
 
