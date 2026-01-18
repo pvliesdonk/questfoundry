@@ -221,13 +221,13 @@ async def test_execute_uses_iterative_serialization() -> None:
 
 @pytest.mark.asyncio
 async def test_execute_uses_seed_summarize_prompt() -> None:
-    """Execute uses seed-specific summarize prompt."""
+    """Execute uses seed-specific summarize prompt with manifest info."""
     stage = SeedStage()
 
     mock_model = MagicMock()
     mock_graph = MagicMock()
     mock_graph.get_nodes_by_type.side_effect = lambda t: (
-        {"entity1": {"type": "entity"}} if t == "entity" else {}
+        {"entity1": {"type": "entity", "raw_id": "hero"}} if t == "entity" else {}
     )
     mock_graph.get_edges.return_value = []
 
@@ -238,10 +238,17 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
         patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.get_seed_summarize_prompt") as mock_prompt,
+        patch("questfoundry.pipeline.stages.seed.get_expected_counts") as mock_counts,
+        patch("questfoundry.pipeline.stages.seed.format_summarize_manifest") as mock_manifest,
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
         mock_prompt.return_value = "Seed summarize prompt"
+        mock_counts.return_value = {"entities": 1, "tensions": 0}
+        mock_manifest.return_value = {
+            "entity_manifest": "**Characters:**\n  - `hero`",
+            "tension_manifest": "(No tensions)",
+        }
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
@@ -253,8 +260,19 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
             project_path=Path("/test/project"),
         )
 
-        # Verify summarize was called with seed prompt
+        # Verify manifest functions were called with graph
+        mock_counts.assert_called_once_with(mock_graph)
+        mock_manifest.assert_called_once_with(mock_graph)
+
+        # Verify prompt was called with manifest parameters
         mock_prompt.assert_called_once()
+        call_kwargs = mock_prompt.call_args.kwargs
+        assert call_kwargs["entity_count"] == 1
+        assert call_kwargs["tension_count"] == 0
+        assert "hero" in call_kwargs["entity_manifest"]
+        assert call_kwargs["tension_manifest"] == "(No tensions)"
+
+        # Verify summarize was called with seed prompt
         assert mock_summarize.call_args.kwargs["system_prompt"] == "Seed summarize prompt"
 
 

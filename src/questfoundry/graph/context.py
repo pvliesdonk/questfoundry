@@ -11,6 +11,9 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
+# Standard entity categories for BRAINSTORM/SEED stages
+_ENTITY_CATEGORIES = ["character", "location", "object", "faction"]
+
 
 def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
     """Format thread IDs for beat serialization with inline constraints.
@@ -116,7 +119,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
         lines.append("Use these for `entity_id`, `entities`, and `location` fields:")
         lines.append("")
 
-        for category in ["character", "location", "object", "faction"]:
+        for category in _ENTITY_CATEGORIES:
             if category in by_category:
                 cat_count = len(by_category[category])
                 lines.append(f"**{category.title()}s ({cat_count}):**")
@@ -199,4 +202,53 @@ def get_expected_counts(graph: Graph) -> dict[str, int]:
     return {
         "entities": entity_count,
         "tensions": tension_count,
+    }
+
+
+def format_summarize_manifest(graph: Graph) -> dict[str, str]:
+    """Format entity and tension manifests for SEED summarize prompt.
+
+    Returns bullet lists of entity/tension IDs that the summarize phase must
+    make decisions about (retain/cut for entities, explored/implicit for
+    tensions). Simpler than serialize manifest - just lists IDs without
+    validation context.
+
+    Note: Entities with unknown entity_type (not in _ENTITY_CATEGORIES) are
+    excluded from the manifest since they shouldn't appear in BRAINSTORM output.
+
+    Args:
+        graph: Graph containing BRAINSTORM data.
+
+    Returns:
+        Dict with 'entity_manifest' and 'tension_manifest' strings.
+    """
+    # Collect entity IDs grouped by category
+    entities = graph.get_nodes_by_type("entity")
+    by_category: dict[str, list[str]] = {}
+    for node in entities.values():
+        cat = node.get("entity_type", "unknown")
+        raw_id = node.get("raw_id", "")
+        if raw_id:
+            by_category.setdefault(cat, []).append(raw_id)
+
+    # Format entity manifest (only standard categories)
+    entity_lines: list[str] = []
+    for category in _ENTITY_CATEGORIES:
+        if category in by_category:
+            entity_lines.append(f"**{category.title()}s:**")
+            for raw_id in sorted(by_category[category]):
+                entity_lines.append(f"  - `{raw_id}`")
+            entity_lines.append("")  # Blank line between categories
+
+    # Collect tension IDs
+    tensions = graph.get_nodes_by_type("tension")
+    tension_lines: list[str] = []
+    for _tid, tdata in sorted(tensions.items()):
+        raw_id = tdata.get("raw_id")
+        if raw_id:
+            tension_lines.append(f"- `{raw_id}`")
+
+    return {
+        "entity_manifest": "\n".join(entity_lines) if entity_lines else "(No entities)",
+        "tension_manifest": "\n".join(tension_lines) if tension_lines else "(No tensions)",
     }

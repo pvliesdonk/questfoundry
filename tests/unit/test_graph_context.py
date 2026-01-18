@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from questfoundry.graph import Graph, format_valid_ids_context
+from questfoundry.graph import Graph, format_summarize_manifest, format_valid_ids_context
 from questfoundry.graph.context import format_thread_ids_context, get_expected_counts
 
 
@@ -482,3 +482,226 @@ class TestManifestCounts:
         assert "Verification" in result
         assert "entities array should have 1 item" in result
         assert "tensions array should have 1 item" in result
+
+
+class TestFormatSummarizeManifest:
+    """Tests for format_summarize_manifest function."""
+
+    def test_returns_no_entities_for_empty_graph(self) -> None:
+        """Empty graph returns '(No entities)' and '(No tensions)'."""
+        graph = Graph.empty()
+        result = format_summarize_manifest(graph)
+
+        assert result["entity_manifest"] == "(No entities)"
+        assert result["tension_manifest"] == "(No tensions)"
+
+    def test_formats_entities_by_category(self) -> None:
+        """Entities are grouped by category with markdown formatting."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "entity_type": "character",
+            },
+        )
+        graph.create_node(
+            "entity::castle",
+            {
+                "type": "entity",
+                "raw_id": "castle",
+                "entity_type": "location",
+            },
+        )
+
+        result = format_summarize_manifest(graph)
+
+        assert "**Characters:**" in result["entity_manifest"]
+        assert "`hero`" in result["entity_manifest"]
+        assert "**Locations:**" in result["entity_manifest"]
+        assert "`castle`" in result["entity_manifest"]
+
+    def test_formats_tensions_as_list(self) -> None:
+        """Tensions are formatted as simple bullet list."""
+        graph = Graph.empty()
+        graph.create_node(
+            "tension::trust",
+            {
+                "type": "tension",
+                "raw_id": "trust",
+            },
+        )
+        graph.create_node(
+            "tension::loyalty",
+            {
+                "type": "tension",
+                "raw_id": "loyalty",
+            },
+        )
+
+        result = format_summarize_manifest(graph)
+
+        assert "- `loyalty`" in result["tension_manifest"]
+        assert "- `trust`" in result["tension_manifest"]
+
+    def test_skips_entities_without_raw_id(self) -> None:
+        """Entities without raw_id are excluded."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::valid",
+            {
+                "type": "entity",
+                "raw_id": "valid",
+                "entity_type": "character",
+            },
+        )
+        graph.create_node(
+            "entity::invalid",
+            {
+                "type": "entity",
+                "entity_type": "character",
+                # Missing raw_id
+            },
+        )
+
+        result = format_summarize_manifest(graph)
+
+        assert "`valid`" in result["entity_manifest"]
+        assert "invalid" not in result["entity_manifest"]
+
+    def test_skips_tensions_without_raw_id(self) -> None:
+        """Tensions without raw_id are excluded."""
+        graph = Graph.empty()
+        graph.create_node(
+            "tension::valid",
+            {
+                "type": "tension",
+                "raw_id": "valid",
+            },
+        )
+        graph.create_node(
+            "tension::invalid",
+            {
+                "type": "tension",
+                # Missing raw_id
+            },
+        )
+
+        result = format_summarize_manifest(graph)
+
+        assert "`valid`" in result["tension_manifest"]
+        assert "invalid" not in result["tension_manifest"]
+
+    def test_sorts_entities_alphabetically(self) -> None:
+        """Entity IDs are sorted alphabetically within categories."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::zara",
+            {"type": "entity", "raw_id": "zara", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::alice",
+            {"type": "entity", "raw_id": "alice", "entity_type": "character"},
+        )
+
+        result = format_summarize_manifest(graph)
+
+        alice_pos = result["entity_manifest"].find("`alice`")
+        zara_pos = result["entity_manifest"].find("`zara`")
+        assert alice_pos < zara_pos
+
+    def test_sorts_tensions_by_node_id(self) -> None:
+        """Tensions are sorted by node ID for deterministic output."""
+        graph = Graph.empty()
+        graph.create_node(
+            "tension::zebra",
+            {"type": "tension", "raw_id": "zebra"},
+        )
+        graph.create_node(
+            "tension::alpha",
+            {"type": "tension", "raw_id": "alpha"},
+        )
+
+        result = format_summarize_manifest(graph)
+
+        alpha_pos = result["tension_manifest"].find("`alpha`")
+        zebra_pos = result["tension_manifest"].find("`zebra`")
+        assert alpha_pos < zebra_pos
+
+    def test_handles_all_entity_categories(self) -> None:
+        """All standard entity categories are included in output."""
+        graph = Graph.empty()
+        for cat in ["character", "location", "object", "faction"]:
+            graph.create_node(
+                f"entity::{cat}_example",
+                {"type": "entity", "raw_id": f"{cat}_example", "entity_type": cat},
+            )
+
+        result = format_summarize_manifest(graph)
+
+        assert "**Characters:**" in result["entity_manifest"]
+        assert "**Locations:**" in result["entity_manifest"]
+        assert "**Objects:**" in result["entity_manifest"]
+        assert "**Factions:**" in result["entity_manifest"]
+
+    def test_returns_dict_with_both_keys(self) -> None:
+        """Result always contains both entity_manifest and tension_manifest keys."""
+        graph = Graph.empty()
+        result = format_summarize_manifest(graph)
+
+        assert "entity_manifest" in result
+        assert "tension_manifest" in result
+        assert len(result) == 2
+
+    def test_skips_entities_with_unknown_type(self) -> None:
+        """Entities with unknown entity_type are excluded from manifest."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::weird",
+            {
+                "type": "entity",
+                "raw_id": "weird_thing",
+                "entity_type": "unknown",
+            },
+        )
+        graph.create_node(
+            "entity::custom",
+            {
+                "type": "entity",
+                "raw_id": "custom_item",
+                "entity_type": "custom_type",
+            },
+        )
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "entity_type": "character",
+            },
+        )
+
+        result = format_summarize_manifest(graph)
+
+        # Only standard categories are included
+        assert "hero" in result["entity_manifest"]
+        assert "weird_thing" not in result["entity_manifest"]
+        assert "custom_item" not in result["entity_manifest"]
+
+    def test_adds_blank_lines_between_categories(self) -> None:
+        """Output includes blank lines between entity categories for readability."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::castle",
+            {"type": "entity", "raw_id": "castle", "entity_type": "location"},
+        )
+
+        result = format_summarize_manifest(graph)
+
+        # Should have blank line after Characters section, before Locations
+        assert "**Characters:**\n  - `hero`\n\n**Locations:**" in result["entity_manifest"]
