@@ -306,3 +306,130 @@ class ConvergenceSection(BaseModel):
         default_factory=ConvergenceSketch,
         description="Guidance for GROW about thread convergence",
     )
+
+
+# =============================================================================
+# 4-Phase Architecture Output Models
+# =============================================================================
+# These models represent the output of each phase in the 4-phase SEED pipeline.
+# Each phase has its own output type that feeds into the next phase.
+
+
+class StoryDirectionStatement(BaseModel):
+    """Story direction "north star" from Phase 1.
+
+    A 2-3 sentence statement that captures the protagonist's main goal,
+    the central conflict, and the intended tone. This guides all subsequent
+    phases to maintain narrative coherence.
+
+    Attributes:
+        statement: The story direction statement.
+    """
+
+    statement: str = Field(
+        min_length=10,
+        description="2-3 sentence story direction capturing goal, conflict, and tone",
+    )
+
+
+class BeatHook(BaseModel):
+    """Beat concept from Phase 2 to guide Phase 3 beat creation.
+
+    Beat hooks provide continuity between Thread Design (Phase 2) and
+    Beat Creation (Phase 3). They are inspirational concepts, not strict
+    requirements.
+
+    Attributes:
+        thread_id: Thread this hook belongs to.
+        hook: Beat concept description (e.g., "discovery in library").
+    """
+
+    thread_id: str = Field(min_length=1, description="Thread this hook belongs to")
+    hook: str = Field(
+        min_length=1,
+        description="Beat concept, e.g., 'discovery in library', 'confrontation at dinner'",
+    )
+
+
+class EntityCurationOutput(BaseModel):
+    """Phase 1 output: Entity curation decisions + story direction.
+
+    Phase 1 establishes the foundation by curating which entities to keep
+    and defining a clear narrative direction for the story.
+
+    Attributes:
+        story_direction: The story's "north star" statement.
+        entities: Retain/cut decisions for all BRAINSTORM entities.
+    """
+
+    story_direction: StoryDirectionStatement = Field(
+        description="Story direction north star from Phase 1",
+    )
+    entities: list[EntityDecision] = Field(
+        default_factory=list,
+        description="Entity curation decisions (retain/cut)",
+    )
+
+
+class ThreadDesignOutput(BaseModel):
+    """Phase 2 output: Thread design with tensions, threads, and beat hooks.
+
+    Phase 2 creates the branching structure by deciding which alternatives
+    to explore as threads and defining consequences for each path.
+
+    Attributes:
+        tensions: Tension exploration decisions.
+        threads: Created plot threads.
+        consequences: Narrative consequences for threads.
+        beat_hooks: Beat concepts to guide Phase 3.
+    """
+
+    tensions: list[TensionDecision] = Field(
+        default_factory=list,
+        description="Tension exploration decisions",
+    )
+    threads: list[Thread] = Field(
+        default_factory=list,
+        description="Created plot threads",
+    )
+    consequences: list[Consequence] = Field(
+        default_factory=list,
+        description="Narrative consequences for threads",
+    )
+    beat_hooks: list[BeatHook] = Field(
+        default_factory=list,
+        description="Beat concepts to guide Phase 3 beat creation",
+    )
+
+
+class BeatsOutput(BaseModel):
+    """Phase 3 output: Initial beats with strict ID validation.
+
+    Phase 3 creates the initial beats for each thread. This phase has
+    STRICT validation - any reference to an invalid thread ID or entity ID
+    causes immediate failure without retry.
+
+    Attributes:
+        initial_beats: Initial beats for each thread (2-4 per thread).
+    """
+
+    initial_beats: list[InitialBeat] = Field(
+        default_factory=list,
+        description="Initial beats for each thread (2-4 per thread required)",
+    )
+
+
+class ConvergenceOutput(BaseModel):
+    """Phase 4 output: Convergence guidance for GROW.
+
+    Phase 4 provides guidance about where threads should merge and what
+    differences persist after convergence.
+
+    Attributes:
+        convergence_sketch: Convergence guidance for GROW.
+    """
+
+    convergence_sketch: ConvergenceSketch = Field(
+        default_factory=ConvergenceSketch,
+        description="Guidance for GROW about thread convergence",
+    )
