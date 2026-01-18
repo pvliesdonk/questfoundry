@@ -8,10 +8,12 @@ from questfoundry.graph import Graph, MutationError, SeedMutationError
 from questfoundry.graph.mutations import (
     BrainstormMutationError,
     BrainstormValidationError,
+    SeedValidationError,
     apply_brainstorm_mutations,
     apply_dream_mutations,
     apply_mutations,
     apply_seed_mutations,
+    classify_seed_errors,
     has_mutation_handler,
     validate_brainstorm_mutations,
     validate_seed_mutations,
@@ -997,6 +999,202 @@ class TestSeedCompletenessValidation:
         invalid_errors = [e for e in errors if "not in BRAINSTORM" in e.issue]
         assert len(invalid_errors) == 1
         assert "nonexistent" in invalid_errors[0].provided
+
+
+class TestSeedErrorClassification:
+    """Test SEED error classification (wrong_id vs missing_item)."""
+
+    def test_wrong_id_error_type_default(self) -> None:
+        """SeedValidationError defaults to wrong_id error_type."""
+        error = SeedValidationError(
+            field_path="entities.0.entity_id",
+            issue="Entity 'phantom' not in BRAINSTORM",
+            available=["kay", "mentor"],
+            provided="phantom",
+        )
+        assert error.error_type == "wrong_id"
+
+    def test_wrong_id_errors_from_validation(self) -> None:
+        """Invalid ID reference errors have error_type='wrong_id'."""
+        graph = Graph.empty()
+        graph.create_node("entity::kay", {"type": "entity", "raw_id": "kay"})
+
+        output = {
+            "entities": [
+                {"entity_id": "kay", "disposition": "retained"},
+                {"entity_id": "phantom", "disposition": "retained"},  # Wrong ID
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert len(errors) == 1
+        assert errors[0].error_type == "wrong_id"
+        assert "phantom" in errors[0].provided
+
+    def test_missing_item_errors_from_validation(self) -> None:
+        """Missing decision errors have error_type='missing_item'."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::kay", {"type": "entity", "raw_id": "kay", "entity_type": "character"}
+        )
+        graph.create_node(
+            "entity::mentor", {"type": "entity", "raw_id": "mentor", "entity_type": "character"}
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "kay", "disposition": "retained"},
+                # mentor is missing - no decision
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert len(errors) == 1
+        assert errors[0].error_type == "missing_item"
+        assert "Missing decision" in errors[0].issue
+        assert "mentor" in errors[0].issue
+
+    def test_missing_tension_decision_has_missing_item_type(self) -> None:
+        """Missing tension decision has error_type='missing_item'."""
+        graph = Graph.empty()
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "trust", "explored": [], "implicit": []},
+                # loyalty is missing
+            ],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert len(errors) == 1
+        assert errors[0].error_type == "missing_item"
+        assert "loyalty" in errors[0].issue
+
+    def test_classify_seed_errors_splits_correctly(self) -> None:
+        """classify_seed_errors splits errors by error_type."""
+        errors = [
+            SeedValidationError(
+                field_path="entities.0.entity_id",
+                issue="Entity 'phantom' not in BRAINSTORM",
+                available=["kay"],
+                provided="phantom",
+                error_type="wrong_id",
+            ),
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'mentor'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            ),
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension 'invalid_tension' not in BRAINSTORM",
+                available=["trust"],
+                provided="invalid_tension",
+                error_type="wrong_id",
+            ),
+            SeedValidationError(
+                field_path="tensions",
+                issue="Missing decision for tension 'loyalty'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            ),
+        ]
+
+        wrong_ids, missing = classify_seed_errors(errors)
+
+        assert len(wrong_ids) == 2
+        assert len(missing) == 2
+        assert all(e.error_type == "wrong_id" for e in wrong_ids)
+        assert all(e.error_type == "missing_item" for e in missing)
+
+    def test_classify_seed_errors_handles_empty_list(self) -> None:
+        """classify_seed_errors handles empty error list."""
+        wrong_ids, missing = classify_seed_errors([])
+
+        assert wrong_ids == []
+        assert missing == []
+
+    def test_classify_seed_errors_handles_only_wrong_ids(self) -> None:
+        """classify_seed_errors handles list with only wrong_id errors."""
+        errors = [
+            SeedValidationError(
+                field_path="entities.0.entity_id",
+                issue="Entity 'phantom' not in BRAINSTORM",
+                available=["kay"],
+                provided="phantom",
+                error_type="wrong_id",
+            ),
+        ]
+
+        wrong_ids, missing = classify_seed_errors(errors)
+
+        assert len(wrong_ids) == 1
+        assert len(missing) == 0
+
+    def test_classify_seed_errors_handles_only_missing_items(self) -> None:
+        """classify_seed_errors handles list with only missing_item errors."""
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'mentor'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            ),
+        ]
+
+        wrong_ids, missing = classify_seed_errors(errors)
+
+        assert len(wrong_ids) == 0
+        assert len(missing) == 1
+
+    def test_mixed_errors_from_validation(self) -> None:
+        """Validation can produce both wrong_id and missing_item errors."""
+        graph = Graph.empty()
+        # Add two entities
+        graph.create_node(
+            "entity::kay", {"type": "entity", "raw_id": "kay", "entity_type": "character"}
+        )
+        graph.create_node(
+            "entity::mentor", {"type": "entity", "raw_id": "mentor", "entity_type": "character"}
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "kay", "disposition": "retained"},
+                {"entity_id": "phantom", "disposition": "retained"},  # Wrong ID
+                # mentor is missing
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+        wrong_ids, missing = classify_seed_errors(errors)
+
+        # Should have 1 wrong_id (phantom) and 1 missing_item (mentor)
+        assert len(wrong_ids) == 1
+        assert wrong_ids[0].provided == "phantom"
+        assert len(missing) == 1
+        assert "mentor" in missing[0].issue
 
 
 class TestMutationIntegration:
