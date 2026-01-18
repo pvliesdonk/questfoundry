@@ -253,6 +253,165 @@ def format_repair_errors(errors: list[SeedValidationError]) -> str:
     return "\n".join(lines)
 
 
+def format_missing_items_feedback(
+    errors: list[SeedValidationError],
+    brainstorm_context: str = "",  # noqa: ARG001
+) -> str:
+    """Format feedback for missing entity/tension decisions.
+
+    Creates actionable feedback that tells the LLM which items from BRAINSTORM
+    are missing decisions in the summary brief. The feedback includes context
+    about what decisions are needed (retained/cut for entities, explored/implicit
+    for tensions).
+
+    Args:
+        errors: List of SeedValidationError objects with error_type="missing_item".
+        brainstorm_context: The formatted BRAINSTORM context string that contains
+            the full entity/tension information.
+
+    Returns:
+        Formatted feedback string to append to summarize messages.
+    """
+    # Separate entity and tension errors
+    entity_errors = [
+        e for e in errors if e.error_type == "missing_item" and "entity" not in e.issue.lower()[:20]
+    ]
+    tension_errors = [
+        e for e in errors if e.error_type == "missing_item" and "tension" in e.issue.lower()
+    ]
+
+    # Actually, let's parse based on issue content more robustly
+    entity_errors = []
+    tension_errors = []
+    for e in errors:
+        if e.error_type != "missing_item":
+            continue
+        if "tension" in e.issue.lower():
+            tension_errors.append(e)
+        else:
+            entity_errors.append(e)
+
+    lines = [
+        "## SUMMARY INCOMPLETE - Missing Items",
+        "",
+        "Your summary is missing decisions for the following items from BRAINSTORM.",
+        "You MUST include explicit decisions for ALL entities and tensions.",
+        "",
+    ]
+
+    if entity_errors:
+        lines.append("### Missing Entity Decisions")
+        lines.append("Each entity needs a disposition decision (retained, cut, or merged):")
+        lines.append("")
+        for error in entity_errors:
+            # Extract the entity name from the issue message
+            # Format: "Missing decision for character 'kay'"
+            lines.append(f"- {error.issue}")
+        lines.append("")
+
+    if tension_errors:
+        lines.append("### Missing Tension Decisions")
+        lines.append("Each tension needs an exploration decision (which alternatives to explore):")
+        lines.append("")
+        for error in tension_errors:
+            lines.append(f"- {error.issue}")
+        lines.append("")
+
+    lines.extend(
+        [
+            "Please regenerate your summary to include ALL items from BRAINSTORM.",
+            "Every entity must have a retained/cut/merged decision.",
+            "Every tension must specify which alternatives are explored vs implicit.",
+        ]
+    )
+
+    return "\n".join(lines)
+
+
+@traceable(
+    name="Resummarize with Feedback", run_type="chain", tags=["phase:resummarize", "stage:seed"]
+)
+async def resummarize_with_feedback(
+    model: BaseChatModel,
+    summarize_messages: list[BaseMessage],
+    feedback: str,
+    callbacks: list[BaseCallbackHandler] | None = None,
+) -> tuple[str, list[BaseMessage], int]:
+    """Re-summarize with feedback about missing/invalid items.
+
+    This function continues a summarize conversation by appending feedback
+    as a HumanMessage and requesting a new summary. The model has access to
+    the full conversation context (discuss phase messages, previous summary)
+    allowing it to add missing content that wasn't in the original brief.
+
+    This is more powerful than surgical brief repair because the model can
+    draw from the full discussion context to add missing items, not just
+    replace incorrect IDs.
+
+    Note: The summarize_messages list already includes the AIMessage with the
+    previous summary (added by summarize_discussion), so we just append the
+    feedback and request a new summary.
+
+    Args:
+        model: Chat model to use for resummarization.
+        summarize_messages: Message history from previous summarize attempt.
+            Should end with AIMessage containing the previous (incomplete) summary.
+        feedback: Feedback string describing what's missing (from format_missing_items_feedback).
+        callbacks: LangChain callback handlers for logging.
+
+    Returns:
+        Tuple of (new_summary, updated_messages, tokens_used).
+        The updated_messages list includes the feedback and new response.
+    """
+    log.info(
+        "resummarize_started",
+        message_count=len(summarize_messages),
+        feedback_length=len(feedback),
+    )
+
+    # Build the continuation messages
+    # Start with the existing history (which includes system prompt, discuss messages,
+    # summarize instruction, and previous summary)
+    updated_messages: list[BaseMessage] = list(summarize_messages)
+
+    # Add feedback requesting regeneration
+    feedback_message = HumanMessage(
+        content=f"{feedback}\n\nPlease provide a complete summary that addresses ALL items above."
+    )
+    updated_messages.append(feedback_message)
+
+    # Build tracing config for the LLM call
+    config = build_runnable_config(
+        run_name="Resummarize LLM Call",
+        tags=["seed", "resummarize", "llm"],
+        metadata={
+            "stage": "seed",
+            "phase": "resummarize",
+            "message_count": len(updated_messages),
+        },
+        callbacks=callbacks,
+    )
+
+    response = await model.ainvoke(updated_messages, config=config)
+
+    # Extract the new summary
+    new_summary = str(response.content)
+
+    # Extract token usage
+    tokens = _extract_token_usage(response) if isinstance(response, AIMessage) else 0
+
+    # Add AI response to message history
+    updated_messages = [*updated_messages, AIMessage(content=new_summary)]
+
+    log.info(
+        "resummarize_completed",
+        summary_length=len(new_summary),
+        tokens=tokens,
+    )
+
+    return new_summary, updated_messages, tokens
+
+
 @traceable(name="Repair SEED Brief", run_type="chain", tags=["phase:repair", "stage:seed"])
 async def repair_seed_brief(
     model: BaseChatModel,

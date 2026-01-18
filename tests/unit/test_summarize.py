@@ -9,9 +9,11 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from questfoundry.agents.prompts import get_repair_seed_brief_prompt, get_summarize_prompt
 from questfoundry.agents.summarize import (
+    format_missing_items_feedback,
     format_repair_errors,
     get_fuzzy_id_suggestions,
     repair_seed_brief,
+    resummarize_with_feedback,
     summarize_discussion,
 )
 from questfoundry.graph.mutations import SeedValidationError
@@ -675,3 +677,276 @@ class TestSummarizeFeedbackLoop:
 
         assert len(validator_called) == 0  # Validator never called
         assert mock_model.ainvoke.call_count == 1
+
+
+class TestFormatMissingItemsFeedback:
+    """Test format_missing_items_feedback function."""
+
+    def test_formats_missing_entity_decisions(self) -> None:
+        """Should format missing entity decision errors."""
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'kay'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            ),
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for location 'archive'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            ),
+        ]
+
+        result = format_missing_items_feedback(errors, "## Entities from BRAINSTORM\n...")
+
+        assert "SUMMARY INCOMPLETE" in result
+        assert "Missing Entity Decisions" in result
+        assert "Missing decision for character 'kay'" in result
+        assert "Missing decision for location 'archive'" in result
+
+    def test_formats_missing_tension_decisions(self) -> None:
+        """Should format missing tension decision errors."""
+        errors = [
+            SeedValidationError(
+                field_path="tensions",
+                issue="Missing decision for tension 'mentor_trust'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            ),
+        ]
+
+        result = format_missing_items_feedback(errors, "## Tensions from BRAINSTORM\n...")
+
+        assert "SUMMARY INCOMPLETE" in result
+        assert "Missing Tension Decisions" in result
+        assert "Missing decision for tension 'mentor_trust'" in result
+
+    def test_formats_mixed_missing_items(self) -> None:
+        """Should format both entity and tension missing items."""
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'mentor'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            ),
+            SeedValidationError(
+                field_path="tensions",
+                issue="Missing decision for tension 'loyalty'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            ),
+        ]
+
+        result = format_missing_items_feedback(errors, "brainstorm context")
+
+        assert "Missing Entity Decisions" in result
+        assert "Missing Tension Decisions" in result
+        assert "mentor" in result
+        assert "loyalty" in result
+
+    def test_ignores_wrong_id_errors(self) -> None:
+        """Should only process missing_item errors."""
+        errors = [
+            SeedValidationError(
+                field_path="entities.0.entity_id",
+                issue="Entity 'phantom' not in BRAINSTORM",
+                available=["kay"],
+                provided="phantom",
+                error_type="wrong_id",
+            ),
+        ]
+
+        result = format_missing_items_feedback(errors, "brainstorm context")
+
+        assert "SUMMARY INCOMPLETE" in result
+        # wrong_id error should not appear in entity or tension sections
+        assert "Missing Entity Decisions" not in result
+        assert "Missing Tension Decisions" not in result
+
+    def test_includes_instructions_for_regen(self) -> None:
+        """Should include instructions for regenerating summary."""
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'kay'",
+                available=[],
+                provided="",
+                error_type="missing_item",
+            ),
+        ]
+
+        result = format_missing_items_feedback(errors, "brainstorm")
+
+        assert "regenerate" in result.lower()
+        assert "ALL items from BRAINSTORM" in result
+
+    def test_handles_empty_errors(self) -> None:
+        """Should handle empty error list gracefully."""
+        result = format_missing_items_feedback([], "brainstorm")
+
+        assert "SUMMARY INCOMPLETE" in result
+        # No specific error sections
+        assert "Missing Entity Decisions" not in result
+        assert "Missing Tension Decisions" not in result
+
+
+class TestResummarizeWithFeedback:
+    """Test resummarize_with_feedback function."""
+
+    @pytest.mark.asyncio
+    async def test_resummarize_returns_new_summary_and_tokens(self) -> None:
+        """resummarize_with_feedback should return new summary and token count."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="New complete summary with all items")
+        mock_response.usage_metadata = {"total_tokens": 200}
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        # Previous summarize messages (including previous incomplete summary)
+        previous_messages = [
+            SystemMessage(content="System prompt"),
+            HumanMessage(content="Original request"),
+            AIMessage(content="Previous incomplete summary"),
+        ]
+
+        feedback = "## SUMMARY INCOMPLETE\nMissing: mentor"
+
+        new_summary, _updated_messages, tokens = await resummarize_with_feedback(
+            model=mock_model,
+            summarize_messages=previous_messages,
+            feedback=feedback,
+        )
+
+        assert new_summary == "New complete summary with all items"
+        assert tokens == 200
+
+    @pytest.mark.asyncio
+    async def test_resummarize_appends_feedback_to_messages(self) -> None:
+        """resummarize_with_feedback should append feedback as HumanMessage."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="New summary")
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        previous_messages = [
+            SystemMessage(content="System"),
+            HumanMessage(content="Request"),
+            AIMessage(content="Old summary"),
+        ]
+
+        feedback = "Missing: kay"
+
+        _summary, updated_messages, _tokens = await resummarize_with_feedback(
+            model=mock_model,
+            summarize_messages=previous_messages,
+            feedback=feedback,
+        )
+
+        # Updated messages should have: original + feedback + new response
+        assert len(updated_messages) == 5
+        assert isinstance(updated_messages[3], HumanMessage)  # Feedback
+        assert "Missing: kay" in updated_messages[3].content
+        assert isinstance(updated_messages[4], AIMessage)  # New response
+        assert updated_messages[4].content == "New summary"
+
+    @pytest.mark.asyncio
+    async def test_resummarize_preserves_message_history(self) -> None:
+        """resummarize_with_feedback should preserve original message history."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="New summary")
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        original_system = SystemMessage(content="Original system prompt")
+        original_human = HumanMessage(content="Original request")
+        original_ai = AIMessage(content="Original incomplete summary")
+
+        previous_messages = [original_system, original_human, original_ai]
+
+        _summary, updated_messages, _tokens = await resummarize_with_feedback(
+            model=mock_model,
+            summarize_messages=previous_messages,
+            feedback="Feedback",
+        )
+
+        # First three messages should be unchanged
+        assert updated_messages[0] == original_system
+        assert updated_messages[1] == original_human
+        assert updated_messages[2] == original_ai
+
+    @pytest.mark.asyncio
+    async def test_resummarize_calls_model_with_full_context(self) -> None:
+        """resummarize_with_feedback should call model with full context."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="New summary")
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        previous_messages = [
+            SystemMessage(content="System"),
+            HumanMessage(content="Request with context about entities"),
+            AIMessage(content="Old summary missing mentor"),
+        ]
+
+        await resummarize_with_feedback(
+            model=mock_model,
+            summarize_messages=previous_messages,
+            feedback="Missing: mentor",
+        )
+
+        # Verify model was called
+        mock_model.ainvoke.assert_called_once()
+
+        # Get the messages passed to model
+        call_args = mock_model.ainvoke.call_args
+        messages_to_model = call_args[0][0]
+
+        # Should have: system, human, ai (old), human (feedback) = 4 messages
+        assert len(messages_to_model) == 4
+        assert isinstance(messages_to_model[0], SystemMessage)
+        assert isinstance(messages_to_model[-1], HumanMessage)
+        assert "mentor" in messages_to_model[-1].content
+
+    @pytest.mark.asyncio
+    async def test_resummarize_handles_missing_token_metadata(self) -> None:
+        """resummarize_with_feedback should handle responses without token metadata."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="New summary")
+        # No usage_metadata
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        previous_messages = [SystemMessage(content="System")]
+
+        _summary, _messages, tokens = await resummarize_with_feedback(
+            model=mock_model,
+            summarize_messages=previous_messages,
+            feedback="Feedback",
+        )
+
+        assert tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_resummarize_does_not_modify_original_list(self) -> None:
+        """resummarize_with_feedback should not modify the input message list."""
+        mock_model = MagicMock()
+        mock_response = AIMessage(content="New summary")
+        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+
+        original_messages = [
+            SystemMessage(content="System"),
+            HumanMessage(content="Request"),
+        ]
+        original_length = len(original_messages)
+
+        await resummarize_with_feedback(
+            model=mock_model,
+            summarize_messages=original_messages,
+            feedback="Feedback",
+        )
+
+        # Original list should be unchanged
+        assert len(original_messages) == original_length
