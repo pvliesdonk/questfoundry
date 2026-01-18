@@ -653,3 +653,55 @@ class TestFormatSummarizeManifest:
         assert "entity_manifest" in result
         assert "tension_manifest" in result
         assert len(result) == 2
+
+    def test_skips_entities_with_unknown_type(self) -> None:
+        """Entities with unknown entity_type are excluded from manifest."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::weird",
+            {
+                "type": "entity",
+                "raw_id": "weird_thing",
+                "entity_type": "unknown",
+            },
+        )
+        graph.create_node(
+            "entity::custom",
+            {
+                "type": "entity",
+                "raw_id": "custom_item",
+                "entity_type": "custom_type",
+            },
+        )
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "entity_type": "character",
+            },
+        )
+
+        result = format_summarize_manifest(graph)
+
+        # Only standard categories are included
+        assert "hero" in result["entity_manifest"]
+        assert "weird_thing" not in result["entity_manifest"]
+        assert "custom_item" not in result["entity_manifest"]
+
+    def test_adds_blank_lines_between_categories(self) -> None:
+        """Output includes blank lines between entity categories for readability."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::castle",
+            {"type": "entity", "raw_id": "castle", "entity_type": "location"},
+        )
+
+        result = format_summarize_manifest(graph)
+
+        # Should have blank line after Characters section, before Locations
+        assert "**Characters:**\n  - `hero`\n\n**Locations:**" in result["entity_manifest"]
