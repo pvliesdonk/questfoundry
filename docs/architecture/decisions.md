@@ -367,6 +367,63 @@ Precedence (highest to lowest):
 
 ---
 
+## ADR-011: Manifest-First Freeze for SEED Stage
+
+**Date**: 2026-01-18
+**Status**: Accepted
+
+### Context
+
+The SEED stage's Discuss → Summarize → Serialize pattern had a critical information bottleneck:
+- Summarize converts rich message history (including tool calls) to prose
+- Serialize extracts from prose, missing items not prominently mentioned
+- Validation catches missing items post-hoc, but recovery is structurally impossible
+
+Multiple PRs (#188-#201) attempted to fix symptoms (phantom IDs, missing items) without addressing the root cause: extraction-based prompts that made completeness recovery impossible.
+
+### Decision
+
+Implement **manifest-first architecture** with three gates:
+
+1. **Gate 1 (Summarize):** Manifest-aware
+   - Prompt includes explicit list of ALL entity/tension IDs
+   - Summarize must include decisions for each ID
+   - Tool call preservation ensures research context is visible
+
+2. **Gate 2 (Serialize):** Manifest-driven
+   - Prompt language changed from "extraction" to "generation"
+   - Before: "Do NOT include entities not listed in brief"
+   - After: "You MUST generate a decision for EVERY ID below"
+   - Counts explicit: "Generate EXACTLY N decisions"
+
+3. **Gate 3 (Validate):** Count-based structural check
+   - Fast pre-check: `len(output.entities) == expected.entities`
+   - No string parsing—just count comparison
+
+Additionally, classify errors by type for targeted retry strategies:
+- SEMANTIC: Invalid ID reference → retry with valid ID list
+- COMPLETENESS: Count mismatch → retry with manifest counts
+- INNER: Schema error → retry with Pydantic feedback
+
+### Rationale
+
+- **Extraction mindset fails**: "Do NOT include items not in brief" makes omission irrecoverable
+- **Counts are reliable**: `len(entities) == 5` is unambiguous; string parsing is not
+- **Gates prevent, validation detects**: Prevention at phase boundaries is cheaper than detection at the end
+- **Targeted retries**: Different error types need different recovery strategies
+
+### Consequences
+
+- Summarize prompts include manifest template with all IDs
+- Serialize prompts use generation language, not extraction language
+- `check_structural_completeness()` provides fast count-based validation
+- `categorize_error()` enables targeted retry strategies
+- Tool calls preserved in summarize input for research context visibility
+
+See [Manifest-First Freeze Architecture](manifest-first-freeze.md) for implementation details.
+
+---
+
 ## Template
 
 ```markdown
