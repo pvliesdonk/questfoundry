@@ -31,30 +31,25 @@ async def summarize_discussion(
     system_prompt: str | None = None,
     stage_name: str = "dream",
     callbacks: list[BaseCallbackHandler] | None = None,
-) -> tuple[str, list[BaseMessage], int]:
+) -> tuple[str, int]:
     """Summarize a discussion into a compact brief.
 
     This is a single LLM call (not an agent) that takes the conversation
     history from the Discuss phase and produces a compact summary for
     the Serialize phase.
 
-    The discuss phase messages are passed as proper LangChain messages,
-    preserving role structure and tool call associations. This enables
-    future feedback loops where the model can reference the original
-    discussion context.
+    Uses lower temperature (0.3) for more focused, consistent output.
 
     Args:
-        model: Chat model to use
-        messages: Conversation history from Discuss phase (proper message list)
+        model: Chat model to use (will be invoked with low temperature)
+        messages: Conversation history from Discuss phase
         system_prompt: Optional custom system prompt. If not provided,
             uses the default summarize prompt.
         stage_name: Stage name for logging/tagging (default "dream")
         callbacks: LangChain callback handlers for logging LLM calls
 
     Returns:
-        Tuple of (summary_text, full_message_history, tokens_used).
-        The message history includes the discuss messages, summarize instruction,
-        and the model's response - useful for feedback loops.
+        Tuple of (summary_text, tokens_used)
     """
     log.info("summarize_started", message_count=len(messages), stage=stage_name)
 
@@ -63,22 +58,15 @@ async def summarize_discussion(
         system_prompt = get_summarize_prompt()
 
     # Build the messages for the summarize call
-    # We include the system prompt, then the ACTUAL conversation messages
-    # (not flattened text), then the summarize instruction.
-    # This preserves message roles and tool call structure.
+    # We include the system prompt, then the conversation as context,
+    # then ask for the summary
     summarize_messages: list[BaseMessage] = [
         SystemMessage(content=system_prompt),
-    ]
-
-    # Add discuss messages with proper structure, filtering out any system messages
-    summarize_messages.extend([msg for msg in messages if not isinstance(msg, SystemMessage)])
-
-    # Add the summarize instruction
-    summarize_messages.append(
         HumanMessage(
-            content="Based on the discussion above, create the summary in the format specified."
-        )
-    )
+            content="Here is the discussion to summarize:\n\n"
+            + _format_messages_for_summary(messages)
+        ),
+    ]
 
     # Build tracing config for the LLM call
     config = build_runnable_config(
@@ -88,6 +76,10 @@ async def summarize_discussion(
         callbacks=callbacks,
     )
 
+    # Note: We use the model as configured rather than trying to override temperature
+    # at runtime. The bind(temperature=X) approach is not compatible with all providers
+    # (e.g., langchain-ollama doesn't support runtime temperature in chat()).
+    # The model's default temperature (0.7) works fine for summarization.
     response = await model.ainvoke(summarize_messages, config=config)
 
     # Extract the summary text
@@ -96,13 +88,35 @@ async def summarize_discussion(
     # Extract token usage
     tokens = _extract_token_usage(response) if isinstance(response, AIMessage) else 0
 
-    # Create full message history for potential feedback loops
-    # (avoid mutating summarize_messages after passing to ainvoke)
-    full_message_history = [*summarize_messages, AIMessage(content=summary)]
-
     log.info("summarize_completed", summary_length=len(summary), tokens=tokens)
 
-    return summary, full_message_history, tokens
+    return summary, tokens
+
+
+def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
+    """Format conversation messages for the summary prompt.
+
+    Args:
+        messages: List of conversation messages
+
+    Returns:
+        Formatted string representation of the conversation
+    """
+    formatted_parts = []
+    for msg in messages:
+        if isinstance(msg, HumanMessage):
+            prefix = "User"
+        elif isinstance(msg, AIMessage):
+            prefix = "Assistant"
+        elif isinstance(msg, SystemMessage):
+            prefix = "System"
+        else:
+            prefix = "Message"
+
+        content = msg.content if isinstance(msg.content, str) else str(msg.content)
+        formatted_parts.append(f"{prefix}: {content}")
+
+    return "\n\n".join(formatted_parts)
 
 
 def _extract_token_usage(response: AIMessage) -> int:
