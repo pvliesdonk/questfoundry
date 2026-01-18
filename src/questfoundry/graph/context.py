@@ -266,33 +266,29 @@ def check_structural_completeness(
     Args:
         output: SEED output dict with 'entities' and 'tensions' arrays.
         expected: Dict from get_expected_counts() with expected counts.
+            Values must be non-negative integers.
 
     Returns:
         List of (field_path, issue) tuples for any completeness errors.
         Empty list if counts match.
+
+    Raises:
+        ValueError: If expected counts contain negative values.
     """
     errors: list[tuple[str, str]] = []
 
-    # Check entity decisions count
-    actual_entities = len(output.get("entities", []))
-    expected_entities = expected.get("entities", 0)
-    if actual_entities != expected_entities:
-        errors.append(
-            (
-                "entities",
-                f"Expected {expected_entities} entity decisions, got {actual_entities}",
-            )
-        )
+    # Validate expected counts are non-negative (defensive check)
+    for field, count in expected.items():
+        if count < 0:
+            raise ValueError(f"Expected count for '{field}' cannot be negative: {count}")
 
-    # Check tension decisions count
-    actual_tensions = len(output.get("tensions", []))
-    expected_tensions = expected.get("tensions", 0)
-    if actual_tensions != expected_tensions:
-        errors.append(
-            (
-                "tensions",
-                f"Expected {expected_tensions} tension decisions, got {actual_tensions}",
+    # Check counts for each tracked field
+    for field in ("entities", "tensions"):
+        actual = len(output.get(field, []))
+        expected_count = expected.get(field, 0)
+        if actual != expected_count:
+            errors.append(
+                (field, f"Expected {expected_count} {field[:-1]} decisions, got {actual}")
             )
-        )
 
     return errors

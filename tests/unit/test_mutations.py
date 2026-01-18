@@ -1226,3 +1226,68 @@ class TestCategorizeErrors:
 
         assert len(by_category) == 1
         assert len(by_category[SeedErrorCategory.COMPLETENESS]) == 2
+
+
+class TestErrorPatternConsistency:
+    """Tests that error patterns match actual validation output.
+
+    These tests verify that the pattern constants used by categorize_error()
+    match the error messages produced by validate_seed_mutations().
+    See issue #216 for the plan to replace string matching with structured codes.
+    """
+
+    def test_semantic_errors_match_pattern(self) -> None:
+        """Real semantic errors from validate_seed_mutations are categorized correctly."""
+        graph = Graph.empty()
+        # Add an entity from BRAINSTORM
+        graph.create_node("entity::real", {"type": "entity", "raw_id": "real"})
+
+        output = {
+            "entities": [
+                {"entity_id": "phantom", "disposition": "retained"},  # Not in BRAINSTORM
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Find the semantic error (invalid entity reference)
+        semantic_errors = [e for e in errors if categorize_error(e) == SeedErrorCategory.SEMANTIC]
+        assert len(semantic_errors) >= 1
+        # Verify the error message contains expected pattern
+        assert any("not in brainstorm" in e.issue.lower() for e in semantic_errors)
+
+    def test_completeness_errors_match_pattern(self) -> None:
+        """Real completeness errors from validate_seed_mutations are categorized correctly."""
+        graph = Graph.empty()
+        # Add entities that need decisions
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::villain",
+            {"type": "entity", "raw_id": "villain", "entity_type": "character"},
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "hero", "disposition": "retained"},
+                # Missing: villain
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Find the completeness error (missing decision)
+        completeness_errors = [
+            e for e in errors if categorize_error(e) == SeedErrorCategory.COMPLETENESS
+        ]
+        assert len(completeness_errors) == 1
+        # Verify the error message contains expected pattern
+        assert "missing decision" in completeness_errors[0].issue.lower()

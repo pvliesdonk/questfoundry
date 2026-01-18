@@ -802,3 +802,13 @@ class TestCheckStructuralCompleteness:
         errors = check_structural_completeness(output, expected)
 
         assert errors == []
+
+    def test_raises_on_negative_expected_count(self) -> None:
+        """Raises ValueError when expected count is negative."""
+        import pytest
+
+        output = {"entities": [], "tensions": []}
+        expected = {"entities": -1, "tensions": 0}
+
+        with pytest.raises(ValueError, match="cannot be negative"):
+            check_structural_completeness(output, expected)
