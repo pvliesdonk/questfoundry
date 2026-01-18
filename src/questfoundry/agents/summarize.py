@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from difflib import get_close_matches
 from typing import TYPE_CHECKING
 
@@ -18,9 +17,6 @@ if TYPE_CHECKING:
 
     from questfoundry.graph.mutations import SeedValidationError
 
-# Type alias for entity validator function
-EntityValidator = Callable[[str, int], tuple[bool, int]]
-
 log = get_logger(__name__)
 
 # Constants for fuzzy matching and display limits
@@ -35,9 +31,6 @@ async def summarize_discussion(
     system_prompt: str | None = None,
     stage_name: str = "dream",
     callbacks: list[BaseCallbackHandler] | None = None,
-    max_retries: int = 0,
-    entity_validator: EntityValidator | None = None,
-    expected_entity_count: int = 0,
 ) -> tuple[str, list[BaseMessage], int]:
     """Summarize a discussion into a compact brief.
 
@@ -47,12 +40,8 @@ async def summarize_discussion(
 
     The discuss phase messages are passed as proper LangChain messages,
     preserving role structure and tool call associations. This enables
-    feedback loops where the model can reference the original discussion
-    context.
-
-    When entity_validator is provided, the function validates the summary
-    and requests regeneration if coverage is incomplete. This uses proper
-    message history for multi-turn feedback.
+    future feedback loops where the model can reference the original
+    discussion context.
 
     Args:
         model: Chat model to use
@@ -61,10 +50,6 @@ async def summarize_discussion(
             uses the default summarize prompt.
         stage_name: Stage name for logging/tagging (default "dream")
         callbacks: LangChain callback handlers for logging LLM calls
-        max_retries: Maximum number of retries for validation failures (default 0)
-        entity_validator: Optional validation function that takes (brief, expected_count)
-            and returns (is_complete, actual_count, missing_ids)
-        expected_entity_count: Number of entities expected in the summary
 
     Returns:
         Tuple of (summary_text, full_message_history, tokens_used).
@@ -103,70 +88,21 @@ async def summarize_discussion(
         callbacks=callbacks,
     )
 
-    total_tokens = 0
-    summary = ""
-    attempt = 0  # Initialize to avoid UnboundLocalError
+    response = await model.ainvoke(summarize_messages, config=config)
 
-    # Main summarize loop with optional validation feedback
-    for attempt in range(max_retries + 1):
-        response = await model.ainvoke(summarize_messages, config=config)
+    # Extract the summary text
+    summary = str(response.content)
 
-        # Extract the summary text
-        summary = str(response.content)
+    # Extract token usage
+    tokens = _extract_token_usage(response) if isinstance(response, AIMessage) else 0
 
-        # Extract token usage
-        tokens = _extract_token_usage(response) if isinstance(response, AIMessage) else 0
-        total_tokens += tokens
+    # Create full message history for potential feedback loops
+    # (avoid mutating summarize_messages after passing to ainvoke)
+    full_message_history = [*summarize_messages, AIMessage(content=summary)]
 
-        # Add AI response to message history
-        summarize_messages = [*summarize_messages, AIMessage(content=summary)]
+    log.info("summarize_completed", summary_length=len(summary), tokens=tokens)
 
-        # Validate if validator provided
-        if entity_validator and expected_entity_count > 0:
-            is_complete, actual_count = entity_validator(summary, expected_entity_count)
-
-            if is_complete:
-                log.info(
-                    "summarize_validation_passed",
-                    attempt=attempt + 1,
-                    expected=expected_entity_count,
-                    actual=actual_count,
-                )
-                break
-
-            # If not last attempt, add feedback for retry
-            if attempt < max_retries:
-                log.warning(
-                    "summarize_validation_failed",
-                    attempt=attempt + 1,
-                    expected=expected_entity_count,
-                    actual=actual_count,
-                )
-                feedback = (
-                    f"Your summary is incomplete. You covered {actual_count} entities "
-                    f"but {expected_entity_count} are expected. Please regenerate the "
-                    "summary and ensure ALL entities from the brainstorm are included "
-                    "with explicit decisions (retained or cut)."
-                )
-                summarize_messages = [*summarize_messages, HumanMessage(content=feedback)]
-            else:
-                log.warning(
-                    "summarize_validation_exhausted",
-                    expected=expected_entity_count,
-                    actual=actual_count,
-                )
-        else:
-            # No validation, exit after first attempt
-            break
-
-    log.info(
-        "summarize_completed",
-        summary_length=len(summary),
-        tokens=total_tokens,
-        attempts=attempt + 1 if entity_validator else 1,
-    )
-
-    return summary, summarize_messages, total_tokens
+    return summary, full_message_history, tokens
 
 
 def _extract_token_usage(response: AIMessage) -> int:
