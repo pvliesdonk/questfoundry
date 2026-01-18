@@ -247,7 +247,7 @@ class BrainstormStage:
         # Phase 2: Summarize (use summarize_model if provided)
         log.debug("brainstorm_phase", phase="summarize")
         summarize_prompt = get_brainstorm_summarize_prompt()
-        brief, _summarize_messages, summarize_tokens = await summarize_discussion(
+        brief, summarize_tokens = await summarize_discussion(
             model=summarize_model or model,
             messages=messages,
             system_prompt=summarize_prompt,

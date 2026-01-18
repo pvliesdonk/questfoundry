@@ -83,7 +83,7 @@ async def test_execute_calls_all_three_phases() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_with_brief_repair") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):
         MockGraph.load.return_value = mock_graph
@@ -93,7 +93,7 @@ async def test_execute_calls_all_three_phases() -> None:
             2,  # llm_calls
             500,  # tokens
         )
-        mock_summarize.return_value = ("Brief summary", [], 100)  # summary, messages, tokens
+        mock_summarize.return_value = ("Brief summary", 100)
         mock_artifact = SeedOutput(
             entities=[{"entity_id": "kay", "disposition": "retained"}],
             tensions=[{"tension_id": "trust", "explored": ["yes"], "implicit": ["no"]}],
@@ -156,7 +156,7 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_with_brief_repair") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.get_seed_discuss_prompt") as mock_prompt,
     ):
@@ -164,7 +164,7 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
         mock_tools.return_value = []
         mock_prompt.return_value = "System prompt with brainstorm"
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
+        mock_summarize.return_value = ("Brief", 50)
         mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -183,8 +183,8 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
 
 
 @pytest.mark.asyncio
-async def test_execute_uses_brief_repair_serialization() -> None:
-    """Execute uses serialize_with_brief_repair for SEED output."""
+async def test_execute_uses_iterative_serialization() -> None:
+    """Execute uses iterative serialization for SEED output."""
     stage = SeedStage()
 
     mock_model = MagicMock()
@@ -198,13 +198,13 @@ async def test_execute_uses_brief_repair_serialization() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_with_brief_repair") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
+        mock_summarize.return_value = ("Brief", 50)
         mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -235,7 +235,7 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_with_brief_repair") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.get_seed_summarize_prompt") as mock_prompt,
     ):
@@ -243,7 +243,7 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
         mock_tools.return_value = []
         mock_prompt.return_value = "Seed summarize prompt"
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
+        mock_summarize.return_value = ("Brief", 50)
         mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
         mock_serialize.return_value = (mock_artifact, 100)
 
@@ -274,13 +274,13 @@ async def test_execute_returns_artifact_as_dict() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_with_brief_repair") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
-        mock_summarize.return_value = ("Brief", [], 50)  # summary, messages, tokens
+        mock_summarize.return_value = ("Brief", 50)
         mock_artifact = SeedOutput(
             entities=[{"entity_id": "kay", "disposition": "retained"}],
             tensions=[],

@@ -11,17 +11,11 @@ from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.prompts import get_serialize_prompt
-from questfoundry.agents.summarize import (
-    format_missing_items_feedback,
-    repair_seed_brief,
-    resummarize_with_feedback,
-)
 from questfoundry.artifacts.validator import strip_null_values
 from questfoundry.graph.context import format_thread_ids_context, format_valid_ids_context
 from questfoundry.graph.mutations import (
     SeedMutationError,
     SeedValidationError,
-    classify_seed_errors,
     validate_seed_mutations,
 )
 from questfoundry.observability.logging import get_logger
@@ -40,7 +34,6 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.graph.graph import Graph
-    from questfoundry.models import SeedOutput
 
 log = get_logger(__name__)
 
@@ -572,11 +565,8 @@ async def serialize_seed_iteratively(
     for section_name, schema, output_field in sections:
         log.debug("serialize_section_started", section=section_name)
 
-        # Use brief with thread IDs for sections that reference threads
-        # (beats and consequences both have thread_id fields)
-        current_brief = (
-            brief_with_threads if section_name in ("beats", "consequences") else enhanced_brief
-        )
+        # Use brief with thread IDs for beats section (threads are known by then)
+        current_brief = brief_with_threads if section_name == "beats" else enhanced_brief
 
         section_prompt = prompts[section_name]
         section_result, section_tokens = await serialize_to_artifact(
@@ -649,9 +639,8 @@ async def serialize_seed_iteratively(
             )
 
             # Re-serialize problematic sections with feedback appended to brief
-            # Use brief_with_threads (not enhanced_brief) to preserve thread ID context
             brief_with_feedback = (
-                f"{brief_with_threads}\n\n## VALIDATION ERRORS - PLEASE FIX\n\n{feedback}"
+                f"{enhanced_brief}\n\n## VALIDATION ERRORS - PLEASE FIX\n\n{feedback}"
             )
 
             for section_name, schema, output_field in sections:
@@ -724,168 +713,3 @@ def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
             sections.add(field_to_section[top_level])
 
     return sections
-
-
-@traceable(
-    name="Serialize SEED with Brief Repair",
-    run_type="chain",
-    tags=["phase:serialize", "stage:seed", "outer-loop"],
-)
-async def serialize_with_brief_repair(
-    model: BaseChatModel,
-    brief: str,
-    graph: Graph,
-    summarize_messages: list[BaseMessage] | None = None,
-    provider_name: str | None = None,
-    max_retries: int = 3,
-    callbacks: list[BaseCallbackHandler] | None = None,
-    max_semantic_retries: int = 2,
-    max_outer_retries: int = 2,
-) -> tuple[SeedOutput, int]:
-    """Serialize SEED with two-level feedback loop for brief repair.
-
-    This wraps serialize_seed_iteratively with an outer loop that repairs
-    the brief when semantic validation fails. The two-level structure:
-
-    - OUTER LOOP (max_outer_retries): On SeedMutationError, choose strategy:
-      - If ANY missing_item errors AND summarize_messages available:
-        Use resummarize_with_feedback() (can fix both missing AND wrong IDs)
-      - Else (only wrong_id errors OR no message history):
-        Use repair_seed_brief() for surgical ID replacement
-    - INNER LOOP (inside serialize_seed_iteratively): Handles Pydantic errors
-      and per-section semantic retries.
-
-    This addresses the "stuck brief" problem where semantic errors in the
-    summarize phase cause 0% correction rate in the serialize phase.
-
-    Args:
-        model: Chat model to use for generation.
-        brief: The summary brief from the Summarize phase.
-        graph: Graph containing BRAINSTORM data for validation. Required.
-        summarize_messages: Message history from summarize phase. When provided,
-            enables resummarization for missing_item errors. The model can draw
-            from the full discussion context to add missing content.
-        brainstorm_context: Formatted BRAINSTORM context string for feedback.
-            Used when formatting missing items feedback.
-        provider_name: Provider name for strategy auto-detection.
-        max_retries: Maximum retries per section (Pydantic validation).
-        callbacks: LangChain callback handlers for logging LLM calls.
-        max_semantic_retries: Maximum retries inside serialize_seed_iteratively.
-        max_outer_retries: Maximum outer loop retries for brief repair.
-
-    Returns:
-        Tuple of (SeedOutput, total_tokens).
-
-    Raises:
-        SeedMutationError: If validation fails after all outer retries.
-    """
-    total_tokens = 0
-    current_brief = brief
-    current_summarize_messages = summarize_messages
-
-    for outer_attempt in range(1, max_outer_retries + 1):
-        log.debug(
-            "serialize_outer_loop_attempt",
-            attempt=outer_attempt,
-            max_attempts=max_outer_retries,
-        )
-
-        try:
-            result, tokens = await serialize_seed_iteratively(
-                model=model,
-                brief=current_brief,
-                provider_name=provider_name,
-                max_retries=max_retries,
-                callbacks=callbacks,
-                graph=graph,
-                max_semantic_retries=max_semantic_retries,
-            )
-            total_tokens += tokens
-            log.info(
-                "serialize_outer_loop_succeeded",
-                attempt=outer_attempt,
-                tokens=total_tokens,
-            )
-            return result, total_tokens
-
-        except SeedMutationError as e:
-            # Note: Token count from failed serialize attempts is lost.
-            # This is acceptable since we track successful serializations.
-
-            if outer_attempt >= max_outer_retries:
-                log.error(
-                    "serialize_outer_loop_exhausted",
-                    attempt=outer_attempt,
-                    error_count=len(e.errors),
-                )
-                raise
-
-            # Classify errors to determine repair strategy
-            wrong_ids, missing_items = classify_seed_errors(e.errors)
-
-            log.warning(
-                "serialize_outer_loop_failed",
-                attempt=outer_attempt,
-                error_count=len(e.errors),
-                wrong_id_count=len(wrong_ids),
-                missing_item_count=len(missing_items),
-                errors=[err.provided for err in wrong_ids[:5]],  # First 5 invalid IDs
-            )
-
-            # Choose repair strategy:
-            # - Resummarize can fix BOTH missing items AND wrong IDs (has full context)
-            # - Surgical repair can only fix wrong IDs
-            # So prioritize resummarize when there are ANY missing items
-            if missing_items and current_summarize_messages:
-                # Resummarize with feedback (can fix both error types)
-                feedback = format_missing_items_feedback(missing_items)
-                new_brief, updated_messages, resum_tokens = await resummarize_with_feedback(
-                    model=model,
-                    summarize_messages=current_summarize_messages,
-                    feedback=feedback,
-                    callbacks=callbacks,
-                )
-                total_tokens += resum_tokens
-
-                log.info(
-                    "resummarize_repair_completed",
-                    original_length=len(current_brief),
-                    new_length=len(new_brief),
-                    missing_items_count=len(missing_items),
-                    tokens=resum_tokens,
-                )
-
-                current_brief = new_brief
-                current_summarize_messages = updated_messages
-            elif wrong_ids:
-                # Surgical ID repair (only for wrong_id errors)
-                valid_ids_context = format_valid_ids_context(graph, stage="seed")
-                repaired_brief, repair_tokens = await repair_seed_brief(
-                    model=model,
-                    brief=current_brief,
-                    errors=wrong_ids,
-                    valid_ids_context=valid_ids_context,
-                    callbacks=callbacks,
-                )
-                total_tokens += repair_tokens
-
-                log.info(
-                    "surgical_repair_completed",
-                    original_length=len(current_brief),
-                    repaired_length=len(repaired_brief),
-                    wrong_id_count=len(wrong_ids),
-                    tokens=repair_tokens,
-                )
-
-                current_brief = repaired_brief
-            else:
-                # Only missing_items without message history - cannot repair
-                log.warning(
-                    "unrepairable_seed_errors",
-                    reason="Missing items found but cannot resummarize without message history",
-                    missing_item_count=len(missing_items),
-                )
-                # Continue loop to exhaust retries and raise the error
-
-    # Should not reach here due to raise in loop, but satisfy type checker
-    raise SeedMutationError([])  # pragma: no cover
