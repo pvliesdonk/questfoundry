@@ -5,10 +5,10 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from questfoundry.agents.prompts import get_summarize_prompt
-from questfoundry.agents.summarize import summarize_discussion
+from questfoundry.agents.summarize import _format_messages_for_summary, summarize_discussion
 
 
 class TestGetSummarizePrompt:
@@ -222,3 +222,135 @@ class TestSummarizeDiscussion:
         assert "System: System context" in conversation_text
         assert "User: User input" in conversation_text
         assert "Assistant: AI response" in conversation_text
+
+
+class TestFormatMessagesToolCalls:
+    """Test _format_messages_for_summary with tool calls and results."""
+
+    def test_format_messages_with_tool_calls(self) -> None:
+        """Should include tool call name and arguments in formatted output."""
+        ai_message = AIMessage(content="Let me search for relevant information.")
+        ai_message.tool_calls = [
+            {
+                "name": "search_corpus",
+                "args": {"query": "mystery genre conventions"},
+                "id": "call_123",
+            }
+        ]
+        messages = [ai_message]
+
+        result = _format_messages_for_summary(messages)
+
+        assert "Let me search for relevant information." in result
+        assert "[Tool Call: search_corpus]" in result
+        assert "mystery genre conventions" in result
+
+    def test_format_messages_with_tool_messages(self) -> None:
+        """Should include tool result name and content in formatted output."""
+        tool_message = ToolMessage(
+            content='{"result": "success", "data": {"genre": "mystery"}}',
+            name="search_corpus",
+            tool_call_id="call_123",
+        )
+        messages = [tool_message]
+
+        result = _format_messages_for_summary(messages)
+
+        assert "[Tool Result: search_corpus]" in result
+        assert '"result": "success"' in result
+        assert '"genre": "mystery"' in result
+
+    def test_format_preserves_research_context(self) -> None:
+        """Should preserve full tool research chain in conversation context."""
+        # Simulate a discuss phase with tool research
+        messages = [
+            HumanMessage(content="I want to write a mystery story"),
+            AIMessage(content="Let me research mystery conventions."),
+        ]
+        # Add tool call to the AI message
+        messages[1].tool_calls = [
+            {
+                "name": "search_corpus",
+                "args": {"query": "mystery tropes"},
+                "id": "call_456",
+            }
+        ]
+        messages.append(
+            ToolMessage(
+                content='{"result": "success", "data": {"tropes": ["locked room", "red herring"]}}',
+                name="search_corpus",
+                tool_call_id="call_456",
+            )
+        )
+        messages.append(
+            AIMessage(
+                content="Based on my research, I found common mystery tropes include locked room mysteries and red herrings."
+            )
+        )
+
+        result = _format_messages_for_summary(messages)
+
+        # Verify the full context is preserved
+        assert "User: I want to write a mystery story" in result
+        assert "Let me research mystery conventions" in result
+        assert "[Tool Call: search_corpus]" in result
+        assert "mystery tropes" in result
+        assert "[Tool Result: search_corpus]" in result
+        assert "locked room" in result
+        assert "red herring" in result
+        assert "Based on my research" in result
+
+    def test_format_messages_with_multiple_tool_calls(self) -> None:
+        """Should include all tool calls from a single AI message."""
+        ai_message = AIMessage(content="")
+        ai_message.tool_calls = [
+            {"name": "search_corpus", "args": {"query": "genre"}, "id": "call_1"},
+            {"name": "get_example", "args": {"category": "mystery"}, "id": "call_2"},
+        ]
+        messages = [ai_message]
+
+        result = _format_messages_for_summary(messages)
+
+        assert "[Tool Call: search_corpus]" in result
+        assert "[Tool Call: get_example]" in result
+        assert "genre" in result
+        assert "mystery" in result
+
+    def test_format_messages_ai_without_content_but_with_tool_calls(self) -> None:
+        """Should handle AI message with only tool calls (no text content)."""
+        ai_message = AIMessage(content="")
+        ai_message.tool_calls = [{"name": "search", "args": {"q": "test"}, "id": "call_1"}]
+        messages = [ai_message]
+
+        result = _format_messages_for_summary(messages)
+
+        # Should not have empty "Assistant: " prefix
+        assert "Assistant: " not in result or result.count("Assistant:") == 0
+        assert "[Tool Call: search]" in result
+
+    def test_format_messages_tool_message_without_name(self) -> None:
+        """Should handle tool message without name attribute."""
+        tool_message = ToolMessage(
+            content="some result",
+            tool_call_id="call_123",
+        )
+        # Ensure name is None/missing
+        tool_message.name = None
+        messages = [tool_message]
+
+        result = _format_messages_for_summary(messages)
+
+        assert "[Tool Result: unknown_tool]" in result
+        assert "some result" in result
+
+    def test_format_messages_tool_call_without_args(self) -> None:
+        """Should handle tool call with missing args."""
+        ai_message = AIMessage(content="")
+        ai_message.tool_calls = [{"name": "simple_tool", "id": "call_1"}]
+        messages = [ai_message]
+
+        result = _format_messages_for_summary(messages)
+
+        assert "[Tool Call: simple_tool]" in result
+        # Empty args should render as {}
+        assert "{}" in result
