@@ -20,11 +20,16 @@ from questfoundry.agents.serialize import (
     serialize_to_artifact,
     serialize_with_brief_repair,
 )
-from questfoundry.agents.summarize import summarize_discussion
+from questfoundry.agents.summarize import (
+    format_missing_items_feedback,
+    resummarize_with_feedback,
+    summarize_discussion,
+)
 
 __all__ = [
     "SerializationError",
     "create_discuss_agent",
+    "format_missing_items_feedback",
     "get_brainstorm_discuss_prompt",
     "get_brainstorm_serialize_prompt",
     "get_brainstorm_summarize_prompt",
@@ -35,6 +40,7 @@ __all__ = [
     "get_seed_summarize_prompt",
     "get_serialize_prompt",
     "get_summarize_prompt",
+    "resummarize_with_feedback",
     "run_discuss_phase",
     "serialize_seed_iteratively",
     "serialize_to_artifact",
