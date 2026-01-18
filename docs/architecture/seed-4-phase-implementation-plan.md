@@ -1,7 +1,7 @@
 # SEED 4-Phase Architecture Implementation Plan
 
 **Status**: Ready for review
-**Related Issues**: #202, #204
+**Related Issues**: #193, #202, #204
 **Author**: Implementation analysis based on codebase research
 
 ## Executive Summary
@@ -206,9 +206,46 @@ async def run_seed_phase(
 
 ---
 
-### PR #2: Phase 1 & 2 Prompts + Validation (~350 lines)
+### PR #2: Phase 1 & 2 Prompts + Message History Fix (~400 lines)
 
-**Goal**: Implement Entity Curation and Thread Design phases with validation.
+**Goal**: Implement Entity Curation and Thread Design phases with validation, and fix message history flattening (issue #193).
+
+#### Fix Message History Flattening (Issue #193)
+
+The current `summarize_discussion` flattens `list[BaseMessage]` to text, losing:
+- Message role structure (who said what)
+- Tool call/result associations
+- Conversation turn boundaries
+
+**Changes to `agents/summarize.py`:**
+
+```python
+async def summarize_discussion(
+    model: BaseChatModel,
+    messages: list[BaseMessage],
+    system_prompt: str | None = None,
+    ...
+) -> tuple[str, int]:
+    """Summarize discussion preserving message structure."""
+
+    # NEW: Pass messages directly instead of flattening
+    summarize_messages: list[BaseMessage] = [
+        SystemMessage(content=system_prompt or get_summarize_prompt()),
+        # Include actual message objects, not flattened text
+        *messages,
+        # Final instruction to summarize
+        HumanMessage(content="Based on the above discussion, provide a summary."),
+    ]
+
+    response = await model.ainvoke(summarize_messages, config=config)
+    return str(response.content), tokens
+```
+
+**Acceptance criteria from #193:**
+- [x] Summarize receives `list[BaseMessage]` (done in PR#1)
+- [ ] Tool calls from discuss visible in summarize context → **Fix in this PR**
+- [ ] Summarize has feedback loop for validation → **Add in this PR**
+- [ ] Tests verify message structure preservation → **Add in this PR**
 
 #### New Prompts
 
@@ -275,9 +312,11 @@ def validate_phase2_output(
 
 #### Files Changed
 
+- `src/questfoundry/agents/summarize.py` - Fix message flattening (~30 lines changed)
 - `prompts/templates/phase1_*.yaml` - 3 new prompt files (~200 lines total)
 - `prompts/templates/phase2_*.yaml` - 3 new prompt files (~250 lines total)
 - `src/questfoundry/graph/validation.py` - New validation functions (~100 lines)
+- `tests/unit/test_summarize.py` - Add message structure preservation tests (~50 lines)
 - `tests/unit/test_phase_validation.py` - Unit tests (~100 lines)
 
 ---
