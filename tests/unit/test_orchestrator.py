@@ -35,6 +35,31 @@ def mock_provider() -> MagicMock:
     return provider
 
 
+def _inject_mock_models(orchestrator: PipelineOrchestrator) -> MagicMock:
+    """Inject mock models for all phases (discuss, summarize, serialize).
+
+    This helper sets up mocks for the chat model and phase-specific models
+    that would otherwise require provider configuration (e.g., OLLAMA_HOST).
+
+    Returns:
+        The mock model instance used for all phases.
+    """
+    mock_model = MagicMock()
+    # Discuss phase model
+    orchestrator._chat_model = mock_model
+    orchestrator._provider_name = "mock"
+    orchestrator._model_name = "mock-model"
+    # Summarize phase model
+    orchestrator._summarize_model = mock_model
+    orchestrator._summarize_provider_name = "mock"
+    orchestrator._summarize_model_name = "mock-model"
+    # Serialize phase model
+    orchestrator._serialize_model = mock_model
+    orchestrator._serialize_provider_name = "mock"
+    orchestrator._serialize_model_name = "mock-model"
+    return mock_model
+
+
 # --- ProjectConfig Tests ---
 
 
@@ -255,10 +280,7 @@ async def test_orchestrator_run_stage_with_mock(tmp_path: Path) -> None:
     register_stage(mock_stage)
 
     orchestrator = PipelineOrchestrator(tmp_path)
-    # Inject mock chat model directly
-    mock_model = MagicMock()
-    orchestrator._chat_model = mock_model
-    orchestrator._provider_name = "mock"
+    _inject_mock_models(orchestrator)
 
     # Run stage with user_prompt
     result = await orchestrator.run_stage("mock", {"user_prompt": "test prompt"})
@@ -280,10 +302,7 @@ async def test_orchestrator_run_stage_with_errors(tmp_path: Path) -> None:
     register_stage(mock_stage)
 
     orchestrator = PipelineOrchestrator(tmp_path)
-    # Inject mock chat model directly
-    mock_model = MagicMock()
-    orchestrator._chat_model = mock_model
-    orchestrator._provider_name = "mock"
+    _inject_mock_models(orchestrator)
 
     result = await orchestrator.run_stage("failing", {"user_prompt": "test prompt"})
 
@@ -342,10 +361,7 @@ async def test_orchestrator_gate_rejection(tmp_path: Path) -> None:
             return "reject"
 
     orchestrator = PipelineOrchestrator(tmp_path, gate=RejectGate())
-    # Inject mock chat model directly
-    mock_model = MagicMock()
-    orchestrator._chat_model = mock_model
-    orchestrator._provider_name = "mock"
+    _inject_mock_models(orchestrator)
 
     result = await orchestrator.run_stage("gated", {"user_prompt": "test prompt"})
 
@@ -431,9 +447,7 @@ async def test_orchestrator_calls_validate_invariants(project_with_graph: Path) 
     register_stage(mock_stage)
 
     orchestrator = PipelineOrchestrator(project_with_graph)
-    mock_model = MagicMock()
-    orchestrator._chat_model = mock_model
-    orchestrator._provider_name = "mock"
+    _inject_mock_models(orchestrator)
 
     # Patch has_mutation_handler to return True for our stage
     # and validate_invariants to track if it was called
@@ -466,9 +480,7 @@ async def test_orchestrator_rollback_on_graph_corruption(
     register_stage(mock_stage)
 
     orchestrator = PipelineOrchestrator(project_with_graph)
-    mock_model = MagicMock()
-    orchestrator._chat_model = mock_model
-    orchestrator._provider_name = "mock"
+    _inject_mock_models(orchestrator)
 
     fake_violations = ["Dangling edge: entity::missing -> entity::nonexistent"]
 
@@ -506,9 +518,7 @@ async def test_orchestrator_graph_restored_after_rollback(
     register_stage(mock_stage)
 
     orchestrator = PipelineOrchestrator(project_with_graph)
-    mock_model = MagicMock()
-    orchestrator._chat_model = mock_model
-    orchestrator._provider_name = "mock"
+    _inject_mock_models(orchestrator)
 
     # Get initial graph state
     original_graph = Graph.load(project_with_graph)
@@ -563,9 +573,7 @@ async def test_orchestrator_no_validation_without_mutation_handler(
     register_stage(mock_stage)
 
     orchestrator = PipelineOrchestrator(project_with_graph)
-    mock_model = MagicMock()
-    orchestrator._chat_model = mock_model
-    orchestrator._provider_name = "mock"
+    _inject_mock_models(orchestrator)
 
     with (
         patch("questfoundry.pipeline.orchestrator.has_mutation_handler", return_value=False),

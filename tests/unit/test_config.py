@@ -252,3 +252,92 @@ class TestCreateDefaultConfig:
         assert config.provider.name == "custom-provider"
         assert config.provider.model == DEFAULT_MODEL
         assert config.providers.default == "custom-provider"
+
+
+# --- Tests for ProvidersConfig phase settings ---
+
+
+class TestProvidersConfigSettings:
+    """Tests for ProvidersConfig settings functionality."""
+
+    def test_from_dict_with_settings(self) -> None:
+        """Parse config with phase-specific settings."""
+        data = {
+            "default": "ollama/qwen3:4b-instruct-32k",
+            "settings": {
+                "discuss": {"temperature": 0.95, "top_p": 0.9},
+                "serialize": {"seed": 42},
+            },
+        }
+        config = ProvidersConfig.from_dict(data)
+
+        assert "discuss" in config.settings
+        assert config.settings["discuss"].temperature == 0.95
+        assert config.settings["discuss"].top_p == 0.9
+        assert "serialize" in config.settings
+        assert config.settings["serialize"].seed == 42
+
+    def test_from_dict_without_settings(self) -> None:
+        """Parse config without settings uses empty dict."""
+        data = {"default": "ollama/qwen3:4b-instruct-32k"}
+        config = ProvidersConfig.from_dict(data)
+
+        assert config.settings == {}
+
+    def test_get_phase_settings_returns_configured(self) -> None:
+        """get_phase_settings returns configured settings."""
+        from questfoundry.providers.settings import PhaseSettings
+
+        config = ProvidersConfig(
+            default="ollama/qwen3:4b-instruct-32k",
+            settings={"discuss": PhaseSettings(temperature=0.95)},
+        )
+
+        settings = config.get_phase_settings("discuss")
+        assert settings.temperature == 0.95
+
+    def test_get_phase_settings_returns_defaults_when_not_configured(self) -> None:
+        """get_phase_settings returns defaults when phase not in settings."""
+        config = ProvidersConfig(default="ollama/qwen3:4b-instruct-32k")
+
+        settings = config.get_phase_settings("discuss")
+        # Default settings have no explicit temperature (uses phase/provider default)
+        assert settings.temperature is None
+
+    def test_get_phase_settings_merges_with_defaults(self) -> None:
+        """get_phase_settings merges configured with defaults."""
+        from questfoundry.providers.settings import PhaseSettings
+
+        # Configure only temperature, leave top_p as default
+        config = ProvidersConfig(
+            default="ollama/qwen3:4b-instruct-32k",
+            settings={"discuss": PhaseSettings(temperature=0.95)},
+        )
+
+        settings = config.get_phase_settings("discuss")
+        assert settings.temperature == 0.95
+        assert settings.top_p is None  # Not configured, uses default
+
+
+class TestProjectConfigWithSettings:
+    """Tests for ProjectConfig with phase settings support."""
+
+    def test_from_dict_parses_settings(self) -> None:
+        """ProjectConfig.from_dict parses nested settings."""
+        data = {
+            "name": "test-project",
+            "providers": {
+                "default": "ollama/qwen3:4b-instruct-32k",
+                "settings": {
+                    "discuss": {"temperature": 0.9},
+                    "summarize": {"temperature": 0.5},
+                    "serialize": {"temperature": 0.0, "seed": 42},
+                },
+            },
+        }
+        config = ProjectConfig.from_dict(data)
+
+        assert config.providers.settings["discuss"].temperature == 0.9
+        assert config.providers.settings["summarize"].temperature == 0.5
+        assert config.providers.settings["serialize"].temperature == 0.0
+        assert config.providers.settings["serialize"].seed == 42

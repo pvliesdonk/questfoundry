@@ -5,9 +5,12 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path  # noqa: TC003 - used at runtime
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from ruamel.yaml import YAML
+
+if TYPE_CHECKING:
+    from questfoundry.providers.settings import PhaseSettings
 
 # Default configuration values
 DEFAULT_PROVIDER = "ollama"
@@ -44,12 +47,30 @@ class ProvidersConfig:
         discuss: Optional provider override for the discuss phase.
         summarize: Optional provider override for the summarize phase.
         serialize: Optional provider override for the serialize phase.
+        settings: Phase-specific model settings (temperature, top_p, seed).
     """
 
     default: str
     discuss: str | None = None
     summarize: str | None = None
     serialize: str | None = None
+    settings: dict[str, PhaseSettings] = field(default_factory=dict)
+
+    def get_phase_settings(self, phase: str) -> PhaseSettings:
+        """Get settings for a phase, with defaults.
+
+        Args:
+            phase: Pipeline phase (discuss, summarize, serialize).
+
+        Returns:
+            PhaseSettings for the phase. Returns configured settings if present,
+            otherwise returns default (empty) PhaseSettings. Note that actual
+            temperature values are computed dynamically in to_model_kwargs()
+            based on the phase and provider when not explicitly configured.
+        """
+        from questfoundry.providers.settings import get_default_phase_settings
+
+        return self.settings.get(phase) or get_default_phase_settings(phase)
 
     def get_discuss_provider(self) -> str:
         """Get the effective provider for the discuss phase.
@@ -85,16 +106,27 @@ class ProvidersConfig:
                 - discuss: Optional discuss phase provider
                 - summarize: Optional summarize phase provider
                 - serialize: Optional serialize phase provider
+                - settings: Optional dict of phase -> settings
 
         Returns:
             ProvidersConfig instance.
         """
+        from questfoundry.providers.settings import PhaseSettings
+
         default = data.get("default", f"{DEFAULT_PROVIDER}/{DEFAULT_MODEL}")
+
+        # Parse phase-specific settings
+        settings_data = data.get("settings", {})
+        settings: dict[str, PhaseSettings] = {}
+        for phase_name, phase_settings_data in settings_data.items():
+            settings[phase_name] = PhaseSettings.from_dict(phase_settings_data)
+
         return cls(
             default=default,
             discuss=data.get("discuss"),
             summarize=data.get("summarize"),
             serialize=data.get("serialize"),
+            settings=settings,
         )
 
 

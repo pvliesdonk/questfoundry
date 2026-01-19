@@ -165,7 +165,23 @@ def create_model_for_structured_output(
 
 
 def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
-    """Create base Ollama chat model (unstructured)."""
+    """Create base Ollama chat model (unstructured).
+
+    Args:
+        model: Model name.
+        **kwargs: Model options including:
+            - host: Ollama server URL (or use OLLAMA_HOST env var)
+            - temperature: Sampling temperature (optional, uses model default if not provided)
+            - top_p: Nucleus sampling parameter
+            - seed: Random seed for reproducibility
+            - num_ctx: Context window size (default 32768)
+
+    Returns:
+        Configured ChatOllama model.
+
+    Raises:
+        ProviderError: If OLLAMA_HOST not configured.
+    """
     try:
         from langchain_ollama import ChatOllama
     except ImportError as e:
@@ -183,13 +199,24 @@ def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
             "OLLAMA_HOST not configured. Set OLLAMA_HOST environment variable.",
         )
 
-    # Cast needed: ChatOllama runtime type is BaseChatModel, but mypy can't verify
-    chat_model: BaseChatModel = ChatOllama(
-        model=model,
-        base_url=host,
-        temperature=kwargs.get("temperature", 0.7),
-        num_ctx=kwargs.get("num_ctx", 32768),  # Default 32k to avoid truncation
-    )
+    # Build model kwargs - only include parameters that are provided
+    model_kwargs: dict[str, Any] = {
+        "model": model,
+        "base_url": host,
+        "num_ctx": kwargs.get("num_ctx", 32768),  # Default 32k to avoid truncation
+    }
+
+    # Temperature is provided by phase settings; if absent, model uses its default
+    if "temperature" in kwargs:
+        model_kwargs["temperature"] = kwargs["temperature"]
+
+    if "top_p" in kwargs:
+        model_kwargs["top_p"] = kwargs["top_p"]
+
+    if "seed" in kwargs:
+        model_kwargs["seed"] = kwargs["seed"]
+
+    chat_model: BaseChatModel = ChatOllama(**model_kwargs)
     return chat_model
 
 
@@ -212,7 +239,22 @@ def _is_reasoning_model(model: str) -> bool:
 
 
 def _create_openai_base_model(model: str, **kwargs: Any) -> BaseChatModel:
-    """Create base OpenAI chat model (unstructured)."""
+    """Create base OpenAI chat model (unstructured).
+
+    Args:
+        model: Model name.
+        **kwargs: Model options including:
+            - api_key: OpenAI API key (or use OPENAI_API_KEY env var)
+            - temperature: Sampling temperature (optional, ignored for reasoning models)
+            - top_p: Nucleus sampling parameter
+            - seed: Random seed for reproducibility
+
+    Returns:
+        Configured ChatOpenAI model.
+
+    Raises:
+        ProviderError: If API key not configured.
+    """
     try:
         from langchain_openai import ChatOpenAI
     except ImportError as e:
@@ -238,15 +280,40 @@ def _create_openai_base_model(model: str, **kwargs: Any) -> BaseChatModel:
 
     # Reasoning models (o1, o1-mini, o3, etc.) don't support temperature
     if not _is_reasoning_model(model):
-        model_kwargs["temperature"] = kwargs.get("temperature", 0.7)
+        if "temperature" in kwargs:
+            model_kwargs["temperature"] = kwargs["temperature"]
+        if "top_p" in kwargs:
+            model_kwargs["top_p"] = kwargs["top_p"]
     else:
         log.debug("reasoning_model_detected", model=model, note="skipping temperature parameter")
+
+    # Seed is supported for all OpenAI models
+    if "seed" in kwargs:
+        model_kwargs["seed"] = kwargs["seed"]
 
     return ChatOpenAI(**model_kwargs)
 
 
 def _create_anthropic_base_model(model: str, **kwargs: Any) -> BaseChatModel:
-    """Create base Anthropic chat model (unstructured)."""
+    """Create base Anthropic chat model (unstructured).
+
+    Args:
+        model: Model name.
+        **kwargs: Model options including:
+            - api_key: Anthropic API key (or use ANTHROPIC_API_KEY env var)
+            - temperature: Sampling temperature (optional, uses model default if not provided)
+            - top_p: Nucleus sampling parameter
+
+    Note:
+        Anthropic does not support the seed parameter. It is filtered out
+        by PhaseSettings.to_model_kwargs() before reaching this function.
+
+    Returns:
+        Configured ChatAnthropic model.
+
+    Raises:
+        ProviderError: If API key not configured.
+    """
     try:
         from langchain_anthropic import ChatAnthropic
     except ImportError as e:
@@ -264,8 +331,18 @@ def _create_anthropic_base_model(model: str, **kwargs: Any) -> BaseChatModel:
             "API key required. Set ANTHROPIC_API_KEY environment variable.",
         )
 
-    return ChatAnthropic(
-        model=model,  # type: ignore[call-arg]
-        api_key=api_key,  # type: ignore[arg-type]
-        temperature=kwargs.get("temperature", 0.7),
-    )
+    # Build model kwargs
+    model_kwargs: dict[str, Any] = {
+        "model": model,
+        "api_key": api_key,
+    }
+
+    if "temperature" in kwargs:
+        model_kwargs["temperature"] = kwargs["temperature"]
+
+    if "top_p" in kwargs:
+        model_kwargs["top_p"] = kwargs["top_p"]
+
+    # Note: seed is not supported by Anthropic - filtered upstream
+
+    return ChatAnthropic(**model_kwargs)
