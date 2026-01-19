@@ -10,6 +10,7 @@ from questfoundry.graph.mutations import (
     BrainstormValidationError,
     SeedErrorCategory,
     SeedValidationError,
+    _normalize_id,
     apply_brainstorm_mutations,
     apply_dream_mutations,
     apply_mutations,
@@ -1291,3 +1292,354 @@ class TestErrorPatternConsistency:
         assert len(completeness_errors) == 1
         # Verify the error message contains expected pattern
         assert "missing decision" in completeness_errors[0].issue.lower()
+
+
+class TestNormalizeId:
+    """Tests for _normalize_id helper function."""
+
+    def test_unscoped_id_returned_as_is(self) -> None:
+        """Unscoped ID is returned unchanged."""
+        normalized, error = _normalize_id("hero", "entity")
+        assert normalized == "hero"
+        assert error is None
+
+    def test_correctly_scoped_id_strips_prefix(self) -> None:
+        """Correctly scoped ID has prefix stripped."""
+        normalized, error = _normalize_id("entity::hero", "entity")
+        assert normalized == "hero"
+        assert error is None
+
+    def test_tension_scope_accepted(self) -> None:
+        """Tension scope is handled correctly."""
+        normalized, error = _normalize_id("tension::mentor_trust", "tension")
+        assert normalized == "mentor_trust"
+        assert error is None
+
+    def test_thread_scope_accepted(self) -> None:
+        """Thread scope is handled correctly."""
+        normalized, error = _normalize_id("thread::mentor_arc", "thread")
+        assert normalized == "mentor_arc"
+        assert error is None
+
+    def test_wrong_scope_returns_error(self) -> None:
+        """Wrong scope prefix returns error message."""
+        normalized, error = _normalize_id("tension::hero", "entity")
+        # Returns original ID unchanged when scope is wrong
+        assert normalized == "tension::hero"
+        assert error is not None
+        assert "entity::" in error
+        assert "tension::" in error
+
+    def test_entity_scope_rejected_when_thread_expected(self) -> None:
+        """Entity scope rejected when thread is expected."""
+        normalized, error = _normalize_id("entity::mentor_arc", "thread")
+        assert normalized == "entity::mentor_arc"
+        assert error is not None
+        assert "thread::" in error
+        assert "entity::" in error
+
+    def test_id_with_colons_in_raw_id(self) -> None:
+        """IDs with :: only split on first occurrence."""
+        # Edge case: raw_id containing ::
+        normalized, error = _normalize_id("entity::my::complex::id", "entity")
+        assert normalized == "my::complex::id"
+        assert error is None
+
+    def test_empty_raw_id_after_scope(self) -> None:
+        """Scoped ID with empty raw_id."""
+        normalized, error = _normalize_id("entity::", "entity")
+        assert normalized == ""
+        assert error is None
+
+
+class TestScopedIdValidation:
+    """Tests for scoped ID acceptance in validate_seed_mutations."""
+
+    def test_scoped_entity_id_accepted(self) -> None:
+        """Scoped entity IDs (entity::hero) are accepted in entity decisions."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+
+        output = {
+            "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+    def test_scoped_tension_id_accepted(self) -> None:
+        """Scoped tension IDs (tension::trust) are accepted in tension decisions."""
+        graph = Graph.empty()
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+
+        output = {
+            "entities": [],
+            "tensions": [{"tension_id": "tension::trust", "explored": [], "implicit": []}],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+    def test_scoped_thread_id_accepted_in_beats(self) -> None:
+        """Scoped thread IDs (thread::mentor) are accepted in beat thread references."""
+        graph = Graph.empty()
+        # Set up BRAINSTORM data
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+
+        output = {
+            "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
+            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "threads": [
+                {
+                    "thread_id": "mentor",
+                    "name": "Mentor Arc",
+                    "tension_id": "tension::trust",
+                    "alternative_id": "yes",
+                }
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "The beginning",
+                    "threads": ["thread::mentor"],  # Scoped thread ID
+                    "entities": ["entity::hero"],
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+    def test_wrong_scope_detected_for_entity(self) -> None:
+        """Wrong scope (tension:: instead of entity::) is detected."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+
+        output = {
+            "entities": [{"entity_id": "tension::hero", "disposition": "retained"}],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert len(errors) >= 1
+        scope_errors = [e for e in errors if "Wrong scope prefix" in e.issue]
+        assert len(scope_errors) == 1
+        assert "entity::" in scope_errors[0].issue
+        assert "tension::" in scope_errors[0].issue
+
+    def test_wrong_scope_detected_for_tension(self) -> None:
+        """Wrong scope (entity:: instead of tension::) is detected."""
+        graph = Graph.empty()
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+
+        output = {
+            "entities": [],
+            "tensions": [{"tension_id": "entity::trust", "explored": [], "implicit": []}],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert len(errors) >= 1
+        scope_errors = [e for e in errors if "Wrong scope prefix" in e.issue]
+        assert len(scope_errors) == 1
+        assert "tension::" in scope_errors[0].issue
+        assert "entity::" in scope_errors[0].issue
+
+    def test_wrong_scope_detected_for_thread_in_beat(self) -> None:
+        """Wrong scope (entity:: instead of thread::) in beat thread references."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+
+        output = {
+            "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
+            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "threads": [
+                {
+                    "thread_id": "mentor",
+                    "name": "Mentor Arc",
+                    "tension_id": "tension::trust",
+                    "alternative_id": "yes",
+                }
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "The beginning",
+                    "threads": ["entity::mentor"],  # Wrong scope - should be thread::
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        scope_errors = [e for e in errors if "Wrong scope prefix" in e.issue]
+        assert len(scope_errors) == 1
+        assert "thread::" in scope_errors[0].issue
+
+    def test_mixed_scoped_and_unscoped_ids(self) -> None:
+        """Both scoped and unscoped IDs work together."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("entity::villain", {"type": "entity", "raw_id": "villain"})
+
+        output = {
+            "entities": [
+                {"entity_id": "entity::hero", "disposition": "retained"},  # Scoped
+                {"entity_id": "villain", "disposition": "cut"},  # Unscoped
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+    def test_scoped_ids_in_completeness_check(self) -> None:
+        """Scoped IDs are normalized for completeness checking."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("entity::villain", {"type": "entity", "raw_id": "villain"})
+
+        output = {
+            "entities": [
+                {"entity_id": "entity::hero", "disposition": "retained"},
+                {"entity_id": "entity::villain", "disposition": "cut"},
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # No missing decision errors since scoped IDs should be normalized
+        completeness_errors = [e for e in errors if "Missing decision" in e.issue]
+        assert completeness_errors == []
+
+    def test_scoped_entity_in_beat_entities(self) -> None:
+        """Scoped entity IDs work in beat.entities array."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+
+        output = {
+            "entities": [
+                {"entity_id": "entity::hero", "disposition": "retained"},
+                {"entity_id": "entity::mentor", "disposition": "retained"},
+            ],
+            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "threads": [
+                {
+                    "thread_id": "mentor_arc",
+                    "name": "Mentor Arc",
+                    "tension_id": "tension::trust",
+                    "alternative_id": "yes",
+                }
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "Meet mentor",
+                    "entities": ["entity::hero", "entity::mentor"],  # Scoped IDs
+                    "location": "entity::hero",  # Scoped location
+                    "threads": ["thread::mentor_arc"],
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # No errors expected
+        assert errors == []
+
+    def test_scoped_tension_in_tension_impacts(self) -> None:
+        """Scoped tension IDs work in beat.tension_impacts."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+
+        output = {
+            "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
+            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "threads": [
+                {
+                    "thread_id": "mentor_arc",
+                    "name": "Mentor Arc",
+                    "tension_id": "tension::trust",
+                    "alternative_id": "yes",
+                }
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "Build trust",
+                    "threads": ["thread::mentor_arc"],
+                    "tension_impacts": [
+                        {"tension_id": "tension::trust", "effect": "advances"}  # Scoped ID
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+    def test_scoped_thread_in_consequences(self) -> None:
+        """Scoped thread IDs work in consequence.thread_id."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+
+        output = {
+            "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
+            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "threads": [
+                {
+                    "thread_id": "mentor_arc",
+                    "name": "Mentor Arc",
+                    "tension_id": "tension::trust",
+                    "alternative_id": "yes",
+                }
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "trust_earned",
+                    "thread_id": "thread::mentor_arc",  # Scoped thread ID
+                    "description": "Trust is earned",
+                }
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
