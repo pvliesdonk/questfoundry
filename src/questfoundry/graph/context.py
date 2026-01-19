@@ -14,6 +14,50 @@ if TYPE_CHECKING:
 # Standard entity categories for BRAINSTORM/SEED stages
 _ENTITY_CATEGORIES = ["character", "location", "object", "faction"]
 
+# Scope prefixes for typed IDs (disambiguates ID types for LLM)
+SCOPE_ENTITY = "entity"
+SCOPE_TENSION = "tension"
+SCOPE_THREAD = "thread"
+
+
+def parse_scoped_id(scoped_id: str) -> tuple[str, str]:
+    """Parse 'type::raw_id' into (type, raw_id).
+
+    Scoped IDs use '::' as delimiter to disambiguate ID types for the LLM.
+    This prevents confusion between entity IDs, tension IDs, and thread IDs.
+
+    Args:
+        scoped_id: An ID string, optionally scoped (e.g., 'entity::hero' or 'hero').
+
+    Returns:
+        Tuple of (scope_type, raw_id). Returns ('', raw_id) if unscoped.
+
+    Examples:
+        >>> parse_scoped_id("entity::hero")
+        ('entity', 'hero')
+        >>> parse_scoped_id("thread::host_motive")
+        ('thread', 'host_motive')
+        >>> parse_scoped_id("hero")
+        ('', 'hero')
+    """
+    if "::" in scoped_id:
+        parts = scoped_id.split("::", 1)
+        return parts[0], parts[1]
+    return "", scoped_id
+
+
+def format_scoped_id(scope: str, raw_id: str) -> str:
+    """Format a raw ID with its scope prefix.
+
+    Args:
+        scope: The scope type (e.g., 'entity', 'tension', 'thread').
+        raw_id: The raw ID without scope.
+
+    Returns:
+        Scoped ID string (e.g., 'entity::hero').
+    """
+    return f"{scope}::{raw_id}"
+
 
 def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
     """Format thread IDs for beat serialization with inline constraints.
@@ -37,8 +81,8 @@ def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
     if not thread_ids:
         return ""
 
-    # Pipe-delimited for easy scanning
-    id_list = " | ".join(f"`{tid}`" for tid in thread_ids)
+    # Pipe-delimited for easy scanning, with thread:: scope prefix
+    id_list = " | ".join(f"`{format_scoped_id(SCOPE_THREAD, tid)}`" for tid in thread_ids)
 
     lines = [
         "## VALID THREAD IDs (copy exactly, no modifications)",
@@ -47,13 +91,13 @@ def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
         "",
         "Rules:",
         "- Use ONLY IDs from the list above in the `threads` array",
-        "- Do NOT add prefixes like 'the_'",
+        "- Include the `thread::` prefix in your output",
         "- Do NOT derive IDs from tension concepts",
         "- If a concept has no matching thread, omit it - do NOT invent an ID",
         "",
         "WRONG (will fail validation):",
         "- `clock_distortion` - NOT a valid thread ID (derived from concept)",
-        "- `the_host_motive` - WRONG prefix, use `host_motive`",
+        "- `host_motive` - WRONG: missing scope prefix, use `thread::host_motive`",
         "",
     ]
 
@@ -124,7 +168,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
                 cat_count = len(by_category[category])
                 lines.append(f"**{category.title()}s ({cat_count}):**")
                 for raw_id in sorted(by_category[category]):
-                    lines.append(f"  - `{raw_id}`")
+                    lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
                 lines.append("")
 
     # Tensions with alternatives
@@ -138,7 +182,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
                 alt_edges_by_tension.setdefault(from_id, []).append(edge)
 
         lines.append(f"### Tension IDs (TOTAL: {tension_count} - generate decision for ALL)")
-        lines.append("Format: tension_id → [alternative_ids]")
+        lines.append("Format: tension::id → [alternative_ids]")
         lines.append("")
 
         for tid, tdata in sorted(tensions.items()):
@@ -158,7 +202,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
             if alts:
                 # Sort alternatives for deterministic output
                 alts.sort()
-                lines.append(f"- `{raw_id}` → [{', '.join(alts)}]")
+                lines.append(f"- `{format_scoped_id(SCOPE_TENSION, raw_id)}` → [{', '.join(alts)}]")
 
         lines.append("")
 
@@ -172,7 +216,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
             f"- Generate EXACTLY {total_entity_count} entity decisions (one per entity above)",
             f"- Generate EXACTLY {tension_count} tension decisions (one per tension above)",
             "- Thread `alternative_id` must be from that tension's alternatives list",
-            "- Beat `entities` and `location` must use entity IDs from above",
+            "- Use scoped IDs with `entity::` or `tension::` prefix in your output",
             "",
             "### Verification",
             "Before submitting, COUNT your outputs:",
@@ -237,7 +281,7 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
         if category in by_category:
             entity_lines.append(f"**{category.title()}s:**")
             for raw_id in sorted(by_category[category]):
-                entity_lines.append(f"  - `{raw_id}`")
+                entity_lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
             entity_lines.append("")  # Blank line between categories
 
     # Collect tension IDs
@@ -246,7 +290,7 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
     for _tid, tdata in sorted(tensions.items()):
         raw_id = tdata.get("raw_id")
         if raw_id:
-            tension_lines.append(f"- `{raw_id}`")
+            tension_lines.append(f"- `{format_scoped_id(SCOPE_TENSION, raw_id)}`")
 
     return {
         "entity_manifest": "\n".join(entity_lines) if entity_lines else "(No entities)",
