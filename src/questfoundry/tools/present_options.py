@@ -140,14 +140,13 @@ class PresentOptionsTool:
                 }
             )
 
-        # Run async logic - we need to get into the running event loop
+        # Run async logic using the stored event loop
+        # (The loop is stored in callbacks because this sync tool may be
+        # executed in a thread pool where get_running_loop() would fail)
         try:
-            loop = asyncio.get_running_loop()
-            # We're inside an async context - use run_coroutine_threadsafe
-            # to run our coroutine from within sync code
             future = asyncio.run_coroutine_threadsafe(
                 self._execute_async(arguments, callbacks),
-                loop,
+                callbacks.event_loop,
             )
             return future.result(timeout=300)  # 5 minute timeout for user input
         except TimeoutError:
@@ -156,16 +155,6 @@ class PresentOptionsTool:
                 {
                     "result": "error",
                     "error": "User input timed out",
-                    "action": "Proceed with your best judgment on this decision.",
-                }
-            )
-        except RuntimeError:
-            # No running loop - shouldn't happen in normal use
-            log.warning("present_options_no_loop")
-            return json.dumps(
-                {
-                    "result": "error",
-                    "error": "No event loop available",
                     "action": "Proceed with your best judgment on this decision.",
                 }
             )

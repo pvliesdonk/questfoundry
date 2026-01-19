@@ -31,6 +31,7 @@ Usage in tools:
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -47,10 +48,12 @@ class InteractiveCallbacks:
     Attributes:
         user_input_fn: Async function to get user input.
         display_fn: Function to display formatted content to user.
+        event_loop: The event loop to use for async operations from sync context.
     """
 
     user_input_fn: UserInputFn
     display_fn: DisplayFn
+    event_loop: asyncio.AbstractEventLoop
 
 
 # Context variable for async-safe callback storage
@@ -68,11 +71,15 @@ def set_interactive_callbacks(
     Call this before agent invocation when in interactive mode.
     The callbacks will be available to any tools that need them.
 
+    Also captures the current event loop so that sync tools can schedule
+    async operations (like user input) even when running in a thread pool.
+
     Args:
         user_input_fn: Async function that prompts user and returns input.
         display_fn: Function to display formatted content (e.g., rich panel).
     """
-    _interactive_callbacks.set(InteractiveCallbacks(user_input_fn, display_fn))
+    loop = asyncio.get_running_loop()
+    _interactive_callbacks.set(InteractiveCallbacks(user_input_fn, display_fn, loop))
 
 
 def get_interactive_callbacks() -> InteractiveCallbacks | None:

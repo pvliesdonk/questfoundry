@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
@@ -38,7 +39,8 @@ class TestInteractiveContext:
         """get_interactive_callbacks returns None when not set."""
         assert get_interactive_callbacks() is None
 
-    def test_set_and_get_callbacks(self) -> None:
+    @pytest.mark.asyncio
+    async def test_set_and_get_callbacks(self) -> None:
         """Callbacks can be set and retrieved."""
         mock_input = AsyncMock(return_value="test")
         mock_display = MagicMock()
@@ -49,8 +51,10 @@ class TestInteractiveContext:
         assert callbacks is not None
         assert callbacks.user_input_fn is mock_input
         assert callbacks.display_fn is mock_display
+        assert callbacks.event_loop is asyncio.get_running_loop()
 
-    def test_clear_removes_callbacks(self) -> None:
+    @pytest.mark.asyncio
+    async def test_clear_removes_callbacks(self) -> None:
         """clear_interactive_callbacks removes stored callbacks."""
         mock_input = AsyncMock(return_value="test")
         mock_display = MagicMock()
@@ -61,18 +65,22 @@ class TestInteractiveContext:
         clear_interactive_callbacks()
         assert get_interactive_callbacks() is None
 
-    def test_callbacks_dataclass(self) -> None:
+    @pytest.mark.asyncio
+    async def test_callbacks_dataclass(self) -> None:
         """InteractiveCallbacks is a proper dataclass."""
         mock_input = AsyncMock()
         mock_display = MagicMock()
+        loop = asyncio.get_running_loop()
 
         callbacks = InteractiveCallbacks(
             user_input_fn=mock_input,
             display_fn=mock_display,
+            event_loop=loop,
         )
 
         assert callbacks.user_input_fn is mock_input
         assert callbacks.display_fn is mock_display
+        assert callbacks.event_loop is loop
 
 
 # --- PresentOptionsTool Tests ---
@@ -269,12 +277,21 @@ class TestPresentOptionsToolAsync:
     """Tests for async execution with mocked callbacks."""
 
     @pytest.fixture
-    def mock_callbacks(self) -> InteractiveCallbacks:
+    def mock_callbacks(self, event_loop: asyncio.AbstractEventLoop) -> InteractiveCallbacks:
         """Create mock callbacks for testing."""
         return InteractiveCallbacks(
             user_input_fn=AsyncMock(return_value="1"),
             display_fn=MagicMock(),
+            event_loop=event_loop,
         )
+
+    @pytest.fixture
+    def event_loop(self) -> asyncio.AbstractEventLoop:
+        """Get or create event loop for tests."""
+        try:
+            return asyncio.get_running_loop()
+        except RuntimeError:
+            return asyncio.new_event_loop()
 
     @pytest.mark.asyncio
     async def test_execute_async_success(self, mock_callbacks: InteractiveCallbacks) -> None:

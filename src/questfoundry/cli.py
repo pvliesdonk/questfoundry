@@ -984,14 +984,16 @@ def run(
         console.print("Use [cyan]--force[/cyan] to re-run completed stages.")
         return
 
-    # Check if DREAM will run and prompt is required
-    if "dream" in stages_to_run and prompt is None:
-        console.print("[red]Error:[/red] DREAM stage requires a prompt.")
-        console.print("Use [cyan]--prompt[/cyan] to provide a story idea.")
-        raise typer.Exit(1)
-
     # Determine interactive mode: explicit flag > default to non-interactive for batch execution
     use_interactive = interactive if interactive is not None else False
+
+    # Check if DREAM will run and prompt is required (only in non-interactive mode)
+    # In interactive mode, DREAM has a default prompt
+    if "dream" in stages_to_run and prompt is None and not use_interactive:
+        console.print("[red]Error:[/red] DREAM stage requires a prompt in non-interactive mode.")
+        console.print("Use [cyan]--prompt[/cyan] to provide a story idea,")
+        console.print("or use [cyan]--interactive[/cyan] to discuss interactively.")
+        raise typer.Exit(1)
 
     console.print()
     console.print(f"[bold]Running stages:[/bold] {' → '.join(s.upper() for s in stages_to_run)}")

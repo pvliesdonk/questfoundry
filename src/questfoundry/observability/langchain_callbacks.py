@@ -68,8 +68,16 @@ class LLMLoggingCallback(BaseCallbackHandler):
             metadata: Optional metadata.
             **kwargs: Additional arguments.
         """
-        # Extract model info
-        model_name = serialized.get("kwargs", {}).get("model", "unknown")
+        # Extract model info - check multiple locations
+        model_kwargs = serialized.get("kwargs", {})
+        model_name = (
+            model_kwargs.get("model")
+            or model_kwargs.get("model_name")
+            or serialized.get("id", ["unknown"])[-1]  # Last part of ID list
+        )
+
+        # Extract temperature (may be None if not set, defaults applied in create_entry)
+        temperature = model_kwargs.get("temperature")
 
         # Flatten messages for storage
         flat_messages = []
@@ -89,6 +97,7 @@ class LLMLoggingCallback(BaseCallbackHandler):
             "model": model_name,
             "messages": flat_messages,
             "start_time": perf_counter(),
+            "temperature": temperature,
         }
 
         # Store metadata for stage extraction in on_llm_end
@@ -98,6 +107,7 @@ class LLMLoggingCallback(BaseCallbackHandler):
             "llm_call_start",
             run_id=str(run_id),
             model=model_name,
+            temperature=temperature,
             message_count=len(flat_messages),
         )
 
@@ -182,17 +192,23 @@ class LLMLoggingCallback(BaseCallbackHandler):
             else:
                 total_tokens = tokens
 
+        # Get temperature if captured, otherwise use default
+        temperature = call_info.get("temperature")
+        entry_kwargs: dict[str, Any] = {
+            "stage": stage,  # Extracted from metadata passed via RunnableConfig
+            "model": call_info.get("model", "unknown"),
+            "messages": call_info.get("messages", []),
+            "content": content,
+            "tokens_used": total_tokens,
+            "finish_reason": "stop",  # Default, can be extracted from response metadata
+            "duration_seconds": duration_seconds,
+            "tool_calls": tool_calls if tool_calls else None,
+        }
+        if temperature is not None:
+            entry_kwargs["temperature"] = temperature
+
         # Write to logger
-        entry = self._llm_logger.create_entry(
-            stage=stage,  # Extracted from metadata passed via RunnableConfig
-            model=call_info.get("model", "unknown"),
-            messages=call_info.get("messages", []),
-            content=content,
-            tokens_used=total_tokens,
-            finish_reason="stop",  # Default, can be extracted from response metadata
-            duration_seconds=duration_seconds,
-            tool_calls=tool_calls if tool_calls else None,
-        )
+        entry = self._llm_logger.create_entry(**entry_kwargs)
         self._llm_logger.log(entry)
 
         log.debug(
