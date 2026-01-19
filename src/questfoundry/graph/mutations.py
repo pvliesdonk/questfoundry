@@ -224,6 +224,40 @@ def _require_field(item: dict[str, Any], field: str, context: str) -> Any:
     return item[field]
 
 
+def _normalize_id(provided_id: str, expected_scope: str) -> tuple[str, str | None]:
+    """Normalize a potentially scoped ID for validation.
+
+    Accepts both scoped (`entity::hero`) and unscoped (`hero`) IDs.
+    If scoped, validates the scope matches expected_scope.
+
+    Args:
+        provided_id: The ID from LLM output (may or may not have scope prefix).
+        expected_scope: Expected scope type (e.g., "entity", "tension", "thread").
+
+    Returns:
+        Tuple of (normalized_id, error_message).
+        - If valid: (raw_id, None)
+        - If wrong scope: (provided_id, error message describing mismatch)
+
+    Examples:
+        >>> _normalize_id("entity::hero", "entity")
+        ('hero', None)
+        >>> _normalize_id("hero", "entity")
+        ('hero', None)
+        >>> _normalize_id("tension::hero", "entity")
+        ('tension::hero', "Wrong scope prefix: expected 'entity::', got 'tension::'")
+    """
+    if "::" in provided_id:
+        scope, raw_id = provided_id.split("::", 1)
+        if scope != expected_scope:
+            return (
+                provided_id,
+                f"Wrong scope prefix: expected '{expected_scope}::', got '{scope}::'",
+            )
+        return raw_id, None
+    return provided_id, None
+
+
 def _clean_dict(data: dict[str, Any]) -> dict[str, Any]:
     """Remove None values from a dictionary for cleaner storage.
 
@@ -553,133 +587,239 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
     # 1. Validate entity decisions
     for i, decision in enumerate(output.get("entities", [])):
-        entity_id = decision.get("entity_id")
-        if entity_id and entity_id not in valid_entity_ids:
-            errors.append(
-                SeedValidationError(
-                    field_path=f"entities.{i}.entity_id",
-                    issue=f"Entity '{entity_id}' not in BRAINSTORM",
-                    available=sorted_entity_ids,
-                    provided=entity_id,
+        raw_entity_id = decision.get("entity_id")
+        if raw_entity_id:
+            entity_id, scope_error = _normalize_id(raw_entity_id, "entity")
+            if scope_error:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"entities.{i}.entity_id",
+                        issue=scope_error,
+                        available=sorted_entity_ids,
+                        provided=raw_entity_id,
+                    )
                 )
-            )
+            elif entity_id not in valid_entity_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"entities.{i}.entity_id",
+                        issue=f"Entity '{entity_id}' not in BRAINSTORM",
+                        available=sorted_entity_ids,
+                        provided=raw_entity_id,
+                    )
+                )
 
     # 2. Validate tension decisions
     for i, decision in enumerate(output.get("tensions", [])):
-        tension_id = decision.get("tension_id")
-        if tension_id and tension_id not in valid_tension_ids:
-            errors.append(
-                SeedValidationError(
-                    field_path=f"tensions.{i}.tension_id",
-                    issue=f"Tension '{tension_id}' not in BRAINSTORM",
-                    available=sorted_tension_ids,
-                    provided=tension_id,
+        raw_tension_id = decision.get("tension_id")
+        if raw_tension_id:
+            tension_id, scope_error = _normalize_id(raw_tension_id, "tension")
+            if scope_error:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"tensions.{i}.tension_id",
+                        issue=scope_error,
+                        available=sorted_tension_ids,
+                        provided=raw_tension_id,
+                    )
                 )
-            )
+            elif tension_id not in valid_tension_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"tensions.{i}.tension_id",
+                        issue=f"Tension '{tension_id}' not in BRAINSTORM",
+                        available=sorted_tension_ids,
+                        provided=raw_tension_id,
+                    )
+                )
 
     # 3-4. Validate threads
     for i, thread in enumerate(output.get("threads", [])):
-        tension_id = thread.get("tension_id")
-        alt_id = thread.get("alternative_id")
+        raw_thread_tension_id = thread.get("tension_id")
+        raw_alt_id = thread.get("alternative_id")
 
-        if tension_id and tension_id not in valid_tension_ids:
-            errors.append(
-                SeedValidationError(
-                    field_path=f"threads.{i}.tension_id",
-                    issue=f"Tension '{tension_id}' not in BRAINSTORM",
-                    available=sorted_tension_ids,
-                    provided=tension_id,
+        # Normalize tension_id
+        thread_tension_id: str | None = None
+        tension_valid = False
+        if raw_thread_tension_id:
+            thread_tension_id, scope_error = _normalize_id(raw_thread_tension_id, "tension")
+            if scope_error:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"threads.{i}.tension_id",
+                        issue=scope_error,
+                        available=sorted_tension_ids,
+                        provided=raw_thread_tension_id,
+                    )
                 )
-            )
+            elif thread_tension_id not in valid_tension_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"threads.{i}.tension_id",
+                        issue=f"Tension '{thread_tension_id}' not in BRAINSTORM",
+                        available=sorted_tension_ids,
+                        provided=raw_thread_tension_id,
+                    )
+                )
+            else:
+                tension_valid = True
+
         # Check alternative (report even if tension was also invalid, so LLM gets all feedback)
-        if tension_id and alt_id:
-            valid_alts = alt_by_tension.get(tension_id, set())
-            if alt_id not in valid_alts:
+        # Alternative IDs are not scoped (they're local to their tension)
+        if thread_tension_id and raw_alt_id:
+            valid_alts = alt_by_tension.get(thread_tension_id, set())
+            if raw_alt_id not in valid_alts:
                 errors.append(
                     SeedValidationError(
                         field_path=f"threads.{i}.alternative_id",
-                        issue=f"Alternative '{alt_id}' not in tension '{tension_id}'",
-                        available=sorted(valid_alts),
-                        provided=alt_id,
+                        issue=f"Alternative '{raw_alt_id}' not in tension '{thread_tension_id}'",
+                        available=sorted(valid_alts) if tension_valid else [],
+                        provided=raw_alt_id,
                     )
                 )
 
     # 5. Validate beat entity references
     for i, beat in enumerate(output.get("initial_beats", [])):
-        for entity_id in beat.get("entities", []):
-            if entity_id and entity_id not in valid_entity_ids:
-                errors.append(
-                    SeedValidationError(
-                        field_path=f"initial_beats.{i}.entities",
-                        issue=f"Entity '{entity_id}' not in BRAINSTORM",
-                        available=sorted_entity_ids,
-                        provided=entity_id,
+        for raw_entity_id in beat.get("entities", []):
+            if raw_entity_id:
+                entity_id, scope_error = _normalize_id(raw_entity_id, "entity")
+                if scope_error:
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"initial_beats.{i}.entities",
+                            issue=scope_error,
+                            available=sorted_entity_ids,
+                            provided=raw_entity_id,
+                        )
                     )
-                )
+                elif entity_id not in valid_entity_ids:
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"initial_beats.{i}.entities",
+                            issue=f"Entity '{entity_id}' not in BRAINSTORM",
+                            available=sorted_entity_ids,
+                            provided=raw_entity_id,
+                        )
+                    )
 
         # Location is also an entity
-        location = beat.get("location")
-        if location and location not in valid_entity_ids:
-            errors.append(
-                SeedValidationError(
-                    field_path=f"initial_beats.{i}.location",
-                    issue=f"Location '{location}' not in BRAINSTORM entities",
-                    available=sorted_entity_ids,
-                    provided=location,
-                )
-            )
-
-        # Location alternatives are also entities
-        for loc_alt in beat.get("location_alternatives", []):
-            if loc_alt and loc_alt not in valid_entity_ids:
+        raw_location = beat.get("location")
+        if raw_location:
+            location, scope_error = _normalize_id(raw_location, "entity")
+            if scope_error:
                 errors.append(
                     SeedValidationError(
-                        field_path=f"initial_beats.{i}.location_alternatives",
-                        issue=f"Location alternative '{loc_alt}' not in BRAINSTORM entities",
+                        field_path=f"initial_beats.{i}.location",
+                        issue=scope_error,
                         available=sorted_entity_ids,
-                        provided=loc_alt,
+                        provided=raw_location,
                     )
                 )
+            elif location not in valid_entity_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"initial_beats.{i}.location",
+                        issue=f"Location '{location}' not in BRAINSTORM entities",
+                        available=sorted_entity_ids,
+                        provided=raw_location,
+                    )
+                )
+
+        # Location alternatives are also entities
+        for raw_loc_alt in beat.get("location_alternatives", []):
+            if raw_loc_alt:
+                loc_alt, scope_error = _normalize_id(raw_loc_alt, "entity")
+                if scope_error:
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"initial_beats.{i}.location_alternatives",
+                            issue=scope_error,
+                            available=sorted_entity_ids,
+                            provided=raw_loc_alt,
+                        )
+                    )
+                elif loc_alt not in valid_entity_ids:
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"initial_beats.{i}.location_alternatives",
+                            issue=f"Location alternative '{loc_alt}' not in BRAINSTORM entities",
+                            available=sorted_entity_ids,
+                            provided=raw_loc_alt,
+                        )
+                    )
 
     # 6. Validate beat thread references (internal to SEED)
     for i, beat in enumerate(output.get("initial_beats", [])):
-        for thread_id in beat.get("threads", []):
-            if thread_id and thread_id not in seed_thread_ids:
-                errors.append(
-                    SeedValidationError(
-                        field_path=f"initial_beats.{i}.threads",
-                        issue=f"Thread '{thread_id}' not defined in SEED threads",
-                        available=sorted_thread_ids,
-                        provided=thread_id,
+        for raw_thread_id in beat.get("threads", []):
+            if raw_thread_id:
+                thread_id, scope_error = _normalize_id(raw_thread_id, "thread")
+                if scope_error:
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"initial_beats.{i}.threads",
+                            issue=scope_error,
+                            available=sorted_thread_ids,
+                            provided=raw_thread_id,
+                        )
                     )
-                )
+                elif thread_id not in seed_thread_ids:
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"initial_beats.{i}.threads",
+                            issue=f"Thread '{thread_id}' not defined in SEED threads",
+                            available=sorted_thread_ids,
+                            provided=raw_thread_id,
+                        )
+                    )
 
     # 7. Validate consequence thread references (internal to SEED)
     for i, consequence in enumerate(output.get("consequences", [])):
-        thread_id = consequence.get("thread_id")
-        if thread_id and thread_id not in seed_thread_ids:
-            errors.append(
-                SeedValidationError(
-                    field_path=f"consequences.{i}.thread_id",
-                    issue=f"Thread '{thread_id}' not defined in SEED threads",
-                    available=sorted_thread_ids,
-                    provided=thread_id,
+        raw_thread_id = consequence.get("thread_id")
+        if raw_thread_id:
+            thread_id, scope_error = _normalize_id(raw_thread_id, "thread")
+            if scope_error:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"consequences.{i}.thread_id",
+                        issue=scope_error,
+                        available=sorted_thread_ids,
+                        provided=raw_thread_id,
+                    )
                 )
-            )
+            elif thread_id not in seed_thread_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"consequences.{i}.thread_id",
+                        issue=f"Thread '{thread_id}' not defined in SEED threads",
+                        available=sorted_thread_ids,
+                        provided=raw_thread_id,
+                    )
+                )
 
     # 8. Validate tension_impacts in beats
     for i, beat in enumerate(output.get("initial_beats", [])):
         for j, impact in enumerate(beat.get("tension_impacts", [])):
-            tension_id = impact.get("tension_id")
-            if tension_id and tension_id not in valid_tension_ids:
-                errors.append(
-                    SeedValidationError(
-                        field_path=f"initial_beats.{i}.tension_impacts.{j}.tension_id",
-                        issue=f"Tension '{tension_id}' not in BRAINSTORM",
-                        available=sorted_tension_ids,
-                        provided=tension_id,
+            raw_tension_id = impact.get("tension_id")
+            if raw_tension_id:
+                tension_id, scope_error = _normalize_id(raw_tension_id, "tension")
+                if scope_error:
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"initial_beats.{i}.tension_impacts.{j}.tension_id",
+                            issue=scope_error,
+                            available=sorted_tension_ids,
+                            provided=raw_tension_id,
+                        )
                     )
-                )
+                elif tension_id not in valid_tension_ids:
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"initial_beats.{i}.tension_impacts.{j}.tension_id",
+                            issue=f"Tension '{tension_id}' not in BRAINSTORM",
+                            available=sorted_tension_ids,
+                            provided=raw_tension_id,
+                        )
+                    )
 
     # 9 & 10. Check completeness: all BRAINSTORM entities and tensions should have decisions
     completeness_checks = [
@@ -688,9 +828,16 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     ]
     for field_path, item_type, valid_ids in completeness_checks:
         id_field = f"{item_type}_id"
-        decided_ids: set[str] = {
-            item_id for item_id in (d.get(id_field) for d in output.get(field_path, [])) if item_id
-        }
+        # Normalize IDs from output to handle scoped IDs (entity::hero -> hero)
+        # Only count IDs with correct scope (or unscoped) toward completeness
+        decided_ids: set[str] = set()
+        for decision in output.get(field_path, []):
+            raw_id = decision.get(id_field)
+            if raw_id:
+                normalized_id, scope_error = _normalize_id(raw_id, item_type)
+                if not scope_error:
+                    decided_ids.add(normalized_id)
+
         missing_ids = valid_ids - decided_ids
         for item_id in sorted(missing_ids):
             # For entities, include type (character/location/object/faction) for clarity
