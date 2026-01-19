@@ -8,9 +8,14 @@ See docs/architecture/graph-storage.md for architecture details.
 """
 
 from questfoundry.graph.context import (
+    SCOPE_ENTITY,
+    SCOPE_TENSION,
+    SCOPE_THREAD,
     check_structural_completeness,
+    format_scoped_id,
     format_summarize_manifest,
     format_valid_ids_context,
+    parse_scoped_id,
 )
 from questfoundry.graph.errors import (
     EdgeEndpointError,
@@ -45,6 +50,9 @@ from questfoundry.graph.snapshots import (
 )
 
 __all__ = [
+    "SCOPE_ENTITY",
+    "SCOPE_TENSION",
+    "SCOPE_THREAD",
     "BrainstormMutationError",
     "BrainstormValidationError",
     "EdgeEndpointError",
@@ -65,10 +73,12 @@ __all__ = [
     "categorize_error",
     "categorize_errors",
     "check_structural_completeness",
+    "format_scoped_id",
     "format_summarize_manifest",
     "format_valid_ids_context",
     "has_mutation_handler",
     "list_snapshots",
+    "parse_scoped_id",
     "rollback_to_snapshot",
     "save_snapshot",
     "validate_brainstorm_mutations",

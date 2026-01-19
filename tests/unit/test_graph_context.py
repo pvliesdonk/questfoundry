@@ -4,9 +4,14 @@ from __future__ import annotations
 
 from questfoundry.graph import Graph, format_summarize_manifest, format_valid_ids_context
 from questfoundry.graph.context import (
+    SCOPE_ENTITY,
+    SCOPE_TENSION,
+    SCOPE_THREAD,
     check_structural_completeness,
+    format_scoped_id,
     format_thread_ids_context,
     get_expected_counts,
+    parse_scoped_id,
 )
 
 
@@ -59,11 +64,11 @@ class TestFormatValidIdsContext:
 
         # Categories now include counts
         assert "**Characters (1):**" in result
-        assert "`hero`" in result
+        assert "`entity::hero`" in result
         assert "**Locations (1):**" in result
-        assert "`tavern`" in result
+        assert "`entity::tavern`" in result
         assert "**Objects (1):**" in result
-        assert "`sword`" in result
+        assert "`entity::sword`" in result
 
     def test_seed_includes_tensions_with_alternatives(self) -> None:
         """SEED context lists tensions with their alternatives."""
@@ -97,8 +102,8 @@ class TestFormatValidIdsContext:
         result = format_valid_ids_context(graph, "seed")
 
         assert "Tension IDs" in result
-        assert "`trust`" in result
-        assert "`yes`" in result
+        assert "`tension::trust`" in result
+        assert "`yes`" in result  # alternatives stay unscoped within tension arrow
         assert "(default)" in result
         assert "`no`" in result
 
@@ -143,9 +148,9 @@ class TestFormatValidIdsContext:
         result = format_valid_ids_context(graph, "seed")
 
         # Check order: alice should come before bob, bob before zara
-        alice_pos = result.find("`alice`")
-        bob_pos = result.find("`bob`")
-        zara_pos = result.find("`zara`")
+        alice_pos = result.find("`entity::alice`")
+        bob_pos = result.find("`entity::bob`")
+        zara_pos = result.find("`entity::zara`")
 
         assert alice_pos < bob_pos < zara_pos
 
@@ -171,7 +176,7 @@ class TestFormatValidIdsContext:
 
         result = format_valid_ids_context(graph, "seed")
 
-        assert "`valid`" in result
+        assert "`entity::valid`" in result
         assert "invalid" not in result
 
     def test_seed_handles_unknown_category(self) -> None:
@@ -238,11 +243,11 @@ class TestFormatValidIdsContext:
         assert "### Tension IDs" in result
         assert "### Generation Requirements" in result
 
-        # Verify content
-        assert "`hero`" in result
-        assert "`castle`" in result
-        assert "`quest`" in result
-        assert "`accept` (default)" in result
+        # Verify content with scoped IDs
+        assert "`entity::hero`" in result
+        assert "`entity::castle`" in result
+        assert "`tension::quest`" in result
+        assert "`accept` (default)" in result  # alternatives stay unscoped
 
 
 class TestFormatThreadIdsContext:
@@ -268,7 +273,7 @@ class TestFormatThreadIdsContext:
         result = format_thread_ids_context(threads)
 
         assert "## VALID THREAD IDs" in result
-        assert "Allowed: `host_motive`" in result
+        assert "Allowed: `thread::host_motive`" in result
         assert "Rules:" in result
         assert "WRONG" in result
 
@@ -281,8 +286,10 @@ class TestFormatThreadIdsContext:
         ]
         result = format_thread_ids_context(threads)
 
-        # Should be sorted and pipe-delimited
-        assert "`archive_secret` | `butler_fidelity` | `host_motive`" in result
+        # Should be sorted and pipe-delimited with thread:: prefix
+        assert (
+            "`thread::archive_secret` | `thread::butler_fidelity` | `thread::host_motive`" in result
+        )
 
     def test_threads_sorted_alphabetically(self) -> None:
         """Thread IDs are sorted alphabetically for deterministic output."""
@@ -294,9 +301,9 @@ class TestFormatThreadIdsContext:
         result = format_thread_ids_context(threads)
 
         # Check order in the Allowed line
-        alpha_pos = result.find("`alpha_thread`")
-        middle_pos = result.find("`middle_thread`")
-        zebra_pos = result.find("`zebra_thread`")
+        alpha_pos = result.find("`thread::alpha_thread`")
+        middle_pos = result.find("`thread::middle_thread`")
+        zebra_pos = result.find("`thread::zebra_thread`")
 
         assert alpha_pos < middle_pos < zebra_pos
 
@@ -309,8 +316,8 @@ class TestFormatThreadIdsContext:
         ]
         result = format_thread_ids_context(threads)
 
-        assert "`another_valid`" in result
-        assert "`valid_thread`" in result
+        assert "`thread::another_valid`" in result
+        assert "`thread::valid_thread`" in result
         assert "missing_thread_id" not in result
 
     def test_includes_wrong_examples(self) -> None:
@@ -320,7 +327,7 @@ class TestFormatThreadIdsContext:
 
         assert "WRONG (will fail validation):" in result
         assert "`clock_distortion`" in result
-        assert "`the_host_motive`" in result
+        assert "`host_motive`" in result  # missing scope prefix example
 
     def test_includes_rules(self) -> None:
         """Output includes rules for ID usage."""
@@ -329,7 +336,7 @@ class TestFormatThreadIdsContext:
 
         assert "Rules:" in result
         assert "ONLY IDs from the list above" in result
-        assert "Do NOT add prefixes" in result
+        assert "Include the `thread::` prefix" in result
         assert "Do NOT derive IDs from tension concepts" in result
 
     def test_handles_empty_thread_id_string(self) -> None:
@@ -341,11 +348,12 @@ class TestFormatThreadIdsContext:
         ]
         result = format_thread_ids_context(threads)
 
-        # Empty string should be skipped
-        assert "`valid_thread`" in result
-        assert "`another_valid`" in result
-        # Should not have empty backticks
-        assert "``" not in result
+        # Empty string should be skipped - only valid threads appear
+        assert "`thread::valid_thread`" in result
+        assert "`thread::another_valid`" in result
+        # Exactly 2 thread IDs in the Allowed line (empty one skipped)
+        allowed_line = next(ln for ln in result.split("\n") if ln.startswith("Allowed:"))
+        assert allowed_line.count("`thread::") == 2
 
 
 class TestGetExpectedCounts:
@@ -522,9 +530,9 @@ class TestFormatSummarizeManifest:
         result = format_summarize_manifest(graph)
 
         assert "**Characters:**" in result["entity_manifest"]
-        assert "`hero`" in result["entity_manifest"]
+        assert "`entity::hero`" in result["entity_manifest"]
         assert "**Locations:**" in result["entity_manifest"]
-        assert "`castle`" in result["entity_manifest"]
+        assert "`entity::castle`" in result["entity_manifest"]
 
     def test_formats_tensions_as_list(self) -> None:
         """Tensions are formatted as simple bullet list."""
@@ -546,8 +554,8 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        assert "- `loyalty`" in result["tension_manifest"]
-        assert "- `trust`" in result["tension_manifest"]
+        assert "- `tension::loyalty`" in result["tension_manifest"]
+        assert "- `tension::trust`" in result["tension_manifest"]
 
     def test_skips_entities_without_raw_id(self) -> None:
         """Entities without raw_id are excluded."""
@@ -571,7 +579,7 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        assert "`valid`" in result["entity_manifest"]
+        assert "`entity::valid`" in result["entity_manifest"]
         assert "invalid" not in result["entity_manifest"]
 
     def test_skips_tensions_without_raw_id(self) -> None:
@@ -594,7 +602,7 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        assert "`valid`" in result["tension_manifest"]
+        assert "`tension::valid`" in result["tension_manifest"]
         assert "invalid" not in result["tension_manifest"]
 
     def test_sorts_entities_alphabetically(self) -> None:
@@ -611,8 +619,8 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        alice_pos = result["entity_manifest"].find("`alice`")
-        zara_pos = result["entity_manifest"].find("`zara`")
+        alice_pos = result["entity_manifest"].find("`entity::alice`")
+        zara_pos = result["entity_manifest"].find("`entity::zara`")
         assert alice_pos < zara_pos
 
     def test_sorts_tensions_by_node_id(self) -> None:
@@ -629,8 +637,8 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        alpha_pos = result["tension_manifest"].find("`alpha`")
-        zebra_pos = result["tension_manifest"].find("`zebra`")
+        alpha_pos = result["tension_manifest"].find("`tension::alpha`")
+        zebra_pos = result["tension_manifest"].find("`tension::zebra`")
         assert alpha_pos < zebra_pos
 
     def test_handles_all_entity_categories(self) -> None:
@@ -689,7 +697,7 @@ class TestFormatSummarizeManifest:
         result = format_summarize_manifest(graph)
 
         # Only standard categories are included
-        assert "hero" in result["entity_manifest"]
+        assert "entity::hero" in result["entity_manifest"]
         assert "weird_thing" not in result["entity_manifest"]
         assert "custom_item" not in result["entity_manifest"]
 
@@ -708,7 +716,7 @@ class TestFormatSummarizeManifest:
         result = format_summarize_manifest(graph)
 
         # Should have blank line after Characters section, before Locations
-        assert "**Characters:**\n  - `hero`\n\n**Locations:**" in result["entity_manifest"]
+        assert "**Characters:**\n  - `entity::hero`\n\n**Locations:**" in result["entity_manifest"]
 
 
 class TestCheckStructuralCompleteness:
@@ -812,3 +820,101 @@ class TestCheckStructuralCompleteness:
 
         with pytest.raises(ValueError, match="cannot be negative"):
             check_structural_completeness(output, expected)
+
+
+class TestParseScopedId:
+    """Tests for parse_scoped_id function."""
+
+    def test_parses_entity_scoped_id(self) -> None:
+        """Entity scoped ID is correctly parsed."""
+        scope, raw_id = parse_scoped_id("entity::hero")
+        assert scope == "entity"
+        assert raw_id == "hero"
+
+    def test_parses_tension_scoped_id(self) -> None:
+        """Tension scoped ID is correctly parsed."""
+        scope, raw_id = parse_scoped_id("tension::trust_betrayal")
+        assert scope == "tension"
+        assert raw_id == "trust_betrayal"
+
+    def test_parses_thread_scoped_id(self) -> None:
+        """Thread scoped ID is correctly parsed."""
+        scope, raw_id = parse_scoped_id("thread::host_motive")
+        assert scope == "thread"
+        assert raw_id == "host_motive"
+
+    def test_returns_empty_scope_for_unscoped_id(self) -> None:
+        """Unscoped ID returns empty string for scope."""
+        scope, raw_id = parse_scoped_id("hero")
+        assert scope == ""
+        assert raw_id == "hero"
+
+    def test_handles_id_with_multiple_colons(self) -> None:
+        """ID with multiple :: only splits on first occurrence."""
+        scope, raw_id = parse_scoped_id("entity::node::with::colons")
+        assert scope == "entity"
+        assert raw_id == "node::with::colons"
+
+    def test_handles_empty_raw_id(self) -> None:
+        """Scope with empty raw_id is parsed correctly."""
+        scope, raw_id = parse_scoped_id("entity::")
+        assert scope == "entity"
+        assert raw_id == ""
+
+    def test_handles_empty_string(self) -> None:
+        """Empty string returns empty scope and raw_id."""
+        scope, raw_id = parse_scoped_id("")
+        assert scope == ""
+        assert raw_id == ""
+
+    def test_handles_single_colon(self) -> None:
+        """Single colon is not a scope delimiter."""
+        scope, raw_id = parse_scoped_id("entity:hero")
+        assert scope == ""
+        assert raw_id == "entity:hero"
+
+
+class TestFormatScopedId:
+    """Tests for format_scoped_id function."""
+
+    def test_formats_entity_scoped_id(self) -> None:
+        """Entity ID is correctly formatted with scope."""
+        result = format_scoped_id("entity", "hero")
+        assert result == "entity::hero"
+
+    def test_formats_tension_scoped_id(self) -> None:
+        """Tension ID is correctly formatted with scope."""
+        result = format_scoped_id("tension", "trust_betrayal")
+        assert result == "tension::trust_betrayal"
+
+    def test_formats_thread_scoped_id(self) -> None:
+        """Thread ID is correctly formatted with scope."""
+        result = format_scoped_id("thread", "host_motive")
+        assert result == "thread::host_motive"
+
+    def test_roundtrip_scoped_id(self) -> None:
+        """Formatted scoped ID can be parsed back correctly."""
+        original_scope = "entity"
+        original_raw_id = "tavern"
+
+        formatted = format_scoped_id(original_scope, original_raw_id)
+        parsed_scope, parsed_raw_id = parse_scoped_id(formatted)
+
+        assert parsed_scope == original_scope
+        assert parsed_raw_id == original_raw_id
+
+
+class TestScopeConstants:
+    """Tests for scope constant values."""
+
+    def test_scope_entity_value(self) -> None:
+        """SCOPE_ENTITY has expected value."""
+        assert SCOPE_ENTITY == "entity"
+
+    def test_scope_tension_value(self) -> None:
+        """SCOPE_TENSION has expected value."""
+        assert SCOPE_TENSION == "tension"
+
+    def test_scope_thread_value(self) -> None:
+        """SCOPE_THREAD has expected value."""
+        assert SCOPE_THREAD == "thread"
