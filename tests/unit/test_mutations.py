@@ -53,29 +53,49 @@ class TestHasMutationHandler:
 class TestPrefixId:
     """Test the _prefix_id helper function."""
 
-    def test_adds_prefix_to_raw_id(self) -> None:
-        """Adds type prefix to unprefixed ID."""
-        assert _prefix_id("entity", "the_detective") == "entity::the_detective"
-        assert _prefix_id("tension", "host_motivation") == "tension::host_motivation"
-        assert _prefix_id("thread", "main_thread") == "thread::main_thread"
-
-    def test_idempotent_with_correct_prefix(self) -> None:
-        """Returns unchanged if already correctly prefixed."""
-        assert _prefix_id("entity", "entity::the_detective") == "entity::the_detective"
-        assert _prefix_id("tension", "tension::host_motivation") == "tension::host_motivation"
-
-    def test_strips_wrong_prefix_and_adds_correct(self) -> None:
-        """Strips existing prefix and adds correct one if mismatched."""
-        # This handles cases where LLM outputs wrong prefix
-        assert _prefix_id("entity", "tension::the_detective") == "entity::the_detective"
-        assert _prefix_id("tension", "entity::host_motivation") == "tension::host_motivation"
-
-    def test_handles_double_prefix(self) -> None:
-        """Handles double-prefixed IDs by extracting the raw part."""
-        # This was bug #238 - LLM output had tension::tension::id
-        assert (
-            _prefix_id("tension", "tension::tension::host_motivation") == "tension::host_motivation"
-        )
+    @pytest.mark.parametrize(
+        ("node_type", "raw_id", "expected"),
+        [
+            pytest.param("entity", "the_detective", "entity::the_detective", id="raw_id-entity"),
+            pytest.param(
+                "tension", "host_motivation", "tension::host_motivation", id="raw_id-tension"
+            ),
+            pytest.param("thread", "main_thread", "thread::main_thread", id="raw_id-thread"),
+            pytest.param(
+                "entity",
+                "entity::the_detective",
+                "entity::the_detective",
+                id="correctly_prefixed-entity",
+            ),
+            pytest.param(
+                "tension",
+                "tension::host_motivation",
+                "tension::host_motivation",
+                id="correctly_prefixed-tension",
+            ),
+            pytest.param(
+                "entity",
+                "tension::the_detective",
+                "entity::the_detective",
+                id="wrong_prefix-entity",
+            ),
+            pytest.param(
+                "tension",
+                "entity::host_motivation",
+                "tension::host_motivation",
+                id="wrong_prefix-tension",
+            ),
+            pytest.param(
+                "tension",
+                "tension::tension::host_motivation",
+                "tension::host_motivation",
+                id="double_prefix",
+            ),
+        ],
+    )
+    def test_prefix_id(self, node_type: str, raw_id: str, expected: str) -> None:
+        """Tests _prefix_id with various inputs including raw, prefixed, and double-prefixed IDs."""
+        assert _prefix_id(node_type, raw_id) == expected
 
 
 class TestApplyMutations:

@@ -562,7 +562,7 @@ def _prefix_id(node_type: str, raw_id: str) -> str:
     # Strip any existing prefixes to get the raw ID
     # This handles: "the_detective", "entity::the_detective", "entity::entity::the_detective"
     if "::" in raw_id:
-        raw_id = raw_id.split("::")[-1]
+        raw_id = raw_id.rsplit("::", 1)[-1]
 
     return f"{node_type}::{raw_id}"
 
