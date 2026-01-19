@@ -12,6 +12,7 @@ from questfoundry.graph.mutations import (
     SeedValidationError,
     _format_available_with_suggestions,
     _normalize_id,
+    _prefix_id,
     _sort_by_similarity,
     apply_brainstorm_mutations,
     apply_dream_mutations,
@@ -47,6 +48,34 @@ class TestHasMutationHandler:
         assert has_mutation_handler("ship") is False
         assert has_mutation_handler("mock") is False
         assert has_mutation_handler("nonexistent") is False
+
+
+class TestPrefixId:
+    """Test the _prefix_id helper function."""
+
+    def test_adds_prefix_to_raw_id(self) -> None:
+        """Adds type prefix to unprefixed ID."""
+        assert _prefix_id("entity", "the_detective") == "entity::the_detective"
+        assert _prefix_id("tension", "host_motivation") == "tension::host_motivation"
+        assert _prefix_id("thread", "main_thread") == "thread::main_thread"
+
+    def test_idempotent_with_correct_prefix(self) -> None:
+        """Returns unchanged if already correctly prefixed."""
+        assert _prefix_id("entity", "entity::the_detective") == "entity::the_detective"
+        assert _prefix_id("tension", "tension::host_motivation") == "tension::host_motivation"
+
+    def test_strips_wrong_prefix_and_adds_correct(self) -> None:
+        """Strips existing prefix and adds correct one if mismatched."""
+        # This handles cases where LLM outputs wrong prefix
+        assert _prefix_id("entity", "tension::the_detective") == "entity::the_detective"
+        assert _prefix_id("tension", "entity::host_motivation") == "tension::host_motivation"
+
+    def test_handles_double_prefix(self) -> None:
+        """Handles double-prefixed IDs by extracting the raw part."""
+        # This was bug #238 - LLM output had tension::tension::id
+        assert (
+            _prefix_id("tension", "tension::tension::host_motivation") == "tension::host_motivation"
+        )
 
 
 class TestApplyMutations:

@@ -548,13 +548,22 @@ def _prefix_id(node_type: str, raw_id: str) -> str:
     This allows entities and tensions to have the same raw ID without collision.
     E.g., both can use "cipher_journal" -> "entity::cipher_journal", "tension::cipher_journal"
 
+    This function is idempotent - if the ID already has the correct prefix,
+    it returns it unchanged. If it has a different prefix or multiple prefixes,
+    the raw part is extracted and re-prefixed.
+
     Args:
         node_type: Node type prefix (entity, tension, thread, etc.)
-        raw_id: Raw ID from LLM output.
+        raw_id: Raw ID from LLM output (may already be prefixed).
 
     Returns:
         Prefixed ID in format "type::raw_id".
     """
+    # Strip any existing prefixes to get the raw ID
+    # This handles: "the_detective", "entity::the_detective", "entity::entity::the_detective"
+    if "::" in raw_id:
+        raw_id = raw_id.split("::")[-1]
+
     return f"{node_type}::{raw_id}"
 
 
