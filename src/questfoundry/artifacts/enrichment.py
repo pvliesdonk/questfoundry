@@ -70,7 +70,9 @@ def _enrich_entities(graph: Graph, entity_decisions: list[dict[str, Any]]) -> li
     enriched_entities = []
     for decision in entity_decisions:
         entity_id = decision.get("entity_id", "")
-        node = entity_data.get(entity_id, {}) if entity_id else {}
+        # Strip prefix if present (e.g., "entity::the_detective" -> "the_detective")
+        lookup_id = entity_id.split("::")[-1]
+        node = entity_data.get(lookup_id, {}) if lookup_id else {}
 
         # Build enriched entity in consistent field order
         enriched: dict[str, Any] = {
@@ -114,7 +116,9 @@ def _enrich_tensions(graph: Graph, tension_decisions: list[dict[str, Any]]) -> l
     enriched_tensions = []
     for decision in tension_decisions:
         tension_id = decision.get("tension_id", "")
-        node = tension_data.get(tension_id, {}) if tension_id else {}
+        # Strip prefix if present (e.g., "tension::host_motivation" -> "host_motivation")
+        lookup_id = tension_id.split("::")[-1]
+        node = tension_data.get(lookup_id, {}) if lookup_id else {}
 
         # Build enriched tension in consistent field order
         enriched: dict[str, Any] = {
@@ -128,9 +132,7 @@ def _enrich_tensions(graph: Graph, tension_decisions: list[dict[str, Any]]) -> l
 
         # Handle central_entity_ids with prefix stripping for readability
         if value := node.get("central_entity_ids"):
-            enriched["central_entity_ids"] = [
-                eid.split("::")[-1] if "::" in eid else eid for eid in value
-            ]
+            enriched["central_entity_ids"] = [eid.split("::")[-1] for eid in value]
 
         # Add SEED decision fields
         enriched["explored"] = decision.get("explored", [])
