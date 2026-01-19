@@ -1055,6 +1055,106 @@ class TestSeedCompletenessValidation:
         assert "nonexistent" in invalid_errors[0].provided
 
 
+class TestSeedDuplicateValidation:
+    """Test SEED validation detects duplicate entity/tension IDs.
+
+    Fixes #239: LLM may output the same entity or tension multiple times,
+    which should be caught and reported as validation errors.
+    """
+
+    def test_duplicate_entity_id_detected(self) -> None:
+        """Detects when the same entity_id appears multiple times in output."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+
+        output = {
+            "entities": [
+                {"entity_id": "hero", "disposition": "retained"},
+                {"entity_id": "hero", "disposition": "retained"},  # Duplicate!
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        dup_errors = [e for e in errors if "Duplicate" in e.issue]
+        assert len(dup_errors) == 1
+        assert "hero" in dup_errors[0].issue
+        assert "2 times" in dup_errors[0].issue
+
+    def test_duplicate_tension_id_detected(self) -> None:
+        """Detects when the same tension_id appears multiple times in output."""
+        graph = Graph.empty()
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "trust", "explored": ["yes"], "implicit": []},
+                {"tension_id": "trust", "explored": ["yes"], "implicit": []},  # Duplicate!
+                {"tension_id": "trust", "explored": ["yes"], "implicit": []},  # Triple!
+            ],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        dup_errors = [e for e in errors if "Duplicate" in e.issue]
+        assert len(dup_errors) == 1
+        assert "trust" in dup_errors[0].issue
+        assert "3 times" in dup_errors[0].issue
+
+    def test_duplicate_with_scoped_ids_detected(self) -> None:
+        """Detects duplicates even when IDs use different scope prefixes."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+
+        output = {
+            "entities": [
+                {"entity_id": "hero", "disposition": "retained"},
+                {
+                    "entity_id": "entity::hero",
+                    "disposition": "retained",
+                },  # Same after normalization
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        dup_errors = [e for e in errors if "Duplicate" in e.issue]
+        assert len(dup_errors) == 1
+        assert "hero" in dup_errors[0].issue
+
+    def test_no_duplicates_passes(self) -> None:
+        """No errors when all IDs are unique."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
+
+        output = {
+            "entities": [
+                {"entity_id": "hero", "disposition": "retained"},
+                {"entity_id": "mentor", "disposition": "retained"},
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        dup_errors = [e for e in errors if "Duplicate" in e.issue]
+        assert len(dup_errors) == 0
+
+
 class TestMutationIntegration:
     """Integration tests for multi-stage mutation flow."""
 
