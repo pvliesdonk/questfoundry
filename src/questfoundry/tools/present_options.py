@@ -27,21 +27,27 @@ from __future__ import annotations
 
 import asyncio
 import json
-from typing import Any, TypedDict
+from typing import Any, NotRequired, TypedDict
 
 from questfoundry.observability.logging import get_logger
 from questfoundry.tools.base import Tool, ToolDefinition
-from questfoundry.tools.interactive_context import get_interactive_callbacks
+from questfoundry.tools.interactive_context import (
+    InteractiveCallbacks,
+    get_interactive_callbacks,
+)
+
+# Marker returned when user selects "something else" (option 0)
+_CUSTOM_RESPONSE_MARKER = "[custom]"
 
 log = get_logger(__name__)
 
 
-class Option(TypedDict, total=False):
+class Option(TypedDict):
     """A single option in the choices list."""
 
     label: str  # Required: display text (1-5 words)
-    description: str  # Optional: explains implications
-    recommended: bool  # Optional: mark as recommended choice
+    description: NotRequired[str]  # Optional: explains implications
+    recommended: NotRequired[bool]  # Optional: mark as recommended choice
 
 
 class PresentOptionsInput(TypedDict):
@@ -144,6 +150,15 @@ class PresentOptionsTool:
                 loop,
             )
             return future.result(timeout=300)  # 5 minute timeout for user input
+        except TimeoutError:
+            log.warning("present_options_timeout")
+            return json.dumps(
+                {
+                    "result": "error",
+                    "error": "User input timed out",
+                    "action": "Proceed with your best judgment on this decision.",
+                }
+            )
         except RuntimeError:
             # No running loop - shouldn't happen in normal use
             log.warning("present_options_no_loop")
@@ -158,7 +173,7 @@ class PresentOptionsTool:
     async def _execute_async(
         self,
         arguments: dict[str, Any],
-        callbacks: Any,  # InteractiveCallbacks but avoid circular import
+        callbacks: InteractiveCallbacks,
     ) -> str:
         """Async implementation that uses interactive callbacks.
 
@@ -219,7 +234,7 @@ class PresentOptionsTool:
         lines = [f"**{question}**\n"]
 
         for i, opt in enumerate(options, 1):
-            label = opt.get("label", f"Option {i}")
+            label = opt.get("label") or f"Option {i}"
             description = opt.get("description", "")
             recommended = opt.get("recommended", False)
 
@@ -267,9 +282,9 @@ class PresentOptionsTool:
             idx = int(response)
             if idx == 0:
                 # User wants to type something else - return marker
-                return "[custom]"
+                return _CUSTOM_RESPONSE_MARKER
             if 1 <= idx <= len(options):
-                selected_label: str = options[idx - 1].get("label", f"Option {idx}")
+                selected_label: str = options[idx - 1].get("label") or f"Option {idx}"
                 return selected_label
 
         # Check if response matches an option label (case-insensitive)

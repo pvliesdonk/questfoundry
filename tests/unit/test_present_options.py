@@ -15,6 +15,7 @@ from questfoundry.tools.interactive_context import (
     set_interactive_callbacks,
 )
 from questfoundry.tools.present_options import (
+    _CUSTOM_RESPONSE_MARKER,
     PRESENT_OPTIONS_SCHEMA,
     PresentOptionsTool,
 )
@@ -211,7 +212,7 @@ class TestPresentOptionsToolParsing:
         tool = PresentOptionsTool()
         options = [{"label": "Mystery"}, {"label": "Horror"}]
 
-        assert tool._parse_selection("0", options) == "[custom]"
+        assert tool._parse_selection("0", options) == _CUSTOM_RESPONSE_MARKER
 
     def test_parse_out_of_range_treated_as_freeform(self) -> None:
         """Out-of-range numbers treated as freeform text."""
@@ -365,3 +366,36 @@ class TestPresentOptionsToolProtocol:
         assert isinstance(result, str)
         # Should be valid JSON
         json.loads(result)
+
+
+class TestPresentOptionsToolEdgeCases:
+    """Tests for edge cases and error handling."""
+
+    def test_empty_label_uses_fallback(self) -> None:
+        """Empty string labels get fallback 'Option N'."""
+        tool = PresentOptionsTool()
+        options: list[dict[str, Any]] = [
+            {"label": ""},  # Empty label
+            {"label": "Valid"},
+        ]
+
+        formatted = tool._format_options("Test?", options)
+        # Should show "Option 1" not empty string
+        assert "Option 1" in formatted
+        assert "Valid" in formatted
+
+    def test_parse_selection_empty_label_fallback(self) -> None:
+        """Selecting option with empty label returns fallback."""
+        tool = PresentOptionsTool()
+        options: list[dict[str, Any]] = [
+            {"label": ""},  # Empty label
+            {"label": "Valid"},
+        ]
+
+        # Select first option (which has empty label)
+        result = tool._parse_selection("1", options)
+        assert result == "Option 1"
+
+    def test_custom_response_marker_value(self) -> None:
+        """Custom response marker has expected value."""
+        assert _CUSTOM_RESPONSE_MARKER == "[custom]"
