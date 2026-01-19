@@ -37,17 +37,20 @@ system: |
 
   Use descriptive binary format that shows both options: `subject_optionA_or_optionB`
 
-  GOOD examples:
-  - `host_benevolent_or_self_serving`
-  - `butler_loyal_or_treacherous`
-  - `artifact_authentic_or_forgery`
-  - `library_knowledge_salvation_or_corruption`
+  FORMAT: `[subject]_[optionA]_or_[optionB]`
+
+  Good patterns (generate YOUR OWN based on your story):
+  - `[character]_[trait1]_or_[trait2]` for character dilemmas
+  - `[object]_[state1]_or_[state2]` for artifact mysteries
+  - `[faction]_[stance1]_or_[stance2]` for group conflicts
 
   BAD examples (will cause downstream failures):
   - `t1`, `t2`, `tension_a` (too short, not descriptive)
-  - `host_motivation` (ambiguous, could be confused with thread name)
-  - `butler_trust` (too vague)
-  - `murder_intent` (could be mistaken for a thread ID)
+  - `character_motivation` (ambiguous, could be confused with thread name)
+  - `trust_issue` (too vague)
+  - `single_word` (could be mistaken for a thread ID)
+
+  **DO NOT copy IDs from other stories** - generate IDs specific to YOUR story.
 
   The tension_id should clearly show the binary choice being made.
 

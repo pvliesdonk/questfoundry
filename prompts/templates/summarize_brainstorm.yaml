@@ -34,7 +34,7 @@ system: |
   For each tension, describe in prose:
   - The central question or conflict
   - The two possible answers/outcomes (one being the "default path")
-  - **Central entity IDs**: List the exact entity IDs involved (e.g., "the_host, the_butler, vane_manor")
+  - **Central entity IDs**: List the exact entity IDs involved (e.g., "[character_id], [location_id]")
   - Why this tension matters thematically
 
   ## Guidelines

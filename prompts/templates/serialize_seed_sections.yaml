@@ -104,16 +104,22 @@ threads_prompt: |
 
   Thread IDs must be DIFFERENT from tension IDs. Use short descriptive names.
 
-  GOOD examples:
-  - tension `host_benevolent_or_self_serving` → thread `host_motive`
-  - tension `butler_loyal_or_treacherous` → thread `butler_loyalty`
-  - tension `library_knowledge_salvation_or_corruption` → thread `library_secret`
+  FORMAT:
+  - Tension: `[subject]_[optionA]_or_[optionB]` (the binary question)
+  - Thread: `[subject]_[aspect]` (short storyline name)
 
-  BAD examples (will cause validation failures):
-  - tension `murder_intent` → thread `murder_intent` (same ID - WRONG!)
+  Pattern examples (generate YOUR OWN based on your story):
+  - Tension about character loyalty → Thread: `[character]_loyalty`
+  - Tension about artifact's nature → Thread: `[artifact]_secret`
+  - Tension about faction's agenda → Thread: `[faction]_agenda`
+
+  BAD patterns (will cause validation failures):
+  - Using the SAME ID for both tension and thread
   - Using the tension_id as the thread_id
 
   Thread IDs should be short names for the storyline, NOT the binary question.
+
+  **DO NOT copy example IDs** - generate IDs specific to YOUR story.
 
   ## Rules
   - thread_importance must be exactly "major" or "minor" (lowercase)
@@ -193,21 +199,23 @@ beats_prompt: |
       {
         "beat_id": "unique_beat_id",
         "summary": "What happens in this beat",
-        "threads": ["host_motive", "butler_fidelity"],
+        "threads": ["thread::[your_thread_id]", "thread::[another_thread]"],
         "tension_impacts": [
           {
-            "tension_id": "host_benevolent_or_self_serving",
+            "tension_id": "tension::[your_tension_id]",
             "effect": "advances",
             "note": "Explanation of the impact"
           }
         ],
-        "entities": ["butler", "garden"],
-        "location": "garden",
-        "location_alternatives": ["library"]
+        "entities": ["entity::[character_id]", "entity::[location_id]"],
+        "location": "entity::[location_id]",
+        "location_alternatives": ["entity::[other_location]"]
       }
     ]
   }
   ```
+
+  **Use IDs from YOUR story's manifest** - the examples above show the FORMAT only.
 
   ## Rules
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
