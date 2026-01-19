@@ -1537,6 +1537,31 @@ class TestScopedIdValidation:
         completeness_errors = [e for e in errors if "Missing decision" in e.issue]
         assert completeness_errors == []
 
+    def test_wrong_scope_not_counted_in_completeness(self) -> None:
+        """Wrong-scope IDs should not satisfy completeness check."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero", {"type": "entity", "raw_id": "hero", "entity_type": "character"}
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "tension::hero", "disposition": "retained"}  # Wrong scope
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Should have both: scope error AND missing decision error
+        scope_errors = [e for e in errors if "Wrong scope prefix" in e.issue]
+        completeness_errors = [e for e in errors if "Missing decision" in e.issue]
+        assert len(scope_errors) == 1
+        assert len(completeness_errors) == 1
+        assert "hero" in completeness_errors[0].issue
+
     def test_scoped_entity_in_beat_entities(self) -> None:
         """Scoped entity IDs work in beat.entities array."""
         graph = Graph.empty()

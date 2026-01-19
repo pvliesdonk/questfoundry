@@ -829,12 +829,14 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     for field_path, item_type, valid_ids in completeness_checks:
         id_field = f"{item_type}_id"
         # Normalize IDs from output to handle scoped IDs (entity::hero -> hero)
+        # Only count IDs with correct scope (or unscoped) toward completeness
         decided_ids: set[str] = set()
         for decision in output.get(field_path, []):
             raw_id = decision.get(id_field)
             if raw_id:
-                normalized_id, _ = _normalize_id(raw_id, item_type)
-                decided_ids.add(normalized_id)
+                normalized_id, scope_error = _normalize_id(raw_id, item_type)
+                if not scope_error:
+                    decided_ids.add(normalized_id)
 
         missing_ids = valid_ids - decided_ids
         for item_id in sorted(missing_ids):
