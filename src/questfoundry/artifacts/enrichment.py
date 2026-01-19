@@ -78,13 +78,15 @@ def _enrich_entities(graph: Graph, entity_decisions: list[dict[str, Any]]) -> li
         }
 
         # Add BRAINSTORM fields if available
-        # Graph stores as entity_type, but output as entity_category for consistency with brainstorm schema
-        if value := node.get("entity_type"):
-            enriched["entity_category"] = value
-        if value := node.get("concept"):
-            enriched["concept"] = value
-        if value := node.get("notes"):
-            enriched["notes"] = value
+        # Map graph field names to output field names (entity_type -> entity_category)
+        entity_field_map = {
+            "entity_type": "entity_category",
+            "concept": "concept",
+            "notes": "notes",
+        }
+        for source_field, target_field in entity_field_map.items():
+            if value := node.get(source_field):
+                enriched[target_field] = value
 
         # Add SEED disposition
         enriched["disposition"] = decision.get("disposition")
@@ -119,13 +121,13 @@ def _enrich_tensions(graph: Graph, tension_decisions: list[dict[str, Any]]) -> l
             "tension_id": tension_id,
         }
 
-        # Add BRAINSTORM fields if available
-        if value := node.get("question"):
-            enriched["question"] = value
-        if value := node.get("why_it_matters"):
-            enriched["why_it_matters"] = value
+        # Add BRAINSTORM fields if available (simple copy for most fields)
+        for field in ("question", "why_it_matters"):
+            if value := node.get(field):
+                enriched[field] = value
+
+        # Handle central_entity_ids with prefix stripping for readability
         if value := node.get("central_entity_ids"):
-            # Convert prefixed IDs back to raw IDs for readability
             enriched["central_entity_ids"] = [
                 eid.split("::")[-1] if "::" in eid else eid for eid in value
             ]

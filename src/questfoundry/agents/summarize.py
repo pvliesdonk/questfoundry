@@ -144,12 +144,18 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
             # to avoid prompt-stuffing with full JSON boilerplate
             tool_name = msg.name or "unknown_tool"
             raw_content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            useful_content = raw_content
             try:
                 data = json.loads(raw_content)
-                # Extract just the useful content, not the JSON wrapper
-                useful_content = data.get("content") or data.get("data") or raw_content
+                # Try to extract the useful content, not the JSON wrapper
+                if extracted := (data.get("content") or data.get("data")):
+                    if isinstance(extracted, str):
+                        useful_content = extracted
+                    else:
+                        useful_content = json.dumps(extracted, indent=2)
             except (json.JSONDecodeError, TypeError):
-                useful_content = raw_content
+                # If parsing fails, stick with the raw content
+                pass
             formatted_parts.append(f"[Research: {tool_name}]\n{useful_content}")
         elif isinstance(msg, SystemMessage):
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
