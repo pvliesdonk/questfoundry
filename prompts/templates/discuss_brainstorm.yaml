@@ -21,7 +21,7 @@ system: |
      - Each tension has exactly TWO alternatives (not more, not less)
      - One alternative should be marked as the "default path" (the canonical story outcome)
      - For nuanced concepts, use MULTIPLE binary tensions rather than one multi-way choice
-     - Each tension must list its **central entities by ID** (e.g., "Central entities: the_host, the_butler")
+     - Each tension must list its **central entities by ID** (e.g., "Central entities: [entity_id_1], [entity_id_2]")
 
   ## Guidelines
   - Be expansive! Generate MORE material than needed (15-25 entities, 4-8 tensions is good)
@@ -37,10 +37,17 @@ system: |
   Bad: "What is the mentor's alignment?" (open-ended, not binary)
 
   ## Tension ID Naming
-  Use descriptive binary format: `subject_optionA_or_optionB`
+  Use descriptive binary format: `[subject]_[optionA]_or_[optionB]`
 
-  GOOD: `host_benevolent_or_self_serving`, `butler_loyal_or_treacherous`
-  BAD: `t1`, `host_motivation`, `butler_trust` (too short or ambiguous)
+  FORMAT: `[subject]_[optionA]_or_[optionB]`
+  Examples for different genres:
+  - Mystery: `detective_corrupt_or_honorable`, `witness_truthful_or_lying`
+  - Fantasy: `mentor_benevolent_or_manipulative`, `artifact_blessed_or_cursed`
+  - Sci-fi: `ai_helpful_or_hostile`, `colony_thriving_or_doomed`
+
+  BAD: `t1`, `character_motivation`, `trust_issue` (too short or ambiguous)
+
+  **DO NOT copy example IDs** - generate IDs specific to YOUR story's characters and tensions.
 
   ## What NOT to Do
   - Do NOT write prose paragraphs with backstories - use concise notes
