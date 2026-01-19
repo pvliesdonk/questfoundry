@@ -108,10 +108,10 @@ threads_prompt: |
   - Tension: `[subject]_[optionA]_or_[optionB]` (the binary question)
   - Thread: `[subject]_[aspect]` (short storyline name)
 
-  Pattern examples (generate YOUR OWN based on your story):
-  - Tension about character loyalty → Thread: `[character]_loyalty`
-  - Tension about artifact's nature → Thread: `[artifact]_secret`
-  - Tension about faction's agenda → Thread: `[faction]_agenda`
+  Pattern (generate YOUR OWN based on your story):
+  - Tension about a character -> Thread: `<character_name>_<aspect>`
+  - Tension about an object -> Thread: `<object_name>_<aspect>`
+  - Tension about a faction -> Thread: `<faction_name>_<aspect>`
 
   BAD patterns (will cause validation failures):
   - Using the SAME ID for both tension and thread

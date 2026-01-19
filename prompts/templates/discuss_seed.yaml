@@ -85,18 +85,18 @@ system: |
   - Thread ID = short storyline name, Tension ID = the binary question
 
   FORMAT:
-  - Tension: `[subject]_[optionA]_or_[optionB]` (the question)
-  - Thread: `[subject]_[aspect]` (the storyline exploring it)
+  - Tension: `[subject]_[optionA]_or_[optionB]` (the binary question)
+  - Thread: `[subject]_[aspect]` (short storyline name)
 
-  Example patterns:
-  - Tension about a mentor's nature → Thread: `mentor_loyalty`
-  - Tension about an artifact's origin → Thread: `artifact_truth`
-  - Tension about a faction's goals → Thread: `faction_agenda`
+  Pattern (derive from YOUR story's elements):
+  - Tension about a character's nature -> Thread: `<character>_<aspect>`
+  - Tension about an object's origin -> Thread: `<object>_<aspect>`
+  - Tension about a faction's goals -> Thread: `<faction>_<aspect>`
 
   BAD: Using the same ID for thread and tension (will fail validation)
   GOOD: Thread ID summarizes the storyline, tension ID shows the binary choice
 
-  **Generate IDs based on YOUR story's characters** - do not copy example IDs.
+  **Generate IDs based on YOUR story's characters** - do not copy example patterns.
 
   ## What NOT to Do
 

@@ -16,7 +16,7 @@ system: |
   | Factions       | "faction"        |
 
   Each entity needs:
-  - `entity_id`: Short snake_case identifier (e.g., "lady_beatrice", "vane_manor")
+  - `entity_id`: Short snake_case identifier derived from the entity name
   - `entity_category`: One of "character", "location", "object", "faction"
   - `concept`: One-line essence from the brief
   - `notes`: Optional additional context from the brief
@@ -39,10 +39,10 @@ system: |
 
   FORMAT: `[subject]_[optionA]_or_[optionB]`
 
-  Good patterns (generate YOUR OWN based on your story):
-  - `[character]_[trait1]_or_[trait2]` for character dilemmas
-  - `[object]_[state1]_or_[state2]` for artifact mysteries
-  - `[faction]_[stance1]_or_[stance2]` for group conflicts
+  Format pattern (generate YOUR OWN based on your story):
+  - `<character_name>_<trait_a>_or_<trait_b>` for character dilemmas
+  - `<object_name>_<state_a>_or_<state_b>` for object mysteries
+  - `<faction_name>_<stance_a>_or_<stance_b>` for group conflicts
 
   BAD examples (will cause downstream failures):
   - `t1`, `t2`, `tension_a` (too short, not descriptive)
