@@ -10,7 +10,9 @@ from questfoundry.graph.mutations import (
     BrainstormValidationError,
     SeedErrorCategory,
     SeedValidationError,
+    _format_available_with_suggestions,
     _normalize_id,
+    _sort_by_similarity,
     apply_brainstorm_mutations,
     apply_dream_mutations,
     apply_mutations,
@@ -1668,3 +1670,223 @@ class TestScopedIdValidation:
         errors = validate_seed_mutations(graph, output)
 
         assert errors == []
+
+
+class TestSortBySimilarity:
+    """Tests for _sort_by_similarity helper function."""
+
+    def test_sorts_by_similarity_descending(self) -> None:
+        """Most similar ID appears first."""
+        sorted_ids = _sort_by_similarity(
+            "hollow_archive",
+            ["echo_chamber", "the_hollow_archive", "keeper_of_depths"],
+        )
+        assert sorted_ids[0][0] == "the_hollow_archive"
+
+    def test_returns_similarity_scores(self) -> None:
+        """Each result includes a similarity score."""
+        sorted_ids = _sort_by_similarity(
+            "the_archive",
+            ["the_hollow_archive", "keeper_of_depths"],
+        )
+        for sid, score in sorted_ids:
+            assert isinstance(sid, str)
+            assert isinstance(score, float)
+            assert 0.0 <= score <= 1.0
+
+    def test_handles_scoped_ids(self) -> None:
+        """Strips scope prefixes before comparing."""
+        sorted_ids = _sort_by_similarity(
+            "the_archive",
+            ["entity::the_hollow_archive", "entity::keeper_of_depths"],
+        )
+        # Should match on the raw ID part
+        assert sorted_ids[0][0] == "entity::the_hollow_archive"
+
+    def test_case_insensitive(self) -> None:
+        """Comparison is case-insensitive."""
+        sorted_ids = _sort_by_similarity(
+            "THE_ARCHIVE",
+            ["the_hollow_archive", "KEEPER_OF_DEPTHS"],
+        )
+        assert sorted_ids[0][0] == "the_hollow_archive"
+
+    def test_empty_available_returns_empty(self) -> None:
+        """Empty available list returns empty result."""
+        sorted_ids = _sort_by_similarity("test", [])
+        assert sorted_ids == []
+
+    def test_exact_match_has_score_one(self) -> None:
+        """Exact match has score of 1.0."""
+        sorted_ids = _sort_by_similarity("hero", ["hero", "villain"])
+        assert sorted_ids[0] == ("hero", 1.0)
+
+
+class TestFormatAvailableWithSuggestions:
+    """Tests for _format_available_with_suggestions helper function."""
+
+    def test_high_confidence_prescriptive(self) -> None:
+        """Score >= 0.85 gives single 'Use X instead' suggestion."""
+        # "hollow_archive" vs "the_hollow_archive" = 87.5% similarity
+        result = _format_available_with_suggestions(
+            "hollow_archive",
+            ["the_hollow_archive", "keeper_of_depths", "echo_chamber"],
+        )
+        assert "Use 'the_hollow_archive' instead" in result
+        assert "Did you mean" not in result
+
+    def test_medium_confidence_ranked(self) -> None:
+        """Score 0.6-0.85 gives ranked list with percentages."""
+        # "the_archive" vs "the_hollow_archive" = 75% similarity (medium)
+        result = _format_available_with_suggestions(
+            "the_archive",
+            ["the_hollow_archive", "keeper_of_depths", "echo_chamber"],
+        )
+        assert "Did you mean one of these?" in result
+        assert "%" in result
+        # Most similar should be first
+        assert "the_hollow_archive" in result
+
+    def test_low_confidence_sorted_only(self) -> None:
+        """Score < 0.6 gives sorted list without suggestions."""
+        result = _format_available_with_suggestions(
+            "xyz_unknown",
+            ["the_hollow_archive", "keeper_of_depths", "echo_chamber"],
+        )
+        assert "most similar first" in result
+        assert "Did you mean" not in result
+        assert "Use '" not in result
+
+    def test_empty_available_returns_empty(self) -> None:
+        """Empty available list returns empty string."""
+        result = _format_available_with_suggestions("test", [])
+        assert result == ""
+
+    def test_truncates_long_list(self) -> None:
+        """Long available lists are truncated with ellipsis."""
+        available = [f"item_{i}" for i in range(20)]
+        result = _format_available_with_suggestions("xyz_unknown", available)
+        # Should have truncation indicator
+        assert "..." in result
+
+
+class TestSimilarityFeedbackIntegration:
+    """Integration tests for similarity-based feedback in error messages."""
+
+    def test_seed_error_high_confidence(self) -> None:
+        """SeedMutationError shows prescriptive suggestion for high confidence match."""
+        # "hollow_archive" vs "the_hollow_archive" = 87.5% similarity
+        errors = [
+            SeedValidationError(
+                field_path="entities.0.entity_id",
+                issue="Entity 'hollow_archive' not in BRAINSTORM",
+                available=["the_hollow_archive", "keeper_of_depths", "echo_chamber"],
+                provided="hollow_archive",
+            )
+        ]
+        error = SeedMutationError(errors)
+
+        feedback = error.to_feedback()
+
+        assert "Use 'the_hollow_archive' instead" in feedback
+
+    def test_seed_error_medium_confidence(self) -> None:
+        """SeedMutationError shows ranked list for medium confidence match."""
+        # "the_archive" vs "the_hollow_archive" = 75% (medium confidence)
+        errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension 'the_archive' not in BRAINSTORM",
+                available=["the_hollow_archive", "archive_keeper", "echo_chamber"],
+                provided="the_archive",
+            )
+        ]
+        error = SeedMutationError(errors)
+
+        feedback = error.to_feedback()
+
+        assert "Did you mean one of these?" in feedback
+        assert "the_hollow_archive" in feedback
+
+    def test_seed_error_low_confidence(self) -> None:
+        """SeedMutationError shows sorted list for low confidence."""
+        errors = [
+            SeedValidationError(
+                field_path="entities.0.entity_id",
+                issue="Entity 'xyz_unknown' not in BRAINSTORM",
+                available=["the_hollow_archive", "keeper_of_depths", "echo_chamber"],
+                provided="xyz_unknown",
+            )
+        ]
+        error = SeedMutationError(errors)
+
+        feedback = error.to_feedback()
+
+        assert "most similar first" in feedback
+
+    def test_brainstorm_error_high_confidence(self) -> None:
+        """BrainstormMutationError shows prescriptive suggestion for high confidence match."""
+        # "hollow_archive" vs "the_hollow_archive" = 87.5% similarity
+        errors = [
+            BrainstormValidationError(
+                field_path="tensions.0.central_entity_ids",
+                issue="Entity 'hollow_archive' not in entities list",
+                available=["the_hollow_archive", "keeper_of_depths", "echo_chamber"],
+                provided="hollow_archive",
+            )
+        ]
+        error = BrainstormMutationError(errors)
+
+        feedback = error.to_feedback()
+
+        assert "Use 'the_hollow_archive' instead" in feedback
+
+    def test_error_without_provided_uses_fallback(self) -> None:
+        """Errors without provided value use fallback formatting."""
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'hero'",
+                available=["hero", "villain"],
+                provided="",  # No provided value
+            )
+        ]
+        error = SeedMutationError(errors)
+
+        feedback = error.to_feedback()
+
+        # Should show available list in fallback comma-separated format
+        assert "Available: hero, villain" in feedback
+
+    def test_seq3_scenario(self) -> None:
+        """Real failure case from seq-3: 'the_archive' instead of 'the_hollow_archive'.
+
+        Key improvement: Even though similarity (75%) is below high confidence threshold,
+        the correct ID now appears FIRST in the suggestions, making recovery much easier.
+        Previously this ID might have been truncated away in an arbitrary list.
+        """
+        errors = [
+            SeedValidationError(
+                field_path="entity_id",
+                issue="not in BRAINSTORM entities",
+                available=[
+                    "the_hollow_archive",
+                    "keeper_of_depths",
+                    "fractured_lattice",
+                    "chamber_of_stillness",
+                    "garden_of_questions",
+                    "weaver_of_echoes",
+                ],
+                provided="the_archive",
+            )
+        ]
+        error = SeedMutationError(errors)
+
+        feedback = error.to_feedback()
+
+        # The correct ID should appear FIRST in suggestions (sorted by similarity)
+        assert "the_hollow_archive" in feedback
+        # Should show ranked suggestions with the correct ID prominently displayed
+        assert "Did you mean one of these?" in feedback
+        # Verify similarity score is shown
+        assert "%" in feedback
