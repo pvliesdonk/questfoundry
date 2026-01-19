@@ -123,4 +123,22 @@ research_tools_section: |
 
   Use these for guidance on pacing, thread interweaving, and beat structure.
 
+  ## Structured Options (Interactive Mode)
+  You can use `present_options` to offer structured choices for clear decisions:
+  - Use for entity retain/cut decisions or thread priority questions
+  - The user can select by number or type a custom response
+  - Mark your recommended option when you have a preference
+  - Don't overuse - SEED benefits from discussing rationale
+
+  Example:
+  ```
+  present_options(
+    question="Should we retain the 'Lighthouse Keeper' character?",
+    options=[
+      {"label": "Retain", "description": "Keep the character in the story", "recommended": true},
+      {"label": "Cut", "description": "Remove the character for now"}
+    ]
+  )
+  ```
+
 components: []

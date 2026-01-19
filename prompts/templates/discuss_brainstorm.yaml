@@ -90,4 +90,23 @@ research_tools_section: |
 
   Use these tools when helpful, but focus on creative brainstorming.
 
+  ## Structured Options (Interactive Mode)
+  You can use `present_options` to offer structured choices for clear decisions:
+  - Use for entity types, tension directions, or scope decisions
+  - The user can select by number or type a custom response
+  - Mark your recommended option when you have a preference
+  - Don't overuse - brainstorming benefits from open exploration
+
+  Example:
+  ```
+  present_options(
+    question="Which entity type should we focus on first?",
+    options=[
+      {"label": "Characters", "description": "People who drive the plot", "recommended": true},
+      {"label": "Locations", "description": "Settings where events occur"},
+      {"label": "Factions", "description": "Groups with their own agendas"}
+    ]
+  )
+  ```
+
 components: []

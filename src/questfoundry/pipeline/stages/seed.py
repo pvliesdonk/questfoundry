@@ -28,7 +28,10 @@ from questfoundry.graph import Graph
 from questfoundry.graph.context import format_summarize_manifest, get_expected_counts
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
-from questfoundry.tools.langchain_tools import get_all_research_tools
+from questfoundry.tools.langchain_tools import (
+    get_all_research_tools,
+    get_interactive_tools,
+)
 
 log = get_logger(__name__)
 
@@ -279,8 +282,10 @@ class SeedStage:
         brainstorm_context = self._get_brainstorm_context(resolved_path)
         log.debug("seed_brainstorm_loaded", context_length=len(brainstorm_context))
 
-        # Get research tools
+        # Get research tools (and interactive tools when in interactive mode)
         tools = get_all_research_tools()
+        if interactive:
+            tools = [*tools, *get_interactive_tools()]
 
         # Build discuss prompt with brainstorm context
         discuss_prompt = get_seed_discuss_prompt(

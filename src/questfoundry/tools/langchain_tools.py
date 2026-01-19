@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from langchain_core.tools import BaseTool, tool
 
+from questfoundry.tools.present_options import PresentOptionsTool
 from questfoundry.tools.research.corpus_tools import (
     GetDocumentTool,
     ListClustersTool,
@@ -34,6 +35,7 @@ _get_document_tool = GetDocumentTool()
 _list_clusters_tool = ListClustersTool()
 _web_search_tool = WebSearchTool()
 _web_fetch_tool = WebFetchTool()
+_present_options_tool = PresentOptionsTool()
 
 
 @tool
@@ -140,6 +142,41 @@ def web_fetch(url: str, extract_mode: str = "markdown") -> str:
     return _web_fetch_tool.execute({"url": url, "extract_mode": extract_mode})
 
 
+@tool
+def present_options(question: str, options: list[dict[str, str | bool]]) -> str:
+    """Present structured choices to the user during conversation.
+
+    Use when offering clear alternatives for decisions like genre, tone,
+    scope, or similar choices. The user can select by number or type
+    a custom response.
+
+    Only available in interactive mode. In non-interactive mode, returns
+    a "skipped" result with guidance to proceed autonomously.
+
+    Args:
+        question: The question to ask the user. Should be clear and specific.
+        options: 2-4 options, each with:
+            - label (required): Short option name (1-5 words)
+            - description (optional): Brief explanation of this choice
+            - recommended (optional): True if this is your recommended option
+
+    Returns:
+        JSON string with user's selection:
+        - {"result": "success", "selected": "...", "action": "..."}
+        - {"result": "skipped", "reason": "...", "action": "..."}
+
+    Example:
+        present_options(
+            question="What genre fits your haunted mansion idea?",
+            options=[
+                {"label": "Mystery", "description": "Focus on clues", "recommended": True},
+                {"label": "Horror", "description": "Focus on fear"},
+            ]
+        )
+    """
+    return _present_options_tool.execute({"question": question, "options": options})
+
+
 def get_all_research_tools() -> list[BaseTool]:
     """Get all available research tools as LangChain tools.
 
@@ -173,3 +210,16 @@ def get_web_tools() -> list[BaseTool]:
         List containing web_search and web_fetch tools.
     """
     return [web_search, web_fetch]
+
+
+def get_interactive_tools() -> list[BaseTool]:
+    """Get interactive tools for discuss phases.
+
+    These tools require interactive mode with callbacks set via
+    interactive_context. In non-interactive mode, they return
+    "skipped" results.
+
+    Returns:
+        List containing present_options tool.
+    """
+    return [present_options]

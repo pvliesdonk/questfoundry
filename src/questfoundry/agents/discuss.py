@@ -10,6 +10,10 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from questfoundry.agents.prompts import get_discuss_prompt
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import build_runnable_config, traceable
+from questfoundry.tools.interactive_context import (
+    clear_interactive_callbacks,
+    set_interactive_callbacks,
+)
 
 if TYPE_CHECKING:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -128,95 +132,111 @@ async def run_discuss_phase(
     current_messages: list[BaseMessage] = [HumanMessage(content=user_prompt)]
 
     # Validate interactive mode requirements upfront
-    if interactive and user_input_fn is None:
-        log.error("interactive_mode_no_input_fn", stage="discuss")
-        raise ValueError(
-            "interactive=True requires user_input_fn callback. "
-            "Pass user_input_fn parameter or set interactive=False."
-        )
+    if interactive:
+        if user_input_fn is None:
+            log.error("interactive_mode_no_input_fn", stage="discuss")
+            raise ValueError(
+                "interactive=True requires user_input_fn callback. "
+                "Pass user_input_fn parameter or set interactive=False."
+            )
+        if on_assistant_message is None:
+            log.error("interactive_mode_no_display_fn", stage="discuss")
+            raise ValueError(
+                "interactive=True requires on_assistant_message callback. "
+                "Pass on_assistant_message parameter or set interactive=False."
+            )
 
-    while True:
-        # Signal LLM start
-        if on_llm_start:
-            on_llm_start("discuss")
+    # Set interactive callbacks for tools like present_options
+    if interactive and user_input_fn and on_assistant_message:
+        set_interactive_callbacks(user_input_fn, on_assistant_message)
+        log.debug("interactive_callbacks_set")
 
-        # Run agent for this turn with tracing metadata
-        config = build_runnable_config(
-            run_name="Discuss Agent Turn",
-            tags=[stage_name, "discuss", "agent"],
-            metadata={"stage": stage_name, "phase": "discuss"},
-            recursion_limit=max_iterations,
-            callbacks=callbacks,
-        )
-        result = await agent.ainvoke(
-            {"messages": current_messages},
-            config=config,
-        )
+    try:
+        while True:
+            # Signal LLM start
+            if on_llm_start:
+                on_llm_start("discuss")
 
-        # Signal LLM end
-        if on_llm_end:
-            on_llm_end("discuss")
+            # Run agent for this turn with tracing metadata
+            config = build_runnable_config(
+                run_name="Discuss Agent Turn",
+                tags=[stage_name, "discuss", "agent"],
+                metadata={"stage": stage_name, "phase": "discuss"},
+                recursion_limit=max_iterations,
+                callbacks=callbacks,
+            )
+            result = await agent.ainvoke(
+                {"messages": current_messages},
+                config=config,
+            )
 
-        # The agent returns the full conversation history.
-        # We need to process only the messages added in this turn.
-        full_history: list[BaseMessage] = result.get("messages", [])
+            # Signal LLM end
+            if on_llm_end:
+                on_llm_end("discuss")
 
-        # Determine new messages: check if agent returned full history including our input,
-        # or just the response. Real agents include input; test mocks may not.
-        if (
-            len(full_history) > len(current_messages)
-            and len(current_messages) > 0
-            and full_history[0].content == current_messages[0].content
-        ):
-            # Agent returned full history - slice off our input to get new messages
-            new_messages = full_history[len(current_messages) :]
-        else:
-            # Agent returned only responses (or test mock) - treat all as new
-            new_messages = full_history
+            # The agent returns the full conversation history.
+            # We need to process only the messages added in this turn.
+            full_history: list[BaseMessage] = result.get("messages", [])
 
-        # Extract metrics and find the last assistant message from new messages only
-        last_ai_content = ""
-        for msg in new_messages:
-            if isinstance(msg, AIMessage):
-                total_llm_calls += 1
-                last_ai_content = str(msg.content)
-                # Extract tokens
-                if hasattr(msg, "usage_metadata") and msg.usage_metadata:
-                    tokens = msg.usage_metadata.get("total_tokens")
-                    total_tokens += tokens if tokens is not None else 0
-                elif hasattr(msg, "response_metadata") and msg.response_metadata:
-                    metadata = msg.response_metadata
-                    if "token_usage" in metadata:
-                        usage = metadata["token_usage"]
-                        tokens = usage.get("total_tokens")
+            # Determine new messages: check if agent returned full history including our input,
+            # or just the response. Real agents include input; test mocks may not.
+            if (
+                len(full_history) > len(current_messages)
+                and len(current_messages) > 0
+                and full_history[0].content == current_messages[0].content
+            ):
+                # Agent returned full history - slice off our input to get new messages
+                new_messages = full_history[len(current_messages) :]
+            else:
+                # Agent returned only responses (or test mock) - treat all as new
+                new_messages = full_history
+
+            # Extract metrics and find the last assistant message from new messages only
+            last_ai_content = ""
+            for msg in new_messages:
+                if isinstance(msg, AIMessage):
+                    total_llm_calls += 1
+                    last_ai_content = str(msg.content)
+                    # Extract tokens
+                    if hasattr(msg, "usage_metadata") and msg.usage_metadata:
+                        tokens = msg.usage_metadata.get("total_tokens")
                         total_tokens += tokens if tokens is not None else 0
+                    elif hasattr(msg, "response_metadata") and msg.response_metadata:
+                        metadata = msg.response_metadata
+                        if "token_usage" in metadata:
+                            usage = metadata["token_usage"]
+                            tokens = usage.get("total_tokens")
+                            total_tokens += tokens if tokens is not None else 0
 
-        # Update message history for the next turn
-        all_messages = full_history
+            # Update message history for the next turn
+            all_messages = full_history
 
-        # Display assistant response
-        if on_assistant_message and last_ai_content:
-            on_assistant_message(last_ai_content)
+            # Display assistant response
+            if on_assistant_message and last_ai_content:
+                on_assistant_message(last_ai_content)
 
-        # If not interactive, we're done after one turn
-        if not interactive:
-            break
+            # If not interactive, we're done after one turn
+            if not interactive:
+                break
 
-        # Interactive mode: get next user input
-        assert user_input_fn is not None  # Validated at line 112
-        user_input = await user_input_fn()
+            # Interactive mode: get next user input
+            assert user_input_fn is not None  # Validated above in interactive check
+            user_input = await user_input_fn()
 
-        # Check for exit conditions
-        if user_input is None or user_input.strip() == "":
-            log.debug("interactive_exit", reason="empty_input")
-            break
+            # Check for exit conditions
+            if user_input is None or user_input.strip() == "":
+                log.debug("interactive_exit", reason="empty_input")
+                break
 
-        if user_input.strip().lower() in ("/done", "/quit", "/exit"):
-            log.debug("interactive_exit", reason="user_command")
-            break
+            if user_input.strip().lower() in ("/done", "/quit", "/exit"):
+                log.debug("interactive_exit", reason="user_command")
+                break
 
-        # Continue conversation with user's new input
-        current_messages = [*all_messages, HumanMessage(content=user_input)]
+            # Continue conversation with user's new input
+            current_messages = [*all_messages, HumanMessage(content=user_input)]
+    finally:
+        # Always clear interactive callbacks when done
+        clear_interactive_callbacks()
 
     log.info(
         "discuss_phase_completed",

@@ -72,4 +72,23 @@ research_tools_section: |
 
   Use these tools when helpful, but don't overuse them - focus on the creative discussion.
 
+  ## Structured Options (Interactive Mode)
+  You can use `present_options` to offer structured choices for clear decisions:
+  - Use for genre, tone, audience, or scope questions with 2-4 distinct options
+  - The user can select by number or type a custom response
+  - Mark your recommended option when you have a preference
+  - Don't overuse - open discussion is often better than multiple-choice
+
+  Example:
+  ```
+  present_options(
+    question="What genre direction fits your idea best?",
+    options=[
+      {"label": "Mystery", "description": "Focus on investigation", "recommended": true},
+      {"label": "Horror", "description": "Focus on dread and fear"},
+      {"label": "Gothic Drama", "description": "Focus on atmosphere"}
+    ]
+  )
+  ```
+
 components: []
