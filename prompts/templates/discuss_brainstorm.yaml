@@ -90,4 +90,10 @@ research_tools_section: |
 
   Use these tools when helpful, but focus on creative brainstorming.
 
+  ## Structured Options (Interactive Mode)
+  You can use `present_options` to offer structured choices when useful:
+  - Use for entity types, tension directions, or scope decisions
+  - The user can select by number or type a custom response
+  - Don't overuse - brainstorming benefits from open exploration
+
 components: []

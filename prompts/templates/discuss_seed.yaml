@@ -123,4 +123,10 @@ research_tools_section: |
 
   Use these for guidance on pacing, thread interweaving, and beat structure.
 
+  ## Structured Options (Interactive Mode)
+  You can use `present_options` to offer structured choices when useful:
+  - Use for entity retain/cut decisions or thread priority questions
+  - The user can select by number or type a custom response
+  - Don't overuse - SEED benefits from discussing rationale
+
 components: []
