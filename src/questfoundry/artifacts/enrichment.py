@@ -4,7 +4,7 @@ Enriches stage artifacts with data from previous stages stored in the graph.
 This provides full context in human-readable artifacts without requiring the
 LLM to repeat information from earlier stages.
 
-Example: SEED entities include disposition (from SEED) plus entity_type,
+Example: SEED entities include disposition (from SEED) plus entity_category,
 concept, notes (from BRAINSTORM).
 """
 
@@ -21,18 +21,19 @@ log = get_logger(__name__)
 
 
 def enrich_seed_artifact(graph: Graph, artifact: dict[str, Any]) -> dict[str, Any]:
-    """Enrich SEED artifact with BRAINSTORM entity details.
+    """Enrich SEED artifact with BRAINSTORM entity and tension details.
 
-    Merges entity details (entity_type, concept, notes) from graph nodes
-    into entity decisions. This provides full context in the YAML artifact
-    without requiring the LLM to repeat information.
+    Merges entity details (entity_category, concept, notes) and tension details
+    (question, why_it_matters, central_entity_ids) from graph nodes into SEED
+    decisions. This provides full context in the YAML artifact without requiring
+    the LLM to repeat information.
 
     Args:
-        graph: Graph containing BRAINSTORM entity nodes.
-        artifact: SEED artifact dict with entity decisions.
+        graph: Graph containing BRAINSTORM entity and tension nodes.
+        artifact: SEED artifact dict with entity and tension decisions.
 
     Returns:
-        Enriched artifact dict with full entity details.
+        Enriched artifact dict with full entity and tension details.
 
     Example:
         Input artifact:
@@ -41,23 +42,35 @@ def enrich_seed_artifact(graph: Graph, artifact: dict[str, Any]) -> dict[str, An
         Output:
             {"entities": [{
                 "entity_id": "the_detective",
-                "entity_type": "character",
+                "entity_category": "character",
                 "concept": "Seasoned detective...",
                 "notes": "Inspector Reginald...",
                 "disposition": "retained"
             }]}
     """
+    enriched = dict(artifact)
+
+    # Enrich entities
+    enriched["entities"] = _enrich_entities(graph, artifact.get("entities", []))
+
+    # Enrich tensions
+    enriched["tensions"] = _enrich_tensions(graph, artifact.get("tensions", []))
+
+    return enriched
+
+
+def _enrich_entities(graph: Graph, entity_decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Enrich entity decisions with BRAINSTORM details."""
     # Build lookup: raw_id -> node data for entities
     entity_nodes = graph.get_nodes_by_type("entity")
     entity_data: dict[str, dict[str, Any]] = {
         node["raw_id"]: node for node in entity_nodes.values() if node.get("raw_id")
     }
 
-    # Enrich entity decisions
     enriched_entities = []
-    for decision in artifact.get("entities", []):
-        entity_id = decision.get("entity_id")
-        node = entity_data.get(entity_id, {})
+    for decision in entity_decisions:
+        entity_id = decision.get("entity_id", "")
+        node = entity_data.get(entity_id, {}) if entity_id else {}
 
         # Build enriched entity in consistent field order
         enriched: dict[str, Any] = {
@@ -65,9 +78,13 @@ def enrich_seed_artifact(graph: Graph, artifact: dict[str, Any]) -> dict[str, An
         }
 
         # Add BRAINSTORM fields if available
-        for field in ("entity_type", "concept", "notes"):
-            if value := node.get(field):
-                enriched[field] = value
+        # Graph stores as entity_type, but output as entity_category for consistency with brainstorm schema
+        if value := node.get("entity_type"):
+            enriched["entity_category"] = value
+        if value := node.get("concept"):
+            enriched["concept"] = value
+        if value := node.get("notes"):
+            enriched["notes"] = value
 
         # Add SEED disposition
         enriched["disposition"] = decision.get("disposition")
@@ -75,10 +92,55 @@ def enrich_seed_artifact(graph: Graph, artifact: dict[str, Any]) -> dict[str, An
         enriched_entities.append(enriched)
 
     log.debug(
-        "artifact_enriched",
+        "entities_enriched",
         stage="seed",
         entity_count=len(enriched_entities),
         enriched_count=sum(1 for e in enriched_entities if "concept" in e),
     )
 
-    return {**artifact, "entities": enriched_entities}
+    return enriched_entities
+
+
+def _enrich_tensions(graph: Graph, tension_decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Enrich tension decisions with BRAINSTORM details."""
+    # Build lookup: raw_id -> node data for tensions
+    tension_nodes = graph.get_nodes_by_type("tension")
+    tension_data: dict[str, dict[str, Any]] = {
+        node["raw_id"]: node for node in tension_nodes.values() if node.get("raw_id")
+    }
+
+    enriched_tensions = []
+    for decision in tension_decisions:
+        tension_id = decision.get("tension_id", "")
+        node = tension_data.get(tension_id, {}) if tension_id else {}
+
+        # Build enriched tension in consistent field order
+        enriched: dict[str, Any] = {
+            "tension_id": tension_id,
+        }
+
+        # Add BRAINSTORM fields if available
+        if value := node.get("question"):
+            enriched["question"] = value
+        if value := node.get("why_it_matters"):
+            enriched["why_it_matters"] = value
+        if value := node.get("central_entity_ids"):
+            # Convert prefixed IDs back to raw IDs for readability
+            enriched["central_entity_ids"] = [
+                eid.split("::")[-1] if "::" in eid else eid for eid in value
+            ]
+
+        # Add SEED decision fields
+        enriched["explored"] = decision.get("explored", [])
+        enriched["implicit"] = decision.get("implicit", [])
+
+        enriched_tensions.append(enriched)
+
+    log.debug(
+        "tensions_enriched",
+        stage="seed",
+        tension_count=len(enriched_tensions),
+        enriched_count=sum(1 for t in enriched_tensions if "question" in t),
+    )
+
+    return enriched_tensions

@@ -48,11 +48,39 @@ def graph_with_entities() -> Graph:
     return graph
 
 
+@pytest.fixture
+def graph_with_tensions() -> Graph:
+    """Graph with BRAINSTORM tension data."""
+    graph = Graph()
+    # Add tension as BRAINSTORM would
+    graph.create_node(
+        "tension::host_motivation",
+        {
+            "type": "tension",
+            "raw_id": "host_motivation",
+            "question": "Is the host benevolent or self-serving?",
+            "why_it_matters": "Determines whether protagonist can trust their guide",
+            "central_entity_ids": ["entity::the_host", "entity::the_manor"],
+        },
+    )
+    graph.create_node(
+        "tension::killer_identity",
+        {
+            "type": "tension",
+            "raw_id": "killer_identity",
+            "question": "Who committed the murder?",
+            "why_it_matters": "Core mystery that drives the plot",
+            "central_entity_ids": ["entity::the_victim"],
+        },
+    )
+    return graph
+
+
 class TestEnrichSeedArtifact:
     """Tests for enrich_seed_artifact function."""
 
     def test_enriches_entity_with_full_details(self, graph_with_entities: Graph) -> None:
-        """Enrichment adds entity_type, concept, notes from graph."""
+        """Enrichment adds entity_category, concept, notes from graph."""
         artifact = {
             "entities": [
                 {"entity_id": "the_detective", "disposition": "retained"},
@@ -63,7 +91,7 @@ class TestEnrichSeedArtifact:
 
         entity = result["entities"][0]
         assert entity["entity_id"] == "the_detective"
-        assert entity["entity_type"] == "character"
+        assert entity["entity_category"] == "character"
         assert entity["concept"] == "Seasoned detective known for solving intricate cases"
         assert entity["notes"] == "Inspector Reginald Hargrove is known for sharp wit"
         assert entity["disposition"] == "retained"
@@ -80,7 +108,7 @@ class TestEnrichSeedArtifact:
 
         entity = result["entities"][0]
         assert entity["entity_id"] == "the_victim"
-        assert entity["entity_type"] == "character"
+        assert entity["entity_category"] == "character"
         assert entity["concept"] == "Wealthy socialite whose death triggers the mystery"
         assert "notes" not in entity  # Not added if not in graph
         assert entity["disposition"] == "cut"
@@ -97,7 +125,7 @@ class TestEnrichSeedArtifact:
 
         entity = result["entities"][0]
         assert entity["entity_id"] == "unknown_entity"
-        assert "entity_type" not in entity
+        assert "entity_category" not in entity
         assert "concept" not in entity
         assert entity["disposition"] == "retained"
 
@@ -114,9 +142,9 @@ class TestEnrichSeedArtifact:
         result = enrich_seed_artifact(graph_with_entities, artifact)
 
         assert len(result["entities"]) == 3
-        assert result["entities"][0]["entity_type"] == "character"
-        assert result["entities"][1]["entity_type"] == "location"
-        assert result["entities"][2]["entity_type"] == "character"
+        assert result["entities"][0]["entity_category"] == "character"
+        assert result["entities"][1]["entity_category"] == "location"
+        assert result["entities"][2]["entity_category"] == "character"
 
     def test_preserves_other_artifact_fields(self, graph_with_entities: Graph) -> None:
         """Enrichment preserves non-entity fields in artifact."""
@@ -148,6 +176,7 @@ class TestEnrichSeedArtifact:
         result = enrich_seed_artifact(graph_with_entities, artifact)
 
         assert result["entities"] == []
+        assert result["tensions"] == []
         assert result["threads"] == []
 
     def test_field_order_consistent(self, graph_with_entities: Graph) -> None:
@@ -162,6 +191,72 @@ class TestEnrichSeedArtifact:
 
         entity = result["entities"][0]
         keys = list(entity.keys())
-        # Full expected order: entity_id, entity_type, concept, notes, disposition
-        expected_order = ["entity_id", "entity_type", "concept", "notes", "disposition"]
+        # Full expected order: entity_id, entity_category, concept, notes, disposition
+        expected_order = ["entity_id", "entity_category", "concept", "notes", "disposition"]
         assert keys == expected_order
+
+
+class TestEnrichTensions:
+    """Tests for tension enrichment."""
+
+    def test_enriches_tension_with_full_details(self, graph_with_tensions: Graph) -> None:
+        """Enrichment adds question, why_it_matters, central_entity_ids from graph."""
+        artifact = {
+            "tensions": [
+                {
+                    "tension_id": "host_motivation",
+                    "explored": ["benevolent"],
+                    "implicit": ["self_serving"],
+                },
+            ],
+        }
+
+        result = enrich_seed_artifact(graph_with_tensions, artifact)
+
+        tension = result["tensions"][0]
+        assert tension["tension_id"] == "host_motivation"
+        assert tension["question"] == "Is the host benevolent or self-serving?"
+        assert tension["why_it_matters"] == "Determines whether protagonist can trust their guide"
+        # Entity IDs should have prefix stripped
+        assert tension["central_entity_ids"] == ["the_host", "the_manor"]
+        assert tension["explored"] == ["benevolent"]
+        assert tension["implicit"] == ["self_serving"]
+
+    def test_handles_unknown_tension(self, graph_with_tensions: Graph) -> None:
+        """Enrichment handles tensions not in graph gracefully."""
+        artifact = {
+            "tensions": [
+                {"tension_id": "unknown_tension", "explored": ["option_a"], "implicit": []},
+            ],
+        }
+
+        result = enrich_seed_artifact(graph_with_tensions, artifact)
+
+        tension = result["tensions"][0]
+        assert tension["tension_id"] == "unknown_tension"
+        assert "question" not in tension
+        assert "why_it_matters" not in tension
+        assert tension["explored"] == ["option_a"]
+
+    def test_enriches_multiple_tensions(self, graph_with_tensions: Graph) -> None:
+        """Enrichment works for multiple tensions."""
+        artifact = {
+            "tensions": [
+                {"tension_id": "host_motivation", "explored": ["benevolent"], "implicit": []},
+                {"tension_id": "killer_identity", "explored": ["suspect_a"], "implicit": []},
+            ],
+        }
+
+        result = enrich_seed_artifact(graph_with_tensions, artifact)
+
+        assert len(result["tensions"]) == 2
+        assert result["tensions"][0]["question"] == "Is the host benevolent or self-serving?"
+        assert result["tensions"][1]["question"] == "Who committed the murder?"
+
+    def test_empty_tensions_list(self, graph_with_tensions: Graph) -> None:
+        """Enrichment handles empty tensions list."""
+        artifact = {"tensions": []}
+
+        result = enrich_seed_artifact(graph_with_tensions, artifact)
+
+        assert result["tensions"] == []
