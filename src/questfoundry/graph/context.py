@@ -82,7 +82,7 @@ def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
         return ""
 
     # Pipe-delimited for easy scanning, with thread:: scope prefix
-    id_list = " | ".join(f"`{SCOPE_THREAD}::{tid}`" for tid in thread_ids)
+    id_list = " | ".join(f"`{format_scoped_id(SCOPE_THREAD, tid)}`" for tid in thread_ids)
 
     lines = [
         "## VALID THREAD IDs (copy exactly, no modifications)",
@@ -168,7 +168,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
                 cat_count = len(by_category[category])
                 lines.append(f"**{category.title()}s ({cat_count}):**")
                 for raw_id in sorted(by_category[category]):
-                    lines.append(f"  - `{SCOPE_ENTITY}::{raw_id}`")
+                    lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
                 lines.append("")
 
     # Tensions with alternatives
@@ -202,7 +202,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
             if alts:
                 # Sort alternatives for deterministic output
                 alts.sort()
-                lines.append(f"- `{SCOPE_TENSION}::{raw_id}` → [{', '.join(alts)}]")
+                lines.append(f"- `{format_scoped_id(SCOPE_TENSION, raw_id)}` → [{', '.join(alts)}]")
 
         lines.append("")
 
@@ -281,7 +281,7 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
         if category in by_category:
             entity_lines.append(f"**{category.title()}s:**")
             for raw_id in sorted(by_category[category]):
-                entity_lines.append(f"  - `{SCOPE_ENTITY}::{raw_id}`")
+                entity_lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
             entity_lines.append("")  # Blank line between categories
 
     # Collect tension IDs
@@ -290,7 +290,7 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
     for _tid, tdata in sorted(tensions.items()):
         raw_id = tdata.get("raw_id")
         if raw_id:
-            tension_lines.append(f"- `{SCOPE_TENSION}::{raw_id}`")
+            tension_lines.append(f"- `{format_scoped_id(SCOPE_TENSION, raw_id)}`")
 
     return {
         "entity_manifest": "\n".join(entity_lines) if entity_lines else "(No entities)",
