@@ -686,8 +686,11 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             alt_by_tension.setdefault(raw_tension_id, set()).add(alt_node["raw_id"])
 
     # Extract thread IDs from SEED output (for internal references)
+    # Normalize IDs to handle both scoped (thread::foo) and bare (foo) formats
     seed_thread_ids: set[str] = {
-        t["thread_id"] for t in output.get("threads", []) if t.get("thread_id")
+        _normalize_id(t["thread_id"], "thread")[0]
+        for t in output.get("threads", [])
+        if t.get("thread_id")
     }
 
     # Pre-sort available IDs once (used in error messages)

@@ -1671,6 +1671,44 @@ class TestScopedIdValidation:
 
         assert errors == []
 
+    def test_scoped_thread_definitions_and_consequences(self) -> None:
+        """Thread definitions using scoped IDs work with scoped consequence references.
+
+        Regression test for issue #230: When LLM outputs thread definitions with
+        scoped IDs (thread::foo) and consequences reference them with scoped IDs,
+        validation should pass since seed_thread_ids is normalized.
+        """
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+
+        output = {
+            "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
+            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "threads": [
+                {
+                    "thread_id": "thread::mentor_arc",  # Scoped ID in definition
+                    "name": "Mentor Arc",
+                    "tension_id": "tension::trust",
+                    "alternative_id": "yes",
+                }
+            ],
+            "consequences": [
+                {
+                    "consequence_id": "trust_earned",
+                    "thread_id": "thread::mentor_arc",  # Scoped ID in reference
+                    "description": "Trust is earned",
+                }
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
 
 class TestSortBySimilarity:
     """Tests for _sort_by_similarity helper function."""
