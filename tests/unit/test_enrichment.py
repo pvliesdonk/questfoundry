@@ -129,6 +129,24 @@ class TestEnrichSeedArtifact:
         assert "concept" not in entity
         assert entity["disposition"] == "retained"
 
+    def test_handles_prefixed_entity_ids(self, graph_with_entities: Graph) -> None:
+        """Enrichment strips entity:: prefix for lookup."""
+        artifact = {
+            "entities": [
+                {"entity_id": "entity::the_detective", "disposition": "retained"},
+            ],
+        }
+
+        result = enrich_seed_artifact(graph_with_entities, artifact)
+
+        entity = result["entities"][0]
+        # ID should be preserved as-is in output
+        assert entity["entity_id"] == "entity::the_detective"
+        # But enrichment should still find the entity by stripping prefix
+        assert entity["entity_category"] == "character"
+        assert entity["concept"] == "Seasoned detective known for solving intricate cases"
+        assert entity["disposition"] == "retained"
+
     def test_enriches_multiple_entities(self, graph_with_entities: Graph) -> None:
         """Enrichment works for multiple entities."""
         artifact = {
@@ -237,6 +255,28 @@ class TestEnrichTensions:
         assert "question" not in tension
         assert "why_it_matters" not in tension
         assert tension["explored"] == ["option_a"]
+
+    def test_handles_prefixed_tension_ids(self, graph_with_tensions: Graph) -> None:
+        """Enrichment strips tension:: prefix for lookup."""
+        artifact = {
+            "tensions": [
+                {
+                    "tension_id": "tension::host_motivation",
+                    "explored": ["benevolent"],
+                    "implicit": ["self_serving"],
+                },
+            ],
+        }
+
+        result = enrich_seed_artifact(graph_with_tensions, artifact)
+
+        tension = result["tensions"][0]
+        # ID should be preserved as-is in output
+        assert tension["tension_id"] == "tension::host_motivation"
+        # But enrichment should still find the tension by stripping prefix
+        assert tension["question"] == "Is the host benevolent or self-serving?"
+        assert tension["why_it_matters"] == "Determines whether protagonist can trust their guide"
+        assert tension["central_entity_ids"] == ["the_host", "the_manor"]
 
     def test_enriches_multiple_tensions(self, graph_with_tensions: Graph) -> None:
         """Enrichment works for multiple tensions."""
