@@ -170,13 +170,36 @@ class PhaseSettings:
 
         Returns:
             PhaseSettings instance.
+
+        Raises:
+            ValueError: If values are out of valid range.
         """
         if not data:
             return cls()
+
+        temperature = data.get("temperature")
+        top_p = data.get("top_p")
+        seed = data.get("seed")
+
+        # Validate temperature (non-negative)
+        if temperature is not None and temperature < 0:
+            msg = f"temperature must be non-negative, got {temperature}"
+            raise ValueError(msg)
+
+        # Validate top_p (0 to 1 inclusive)
+        if top_p is not None and not (0 <= top_p <= 1):
+            msg = f"top_p must be between 0 and 1, got {top_p}"
+            raise ValueError(msg)
+
+        # Validate seed (must be an integer)
+        if seed is not None and not isinstance(seed, int):
+            msg = f"seed must be an integer, got {type(seed).__name__}"
+            raise ValueError(msg)
+
         return cls(
-            temperature=data.get("temperature"),
-            top_p=data.get("top_p"),
-            seed=data.get("seed"),
+            temperature=temperature,
+            top_p=top_p,
+            seed=seed,
         )
 
 

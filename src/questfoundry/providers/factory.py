@@ -171,7 +171,7 @@ def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
         model: Model name.
         **kwargs: Model options including:
             - host: Ollama server URL (or use OLLAMA_HOST env var)
-            - temperature: Sampling temperature (required, no default)
+            - temperature: Sampling temperature (optional, uses model default if not provided)
             - top_p: Nucleus sampling parameter
             - seed: Random seed for reproducibility
             - num_ctx: Context window size (default 32768)
@@ -206,7 +206,7 @@ def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
         "num_ctx": kwargs.get("num_ctx", 32768),  # Default 32k to avoid truncation
     }
 
-    # Temperature is required - caller must provide via phase settings
+    # Temperature is provided by phase settings; if absent, model uses its default
     if "temperature" in kwargs:
         model_kwargs["temperature"] = kwargs["temperature"]
 
@@ -245,7 +245,7 @@ def _create_openai_base_model(model: str, **kwargs: Any) -> BaseChatModel:
         model: Model name.
         **kwargs: Model options including:
             - api_key: OpenAI API key (or use OPENAI_API_KEY env var)
-            - temperature: Sampling temperature (required for non-reasoning models)
+            - temperature: Sampling temperature (optional, ignored for reasoning models)
             - top_p: Nucleus sampling parameter
             - seed: Random seed for reproducibility
 
@@ -301,7 +301,7 @@ def _create_anthropic_base_model(model: str, **kwargs: Any) -> BaseChatModel:
         model: Model name.
         **kwargs: Model options including:
             - api_key: Anthropic API key (or use ANTHROPIC_API_KEY env var)
-            - temperature: Sampling temperature (required, no default)
+            - temperature: Sampling temperature (optional, uses model default if not provided)
             - top_p: Nucleus sampling parameter
 
     Note:

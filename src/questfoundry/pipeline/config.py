@@ -63,26 +63,14 @@ class ProvidersConfig:
             phase: Pipeline phase (discuss, summarize, serialize).
 
         Returns:
-            PhaseSettings for the phase (may be default if not configured).
+            PhaseSettings for the phase. Returns configured settings if present,
+            otherwise returns default (empty) PhaseSettings. Note that actual
+            temperature values are computed dynamically in to_model_kwargs()
+            based on the phase and provider when not explicitly configured.
         """
-        from questfoundry.providers.settings import PhaseSettings as PS
         from questfoundry.providers.settings import get_default_phase_settings
 
-        config_settings = self.settings.get(phase)
-        if config_settings is None:
-            return get_default_phase_settings(phase)
-
-        # Merge config with defaults (config overrides defaults)
-        defaults = get_default_phase_settings(phase)
-        return PS(
-            temperature=(
-                config_settings.temperature
-                if config_settings.temperature is not None
-                else defaults.temperature
-            ),
-            top_p=(config_settings.top_p if config_settings.top_p is not None else defaults.top_p),
-            seed=config_settings.seed if config_settings.seed is not None else defaults.seed,
-        )
+        return self.settings.get(phase) or get_default_phase_settings(phase)
 
     def get_discuss_provider(self) -> str:
         """Get the effective provider for the discuss phase.

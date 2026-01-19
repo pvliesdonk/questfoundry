@@ -176,6 +176,43 @@ class TestPhaseSettings:
         assert settings.top_p is None
         assert settings.seed is None
 
+    def test_from_dict_rejects_negative_temperature(self) -> None:
+        """from_dict rejects negative temperature."""
+        with pytest.raises(ValueError, match="temperature must be non-negative"):
+            PhaseSettings.from_dict({"temperature": -0.5})
+
+    def test_from_dict_accepts_zero_temperature(self) -> None:
+        """from_dict accepts zero temperature."""
+        settings = PhaseSettings.from_dict({"temperature": 0.0})
+        assert settings.temperature == 0.0
+
+    def test_from_dict_rejects_top_p_below_zero(self) -> None:
+        """from_dict rejects top_p below 0."""
+        with pytest.raises(ValueError, match="top_p must be between 0 and 1"):
+            PhaseSettings.from_dict({"top_p": -0.1})
+
+    def test_from_dict_rejects_top_p_above_one(self) -> None:
+        """from_dict rejects top_p above 1."""
+        with pytest.raises(ValueError, match="top_p must be between 0 and 1"):
+            PhaseSettings.from_dict({"top_p": 1.5})
+
+    def test_from_dict_accepts_boundary_top_p(self) -> None:
+        """from_dict accepts top_p at boundaries (0 and 1)."""
+        settings = PhaseSettings.from_dict({"top_p": 0.0})
+        assert settings.top_p == 0.0
+        settings = PhaseSettings.from_dict({"top_p": 1.0})
+        assert settings.top_p == 1.0
+
+    def test_from_dict_rejects_non_integer_seed(self) -> None:
+        """from_dict rejects non-integer seed."""
+        with pytest.raises(ValueError, match="seed must be an integer"):
+            PhaseSettings.from_dict({"seed": 42.5})
+
+    def test_from_dict_accepts_integer_seed(self) -> None:
+        """from_dict accepts integer seed."""
+        settings = PhaseSettings.from_dict({"seed": 42})
+        assert settings.seed == 42
+
 
 class TestPhaseSettingsToModelKwargs:
     """Tests for PhaseSettings.to_model_kwargs method."""

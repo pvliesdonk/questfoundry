@@ -218,7 +218,7 @@ class PipelineOrchestrator:
         Args:
             provider_string: Provider string like "ollama/qwen3:4b-instruct-32k".
             phase: Pipeline phase (discuss, summarize, serialize) for settings.
-                If None, uses balanced defaults.
+                If None, uses discuss phase defaults (CREATIVE temperature).
 
         Returns:
             Tuple of (chat_model, provider_name, model_name).
