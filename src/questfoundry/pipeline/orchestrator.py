@@ -208,22 +208,40 @@ class PipelineOrchestrator:
             model = default_model
         return provider_name, model
 
-    def _create_model_for_provider(self, provider_string: str) -> tuple[BaseChatModel, str, str]:
-        """Create a chat model from a provider string.
+    def _create_model_for_provider(
+        self,
+        provider_string: str,
+        phase: str | None = None,
+    ) -> tuple[BaseChatModel, str, str]:
+        """Create a chat model from a provider string with phase-specific settings.
 
         Args:
             provider_string: Provider string like "ollama/qwen3:4b-instruct-32k".
+            phase: Pipeline phase (discuss, summarize, serialize) for settings.
+                If None, uses balanced defaults.
 
         Returns:
             Tuple of (chat_model, provider_name, model_name).
         """
         provider_name, model = self._parse_provider_string(provider_string)
 
-        chat_model = create_chat_model(provider_name, model)
+        # Get phase-specific settings (temperature, top_p, seed)
+        settings = self.config.providers.get_phase_settings(phase or "discuss")
+        kwargs = settings.to_model_kwargs(phase or "discuss", provider_name)
+
+        chat_model = create_chat_model(provider_name, model, **kwargs)
 
         # Add callbacks for logging if enabled
         if self._callbacks:
             chat_model = chat_model.with_config(callbacks=self._callbacks)  # type: ignore[assignment]
+
+        log.info(
+            "model_created",
+            phase=phase,
+            provider=provider_name,
+            model=model,
+            temperature=kwargs.get("temperature"),
+        )
 
         return chat_model, provider_name, model
 
@@ -277,7 +295,9 @@ class PipelineOrchestrator:
         self._ensure_callbacks_initialized()
 
         provider_string = self._get_resolved_discuss_provider()
-        chat_model, provider_name, model = self._create_model_for_provider(provider_string)
+        chat_model, provider_name, model = self._create_model_for_provider(
+            provider_string, phase="discuss"
+        )
 
         self._provider_name = provider_name
         self._model_name = model
@@ -330,8 +350,9 @@ class PipelineOrchestrator:
     ) -> BaseChatModel:
         """Get or create the LangChain chat model for a specific phase.
 
-        Uses the phase-specific provider if configured, otherwise falls
-        back to the discuss model. Models are lazily created and cached.
+        Always creates a separate model instance for each phase since
+        model settings (temperature, top_p, seed) differ per phase.
+        Models are lazily created and cached per phase.
 
         Args:
             phase: The pipeline phase ("summarize" or "serialize").
@@ -339,24 +360,22 @@ class PipelineOrchestrator:
         Returns:
             Configured BaseChatModel for the specified phase.
         """
-        # Get resolved providers for both phase and discuss
-        phase_provider = self._get_resolved_phase_provider(phase)
-        discuss_provider = self._get_resolved_discuss_provider()
-
-        # If same as discuss provider, reuse discuss model
-        if phase_provider == discuss_provider:
-            return self._get_chat_model()
-
-        # Check cached model
+        # Check cached model first
         cached_model = self._summarize_model if phase == "summarize" else self._serialize_model
 
         # Return cached model if available
         if cached_model is not None:
             return cached_model
 
-        # Create new model for this phase
+        # Get provider for this phase
+        phase_provider = self._get_resolved_phase_provider(phase)
+
+        # Create new model with phase-specific settings
+        # (always separate from discuss model since settings differ)
         self._ensure_callbacks_initialized()
-        chat_model, provider_name, model = self._create_model_for_provider(phase_provider)
+        chat_model, provider_name, model = self._create_model_for_provider(
+            phase_provider, phase=phase
+        )
 
         # Cache the model and metadata
         if phase == "summarize":
@@ -367,13 +386,6 @@ class PipelineOrchestrator:
             self._serialize_provider_name = provider_name
             self._serialize_model_name = model
             self._serialize_model = chat_model
-
-        log.info(
-            "hybrid_model_created",
-            phase=phase,
-            provider=provider_name,
-            model=model,
-        )
 
         return chat_model
 
