@@ -379,7 +379,7 @@ The SEED stage's Discuss → Summarize → Serialize pattern had a critical info
 - Serialize extracts from prose, missing items not prominently mentioned
 - Validation catches missing items post-hoc, but recovery is structurally impossible
 
-Multiple PRs (#188-#201) attempted to fix symptoms (phantom IDs, missing items) without addressing the root cause: extraction-based prompts that made completeness recovery impossible.
+Multiple earlier PRs (#188-#201) attempted to fix symptoms (phantom IDs, missing items) without addressing the root cause: extraction-based prompts that made completeness recovery impossible.
 
 ### Decision
 
@@ -397,7 +397,7 @@ Implement **manifest-first architecture** with three gates:
    - Counts explicit: "Generate EXACTLY N decisions"
 
 3. **Gate 3 (Validate):** Count-based structural check
-   - Fast pre-check: `len(output.entities) == expected.entities`
+   - Fast pre-check: `len(output.entities) == expected['entities']`
    - No string parsing—just count comparison
 
 Additionally, classify errors by type for targeted retry strategies:

@@ -50,7 +50,7 @@ Completeness is enforced by construction, not post-hoc parsing. The manifest (li
 - Counts explicit: "Generate EXACTLY 5 entity decisions"
 
 **Gate 3 (Validation):** Count-based structural check
-- Fast pre-check: `len(output.entities) == expected.entities`
+- Fast pre-check: `len(output.entities) == expected['entities']`
 - No string parsing—just count comparison
 - Semantic validation follows only if counts match
 
@@ -64,9 +64,9 @@ for msg in messages:
     if isinstance(msg, AIMessage):
         if msg.tool_calls:
             for tc in msg.tool_calls:
-                parts.append(f"[TOOL CALL: {tc['name']}]")
+                parts.append(f"[TOOL CALL: {tc.get('name', 'unknown_tool')}]")
     elif isinstance(msg, ToolMessage):
-        parts.append(f"[TOOL RESULT: {msg.name}]\n{msg.content}")
+        parts.append(f"[TOOL RESULT: {msg.name or 'unknown_tool'}]\n{msg.content}")
 ```
 
 Without this, entities discovered via `query_graph` but not echoed in assistant text are invisible to summarize.
@@ -95,6 +95,7 @@ class SeedErrorCategory(Enum):
 
 def categorize_error(error: SeedValidationError) -> SeedErrorCategory:
     # Uses pattern constants for testability
+    issue = error.issue.lower()
     if _PATTERN_SEMANTIC_BRAINSTORM in issue or _PATTERN_SEMANTIC_SEED in issue:
         return SeedErrorCategory.SEMANTIC
     if _PATTERN_COMPLETENESS in issue:
