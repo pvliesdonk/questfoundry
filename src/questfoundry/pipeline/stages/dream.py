@@ -19,7 +19,10 @@ from questfoundry.agents import (
 from questfoundry.artifacts import DreamArtifact
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
-from questfoundry.tools.langchain_tools import get_all_research_tools
+from questfoundry.tools.langchain_tools import (
+    get_all_research_tools,
+    get_interactive_tools,
+)
 
 log = get_logger(__name__)
 
@@ -111,8 +114,10 @@ class DreamStage:
         total_llm_calls = 0
         total_tokens = 0
 
-        # Get research tools
+        # Get research tools (and interactive tools when in interactive mode)
         tools = get_all_research_tools()
+        if interactive:
+            tools = [*tools, *get_interactive_tools()]
 
         # Phase 1: Discuss
         log.debug("dream_phase", phase="discuss")

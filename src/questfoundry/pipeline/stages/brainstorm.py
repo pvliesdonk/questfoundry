@@ -30,7 +30,10 @@ from questfoundry.graph.mutations import (
 from questfoundry.models import BrainstormOutput
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
-from questfoundry.tools.langchain_tools import get_all_research_tools
+from questfoundry.tools.langchain_tools import (
+    get_all_research_tools,
+    get_interactive_tools,
+)
 
 log = get_logger(__name__)
 
@@ -215,8 +218,10 @@ class BrainstormStage:
         vision_context = self._get_vision_context(resolved_path)
         log.debug("brainstorm_vision_loaded", context_length=len(vision_context))
 
-        # Get research tools
+        # Get research tools (and interactive tools when in interactive mode)
         tools = get_all_research_tools()
+        if interactive:
+            tools = [*tools, *get_interactive_tools()]
 
         # Build discuss prompt with vision context
         discuss_prompt = get_brainstorm_discuss_prompt(

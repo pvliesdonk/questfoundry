@@ -132,12 +132,19 @@ async def run_discuss_phase(
     current_messages: list[BaseMessage] = [HumanMessage(content=user_prompt)]
 
     # Validate interactive mode requirements upfront
-    if interactive and user_input_fn is None:
-        log.error("interactive_mode_no_input_fn", stage="discuss")
-        raise ValueError(
-            "interactive=True requires user_input_fn callback. "
-            "Pass user_input_fn parameter or set interactive=False."
-        )
+    if interactive:
+        if user_input_fn is None:
+            log.error("interactive_mode_no_input_fn", stage="discuss")
+            raise ValueError(
+                "interactive=True requires user_input_fn callback. "
+                "Pass user_input_fn parameter or set interactive=False."
+            )
+        if on_assistant_message is None:
+            log.error("interactive_mode_no_display_fn", stage="discuss")
+            raise ValueError(
+                "interactive=True requires on_assistant_message callback. "
+                "Pass on_assistant_message parameter or set interactive=False."
+            )
 
     # Set interactive callbacks for tools like present_options
     if interactive and user_input_fn and on_assistant_message:
@@ -213,7 +220,7 @@ async def run_discuss_phase(
                 break
 
             # Interactive mode: get next user input
-            assert user_input_fn is not None  # Validated at line 112
+            assert user_input_fn is not None  # Validated above in interactive check
             user_input = await user_input_fn()
 
             # Check for exit conditions
