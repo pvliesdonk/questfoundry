@@ -6,6 +6,8 @@ on:
 
 jobs:
   claude-review:
+    # Skip automated code review for dependabot PRs (just dependency bumps)
+    if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read
