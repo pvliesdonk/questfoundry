@@ -84,7 +84,7 @@ def test_create_chat_model_ollama_success() -> None:
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
         patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
     ):
-        result = create_chat_model("ollama", "qwen3:4b-instruct-32k")
+        result = create_chat_model("ollama", "qwen3:4b-instruct-32k", temperature=0.7)
 
     assert result is mock_chat
     mock_class.assert_called_once_with(
@@ -100,12 +100,12 @@ def test_create_chat_model_ollama_with_custom_host() -> None:
     mock_chat = MagicMock()
 
     with patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class:
-        create_chat_model("ollama", "llama3:8b", host="http://custom:8080")
+        create_chat_model("ollama", "llama3:8b", host="http://custom:8080", temperature=0.5)
 
     mock_class.assert_called_once_with(
         model="llama3:8b",
         base_url="http://custom:8080",
-        temperature=0.7,
+        temperature=0.5,
         num_ctx=32768,
     )
 
@@ -145,7 +145,7 @@ def test_create_chat_model_openai_success() -> None:
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
     ):
-        result = create_chat_model("openai", "gpt-5-mini")
+        result = create_chat_model("openai", "gpt-5-mini", temperature=0.7)
 
     assert result is mock_chat
     mock_class.assert_called_once_with(
@@ -201,7 +201,7 @@ def test_create_chat_model_anthropic_success() -> None:
         patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}),
         patch("langchain_anthropic.ChatAnthropic", return_value=mock_chat) as mock_class,
     ):
-        result = create_chat_model("anthropic", "claude-3-opus")
+        result = create_chat_model("anthropic", "claude-3-opus", temperature=0.7)
 
     assert result is mock_chat
     mock_class.assert_called_once_with(
@@ -237,7 +237,7 @@ def test_create_chat_model_case_insensitive() -> None:
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
         patch("langchain_ollama.ChatOllama", return_value=mock_chat),
     ):
-        result = create_chat_model("OLLAMA", "model")
+        result = create_chat_model("OLLAMA", "model", temperature=0.5)
 
     assert result is not None
 
@@ -264,10 +264,81 @@ def test_create_chat_model_ollama_custom_num_ctx() -> None:
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
         patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
     ):
-        create_chat_model("ollama", "model", num_ctx=131072)
+        create_chat_model("ollama", "model", num_ctx=131072, temperature=0.5)
 
     call_kwargs = mock_class.call_args[1]
     assert call_kwargs["num_ctx"] == 131072
+
+
+def test_create_chat_model_ollama_no_temperature_when_not_provided() -> None:
+    """Factory does not include temperature when not provided."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
+        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("ollama", "model")
+
+    call_kwargs = mock_class.call_args[1]
+    assert "temperature" not in call_kwargs
+
+
+def test_create_chat_model_ollama_top_p() -> None:
+    """Factory passes top_p parameter for Ollama."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
+        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("ollama", "model", temperature=0.5, top_p=0.95)
+
+    call_kwargs = mock_class.call_args[1]
+    assert call_kwargs["top_p"] == 0.95
+
+
+def test_create_chat_model_ollama_seed() -> None:
+    """Factory passes seed parameter for Ollama."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
+        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("ollama", "model", temperature=0.5, seed=42)
+
+    call_kwargs = mock_class.call_args[1]
+    assert call_kwargs["seed"] == 42
+
+
+def test_create_chat_model_openai_top_p_and_seed() -> None:
+    """Factory passes top_p and seed parameters for OpenAI."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
+        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("openai", "gpt-5-mini", temperature=0.7, top_p=0.9, seed=123)
+
+    call_kwargs = mock_class.call_args[1]
+    assert call_kwargs["top_p"] == 0.9
+    assert call_kwargs["seed"] == 123
+
+
+def test_create_chat_model_anthropic_top_p() -> None:
+    """Factory passes top_p parameter for Anthropic."""
+    mock_chat = MagicMock()
+
+    with (
+        patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}),
+        patch("langchain_anthropic.ChatAnthropic", return_value=mock_chat) as mock_class,
+    ):
+        create_chat_model("anthropic", "claude-3-opus", temperature=0.5, top_p=0.85)
+
+    call_kwargs = mock_class.call_args[1]
+    assert call_kwargs["top_p"] == 0.85
 
 
 # --- Tests for create_model_for_structured_output ---
@@ -529,10 +600,10 @@ def test_create_chat_model_gpt4o_has_temperature() -> None:
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
     ):
-        create_chat_model("openai", "gpt-5-mini")
+        create_chat_model("openai", "gpt-5-mini", temperature=0.7)
 
     call_kwargs = mock_class.call_args[1]
-    # GPT-4o should have temperature
+    # GPT-4o should have temperature when provided
     assert "temperature" in call_kwargs
     assert call_kwargs["temperature"] == 0.7
 
