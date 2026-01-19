@@ -22,6 +22,25 @@ system: |
   - Use bullet points or structured format for clarity
   - If something wasn't discussed, note it as "not specified" rather than inventing
 
+  ## Scope Boundary (CRITICAL)
+  DREAM captures HIGH-LEVEL VISION only. If the discussion went into detail that
+  belongs in later stages, DO NOT include it in the summary.
+
+  **Exclude from DREAM summary (save for BRAINSTORM):**
+  - Specific character names and arcs (e.g., "Julia the baker lost her sister")
+  - Specific scene names or plot beats (e.g., "The Lighthouse Night scene")
+  - Detailed mechanics or variable systems (e.g., "memory bank decreases with edits")
+  - Specific endings (e.g., "four endings: Accepting, Withdrawing, Architect, Erasure")
+
+  **Keep only:**
+  - Genre, tone, themes (high-level)
+  - Audience and scope constraints
+  - Style guidance
+  - Content warnings/notes (general, not specific scenes)
+
+  If the discussion produced a full story treatment, distill it back to vision-level
+  concepts. The detailed content will be rediscovered in BRAINSTORM.
+
   ## Output Format
   Provide a structured summary covering all the categories above.
   Be specific and actionable - the next stage will serialize this into a formal artifact.
