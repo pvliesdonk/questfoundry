@@ -248,7 +248,7 @@ class TestFormatMessagesToolCalls:
         assert "mystery genre conventions" in result
 
     def test_format_messages_with_tool_messages(self) -> None:
-        """Should include tool result name and content in formatted output."""
+        """Should include tool result name and extracted content in formatted output."""
         tool_message = ToolMessage(
             content='{"result": "success", "data": {"genre": "mystery"}}',
             name="search_corpus",
@@ -258,9 +258,11 @@ class TestFormatMessagesToolCalls:
 
         result = _format_messages_for_summary(messages)
 
-        assert "[Tool Result: search_corpus]" in result
-        assert '"result": "success"' in result
-        assert '"genre": "mystery"' in result
+        # Tool results now use [Research: ...] format with content-only extraction
+        assert "[Research: search_corpus]" in result
+        # Extracts just the data content, not the wrapper
+        assert "genre" in result
+        assert "mystery" in result
 
     def test_format_preserves_research_context(self) -> None:
         """Should preserve full tool research chain in conversation context."""
@@ -294,7 +296,8 @@ class TestFormatMessagesToolCalls:
         assert "Let me research mystery conventions" in result
         assert "[Tool Call: search_corpus]" in result
         assert "mystery tropes" in result
-        assert "[Tool Result: search_corpus]" in result
+        # Tool results now use [Research: ...] format with content-only extraction
+        assert "[Research: search_corpus]" in result
         assert "locked room" in result
         assert "red herring" in result
         assert "Based on my research" in result
@@ -342,7 +345,8 @@ class TestFormatMessagesToolCalls:
 
         result = _format_messages_for_summary(messages)
 
-        assert "[Tool Result: unknown_tool]" in result
+        # Tool results now use [Research: ...] format
+        assert "[Research: unknown_tool]" in result
         assert "some result" in result
 
     def test_format_messages_tool_call_without_args(self) -> None:

@@ -140,10 +140,17 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
                     args_str = json.dumps(tool_args, indent=2)
                     formatted_parts.append(f"[Tool Call: {tool_name}]\n{args_str}")
         elif isinstance(msg, ToolMessage):
-            # Include tool results (research findings)
+            # Include tool results (research findings) - extract just the useful content
+            # to avoid prompt-stuffing with full JSON boilerplate
             tool_name = msg.name or "unknown_tool"
-            content = msg.content if isinstance(msg.content, str) else str(msg.content)
-            formatted_parts.append(f"[Tool Result: {tool_name}]\n{content}")
+            raw_content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            try:
+                data = json.loads(raw_content)
+                # Extract just the useful content, not the JSON wrapper
+                useful_content = data.get("content") or data.get("data") or raw_content
+            except (json.JSONDecodeError, TypeError):
+                useful_content = raw_content
+            formatted_parts.append(f"[Research: {tool_name}]\n{useful_content}")
         elif isinstance(msg, SystemMessage):
             content = msg.content if isinstance(msg.content, str) else str(msg.content)
             formatted_parts.append(f"System: {content}")
