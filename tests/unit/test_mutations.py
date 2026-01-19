@@ -12,6 +12,7 @@ from questfoundry.graph.mutations import (
     SeedValidationError,
     _format_available_with_suggestions,
     _normalize_id,
+    _prefix_id,
     _sort_by_similarity,
     apply_brainstorm_mutations,
     apply_dream_mutations,
@@ -47,6 +48,54 @@ class TestHasMutationHandler:
         assert has_mutation_handler("ship") is False
         assert has_mutation_handler("mock") is False
         assert has_mutation_handler("nonexistent") is False
+
+
+class TestPrefixId:
+    """Test the _prefix_id helper function."""
+
+    @pytest.mark.parametrize(
+        ("node_type", "raw_id", "expected"),
+        [
+            pytest.param("entity", "the_detective", "entity::the_detective", id="raw_id-entity"),
+            pytest.param(
+                "tension", "host_motivation", "tension::host_motivation", id="raw_id-tension"
+            ),
+            pytest.param("thread", "main_thread", "thread::main_thread", id="raw_id-thread"),
+            pytest.param(
+                "entity",
+                "entity::the_detective",
+                "entity::the_detective",
+                id="correctly_prefixed-entity",
+            ),
+            pytest.param(
+                "tension",
+                "tension::host_motivation",
+                "tension::host_motivation",
+                id="correctly_prefixed-tension",
+            ),
+            pytest.param(
+                "entity",
+                "tension::the_detective",
+                "entity::the_detective",
+                id="wrong_prefix-entity",
+            ),
+            pytest.param(
+                "tension",
+                "entity::host_motivation",
+                "tension::host_motivation",
+                id="wrong_prefix-tension",
+            ),
+            pytest.param(
+                "tension",
+                "tension::tension::host_motivation",
+                "tension::host_motivation",
+                id="double_prefix",
+            ),
+        ],
+    )
+    def test_prefix_id(self, node_type: str, raw_id: str, expected: str) -> None:
+        """Tests _prefix_id with various inputs including raw, prefixed, and double-prefixed IDs."""
+        assert _prefix_id(node_type, raw_id) == expected
 
 
 class TestApplyMutations:
