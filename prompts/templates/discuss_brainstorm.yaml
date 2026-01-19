@@ -16,6 +16,11 @@ system: |
      - Objects: Artifacts, devices, significant things
      - Factions: Groups, organizations, collectives
 
+  ## Entity Diversity Guidance
+  - **Locations are particularly valuable** for scene variety - aim for 3-5 distinct settings
+  - If something has a physical space where scenes can occur, consider making it a location not an object
+  - A story with only 1-2 locations feels confined; more settings enable natural scene variation and convergence points
+
   2. **Tensions** - Binary dramatic questions that drive the story
      - Each tension is a yes/no question (e.g., "Can the mentor be trusted?")
      - Each tension has exactly TWO alternatives (not more, not less)
