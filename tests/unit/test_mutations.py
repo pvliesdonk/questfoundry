@@ -1753,7 +1753,7 @@ class TestFormatAvailableWithSuggestions:
             "xyz_unknown",
             ["the_hollow_archive", "keeper_of_depths", "echo_chamber"],
         )
-        assert "sorted by relevance" in result
+        assert "most similar first" in result
         assert "Did you mean" not in result
         assert "Use '" not in result
 
@@ -1822,7 +1822,7 @@ class TestSimilarityFeedbackIntegration:
 
         feedback = error.to_feedback()
 
-        assert "sorted by relevance" in feedback
+        assert "most similar first" in feedback
 
     def test_brainstorm_error_high_confidence(self) -> None:
         """BrainstormMutationError shows prescriptive suggestion for high confidence match."""
@@ -1855,8 +1855,8 @@ class TestSimilarityFeedbackIntegration:
 
         feedback = error.to_feedback()
 
-        # Should show available list in fallback format
-        assert "Available:" in feedback or "hero" in feedback
+        # Should show available list in fallback comma-separated format
+        assert "Available: hero, villain" in feedback
 
     def test_seq3_scenario(self) -> None:
         """Real failure case from seq-3: 'the_archive' instead of 'the_hollow_archive'.

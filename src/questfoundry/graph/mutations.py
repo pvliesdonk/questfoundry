@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections import Counter
 from dataclasses import dataclass, field
+from difflib import SequenceMatcher
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any
 
@@ -19,8 +20,15 @@ if TYPE_CHECKING:
 # Display limits for error messages
 _MAX_ERRORS_DISPLAY = 8
 _MAX_AVAILABLE_DISPLAY = 5
+_MAX_SIMILARITY_SUGGESTIONS = 3  # Max ranked suggestions in "Did you mean?" output
 
-# Similarity thresholds for ID suggestions
+# Similarity thresholds for ID suggestions.
+# These values were empirically tuned based on real failure cases:
+# - 0.85: Very close matches (e.g., "hollow_archive" vs "the_hollow_archive" = 87.5%)
+#   warrant a prescriptive "Use X instead" since we're confident it's correct.
+# - 0.6: Moderate matches (e.g., "the_archive" vs "the_hollow_archive" = 75%)
+#   get ranked suggestions to help without being overly prescriptive.
+# - Below 0.6: Too dissimilar to suggest confidently; just show sorted list.
 _HIGH_CONFIDENCE_THRESHOLD = 0.85  # Single prescriptive suggestion
 _MEDIUM_CONFIDENCE_THRESHOLD = 0.6  # Ranked suggestions with scores
 
@@ -31,6 +39,10 @@ def _sort_by_similarity(invalid_id: str, available: list[str]) -> list[tuple[str
     Uses SequenceMatcher ratio for fuzzy matching. Strips scope prefixes
     (e.g., "entity::") before comparison to handle both scoped and unscoped IDs.
 
+    Performance: Reuses a single SequenceMatcher instance with set_seq2() for
+    efficiency when comparing against many available IDs. Typical list sizes
+    are 10-30 entities, so O(n) comparisons are acceptable.
+
     Args:
         invalid_id: The invalid ID that was provided.
         available: List of valid IDs to compare against.
@@ -38,18 +50,17 @@ def _sort_by_similarity(invalid_id: str, available: list[str]) -> list[tuple[str
     Returns:
         List of (id, score) tuples sorted by score descending.
     """
-    from difflib import SequenceMatcher
 
     def strip_scope(s: str) -> str:
         """Remove scope prefix if present (e.g., 'entity::hero' -> 'hero')."""
         return s.split("::")[-1] if "::" in s else s
 
-    def sim(a: str, b: str) -> float:
-        """Compute similarity ratio between two strings (case-insensitive)."""
-        return SequenceMatcher(None, a.lower(), b.lower()).ratio()
-
-    invalid_raw = strip_scope(invalid_id)
-    scored = [(aid, sim(invalid_raw, strip_scope(aid))) for aid in available]
+    invalid_raw_lower = strip_scope(invalid_id).lower()
+    matcher = SequenceMatcher(a=invalid_raw_lower)
+    scored = []
+    for aid in available:
+        matcher.set_seq2(strip_scope(aid).lower())
+        scored.append((aid, matcher.ratio()))
     return sorted(scored, key=lambda x: x[1], reverse=True)
 
 
@@ -84,14 +95,41 @@ def _format_available_with_suggestions(invalid_id: str, available: list[str]) ->
     # Medium confidence: ranked suggestions
     if best_score >= _MEDIUM_CONFIDENCE_THRESHOLD:
         lines = ["Did you mean one of these?"]
-        for sid, score in sorted_ids[:3]:
+        for sid, score in sorted_ids[:_MAX_SIMILARITY_SUGGESTIONS]:
             lines.append(f"      - {sid} ({int(score * 100)}%)")
         return "\n".join(lines)
 
     # Low confidence: sorted list only (most similar first)
     display = [sid for sid, _ in sorted_ids[:_MAX_AVAILABLE_DISPLAY]]
     suffix = "..." if len(available) > _MAX_AVAILABLE_DISPLAY else ""
-    return f"Available (sorted by relevance): {', '.join(display)}{suffix}"
+    return f"Available IDs (most similar first): {', '.join(display)}{suffix}"
+
+
+def _format_error_available(provided: str, available: list[str]) -> str | None:
+    """Format available IDs for an error, using similarity if provided value exists.
+
+    This is a shared helper for BrainstormMutationError and SeedMutationError to
+    avoid code duplication (DRY principle).
+
+    Args:
+        provided: The invalid ID that was provided (may be empty).
+        available: List of valid IDs.
+
+    Returns:
+        Formatted suggestion string, or None if no available IDs.
+    """
+    if not available:
+        return None
+
+    if provided:
+        suggestion = _format_available_with_suggestions(provided, available)
+        if suggestion:
+            return suggestion
+
+    # Fallback for errors without provided value
+    avail = available[:_MAX_AVAILABLE_DISPLAY]
+    suffix = "..." if len(available) > _MAX_AVAILABLE_DISPLAY else ""
+    return f"Available: {', '.join(avail)}{suffix}"
 
 
 # Error message patterns for categorization.
@@ -161,15 +199,9 @@ class BrainstormMutationError(MutationError):
         lines = ["BRAINSTORM has invalid internal references:"]
         for e in self.errors[:_MAX_ERRORS_DISPLAY]:
             lines.append(f"  - {e.field_path}: {e.issue}")
-            if e.available and e.provided:
-                suggestion = _format_available_with_suggestions(e.provided, e.available)
-                if suggestion:
-                    lines.append(f"    {suggestion}")
-            elif e.available:
-                # Fallback for errors without provided value
-                avail = e.available[:_MAX_AVAILABLE_DISPLAY]
-                suffix = "..." if len(e.available) > _MAX_AVAILABLE_DISPLAY else ""
-                lines.append(f"    Available: {avail}{suffix}")
+            suggestion = _format_error_available(e.provided, e.available)
+            if suggestion:
+                lines.append(f"    {suggestion}")
         if len(self.errors) > _MAX_ERRORS_DISPLAY:
             lines.append(f"  ... and {len(self.errors) - _MAX_ERRORS_DISPLAY} more errors")
         lines.append("Use entity_id values from the entities list.")
@@ -266,15 +298,9 @@ class SeedMutationError(MutationError):
         lines = ["SEED has invalid cross-references:"]
         for e in self.errors[:_MAX_ERRORS_DISPLAY]:
             lines.append(f"  - {e.field_path}: {e.issue}")
-            if e.available and e.provided:
-                suggestion = _format_available_with_suggestions(e.provided, e.available)
-                if suggestion:
-                    lines.append(f"    {suggestion}")
-            elif e.available:
-                # Fallback for errors without provided value
-                avail = e.available[:_MAX_AVAILABLE_DISPLAY]
-                suffix = "..." if len(e.available) > _MAX_AVAILABLE_DISPLAY else ""
-                lines.append(f"    Available: {avail}{suffix}")
+            suggestion = _format_error_available(e.provided, e.available)
+            if suggestion:
+                lines.append(f"    {suggestion}")
         if len(self.errors) > _MAX_ERRORS_DISPLAY:
             lines.append(f"  ... and {len(self.errors) - _MAX_ERRORS_DISPLAY} more errors")
         lines.append("Use EXACT IDs from BRAINSTORM.")
