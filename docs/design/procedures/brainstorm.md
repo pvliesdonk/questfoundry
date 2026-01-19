@@ -164,6 +164,25 @@ entities:
 - `concept`: One-line essence
 - `notes`: Freeform context from discussion
 
+### Entity Type Distribution (Guidelines)
+
+For a typical story targeting 15-25 entities, aim for a balanced mix:
+
+| Type | Range | Purpose |
+|------|-------|---------|
+| Characters | 6-10 | Protagonist, antagonist, allies, suspects, supporting cast |
+| Locations | 4-6 | Scene settings; enables knot formation and scene variety |
+| Objects | 4-6 | Puzzles, MacGuffins, clues, symbolic items |
+| Factions | 1-3 | Organizations, groups, collectives |
+
+**Location vs Object Classification:**
+- **Location**: Has a physical space where scenes can occur; characters navigate to/from it
+- **Object**: Carried, single-use, or subordinate to a location
+
+Example: "the_clock_in_the_hallway" implies the hallway is a location; the clock is an object within it. If scenes will happen in the hallway, create it as a location.
+
+**Why locations matter:** SEED requires at least 2 different locations for scene variety. A story with only 1 location limits scene pacing and prevents natural knot formation in GROW.
+
 **Human Gate:** Yes
 
 Human reviews entity list:
