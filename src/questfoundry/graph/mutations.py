@@ -687,12 +687,11 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
     # Extract thread IDs from SEED output (for internal references)
     # Normalize IDs to handle both scoped (thread::foo) and bare (foo) formats
-    seed_thread_ids: set[str] = set()
-    for t in output.get("threads", []):
-        raw_id = t.get("thread_id")
-        if raw_id:
-            normalized_id, _ = _normalize_id(raw_id, "thread")
-            seed_thread_ids.add(normalized_id)
+    seed_thread_ids: set[str] = {
+        _normalize_id(t["thread_id"], "thread")[0]
+        for t in output.get("threads", [])
+        if t.get("thread_id")
+    }
 
     # Pre-sort available IDs once (used in error messages)
     sorted_entity_ids = sorted(valid_entity_ids)
