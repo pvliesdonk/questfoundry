@@ -20,4 +20,15 @@ system: |
   - Output ONLY the structured JSON
   - Follow the schema exactly
 
+  ## Scope Boundary (for DREAM artifacts)
+  DREAM artifacts capture HIGH-LEVEL VISION only. Even if the brief contains
+  detailed content, include ONLY:
+  - genre, subgenre, tone, audience, themes (high-level descriptors)
+  - style_notes (prose guidance, 50-200 chars, NOT plot summaries)
+  - scope (word count, passages, branching complexity)
+  - content_notes (warnings/guidance, NOT specific scenes or character arcs)
+
+  Do NOT serialize specific characters, scenes, endings, or mechanics into
+  DREAM fields. Those belong in BRAINSTORM/SEED stages.
+
 components: []
