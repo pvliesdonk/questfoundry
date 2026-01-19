@@ -698,6 +698,43 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     sorted_tension_ids = sorted(valid_tension_ids)
     sorted_thread_ids = sorted(seed_thread_ids)
 
+    # 0. Check for duplicate IDs in output (prevents LLM from outputting same item twice)
+    # Check duplicate entity_ids
+    entity_id_counts: dict[str, int] = {}
+    for decision in output.get("entities", []):
+        raw_id = decision.get("entity_id")
+        if raw_id:
+            normalized_id, _ = _normalize_id(raw_id, "entity")
+            entity_id_counts[normalized_id] = entity_id_counts.get(normalized_id, 0) + 1
+    for eid, count in entity_id_counts.items():
+        if count > 1:
+            errors.append(
+                SeedValidationError(
+                    field_path="entities",
+                    issue=f"Duplicate entity_id '{eid}' appears {count} times - each entity should have exactly one decision",
+                    available=[],
+                    provided=eid,
+                )
+            )
+
+    # Check duplicate tension_ids
+    tension_id_counts: dict[str, int] = {}
+    for decision in output.get("tensions", []):
+        raw_id = decision.get("tension_id")
+        if raw_id:
+            normalized_id, _ = _normalize_id(raw_id, "tension")
+            tension_id_counts[normalized_id] = tension_id_counts.get(normalized_id, 0) + 1
+    for tid, count in tension_id_counts.items():
+        if count > 1:
+            errors.append(
+                SeedValidationError(
+                    field_path="tensions",
+                    issue=f"Duplicate tension_id '{tid}' appears {count} times - each tension should have exactly one decision",
+                    available=[],
+                    provided=tid,
+                )
+            )
+
     # 1. Validate entity decisions
     for i, decision in enumerate(output.get("entities", [])):
         raw_entity_id = decision.get("entity_id")
