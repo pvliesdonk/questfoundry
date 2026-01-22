@@ -220,10 +220,28 @@ beats_prompt: |
   ## Rules
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
   - threads: Array of thread IDs from the VALID THREAD IDs list ONLY
+  - tension_impacts.tension_id: MUST use tension IDs from the ### Tension IDs list ONLY
   - entities: Array of entity IDs from the Entity IDs list ONLY
   - location: Entity ID from locations list (can be null)
   - location_alternatives: Other valid location IDs (can be empty array)
   - Generate 2-4 beats for EACH thread in the VALID THREAD IDs list
+
+  ## TENSION ID vs THREAD ID IN BEATS (CRITICAL)
+
+  The `tension_impacts.tension_id` field requires a TENSION ID (long binary question).
+  Do NOT use a thread ID here - they look similar but are different things:
+
+  - **Tension IDs** are long: `tension::character_sees_thing_as_X_or_Y`
+  - **Thread IDs** are short: `thread::thing_nature`
+
+  WRONG (will fail validation):
+  - `"tension_id": "tension::station_mechanical"` ← This is a THREAD ID!
+
+  RIGHT:
+  - `"tension_id": "tension::mira_soren_sees_station_alive_or_mechanical"` ← Actual tension
+
+  Look up tensions in the ### Tension IDs section of the manifest (they have alternatives listed).
+  Thread IDs go ONLY in the `threads` array, never in `tension_impacts`.
 
   ## BEAT COUNT PRESERVATION (CRITICAL)
 
