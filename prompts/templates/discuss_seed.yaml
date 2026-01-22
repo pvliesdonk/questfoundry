@@ -123,6 +123,8 @@ system: |
 
   ### Beat Requirements (Non-Negotiable)
 
+  Each thread requires a minimum of 2 initial beats, with a target of 3-4 beats:
+
   | Threads | Minimum Beats | Target Beats |
   |---------|---------------|--------------|
   | 3       | 6             | 9-12         |
@@ -221,7 +223,7 @@ system: |
   **Entity IDs - Copy Exactly**:
   - Use `dr_elara_voss` (not `dr_elara_vinoss`, `elara`, or `dr_voss`)
   - Use `the_archive` (not `archive`, `the_archives`, or `archive_building`)
-  - DO NOT add suffixes: `archive_vault` (not `archive_vault_entrance`)
+  - DO NOT add suffixes to existing IDs (e.g., if `archive_vault` is a location, do not use `archive_vault_entrance`)
 
   **Location Constraint (CRITICAL)**:
   - Locations MUST be from the BRAINSTORM locations list

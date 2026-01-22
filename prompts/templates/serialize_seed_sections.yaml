@@ -243,7 +243,8 @@ beats_prompt: |
 
   ## LOCATION vs ENTITY DISAMBIGUATION
 
-  The `location` field accepts ONLY location-category entities.
+  The `location` field accepts ONLY location-category entities from the Entity IDs manifest.
+  DO NOT invent locations - use only IDs from the Entity IDs list that are locations.
   The `entities` field accepts characters, objects, and factions (NOT locations).
 
   WRONG:
@@ -266,7 +267,7 @@ beats_prompt: |
 
   ## FINAL CHECK (verify before output)
   Before returning JSON, check each beat:
-  1. Every `threads` item appears in the ## VALID THREAD IDs list
+  1. Every `threads` item appears EXACTLY in the ## VALID THREAD IDs list (copy-paste, don't retype)
   2. Every `entities` item appears in the ### Entity IDs list
   3. `location` appears in the Locations section
   4. No invented IDs, no prefixes added
