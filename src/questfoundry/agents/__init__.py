@@ -14,6 +14,8 @@ from questfoundry.agents.prompts import (
 )
 from questfoundry.agents.serialize import (
     SerializationError,
+    SerializeResult,
+    serialize_seed_as_function,
     serialize_seed_iteratively,
     serialize_to_artifact,
 )
@@ -21,6 +23,7 @@ from questfoundry.agents.summarize import summarize_discussion
 
 __all__ = [
     "SerializationError",
+    "SerializeResult",
     "create_discuss_agent",
     "get_brainstorm_discuss_prompt",
     "get_brainstorm_serialize_prompt",
@@ -32,6 +35,7 @@ __all__ = [
     "get_serialize_prompt",
     "get_summarize_prompt",
     "run_discuss_phase",
+    "serialize_seed_as_function",
     "serialize_seed_iteratively",
     "serialize_to_artifact",
     "summarize_discussion",

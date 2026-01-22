@@ -666,3 +666,248 @@ class TestSerializeSeedIterativelySemanticValidation:
 
             assert len(exc_info.value.errors) == 1
             assert "threads.0.tension_id" in exc_info.value.errors[0].field_path
+
+
+class TestSerializeResult:
+    """Tests for SerializeResult dataclass."""
+
+    def test_success_property_true_when_artifact_and_no_errors(self) -> None:
+        """success should be True when artifact exists and no semantic errors."""
+        from questfoundry.agents.serialize import SerializeResult
+        from questfoundry.models.seed import SeedOutput
+
+        artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+        result = SerializeResult(artifact=artifact, tokens_used=100, semantic_errors=[])
+
+        assert result.success is True
+
+    def test_success_property_false_when_artifact_none(self) -> None:
+        """success should be False when artifact is None.
+
+        Note: This tests defensive behavior of the dataclass itself.
+        In practice, serialize_seed_as_function() always returns an artifact
+        (or raises SerializationError on Pydantic failure). The None check
+        exists for caller flexibility and defensive programming.
+        """
+        from questfoundry.agents.serialize import SerializeResult
+
+        result = SerializeResult(artifact=None, tokens_used=100, semantic_errors=[])
+
+        assert result.success is False
+
+    def test_success_property_false_when_semantic_errors_present(self) -> None:
+        """success should be False when semantic errors exist."""
+        from questfoundry.agents.serialize import SerializeResult
+        from questfoundry.graph.mutations import SeedValidationError
+        from questfoundry.models.seed import SeedOutput
+
+        artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+        errors = [
+            SeedValidationError(
+                field_path="entities.0.entity_id",
+                issue="Entity not found",
+                available=["a", "b"],
+                provided="x",
+            )
+        ]
+        result = SerializeResult(artifact=artifact, tokens_used=100, semantic_errors=errors)
+
+        assert result.success is False
+
+    def test_result_is_immutable(self) -> None:
+        """SerializeResult should be frozen (immutable)."""
+        from questfoundry.agents.serialize import SerializeResult
+
+        result = SerializeResult(artifact=None, tokens_used=100, semantic_errors=[])
+
+        with pytest.raises(AttributeError):
+            result.tokens_used = 200  # type: ignore[misc]
+
+
+class TestSerializeSeedAsFunction:
+    """Tests for serialize_seed_as_function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_success_result_when_validation_passes(self) -> None:
+        """Should return successful SerializeResult when no semantic errors."""
+        from questfoundry.agents.serialize import SerializeResult, serialize_seed_as_function
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
+                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
+                (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                ),
+            ]
+
+            with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
+                result = await serialize_seed_as_function(
+                    model=mock_model,
+                    brief="Test brief",
+                    graph=mock_graph,
+                )
+
+                assert isinstance(result, SerializeResult)
+                assert result.success is True
+                assert result.artifact is not None
+                assert result.semantic_errors == []
+                assert result.tokens_used == 60  # 6 sections * 10 tokens
+
+    @pytest.mark.asyncio
+    async def test_returns_result_with_errors_when_semantic_validation_fails(self) -> None:
+        """Should return SerializeResult with semantic_errors on validation failure."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+        from questfoundry.graph.mutations import SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension not found",
+                available=["valid_tension"],
+                provided="invalid_tension",
+            )
+        ]
+
+        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
+                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
+                (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                ),
+            ]
+
+            with patch(
+                "questfoundry.agents.serialize.validate_seed_mutations", return_value=errors
+            ):
+                result = await serialize_seed_as_function(
+                    model=mock_model,
+                    brief="Test brief",
+                    graph=mock_graph,
+                )
+
+                assert result.success is False
+                assert result.artifact is not None  # Artifact is still returned
+                assert len(result.semantic_errors) == 1
+                assert result.semantic_errors[0].field_path == "threads.0.tension_id"
+
+    @pytest.mark.asyncio
+    async def test_skips_semantic_validation_when_graph_is_none(self) -> None:
+        """Should skip semantic validation when graph is not provided."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+
+        mock_model = MagicMock()
+
+        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
+                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
+                (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                ),
+            ]
+
+            with patch("questfoundry.agents.serialize.validate_seed_mutations") as mock_validate:
+                result = await serialize_seed_as_function(
+                    model=mock_model,
+                    brief="Test brief",
+                    graph=None,  # No graph
+                )
+
+                mock_validate.assert_not_called()
+                assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_does_not_retry_on_semantic_errors(self) -> None:
+        """Should NOT retry internally on semantic errors (that's for outer loop)."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+        from questfoundry.graph.mutations import SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        errors = [
+            SeedValidationError(
+                field_path="entities.0.entity_id",
+                issue="Entity not found",
+                available=["valid"],
+                provided="invalid",
+            )
+        ]
+
+        call_count = [0]
+
+        def create_section_mock(section_name: str) -> MagicMock:
+            """Create a mock with model_dump returning the section data."""
+            return MagicMock(model_dump=lambda: {section_name: []})
+
+        def mock_serialize_side_effect(*_args, **_kwargs):
+            call_count[0] += 1
+            section_map = {
+                1: "entities",
+                2: "tensions",
+                3: "threads",
+                4: "consequences",
+                5: "initial_beats",
+                6: "convergence_sketch",
+            }
+            section = section_map.get(call_count[0], "unknown")
+            if section == "convergence_sketch":
+                return (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                )
+            return (create_section_mock(section), 10)
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_to_artifact",
+                side_effect=mock_serialize_side_effect,
+            ),
+            patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
+        ):
+            result = await serialize_seed_as_function(
+                model=mock_model,
+                brief="Test brief",
+                graph=mock_graph,
+            )
+
+            # Should only call serialize 6 times (once per section), no retries
+            assert call_count[0] == 6
+            assert result.success is False
+            assert len(result.semantic_errors) == 1
