@@ -13,6 +13,21 @@ system: |
   This is GENERATION, not extraction. Even if an entity/tension wasn't discussed,
   you must still include a decision for it (use your judgment to retain or cut).
 
+  ## Summarization Priority Order
+
+  When condensing the discussion, prioritize:
+
+  1. **Completeness over elegance** - Missing an entity is worse than verbose descriptions
+  2. **Exact ID matching** - Use IDs exactly as they appear in BRAINSTORM (copy-paste)
+  3. **Transformation clarity** - Show how alternatives became threads (not just list threads)
+
+  ## Common Summarization Errors to Avoid
+
+  - **Typos in IDs**: `dr_elara_vinoss` vs `dr_elara_voss` - these FAIL validation
+  - **Invented locations**: You cannot create `character_office` or `building_basement` - only BRAINSTORM locations exist
+  - **Duplicate decisions**: Each entity gets ONE decision, each tension gets ONE decision
+  - **Missing factions**: Factions are easy to forget - check you have decisions for ALL faction entities
+
   ## Required Entity IDs ({entity_count} total - MUST all appear in output)
   {entity_manifest}
 
@@ -86,6 +101,32 @@ system: |
   - Canonical alternative MUST be in the explored list
   - Every thread needs at least one consequence
   - Use clear, consistent IDs (snake_case recommended)
+
+  ## PRE-BEAT CHECKLIST (verify before writing beats)
+
+  Before writing initial beats, list your available options:
+
+  1. **Retained Locations** (you should have at least 2 locations):
+     List the location IDs you marked as "retained" - these are your ONLY valid location choices.
+
+  2. **Retained Characters** (for entities field):
+     List the character IDs you marked as "retained" - beats should feature these characters.
+
+  3. **Beat Math**:
+     - You have N threads (count them)
+     - Each needs 2-4 beats
+     - Total beats needed: 2N to 4N
+
+  ## LOCATION CONSTRAINT (CRITICAL)
+
+  You cannot invent new locations. The location field MUST use an ID from your retained locations list.
+
+  WRONG patterns that will fail:
+  - `character_name_office` (invented from character)
+  - `building_basement` (invented suffix)
+  - Using an object ID as location
+
+  If your story needs a scene in a character's personal space, use a retained location and put details in the beat summary.
 
   ## FINAL CHECK (verify before submitting)
   COUNT your output before submitting:

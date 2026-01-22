@@ -225,6 +225,39 @@ beats_prompt: |
   - location_alternatives: Other valid location IDs (can be empty array)
   - Generate 2-4 beats for EACH thread in the VALID THREAD IDs list
 
+  ## BEAT COUNT PRESERVATION (CRITICAL)
+
+  If you receive validation feedback about invalid IDs, DO NOT reduce your beat count.
+  Instead:
+  1. Keep the SAME number of beats and their narrative structure
+  2. Fix ONLY the invalid ID references
+  3. Replace invented IDs with valid IDs from the manifest
+
+  Common fixes:
+  - `entity::guard` (invented) → use an actual character from Entity IDs
+  - `entity::character_office` (invented) → use a location from the manifest
+  - `thread::concept_name` (derived) → use exact thread ID from VALID THREAD IDs
+
+  Your beat count should stay at 2-4 beats per thread.
+  Producing fewer than 2 beats per thread WILL fail validation.
+
+  ## LOCATION vs ENTITY DISAMBIGUATION
+
+  The `location` field accepts ONLY location-category entities.
+  The `entities` field accepts characters, objects, and factions (NOT locations).
+
+  WRONG:
+  ```json
+  "entities": ["entity::hero", "entity::castle"],  // castle is a location!
+  "location": "entity::magic_sword"                // sword is an object!
+  ```
+
+  RIGHT:
+  ```json
+  "entities": ["entity::hero", "entity::magic_sword"],
+  "location": "entity::castle"
+  ```
+
   ## What NOT to Do
   - Do NOT derive thread IDs from tension names or concepts
   - Do NOT add prefixes like "the_" to entity IDs
