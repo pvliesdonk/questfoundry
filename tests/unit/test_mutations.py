@@ -2077,3 +2077,102 @@ class TestSimilarityFeedbackIntegration:
         assert "Did you mean one of these?" in feedback
         # Verify similarity score is shown
         assert "%" in feedback
+
+
+class TestFormatSemanticErrorsAsContent:
+    """Tests for format_semantic_errors_as_content function."""
+
+    def test_returns_empty_string_for_no_errors(self) -> None:
+        """Should return empty string when no errors provided."""
+        from questfoundry.graph.mutations import format_semantic_errors_as_content
+
+        result = format_semantic_errors_as_content([])
+        assert result == ""
+
+    def test_formats_completeness_errors(self) -> None:
+        """Should format completeness errors in Missing items section."""
+        from questfoundry.graph.mutations import format_semantic_errors_as_content
+
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for entity 'hollow_key'",
+                available=[],
+                provided="",
+            ),
+            SeedValidationError(
+                field_path="tensions",
+                issue="Missing decision for tension 'ancient_scroll'",
+                available=[],
+                provided="",
+            ),
+        ]
+
+        result = format_semantic_errors_as_content(errors)
+
+        assert "Missing items" in result
+        assert "hollow_key" in result
+        assert "ancient_scroll" in result
+
+    def test_formats_semantic_errors_with_suggestions(self) -> None:
+        """Should format semantic errors with similarity-based suggestions."""
+        from questfoundry.graph.mutations import format_semantic_errors_as_content
+
+        errors = [
+            SeedValidationError(
+                field_path="entities.0.entity_id",
+                issue="Entity 'ghost' not in BRAINSTORM",
+                available=["guest", "ghost_hunter", "host"],
+                provided="ghost",
+            )
+        ]
+
+        result = format_semantic_errors_as_content(errors)
+
+        assert "Invalid references" in result
+        assert "'ghost' was referenced but isn't defined" in result
+
+    def test_formats_mixed_error_categories(self) -> None:
+        """Should handle multiple error categories in one output."""
+        from questfoundry.graph.mutations import format_semantic_errors_as_content
+
+        errors = [
+            # Completeness error
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for character 'hero'",
+                available=[],
+                provided="",
+            ),
+            # Semantic error
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension 'unknown' not in BRAINSTORM",
+                available=["main_tension"],
+                provided="unknown",
+            ),
+        ]
+
+        result = format_semantic_errors_as_content(errors)
+
+        assert "Missing items" in result
+        assert "Invalid references" in result
+        assert "Please reconsider the summary" in result
+
+    def test_includes_closing_guidance(self) -> None:
+        """Should include guidance about using BRAINSTORM IDs."""
+        from questfoundry.graph.mutations import format_semantic_errors_as_content
+
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for entity 'test'",
+                available=[],
+                provided="",
+            )
+        ]
+
+        result = format_semantic_errors_as_content(errors)
+
+        assert "ensuring you only reference" in result
+        assert "BRAINSTORM" in result
