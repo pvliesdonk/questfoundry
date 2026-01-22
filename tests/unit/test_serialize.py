@@ -682,7 +682,13 @@ class TestSerializeResult:
         assert result.success is True
 
     def test_success_property_false_when_artifact_none(self) -> None:
-        """success should be False when artifact is None."""
+        """success should be False when artifact is None.
+
+        Note: This tests defensive behavior of the dataclass itself.
+        In practice, serialize_seed_as_function() always returns an artifact
+        (or raises SerializationError on Pydantic failure). The None check
+        exists for caller flexibility and defensive programming.
+        """
         from questfoundry.agents.serialize import SerializeResult
 
         result = SerializeResult(artifact=None, tokens_used=100, semantic_errors=[])
@@ -862,6 +868,10 @@ class TestSerializeSeedAsFunction:
 
         call_count = [0]
 
+        def create_section_mock(section_name: str) -> MagicMock:
+            """Create a mock with model_dump returning the section data."""
+            return MagicMock(model_dump=lambda: {section_name: []})
+
         def mock_serialize_side_effect(*_args, **_kwargs):
             call_count[0] += 1
             section_map = {
@@ -882,7 +892,7 @@ class TestSerializeSeedAsFunction:
                     ),
                     10,
                 )
-            return (MagicMock(model_dump=lambda s=section: {s: []}), 10)
+            return (create_section_mock(section), 10)
 
         with (
             patch(

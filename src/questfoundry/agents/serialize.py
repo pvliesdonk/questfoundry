@@ -35,6 +35,7 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.graph.graph import Graph
+    from questfoundry.models.seed import SeedOutput
 
 log = get_logger(__name__)
 
@@ -71,13 +72,21 @@ class SerializeResult:
         semantic_errors: List of semantic validation errors (if any).
     """
 
-    artifact: Any  # SeedOutput | None - using Any to avoid circular import
+    # artifact can be None for defensive programming - allows callers to handle
+    # edge cases gracefully. In practice, serialize_seed_as_function() always
+    # returns a SeedOutput (or raises SerializationError on Pydantic failure).
+    artifact: SeedOutput | None
     tokens_used: int
     semantic_errors: list[SeedValidationError] = field(default_factory=list)
 
     @property
     def success(self) -> bool:
-        """Check if serialization succeeded without semantic errors."""
+        """Check if serialization succeeded without semantic errors.
+
+        Returns True only when artifact exists AND no semantic errors occurred.
+        The artifact check is defensive - current implementation always provides
+        an artifact or raises SerializationError.
+        """
         return self.artifact is not None and not self.semantic_errors
 
 
@@ -592,8 +601,11 @@ async def serialize_seed_iteratively(
     for section_name, schema, output_field in sections:
         log.debug("serialize_section_started", section=section_name)
 
-        # Use brief with thread IDs for beats section (threads are known by then)
-        current_brief = brief_with_threads if section_name == "beats" else enhanced_brief
+        # Use brief with thread IDs for consequences and beats (threads are known by then)
+        # Consequences reference thread_id, so they need thread context too
+        current_brief = (
+            brief_with_threads if section_name in ("beats", "consequences") else enhanced_brief
+        )
 
         section_prompt = prompts[section_name]
         section_result, section_tokens = await serialize_to_artifact(
