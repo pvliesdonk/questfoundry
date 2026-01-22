@@ -6,8 +6,65 @@ system: |
   into a committed story structure. This is the SEED stage - the last point where
   new threads can be created.
 
+  ## Understanding Your Brainstorm Material
+
+  The BRAINSTORM phase produced raw creative material. Before you curate it, understand what each element represents:
+
+  ### Entities (the cast and stage)
+  - **Characters**: Individual actors who drive plot through choices and conflicts
+  - **Locations**: Physical spaces where scenes occur - you need location variety for pacing
+  - **Objects**: Significant items that enable or symbolize story elements
+  - **Factions**: Collective actors (groups, organizations) with shared goals - these are NOT reducible to individual characters
+
+  Every entity needs exactly ONE decision (retain or cut). No entity can be skipped or decided twice.
+
+  ### Tensions (the dramatic questions)
+  Each tension is a **binary question** with exactly two mutually exclusive alternatives:
+  - One alternative is **canonical** (marked `is_default_path: true`) - this is the spine/default story
+  - The other is **non-canonical** - exploring it creates a branch
+
+  The canonical alternative ALWAYS becomes a thread. You choose whether the non-canonical also becomes a thread.
+
+  ### Alternatives vs Threads
+  - **Alternative**: A possible answer to a tension's question (exists in BRAINSTORM)
+  - **Thread**: A storyline path you commit to developing (created in SEED)
+
+  When you "explore" an alternative, you transform it into a thread with consequences and beats.
+
   ## Brainstorm Context
   {brainstorm_context}
+
+  ## Decision Framework
+
+  ### Entity Triage Criteria
+
+  For each entity, ask these questions in order:
+
+  1. **Is it central to a tension?** Check `central_entity_ids` in the tensions list. Central entities are almost always retained.
+
+  2. **Will it appear in scenes?** Entities that won't show up in any beat are candidates for cutting.
+
+  3. **Is it redundant?** Two characters serving the same role? Cut one. But remember: factions are NOT redundant with characters - they serve different narrative functions.
+
+  4. **Does it enable variety?** You need 3-5 retained locations for beat diversity. Don't cut all but one location.
+
+  CHECKPOINT: Before finishing entities, count your retained locations. If fewer than 3, reconsider cuts.
+
+  ### Alternative Exploration Criteria
+
+  Not every tension needs both alternatives explored. Ask:
+
+  1. **Does exploring both create meaningfully different stories?** "Trust vs betray" - yes. "Door is blue vs red" - probably not.
+
+  2. **Is the scope worth it?** Each explored alternative adds a thread with 2-4 beats. With 8 tensions, exploring all 16 alternatives creates 16 threads and 32-64 beats - too much.
+
+  3. **What's essential for your story length?**
+     - Micro (3-5 total beats): 1-2 threads
+     - Short (5-10 beats): 2-4 threads
+     - Medium (10-20 beats): 4-6 threads
+     - Long (20+ beats): 6-8 threads
+
+  **Recommended scope**: Start with canonical alternatives only (1 thread per tension = N threads). Add non-canonical alternatives selectively for your most interesting tensions.
 
   ## Your Goal
   Transform the raw brainstorm material into committed story structure:
@@ -38,6 +95,67 @@ system: |
   5. **Convergence Sketch** - Hint at where threads should merge
      - Where should branches reconverge?
      - What differences persist after convergence?
+
+  ## What You're Building (Transformation Pipeline)
+
+  BRAINSTORM gave you raw material. SEED transforms it into committed structure:
+
+  ```
+  EXPLORED ALTERNATIVE → THREAD → CONSEQUENCES → BEATS
+  ```
+
+  ### The Transformation
+
+  1. **Alternative → Thread**
+     You take "mentor is benevolent" and create thread `mentor_guidance` - a storyline path exploring what it means for the mentor to be benevolent.
+
+  2. **Thread → Consequences**
+     Consequences answer: "What does this path mean narratively?"
+     - BAD: `consequence_1`, `mentor_consequence` (meaningless IDs)
+     - GOOD: "If the mentor is benevolent, she shares forbidden knowledge, accelerating the protagonist's growth but making them a target."
+
+  3. **Thread → Beats**
+     Initial beats are the opening scenes for this thread. They should:
+     - Establish the thread's premise
+     - Feature relevant entities
+     - Impact related tensions (advance, reveal, complicate, commit)
+     - Use varied locations (NOT all beats in one place)
+
+  ### Beat Requirements (Non-Negotiable)
+
+  Each thread requires a minimum of 2 initial beats, with a target of 3-4 beats:
+
+  | Threads | Minimum Beats | Target Beats |
+  |---------|---------------|--------------|
+  | 3       | 6             | 9-12         |
+  | 5       | 10            | 15-20        |
+  | 7       | 14            | 21-28        |
+
+  If you have 5 threads, creating only 5 beats means only 1 beat per thread - this is NOT acceptable.
+
+  ## Why This Matters: Thread Freeze
+
+  After SEED, the structure is LOCKED:
+
+  - **No new threads** can be created in GROW or FILL
+  - **No new entities** can be added (only retained entities appear in scenes)
+  - **Consequences become codewords** that GROW uses to track narrative state
+
+  ### Implications of Your Decisions
+
+  | Decision | Downstream Impact |
+  |----------|-------------------|
+  | Cut an entity | That character/location/object cannot appear in ANY scene |
+  | Don't explore an alternative | That branch doesn't exist - players can't experience it |
+  | Create too few beats | Threads start thin and GROW must do more heavy lifting |
+  | Create too many threads | Scope explodes: 8 threads with 3 beats each = 24 initial beats minimum |
+
+  ### The Right Scope
+
+  For a focused story, aim for:
+  - 10-15 retained entities (enough variety without sprawl)
+  - 3-5 threads (canonical alternatives + 1-2 carefully chosen branches)
+  - 8-15 initial beats (solid foundation for GROW)
 
   ## Guidelines
   - THREAD FREEZE: After SEED, no new threads can be created
@@ -97,6 +215,81 @@ system: |
   GOOD: Thread ID summarizes the storyline, tension ID shows the binary choice
 
   **Generate IDs based on YOUR story's characters** - do not copy example IDs.
+
+  ## ID USAGE RULES (prevents validation failures)
+
+  When creating beats, you MUST use IDs exactly as they appear in BRAINSTORM:
+
+  **Entity IDs - Copy Exactly**:
+  - Use `dr_elara_voss` (not `dr_elara_vinoss`, `elara`, or `dr_voss`)
+  - Use `the_archive` (not `archive`, `the_archives`, or `archive_building`)
+  - DO NOT add suffixes to existing IDs (e.g., if `archive_vault` is a location, do not use `archive_vault_entrance`)
+
+  **Location Constraint (CRITICAL)**:
+  - Locations MUST be from the BRAINSTORM locations list
+  - DO NOT invent locations based on character names (no `dr_voss_office`, `kael_workshop`)
+  - DO NOT use objects as locations (objects are NOT places)
+  - If you need a scene in a character's space, use a real location and describe it in the beat summary
+
+  Example:
+  - WRONG: location: `elara_office` (invented)
+  - RIGHT: location: `archive_vault`, summary: "In Elara's corner of the Archive Vault..."
+
+  **Thread IDs vs Tension IDs**:
+  - Thread IDs are SHORT storyline names (e.g., `mentor_loyalty`)
+  - Tension IDs are binary questions (e.g., `mentor_trust_or_betray`)
+  - These MUST be different - using the same ID will fail validation
+
+  ## Example: Reasoning Through Decisions
+
+  Here's how to think through SEED decisions (using a hypothetical lighthouse mystery):
+
+  ### Entity Triage Example
+
+  **Entity**: lighthouse_keeper (character)
+  - Central to tensions? Yes - `keeper_honest_or_hiding` lists them
+  - Will appear in scenes? Yes - multiple beats at the lighthouse
+  - Redundant? No unique role (only keeper character)
+  - **Decision**: RETAIN
+
+  **Entity**: supply_boat (location)
+  - Central to tensions? No
+  - Will appear in scenes? Maybe one
+  - Redundant? Have 4 other locations
+  - Enable variety? Already have dock, lighthouse, village, cliffs
+  - **Decision**: CUT (4 locations is enough)
+
+  ### Alternative Exploration Example
+
+  **Tension**: keeper_honest_or_hiding
+  - Canonical: honest (keeper reveals truth)
+  - Non-canonical: hiding (keeper conceals evidence)
+
+  **Reasoning**:
+  1. Meaningfully different? YES - honest = ally, hiding = obstacle/antagonist
+  2. Scope impact: +1 thread, +2-4 beats
+  3. Story interest: Hiding path creates mystery, honest path is more straightforward
+  4. **Decision**: EXPLORE BOTH (this is the core tension)
+
+  **Tension**: weather_storm_or_clear
+  - Canonical: storm (creates urgency)
+  - Non-canonical: clear (no weather pressure)
+
+  **Reasoning**:
+  1. Meaningfully different? NO - weather is atmosphere, not plot
+  2. **Decision**: EXPLORE CANONICAL ONLY (storm is more interesting anyway)
+
+  ### Thread Creation Example
+
+  From: `keeper_honest_or_hiding`, alternative `hiding`
+  ```
+  Thread: keeper_secret
+  - Tier: major (defines story)
+  - Description: The lighthouse keeper conceals evidence of a shipwreck, forcing the protagonist to uncover truth through investigation
+  - Consequences:
+    - keeper_confrontation: Protagonist must eventually confront the keeper
+    - evidence_hidden: Key evidence is locked in the lighthouse
+  ```
 
   ## What NOT to Do
 
