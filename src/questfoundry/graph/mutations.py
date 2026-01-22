@@ -640,6 +640,55 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             graph.add_edge("has_alternative", tension_id, alt_id)
 
 
+def _cross_type_hint(
+    raw_id: str,
+    expected_type: str,
+    valid_entity_ids: set[str],
+    valid_tension_ids: set[str],
+    seed_thread_ids: set[str],
+    entity_types: dict[str, str],
+) -> str:
+    """Return type-aware message when ID exists as different type.
+
+    When an ID isn't found in the expected set, checks whether it exists
+    in a different type's set and provides a helpful cross-type hint.
+    This prevents misleading "not in BRAINSTORM" feedback when the ID
+    actually IS in brainstorm but as a different type (e.g., a faction
+    entity used as a tension_id).
+
+    Args:
+        raw_id: The normalized ID that wasn't found.
+        expected_type: What type was expected ("entity", "tension", "thread").
+        valid_entity_ids: Set of valid entity raw IDs from brainstorm.
+        valid_tension_ids: Set of valid tension raw IDs from brainstorm.
+        seed_thread_ids: Set of thread raw IDs from SEED output.
+        entity_types: Mapping of entity raw_id to entity_type (character, faction, etc.).
+
+    Returns:
+        Descriptive error message indicating the type mismatch or fallback.
+    """
+    if expected_type == "tension" and raw_id in valid_entity_ids:
+        etype = entity_types.get(raw_id, "entity")
+        return (
+            f"'{raw_id}' is an entity ({etype}), not a tension. "
+            "Tension IDs follow the pattern subject_X_or_Y"
+        )
+    if expected_type == "tension" and raw_id in seed_thread_ids:
+        return f"'{raw_id}' is a thread ID, not a tension. Tension IDs are longer binary questions"
+    if expected_type == "entity" and raw_id in valid_tension_ids:
+        return f"'{raw_id}' is a tension ID, not an entity"
+    if expected_type == "entity" and raw_id in seed_thread_ids:
+        return f"'{raw_id}' is a thread ID, not an entity"
+    if expected_type == "thread" and raw_id in valid_entity_ids:
+        etype = entity_types.get(raw_id, "entity")
+        return f"'{raw_id}' is an entity ({etype}), not a thread"
+    if expected_type == "thread" and raw_id in valid_tension_ids:
+        return f"'{raw_id}' is a tension ID, not a thread"
+    if expected_type == "thread":
+        return f"Thread '{raw_id}' not defined in SEED threads"
+    return f"'{raw_id}' not in BRAINSTORM"
+
+
 def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedValidationError]:
     """Validate SEED output references against BRAINSTORM data in graph.
 
@@ -856,7 +905,14 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     errors.append(
                         SeedValidationError(
                             field_path=f"initial_beats.{i}.entities",
-                            issue=f"Entity '{entity_id}' not in BRAINSTORM",
+                            issue=_cross_type_hint(
+                                entity_id,
+                                "entity",
+                                valid_entity_ids,
+                                valid_tension_ids,
+                                seed_thread_ids,
+                                entity_types,
+                            ),
                             available=sorted_entity_ids,
                             provided=raw_entity_id,
                         )
@@ -879,7 +935,14 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 errors.append(
                     SeedValidationError(
                         field_path=f"initial_beats.{i}.location",
-                        issue=f"Location '{location}' not in BRAINSTORM entities",
+                        issue=_cross_type_hint(
+                            location,
+                            "entity",
+                            valid_entity_ids,
+                            valid_tension_ids,
+                            seed_thread_ids,
+                            entity_types,
+                        ),
                         available=sorted_entity_ids,
                         provided=raw_location,
                     )
@@ -926,7 +989,14 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     errors.append(
                         SeedValidationError(
                             field_path=f"initial_beats.{i}.threads",
-                            issue=f"Thread '{thread_id}' not defined in SEED threads",
+                            issue=_cross_type_hint(
+                                thread_id,
+                                "thread",
+                                valid_entity_ids,
+                                valid_tension_ids,
+                                seed_thread_ids,
+                                entity_types,
+                            ),
                             available=sorted_thread_ids,
                             provided=raw_thread_id,
                         )
@@ -975,7 +1045,14 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     errors.append(
                         SeedValidationError(
                             field_path=f"initial_beats.{i}.tension_impacts.{j}.tension_id",
-                            issue=f"Tension '{tension_id}' not in BRAINSTORM",
+                            issue=_cross_type_hint(
+                                tension_id,
+                                "tension",
+                                valid_entity_ids,
+                                valid_tension_ids,
+                                seed_thread_ids,
+                                entity_types,
+                            ),
                             available=sorted_tension_ids,
                             provided=raw_tension_id,
                         )
