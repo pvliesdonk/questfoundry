@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable
+from dataclasses import dataclass, field
 from functools import lru_cache
 from typing import TYPE_CHECKING, Any, Protocol, TypeVar
 
@@ -52,6 +53,32 @@ class SerializationError(Exception):
         self.attempts = attempts
         self.last_errors = last_errors
         super().__init__(message)
+
+
+@dataclass(frozen=True)
+class SerializeResult:
+    """Result of serialize_seed_as_function() for outer loop handling.
+
+    This dataclass allows the caller to handle semantic errors without exceptions,
+    enabling conversation-level retry in the outer loop of SeedStage.execute().
+
+    The inner loop (Pydantic validation) is hidden inside serialize_seed_as_function().
+    Pydantic errors cause internal retries; only semantic errors are surfaced here.
+
+    Attributes:
+        artifact: The successfully serialized SeedOutput, or None if failed.
+        tokens_used: Total tokens consumed during serialization.
+        semantic_errors: List of semantic validation errors (if any).
+    """
+
+    artifact: Any  # SeedOutput | None - using Any to avoid circular import
+    tokens_used: int
+    semantic_errors: list[SeedValidationError] = field(default_factory=list)
+
+    @property
+    def success(self) -> bool:
+        """Check if serialization succeeded without semantic errors."""
+        return self.artifact is not None and not self.semantic_errors
 
 
 # Type alias for semantic validator functions
