@@ -364,7 +364,8 @@ class SeedStage:
                 callbacks=callbacks,
                 graph=graph,  # Enables semantic validation
             )
-            # Iterative serialization makes 6 calls (one per section) + potential retries
+            # Iterative serialization makes one call per section plus potential retries
+            # (actual count depends on serialize_seed_as_function implementation)
             total_llm_calls += 6
             total_tokens += result.tokens_used
 

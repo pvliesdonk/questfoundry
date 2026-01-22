@@ -8,6 +8,7 @@ See docs/architecture/graph-storage.md for design details.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
@@ -1224,13 +1225,13 @@ def format_semantic_errors_as_content(errors: list[SeedValidationError]) -> str:
         for e in completeness_errors[:_MAX_ERRORS_DISPLAY]:
             # Extract item ID from issue message (e.g., "Missing decision for entity 'X'")
             # The provided field is empty for completeness errors, so we parse the issue
-            issue = e.issue
-            # Try to extract the quoted ID
-            if "'" in issue:
-                item_id = issue.split("'")[1]
+            # Use regex for robust extraction in case of multiple quotes
+            match = re.search(r"'([^']+)'", e.issue)
+            if match:
+                item_id = match.group(1)
                 lines.append(f"  - {item_id}")
             else:
-                lines.append(f"  - {e.field_path}: {issue}")
+                lines.append(f"  - {e.field_path}: {e.issue}")
         if len(completeness_errors) > _MAX_ERRORS_DISPLAY:
             lines.append(f"  ... and {len(completeness_errors) - _MAX_ERRORS_DISPLAY} more")
 
