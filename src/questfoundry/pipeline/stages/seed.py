@@ -17,15 +17,19 @@ from __future__ import annotations
 from pathlib import Path  # noqa: TC003 - used at runtime for Graph.load()
 from typing import TYPE_CHECKING, Any
 
+from langchain_core.messages import AIMessage, HumanMessage
+
 from questfoundry.agents import (
+    SerializeResult,
     get_seed_discuss_prompt,
     get_seed_summarize_prompt,
     run_discuss_phase,
-    serialize_seed_iteratively,
+    serialize_seed_as_function,
     summarize_discussion,
 )
 from questfoundry.graph import Graph
 from questfoundry.graph.context import format_summarize_manifest, get_expected_counts
+from questfoundry.graph.mutations import format_semantic_errors_as_content
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
 from questfoundry.tools.langchain_tools import (
@@ -229,6 +233,7 @@ class SeedStage:
         serialize_model: BaseChatModel | None = None,
         summarize_provider_name: str | None = None,  # noqa: ARG002 - for future use
         serialize_provider_name: str | None = None,
+        max_outer_retries: int = 2,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the SEED stage using the 3-phase pattern.
 
@@ -247,6 +252,7 @@ class SeedStage:
             serialize_model: Optional model for serialize phase (defaults to model).
             summarize_provider_name: Provider name for summarize phase (for future use).
             serialize_provider_name: Provider name for serialize phase.
+            max_outer_retries: Maximum outer loop retries for semantic errors (default 2).
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
@@ -316,9 +322,6 @@ class SeedStage:
         # Load graph once for summarize manifest and serialize validation
         graph = Graph.load(resolved_path)
 
-        # Phase 2: Summarize (use summarize_model if provided)
-        log.debug("seed_phase", phase="summarize")
-
         # Get manifest info for summarize prompt (manifest-first freeze)
         counts = get_expected_counts(graph)
         manifests = format_summarize_manifest(graph)
@@ -330,32 +333,74 @@ class SeedStage:
             entity_manifest=manifests["entity_manifest"],
             tension_manifest=manifests["tension_manifest"],
         )
-        brief, summarize_tokens = await summarize_discussion(
-            model=summarize_model or model,
-            messages=messages,
-            system_prompt=summarize_prompt,
-            stage_name="seed",
-            callbacks=callbacks,
-        )
-        total_llm_calls += 1
-        total_tokens += summarize_tokens
 
-        # Phase 3: Serialize (use serialize_model if provided)
-        # Graph already loaded above for semantic validation against BRAINSTORM data
-        log.debug("seed_phase", phase="serialize")
-        artifact, serialize_tokens = await serialize_seed_iteratively(
-            model=serialize_model or model,
-            brief=brief,
-            provider_name=serialize_provider_name or provider_name,
-            callbacks=callbacks,
-            graph=graph,  # Enables semantic validation
-        )
-        # Iterative serialization makes 6 calls (one per section) + potential retries
-        total_llm_calls += 6
-        total_tokens += serialize_tokens
+        # Outer loop: conversation-level retry for semantic errors
+        # Each iteration runs summarize -> serialize; on semantic errors,
+        # we append feedback to messages and retry the whole cycle.
+        result: SerializeResult | None = None
+
+        for outer_attempt in range(max_outer_retries + 1):
+            # Phase 2: Summarize (use summarize_model if provided)
+            log.debug("seed_phase", phase="summarize", outer_attempt=outer_attempt + 1)
+            brief, summarize_tokens = await summarize_discussion(
+                model=summarize_model or model,
+                messages=messages,
+                system_prompt=summarize_prompt,
+                stage_name="seed",
+                callbacks=callbacks,
+            )
+            total_llm_calls += 1
+            total_tokens += summarize_tokens
+
+            # Track brief in conversation history as assistant output
+            messages.append(AIMessage(content=brief))
+
+            # Phase 3: Serialize (use serialize_model if provided)
+            log.debug("seed_phase", phase="serialize", outer_attempt=outer_attempt + 1)
+            result = await serialize_seed_as_function(
+                model=serialize_model or model,
+                brief=brief,
+                provider_name=serialize_provider_name or provider_name,
+                callbacks=callbacks,
+                graph=graph,  # Enables semantic validation
+            )
+            # Iterative serialization makes 6 calls (one per section) + potential retries
+            total_llm_calls += 6
+            total_tokens += result.tokens_used
+
+            # Success - break out of outer loop
+            if result.success:
+                log.debug("seed_outer_loop_success", attempt=outer_attempt + 1)
+                break
+
+            # Semantic errors - format feedback and retry
+            if outer_attempt < max_outer_retries:
+                feedback = format_semantic_errors_as_content(result.semantic_errors)
+                log.info(
+                    "seed_outer_retry",
+                    attempt=outer_attempt + 1,
+                    error_count=len(result.semantic_errors),
+                )
+                log.debug("seed_outer_retry_feedback", feedback=feedback)
+                messages.append(HumanMessage(content=feedback))
+            else:
+                # No more retries - will continue with errors
+                log.warning(
+                    "seed_outer_exhausted",
+                    attempts=max_outer_retries + 1,
+                    error_count=len(result.semantic_errors),
+                )
+
+        # Handle result after outer loop
+        if result is None:
+            raise SeedStageError("SEED serialization failed: no result produced")
+
+        if result.artifact is None:
+            # This shouldn't happen with current logic, but handle defensively
+            raise SeedStageError("SEED serialization failed: artifact is None after all retries")
 
         # Convert to dict for return
-        artifact_data = artifact.model_dump()
+        artifact_data = result.artifact.model_dump()
 
         # Log summary statistics
         entity_count = len(artifact_data.get("entities", []))
