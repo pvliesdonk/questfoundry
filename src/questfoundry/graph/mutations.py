@@ -8,6 +8,7 @@ See docs/architecture/graph-storage.md for design details.
 
 from __future__ import annotations
 
+import re
 from collections import Counter
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
@@ -1182,3 +1183,89 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 "residue_notes": sketch.get("residue_notes", []),
             },
         )
+
+
+def format_semantic_errors_as_content(errors: list[SeedValidationError]) -> str:
+    """Format semantic errors as content-focused feedback for outer loop retry.
+
+    This function formats errors in a way that helps the LLM understand what
+    went wrong conceptually, not just structurally. It groups errors by type
+    and provides actionable guidance.
+
+    Args:
+        errors: List of SeedValidationError objects from validate_seed_mutations.
+
+    Returns:
+        Content-focused feedback string suitable for appending to conversation.
+
+    Example output:
+        I found some issues with the summary that need correction:
+
+        **Missing items** - these need decisions:
+          - hollow_key
+          - ancient_scroll
+
+        **Invalid references** - these don't exist in BRAINSTORM:
+          - 'ghost' was referenced but isn't defined
+
+        Please reconsider the summary, ensuring you only reference
+        entities and tensions from the BRAINSTORM phase.
+    """
+    if not errors:
+        return ""
+
+    by_category = categorize_errors(errors)
+    lines: list[str] = ["I found some issues with the summary that need correction:"]
+
+    # Completeness errors (missing decisions)
+    completeness_errors = by_category.get(SeedErrorCategory.COMPLETENESS, [])
+    if completeness_errors:
+        lines.append("")
+        lines.append("**Missing items** - these need decisions:")
+        for e in completeness_errors[:_MAX_ERRORS_DISPLAY]:
+            # Extract item ID from issue message (e.g., "Missing decision for entity 'X'")
+            # The provided field is empty for completeness errors, so we parse the issue
+            # Use regex for robust extraction in case of multiple quotes
+            match = re.search(r"'([^']+)'", e.issue)
+            if match:
+                item_id = match.group(1)
+                lines.append(f"  - {item_id}")
+            else:
+                lines.append(f"  - {e.field_path}: {e.issue}")
+        if len(completeness_errors) > _MAX_ERRORS_DISPLAY:
+            lines.append(f"  ... and {len(completeness_errors) - _MAX_ERRORS_DISPLAY} more")
+
+    # Semantic errors (invalid references)
+    semantic_errors = by_category.get(SeedErrorCategory.SEMANTIC, [])
+    if semantic_errors:
+        lines.append("")
+        lines.append("**Invalid references** - these don't exist in BRAINSTORM:")
+        for e in semantic_errors[:_MAX_ERRORS_DISPLAY]:
+            if e.provided:
+                lines.append(f"  - '{e.provided}' was referenced but isn't defined")
+                # Add suggestion if available
+                suggestion = _format_error_available(e.provided, e.available)
+                if suggestion and not suggestion.startswith("Available"):
+                    lines.append(f"    {suggestion}")
+            else:
+                lines.append(f"  - {e.field_path}: {e.issue}")
+        if len(semantic_errors) > _MAX_ERRORS_DISPLAY:
+            lines.append(f"  ... and {len(semantic_errors) - _MAX_ERRORS_DISPLAY} more")
+
+    # Inner/structural errors (rarely should make it to outer loop, but handle gracefully)
+    inner_errors = by_category.get(SeedErrorCategory.INNER, [])
+    if inner_errors:
+        lines.append("")
+        lines.append("**Structural issues**:")
+        for e in inner_errors[:_MAX_ERRORS_DISPLAY]:
+            lines.append(f"  - {e.field_path}: {e.issue}")
+        if len(inner_errors) > _MAX_ERRORS_DISPLAY:
+            lines.append(f"  ... and {len(inner_errors) - _MAX_ERRORS_DISPLAY} more")
+
+    lines.append("")
+    lines.append(
+        "Please reconsider the summary, ensuring you only reference "
+        "entities and tensions from the BRAINSTORM phase."
+    )
+
+    return "\n".join(lines)

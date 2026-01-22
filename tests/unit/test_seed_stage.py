@@ -8,6 +8,8 @@ from unittest.mock import MagicMock, patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
 
+from questfoundry.agents import SerializeResult
+from questfoundry.graph.mutations import SeedValidationError
 from questfoundry.models import SeedOutput
 from questfoundry.pipeline.stages import SeedStage, SeedStageError, get_stage
 
@@ -83,7 +85,7 @@ async def test_execute_calls_all_three_phases() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):
         MockGraph.load.return_value = mock_graph
@@ -115,7 +117,9 @@ async def test_execute_calls_all_three_phases() -> None:
                 }
             ],
         )
-        mock_serialize.return_value = (mock_artifact, 200)
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=200, semantic_errors=[]
+        )
 
         artifact, llm_calls, tokens = await stage.execute(
             model=mock_model,
@@ -156,7 +160,7 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.get_seed_discuss_prompt") as mock_prompt,
     ):
@@ -166,7 +170,9 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=100, semantic_errors=[]
+        )
 
         await stage.execute(
             model=mock_model,
@@ -198,7 +204,7 @@ async def test_execute_uses_iterative_serialization() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):
         MockGraph.load.return_value = mock_graph
@@ -206,7 +212,9 @@ async def test_execute_uses_iterative_serialization() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=100, semantic_errors=[]
+        )
 
         await stage.execute(
             model=mock_model,
@@ -214,7 +222,7 @@ async def test_execute_uses_iterative_serialization() -> None:
             project_path=Path("/test/project"),
         )
 
-        # Verify iterative serialization is used with the brief
+        # Verify serialization is used with the brief
         mock_serialize.assert_called_once()
         assert mock_serialize.call_args.kwargs["brief"] == "Brief"
 
@@ -235,7 +243,7 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.get_seed_summarize_prompt") as mock_prompt,
         patch("questfoundry.pipeline.stages.seed.get_expected_counts") as mock_counts,
@@ -252,7 +260,9 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
         mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=100, semantic_errors=[]
+        )
 
         await stage.execute(
             model=mock_model,
@@ -292,7 +302,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
-        patch("questfoundry.pipeline.stages.seed.serialize_seed_iteratively") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):
         MockGraph.load.return_value = mock_graph
@@ -320,7 +330,9 @@ async def test_execute_returns_artifact_as_dict() -> None:
                 }
             ],
         )
-        mock_serialize.return_value = (mock_artifact, 100)
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=100, semantic_errors=[]
+        )
 
         artifact, _, _ = await stage.execute(
             model=mock_model,
@@ -462,3 +474,239 @@ def test_entity_disposition_types() -> None:
             disposition=disposition,  # type: ignore[arg-type]
         )
         assert decision.disposition == disposition
+
+
+# --- Outer Loop Tests ---
+
+
+@pytest.mark.asyncio
+async def test_outer_loop_retries_on_semantic_errors() -> None:
+    """Outer loop retries summarize+serialize on semantic validation errors."""
+    stage = SeedStage()
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+    mock_graph.get_nodes_by_type.side_effect = lambda t: (
+        {"entity1": {"type": "entity", "raw_id": "hero"}} if t == "entity" else {}
+    )
+    mock_graph.get_edges.return_value = []
+
+    # Track call count for serialization
+    serialize_call_count = [0]
+    mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+
+    def serialize_side_effect(*_args, **_kwargs):
+        serialize_call_count[0] += 1
+        if serialize_call_count[0] == 1:
+            # First attempt: return semantic errors
+            return SerializeResult(
+                artifact=mock_artifact,
+                tokens_used=100,
+                semantic_errors=[
+                    SeedValidationError(
+                        field_path="entities",
+                        issue="Missing decision for entity 'hero'",
+                        available=[],
+                        provided="",
+                    )
+                ],
+            )
+        # Second attempt: success
+        return SerializeResult(artifact=mock_artifact, tokens_used=100, semantic_errors=[])
+
+    with (
+        patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.format_semantic_errors_as_content") as mock_format,
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = ("Brief summary", 50)
+        mock_serialize.side_effect = serialize_side_effect
+        mock_format.return_value = "Error feedback message"
+
+        await stage.execute(
+            model=mock_model,
+            user_prompt="test",
+            project_path=Path("/test/project"),
+        )
+
+        # Verify outer loop ran twice (one retry)
+        assert mock_summarize.call_count == 2
+        assert mock_serialize.call_count == 2
+        # Verify error formatting was called for the retry
+        mock_format.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_outer_loop_appends_feedback_to_messages() -> None:
+    """Outer loop appends AIMessage (brief) and HumanMessage (feedback) to history."""
+    stage = SeedStage()
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+    mock_graph.get_nodes_by_type.side_effect = lambda t: (
+        {"entity1": {"type": "entity"}} if t == "entity" else {}
+    )
+    mock_graph.get_edges.return_value = []
+
+    # Capture messages passed to summarize
+    captured_messages = []
+
+    def summarize_side_effect(*, model, messages, **_kwargs):  # noqa: ARG001 - model required by mock signature
+        captured_messages.append(list(messages))
+        return ("Brief summary", 50)
+
+    mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+    call_count = [0]
+
+    def serialize_side_effect(*_args, **_kwargs):
+        call_count[0] += 1
+        if call_count[0] == 1:
+            return SerializeResult(
+                artifact=mock_artifact,
+                tokens_used=100,
+                semantic_errors=[
+                    SeedValidationError(
+                        field_path="test",
+                        issue="Missing decision for entity 'test'",
+                        available=[],
+                        provided="",
+                    )
+                ],
+            )
+        return SerializeResult(artifact=mock_artifact, tokens_used=100, semantic_errors=[])
+
+    with (
+        patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.format_semantic_errors_as_content") as mock_format,
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.side_effect = summarize_side_effect
+        mock_serialize.side_effect = serialize_side_effect
+        mock_format.return_value = "Error feedback"
+
+        await stage.execute(
+            model=mock_model,
+            user_prompt="test",
+            project_path=Path("/test/project"),
+        )
+
+        # First summarize call: just initial messages
+        assert len(captured_messages[0]) == 0
+
+        # Second summarize call: should have AIMessage (brief) + HumanMessage (feedback)
+        assert len(captured_messages[1]) == 2
+        assert isinstance(captured_messages[1][0], AIMessage)
+        assert captured_messages[1][0].content == "Brief summary"
+        assert isinstance(captured_messages[1][1], HumanMessage)
+        assert captured_messages[1][1].content == "Error feedback"
+
+
+@pytest.mark.asyncio
+async def test_outer_loop_respects_max_retries() -> None:
+    """Outer loop stops after max_outer_retries even with persistent errors."""
+    stage = SeedStage()
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+    mock_graph.get_nodes_by_type.side_effect = lambda t: (
+        {"entity1": {"type": "entity"}} if t == "entity" else {}
+    )
+    mock_graph.get_edges.return_value = []
+
+    mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+
+    # Always return errors
+    def always_errors(*_args, **_kwargs):
+        return SerializeResult(
+            artifact=mock_artifact,
+            tokens_used=100,
+            semantic_errors=[
+                SeedValidationError(
+                    field_path="test",
+                    issue="Missing decision for entity 'test'",
+                    available=[],
+                    provided="",
+                )
+            ],
+        )
+
+    with (
+        patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.format_semantic_errors_as_content"),
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = ("Brief", 50)
+        mock_serialize.side_effect = always_errors
+
+        # With max_outer_retries=2, should attempt 3 times (initial + 2 retries)
+        await stage.execute(
+            model=mock_model,
+            user_prompt="test",
+            project_path=Path("/test/project"),
+            max_outer_retries=2,
+        )
+
+        # Verify exactly 3 attempts (1 initial + 2 retries)
+        assert mock_summarize.call_count == 3
+        assert mock_serialize.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_outer_loop_success_on_first_try() -> None:
+    """Outer loop succeeds immediately when no semantic errors."""
+    stage = SeedStage()
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+    mock_graph.get_nodes_by_type.side_effect = lambda t: (
+        {"entity1": {"type": "entity"}} if t == "entity" else {}
+    )
+    mock_graph.get_edges.return_value = []
+
+    mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+
+    with (
+        patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.format_semantic_errors_as_content") as mock_format,
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = ("Brief", 50)
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=100, semantic_errors=[]
+        )
+
+        await stage.execute(
+            model=mock_model,
+            user_prompt="test",
+            project_path=Path("/test/project"),
+        )
+
+        # Should only run once - no retries needed
+        assert mock_summarize.call_count == 1
+        assert mock_serialize.call_count == 1
+        # Error formatting should not be called
+        mock_format.assert_not_called()
