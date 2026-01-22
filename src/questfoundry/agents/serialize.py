@@ -740,3 +740,152 @@ def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
             sections.add(field_to_section[top_level])
 
     return sections
+
+
+@traceable(
+    name="Serialize SEED (Function)", run_type="chain", tags=["phase:serialize", "stage:seed"]
+)
+async def serialize_seed_as_function(
+    model: BaseChatModel,
+    brief: str,
+    provider_name: str | None = None,
+    max_retries: int = 3,
+    callbacks: list[BaseCallbackHandler] | None = None,
+    graph: Graph | None = None,
+) -> SerializeResult:
+    """Serialize SEED brief to structured output, returning result for outer loop.
+
+    This function performs ONE pass of section-by-section serialization and ONE
+    semantic validation. Unlike serialize_seed_iteratively(), it does not retry
+    on semantic errors internally. Instead, it returns a SerializeResult that
+    the caller (SeedStage.execute()) can use to implement conversation-level retry.
+
+    The inner Pydantic validation loop is still handled internally - only semantic
+    errors (phantom IDs, missing decisions) are surfaced to the caller.
+
+    Args:
+        model: Chat model to use for generation.
+        brief: The summary brief from the Summarize phase.
+        provider_name: Provider name for strategy auto-detection.
+        max_retries: Maximum retries per section (Pydantic validation).
+        callbacks: LangChain callback handlers for logging LLM calls.
+        graph: Graph containing BRAINSTORM data for semantic validation.
+            If None, semantic validation is skipped.
+
+    Returns:
+        SerializeResult with artifact and any semantic errors.
+
+    Raises:
+        SerializationError: If Pydantic validation fails after max_retries.
+    """
+    from questfoundry.models.seed import (
+        BeatsSection,
+        ConsequencesSection,
+        ConvergenceSection,
+        EntitiesSection,
+        SeedOutput,
+        TensionsSection,
+        ThreadsSection,
+    )
+
+    log.info("serialize_seed_as_function_started")
+
+    prompts = _load_seed_section_prompts()
+    total_tokens = 0
+
+    # Inject valid IDs context if graph is provided
+    enhanced_brief = brief
+    if graph is not None:
+        valid_ids_context = format_valid_ids_context(graph, stage="seed")
+        if valid_ids_context:
+            enhanced_brief = f"{valid_ids_context}\n\n---\n\n{brief}"
+            log.debug("valid_ids_context_injected", context_length=len(valid_ids_context))
+
+    # Section configuration: (section_name, schema, output_field)
+    sections: list[tuple[str, type[BaseModel], str]] = [
+        ("entities", EntitiesSection, "entities"),
+        ("tensions", TensionsSection, "tensions"),
+        ("threads", ThreadsSection, "threads"),
+        ("consequences", ConsequencesSection, "consequences"),
+        ("beats", BeatsSection, "initial_beats"),
+        ("convergence", ConvergenceSection, "convergence_sketch"),
+    ]
+
+    collected: dict[str, Any] = {}
+    brief_with_threads = enhanced_brief
+
+    for section_name, schema, output_field in sections:
+        log.debug("serialize_section_started", section=section_name)
+
+        # Use brief with thread IDs for consequences and beats
+        current_brief = (
+            brief_with_threads if section_name in ("beats", "consequences") else enhanced_brief
+        )
+
+        section_prompt = prompts[section_name]
+        section_result, section_tokens = await serialize_to_artifact(
+            model=model,
+            brief=current_brief,
+            schema=schema,
+            provider_name=provider_name,
+            max_retries=max_retries,
+            system_prompt=section_prompt,
+            callbacks=callbacks,
+        )
+        total_tokens += section_tokens
+
+        section_data = section_result.model_dump()
+        if output_field not in section_data:
+            raise ValueError(
+                f"Section {section_name} returned unexpected structure. "
+                f"Expected field '{output_field}', got: {list(section_data.keys())}"
+            )
+        collected[output_field] = section_data[output_field]
+
+        # After threads are serialized, inject thread IDs for subsequent sections
+        if section_name == "threads" and collected.get("threads"):
+            thread_ids_context = format_thread_ids_context(collected["threads"])
+            if thread_ids_context:
+                brief_with_threads = f"{enhanced_brief}\n\n{thread_ids_context}"
+                log.debug("thread_ids_context_injected", thread_count=len(collected["threads"]))
+
+        log.debug(
+            "serialize_section_completed",
+            section=section_name,
+            items=len(collected[output_field]) if isinstance(collected[output_field], list) else 1,
+            tokens=section_tokens,
+        )
+
+    # Merge all sections into SeedOutput
+    seed_output = SeedOutput.model_validate(collected)
+
+    # Semantic validation (if graph provided) - single pass, no retry
+    semantic_errors: list[SeedValidationError] = []
+    if graph is not None:
+        semantic_errors = validate_seed_mutations(graph, seed_output.model_dump())
+        if semantic_errors:
+            log.warning(
+                "serialize_seed_semantic_errors",
+                error_count=len(semantic_errors),
+            )
+            return SerializeResult(
+                artifact=seed_output,
+                tokens_used=total_tokens,
+                semantic_errors=semantic_errors,
+            )
+
+    log.info(
+        "serialize_seed_as_function_completed",
+        entities=len(seed_output.entities),
+        tensions=len(seed_output.tensions),
+        threads=len(seed_output.threads),
+        consequences=len(seed_output.consequences),
+        beats=len(seed_output.initial_beats),
+        tokens=total_tokens,
+    )
+
+    return SerializeResult(
+        artifact=seed_output,
+        tokens_used=total_tokens,
+        semantic_errors=[],
+    )
