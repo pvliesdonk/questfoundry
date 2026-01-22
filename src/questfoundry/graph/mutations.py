@@ -971,6 +971,38 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                         )
                     )
 
+    # 5b. Validate beats don't reference entities with disposition: cut
+    cut_entity_ids: set[str] = {
+        _normalize_id(d["entity_id"], "entity")[0]
+        for d in output.get("entities", [])
+        if d.get("disposition") == "cut" and d.get("entity_id")
+    }
+    for i, beat in enumerate(output.get("initial_beats", [])):
+        for raw_entity_id in beat.get("entities", []):
+            if raw_entity_id:
+                entity_id, _ = _normalize_id(raw_entity_id, "entity")
+                if entity_id in cut_entity_ids:
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"initial_beats.{i}.entities",
+                            issue=f"Entity '{entity_id}' has disposition 'cut' but is referenced in beat",
+                            available=[],
+                            provided=raw_entity_id,
+                        )
+                    )
+        raw_location = beat.get("location")
+        if raw_location:
+            location, _ = _normalize_id(raw_location, "entity")
+            if location in cut_entity_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"initial_beats.{i}.location",
+                        issue=f"Entity '{location}' has disposition 'cut' but is referenced in beat",
+                        available=[],
+                        provided=raw_location,
+                    )
+                )
+
     # 6. Validate beat thread references (internal to SEED)
     for i, beat in enumerate(output.get("initial_beats", [])):
         for raw_thread_id in beat.get("threads", []):
