@@ -202,22 +202,137 @@ class GrowStage:
         return grow_result.model_dump(), 0, 0
 
     # -------------------------------------------------------------------------
-    # Phase stubs (implemented in PR4/PR5)
+    # Deterministic phases
     # -------------------------------------------------------------------------
 
-    def _phase_1_validate_dag(self, _graph: Graph) -> GrowPhaseResult:
-        """Phase 1: Validate beat DAG and commits beats."""
-        return GrowPhaseResult(phase="validate_dag", status="skipped", detail="not yet implemented")
+    def _phase_1_validate_dag(self, graph: Graph) -> GrowPhaseResult:
+        """Phase 1: Validate beat DAG and commits beats.
 
-    def _phase_5_enumerate_arcs(self, _graph: Graph) -> GrowPhaseResult:
-        """Phase 5: Enumerate arcs from thread combinations."""
-        return GrowPhaseResult(
-            phase="enumerate_arcs", status="skipped", detail="not yet implemented"
+        Checks:
+        1. Beat requires edges form a valid DAG (no cycles)
+        2. Each explored tension has a commits beat per thread
+        """
+        from questfoundry.graph.grow_algorithms import (
+            validate_beat_dag,
+            validate_commits_beats,
         )
 
-    def _phase_6_divergence(self, _graph: Graph) -> GrowPhaseResult:
-        """Phase 6: Compute divergence points between arcs."""
-        return GrowPhaseResult(phase="divergence", status="skipped", detail="not yet implemented")
+        errors = validate_beat_dag(graph)
+        errors.extend(validate_commits_beats(graph))
+
+        if errors:
+            return GrowPhaseResult(
+                phase="validate_dag",
+                status="failed",
+                detail="; ".join(e.issue for e in errors),
+            )
+
+        return GrowPhaseResult(phase="validate_dag", status="completed")
+
+    def _phase_5_enumerate_arcs(self, graph: Graph) -> GrowPhaseResult:
+        """Phase 5: Enumerate arcs from thread combinations.
+
+        Creates arc nodes and arc_contains edges for each beat in the arc.
+        """
+        from questfoundry.graph.grow_algorithms import enumerate_arcs
+
+        try:
+            arcs = enumerate_arcs(graph)
+        except ValueError as e:
+            return GrowPhaseResult(
+                phase="enumerate_arcs",
+                status="failed",
+                detail=str(e),
+            )
+
+        if not arcs:
+            return GrowPhaseResult(
+                phase="enumerate_arcs",
+                status="completed",
+                detail="No arcs to enumerate",
+            )
+
+        # Create arc nodes and arc_contains edges
+        for arc in arcs:
+            arc_node_id = f"arc::{arc.arc_id}"
+            graph.create_node(
+                arc_node_id,
+                {
+                    "type": "arc",
+                    "raw_id": arc.arc_id,
+                    "arc_type": arc.arc_type,
+                    "threads": arc.threads,
+                    "sequence": arc.sequence,
+                },
+            )
+
+            # Add arc_contains edges for each beat in the sequence
+            for beat_id in arc.sequence:
+                graph.add_edge("arc_contains", arc_node_id, beat_id)
+
+        return GrowPhaseResult(
+            phase="enumerate_arcs",
+            status="completed",
+            detail=f"Created {len(arcs)} arcs",
+        )
+
+    def _phase_6_divergence(self, graph: Graph) -> GrowPhaseResult:
+        """Phase 6: Compute divergence points between arcs.
+
+        Updates arc nodes with divergence metadata and creates diverges_at edges.
+        """
+        from questfoundry.graph.grow_algorithms import compute_divergence_points
+        from questfoundry.models.grow import Arc as ArcModel
+
+        # Reconstruct Arc models from graph nodes
+        arc_nodes = graph.get_nodes_by_type("arc")
+        if not arc_nodes:
+            return GrowPhaseResult(
+                phase="divergence",
+                status="completed",
+                detail="No arcs to process",
+            )
+
+        arcs: list[ArcModel] = []
+        spine_arc_id: str | None = None
+        for _arc_id, arc_data in arc_nodes.items():
+            arc = ArcModel(
+                arc_id=arc_data["raw_id"],
+                arc_type=arc_data["arc_type"],
+                threads=arc_data.get("threads", []),
+                sequence=arc_data.get("sequence", []),
+            )
+            arcs.append(arc)
+            if arc.arc_type == "spine":
+                spine_arc_id = arc.arc_id
+
+        divergence_map = compute_divergence_points(arcs, spine_arc_id)
+
+        if not divergence_map:
+            return GrowPhaseResult(
+                phase="divergence",
+                status="completed",
+                detail="No divergence points (single arc or no branches)",
+            )
+
+        # Update arc nodes and create diverges_at edges
+        for arc_id_raw, info in divergence_map.items():
+            arc_node_id = f"arc::{arc_id_raw}"
+            updates: dict[str, str | None] = {
+                "diverges_from": f"arc::{info.diverges_from}" if info.diverges_from else None,
+                "diverges_at": info.diverges_at,
+            }
+            graph.update_node(arc_node_id, **{k: v for k, v in updates.items() if v is not None})
+
+            # Create diverges_at edge from arc to the divergence beat
+            if info.diverges_at:
+                graph.add_edge("diverges_at", arc_node_id, info.diverges_at)
+
+        return GrowPhaseResult(
+            phase="divergence",
+            status="completed",
+            detail=f"Computed {len(divergence_map)} divergence points",
+        )
 
     def _phase_7_convergence(self, _graph: Graph) -> GrowPhaseResult:
         """Phase 7: Find convergence points for diverged arcs."""
