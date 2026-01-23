@@ -334,21 +334,247 @@ class GrowStage:
             detail=f"Computed {len(divergence_map)} divergence points",
         )
 
-    def _phase_7_convergence(self, _graph: Graph) -> GrowPhaseResult:
-        """Phase 7: Find convergence points for diverged arcs."""
-        return GrowPhaseResult(phase="convergence", status="skipped", detail="not yet implemented")
+    def _phase_7_convergence(self, graph: Graph) -> GrowPhaseResult:
+        """Phase 7: Find convergence points for diverged arcs.
 
-    def _phase_8a_passages(self, _graph: Graph) -> GrowPhaseResult:
-        """Phase 8a: Create passage nodes from beats."""
-        return GrowPhaseResult(phase="passages", status="skipped", detail="not yet implemented")
+        Updates arc nodes with convergence metadata and creates converges_at edges.
+        """
+        from questfoundry.graph.grow_algorithms import (
+            compute_divergence_points,
+            find_convergence_points,
+        )
+        from questfoundry.models.grow import Arc as ArcModel
 
-    def _phase_8b_codewords(self, _graph: Graph) -> GrowPhaseResult:
-        """Phase 8b: Create codeword nodes from consequences."""
-        return GrowPhaseResult(phase="codewords", status="skipped", detail="not yet implemented")
+        arc_nodes = graph.get_nodes_by_type("arc")
+        if not arc_nodes:
+            return GrowPhaseResult(
+                phase="convergence",
+                status="completed",
+                detail="No arcs to process",
+            )
 
-    def _phase_11_prune(self, _graph: Graph) -> GrowPhaseResult:
-        """Phase 11: Prune unreachable passages."""
-        return GrowPhaseResult(phase="prune", status="skipped", detail="not yet implemented")
+        # Reconstruct Arc models from graph nodes
+        arcs: list[ArcModel] = []
+        spine_arc_id: str | None = None
+        for _arc_id, arc_data in arc_nodes.items():
+            arc = ArcModel(
+                arc_id=arc_data["raw_id"],
+                arc_type=arc_data["arc_type"],
+                threads=arc_data.get("threads", []),
+                sequence=arc_data.get("sequence", []),
+            )
+            arcs.append(arc)
+            if arc.arc_type == "spine":
+                spine_arc_id = arc.arc_id
+
+        # Compute divergence first (needed for convergence)
+        divergence_map = compute_divergence_points(arcs, spine_arc_id)
+        convergence_map = find_convergence_points(graph, arcs, divergence_map, spine_arc_id)
+
+        if not convergence_map:
+            return GrowPhaseResult(
+                phase="convergence",
+                status="completed",
+                detail="No convergence points found",
+            )
+
+        # Update arc nodes and create converges_at edges
+        convergence_count = 0
+        for arc_id_raw, info in convergence_map.items():
+            if not info.converges_at:
+                continue
+
+            arc_node_id = f"arc::{arc_id_raw}"
+            graph.update_node(
+                arc_node_id,
+                converges_to=f"arc::{info.converges_to}" if info.converges_to else None,
+                converges_at=info.converges_at,
+            )
+            graph.add_edge("converges_at", arc_node_id, info.converges_at)
+            convergence_count += 1
+
+        return GrowPhaseResult(
+            phase="convergence",
+            status="completed",
+            detail=f"Found {convergence_count} convergence points",
+        )
+
+    def _phase_8a_passages(self, graph: Graph) -> GrowPhaseResult:
+        """Phase 8a: Create passage nodes from beats.
+
+        Each beat gets exactly one passage node and a passage_from edge.
+        """
+        beat_nodes = graph.get_nodes_by_type("beat")
+        if not beat_nodes:
+            return GrowPhaseResult(
+                phase="passages",
+                status="completed",
+                detail="No beats to process",
+            )
+
+        passage_count = 0
+        for beat_id, beat_data in sorted(beat_nodes.items()):
+            raw_id = beat_data.get(
+                "raw_id", beat_id.split("::")[-1] if "::" in beat_id else beat_id
+            )
+            passage_id = f"passage::{raw_id}"
+
+            graph.create_node(
+                passage_id,
+                {
+                    "type": "passage",
+                    "raw_id": raw_id,
+                    "from_beat": beat_id,
+                    "summary": beat_data.get("summary", ""),
+                    "entities": beat_data.get("entities", []),
+                },
+            )
+            graph.add_edge("passage_from", passage_id, beat_id)
+            passage_count += 1
+
+        return GrowPhaseResult(
+            phase="passages",
+            status="completed",
+            detail=f"Created {passage_count} passages",
+        )
+
+    def _phase_8b_codewords(self, graph: Graph) -> GrowPhaseResult:
+        """Phase 8b: Create codeword nodes from consequences.
+
+        For each consequence, creates a codeword node with a tracks edge.
+        Finds commits beats and adds grants edges from beat to codeword.
+        """
+        consequence_nodes = graph.get_nodes_by_type("consequence")
+        if not consequence_nodes:
+            return GrowPhaseResult(
+                phase="codewords",
+                status="completed",
+                detail="No consequences to process",
+            )
+
+        beat_nodes = graph.get_nodes_by_type("beat")
+        thread_nodes = graph.get_nodes_by_type("thread")
+
+        # Build thread → consequence mapping
+        thread_consequences: dict[str, list[str]] = {}
+        has_consequence_edges = graph.get_edges(
+            from_id=None, to_id=None, edge_type="has_consequence"
+        )
+        for edge in has_consequence_edges:
+            thread_id = edge["from"]
+            cons_id = edge["to"]
+            thread_consequences.setdefault(thread_id, []).append(cons_id)
+
+        # Build thread → tension mapping for commits beat lookup
+        thread_tension: dict[str, str] = {}
+        for thread_id, thread_data in thread_nodes.items():
+            tension_id = thread_data.get("tension_id", "")
+            thread_tension[thread_id] = tension_id
+
+        # Build beat → thread mapping via belongs_to
+        beat_threads: dict[str, list[str]] = {}
+        belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
+        for edge in belongs_to_edges:
+            beat_id = edge["from"]
+            thread_id = edge["to"]
+            beat_threads.setdefault(beat_id, []).append(thread_id)
+
+        codeword_count = 0
+        for cons_id, cons_data in sorted(consequence_nodes.items()):
+            cons_raw = cons_data.get(
+                "raw_id", cons_id.split("::")[-1] if "::" in cons_id else cons_id
+            )
+            codeword_id = f"codeword::{cons_raw}_committed"
+
+            graph.create_node(
+                codeword_id,
+                {
+                    "type": "codeword",
+                    "raw_id": f"{cons_raw}_committed",
+                    "tracks": cons_id,
+                    "codeword_type": "granted",
+                },
+            )
+            graph.add_edge("tracks", codeword_id, cons_id)
+
+            # Find commits beats for this consequence's thread
+            cons_thread_id = cons_data.get("thread_id", "")
+            # Look up the full thread ID
+            full_thread_id = (
+                f"thread::{cons_thread_id}" if "::" not in cons_thread_id else cons_thread_id
+            )
+            thread_tension_id = thread_tension.get(full_thread_id, "")
+
+            # Find beats that commit this tension via this thread
+            for beat_id, beat_data in beat_nodes.items():
+                # Check if beat belongs to this thread
+                beat_thread_list = beat_threads.get(beat_id, [])
+                if full_thread_id not in beat_thread_list:
+                    continue
+
+                # Check if beat commits this tension
+                impacts = beat_data.get("tension_impacts", [])
+                for impact in impacts:
+                    if (
+                        impact.get("tension_id") == thread_tension_id
+                        and impact.get("effect") == "commits"
+                    ):
+                        graph.add_edge("grants", beat_id, codeword_id)
+                        break
+
+            codeword_count += 1
+
+        return GrowPhaseResult(
+            phase="codewords",
+            status="completed",
+            detail=f"Created {codeword_count} codewords",
+        )
+
+    def _phase_11_prune(self, graph: Graph) -> GrowPhaseResult:
+        """Phase 11: Prune unreachable passages.
+
+        Uses BFS from the first passage (topologically) to find reachable
+        passages via arc_contains edges. Deletes unreachable passages.
+
+        Note: Without choices (Phase 9), reachability is determined via
+        arc_contains edges - passages whose beats are in any arc are reachable.
+        """
+        passage_nodes = graph.get_nodes_by_type("passage")
+        if not passage_nodes:
+            return GrowPhaseResult(
+                phase="prune",
+                status="completed",
+                detail="No passages to prune",
+            )
+
+        # Find all beats that are in any arc (via arc_contains edges)
+        arc_contains_edges = graph.get_edges(from_id=None, to_id=None, edge_type="arc_contains")
+        beats_in_arcs: set[str] = {edge["to"] for edge in arc_contains_edges}
+
+        # A passage is reachable if its from_beat is in any arc
+        reachable_passages: set[str] = set()
+        for passage_id, passage_data in passage_nodes.items():
+            from_beat = passage_data.get("from_beat", "")
+            if from_beat in beats_in_arcs:
+                reachable_passages.add(passage_id)
+
+        # Prune unreachable passages
+        unreachable = set(passage_nodes.keys()) - reachable_passages
+        for passage_id in sorted(unreachable):
+            graph.delete_node(passage_id, cascade=True)
+
+        if unreachable:
+            return GrowPhaseResult(
+                phase="prune",
+                status="completed",
+                detail=f"Pruned {len(unreachable)} unreachable passages",
+            )
+
+        return GrowPhaseResult(
+            phase="prune",
+            status="completed",
+            detail="All passages reachable",
+        )
 
 
 def create_grow_stage(

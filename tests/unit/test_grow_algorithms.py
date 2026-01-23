@@ -9,8 +9,10 @@ import pytest
 
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_algorithms import (
+    bfs_reachable,
     compute_divergence_points,
     enumerate_arcs,
+    find_convergence_points,
     topological_sort_beats,
     validate_beat_dag,
     validate_commits_beats,
@@ -548,9 +550,502 @@ class TestPhase6Integration:
         assert "No arcs" in result.detail
 
 
+# ---------------------------------------------------------------------------
+# find_convergence_points
+# ---------------------------------------------------------------------------
+
+
+class TestFindConvergencePoints:
+    def test_converging_arcs_with_shared_finale(self) -> None:
+        """Branch and spine share a beat after divergence (convergence)."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            threads=["t1_canon"],
+            sequence=["beat::a", "beat::b", "beat::c", "beat::finale"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            threads=["t1_alt"],
+            sequence=["beat::a", "beat::b", "beat::d", "beat::finale"],
+        )
+
+        graph = Graph.empty()
+        divergence_map = compute_divergence_points([spine, branch])
+        result = find_convergence_points(graph, [spine, branch], divergence_map)
+
+        assert "branch" in result
+        assert result["branch"].converges_at == "beat::finale"
+        assert result["branch"].converges_to == "spine"
+
+    def test_non_converging_arcs(self) -> None:
+        """Branch never shares beats with spine after divergence."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            threads=["t1"],
+            sequence=["beat::a", "beat::b", "beat::c"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            threads=["t2"],
+            sequence=["beat::a", "beat::x", "beat::y"],
+        )
+
+        graph = Graph.empty()
+        divergence_map = compute_divergence_points([spine, branch])
+        result = find_convergence_points(graph, [spine, branch], divergence_map)
+
+        assert "branch" in result
+        assert result["branch"].converges_at is None
+
+    def test_immediate_divergence_with_convergence(self) -> None:
+        """Branch diverges at start but converges at end."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            threads=["t1"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            threads=["t2"],
+            sequence=["beat::x", "beat::y", "beat::end"],
+        )
+
+        graph = Graph.empty()
+        divergence_map = compute_divergence_points([spine, branch])
+        # diverges_at is None (no shared prefix)
+        result = find_convergence_points(graph, [spine, branch], divergence_map)
+
+        assert result["branch"].converges_at == "beat::end"
+
+    def test_no_spine_returns_empty(self) -> None:
+        branch = Arc(
+            arc_id="b1",
+            arc_type="branch",
+            threads=["t1"],
+            sequence=["beat::a"],
+        )
+        graph = Graph.empty()
+        result = find_convergence_points(graph, [branch])
+        assert result == {}
+
+    def test_multiple_branches_different_convergence(self) -> None:
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            threads=["t1"],
+            sequence=["beat::a", "beat::b", "beat::c", "beat::end"],
+        )
+        branch1 = Arc(
+            arc_id="b1",
+            arc_type="branch",
+            threads=["t2"],
+            sequence=["beat::a", "beat::x", "beat::end"],
+        )
+        branch2 = Arc(
+            arc_id="b2",
+            arc_type="branch",
+            threads=["t3"],
+            sequence=["beat::a", "beat::y", "beat::c", "beat::end"],
+        )
+
+        graph = Graph.empty()
+        divergence_map = compute_divergence_points([spine, branch1, branch2])
+        result = find_convergence_points(graph, [spine, branch1, branch2], divergence_map)
+
+        assert result["b1"].converges_at == "beat::end"
+        assert result["b2"].converges_at == "beat::c"
+
+    def test_computes_divergence_internally_if_not_provided(self) -> None:
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            threads=["t1"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            threads=["t2"],
+            sequence=["beat::a", "beat::x", "beat::end"],
+        )
+
+        graph = Graph.empty()
+        # Don't pass divergence_map - should compute internally
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at == "beat::end"
+
+
+# ---------------------------------------------------------------------------
+# bfs_reachable
+# ---------------------------------------------------------------------------
+
+
+class TestBfsReachable:
+    def test_single_node(self) -> None:
+        graph = Graph.empty()
+        graph.create_node("node::a", {"type": "test"})
+        reachable = bfs_reachable(graph, "node::a", ["connects"])
+        assert reachable == {"node::a"}
+
+    def test_linear_chain(self) -> None:
+        graph = Graph.empty()
+        graph.create_node("node::a", {"type": "test"})
+        graph.create_node("node::b", {"type": "test"})
+        graph.create_node("node::c", {"type": "test"})
+        graph.add_edge("connects", "node::a", "node::b")
+        graph.add_edge("connects", "node::b", "node::c")
+
+        reachable = bfs_reachable(graph, "node::a", ["connects"])
+        assert reachable == {"node::a", "node::b", "node::c"}
+
+    def test_disconnected_components(self) -> None:
+        graph = Graph.empty()
+        graph.create_node("node::a", {"type": "test"})
+        graph.create_node("node::b", {"type": "test"})
+        graph.create_node("node::c", {"type": "test"})
+        graph.add_edge("connects", "node::a", "node::b")
+        # c is disconnected
+
+        reachable = bfs_reachable(graph, "node::a", ["connects"])
+        assert reachable == {"node::a", "node::b"}
+        assert "node::c" not in reachable
+
+    def test_multiple_edge_types(self) -> None:
+        graph = Graph.empty()
+        graph.create_node("node::a", {"type": "test"})
+        graph.create_node("node::b", {"type": "test"})
+        graph.create_node("node::c", {"type": "test"})
+        graph.add_edge("type1", "node::a", "node::b")
+        graph.add_edge("type2", "node::b", "node::c")
+
+        # Only type1 - shouldn't reach c
+        reachable_t1 = bfs_reachable(graph, "node::a", ["type1"])
+        assert reachable_t1 == {"node::a", "node::b"}
+
+        # Both types - should reach all
+        reachable_both = bfs_reachable(graph, "node::a", ["type1", "type2"])
+        assert reachable_both == {"node::a", "node::b", "node::c"}
+
+    def test_nonexistent_start_returns_empty(self) -> None:
+        graph = Graph.empty()
+        reachable = bfs_reachable(graph, "node::missing", ["connects"])
+        assert reachable == set()
+
+    def test_cycle_handling(self) -> None:
+        graph = Graph.empty()
+        graph.create_node("node::a", {"type": "test"})
+        graph.create_node("node::b", {"type": "test"})
+        graph.add_edge("connects", "node::a", "node::b")
+        graph.add_edge("connects", "node::b", "node::a")
+
+        # Should not infinite loop
+        reachable = bfs_reachable(graph, "node::a", ["connects"])
+        assert reachable == {"node::a", "node::b"}
+
+    def test_directed_edges_only_forward(self) -> None:
+        graph = Graph.empty()
+        graph.create_node("node::a", {"type": "test"})
+        graph.create_node("node::b", {"type": "test"})
+        graph.create_node("node::c", {"type": "test"})
+        # a → b, c → a (edge from c to a, but starting from a)
+        graph.add_edge("connects", "node::a", "node::b")
+        graph.add_edge("connects", "node::c", "node::a")
+
+        reachable = bfs_reachable(graph, "node::a", ["connects"])
+        # Only follows edges FROM a, not TO a
+        assert reachable == {"node::a", "node::b"}
+
+
+# ---------------------------------------------------------------------------
+# Phase 7, 8a, 8b, 11 integration tests
+# ---------------------------------------------------------------------------
+
+
+class TestPhase7Integration:
+    def test_phase_7_finds_convergence(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_two_tension_graph()
+        stage = GrowStage()
+
+        # Run prerequisite phases
+        stage._phase_5_enumerate_arcs(graph)
+        stage._phase_6_divergence(graph)
+
+        # Run phase 7
+        result = stage._phase_7_convergence(graph)
+        assert result.status == "completed"
+
+    def test_phase_7_creates_converges_at_edges(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_two_tension_graph()
+        stage = GrowStage()
+        stage._phase_5_enumerate_arcs(graph)
+        stage._phase_6_divergence(graph)
+        stage._phase_7_convergence(graph)
+
+        converges_edges = graph.get_edges(from_id=None, to_id=None, edge_type="converges_at")
+        # Two-tension graph: branches converge at finale
+        assert len(converges_edges) >= 1
+
+    def test_phase_7_no_arcs(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = Graph.empty()
+        stage = GrowStage()
+        result = stage._phase_7_convergence(graph)
+        assert result.status == "completed"
+        assert "No arcs" in result.detail
+
+    def test_phase_7_updates_arc_nodes(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_two_tension_graph()
+        stage = GrowStage()
+        stage._phase_5_enumerate_arcs(graph)
+        stage._phase_6_divergence(graph)
+        stage._phase_7_convergence(graph)
+
+        arc_nodes = graph.get_nodes_by_type("arc")
+        # Check that at least some branch arcs have convergence data
+        converging_arcs = [
+            data for data in arc_nodes.values() if data.get("converges_at") is not None
+        ]
+        assert len(converging_arcs) >= 1
+
+
+class TestPhase8aIntegration:
+    def test_passages_match_beats(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+        result = stage._phase_8a_passages(graph)
+
+        assert result.status == "completed"
+        beat_nodes = graph.get_nodes_by_type("beat")
+        passage_nodes = graph.get_nodes_by_type("passage")
+        # Each beat should get exactly one passage
+        assert len(passage_nodes) == len(beat_nodes)
+
+    def test_passages_have_correct_structure(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+        stage._phase_8a_passages(graph)
+
+        passage_nodes = graph.get_nodes_by_type("passage")
+        for _pid, pdata in passage_nodes.items():
+            assert pdata["type"] == "passage"
+            assert "raw_id" in pdata
+            assert "from_beat" in pdata
+            assert "summary" in pdata
+
+    def test_passage_from_edges_created(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+        stage._phase_8a_passages(graph)
+
+        passage_from_edges = graph.get_edges(from_id=None, to_id=None, edge_type="passage_from")
+        passage_nodes = graph.get_nodes_by_type("passage")
+        assert len(passage_from_edges) == len(passage_nodes)
+
+    def test_passages_from_two_tension_graph(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_two_tension_graph()
+        stage = GrowStage()
+        result = stage._phase_8a_passages(graph)
+
+        assert result.status == "completed"
+        assert "8 passages" in result.detail
+
+    def test_empty_graph_no_passages(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = Graph.empty()
+        stage = GrowStage()
+        result = stage._phase_8a_passages(graph)
+        assert result.status == "completed"
+        assert "No beats" in result.detail
+
+
+class TestPhase8bIntegration:
+    def test_codewords_match_consequences(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+        result = stage._phase_8b_codewords(graph)
+
+        assert result.status == "completed"
+        consequence_nodes = graph.get_nodes_by_type("consequence")
+        codeword_nodes = graph.get_nodes_by_type("codeword")
+        assert len(codeword_nodes) == len(consequence_nodes)
+
+    def test_codeword_tracks_edges(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+        stage._phase_8b_codewords(graph)
+
+        tracks_edges = graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
+        codeword_nodes = graph.get_nodes_by_type("codeword")
+        assert len(tracks_edges) == len(codeword_nodes)
+
+    def test_grants_edges_assigned_to_commits_beats(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+        stage._phase_8b_codewords(graph)
+
+        grants_edges = graph.get_edges(from_id=None, to_id=None, edge_type="grants")
+        # Each consequence has a thread which has a commits beat
+        # 2 consequences, 2 commits beats → 2 grants edges
+        assert len(grants_edges) == 2
+
+        # Verify grants edges come from beats
+        for edge in grants_edges:
+            assert edge["from"].startswith("beat::")
+            assert edge["to"].startswith("codeword::")
+
+    def test_codeword_id_format(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+        stage._phase_8b_codewords(graph)
+
+        codeword_nodes = graph.get_nodes_by_type("codeword")
+        for cw_id in codeword_nodes:
+            # Format: codeword::{consequence_raw_id}_committed
+            assert cw_id.startswith("codeword::")
+            assert cw_id.endswith("_committed")
+
+    def test_two_tension_codewords(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_two_tension_graph()
+        stage = GrowStage()
+        result = stage._phase_8b_codewords(graph)
+
+        assert result.status == "completed"
+        codeword_nodes = graph.get_nodes_by_type("codeword")
+        # 4 consequences → 4 codewords
+        assert len(codeword_nodes) == 4
+
+    def test_empty_graph_no_codewords(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = Graph.empty()
+        stage = GrowStage()
+        result = stage._phase_8b_codewords(graph)
+        assert result.status == "completed"
+        assert "No consequences" in result.detail
+
+
+class TestPhase11Integration:
+    def test_all_passages_reachable(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        # Run phases 5 and 8a to create arcs and passages
+        stage._phase_5_enumerate_arcs(graph)
+        stage._phase_8a_passages(graph)
+
+        result = stage._phase_11_prune(graph)
+        assert result.status == "completed"
+        assert "All passages reachable" in result.detail
+
+    def test_unreachable_passages_pruned(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        # Run phase 5 to create arcs
+        stage._phase_5_enumerate_arcs(graph)
+        # Run phase 8a to create passages
+        stage._phase_8a_passages(graph)
+
+        # Manually create an orphan passage not connected to any arc beat
+        graph.create_node(
+            "passage::orphan",
+            {
+                "type": "passage",
+                "raw_id": "orphan",
+                "from_beat": "beat::nonexistent",
+                "summary": "orphan passage",
+            },
+        )
+
+        result = stage._phase_11_prune(graph)
+        assert result.status == "completed"
+        assert "Pruned 1" in result.detail
+
+        # Orphan should be gone
+        passage_nodes = graph.get_nodes_by_type("passage")
+        assert "passage::orphan" not in passage_nodes
+
+    def test_prune_preserves_reachable(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+        stage._phase_5_enumerate_arcs(graph)
+        stage._phase_8a_passages(graph)
+
+        # Add orphan
+        graph.create_node(
+            "passage::orphan",
+            {
+                "type": "passage",
+                "raw_id": "orphan",
+                "from_beat": "beat::nonexistent",
+                "summary": "orphan",
+            },
+        )
+
+        beat_count = len(graph.get_nodes_by_type("beat"))
+        stage._phase_11_prune(graph)
+
+        # Original passages should still exist (one per beat)
+        passage_nodes = graph.get_nodes_by_type("passage")
+        assert len(passage_nodes) == beat_count
+
+    def test_prune_empty_graph(self) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = Graph.empty()
+        stage = GrowStage()
+        result = stage._phase_11_prune(graph)
+        assert result.status == "completed"
+        assert "No passages" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# End-to-end: all phases on fixture graphs
+# ---------------------------------------------------------------------------
+
+
 class TestPhaseIntegrationEndToEnd:
     @pytest.mark.asyncio
-    async def test_phases_1_5_6_full_run(self, tmp_path: Path) -> None:
+    async def test_all_phases_full_run(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_tension_graph()
@@ -560,14 +1055,85 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = MagicMock()
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # Phases 1, 5, 6 should be completed; 7, 8a, 8b, 11 still skipped
+        # All 7 phases should be completed
         phases = result_dict["phases_completed"]
-        completed_phases = [p for p in phases if p["status"] == "completed"]
-        skipped_phases = [p for p in phases if p["status"] == "skipped"]
-
-        assert len(completed_phases) == 3  # validate_dag, enumerate_arcs, divergence
-        assert len(skipped_phases) == 4  # convergence, passages, codewords, prune
+        assert len(phases) == 7
+        for phase in phases:
+            assert phase["status"] == "completed"
 
         # Should have created arcs
         assert result_dict["arc_count"] == 4  # 2x2 = 4 arcs
         assert result_dict["spine_arc_id"] is not None
+
+        # Should have passages (one per beat)
+        assert result_dict["passage_count"] == 8  # 8 beats in two-tension graph
+
+        # Should have codewords (one per consequence)
+        assert result_dict["codeword_count"] == 4  # 4 consequences
+
+    @pytest.mark.asyncio
+    async def test_single_tension_full_run(self, tmp_path: Path) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_single_tension_graph()
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        mock_model = MagicMock()
+        result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
+
+        # All phases completed
+        phases = result_dict["phases_completed"]
+        assert all(p["status"] == "completed" for p in phases)
+
+        assert result_dict["arc_count"] == 2  # 1 tension x 2 threads = 2 arcs
+        assert result_dict["passage_count"] == 4  # 4 beats
+        assert result_dict["codeword_count"] == 2  # 2 consequences
+
+    @pytest.mark.asyncio
+    async def test_final_graph_has_expected_nodes(self, tmp_path: Path) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_two_tension_graph()
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        mock_model = MagicMock()
+        await stage.execute(model=mock_model, user_prompt="")
+
+        # Reload the saved graph
+        saved_graph = Graph.load(tmp_path)
+
+        # Verify node types exist
+        assert len(saved_graph.get_nodes_by_type("arc")) == 4
+        assert len(saved_graph.get_nodes_by_type("passage")) == 8
+        assert len(saved_graph.get_nodes_by_type("codeword")) == 4
+        assert len(saved_graph.get_nodes_by_type("beat")) == 8
+        assert len(saved_graph.get_nodes_by_type("tension")) == 2
+        assert len(saved_graph.get_nodes_by_type("thread")) == 4
+
+    @pytest.mark.asyncio
+    async def test_final_graph_has_expected_edges(self, tmp_path: Path) -> None:
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_two_tension_graph()
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        mock_model = MagicMock()
+        await stage.execute(model=mock_model, user_prompt="")
+
+        saved_graph = Graph.load(tmp_path)
+
+        # Verify edge types exist
+        arc_contains = saved_graph.get_edges(from_id=None, to_id=None, edge_type="arc_contains")
+        assert len(arc_contains) > 0
+
+        passage_from = saved_graph.get_edges(from_id=None, to_id=None, edge_type="passage_from")
+        assert len(passage_from) == 8
+
+        tracks = saved_graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
+        assert len(tracks) == 4
+
+        grants = saved_graph.get_edges(from_id=None, to_id=None, edge_type="grants")
+        assert len(grants) == 4

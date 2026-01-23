@@ -412,3 +412,140 @@ def compute_divergence_points(
         )
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Convergence Points
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ConvergenceInfo:
+    """Information about where a branch arc converges back to the spine.
+
+    Attributes:
+        arc_id: The branch arc that converges.
+        converges_to: The arc it converges to (spine).
+        converges_at: The first shared beat after divergence.
+    """
+
+    arc_id: str
+    converges_to: str
+    converges_at: str | None = None
+
+
+def find_convergence_points(
+    graph: Graph,  # noqa: ARG001 - available for future validation
+    arcs: list[Arc],
+    divergence_map: dict[str, DivergenceInfo] | None = None,
+    spine_arc_id: str | None = None,
+) -> dict[str, ConvergenceInfo]:
+    """Find where branch arcs converge back to the spine.
+
+    For each diverged branch arc, looks for shared beats that appear in
+    both the spine and branch sequences AFTER the divergence point.
+    The first such shared beat is the convergence point.
+
+    Args:
+        graph: Graph (reserved for future validation).
+        arcs: List of Arc models.
+        divergence_map: Pre-computed divergence info. If None, computed internally.
+        spine_arc_id: ID of the spine arc. If None, detected from arc_type.
+
+    Returns:
+        Dict mapping branch arc_id to ConvergenceInfo.
+        Empty dict if no convergence found.
+    """
+    # Find spine
+    spine: Arc | None = None
+    for arc in arcs:
+        if spine_arc_id and arc.arc_id == spine_arc_id:
+            spine = arc
+            break
+        if arc.arc_type == "spine":
+            spine = arc
+            break
+
+    if spine is None:
+        return {}
+
+    # Compute divergence if not provided
+    if divergence_map is None:
+        divergence_map = compute_divergence_points(arcs, spine_arc_id)
+
+    result: dict[str, ConvergenceInfo] = {}
+    spine_seq_set = set(spine.sequence)
+
+    for arc in arcs:
+        if arc.arc_type == "spine":
+            continue
+
+        div_info = divergence_map.get(arc.arc_id)
+        if not div_info:
+            continue
+
+        # Find beats in branch after divergence point
+        diverge_at = div_info.diverges_at
+        if diverge_at and diverge_at in arc.sequence:
+            div_idx = arc.sequence.index(diverge_at)
+            # Look at beats after the divergence point in the branch
+            branch_after_div = arc.sequence[div_idx + 1 :]
+        else:
+            # No divergence point means they diverge from the start
+            branch_after_div = arc.sequence
+
+        # Find first shared beat after divergence
+        converges_at: str | None = None
+        for beat_id in branch_after_div:
+            if beat_id in spine_seq_set:
+                converges_at = beat_id
+                break
+
+        result[arc.arc_id] = ConvergenceInfo(
+            arc_id=arc.arc_id,
+            converges_to=spine.arc_id,
+            converges_at=converges_at,
+        )
+
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Phase 11: BFS Reachability
+# ---------------------------------------------------------------------------
+
+
+def bfs_reachable(graph: Graph, start_node_id: str, edge_types: list[str]) -> set[str]:
+    """Find all nodes reachable from start_node_id via specified edge types.
+
+    Standard BFS following edges of the given types. Follows edges where
+    the current node is the 'from' endpoint.
+
+    Args:
+        graph: Graph to traverse.
+        start_node_id: Node to start BFS from.
+        edge_types: Edge types to follow.
+
+    Returns:
+        Set of reachable node IDs (includes start_node_id).
+    """
+    if not graph.has_node(start_node_id):
+        return set()
+
+    visited: set[str] = set()
+    queue = deque([start_node_id])
+
+    while queue:
+        node_id = queue.popleft()
+        if node_id in visited:
+            continue
+        visited.add(node_id)
+
+        for edge_type in edge_types:
+            edges = graph.get_edges(from_id=node_id, to_id=None, edge_type=edge_type)
+            for edge in edges:
+                to_id = edge["to"]
+                if to_id not in visited:
+                    queue.append(to_id)
+
+    return visited

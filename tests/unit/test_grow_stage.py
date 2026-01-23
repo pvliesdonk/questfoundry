@@ -56,11 +56,11 @@ class TestGrowStageExecute:
         result_dict, llm_calls, tokens = await stage.execute(model=mock_model, user_prompt="")
         assert llm_calls == 0
         assert tokens == 0
-        # All phases should be skipped (stubs)
+        # All phases run to completion (empty graph = no work to do)
         phases = result_dict["phases_completed"]
         assert len(phases) == 7
         for phase in phases:
-            assert phase["status"] == "skipped"
+            assert phase["status"] == "completed"
 
     @pytest.mark.asyncio
     async def test_execute_with_project_path_kwarg(
