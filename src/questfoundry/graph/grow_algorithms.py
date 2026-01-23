@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from itertools import product
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.mutations import GrowErrorCategory, GrowValidationError
 from questfoundry.models.grow import Arc
@@ -540,3 +540,367 @@ def bfs_reachable(graph: Graph, start_node_id: str, edge_types: list[str]) -> se
                     queue.append(to_id)
 
     return visited
+
+
+# ---------------------------------------------------------------------------
+# Phase 3: Knot Detection
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class KnotCandidate:
+    """A group of beats that share signals and could form a knot.
+
+    Attributes:
+        beat_ids: Beat node IDs that share signals.
+        signal_type: What signal links them (location, entity).
+        shared_value: The shared signal value.
+    """
+
+    beat_ids: list[str]
+    signal_type: str
+    shared_value: str
+
+
+def build_knot_candidates(graph: Graph) -> list[KnotCandidate]:
+    """Find beats that share signals and could form knots.
+
+    Groups beats by shared locations/location_alternatives and shared entities.
+    Only considers beats from different tensions (same tension = alternative).
+
+    Args:
+        graph: Graph with beat, thread, and tension nodes.
+
+    Returns:
+        List of KnotCandidate groups, prioritizing location overlap.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    if not beat_nodes:
+        return []
+
+    # Build beat → tension mapping via belongs_to → explores
+    beat_tensions = _build_beat_tensions(graph, beat_nodes)
+
+    # Group by location overlap (highest priority)
+    location_groups = _group_by_location(beat_nodes, beat_tensions)
+
+    # Group by shared entity
+    entity_groups = _group_by_entity(graph, beat_nodes, beat_tensions)
+
+    return location_groups + entity_groups
+
+
+def _build_beat_tensions(graph: Graph, beat_nodes: dict[str, Any]) -> dict[str, set[str]]:
+    """Map each beat to its tension IDs (via thread → tension edges).
+
+    Returns:
+        Dict mapping beat_id → set of tension raw_ids.
+    """
+    # thread → tension mapping
+    thread_tension: dict[str, str] = {}
+    explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
+    for edge in explores_edges:
+        thread_node = graph.get_node(edge["from"])
+        if thread_node:
+            tension_node = graph.get_node(edge["to"])
+            if tension_node:
+                thread_tension[edge["from"]] = tension_node.get("raw_id", edge["to"])
+
+    # beat → tensions via belongs_to
+    beat_tensions: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
+    belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
+    for edge in belongs_to_edges:
+        beat_id = edge["from"]
+        thread_id = edge["to"]
+        if beat_id in beat_nodes and thread_id in thread_tension:
+            beat_tensions[beat_id].add(thread_tension[thread_id])
+
+    return beat_tensions
+
+
+def _group_by_location(
+    beat_nodes: dict[str, Any],
+    beat_tensions: dict[str, set[str]],
+) -> list[KnotCandidate]:
+    """Group beats by location overlap (primary location or alternatives).
+
+    Two beats have location overlap if:
+    - Beat A's location is in Beat B's location_alternatives, or vice versa
+    - They share the same primary location
+    """
+    # Build location → beats mapping
+    location_beats: dict[str, list[str]] = defaultdict(list)
+
+    for beat_id, beat_data in beat_nodes.items():
+        primary = beat_data.get("location")
+        if primary:
+            location_beats[primary].append(beat_id)
+        alternatives = beat_data.get("location_alternatives", [])
+        for alt in alternatives:
+            location_beats[alt].append(beat_id)
+
+    candidates: list[KnotCandidate] = []
+    for location, beats in sorted(location_beats.items()):
+        if len(beats) < 2:
+            continue
+        # Filter to beats from different tensions
+        multi_tension = _filter_different_tensions(beats, beat_tensions)
+        if len(multi_tension) >= 2:
+            candidates.append(
+                KnotCandidate(
+                    beat_ids=sorted(multi_tension),
+                    signal_type="location",
+                    shared_value=location,
+                )
+            )
+
+    return candidates
+
+
+def _group_by_entity(
+    graph: Graph,
+    beat_nodes: dict[str, Any],
+    beat_tensions: dict[str, set[str]],
+) -> list[KnotCandidate]:
+    """Group beats by shared entity references."""
+    # Build entity → beats mapping from features edges
+    entity_beats: dict[str, list[str]] = defaultdict(list)
+    features_edges = graph.get_edges(from_id=None, to_id=None, edge_type="features")
+    for edge in features_edges:
+        beat_id = edge["from"]
+        entity_id = edge["to"]
+        if beat_id in beat_nodes:
+            entity_beats[entity_id].append(beat_id)
+
+    # Also check entity references in beat data
+    for beat_id, beat_data in beat_nodes.items():
+        entities = beat_data.get("entities", [])
+        for entity_ref in entities:
+            entity_id = (
+                f"entity::{entity_ref}" if not entity_ref.startswith("entity::") else entity_ref
+            )
+            entity_beats[entity_id].append(beat_id)
+
+    candidates: list[KnotCandidate] = []
+    seen_pairs: set[tuple[str, ...]] = set()
+
+    for entity_id, beats in sorted(entity_beats.items()):
+        unique_beats = sorted(set(beats))
+        if len(unique_beats) < 2:
+            continue
+        multi_tension = _filter_different_tensions(unique_beats, beat_tensions)
+        if len(multi_tension) >= 2:
+            key = tuple(multi_tension)
+            if key not in seen_pairs:
+                seen_pairs.add(key)
+                candidates.append(
+                    KnotCandidate(
+                        beat_ids=multi_tension,
+                        signal_type="entity",
+                        shared_value=entity_id,
+                    )
+                )
+
+    return candidates
+
+
+def _filter_different_tensions(
+    beat_ids: list[str],
+    beat_tensions: dict[str, set[str]],
+) -> list[str]:
+    """Filter to beats that span at least 2 different tensions.
+
+    Returns all beats if the group spans multiple tensions,
+    empty list otherwise.
+    """
+    all_tensions: set[str] = set()
+    for bid in beat_ids:
+        all_tensions.update(beat_tensions.get(bid, set()))
+    if len(all_tensions) < 2:
+        return []
+    return sorted(beat_ids)
+
+
+def check_knot_compatibility(
+    graph: Graph,
+    beat_ids: list[str],
+) -> list[GrowValidationError]:
+    """Check if beats can form a valid knot.
+
+    Validates:
+    - All beat IDs exist in the graph
+    - Beats are from different tensions (not same tension)
+    - No circular requires conflicts between the beats
+    - At least 2 beats
+
+    Args:
+        graph: Graph with beat and thread nodes.
+        beat_ids: Proposed knot beat IDs.
+
+    Returns:
+        List of validation errors. Empty if compatible.
+    """
+    errors: list[GrowValidationError] = []
+
+    if len(beat_ids) < 2:
+        errors.append(
+            GrowValidationError(
+                field_path="knot.beat_ids",
+                issue="Knot requires at least 2 beats",
+                category=GrowErrorCategory.STRUCTURAL,
+            )
+        )
+        return errors
+
+    beat_nodes = graph.get_nodes_by_type("beat")
+
+    # Check all beats exist
+    for bid in beat_ids:
+        if bid not in beat_nodes:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"knot.beat_ids.{bid}",
+                    issue=f"Beat '{bid}' not found in graph",
+                    category=GrowErrorCategory.REFERENCE,
+                )
+            )
+
+    if errors:
+        return errors
+
+    # Check beats are from different tensions
+    beat_tensions = _build_beat_tensions(graph, beat_nodes)
+    tension_sets = [beat_tensions.get(bid, set()) for bid in beat_ids]
+
+    # All beats share the same single tension = invalid (same tension = alternative)
+    common_tensions = set.intersection(*tension_sets) if tension_sets else set()
+    all_tensions = set.union(*tension_sets) if tension_sets else set()
+
+    if len(all_tensions) < 2 and common_tensions:
+        errors.append(
+            GrowValidationError(
+                field_path="knot.tensions",
+                issue=(
+                    f"All beats belong to the same tension(s): {sorted(common_tensions)}. "
+                    f"Knots must span different tensions."
+                ),
+                category=GrowErrorCategory.STRUCTURAL,
+            )
+        )
+
+    # Check no circular requires between the knot beats
+    beat_set = set(beat_ids)
+    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="requires")
+    for edge in requires_edges:
+        from_id = edge["from"]
+        to_id = edge["to"]
+        if from_id in beat_set and to_id in beat_set:
+            errors.append(
+                GrowValidationError(
+                    field_path="knot.requires",
+                    issue=(
+                        f"Beat '{from_id}' requires '{to_id}' — "
+                        f"knot beats cannot have requires dependencies on each other"
+                    ),
+                    category=GrowErrorCategory.STRUCTURAL,
+                )
+            )
+
+    return errors
+
+
+def resolve_knot_location(graph: Graph, beat_ids: list[str]) -> str | None:
+    """Find a shared location for the knot beats.
+
+    Resolution priority:
+    1. Shared primary location
+    2. Primary location of one that appears in alternatives of another
+    3. Shared alternative location
+    4. None if no common location found
+
+    Args:
+        graph: Graph with beat nodes.
+        beat_ids: Beat IDs in the proposed knot.
+
+    Returns:
+        Resolved location string, or None if no common location.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+
+    # Collect primary and alternative locations per beat
+    primaries: list[str | None] = []
+    all_locations: list[set[str]] = []
+
+    for bid in beat_ids:
+        data = beat_nodes.get(bid, {})
+        primary = data.get("location")
+        primaries.append(primary)
+        locs = set()
+        if primary:
+            locs.add(primary)
+        for alt in data.get("location_alternatives", []):
+            locs.add(alt)
+        all_locations.append(locs)
+
+    if not all_locations:
+        return None
+
+    # 1. Shared primary location
+    non_none_primaries = [p for p in primaries if p is not None]
+    if non_none_primaries and len(set(non_none_primaries)) == 1:
+        return non_none_primaries[0]
+
+    # 2. Primary of one in alternatives/primaries of all others
+    for primary in non_none_primaries:
+        if all(primary in locs for locs in all_locations):
+            return primary
+
+    # 3. Any shared location across all beats
+    if all_locations:
+        shared = set.intersection(*all_locations)
+        if shared:
+            return sorted(shared)[0]  # Deterministic: alphabetically first
+
+    return None
+
+
+def apply_knot_mark(
+    graph: Graph,
+    beat_ids: list[str],
+    resolved_location: str | None,
+) -> None:
+    """Mark beats as belonging to a knot (multi-thread scene).
+
+    Updates beat nodes with:
+    - knot_group: list of other beat IDs in the knot
+    - resolved_location: the location chosen for the combined scene
+
+    Also adds additional belongs_to edges so each beat is assigned to
+    all threads from all beats in the knot.
+
+    Args:
+        graph: Graph to mutate.
+        beat_ids: Beat IDs to knot together.
+        resolved_location: Resolved location, or None.
+    """
+    beat_set = set(beat_ids)
+
+    # Collect all thread assignments across all knot beats
+    all_thread_ids: set[str] = set()
+    belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
+    for edge in belongs_to_edges:
+        if edge["from"] in beat_set:
+            all_thread_ids.add(edge["to"])
+
+    # Update each beat
+    for bid in beat_ids:
+        others = sorted(b for b in beat_ids if b != bid)
+        update_data: dict[str, Any] = {"knot_group": others}
+        if resolved_location:
+            update_data["location"] = resolved_location
+        graph.update_node(bid, **update_data)
+
+        # Add belongs_to edges for threads this beat isn't yet assigned to
+        current_threads = {e["to"] for e in belongs_to_edges if e["from"] == bid}
+        for thread_id in all_thread_ids - current_threads:
+            graph.add_edge("belongs_to", bid, thread_id)

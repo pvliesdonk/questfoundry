@@ -33,6 +33,7 @@ from questfoundry.models.grow import (
     OverlayProposal,
     Passage,
     Phase2Output,
+    Phase3Output,
     SceneTypeTag,
     ThreadAgnosticAssessment,
 )
@@ -74,6 +75,7 @@ __all__ = [
     "OverlayProposal",
     "Passage",
     "Phase2Output",
+    "Phase3Output",
     "SceneTypeTag",
     "Scope",
     "SeedOutput",
