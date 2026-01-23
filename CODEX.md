@@ -44,7 +44,7 @@ DRESS (visual direction) stays deferred until the narrative pipeline is stable.
 
 - **Runtime:** Python 3.11+ managed via `uv`.
 - **CLI:** `typer` + `rich` for command UX.
-- **Validation:** JSON Schema in `/schemas/` feeding generated Pydantic models.
+- **Validation:** Hand-written Pydantic models in `src/questfoundry/models/` implementing the ontology from design docs.
 - **Providers:**
   - **Primary:** OpenAI Codex (GPT-5 series) invoked through the Codex CLI toolchain, respecting local rate limits and audit logging.
   - **Secondary:** Anthropic (Claude) or Ollama (`qwen3:8b`) when explicitly configured for parity testing.
@@ -78,25 +78,21 @@ log.error("provider_error", provider="openai", message=str(exc))
 - Prefer key/value context over formatted strings.
 - `INFO` for lifecycle events, `DEBUG` for tool chatter, `WARNING` for recoverable anomalies, `ERROR` for terminal failures.
 
-## Schema Workflow (Source of Truth)
+## Model Workflow (Ontology → Pydantic → Graph)
 
-Artifact schemas in `/schemas/*.schema.json` define every structure consumed or produced by Codex subagents.
+The design specification (`docs/design/00-spec.md`) defines the ontology. Hand-written Pydantic models in `src/questfoundry/models/` implement that ontology for LLM output validation. The graph (`graph.json`) is the runtime source of truth.
 
 ```
-schemas/*.schema.json ─┐
-                       ├─ scripts/generate_models.py
-                       └─> src/questfoundry/artifacts/generated.py
-                           src/questfoundry/tools/generated.py
+docs/design/00-spec.md        ← Ontology (node types, relationships)
+        ↓
+src/questfoundry/models/*.py  ← Pydantic models (validate LLM output)
+        ↓
+graph/mutations.py            ← Semantic validation + graph mutations
+        ↓
+graph.json                    ← Runtime state
 ```
 
-Update schemas first, then regenerate models:
-
-```bash
-uv run python scripts/generate_models.py
-git add schemas/ src/questfoundry/artifacts/generated.py src/questfoundry/tools/generated.py
-```
-
-Never edit generated files by hand. Distinguish optional (missing key) from nullable (`null` as a valid value) and normalize model outputs by stripping redundant `null`s before validation.
+When adding new models, check the ontology first, then create Pydantic models in `models/`. Distinguish optional (missing key) from nullable (`null` as a valid value) and normalize model outputs by stripping redundant `null`s before validation.
 
 ## Prompt & Subagent Strategy
 
@@ -187,7 +183,7 @@ Common failure modes:
 
 - `README.md` – repo status and doc index.
 - `docs/design/*.md` – canonical architecture specs, especially `01-pipeline-architecture.md` and `05-prompt-compiler.md`.
-- `docs/architecture/schema-first-models.md` – detailed schema workflow.
+- `docs/design/00-spec.md` – ontology definition for all stage models.
 - `CLAUDE.md` – reference for cross-provider parity expectations.
 
 Use this document whenever Codex participates in QuestFoundry: it encodes the constraints, tooling expectations, and collaboration model that keep Codex aligned with the maintained Claude instructions.

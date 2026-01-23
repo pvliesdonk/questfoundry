@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any
 import jsonschema
 from pydantic import BaseModel, ValidationError
 
-from questfoundry.artifacts import DreamArtifact
+from questfoundry.models.dream import DreamArtifact
 from questfoundry.observability.logging import get_logger
 
 log = get_logger(__name__)

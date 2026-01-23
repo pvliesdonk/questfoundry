@@ -20,9 +20,7 @@ questfoundry/
 │   └── export/                 # Output formats (Twee, HTML, JSON)
 ├── prompts/                    # Prompt templates (external to src/)
 │   ├── templates/              # Stage-specific prompts
-│   ├── components/             # Reusable prompt pieces
-│   └── schemas/                # Output format schemas
-├── schemas/                    # JSON schemas for artifacts
+│   └── components/             # Reusable prompt pieces
 ├── tests/                      # Test suite
 │   ├── unit/
 │   ├── integration/
@@ -105,7 +103,7 @@ See [decisions.md](./decisions.md) for Architecture Decision Records.
 For detailed information on specific components:
 
 - **DREAM Pipeline**: See [langchain-dream-pipeline.md](./langchain-dream-pipeline.md) - Three-phase pattern, provider strategies, validation flow
-- **Schema Generation**: See [schema-first-models.md](./schema-first-models.md) - Source-of-truth workflow
+- **Graph Storage**: See [graph-storage.md](./graph-storage.md) - Graph-as-source-of-truth and mutations
 - **Interactive Stages**: See [interactive-stages.md](./interactive-stages.md) - Multi-turn dialogue patterns
 
 ---

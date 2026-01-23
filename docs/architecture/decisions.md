@@ -121,32 +121,34 @@ Original vision included DRESS stage for art direction/image prompts.
 
 ---
 
-## ADR-006: Schema-First Model Generation
+## ADR-006: Design-Doc Ontology with Hand-Written Models
 
 **Date**: 2026-01-04
-**Status**: Accepted
+**Status**: Accepted (supersedes original schema-first approach)
 
 ### Context
-Artifact models (DreamArtifact, Scope, etc.) must stay synchronized with JSON schemas used
-for external validation. Hand-maintaining both creates drift risk.
+Originally, JSON schemas in `schemas/` were the source of truth with generated Pydantic models.
+As the project evolved to use graph mutations (ADR-010+), the internal models no longer need
+an external schema — the design specification defines the ontology and Pydantic models
+implement it directly.
 
 ### Decision
-Use **schema-first generation**: JSON schemas in `schemas/` are the source of truth,
-and Pydantic models are generated from them via `scripts/generate_models.py`.
+Use **ontology-first models**: the design specification (`docs/design/00-spec.md`) defines
+node types, relationships, and lifecycle. Hand-written Pydantic models in `src/questfoundry/models/`
+implement that ontology for LLM output validation. The graph is the runtime source of truth.
 
 ### Rationale
-- Single source of truth (no schema/model drift)
-- External tool compatibility (any JSON Schema validator works)
-- Human-readable documentation of data formats
-- CI enforces consistency via drift detection
-- Eliminates class of bugs from manual sync errors
+- Design docs are the single conceptual source of truth
+- Hand-written models allow richer validation (cross-field, semantic constraints)
+- No generation step means faster iteration
+- Graph mutations handle runtime state, models handle structural validation
+- Consistent with BRAINSTORM and SEED stage patterns
 
 ### Consequences
-- Developers edit schemas, not models directly
-- Generated file must be committed (not gitignored)
-- CI fails if generated.py doesn't match schemas
-- Developers run `uv run python scripts/generate_models.py` after schema changes
-- The deprecated `models.py` has been removed
+- Developers write Pydantic models directly in `models/`
+- No JSON schemas or generation scripts needed
+- Design docs must stay in sync with model implementations
+- CI validates via mypy type checking and pytest, not schema drift detection
 
 ---
 

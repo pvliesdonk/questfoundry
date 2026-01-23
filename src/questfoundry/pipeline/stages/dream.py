@@ -16,7 +16,7 @@ from questfoundry.agents import (
     serialize_to_artifact,
     summarize_discussion,
 )
-from questfoundry.artifacts import DreamArtifact
+from questfoundry.models.dream import DreamArtifact
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
 from questfoundry.tools.langchain_tools import (

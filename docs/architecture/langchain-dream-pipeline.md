@@ -335,7 +335,7 @@ The feedback is designed to:
 
 ## Artifact Schema
 
-The `DreamArtifact` Pydantic model is generated from `schemas/dream.schema.json`.
+The `DreamArtifact` Pydantic model is defined in `src/questfoundry/models/dream.py`.
 
 **Key Fields**:
 

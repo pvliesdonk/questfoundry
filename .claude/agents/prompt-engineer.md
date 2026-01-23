@@ -11,8 +11,7 @@ You are a senior prompt engineer specializing in structured output generation fr
 
 QuestFoundry uses a six-stage pipeline where each stage has:
 - A prompt template in `/prompts/templates/{stage}.yaml`
-- A schema in `/schemas/{stage}.schema.json`
-- A pydantic model for validation
+- A Pydantic model in `src/questfoundry/models/` for LLM output validation
 
 ## Prompt Architecture
 
@@ -25,8 +24,7 @@ QuestFoundry prompts follow the **Discuss -> Freeze -> Serialize** pattern:
 ## Key Files
 
 - `prompts/templates/dream.yaml` - DREAM stage prompt
-- `schemas/dream.schema.json` - JSON Schema for validation
-- `src/questfoundry/artifacts/generated.py` - Generated Pydantic models (from schema)
+- `src/questfoundry/models/dream.py` - DreamArtifact Pydantic model
 - `src/questfoundry/tools/finalization.py` - Tool definitions
 
 ## Prompt Engineering Patterns
