@@ -20,6 +20,21 @@ from questfoundry.models.dream import (
     DreamArtifact,
     Scope,
 )
+from questfoundry.models.grow import (
+    Arc,
+    Choice,
+    ChoiceLabel,
+    Codeword,
+    EntityOverlay,
+    GapProposal,
+    GrowPhaseResult,
+    GrowResult,
+    KnotProposal,
+    OverlayProposal,
+    Passage,
+    SceneTypeTag,
+    ThreadAgnosticAssessment,
+)
 from questfoundry.models.seed import (
     Consequence,
     ConvergenceSketch,
@@ -36,7 +51,11 @@ from questfoundry.models.seed import (
 
 __all__ = [
     "Alternative",
+    "Arc",
     "BrainstormOutput",
+    "Choice",
+    "ChoiceLabel",
+    "Codeword",
     "Consequence",
     "ContentNotes",
     "ConvergenceSketch",
@@ -44,8 +63,16 @@ __all__ = [
     "Entity",
     "EntityDecision",
     "EntityDisposition",
+    "EntityOverlay",
     "EntityType",
+    "GapProposal",
+    "GrowPhaseResult",
+    "GrowResult",
     "InitialBeat",
+    "KnotProposal",
+    "OverlayProposal",
+    "Passage",
+    "SceneTypeTag",
     "Scope",
     "SeedOutput",
     "Tension",
@@ -53,5 +80,6 @@ __all__ = [
     "TensionEffect",
     "TensionImpact",
     "Thread",
+    "ThreadAgnosticAssessment",
     "ThreadTier",
 ]

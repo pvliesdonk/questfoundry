@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, Protocol
 
 if TYPE_CHECKING:
+    from questfoundry.models.grow import GrowPhaseResult
     from questfoundry.pipeline.orchestrator import StageResult
 
 
@@ -74,4 +75,56 @@ class RequireSuccessGate:
         """
         if result.errors:
             return "reject"
+        return "approve"
+
+
+class PhaseGateHook(Protocol):
+    """Protocol for intra-stage phase gates used by GROW.
+
+    Unlike GateHook which gates between pipeline stages, PhaseGateHook
+    gates between phases within a single stage. This allows stopping
+    execution mid-stage and rolling back to a previous phase snapshot.
+    """
+
+    async def on_phase_complete(
+        self,
+        stage: str,
+        phase: str,
+        result: GrowPhaseResult,
+    ) -> Literal["approve", "reject"]:
+        """Called when a phase within a stage completes.
+
+        Args:
+            stage: Name of the stage (e.g., "grow").
+            phase: Name of the completed phase (e.g., "validate_dag").
+            result: Result of the phase execution.
+
+        Returns:
+            "approve" to continue or "reject" to halt and rollback.
+        """
+        ...
+
+
+class AutoApprovePhaseGate:
+    """Phase gate that automatically approves all phase transitions.
+
+    Default gate for GROW phases where human review is not yet implemented.
+    """
+
+    async def on_phase_complete(
+        self,
+        _stage: str,
+        _phase: str,
+        _result: GrowPhaseResult,
+    ) -> Literal["approve", "reject"]:
+        """Automatically approve all completed phases.
+
+        Args:
+            _stage: Name of the stage (unused).
+            _phase: Name of the phase (unused).
+            _result: Phase result (unused).
+
+        Returns:
+            Always returns "approve".
+        """
         return "approve"
