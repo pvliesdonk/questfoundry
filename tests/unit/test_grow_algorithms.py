@@ -457,7 +457,8 @@ class TestPhase1Integration:
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
-        result = stage._phase_1_validate_dag(Graph.load(tmp_path))
+        mock_model = MagicMock()
+        result = await stage._phase_1_validate_dag(Graph.load(tmp_path), mock_model)
         assert result.status == "completed"
 
     @pytest.mark.asyncio
@@ -471,55 +472,64 @@ class TestPhase1Integration:
         graph.add_edge("requires", "beat::a", "beat::b")
 
         stage = GrowStage()
-        result = stage._phase_1_validate_dag(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_1_validate_dag(graph, mock_model)
         assert result.status == "failed"
         assert "Cycle" in result.detail
 
 
 class TestPhase5Integration:
-    def test_phase_5_creates_arc_nodes(self) -> None:
+    @pytest.mark.asyncio
+    async def test_phase_5_creates_arc_nodes(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        result = stage._phase_5_enumerate_arcs(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_5_enumerate_arcs(graph, mock_model)
 
         assert result.status == "completed"
         arc_nodes = graph.get_nodes_by_type("arc")
         assert len(arc_nodes) == 2
 
-    def test_phase_5_creates_arc_contains_edges(self) -> None:
+    @pytest.mark.asyncio
+    async def test_phase_5_creates_arc_contains_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        stage._phase_5_enumerate_arcs(graph)
+        mock_model = MagicMock()
+        await stage._phase_5_enumerate_arcs(graph, mock_model)
 
         arc_contains_edges = graph.get_edges(from_id=None, to_id=None, edge_type="arc_contains")
         assert len(arc_contains_edges) > 0
 
-    def test_phase_5_empty_graph(self) -> None:
+    @pytest.mark.asyncio
+    async def test_phase_5_empty_graph(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
         stage = GrowStage()
-        result = stage._phase_5_enumerate_arcs(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_5_enumerate_arcs(graph, mock_model)
         assert result.status == "completed"
         assert "No arcs" in result.detail
 
 
 class TestPhase6Integration:
-    def test_phase_6_computes_divergence(self) -> None:
+    @pytest.mark.asyncio
+    async def test_phase_6_computes_divergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
+        mock_model = MagicMock()
 
         # First run phase 5 to create arcs
-        stage._phase_5_enumerate_arcs(graph)
+        await stage._phase_5_enumerate_arcs(graph, mock_model)
 
         # Then run phase 6
-        result = stage._phase_6_divergence(graph)
+        result = await stage._phase_6_divergence(graph, mock_model)
         assert result.status == "completed"
 
         # Check that branch arc has divergence info
@@ -528,24 +538,28 @@ class TestPhase6Integration:
         for _arc_id, arc_data in branch_arcs.items():
             assert "diverges_from" in arc_data or "diverges_at" in arc_data
 
-    def test_phase_6_creates_diverges_at_edges(self) -> None:
+    @pytest.mark.asyncio
+    async def test_phase_6_creates_diverges_at_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        stage._phase_5_enumerate_arcs(graph)
-        stage._phase_6_divergence(graph)
+        mock_model = MagicMock()
+        await stage._phase_5_enumerate_arcs(graph, mock_model)
+        await stage._phase_6_divergence(graph, mock_model)
 
         diverges_edges = graph.get_edges(from_id=None, to_id=None, edge_type="diverges_at")
         # Should have at least one diverges_at edge for the branch
         assert len(diverges_edges) >= 1
 
-    def test_phase_6_no_arcs(self) -> None:
+    @pytest.mark.asyncio
+    async def test_phase_6_no_arcs(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
         stage = GrowStage()
-        result = stage._phase_6_divergence(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_6_divergence(graph, mock_model)
         assert result.status == "completed"
         assert "No arcs" in result.detail
 
@@ -769,50 +783,58 @@ class TestBfsReachable:
 
 
 class TestPhase7Integration:
-    def test_phase_7_finds_convergence(self) -> None:
+    @pytest.mark.asyncio
+    async def test_phase_7_finds_convergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_tension_graph()
         stage = GrowStage()
+        mock_model = MagicMock()
 
         # Run prerequisite phases
-        stage._phase_5_enumerate_arcs(graph)
-        stage._phase_6_divergence(graph)
+        await stage._phase_5_enumerate_arcs(graph, mock_model)
+        await stage._phase_6_divergence(graph, mock_model)
 
         # Run phase 7
-        result = stage._phase_7_convergence(graph)
+        result = await stage._phase_7_convergence(graph, mock_model)
         assert result.status == "completed"
 
-    def test_phase_7_creates_converges_at_edges(self) -> None:
+    @pytest.mark.asyncio
+    async def test_phase_7_creates_converges_at_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_tension_graph()
         stage = GrowStage()
-        stage._phase_5_enumerate_arcs(graph)
-        stage._phase_6_divergence(graph)
-        stage._phase_7_convergence(graph)
+        mock_model = MagicMock()
+        await stage._phase_5_enumerate_arcs(graph, mock_model)
+        await stage._phase_6_divergence(graph, mock_model)
+        await stage._phase_7_convergence(graph, mock_model)
 
         converges_edges = graph.get_edges(from_id=None, to_id=None, edge_type="converges_at")
         # Two-tension graph: branches converge at finale
         assert len(converges_edges) >= 1
 
-    def test_phase_7_no_arcs(self) -> None:
+    @pytest.mark.asyncio
+    async def test_phase_7_no_arcs(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
         stage = GrowStage()
-        result = stage._phase_7_convergence(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_7_convergence(graph, mock_model)
         assert result.status == "completed"
         assert "No arcs" in result.detail
 
-    def test_phase_7_updates_arc_nodes(self) -> None:
+    @pytest.mark.asyncio
+    async def test_phase_7_updates_arc_nodes(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_tension_graph()
         stage = GrowStage()
-        stage._phase_5_enumerate_arcs(graph)
-        stage._phase_6_divergence(graph)
-        stage._phase_7_convergence(graph)
+        mock_model = MagicMock()
+        await stage._phase_5_enumerate_arcs(graph, mock_model)
+        await stage._phase_6_divergence(graph, mock_model)
+        await stage._phase_7_convergence(graph, mock_model)
 
         arc_nodes = graph.get_nodes_by_type("arc")
         # Check that at least some branch arcs have convergence data
@@ -823,12 +845,14 @@ class TestPhase7Integration:
 
 
 class TestPhase8aIntegration:
-    def test_passages_match_beats(self) -> None:
+    @pytest.mark.asyncio
+    async def test_passages_match_beats(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        result = stage._phase_8a_passages(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_8a_passages(graph, mock_model)
 
         assert result.status == "completed"
         beat_nodes = graph.get_nodes_by_type("beat")
@@ -836,12 +860,14 @@ class TestPhase8aIntegration:
         # Each beat should get exactly one passage
         assert len(passage_nodes) == len(beat_nodes)
 
-    def test_passages_have_correct_structure(self) -> None:
+    @pytest.mark.asyncio
+    async def test_passages_have_correct_structure(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        stage._phase_8a_passages(graph)
+        mock_model = MagicMock()
+        await stage._phase_8a_passages(graph, mock_model)
 
         passage_nodes = graph.get_nodes_by_type("passage")
         for _pid, pdata in passage_nodes.items():
@@ -850,67 +876,79 @@ class TestPhase8aIntegration:
             assert "from_beat" in pdata
             assert "summary" in pdata
 
-    def test_passage_from_edges_created(self) -> None:
+    @pytest.mark.asyncio
+    async def test_passage_from_edges_created(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        stage._phase_8a_passages(graph)
+        mock_model = MagicMock()
+        await stage._phase_8a_passages(graph, mock_model)
 
         passage_from_edges = graph.get_edges(from_id=None, to_id=None, edge_type="passage_from")
         passage_nodes = graph.get_nodes_by_type("passage")
         assert len(passage_from_edges) == len(passage_nodes)
 
-    def test_passages_from_two_tension_graph(self) -> None:
+    @pytest.mark.asyncio
+    async def test_passages_from_two_tension_graph(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_tension_graph()
         stage = GrowStage()
-        result = stage._phase_8a_passages(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_8a_passages(graph, mock_model)
 
         assert result.status == "completed"
         assert "8 passages" in result.detail
 
-    def test_empty_graph_no_passages(self) -> None:
+    @pytest.mark.asyncio
+    async def test_empty_graph_no_passages(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
         stage = GrowStage()
-        result = stage._phase_8a_passages(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_8a_passages(graph, mock_model)
         assert result.status == "completed"
         assert "No beats" in result.detail
 
 
 class TestPhase8bIntegration:
-    def test_codewords_match_consequences(self) -> None:
+    @pytest.mark.asyncio
+    async def test_codewords_match_consequences(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        result = stage._phase_8b_codewords(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_8b_codewords(graph, mock_model)
 
         assert result.status == "completed"
         consequence_nodes = graph.get_nodes_by_type("consequence")
         codeword_nodes = graph.get_nodes_by_type("codeword")
         assert len(codeword_nodes) == len(consequence_nodes)
 
-    def test_codeword_tracks_edges(self) -> None:
+    @pytest.mark.asyncio
+    async def test_codeword_tracks_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        stage._phase_8b_codewords(graph)
+        mock_model = MagicMock()
+        await stage._phase_8b_codewords(graph, mock_model)
 
         tracks_edges = graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
         codeword_nodes = graph.get_nodes_by_type("codeword")
         assert len(tracks_edges) == len(codeword_nodes)
 
-    def test_grants_edges_assigned_to_commits_beats(self) -> None:
+    @pytest.mark.asyncio
+    async def test_grants_edges_assigned_to_commits_beats(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        stage._phase_8b_codewords(graph)
+        mock_model = MagicMock()
+        await stage._phase_8b_codewords(graph, mock_model)
 
         grants_edges = graph.get_edges(from_id=None, to_id=None, edge_type="grants")
         # Each consequence has a thread which has a commits beat
@@ -922,12 +960,14 @@ class TestPhase8bIntegration:
             assert edge["from"].startswith("beat::")
             assert edge["to"].startswith("codeword::")
 
-    def test_codeword_id_format(self) -> None:
+    @pytest.mark.asyncio
+    async def test_codeword_id_format(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        stage._phase_8b_codewords(graph)
+        mock_model = MagicMock()
+        await stage._phase_8b_codewords(graph, mock_model)
 
         codeword_nodes = graph.get_nodes_by_type("codeword")
         for cw_id in codeword_nodes:
@@ -935,53 +975,61 @@ class TestPhase8bIntegration:
             assert cw_id.startswith("codeword::")
             assert cw_id.endswith("_committed")
 
-    def test_two_tension_codewords(self) -> None:
+    @pytest.mark.asyncio
+    async def test_two_tension_codewords(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_tension_graph()
         stage = GrowStage()
-        result = stage._phase_8b_codewords(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_8b_codewords(graph, mock_model)
 
         assert result.status == "completed"
         codeword_nodes = graph.get_nodes_by_type("codeword")
         # 4 consequences → 4 codewords
         assert len(codeword_nodes) == 4
 
-    def test_empty_graph_no_codewords(self) -> None:
+    @pytest.mark.asyncio
+    async def test_empty_graph_no_codewords(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
         stage = GrowStage()
-        result = stage._phase_8b_codewords(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_8b_codewords(graph, mock_model)
         assert result.status == "completed"
         assert "No consequences" in result.detail
 
 
 class TestPhase11Integration:
-    def test_all_passages_reachable(self) -> None:
+    @pytest.mark.asyncio
+    async def test_all_passages_reachable(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
+        mock_model = MagicMock()
 
         # Run phases 5 and 8a to create arcs and passages
-        stage._phase_5_enumerate_arcs(graph)
-        stage._phase_8a_passages(graph)
+        await stage._phase_5_enumerate_arcs(graph, mock_model)
+        await stage._phase_8a_passages(graph, mock_model)
 
-        result = stage._phase_11_prune(graph)
+        result = await stage._phase_11_prune(graph, mock_model)
         assert result.status == "completed"
         assert "All passages reachable" in result.detail
 
-    def test_unreachable_passages_pruned(self) -> None:
+    @pytest.mark.asyncio
+    async def test_unreachable_passages_pruned(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
+        mock_model = MagicMock()
 
         # Run phase 5 to create arcs
-        stage._phase_5_enumerate_arcs(graph)
+        await stage._phase_5_enumerate_arcs(graph, mock_model)
         # Run phase 8a to create passages
-        stage._phase_8a_passages(graph)
+        await stage._phase_8a_passages(graph, mock_model)
 
         # Manually create an orphan passage not connected to any arc beat
         graph.create_node(
@@ -994,7 +1042,7 @@ class TestPhase11Integration:
             },
         )
 
-        result = stage._phase_11_prune(graph)
+        result = await stage._phase_11_prune(graph, mock_model)
         assert result.status == "completed"
         assert "Pruned 1" in result.detail
 
@@ -1002,13 +1050,15 @@ class TestPhase11Integration:
         passage_nodes = graph.get_nodes_by_type("passage")
         assert "passage::orphan" not in passage_nodes
 
-    def test_prune_preserves_reachable(self) -> None:
+    @pytest.mark.asyncio
+    async def test_prune_preserves_reachable(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_tension_graph()
         stage = GrowStage()
-        stage._phase_5_enumerate_arcs(graph)
-        stage._phase_8a_passages(graph)
+        mock_model = MagicMock()
+        await stage._phase_5_enumerate_arcs(graph, mock_model)
+        await stage._phase_8a_passages(graph, mock_model)
 
         # Add orphan
         graph.create_node(
@@ -1022,18 +1072,20 @@ class TestPhase11Integration:
         )
 
         beat_count = len(graph.get_nodes_by_type("beat"))
-        stage._phase_11_prune(graph)
+        await stage._phase_11_prune(graph, mock_model)
 
         # Original passages should still exist (one per beat)
         passage_nodes = graph.get_nodes_by_type("passage")
         assert len(passage_nodes) == beat_count
 
-    def test_prune_empty_graph(self) -> None:
+    @pytest.mark.asyncio
+    async def test_prune_empty_graph(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
         stage = GrowStage()
-        result = stage._phase_11_prune(graph)
+        mock_model = MagicMock()
+        result = await stage._phase_11_prune(graph, mock_model)
         assert result.status == "completed"
         assert "No passages" in result.detail
 
@@ -1041,6 +1093,64 @@ class TestPhase11Integration:
 # ---------------------------------------------------------------------------
 # End-to-end: all phases on fixture graphs
 # ---------------------------------------------------------------------------
+
+
+def _make_grow_mock_model(graph: Graph) -> MagicMock:
+    """Create a mock model that returns valid Phase2Output for thread-agnostic assessment.
+
+    Examines the graph to find candidate beats and marks shared beats
+    (those belonging to multiple threads of the same tension) as agnostic.
+    """
+    from unittest.mock import AsyncMock
+
+    from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+
+    # Build the response based on graph structure
+    tension_nodes = graph.get_nodes_by_type("tension")
+    thread_nodes = graph.get_nodes_by_type("thread")
+    beat_nodes = graph.get_nodes_by_type("beat")
+
+    # Build tension → threads mapping
+    tension_threads: dict[str, list[str]] = {}
+    explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
+    for edge in explores_edges:
+        thread_id = edge["from"]
+        tension_id = edge["to"]
+        if thread_id in thread_nodes and tension_id in tension_nodes:
+            tension_threads.setdefault(tension_id, []).append(thread_id)
+
+    # Build beat → threads via belongs_to
+    beat_threads: dict[str, list[str]] = {}
+    belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
+    for edge in belongs_to_edges:
+        beat_threads.setdefault(edge["from"], []).append(edge["to"])
+
+    # Find shared beats and mark all as agnostic for simplicity
+    assessments: list[ThreadAgnosticAssessment] = []
+    for beat_id, bt_list in beat_threads.items():
+        if beat_id not in beat_nodes:
+            continue
+        agnostic_tensions: list[str] = []
+        for tension_id, t_threads in tension_threads.items():
+            shared = [t for t in bt_list if t in t_threads]
+            if len(shared) > 1:
+                raw_tid = tension_nodes[tension_id].get("raw_id", tension_id)
+                agnostic_tensions.append(raw_tid)
+        if agnostic_tensions:
+            assessments.append(
+                ThreadAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_tensions)
+            )
+
+    phase2_output = Phase2Output(assessments=assessments)
+
+    # Create mock model with structured output support
+    mock_structured = AsyncMock()
+    mock_structured.ainvoke = AsyncMock(return_value=phase2_output)
+
+    mock_model = MagicMock()
+    mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+    return mock_model
 
 
 class TestPhaseIntegrationEndToEnd:
@@ -1052,12 +1162,12 @@ class TestPhaseIntegrationEndToEnd:
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
-        mock_model = MagicMock()
+        mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All 7 phases should be completed
+        # All 8 phases should be completed
         phases = result_dict["phases_completed"]
-        assert len(phases) == 7
+        assert len(phases) == 8
         for phase in phases:
             assert phase["status"] == "completed"
 
@@ -1079,7 +1189,7 @@ class TestPhaseIntegrationEndToEnd:
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
-        mock_model = MagicMock()
+        mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
         # All phases completed
@@ -1098,7 +1208,7 @@ class TestPhaseIntegrationEndToEnd:
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
-        mock_model = MagicMock()
+        mock_model = _make_grow_mock_model(graph)
         await stage.execute(model=mock_model, user_prompt="")
 
         # Reload the saved graph
@@ -1120,7 +1230,7 @@ class TestPhaseIntegrationEndToEnd:
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
-        mock_model = MagicMock()
+        mock_model = _make_grow_mock_model(graph)
         await stage.execute(model=mock_model, user_prompt="")
 
         saved_graph = Graph.load(tmp_path)

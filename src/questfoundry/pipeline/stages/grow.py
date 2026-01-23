@@ -1,7 +1,8 @@
 """GROW stage implementation.
 
 The GROW stage builds the complete branching structure from the SEED
-graph. It runs deterministic phases that enumerate arcs, compute
+graph. It runs a mix of deterministic and LLM-powered phases that
+enumerate arcs, assess thread-agnostic beats, compute
 divergence/convergence points, create passages and codewords, and
 prune unreachable nodes.
 
@@ -9,24 +10,30 @@ GROW manages its own graph: it loads, mutates, and saves the graph
 within execute(). The orchestrator should skip post-execute
 apply_mutations() for GROW.
 
-Phase dispatch is sequential method calls - no PhaseRunner abstraction.
+Phase dispatch is sequential async method calls - no PhaseRunner abstraction.
 Pure graph algorithms live in graph/grow_algorithms.py.
+
+LLM phases use direct structured output (not discuss→summarize→serialize):
+context from graph state → single LLM call → validate → retry (max 3).
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, TypeVar
+
+from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel, ValidationError
 
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
 from questfoundry.observability.logging import get_logger
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
+from questfoundry.providers.structured_output import with_structured_output
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
-    from pathlib import Path
-
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.pipeline.gates import PhaseGateHook
@@ -35,6 +42,20 @@ if TYPE_CHECKING:
         LLMCallbackFn,
         UserInputFn,
     )
+
+T = TypeVar("T", bound=BaseModel)
+
+
+def _get_prompts_path() -> Path:
+    """Get the prompts directory path.
+
+    Returns prompts from package first, then falls back to project root.
+    """
+    pkg_path = Path(__file__).parents[4] / "prompts"
+    if pkg_path.exists():
+        return pkg_path
+    return Path.cwd() / "prompts"
+
 
 log = get_logger(__name__)
 
@@ -71,14 +92,20 @@ class GrowStage:
         self.project_path = project_path
         self.gate = gate or AutoApprovePhaseGate()
 
-    def _phase_order(self) -> list[tuple[Callable[[Graph], GrowPhaseResult], str]]:
+    # Type for async phase functions: (Graph, BaseChatModel) -> GrowPhaseResult
+    PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[GrowPhaseResult]]
+
+    def _phase_order(self) -> list[tuple[PhaseFunc, str]]:
         """Return ordered list of (phase_function, phase_name) tuples.
 
         Returns:
             List of phase functions with their names, in execution order.
+            All phases are async and accept (graph, model) parameters.
+            Deterministic phases ignore the model parameter.
         """
         return [
             (self._phase_1_validate_dag, "validate_dag"),
+            (self._phase_2_thread_agnostic, "thread_agnostic"),
             (self._phase_5_enumerate_arcs, "enumerate_arcs"),
             (self._phase_6_divergence, "divergence"),
             (self._phase_7_convergence, "convergence"),
@@ -89,7 +116,7 @@ class GrowStage:
 
     async def execute(
         self,
-        model: BaseChatModel,  # noqa: ARG002 - unused in deterministic phases
+        model: BaseChatModel,
         user_prompt: str,  # noqa: ARG002
         provider_name: str | None = None,  # noqa: ARG002
         *,
@@ -143,13 +170,17 @@ class GrowStage:
         log.info("stage_start", stage="grow")
         graph = Graph.load(resolved_path)
         phase_results: list[GrowPhaseResult] = []
+        total_llm_calls = 0
+        total_tokens = 0
 
         for phase_fn, phase_name in self._phase_order():
             log.debug("phase_start", phase=phase_name)
             snapshot = graph.to_dict()
 
-            result = phase_fn(graph)
+            result = await phase_fn(graph, model)
             phase_results.append(result)
+            total_llm_calls += result.llm_calls
+            total_tokens += result.tokens_used
 
             if result.status == "failed":
                 log.error("phase_failed", phase=phase_name, detail=result.detail)
@@ -199,13 +230,270 @@ class GrowStage:
             codewords=grow_result.codeword_count,
         )
 
-        return grow_result.model_dump(), 0, 0
+        return grow_result.model_dump(), total_llm_calls, total_tokens
+
+    # -------------------------------------------------------------------------
+    # LLM helper
+    # -------------------------------------------------------------------------
+
+    async def _grow_llm_call(
+        self,
+        model: BaseChatModel,
+        template_name: str,
+        context: dict[str, Any],
+        output_schema: type[T],
+        max_retries: int = 3,
+    ) -> tuple[T, int, int]:
+        """Call LLM with structured output and retry on validation failure.
+
+        Loads prompt template, injects context, calls model.with_structured_output(),
+        validates with Pydantic, retries with error feedback on failure.
+
+        Args:
+            model: LangChain chat model.
+            template_name: Name of the prompt template (without .yaml).
+            context: Variables to inject into the prompt template.
+            output_schema: Pydantic model class for structured output.
+            max_retries: Maximum retry attempts on validation failure.
+
+        Returns:
+            Tuple of (validated_result, llm_calls, tokens_used).
+
+        Raises:
+            GrowStageError: After max_retries exhausted.
+        """
+        from questfoundry.prompts.loader import PromptLoader
+
+        loader = PromptLoader(_get_prompts_path())
+        template = loader.load(template_name)
+
+        # Build system message from template with context injection
+        system_text = template.system.format(**context) if context else template.system
+        user_text = template.user.format(**context) if template.user else None
+
+        structured_model = with_structured_output(model, output_schema)
+
+        messages: list[SystemMessage | HumanMessage] = [SystemMessage(content=system_text)]
+        if user_text:
+            messages.append(HumanMessage(content=user_text))
+
+        # Token counting is not available via with_structured_output() since
+        # it returns a Pydantic object, not an AIMessage with response_metadata.
+        # Track only llm_calls; tokens remain 0 until a callback-based approach
+        # is implemented.
+        llm_calls = 0
+        base_messages = list(messages)  # Preserve original for retry resets
+
+        for attempt in range(max_retries):
+            log.debug(
+                "grow_llm_call",
+                template=template_name,
+                attempt=attempt + 1,
+                max_retries=max_retries,
+            )
+
+            try:
+                result = await structured_model.ainvoke(messages)
+                llm_calls += 1
+
+                # with_structured_output returns validated Pydantic instance directly.
+                # Defensive fallback for providers that return dicts instead.
+                if isinstance(result, output_schema):
+                    log.debug("grow_llm_validation_pass", template=template_name)
+                    return result, llm_calls, 0
+
+                validated = output_schema.model_validate(result)
+                log.debug("grow_llm_validation_pass", template=template_name)
+                return validated, llm_calls, 0
+
+            except (ValidationError, TypeError, AttributeError) as e:
+                log.warning(
+                    "grow_llm_validation_fail",
+                    template=template_name,
+                    attempt=attempt + 1,
+                    error=str(e),
+                )
+
+                if attempt < max_retries - 1:
+                    # Reset to base messages + error feedback to avoid
+                    # unbounded message history growth across retries
+                    error_msg = (
+                        f"Your previous response had validation errors:\n{e}\n\n"
+                        f"Please fix these issues and try again. "
+                        f"Ensure all IDs are valid and all required fields are present."
+                    )
+                    messages = list(base_messages)
+                    messages.append(HumanMessage(content=error_msg))
+
+        raise GrowStageError(
+            f"LLM call for {template_name} failed after {max_retries} attempts. "
+            f"Could not produce valid {output_schema.__name__} output."
+        )
+
+    # -------------------------------------------------------------------------
+    # LLM phases
+    # -------------------------------------------------------------------------
+
+    async def _phase_2_thread_agnostic(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 2: Thread-agnostic assessment.
+
+        Identifies beats whose prose is compatible across multiple threads
+        of the same tension. Thread-agnostic beats don't need separate
+        renderings per thread — they read the same regardless of path.
+
+        This is about prose compatibility, not logical compatibility.
+        A beat is thread-agnostic if its narrative content doesn't reference
+        thread-specific choices or consequences.
+        """
+        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+
+        # Collect tensions with multiple threads
+        tension_nodes = graph.get_nodes_by_type("tension")
+        thread_nodes = graph.get_nodes_by_type("thread")
+        beat_nodes = graph.get_nodes_by_type("beat")
+
+        if not tension_nodes or not thread_nodes or not beat_nodes:
+            return GrowPhaseResult(
+                phase="thread_agnostic",
+                status="completed",
+                detail="No tensions/threads/beats to assess",
+            )
+
+        # Build tension → threads mapping
+        tension_threads: dict[str, list[str]] = {}
+        explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
+        for edge in explores_edges:
+            thread_id = edge["from"]
+            tension_id = edge["to"]
+            if thread_id in thread_nodes and tension_id in tension_nodes:
+                tension_threads.setdefault(tension_id, []).append(thread_id)
+
+        # Only assess tensions with multiple threads
+        multi_thread_tensions = {
+            tid: threads for tid, threads in tension_threads.items() if len(threads) > 1
+        }
+
+        if not multi_thread_tensions:
+            return GrowPhaseResult(
+                phase="thread_agnostic",
+                status="completed",
+                detail="No multi-thread tensions to assess",
+            )
+
+        # Build beat → threads mapping via belongs_to edges
+        beat_thread_map: dict[str, list[str]] = {}
+        belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
+        for edge in belongs_to_edges:
+            beat_id = edge["from"]
+            thread_id = edge["to"]
+            beat_thread_map.setdefault(beat_id, []).append(thread_id)
+
+        # Find beats that belong to multiple threads of the same tension
+        # These are candidates for thread-agnostic assessment
+        candidate_beats: dict[str, list[str]] = {}  # beat_id → list of tension_ids
+        for beat_id, beat_threads in beat_thread_map.items():
+            if beat_id not in beat_nodes:
+                continue
+            for tension_id, tension_thread_list in multi_thread_tensions.items():
+                # Count how many of this tension's threads the beat belongs to
+                shared = [t for t in beat_threads if t in tension_thread_list]
+                if len(shared) > 1:
+                    candidate_beats.setdefault(beat_id, []).append(tension_id)
+
+        if not candidate_beats:
+            return GrowPhaseResult(
+                phase="thread_agnostic",
+                status="completed",
+                detail="No candidate beats for thread-agnostic assessment",
+            )
+
+        # Build context for LLM
+        beat_summaries: list[str] = []
+        valid_beat_ids: list[str] = []
+        valid_tension_ids: list[str] = []
+
+        for beat_id, tension_ids in sorted(candidate_beats.items()):
+            beat_data = beat_nodes[beat_id]
+            summary = beat_data.get("summary", "No summary")
+            tensions_str = ", ".join(tension_nodes[tid].get("raw_id", tid) for tid in tension_ids)
+            beat_summaries.append(
+                f"- beat_id: {beat_id}\n  summary: {summary}\n  tensions: [{tensions_str}]"
+            )
+            valid_beat_ids.append(beat_id)
+            for tid in tension_ids:
+                raw_tid = tension_nodes[tid].get("raw_id", tid)
+                if raw_tid not in valid_tension_ids:
+                    valid_tension_ids.append(raw_tid)
+
+        context = {
+            "beat_summaries": "\n".join(beat_summaries),
+            "valid_beat_ids": ", ".join(valid_beat_ids),
+            "valid_tension_ids": ", ".join(valid_tension_ids),
+        }
+
+        # Call LLM
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model=model,
+                template_name="grow_phase2_agnostic",
+                context=context,
+                output_schema=Phase2Output,
+            )
+        except GrowStageError as e:
+            return GrowPhaseResult(
+                phase="thread_agnostic",
+                status="failed",
+                detail=str(e),
+            )
+
+        # Semantic validation: check all IDs exist
+        valid_assessments: list[ThreadAgnosticAssessment] = []
+        for assessment in result.assessments:
+            if assessment.beat_id not in beat_nodes:
+                log.warning(
+                    "phase2_invalid_beat_id",
+                    beat_id=assessment.beat_id,
+                )
+                continue
+            # Filter agnostic_for to valid tension raw_ids
+            invalid_tensions = [t for t in assessment.agnostic_for if t not in valid_tension_ids]
+            if invalid_tensions:
+                log.warning(
+                    "phase2_invalid_tension_ids",
+                    beat_id=assessment.beat_id,
+                    invalid_ids=invalid_tensions,
+                )
+            valid_tensions = [t for t in assessment.agnostic_for if t in valid_tension_ids]
+            if valid_tensions:
+                valid_assessments.append(
+                    ThreadAgnosticAssessment(
+                        beat_id=assessment.beat_id,
+                        agnostic_for=valid_tensions,
+                    )
+                )
+
+        # Apply results to graph
+        agnostic_count = 0
+        for assessment in valid_assessments:
+            graph.update_node(
+                assessment.beat_id,
+                thread_agnostic_for=assessment.agnostic_for,
+            )
+            agnostic_count += 1
+
+        return GrowPhaseResult(
+            phase="thread_agnostic",
+            status="completed",
+            detail=f"Assessed {len(candidate_beats)} beats, {agnostic_count} marked agnostic",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
 
     # -------------------------------------------------------------------------
     # Deterministic phases
     # -------------------------------------------------------------------------
 
-    def _phase_1_validate_dag(self, graph: Graph) -> GrowPhaseResult:
+    async def _phase_1_validate_dag(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
         """Phase 1: Validate beat DAG and commits beats.
 
         Checks:
@@ -229,7 +517,7 @@ class GrowStage:
 
         return GrowPhaseResult(phase="validate_dag", status="completed")
 
-    def _phase_5_enumerate_arcs(self, graph: Graph) -> GrowPhaseResult:
+    async def _phase_5_enumerate_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
         """Phase 5: Enumerate arcs from thread combinations.
 
         Creates arc nodes and arc_contains edges for each beat in the arc.
@@ -276,7 +564,7 @@ class GrowStage:
             detail=f"Created {len(arcs)} arcs",
         )
 
-    def _phase_6_divergence(self, graph: Graph) -> GrowPhaseResult:
+    async def _phase_6_divergence(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
         """Phase 6: Compute divergence points between arcs.
 
         Updates arc nodes with divergence metadata and creates diverges_at edges.
@@ -334,7 +622,7 @@ class GrowStage:
             detail=f"Computed {len(divergence_map)} divergence points",
         )
 
-    def _phase_7_convergence(self, graph: Graph) -> GrowPhaseResult:
+    async def _phase_7_convergence(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
         """Phase 7: Find convergence points for diverged arcs.
 
         Updates arc nodes with convergence metadata and creates converges_at edges.
@@ -399,7 +687,7 @@ class GrowStage:
             detail=f"Found {convergence_count} convergence points",
         )
 
-    def _phase_8a_passages(self, graph: Graph) -> GrowPhaseResult:
+    async def _phase_8a_passages(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
         """Phase 8a: Create passage nodes from beats.
 
         Each beat gets exactly one passage node and a passage_from edge.
@@ -438,7 +726,7 @@ class GrowStage:
             detail=f"Created {passage_count} passages",
         )
 
-    def _phase_8b_codewords(self, graph: Graph) -> GrowPhaseResult:
+    async def _phase_8b_codewords(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
         """Phase 8b: Create codeword nodes from consequences.
 
         For each consequence, creates a codeword node with a tracks edge.
@@ -530,7 +818,7 @@ class GrowStage:
             detail=f"Created {codeword_count} codewords",
         )
 
-    def _phase_11_prune(self, graph: Graph) -> GrowPhaseResult:
+    async def _phase_11_prune(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
         """Phase 11: Prune unreachable passages.
 
         Uses arc membership to identify reachable passages.

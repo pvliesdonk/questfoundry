@@ -1,0 +1,59 @@
+name: grow_phase2_agnostic
+description: Assess which beats are thread-agnostic for their tensions
+
+system: |
+  You are analyzing story beats to determine which ones are "thread-agnostic".
+
+  ## What is Thread-Agnostic?
+  A beat is thread-agnostic for a tension when its prose would read the same
+  regardless of which thread (path) the reader is on for that tension.
+
+  This is about PROSE COMPATIBILITY, not logical compatibility:
+  - A beat describing "the hero enters the tavern" is thread-agnostic if it
+    doesn't reference any thread-specific choices or consequences.
+  - A beat describing "the hero, grateful for the mentor's guidance" is NOT
+    thread-agnostic for the mentor_trust tension, because it assumes the
+    trust path was chosen.
+
+  ## Examples
+
+  THREAD-AGNOSTIC:
+  - "The hero arrives at the crossroads" (no thread-specific references)
+  - "Night falls over the village" (purely environmental)
+  - "The artifact glows faintly" (describes object without path-dependent context)
+
+  NOT THREAD-AGNOSTIC:
+  - "The mentor smiles, pleased with the hero's trust" (references trust path)
+  - "Having rejected the artifact, the hero feels lighter" (references specific choice)
+  - "The ally they saved earlier returns" (references specific path outcome)
+
+  ## Your Task
+  For each beat listed below, assess whether its prose would be compatible
+  across all threads of each tension it belongs to. If yes, mark it as
+  agnostic for that tension.
+
+  ## Candidate Beats
+  {beat_summaries}
+
+  ## Valid IDs
+  Valid beat_ids: {valid_beat_ids}
+  Valid tension IDs for agnostic_for: {valid_tension_ids}
+
+  ## What NOT to Do
+  - Do NOT use partial beat IDs like "opening" (must include "beat::" prefix)
+  - Do NOT invent tension IDs not listed in the Valid IDs section
+  - Do NOT include beats with empty agnostic_for arrays
+  - Do NOT include beats that are NOT thread-agnostic for any tension
+
+  ## Output Format
+  Return a JSON object with an "assessments" array. Each assessment has:
+  - beat_id: the full beat ID (e.g., "beat::opening")
+  - agnostic_for: list of tension raw_ids this beat is agnostic for
+
+  Only include beats that ARE thread-agnostic for at least one tension.
+  Omit beats that are NOT thread-agnostic for any tension.
+
+user: |
+  Analyze the candidate beats above and return your thread-agnostic assessments.
+
+components: []

@@ -85,7 +85,7 @@ class EntityOverlay(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# LLM sub-phase output models (for future LLM phases)
+# LLM sub-phase output models
 # ---------------------------------------------------------------------------
 
 
@@ -94,6 +94,12 @@ class ThreadAgnosticAssessment(BaseModel):
 
     beat_id: str = Field(min_length=1)
     agnostic_for: list[str] = Field(default_factory=list)
+
+
+class Phase2Output(BaseModel):
+    """Wrapper for Phase 2 structured output (thread-agnostic assessment)."""
+
+    assessments: list[ThreadAgnosticAssessment] = Field(default_factory=list)
 
 
 class KnotProposal(BaseModel):
@@ -147,6 +153,8 @@ class GrowPhaseResult(BaseModel):
     phase: str = Field(min_length=1)
     status: Literal["completed", "skipped", "failed"]
     detail: str = ""
+    llm_calls: int = 0
+    tokens_used: int = 0
 
 
 class GrowResult(BaseModel):
@@ -155,5 +163,7 @@ class GrowResult(BaseModel):
     arc_count: int = 0
     passage_count: int = 0
     codeword_count: int = 0
+    choice_count: int = 0
+    overlay_count: int = 0
     phases_completed: list[GrowPhaseResult] = Field(default_factory=list)
     spine_arc_id: str | None = None
