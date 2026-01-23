@@ -20,33 +20,32 @@ Introduce a `PhaseGateHook` Protocol with `on_phase_complete(phase_name, phase_r
 
 Each phase reads the current graph state and adds/modifies nodes/edges. Each phase function takes a `Graph` and returns a `PhaseResult` dataclass with summary stats.
 
-### 4. Schema-First for New Node Types
+### 4. Hand-Written Pydantic Models
 
-New node types (arc, passage, codeword, choice, entity_overlay) defined in `schemas/grow.schema.json`. Sub-phase LLM output models (AgnosticAssessment, KnotProposal, etc.) are hand-written Pydantic models in `models/grow.py` following the SEED section-models pattern.
+New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase output models (ThreadAgnosticAssessment, KnotProposal, etc.) are hand-written Pydantic models in `models/grow.py`, following the same pattern as BRAINSTORM and SEED (not the schema-first generation used by DREAM).
 
 ---
 
 ## PR Breakdown
 
-### PR 1: GROW Schemas and Models (Contract)
+### PR 1: GROW Models (Contract)
 
-**Scope:** JSON schemas and Pydantic models for GROW data types
+**Scope:** Hand-written Pydantic models for GROW data types (following BRAINSTORM/SEED pattern)
 
 **Dependencies:** None
 
 **Key files:**
-- `schemas/grow.schema.json` — Arc, Passage, Codeword, Choice, EntityOverlay, GrowResult
-- `src/questfoundry/models/grow.py` — Sub-phase output models (ThreadAgnosticAssessment, KnotProposal, SceneTypeTag, GapProposal, OverlayProposal, ChoiceLabel)
-- `src/questfoundry/artifacts/generated.py` — Regenerated
+- `src/questfoundry/models/grow.py` — Node types (Arc, Passage, Codeword, Choice, EntityOverlay, GrowResult) and sub-phase output models (ThreadAgnosticAssessment, KnotProposal, SceneTypeTag, GapProposal, OverlayProposal, ChoiceLabel)
+- `src/questfoundry/models/__init__.py` — Exports
 - `tests/unit/test_grow_models.py`
 
 **Lines:** ~350-400
 
 **Acceptance:**
-- Schema validates against draft-07
-- `generate_models.py` produces valid generated.py
+- All GROW node types defined as Pydantic models
+- Sub-phase output models cover all LLM-assisted phases
 - Unit tests for each model class
-- Models cover all phase input/output types
+- Models exported from `questfoundry.models`
 
 ---
 
@@ -341,7 +340,7 @@ This gives a GROW that imports beats, enumerates arcs, creates passages/codeword
 
 | Pattern | Where |
 |---------|-------|
-| Schema-first | PR 1: define GrowOutput before implementation |
+| Models-first | PR 1: define GrowResult and node types before implementation |
 | Two-loop retry | PRs 6-10: inner Pydantic + outer semantic |
 | Valid ID injection | PRs 6-10: inject manifests before each LLM call |
 | Defensive prompts | PRs 6-10: GOOD/BAD examples per phase |
