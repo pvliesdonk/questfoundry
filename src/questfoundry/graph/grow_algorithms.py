@@ -909,3 +909,185 @@ def apply_knot_mark(
     # Apply cross-thread edges
     for from_id, to_id in new_edges:
         graph.add_edge("belongs_to", from_id, to_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Gap detection algorithms
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PacingIssue:
+    """A sequence of 3+ consecutive beats with the same scene_type."""
+
+    thread_id: str
+    beat_ids: list[str]
+    scene_type: str
+    start_index: int
+
+
+def get_thread_beat_sequence(graph: Graph, thread_id: str) -> list[str]:
+    """Get ordered beat sequence for a thread using topological sort on requires edges.
+
+    Beats belonging to the thread are sorted by their requires (dependency) edges.
+    The result is a list of beat IDs in execution order (dependencies first).
+
+    Args:
+        graph: Graph with beat nodes and requires edges.
+        thread_id: Prefixed thread ID (e.g., "thread::mentor_trust_canonical").
+
+    Returns:
+        Ordered list of beat IDs in the thread.
+    """
+    # Collect beats belonging to this thread
+    belongs_to_edges = graph.get_edges(from_id=None, to_id=thread_id, edge_type="belongs_to")
+    thread_beats = {e["from"] for e in belongs_to_edges}
+
+    if not thread_beats:
+        return []
+
+    # Build dependency graph (within thread beats only)
+    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="requires")
+    # requires: A requires B means B comes before A
+    deps: dict[str, set[str]] = {bid: set() for bid in thread_beats}
+    for edge in requires_edges:
+        if edge["from"] in thread_beats and edge["to"] in thread_beats:
+            deps[edge["from"]].add(edge["to"])
+
+    # Topological sort (Kahn's algorithm)
+    in_degree: dict[str, int] = dict.fromkeys(thread_beats, 0)
+    for bid, predecessors in deps.items():
+        in_degree[bid] = len(predecessors)
+
+    queue = sorted(bid for bid, deg in in_degree.items() if deg == 0)
+    result: list[str] = []
+
+    while queue:
+        current = queue.pop(0)
+        result.append(current)
+        for bid in sorted(thread_beats):
+            if current in deps[bid]:
+                deps[bid].discard(current)
+                in_degree[bid] -= 1
+                if in_degree[bid] == 0:
+                    queue.append(bid)
+
+    # Any remaining beats (cycles or disconnected) appended at end
+    remaining = sorted(thread_beats - set(result))
+    result.extend(remaining)
+
+    return result
+
+
+def detect_pacing_issues(graph: Graph) -> list[PacingIssue]:
+    """Detect pacing issues: 3+ consecutive beats with the same scene_type.
+
+    Checks each thread's beat sequence for runs of 3 or more beats
+    all tagged with the same scene_type (scene, sequel, or micro_beat).
+
+    Args:
+        graph: Graph with beat nodes that have scene_type data.
+
+    Returns:
+        List of PacingIssue objects describing problematic sequences.
+    """
+    issues: list[PacingIssue] = []
+    thread_nodes = graph.get_nodes_by_type("thread")
+
+    for tid in sorted(thread_nodes.keys()):
+        sequence = get_thread_beat_sequence(graph, tid)
+        if len(sequence) < 3:
+            continue
+
+        # Get scene_type for each beat
+        beat_types: list[tuple[str, str]] = []
+        for bid in sequence:
+            node = graph.get_node(bid)
+            if node:
+                scene_type = node.get("scene_type", "")
+                beat_types.append((bid, scene_type))
+
+        # Find runs of 3+ same type
+        run_start = 0
+        while run_start < len(beat_types):
+            current_type = beat_types[run_start][1]
+            if not current_type:
+                run_start += 1
+                continue
+
+            run_end = run_start + 1
+            while run_end < len(beat_types) and beat_types[run_end][1] == current_type:
+                run_end += 1
+
+            run_length = run_end - run_start
+            if run_length >= 3:
+                issues.append(
+                    PacingIssue(
+                        thread_id=tid,
+                        beat_ids=[bt[0] for bt in beat_types[run_start:run_end]],
+                        scene_type=current_type,
+                        start_index=run_start,
+                    )
+                )
+
+            run_start = run_end
+
+    return issues
+
+
+def insert_gap_beat(
+    graph: Graph,
+    thread_id: str,
+    after_beat: str | None,
+    before_beat: str | None,
+    summary: str,
+    scene_type: str,
+) -> str:
+    """Insert a new gap beat into the graph between existing beats.
+
+    Creates a new beat node and adjusts requires edges to maintain ordering.
+    The new beat is assigned to the specified thread.
+
+    Args:
+        graph: Graph to mutate.
+        thread_id: Thread this beat belongs to (prefixed ID).
+        after_beat: Beat that should come before the new beat (or None for start).
+        before_beat: Beat that should come after the new beat (or None for end).
+        summary: Summary text for the new beat.
+        scene_type: Scene type tag for the new beat.
+
+    Returns:
+        The new beat's node ID.
+    """
+    # Generate unique beat ID
+    existing_beats = graph.get_nodes_by_type("beat")
+    gap_count = sum(1 for bid in existing_beats if "gap_" in bid)
+    raw_id = f"gap_{gap_count + 1}"
+    beat_id = f"beat::{raw_id}"
+
+    # Create the beat node
+    graph.create_node(
+        beat_id,
+        {
+            "type": "beat",
+            "raw_id": raw_id,
+            "summary": summary,
+            "scene_type": scene_type,
+            "threads": [thread_id.removeprefix("thread::")],
+            "is_gap_beat": True,
+        },
+    )
+
+    # Add belongs_to edge
+    graph.add_edge("belongs_to", beat_id, thread_id)
+
+    # Adjust requires edges for ordering.
+    # Existing transitive requires (before_beat → after_beat) is kept as redundant
+    # but harmless for topological sort correctness.
+    if after_beat:
+        graph.add_edge("requires", beat_id, after_beat)
+
+    if before_beat:
+        graph.add_edge("requires", before_beat, beat_id)
+
+    return beat_id
