@@ -373,5 +373,5 @@ For long-running stages:
 ## See Also
 
 - [00-spec.md](../design/00-spec.md) - Graph ontology and design
-- [schema-first-models.md](./schema-first-models.md) - Pydantic model generation
+- `src/questfoundry/models/` - Hand-written Pydantic models implementing the ontology
 - [langchain-dream-pipeline.md](./langchain-dream-pipeline.md) - Stage execution

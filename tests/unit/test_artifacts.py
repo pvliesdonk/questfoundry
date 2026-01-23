@@ -1,8 +1,6 @@
 """Tests for artifact reading, writing, and validation."""
 
-import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 from pydantic import ValidationError
@@ -16,17 +14,6 @@ from questfoundry.artifacts import (
     DreamArtifact,
     Scope,
 )
-
-# --- Fixtures ---
-
-
-@pytest.fixture
-def dream_json_schema() -> dict[str, Any]:
-    """Load the DREAM artifact JSON schema."""
-    schema_path = Path(__file__).parent.parent.parent / "schemas" / "dream.schema.json"
-    with schema_path.open() as f:
-        return json.load(f)
-
 
 # --- DreamArtifact Model Tests ---
 
@@ -440,54 +427,6 @@ def test_roundtrip_preserves_data(tmp_path: Path) -> None:
     assert loaded.style_notes == original.style_notes
     assert loaded.scope is not None
     assert loaded.scope.target_word_count == original.scope.target_word_count
-
-
-# --- Schema/Model Contract Tests ---
-
-
-def test_schema_model_required_fields_match(dream_json_schema: dict[str, Any]) -> None:
-    """Verify JSON schema required fields match Pydantic model requirements.
-
-    This test ensures the JSON schema and Pydantic model stay in sync.
-    The schema defines required fields for external validation, while the
-    Pydantic model enforces them at runtime.
-    """
-    # Get required fields from schema
-    schema_required = set(dream_json_schema.get("required", []))
-
-    # Get required fields from Pydantic model (fields without defaults)
-    model_fields = DreamArtifact.model_fields
-    model_required = set()
-    for name, field_info in model_fields.items():
-        # A field is required if it has no default and is not Optional
-        if field_info.is_required():
-            model_required.add(name)
-
-    # Check that schema requires at least the same fields as Pydantic
-    # (schema may require more for external tool compatibility)
-    missing_from_schema = model_required - schema_required
-    assert not missing_from_schema, (
-        f"Model requires fields not in schema: {missing_from_schema}. "
-        "Update schemas/dream.schema.json to include these in 'required'."
-    )
-
-
-def test_scope_required_fields_in_schema(dream_json_schema: dict[str, Any]) -> None:
-    """Verify scope object in schema requires target_word_count and estimated_passages.
-
-    The Scope Pydantic model requires these fields (no defaults), so the JSON
-    schema must also require them to ensure consistent validation.
-    """
-    scope_schema = dream_json_schema.get("properties", {}).get("scope", {})
-    scope_required = set(scope_schema.get("required", []))
-
-    # These are required in Pydantic Scope model
-    expected = {"target_word_count", "estimated_passages"}
-
-    assert expected == scope_required, (
-        f"Schema scope.required should be {expected}, got {scope_required}. "
-        "The Scope Pydantic model requires these fields."
-    )
 
 
 def test_scope_requires_word_count_and_passages() -> None:

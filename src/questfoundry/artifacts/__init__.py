@@ -1,11 +1,5 @@
 """Artifact reading, writing, and validation."""
 
-from questfoundry.artifacts.generated import (
-    ArtifactType,
-    ContentNotes,
-    DreamArtifact,
-    Scope,
-)
 from questfoundry.artifacts.reader import (
     ArtifactNotFoundError,
     ArtifactParseError,
@@ -20,6 +14,14 @@ from questfoundry.artifacts.validator import (
     pydantic_errors_to_details,
 )
 from questfoundry.artifacts.writer import ArtifactWriteError, ArtifactWriter
+from questfoundry.models.dream import (
+    ContentNotes,
+    DreamArtifact,
+    Scope,
+)
+
+# Legacy alias - DreamArtifact is the only artifact type currently
+ArtifactType = DreamArtifact
 
 __all__ = [
     "ArtifactNotFoundError",

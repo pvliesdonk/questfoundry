@@ -90,40 +90,30 @@ log.error("provider_error", provider="ollama", message=str(e))
 - LLM call counts and token usage (INFO at completion)
 - Errors with context for debugging (ERROR/WARNING)
 
-### Schema Workflow (CRITICAL: Source of Truth)
+### Model Workflow (Ontology → Pydantic → Graph)
 
-**The JSON Schema is the SINGLE SOURCE OF TRUTH for artifact structure.**
+**The design specification (`docs/design/00-spec.md`) defines the ontology.** Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.json`) is the runtime source of truth for story state.
 
 ```
-schemas/*.schema.json  ←  SOURCE OF TRUTH (edit this)
+docs/design/00-spec.md        ← Ontology definition (node types, relationships)
         ↓
-   generate_models.py
+src/questfoundry/models/*.py  ← Hand-written Pydantic models (validate LLM output)
         ↓
-   ┌────────────────────────────────────────────┐
-   │  src/questfoundry/artifacts/generated.py   │  ← Pydantic models
-   │  src/questfoundry/tools/generated.py       │  ← Tool schemas for LLM
-   └────────────────────────────────────────────┘
+graph/mutations.py            ← Semantic validation against graph state
+        ↓
+graph.json                    ← Runtime source of truth (nodes + edges)
 ```
 
-**NEVER work backwards.** If the Pydantic model or tool schema seems wrong:
-1. Check if the JSON Schema needs updating
-2. Update the schema FIRST
-3. Regenerate
+**When adding new stage models:**
+1. Check the ontology in `docs/design/00-spec.md` for the node types and fields
+2. Create/update Pydantic models in `src/questfoundry/models/`
+3. Add semantic validation in `graph/mutations.py` if needed
+4. Export from `models/__init__.py`
 
 **Optional vs Nullable (semantic distinction):**
 - **Optional** (not in `required`): field may be absent → Pydantic defaults to `None`
-- **Nullable** (`["integer", "null"]`): field explicitly accepts `null` as a value
+- **Nullable**: field explicitly accepts `null` as a value
 - LLMs often send `null` for optional fields; use `strip_null_values()` before validation to treat `null` as absent
-
-```bash
-# After modifying schemas/*.schema.json:
-uv run python scripts/generate_models.py
-git add schemas/ src/questfoundry/artifacts/generated.py src/questfoundry/tools/generated.py
-```
-
-**Never edit `generated.py` files directly** - they will be overwritten. CI will fail if generated files don't match schemas.
-
-See [docs/architecture/schema-first-models.md](docs/architecture/schema-first-models.md) for details.
 
 ### Pre-Implementation Analysis
 
@@ -361,9 +351,7 @@ questfoundry/
 │   └── export/                # Output format exporters
 ├── prompts/                   # Prompt templates (outside src/)
 │   ├── templates/
-│   ├── components/
-│   └── schemas/
-├── schemas/                   # JSON schemas for artifacts
+│   └── components/
 ├── tests/
 │   ├── unit/
 │   ├── integration/
