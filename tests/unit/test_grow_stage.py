@@ -58,7 +58,7 @@ class TestGrowStageExecute:
         assert tokens == 0
         # All phases run to completion (empty graph = no work to do)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 9
+        assert len(phases) == 12
         for phase in phases:
             assert phase["status"] == "completed"
 
@@ -99,10 +99,10 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_nine_phases(self) -> None:
+    def test_phase_order_returns_twelve_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 9
+        assert len(phases) == 12
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -111,6 +111,9 @@ class TestGrowStagePhaseOrder:
             "validate_dag",
             "thread_agnostic",
             "knots",
+            "scene_types",
+            "narrative_gaps",
+            "pacing_gaps",
             "enumerate_arcs",
             "divergence",
             "convergence",
@@ -537,3 +540,297 @@ class TestPhase3Knots:
         assert result.status == "completed"
         assert "0 applied" in result.detail
         assert "1 skipped" in result.detail
+
+
+class TestPhase4aSceneTypes:
+    @pytest.mark.asyncio
+    async def test_phase_4a_tags_beats(self) -> None:
+        """Phase 4a tags beats with scene type classifications."""
+        from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        phase4a_output = Phase4aOutput(
+            tags=[
+                SceneTypeTag(beat_id="beat::opening", scene_type="scene"),
+                SceneTypeTag(beat_id="beat::mentor_meet", scene_type="sequel"),
+                SceneTypeTag(beat_id="beat::mentor_commits_canonical", scene_type="scene"),
+                SceneTypeTag(beat_id="beat::mentor_commits_alt", scene_type="scene"),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase4a_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_4a_scene_types(graph, mock_model)
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert "4/4" in result.detail
+
+        # Verify scene_type applied to nodes
+        opening = graph.get_node("beat::opening")
+        assert opening["scene_type"] == "scene"
+        mentor = graph.get_node("beat::mentor_meet")
+        assert mentor["scene_type"] == "sequel"
+
+    @pytest.mark.asyncio
+    async def test_phase_4a_skips_invalid_beat_ids(self) -> None:
+        """Phase 4a skips tags with non-existent beat IDs."""
+        from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        phase4a_output = Phase4aOutput(
+            tags=[
+                SceneTypeTag(beat_id="beat::opening", scene_type="scene"),
+                SceneTypeTag(beat_id="beat::nonexistent", scene_type="sequel"),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase4a_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_4a_scene_types(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "1/4" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_4a_empty_graph(self) -> None:
+        """Phase 4a returns completed on empty graph."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        result = await stage._phase_4a_scene_types(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "No beats" in result.detail
+        assert result.llm_calls == 0
+
+
+class TestPhase4bNarrativeGaps:
+    @pytest.mark.asyncio
+    async def test_phase_4b_inserts_gap_beats(self) -> None:
+        """Phase 4b inserts gap beats from LLM proposals."""
+        from questfoundry.models.grow import GapProposal, Phase4bOutput
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        phase4b_output = Phase4bOutput(
+            gaps=[
+                GapProposal(
+                    thread_id="thread::mentor_trust_canonical",
+                    after_beat="beat::mentor_meet",
+                    before_beat="beat::mentor_commits_canonical",
+                    summary="Hero reflects on mentor's words",
+                    scene_type="sequel",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase4b_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_4b_narrative_gaps(graph, mock_model)
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert "1" in result.detail
+
+        # Verify gap beat was inserted
+        beat_nodes = graph.get_nodes_by_type("beat")
+        gap_beats = [bid for bid in beat_nodes if "gap" in bid]
+        assert len(gap_beats) == 1
+
+    @pytest.mark.asyncio
+    async def test_phase_4b_skips_invalid_thread(self) -> None:
+        """Phase 4b skips gap proposals with invalid thread IDs."""
+        from questfoundry.models.grow import GapProposal, Phase4bOutput
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        phase4b_output = Phase4bOutput(
+            gaps=[
+                GapProposal(
+                    thread_id="thread::nonexistent",
+                    after_beat="beat::opening",
+                    before_beat="beat::mentor_meet",
+                    summary="Invalid thread gap",
+                    scene_type="sequel",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase4b_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_4b_narrative_gaps(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "0" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_4b_no_threads(self) -> None:
+        """Phase 4b returns completed when no threads exist."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        result = await stage._phase_4b_narrative_gaps(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "No threads" in result.detail
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_phase_4b_single_beat_threads_skipped(self) -> None:
+        """Phase 4b skips threads with only 1 beat (no sequence to gap-check)."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        graph.create_node("thread::short", {"type": "thread", "raw_id": "short"})
+        graph.create_node("beat::only", {"type": "beat", "summary": "Lone beat"})
+        graph.add_edge("belongs_to", "beat::only", "thread::short")
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        result = await stage._phase_4b_narrative_gaps(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "No threads with 2+ beats" in result.detail
+
+
+class TestPhase4cPacingGaps:
+    @pytest.mark.asyncio
+    async def test_phase_4c_detects_and_fixes_pacing(self) -> None:
+        """Phase 4c detects pacing issues and inserts correction beats."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import GapProposal, Phase4bOutput
+
+        graph = Graph.empty()
+        graph.create_node("thread::main", {"type": "thread", "raw_id": "main"})
+
+        # Create 3 consecutive scene beats (triggers pacing issue)
+        graph.create_node(
+            "beat::b1", {"type": "beat", "summary": "Action 1", "scene_type": "scene"}
+        )
+        graph.create_node(
+            "beat::b2", {"type": "beat", "summary": "Action 2", "scene_type": "scene"}
+        )
+        graph.create_node(
+            "beat::b3", {"type": "beat", "summary": "Action 3", "scene_type": "scene"}
+        )
+        graph.add_edge("belongs_to", "beat::b1", "thread::main")
+        graph.add_edge("belongs_to", "beat::b2", "thread::main")
+        graph.add_edge("belongs_to", "beat::b3", "thread::main")
+        graph.add_edge("requires", "beat::b2", "beat::b1")
+        graph.add_edge("requires", "beat::b3", "beat::b2")
+
+        stage = GrowStage()
+
+        phase4c_output = Phase4bOutput(
+            gaps=[
+                GapProposal(
+                    thread_id="thread::main",
+                    after_beat="beat::b1",
+                    before_beat="beat::b2",
+                    summary="Moment of reflection after first action",
+                    scene_type="sequel",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase4c_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_4c_pacing_gaps(graph, mock_model)
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert "1" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_4c_no_pacing_issues(self) -> None:
+        """Phase 4c returns completed when no pacing issues detected."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        graph.create_node("thread::main", {"type": "thread", "raw_id": "main"})
+        # Mix of scene types — no pacing issue
+        graph.create_node("beat::b1", {"type": "beat", "summary": "Action", "scene_type": "scene"})
+        graph.create_node(
+            "beat::b2", {"type": "beat", "summary": "Reflect", "scene_type": "sequel"}
+        )
+        graph.create_node(
+            "beat::b3", {"type": "beat", "summary": "Transition", "scene_type": "micro_beat"}
+        )
+        graph.add_edge("belongs_to", "beat::b1", "thread::main")
+        graph.add_edge("belongs_to", "beat::b2", "thread::main")
+        graph.add_edge("belongs_to", "beat::b3", "thread::main")
+        graph.add_edge("requires", "beat::b2", "beat::b1")
+        graph.add_edge("requires", "beat::b3", "beat::b2")
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        result = await stage._phase_4c_pacing_gaps(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "No pacing issues" in result.detail
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_phase_4c_skips_without_scene_types(self) -> None:
+        """Phase 4c skips when beats have no scene_type tags."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        graph.create_node("beat::b1", {"type": "beat", "summary": "Untagged"})
+        graph.create_node("beat::b2", {"type": "beat", "summary": "Also untagged"})
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        result = await stage._phase_4c_pacing_gaps(graph, mock_model)
+
+        assert result.status == "skipped"
+        assert "No scene_type tags" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_4c_empty_graph(self) -> None:
+        """Phase 4c returns completed on empty graph."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        result = await stage._phase_4c_pacing_gaps(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "No beats" in result.detail
