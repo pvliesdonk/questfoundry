@@ -1091,6 +1091,210 @@ class TestPhase11Integration:
 
 
 # ---------------------------------------------------------------------------
+# Phase 3: Knot Algorithms
+# ---------------------------------------------------------------------------
+
+
+class TestBuildKnotCandidates:
+    def test_no_candidates_without_locations_or_entities(self) -> None:
+        """No candidates when beats lack location/entity overlap."""
+        from questfoundry.graph.grow_algorithms import build_knot_candidates
+
+        graph = make_two_tension_graph()  # No location data
+        candidates = build_knot_candidates(graph)
+        assert candidates == []
+
+    def test_finds_location_overlap_candidates(self) -> None:
+        """Finds candidates when beats share locations across tensions."""
+        from questfoundry.graph.grow_algorithms import build_knot_candidates
+        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+
+        graph = make_knot_candidate_graph()
+        candidates = build_knot_candidates(graph)
+
+        # Should find at least one candidate group with location signal
+        location_candidates = [c for c in candidates if c.signal_type == "location"]
+        assert len(location_candidates) >= 1
+
+        # The market location should link mentor_meet and artifact_discover
+        market_candidate = next(
+            (c for c in location_candidates if c.shared_value == "market"), None
+        )
+        assert market_candidate is not None
+        assert "beat::mentor_meet" in market_candidate.beat_ids
+        assert "beat::artifact_discover" in market_candidate.beat_ids
+
+    def test_single_tension_no_candidates(self) -> None:
+        """No candidates when all beats belong to same tension."""
+        from questfoundry.graph.grow_algorithms import build_knot_candidates
+
+        graph = make_single_tension_graph()
+        # Add location to single-tension beats
+        graph.update_node("beat::opening", location="tavern")
+        graph.update_node("beat::mentor_meet", location="tavern")
+        candidates = build_knot_candidates(graph)
+        # Both beats are from the same tension, so no cross-tension candidates
+        assert candidates == []
+
+    def test_empty_graph(self) -> None:
+        """Empty graph returns no candidates."""
+        from questfoundry.graph.grow_algorithms import build_knot_candidates
+
+        graph = Graph.empty()
+        assert build_knot_candidates(graph) == []
+
+
+class TestCheckKnotCompatibility:
+    def test_compatible_cross_tension_beats(self) -> None:
+        """Beats from different tensions with no requires are compatible."""
+        from questfoundry.graph.grow_algorithms import check_knot_compatibility
+        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+
+        graph = make_knot_candidate_graph()
+        errors = check_knot_compatibility(graph, ["beat::mentor_meet", "beat::artifact_discover"])
+        assert errors == []
+
+    def test_incompatible_same_tension(self) -> None:
+        """Beats from same tension are incompatible."""
+        from questfoundry.graph.grow_algorithms import check_knot_compatibility
+
+        graph = make_two_tension_graph()
+        errors = check_knot_compatibility(
+            graph, ["beat::mentor_commits_canonical", "beat::mentor_commits_alt"]
+        )
+        assert len(errors) > 0
+        assert any("same tension" in e.issue for e in errors)
+
+    def test_incompatible_requires_conflict(self) -> None:
+        """Beats with requires edge are incompatible."""
+        from questfoundry.graph.grow_algorithms import check_knot_compatibility
+
+        graph = make_two_tension_graph()
+        # mentor_meet requires opening, and both are in the graph
+        errors = check_knot_compatibility(graph, ["beat::opening", "beat::mentor_meet"])
+        assert len(errors) > 0
+        assert any("requires" in e.issue for e in errors)
+
+    def test_insufficient_beats(self) -> None:
+        """Single beat is incompatible."""
+        from questfoundry.graph.grow_algorithms import check_knot_compatibility
+
+        graph = make_two_tension_graph()
+        errors = check_knot_compatibility(graph, ["beat::opening"])
+        assert len(errors) > 0
+        assert any("at least 2" in e.issue for e in errors)
+
+    def test_nonexistent_beat(self) -> None:
+        """Nonexistent beat ID returns error."""
+        from questfoundry.graph.grow_algorithms import check_knot_compatibility
+
+        graph = make_two_tension_graph()
+        errors = check_knot_compatibility(graph, ["beat::nonexistent", "beat::opening"])
+        assert len(errors) > 0
+        assert any("not found" in e.issue for e in errors)
+
+
+class TestResolveKnotLocation:
+    def test_shared_primary_location(self) -> None:
+        """Resolves to shared primary location."""
+        from questfoundry.graph.grow_algorithms import resolve_knot_location
+
+        graph = make_two_tension_graph()
+        graph.update_node("beat::mentor_meet", location="market")
+        graph.update_node("beat::artifact_discover", location="market")
+
+        location = resolve_knot_location(graph, ["beat::mentor_meet", "beat::artifact_discover"])
+        assert location == "market"
+
+    def test_primary_in_alternatives(self) -> None:
+        """Resolves when primary of one is in alternatives of another."""
+        from questfoundry.graph.grow_algorithms import resolve_knot_location
+        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+
+        graph = make_knot_candidate_graph()
+        location = resolve_knot_location(graph, ["beat::mentor_meet", "beat::artifact_discover"])
+        assert location == "market"
+
+    def test_no_shared_location(self) -> None:
+        """Returns None when no shared location exists."""
+        from questfoundry.graph.grow_algorithms import resolve_knot_location
+
+        graph = make_two_tension_graph()
+        graph.update_node("beat::mentor_meet", location="market")
+        graph.update_node("beat::artifact_discover", location="forest")
+
+        location = resolve_knot_location(graph, ["beat::mentor_meet", "beat::artifact_discover"])
+        assert location is None
+
+    def test_no_location_data(self) -> None:
+        """Returns None when beats have no location data."""
+        from questfoundry.graph.grow_algorithms import resolve_knot_location
+
+        graph = make_two_tension_graph()
+        location = resolve_knot_location(graph, ["beat::mentor_meet", "beat::artifact_discover"])
+        assert location is None
+
+
+class TestApplyKnotMark:
+    def test_marks_beats_with_knot_group(self) -> None:
+        """Applying knot mark updates beat nodes."""
+        from questfoundry.graph.grow_algorithms import apply_knot_mark
+        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+
+        graph = make_knot_candidate_graph()
+        apply_knot_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            "market",
+        )
+
+        mentor = graph.get_node("beat::mentor_meet")
+        assert mentor["knot_group"] == ["beat::artifact_discover"]
+        assert mentor["location"] == "market"
+
+        artifact = graph.get_node("beat::artifact_discover")
+        assert artifact["knot_group"] == ["beat::mentor_meet"]
+        assert artifact["location"] == "market"
+
+    def test_adds_cross_thread_belongs_to_edges(self) -> None:
+        """Knot marking adds belongs_to edges for cross-thread assignment."""
+        from questfoundry.graph.grow_algorithms import apply_knot_mark
+        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+
+        graph = make_knot_candidate_graph()
+        apply_knot_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            "market",
+        )
+
+        # mentor_meet should now also belong to artifact threads
+        mentor_edges = graph.get_edges(
+            from_id="beat::mentor_meet", to_id=None, edge_type="belongs_to"
+        )
+        mentor_threads = {e["to"] for e in mentor_edges}
+        # Originally: mentor_trust_canonical, mentor_trust_alt
+        # Now also: artifact_quest_canonical, artifact_quest_alt
+        assert "thread::artifact_quest_canonical" in mentor_threads
+        assert "thread::artifact_quest_alt" in mentor_threads
+
+    def test_no_location_leaves_location_unchanged(self) -> None:
+        """When resolved_location is None, location field is not added."""
+        from questfoundry.graph.grow_algorithms import apply_knot_mark
+
+        graph = make_two_tension_graph()
+        apply_knot_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            None,
+        )
+
+        mentor = graph.get_node("beat::mentor_meet")
+        assert mentor["knot_group"] == ["beat::artifact_discover"]
+        assert "location" not in mentor
+
+
+# ---------------------------------------------------------------------------
 # End-to-end: all phases on fixture graphs
 # ---------------------------------------------------------------------------
 
@@ -1165,9 +1369,9 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All 8 phases should be completed
+        # All 9 phases should be completed
         phases = result_dict["phases_completed"]
-        assert len(phases) == 8
+        assert len(phases) == 9
         for phase in phases:
             assert phase["status"] == "completed"
 
