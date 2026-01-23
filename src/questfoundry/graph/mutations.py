@@ -978,28 +978,22 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         if d.get("disposition") == "cut" and d.get("entity_id")
     }
     for i, beat in enumerate(output.get("initial_beats", [])):
-        for raw_entity_id in beat.get("entities", []):
-            if raw_entity_id:
-                entity_id, _ = _normalize_id(raw_entity_id, "entity")
-                if entity_id in cut_entity_ids:
-                    errors.append(
-                        SeedValidationError(
-                            field_path=f"initial_beats.{i}.entities",
-                            issue=f"Entity '{entity_id}' has disposition 'cut' but is referenced in beat",
-                            available=[],
-                            provided=raw_entity_id,
-                        )
-                    )
-        raw_location = beat.get("location")
-        if raw_location:
-            location, _ = _normalize_id(raw_location, "entity")
-            if location in cut_entity_ids:
+        entity_references = [
+            *[(eid, "entities") for eid in beat.get("entities", [])],
+            (beat.get("location"), "location"),
+            *[(alt, "location_alternatives") for alt in beat.get("location_alternatives", [])],
+        ]
+        for raw_id, field_name in entity_references:
+            if not raw_id:
+                continue
+            entity_id, _ = _normalize_id(raw_id, "entity")
+            if entity_id in cut_entity_ids:
                 errors.append(
                     SeedValidationError(
-                        field_path=f"initial_beats.{i}.location",
-                        issue=f"Entity '{location}' has disposition 'cut' but is referenced in beat",
+                        field_path=f"initial_beats.{i}.{field_name}",
+                        issue=f"Entity '{entity_id}' has disposition 'cut' but is referenced in beat",
                         available=[],
-                        provided=raw_location,
+                        provided=raw_id,
                     )
                 )
 

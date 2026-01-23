@@ -2426,3 +2426,45 @@ class TestCutEntityInBeats:
 
         cut_errors = [e for e in errors if "disposition 'cut'" in e.issue]
         assert cut_errors == []
+
+    def test_cut_entity_in_location_alternatives_detected(self) -> None:
+        """Cut entity in beat location_alternatives raises error."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::tavern",
+            {"type": "entity", "raw_id": "tavern", "entity_type": "location"},
+        )
+        graph.create_node(
+            "entity::ruins",
+            {"type": "entity", "raw_id": "ruins", "entity_type": "location"},
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "hero", "disposition": "retained"},
+                {"entity_id": "tavern", "disposition": "retained"},
+                {"entity_id": "ruins", "disposition": "cut"},
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "Test",
+                    "entities": ["hero"],
+                    "location": "tavern",
+                    "location_alternatives": ["ruins"],  # ruins is cut!
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        cut_errors = [e for e in errors if "disposition 'cut'" in e.issue]
+        assert len(cut_errors) == 1
+        assert "ruins" in cut_errors[0].issue
+        assert "initial_beats.0.location_alternatives" in cut_errors[0].field_path
