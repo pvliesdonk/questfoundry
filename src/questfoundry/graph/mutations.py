@@ -321,6 +321,74 @@ class SeedMutationError(MutationError):
         return self._format_message()
 
 
+class GrowErrorCategory(Enum):
+    """Categories of GROW validation errors for targeted recovery.
+
+    Different error types require different recovery approaches:
+    - STRUCTURAL: DAG violations or missing commits beats
+    - COMBINATORIAL: Too many arcs (exponential blowup)
+    - REFERENCE: Invalid node/edge references
+    - FATAL: Unrecoverable graph state
+    """
+
+    STRUCTURAL = auto()
+    COMBINATORIAL = auto()
+    REFERENCE = auto()
+    FATAL = auto()
+
+
+@dataclass
+class GrowValidationError:
+    """Semantic error for GROW phase validation.
+
+    Attributes:
+        field_path: Path to the invalid field (e.g., "arc.threads.0").
+        issue: Description of what's wrong.
+        available: List of valid IDs that could be used instead.
+        provided: The value that was provided.
+        category: Error category for targeted recovery.
+    """
+
+    field_path: str
+    issue: str
+    available: list[str] = field(default_factory=list)
+    provided: str = ""
+    category: GrowErrorCategory | None = None
+
+
+class GrowMutationError(MutationError):
+    """GROW phase failed due to structural or reference errors.
+
+    This error contains structured validation errors with categories
+    to guide error recovery strategies.
+    """
+
+    def __init__(self, errors: list[GrowValidationError]) -> None:
+        self.errors = errors
+        super().__init__(self._format_message())
+
+    def _format_message(self) -> str:
+        """Format errors for exception message."""
+        lines = ["GROW has validation errors:"]
+        for e in self.errors[:_MAX_ERRORS_DISPLAY]:
+            category_label = f" [{e.category.name}]" if e.category else ""
+            lines.append(f"  - {e.field_path}: {e.issue}{category_label}")
+            suggestion = _format_error_available(e.provided, e.available)
+            if suggestion:
+                lines.append(f"    {suggestion}")
+        if len(self.errors) > _MAX_ERRORS_DISPLAY:
+            lines.append(f"  ... and {len(self.errors) - _MAX_ERRORS_DISPLAY} more errors")
+        return "\n".join(lines)
+
+    def to_feedback(self) -> str:
+        """Format for error reporting.
+
+        Returns:
+            Human-readable error message describing validation failures.
+        """
+        return self._format_message()
+
+
 def _require_field(item: dict[str, Any], field: str, context: str) -> Any:
     """Require a field exists in a dict, raising clear error if missing.
 
@@ -387,7 +455,7 @@ def _clean_dict(data: dict[str, Any]) -> dict[str, Any]:
 
 
 # Registry of stages with mutation handlers
-_MUTATION_STAGES = frozenset({"dream", "brainstorm", "seed"})
+_MUTATION_STAGES = frozenset({"dream", "brainstorm", "seed", "grow"})
 
 
 def has_mutation_handler(stage: str) -> bool:
