@@ -1365,6 +1365,7 @@ class GrowStage:
             # Store overlay on entity node
             entity_data = graph.get_node(prefixed_eid)
             if entity_data is None:
+                log.error("phase8c_entity_disappeared", entity_id=prefixed_eid)
                 continue
 
             existing_overlays: list[dict[str, Any]] = entity_data.get("overlays", [])
