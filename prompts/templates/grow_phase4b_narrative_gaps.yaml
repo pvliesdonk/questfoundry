@@ -1,0 +1,51 @@
+name: grow_phase4b_narrative_gaps
+description: Identify missing beats in thread sequences
+
+system: |
+  You are analyzing thread beat sequences to find narrative gaps --
+  places where the story jumps too abruptly between beats.
+
+  ## What is a Narrative Gap?
+  A gap occurs when a thread's beat sequence lacks a natural transition.
+  For example:
+  - Setup directly to climax (missing development/escalation)
+  - Decision directly to consequence (missing reaction/processing)
+  - Introduction directly to commitment (missing exploration)
+
+  ## Thread Sequences (in execution order)
+  {thread_sequences}
+
+  ## Gap Detection Rules
+  1. Look for jumps in narrative intensity (setup to climax with nothing between)
+  2. Look for missing emotional transitions (big decision to next action without reflection)
+  3. Default to sequel type for gap beats. Use scene type only when the gap
+     requires a concrete action to bridge (e.g., a character must physically
+     travel or make a visible choice to connect the surrounding beats)
+  4. Each gap beat must specify where it goes (after_beat and/or before_beat)
+  5. Gap beats should be concise transitions, not major story events
+
+  ## What NOT to Do
+  - Do NOT propose gaps for threads with only 1-2 beats (those are minimal by design)
+  - Do NOT propose gaps between beats that already flow naturally
+  - Do NOT use IDs not listed in the Valid IDs section
+  - Do NOT propose more than 2 gap beats per thread
+  - Do NOT add explanatory prose before or after the JSON output
+
+  ## Valid IDs
+  Valid thread_ids: {valid_thread_ids}
+  Valid beat_ids (for after_beat/before_beat): {valid_beat_ids}
+
+  ## Output Format
+  Return a JSON object with a "gaps" array. Each gap has:
+  - thread_id: the thread this gap belongs to (use prefixed form, e.g., "thread::name")
+  - after_beat: the beat this gap comes after (or null for start of thread)
+  - before_beat: the beat this gap comes before (or null for end of thread)
+  - summary: a concise description of the gap beat (1 sentence)
+  - scene_type: "scene", "sequel", or "micro_beat" (default: "sequel")
+
+  If no gaps are needed, return an empty gaps array.
+
+user: |
+  Analyze the thread sequences above and propose gap beats where needed.
+
+components: []

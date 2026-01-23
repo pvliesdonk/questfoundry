@@ -13,6 +13,7 @@ Algorithm summary:
 
 from __future__ import annotations
 
+import contextlib
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from itertools import product
@@ -909,3 +910,160 @@ def apply_knot_mark(
     # Apply cross-thread edges
     for from_id, to_id in new_edges:
         graph.add_edge("belongs_to", from_id, to_id)
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Gap detection algorithms
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PacingIssue:
+    """A sequence of 3+ consecutive beats with the same scene_type."""
+
+    thread_id: str
+    beat_ids: list[str]
+    scene_type: str
+
+
+def get_thread_beat_sequence(graph: Graph, thread_id: str) -> list[str]:
+    """Get ordered beat sequence for a thread using topological sort on requires edges.
+
+    Delegates to topological_sort_beats() for the sorting logic.
+
+    Args:
+        graph: Graph with beat nodes and requires edges.
+        thread_id: Prefixed thread ID (e.g., "thread::mentor_trust_canonical").
+
+    Returns:
+        Ordered list of beat IDs in the thread.
+
+    Raises:
+        ValueError: If a cycle is detected among the thread's beats.
+    """
+    belongs_to_edges = graph.get_edges(from_id=None, to_id=thread_id, edge_type="belongs_to")
+    thread_beats = [e["from"] for e in belongs_to_edges]
+
+    if not thread_beats:
+        return []
+
+    return topological_sort_beats(graph, thread_beats)
+
+
+def detect_pacing_issues(graph: Graph) -> list[PacingIssue]:
+    """Detect pacing issues: 3+ consecutive beats with the same scene_type.
+
+    Checks each thread's beat sequence for runs of 3 or more beats
+    all tagged with the same scene_type (scene, sequel, or micro_beat).
+
+    Args:
+        graph: Graph with beat nodes that have scene_type data.
+
+    Returns:
+        List of PacingIssue objects describing problematic sequences.
+    """
+    issues: list[PacingIssue] = []
+    thread_nodes = graph.get_nodes_by_type("thread")
+
+    for tid in sorted(thread_nodes.keys()):
+        sequence = get_thread_beat_sequence(graph, tid)
+        if len(sequence) < 3:
+            continue
+
+        # Get scene_type for each beat
+        beat_types: list[tuple[str, str]] = []
+        for bid in sequence:
+            node = graph.get_node(bid)
+            if node:
+                scene_type = node.get("scene_type", "")
+                beat_types.append((bid, scene_type))
+
+        # Find runs of 3+ same type
+        run_start = 0
+        while run_start < len(beat_types):
+            current_type = beat_types[run_start][1]
+            if not current_type:
+                run_start += 1
+                continue
+
+            run_end = run_start + 1
+            while run_end < len(beat_types) and beat_types[run_end][1] == current_type:
+                run_end += 1
+
+            run_length = run_end - run_start
+            if run_length >= 3:
+                issues.append(
+                    PacingIssue(
+                        thread_id=tid,
+                        beat_ids=[bt[0] for bt in beat_types[run_start:run_end]],
+                        scene_type=current_type,
+                    )
+                )
+
+            run_start = run_end
+
+    return issues
+
+
+def insert_gap_beat(
+    graph: Graph,
+    thread_id: str,
+    after_beat: str | None,
+    before_beat: str | None,
+    summary: str,
+    scene_type: str,
+) -> str:
+    """Insert a new gap beat into the graph between existing beats.
+
+    Creates a new beat node and adjusts requires edges to maintain ordering.
+    The new beat is assigned to the specified thread.
+
+    Args:
+        graph: Graph to mutate.
+        thread_id: Thread this beat belongs to (prefixed ID).
+        after_beat: Beat that should come before the new beat (or None for start).
+        before_beat: Beat that should come after the new beat (or None for end).
+        summary: Summary text for the new beat.
+        scene_type: Scene type tag for the new beat.
+
+    Returns:
+        The new beat's node ID.
+    """
+    # Generate unique beat ID using max existing gap index + 1
+    existing_beats = graph.get_nodes_by_type("beat")
+    max_gap_index = 0
+    for bid, data in existing_beats.items():
+        if data.get("is_gap_beat", False):
+            parts = bid.split("gap_")
+            if len(parts) > 1:
+                with contextlib.suppress(ValueError):
+                    max_gap_index = max(max_gap_index, int(parts[-1]))
+    raw_id = f"gap_{max_gap_index + 1}"
+    beat_id = f"beat::{raw_id}"
+
+    # Create the beat node
+    graph.create_node(
+        beat_id,
+        {
+            "type": "beat",
+            "raw_id": raw_id,
+            "summary": summary,
+            "scene_type": scene_type,
+            "threads": [thread_id.removeprefix("thread::")],
+            "is_gap_beat": True,
+        },
+    )
+
+    # Add belongs_to edge
+    graph.add_edge("belongs_to", beat_id, thread_id)
+
+    # Adjust requires edges for ordering.
+    # Existing transitive requires (before_beat → after_beat) is kept as redundant
+    # but harmless for topological sort correctness.
+    if after_beat:
+        graph.add_edge("requires", beat_id, after_beat)
+
+    if before_beat:
+        graph.add_edge("requires", before_beat, beat_id)
+
+    return beat_id

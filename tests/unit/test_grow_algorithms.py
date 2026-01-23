@@ -1300,21 +1300,32 @@ class TestApplyKnotMark:
 
 
 def _make_grow_mock_model(graph: Graph) -> MagicMock:
-    """Create a mock model that returns valid Phase2Output for thread-agnostic assessment.
+    """Create a mock model that returns valid structured output for all LLM phases.
 
-    Examines the graph to find candidate beats and marks shared beats
-    (those belonging to multiple threads of the same tension) as agnostic.
+    Inspects the output schema passed to with_structured_output() and returns
+    the appropriate mock response for each phase:
+    - Phase 2: ThreadAgnosticAssessment for shared beats
+    - Phase 3: Empty knots (no candidates in typical test graphs)
+    - Phase 4a: SceneTypeTag for all beats
+    - Phase 4b/4c: Empty gaps (no gap proposals)
     """
     from unittest.mock import AsyncMock
 
-    from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+    from questfoundry.models.grow import (
+        Phase2Output,
+        Phase3Output,
+        Phase4aOutput,
+        Phase4bOutput,
+        SceneTypeTag,
+        ThreadAgnosticAssessment,
+    )
 
-    # Build the response based on graph structure
+    # Build Phase 2 response based on graph structure
     tension_nodes = graph.get_nodes_by_type("tension")
     thread_nodes = graph.get_nodes_by_type("thread")
     beat_nodes = graph.get_nodes_by_type("beat")
 
-    # Build tension → threads mapping
+    # Build tension -> threads mapping
     tension_threads: dict[str, list[str]] = {}
     explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
     for edge in explores_edges:
@@ -1323,7 +1334,7 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         if thread_id in thread_nodes and tension_id in tension_nodes:
             tension_threads.setdefault(tension_id, []).append(thread_id)
 
-    # Build beat → threads via belongs_to
+    # Build beat -> threads via belongs_to
     beat_threads: dict[str, list[str]] = {}
     belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
     for edge in belongs_to_edges:
@@ -1345,14 +1356,38 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
                 ThreadAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_tensions)
             )
 
+    # Pre-build outputs for each phase
     phase2_output = Phase2Output(assessments=assessments)
+    phase3_output = Phase3Output(knots=[])
 
-    # Create mock model with structured output support
-    mock_structured = AsyncMock()
-    mock_structured.ainvoke = AsyncMock(return_value=phase2_output)
+    # Phase 4a: tag all beats with alternating scene types
+    scene_types = ["scene", "sequel", "micro_beat"]
+    tags = [
+        SceneTypeTag(beat_id=bid, scene_type=scene_types[i % 3])
+        for i, bid in enumerate(sorted(beat_nodes.keys()))
+    ]
+    phase4a_output = Phase4aOutput(tags=tags)
+
+    # Phase 4b/4c: no gaps proposed (keeps test graphs simple)
+    phase4b_output = Phase4bOutput(gaps=[])
+
+    # Map schema -> output
+    output_by_schema: dict[type, object] = {
+        Phase2Output: phase2_output,
+        Phase3Output: phase3_output,
+        Phase4aOutput: phase4a_output,
+        Phase4bOutput: phase4b_output,
+    }
+
+    def _with_structured_output(schema: type, **_kwargs: object) -> AsyncMock:
+        """Return a mock that produces the correct output for the given schema."""
+        output = output_by_schema.get(schema, phase2_output)
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=output)
+        return mock_structured
 
     mock_model = MagicMock()
-    mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+    mock_model.with_structured_output = MagicMock(side_effect=_with_structured_output)
 
     return mock_model
 
@@ -1369,11 +1404,11 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All 9 phases should be completed
+        # All 12 phases should run (completed or skipped)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 9
+        assert len(phases) == 12
         for phase in phases:
-            assert phase["status"] == "completed"
+            assert phase["status"] in ("completed", "skipped")
 
         # Should have created arcs
         assert result_dict["arc_count"] == 4  # 2x2 = 4 arcs
@@ -1396,9 +1431,9 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All phases completed
+        # All phases run (completed or skipped)
         phases = result_dict["phases_completed"]
-        assert all(p["status"] == "completed" for p in phases)
+        assert all(p["status"] in ("completed", "skipped") for p in phases)
 
         assert result_dict["arc_count"] == 2  # 1 tension x 2 threads = 2 arcs
         assert result_dict["passage_count"] == 4  # 4 beats
@@ -1451,3 +1486,245 @@ class TestPhaseIntegrationEndToEnd:
 
         grants = saved_graph.get_edges(from_id=None, to_id=None, edge_type="grants")
         assert len(grants) == 4
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Gap detection algorithm tests
+# ---------------------------------------------------------------------------
+
+
+class TestGetThreadBeatSequence:
+    def test_returns_ordered_sequence(self) -> None:
+        """Beats are returned in dependency order."""
+        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+
+        graph = make_single_tension_graph()
+        sequence = get_thread_beat_sequence(graph, "thread::mentor_trust_canonical")
+        # opening → mentor_meet → mentor_commits_canonical
+        assert sequence == [
+            "beat::opening",
+            "beat::mentor_meet",
+            "beat::mentor_commits_canonical",
+        ]
+
+    def test_empty_thread(self) -> None:
+        """Empty result for nonexistent thread."""
+        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+
+        graph = make_single_tension_graph()
+        sequence = get_thread_beat_sequence(graph, "thread::nonexistent")
+        assert sequence == []
+
+    def test_multiple_roots(self) -> None:
+        """Handles beats with no dependencies (multiple roots)."""
+        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+
+        graph = Graph.empty()
+        graph.create_node("thread::t1", {"type": "thread", "raw_id": "t1"})
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "A"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "B"})
+        graph.add_edge("belongs_to", "beat::a", "thread::t1")
+        graph.add_edge("belongs_to", "beat::b", "thread::t1")
+        # No requires edges — both are roots
+        sequence = get_thread_beat_sequence(graph, "thread::t1")
+        assert set(sequence) == {"beat::a", "beat::b"}
+        assert len(sequence) == 2
+
+    def test_alt_thread_sequence(self) -> None:
+        """Alternative thread has its own sequence."""
+        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+
+        graph = make_single_tension_graph()
+        sequence = get_thread_beat_sequence(graph, "thread::mentor_trust_alt")
+        assert sequence == [
+            "beat::opening",
+            "beat::mentor_meet",
+            "beat::mentor_commits_alt",
+        ]
+
+    def test_cycle_raises_value_error(self) -> None:
+        """Cycle in thread beat dependencies raises ValueError."""
+        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+
+        graph = Graph.empty()
+        graph.create_node("thread::t1", {"type": "thread", "raw_id": "t1"})
+        graph.create_node("beat::a", {"type": "beat", "summary": "A"})
+        graph.create_node("beat::b", {"type": "beat", "summary": "B"})
+        graph.add_edge("belongs_to", "beat::a", "thread::t1")
+        graph.add_edge("belongs_to", "beat::b", "thread::t1")
+        # Create a cycle: a requires b, b requires a
+        graph.add_edge("requires", "beat::a", "beat::b")
+        graph.add_edge("requires", "beat::b", "beat::a")
+
+        with pytest.raises(ValueError, match="Cycle detected"):
+            get_thread_beat_sequence(graph, "thread::t1")
+
+
+class TestDetectPacingIssues:
+    def test_no_issues_without_scene_types(self) -> None:
+        """No issues when beats lack scene_type."""
+        from questfoundry.graph.grow_algorithms import detect_pacing_issues
+
+        graph = make_single_tension_graph()
+        issues = detect_pacing_issues(graph)
+        assert issues == []
+
+    def test_detects_three_consecutive_scenes(self) -> None:
+        """Flags 3+ consecutive beats with same scene_type."""
+        from questfoundry.graph.grow_algorithms import detect_pacing_issues
+
+        graph = make_single_tension_graph()
+        # Tag all canonical thread beats as "scene"
+        graph.update_node("beat::opening", scene_type="scene")
+        graph.update_node("beat::mentor_meet", scene_type="scene")
+        graph.update_node("beat::mentor_commits_canonical", scene_type="scene")
+
+        issues = detect_pacing_issues(graph)
+        assert len(issues) >= 1
+        issue = next(i for i in issues if i.thread_id == "thread::mentor_trust_canonical")
+        assert issue.scene_type == "scene"
+        assert len(issue.beat_ids) == 3
+
+    def test_no_issue_with_varied_types(self) -> None:
+        """No issues when scene types alternate."""
+        from questfoundry.graph.grow_algorithms import detect_pacing_issues
+
+        graph = make_single_tension_graph()
+        graph.update_node("beat::opening", scene_type="scene")
+        graph.update_node("beat::mentor_meet", scene_type="sequel")
+        graph.update_node("beat::mentor_commits_canonical", scene_type="scene")
+
+        issues = detect_pacing_issues(graph)
+        # No run of 3+, so no issues
+        assert issues == []
+
+    def test_short_thread_skipped(self) -> None:
+        """Threads with fewer than 3 beats are skipped."""
+        from questfoundry.graph.grow_algorithms import detect_pacing_issues
+
+        graph = Graph.empty()
+        graph.create_node("thread::short", {"type": "thread", "raw_id": "short"})
+        graph.create_node("beat::x", {"type": "beat", "raw_id": "x", "scene_type": "scene"})
+        graph.create_node("beat::y", {"type": "beat", "raw_id": "y", "scene_type": "scene"})
+        graph.add_edge("belongs_to", "beat::x", "thread::short")
+        graph.add_edge("belongs_to", "beat::y", "thread::short")
+
+        issues = detect_pacing_issues(graph)
+        assert issues == []
+
+
+class TestInsertGapBeat:
+    def test_creates_beat_node(self) -> None:
+        """Creates a new beat node with correct data."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = make_single_tension_graph()
+        beat_id = insert_gap_beat(
+            graph,
+            thread_id="thread::mentor_trust_canonical",
+            after_beat="beat::opening",
+            before_beat="beat::mentor_meet",
+            summary="Hero reflects on the journey so far.",
+            scene_type="sequel",
+        )
+
+        assert beat_id.startswith("beat::gap_")
+        node = graph.get_node(beat_id)
+        assert node is not None
+        assert node["type"] == "beat"
+        assert node["scene_type"] == "sequel"
+        assert node["is_gap_beat"] is True
+        assert node["summary"] == "Hero reflects on the journey so far."
+
+    def test_adds_requires_edges(self) -> None:
+        """New beat gets requires edges for ordering."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = make_single_tension_graph()
+        beat_id = insert_gap_beat(
+            graph,
+            thread_id="thread::mentor_trust_canonical",
+            after_beat="beat::opening",
+            before_beat="beat::mentor_meet",
+            summary="Transition beat",
+            scene_type="sequel",
+        )
+
+        # New beat requires after_beat
+        requires_from_new = graph.get_edges(
+            from_id=beat_id, to_id="beat::opening", edge_type="requires"
+        )
+        assert len(requires_from_new) == 1
+
+        # before_beat requires new beat
+        requires_to_new = graph.get_edges(
+            from_id="beat::mentor_meet", to_id=beat_id, edge_type="requires"
+        )
+        assert len(requires_to_new) == 1
+
+    def test_adds_belongs_to_edge(self) -> None:
+        """New beat gets belongs_to edge for thread."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = make_single_tension_graph()
+        beat_id = insert_gap_beat(
+            graph,
+            thread_id="thread::mentor_trust_canonical",
+            after_beat="beat::opening",
+            before_beat=None,
+            summary="End of thread transition",
+            scene_type="micro_beat",
+        )
+
+        belongs_to = graph.get_edges(
+            from_id=beat_id, to_id="thread::mentor_trust_canonical", edge_type="belongs_to"
+        )
+        assert len(belongs_to) == 1
+
+    def test_no_after_beat(self) -> None:
+        """Handles insertion at start of thread."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = make_single_tension_graph()
+        beat_id = insert_gap_beat(
+            graph,
+            thread_id="thread::mentor_trust_canonical",
+            after_beat=None,
+            before_beat="beat::opening",
+            summary="Prologue beat",
+            scene_type="scene",
+        )
+
+        # No requires from new beat (no after_beat)
+        requires_from_new = graph.get_edges(from_id=beat_id, to_id=None, edge_type="requires")
+        assert len(requires_from_new) == 0
+
+        # before_beat requires new beat
+        requires_to_new = graph.get_edges(
+            from_id="beat::opening", to_id=beat_id, edge_type="requires"
+        )
+        assert len(requires_to_new) == 1
+
+    def test_id_avoids_collision_with_existing_gaps(self) -> None:
+        """Gap IDs increment past highest existing gap index."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("thread::t1", {"type": "thread", "raw_id": "t1"})
+        graph.create_node("beat::a", {"type": "beat", "summary": "A"})
+        # Simulate existing gap beats (gap_1 exists, gap_2 was deleted)
+        graph.create_node("beat::gap_1", {"type": "beat", "summary": "Gap 1", "is_gap_beat": True})
+        graph.create_node("beat::gap_3", {"type": "beat", "summary": "Gap 3", "is_gap_beat": True})
+        graph.add_edge("belongs_to", "beat::a", "thread::t1")
+
+        beat_id = insert_gap_beat(
+            graph,
+            thread_id="thread::t1",
+            after_beat="beat::a",
+            before_beat=None,
+            summary="New gap",
+            scene_type="sequel",
+        )
+
+        # Should be gap_4 (max existing is 3, so next is 4)
+        assert beat_id == "beat::gap_4"

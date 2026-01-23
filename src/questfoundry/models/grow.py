@@ -123,14 +123,26 @@ class SceneTypeTag(BaseModel):
     scene_type: Literal["scene", "sequel", "micro_beat"]
 
 
+class Phase4aOutput(BaseModel):
+    """Wrapper for Phase 4a structured output (scene-type tags)."""
+
+    tags: list[SceneTypeTag] = Field(default_factory=list)
+
+
 class GapProposal(BaseModel):
-    """Phase 4b: Proposes new beats to fill structural gaps."""
+    """Phase 4b/4c: Proposes new beats to fill structural gaps."""
 
     thread_id: str = Field(min_length=1)
     after_beat: str | None = None
     before_beat: str | None = None
     summary: str = Field(min_length=1)
     scene_type: Literal["scene", "sequel", "micro_beat"] = "sequel"
+
+
+class Phase4bOutput(BaseModel):
+    """Wrapper for Phase 4b/4c structured output (gap proposals)."""
+
+    gaps: list[GapProposal] = Field(default_factory=list)
 
 
 class OverlayProposal(BaseModel):

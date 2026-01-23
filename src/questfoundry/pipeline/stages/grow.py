@@ -107,6 +107,9 @@ class GrowStage:
             (self._phase_1_validate_dag, "validate_dag"),
             (self._phase_2_thread_agnostic, "thread_agnostic"),
             (self._phase_3_knots, "knots"),
+            (self._phase_4a_scene_types, "scene_types"),
+            (self._phase_4b_narrative_gaps, "narrative_gaps"),
+            (self._phase_4c_pacing_gaps, "pacing_gaps"),
             (self._phase_5_enumerate_arcs, "enumerate_arcs"),
             (self._phase_6_divergence, "divergence"),
             (self._phase_7_convergence, "convergence"),
@@ -620,6 +623,316 @@ class GrowStage:
                 f"Proposed {len(result.knots)} knots: "
                 f"{applied_count} applied, {skipped_count} skipped"
             ),
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    async def _phase_4a_scene_types(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 4a: Tag beats with scene type classification.
+
+        Asks the LLM to classify each beat as scene (active conflict/action),
+        sequel (reaction/reflection), or micro_beat (brief transition).
+        Updates beat nodes with scene_type field.
+        """
+        from questfoundry.models.grow import Phase4aOutput
+
+        beat_nodes = graph.get_nodes_by_type("beat")
+        if not beat_nodes:
+            return GrowPhaseResult(
+                phase="scene_types",
+                status="completed",
+                detail="No beats to classify",
+            )
+
+        # Build beat summaries with position context
+        beat_summaries: list[str] = []
+        for bid in sorted(beat_nodes.keys()):
+            data = beat_nodes[bid]
+            summary = data.get("summary", "")
+            threads = data.get("threads", [])
+            impacts = data.get("tension_impacts", [])
+            beat_summaries.append(
+                f'- {bid}: summary="{summary}", threads={threads}, tension_impacts={impacts}'
+            )
+
+        context = {
+            "beat_summaries": "\n".join(beat_summaries),
+            "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
+            "beat_count": str(len(beat_nodes)),
+        }
+
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model=model,
+                template_name="grow_phase4a_scene_types",
+                context=context,
+                output_schema=Phase4aOutput,
+            )
+        except GrowStageError as e:
+            return GrowPhaseResult(
+                phase="scene_types",
+                status="failed",
+                detail=str(e),
+            )
+
+        # Validate and apply tags
+        applied = 0
+        for tag in result.tags:
+            if tag.beat_id not in beat_nodes:
+                log.warning("phase4a_invalid_beat_id", beat_id=tag.beat_id)
+                continue
+            graph.update_node(tag.beat_id, scene_type=tag.scene_type)
+            applied += 1
+
+        return GrowPhaseResult(
+            phase="scene_types",
+            status="completed",
+            detail=f"Tagged {applied}/{len(beat_nodes)} beats with scene types",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    async def _phase_4b_narrative_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 4b: Detect narrative gaps in thread beat sequences.
+
+        For each thread, traces the beat sequence and asks the LLM
+        to identify missing beats (e.g., a thread jumps from setup
+        to climax without a development beat). Inserts proposed gap
+        beats into the graph.
+        """
+        from questfoundry.graph.grow_algorithms import (
+            get_thread_beat_sequence,
+            insert_gap_beat,
+        )
+        from questfoundry.models.grow import Phase4bOutput
+
+        thread_nodes = graph.get_nodes_by_type("thread")
+        if not thread_nodes:
+            return GrowPhaseResult(
+                phase="narrative_gaps",
+                status="completed",
+                detail="No threads to check for gaps",
+            )
+
+        # Build thread sequences with summaries
+        thread_sequences: list[str] = []
+        valid_beat_ids: set[str] = set()
+        for tid in sorted(thread_nodes.keys()):
+            sequence = get_thread_beat_sequence(graph, tid)
+            if len(sequence) < 2:
+                continue
+            beat_list: list[str] = []
+            for bid in sequence:
+                node = graph.get_node(bid)
+                summary = node.get("summary", "") if node else ""
+                scene_type = node.get("scene_type", "untagged") if node else "untagged"
+                beat_list.append(f"    {bid} [{scene_type}]: {summary}")
+                valid_beat_ids.add(bid)
+            raw_tid = thread_nodes[tid].get("raw_id", tid)
+            thread_sequences.append(f"  Thread: {raw_tid} ({tid})\n" + "\n".join(beat_list))
+
+        if not thread_sequences:
+            return GrowPhaseResult(
+                phase="narrative_gaps",
+                status="completed",
+                detail="No threads with 2+ beats to check",
+            )
+
+        context = {
+            "thread_sequences": "\n\n".join(thread_sequences),
+            "valid_thread_ids": ", ".join(sorted(thread_nodes.keys())),
+            "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
+        }
+
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model=model,
+                template_name="grow_phase4b_narrative_gaps",
+                context=context,
+                output_schema=Phase4bOutput,
+            )
+        except GrowStageError as e:
+            return GrowPhaseResult(
+                phase="narrative_gaps",
+                status="failed",
+                detail=str(e),
+            )
+
+        # Validate and insert gap beats
+        inserted = 0
+        for gap in result.gaps:
+            prefixed_tid = (
+                gap.thread_id
+                if gap.thread_id.startswith("thread::")
+                else f"thread::{gap.thread_id}"
+            )
+            if prefixed_tid not in thread_nodes:
+                log.warning("phase4b_invalid_thread_id", thread_id=gap.thread_id)
+                continue
+            if gap.after_beat and gap.after_beat not in valid_beat_ids:
+                log.warning("phase4b_invalid_after_beat", beat_id=gap.after_beat)
+                continue
+            if gap.before_beat and gap.before_beat not in valid_beat_ids:
+                log.warning("phase4b_invalid_before_beat", beat_id=gap.before_beat)
+                continue
+            # Validate ordering: after_beat must come before before_beat
+            if gap.after_beat and gap.before_beat:
+                sequence = get_thread_beat_sequence(graph, prefixed_tid)
+                try:
+                    after_idx = sequence.index(gap.after_beat)
+                    before_idx = sequence.index(gap.before_beat)
+                    if after_idx >= before_idx:
+                        log.warning(
+                            "phase4b_invalid_beat_order",
+                            after_beat=gap.after_beat,
+                            before_beat=gap.before_beat,
+                        )
+                        continue
+                except ValueError:
+                    log.warning("phase4b_beat_not_in_sequence", thread_id=gap.thread_id)
+                    continue
+
+            insert_gap_beat(
+                graph,
+                thread_id=prefixed_tid,
+                after_beat=gap.after_beat,
+                before_beat=gap.before_beat,
+                summary=gap.summary,
+                scene_type=gap.scene_type,
+            )
+            inserted += 1
+
+        return GrowPhaseResult(
+            phase="narrative_gaps",
+            status="completed",
+            detail=f"Inserted {inserted} gap beats from {len(result.gaps)} proposals",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    async def _phase_4c_pacing_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 4c: Detect and fix pacing issues (3+ same scene_type in a row).
+
+        Runs deterministic pacing detection first. If issues are found,
+        asks the LLM to propose correction beats. Only proceeds if
+        Phase 4a has tagged beats with scene types.
+        """
+        from questfoundry.graph.grow_algorithms import (
+            detect_pacing_issues,
+            get_thread_beat_sequence,
+            insert_gap_beat,
+        )
+        from questfoundry.models.grow import Phase4bOutput
+
+        beat_nodes = graph.get_nodes_by_type("beat")
+        if not beat_nodes:
+            return GrowPhaseResult(
+                phase="pacing_gaps",
+                status="completed",
+                detail="No beats to check for pacing",
+            )
+
+        # Check if scene types have been assigned
+        has_scene_types = any(b.get("scene_type") for b in beat_nodes.values())
+        if not has_scene_types:
+            return GrowPhaseResult(
+                phase="pacing_gaps",
+                status="skipped",
+                detail="No scene_type tags found (Phase 4a may not have run)",
+            )
+
+        issues = detect_pacing_issues(graph)
+        if not issues:
+            return GrowPhaseResult(
+                phase="pacing_gaps",
+                status="completed",
+                detail="No pacing issues detected",
+            )
+
+        # Build context for LLM
+        issue_descriptions: list[str] = []
+        for issue in issues:
+            beat_summaries: list[str] = []
+            for bid in issue.beat_ids:
+                node = graph.get_node(bid)
+                summary = node.get("summary", "") if node else ""
+                beat_summaries.append(f"    {bid}: {summary}")
+            raw_tid = issue.thread_id.removeprefix("thread::")
+            issue_descriptions.append(
+                f"  Thread {raw_tid}: {len(issue.beat_ids)} consecutive "
+                f"'{issue.scene_type}' beats:\n" + "\n".join(beat_summaries)
+            )
+
+        thread_nodes = graph.get_nodes_by_type("thread")
+        context = {
+            "pacing_issues": "\n\n".join(issue_descriptions),
+            "valid_thread_ids": ", ".join(sorted(thread_nodes.keys())),
+            "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
+            "issue_count": str(len(issues)),
+        }
+
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model=model,
+                template_name="grow_phase4c_pacing_gaps",
+                context=context,
+                output_schema=Phase4bOutput,
+            )
+        except GrowStageError as e:
+            return GrowPhaseResult(
+                phase="pacing_gaps",
+                status="failed",
+                detail=str(e),
+            )
+
+        # Insert correction beats
+        inserted = 0
+        for gap in result.gaps:
+            prefixed_tid = (
+                gap.thread_id
+                if gap.thread_id.startswith("thread::")
+                else f"thread::{gap.thread_id}"
+            )
+            if prefixed_tid not in thread_nodes:
+                log.warning("phase4c_invalid_thread_id", thread_id=gap.thread_id)
+                continue
+            if gap.after_beat and gap.after_beat not in beat_nodes:
+                log.warning("phase4c_invalid_after_beat", beat_id=gap.after_beat)
+                continue
+            if gap.before_beat and gap.before_beat not in beat_nodes:
+                log.warning("phase4c_invalid_before_beat", beat_id=gap.before_beat)
+                continue
+            # Validate ordering: after_beat must come before before_beat
+            if gap.after_beat and gap.before_beat:
+                sequence = get_thread_beat_sequence(graph, prefixed_tid)
+                try:
+                    after_idx = sequence.index(gap.after_beat)
+                    before_idx = sequence.index(gap.before_beat)
+                    if after_idx >= before_idx:
+                        log.warning(
+                            "phase4c_invalid_beat_order",
+                            after_beat=gap.after_beat,
+                            before_beat=gap.before_beat,
+                        )
+                        continue
+                except ValueError:
+                    log.warning("phase4c_beat_not_in_sequence", thread_id=gap.thread_id)
+                    continue
+
+            insert_gap_beat(
+                graph,
+                thread_id=prefixed_tid,
+                after_beat=gap.after_beat,
+                before_beat=gap.before_beat,
+                summary=gap.summary,
+                scene_type=gap.scene_type,
+            )
+            inserted += 1
+
+        return GrowPhaseResult(
+            phase="pacing_gaps",
+            status="completed",
+            detail=(f"Found {len(issues)} pacing issues, inserted {inserted} correction beats"),
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
