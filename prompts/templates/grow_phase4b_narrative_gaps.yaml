@@ -18,7 +18,9 @@ system: |
   ## Gap Detection Rules
   1. Look for jumps in narrative intensity (setup to climax with nothing between)
   2. Look for missing emotional transitions (big decision to next action without reflection)
-  3. Propose gap beats that are sequel type unless the gap needs action
+  3. Default to sequel type for gap beats. Use scene type only when the gap
+     requires a concrete action to bridge (e.g., a character must physically
+     travel or make a visible choice to connect the surrounding beats)
   4. Each gap beat must specify where it goes (after_beat and/or before_beat)
   5. Gap beats should be concise transitions, not major story events
 

@@ -13,9 +13,9 @@ system: |
     observation) that connects larger beats without standalone drama.
 
   ## Classification Guidelines
-  1. Beats with tension_impacts (commits/escalates) are almost always scenes
-  2. Opening/setup beats are typically scenes (they introduce conflict)
-  3. Beats after major decisions are often sequels (processing the choice)
+  1. Beats with tension_impacts (commits/escalates) are scenes — they drive conflict forward
+  2. Opening/setup beats are scenes (they introduce conflict or establish stakes)
+  3. Beats after major decisions are sequels (processing the choice, emotional reaction)
   4. Short connecting beats with no named characters acting are micro_beats
   5. When in doubt between scene and sequel, prefer scene
 

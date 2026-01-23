@@ -13,6 +13,7 @@ Algorithm summary:
 
 from __future__ import annotations
 
+import contextlib
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from itertools import product
@@ -946,35 +947,35 @@ def get_thread_beat_sequence(graph: Graph, thread_id: str) -> list[str]:
     if not thread_beats:
         return []
 
-    # Build dependency graph (within thread beats only)
+    # Build adjacency list: prerequisite -> list of dependents (successors)
+    # requires: A requires B means B comes before A (B -> A in the DAG)
+    adj: dict[str, list[str]] = {bid: [] for bid in thread_beats}
+    in_degree: dict[str, int] = dict.fromkeys(thread_beats, 0)
+
     requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="requires")
-    # requires: A requires B means B comes before A
-    deps: dict[str, set[str]] = {bid: set() for bid in thread_beats}
     for edge in requires_edges:
-        if edge["from"] in thread_beats and edge["to"] in thread_beats:
-            deps[edge["from"]].add(edge["to"])
+        dependent = edge["from"]
+        prerequisite = edge["to"]
+        if dependent in thread_beats and prerequisite in thread_beats:
+            adj[prerequisite].append(dependent)
+            in_degree[dependent] += 1
 
     # Topological sort (Kahn's algorithm)
-    in_degree: dict[str, int] = dict.fromkeys(thread_beats, 0)
-    for bid, predecessors in deps.items():
-        in_degree[bid] = len(predecessors)
-
     queue = sorted(bid for bid, deg in in_degree.items() if deg == 0)
     result: list[str] = []
 
     while queue:
         current = queue.pop(0)
         result.append(current)
-        for bid in sorted(thread_beats):
-            if current in deps[bid]:
-                deps[bid].discard(current)
-                in_degree[bid] -= 1
-                if in_degree[bid] == 0:
-                    queue.append(bid)
+        for successor in sorted(adj[current]):
+            in_degree[successor] -= 1
+            if in_degree[successor] == 0:
+                queue.append(successor)
 
-    # Any remaining beats (cycles or disconnected) appended at end
-    remaining = sorted(thread_beats - set(result))
-    result.extend(remaining)
+    if len(result) != len(thread_beats):
+        raise ValueError(
+            f"Cycle detected in thread {thread_id}: sorted {len(result)}/{len(thread_beats)} beats"
+        )
 
     return result
 
@@ -1059,10 +1060,16 @@ def insert_gap_beat(
     Returns:
         The new beat's node ID.
     """
-    # Generate unique beat ID
+    # Generate unique beat ID using max existing index + 1
     existing_beats = graph.get_nodes_by_type("beat")
-    gap_count = sum(1 for bid in existing_beats if "gap_" in bid)
-    raw_id = f"gap_{gap_count + 1}"
+    max_gap_index = 0
+    for bid in existing_beats:
+        if "gap_" in bid:
+            parts = bid.split("gap_")
+            if len(parts) > 1:
+                with contextlib.suppress(ValueError):
+                    max_gap_index = max(max_gap_index, int(parts[-1]))
+    raw_id = f"gap_{max_gap_index + 1}"
     beat_id = f"beat::{raw_id}"
 
     # Create the beat node
