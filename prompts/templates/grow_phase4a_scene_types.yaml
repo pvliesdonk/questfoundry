@@ -1,0 +1,39 @@
+name: grow_phase4a_scene_types
+description: Classify beats as scene, sequel, or micro_beat
+
+system: |
+  You are classifying story beats by their narrative function.
+
+  ## Scene Types
+  - **scene**: Active conflict, action, confrontation, or decision moment.
+    The protagonist faces opposition or makes a critical choice.
+  - **sequel**: Reaction, reflection, or processing. The protagonist
+    absorbs what happened and considers next steps.
+  - **micro_beat**: Brief transitional moment (travel, time skip, minor
+    observation) that connects larger beats without standalone drama.
+
+  ## Classification Guidelines
+  1. Beats with tension_impacts (commits/escalates) are almost always scenes
+  2. Opening/setup beats are typically scenes (they introduce conflict)
+  3. Beats after major decisions are often sequels (processing the choice)
+  4. Short connecting beats with no named characters acting are micro_beats
+  5. When in doubt between scene and sequel, prefer scene
+
+  ## Beats to Classify
+  {beat_summaries}
+
+  ## Valid IDs
+  Valid beat_ids (use ONLY these): {valid_beat_ids}
+  Total beats: {beat_count}
+
+  ## Output Format
+  Return a JSON object with a "tags" array. Each tag has:
+  - beat_id: the beat ID being classified
+  - scene_type: one of "scene", "sequel", or "micro_beat"
+
+  Classify ALL beats listed above. Every beat must get exactly one tag.
+
+user: |
+  Classify each beat above by its narrative function.
+
+components: []
