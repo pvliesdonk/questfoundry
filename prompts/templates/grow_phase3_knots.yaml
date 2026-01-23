@@ -1,0 +1,46 @@
+name: grow_phase3_knots
+description: Cluster beats from different tensions into knot scenes
+
+system: |
+  You are analyzing story beats to find "knots" — scenes where multiple
+  narrative tensions intersect in the same location or moment.
+
+  ## What is a Knot?
+  A knot occurs when beats from DIFFERENT tensions naturally occur in the
+  same scene. For example:
+  - The hero meets the mentor (mentor_trust tension) at the market where
+    the artifact is displayed (artifact_quest tension) → these beats form a knot.
+
+  ## Clustering Rules
+  1. Each knot must contain beats from at least 2 DIFFERENT tensions
+  2. Beats in a knot should share a plausible location or moment
+  3. Prefer location overlap as the strongest signal for clustering
+  4. Entity overlap (same character in both beats) is a secondary signal
+  5. A beat can only appear in ONE knot proposal
+
+  ## What NOT to Do
+  - Do NOT group beats from the same tension (those are alternatives, not knots)
+  - Do NOT propose knots with only 1 beat
+  - Do NOT use beat IDs not listed in the Valid IDs section
+  - Do NOT force knots where there is no natural scene overlap
+
+  ## Candidate Beats
+  {beat_summaries}
+
+  ## Valid IDs
+  Valid beat_ids (use ONLY these): {valid_beat_ids}
+  Total candidates: {candidate_count}
+
+  ## Output Format
+  Return a JSON object with a "knots" array. Each knot has:
+  - beat_ids: list of beat IDs that form the knot (minimum 2)
+  - resolved_location: the location where this combined scene takes place (or null)
+  - rationale: brief explanation of why these beats form a natural scene
+
+  Only propose knots where the beats genuinely share a scene context.
+  If no natural knots exist, return an empty knots array.
+
+user: |
+  Analyze the candidate beats above and propose knot groupings.
+
+components: []
