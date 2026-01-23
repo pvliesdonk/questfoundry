@@ -39,6 +39,12 @@ system: |
   Valid beat_ids: {valid_beat_ids}
   Valid tension IDs for agnostic_for: {valid_tension_ids}
 
+  ## What NOT to Do
+  - Do NOT use partial beat IDs like "opening" (must include "beat::" prefix)
+  - Do NOT invent tension IDs not listed in the Valid IDs section
+  - Do NOT include beats with empty agnostic_for arrays
+  - Do NOT include beats that are NOT thread-agnostic for any tension
+
   ## Output Format
   Return a JSON object with an "assessments" array. Each assessment has:
   - beat_id: the full beat ID (e.g., "beat::opening")

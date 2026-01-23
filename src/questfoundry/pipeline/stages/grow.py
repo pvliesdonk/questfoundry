@@ -269,7 +269,7 @@ class GrowStage:
 
         # Build system message from template with context injection
         system_text = template.system.format(**context) if context else template.system
-        user_text = template.user.format(**context) if template.user and context else template.user
+        user_text = template.user.format(**context) if template.user else None
 
         structured_model = with_structured_output(model, output_schema)
 
@@ -277,8 +277,12 @@ class GrowStage:
         if user_text:
             messages.append(HumanMessage(content=user_text))
 
-        total_tokens = 0
+        # Token counting is not available via with_structured_output() since
+        # it returns a Pydantic object, not an AIMessage with response_metadata.
+        # Track only llm_calls; tokens remain 0 until a callback-based approach
+        # is implemented.
         llm_calls = 0
+        base_messages = list(messages)  # Preserve original for retry resets
 
         for attempt in range(max_retries):
             log.debug(
@@ -292,24 +296,15 @@ class GrowStage:
                 result = await structured_model.ainvoke(messages)
                 llm_calls += 1
 
-                # Extract token usage from response metadata if available
-                if hasattr(result, "response_metadata"):
-                    usage = getattr(result, "response_metadata", {}).get("token_usage", {})
-                    total_tokens += usage.get("total_tokens", 0)
-
-                # Validate with Pydantic
+                # with_structured_output returns validated Pydantic instance directly.
+                # Defensive fallback for providers that return dicts instead.
                 if isinstance(result, output_schema):
                     log.debug("grow_llm_validation_pass", template=template_name)
-                    return result, llm_calls, total_tokens
+                    return result, llm_calls, 0
 
-                # If result is a dict, try to validate it
-                if isinstance(result, dict):
-                    validated = output_schema.model_validate(result)
-                    return validated, llm_calls, total_tokens
-
-                # Unexpected result type - try model_validate
                 validated = output_schema.model_validate(result)
-                return validated, llm_calls, total_tokens
+                log.debug("grow_llm_validation_pass", template=template_name)
+                return validated, llm_calls, 0
 
             except (ValidationError, TypeError, AttributeError) as e:
                 log.warning(
@@ -320,12 +315,14 @@ class GrowStage:
                 )
 
                 if attempt < max_retries - 1:
-                    # Add error feedback for retry
+                    # Reset to base messages + error feedback to avoid
+                    # unbounded message history growth across retries
                     error_msg = (
                         f"Your previous response had validation errors:\n{e}\n\n"
                         f"Please fix these issues and try again. "
                         f"Ensure all IDs are valid and all required fields are present."
                     )
+                    messages = list(base_messages)
                     messages.append(HumanMessage(content=error_msg))
 
         raise GrowStageError(
@@ -459,6 +456,13 @@ class GrowStage:
                 )
                 continue
             # Filter agnostic_for to valid tension raw_ids
+            invalid_tensions = [t for t in assessment.agnostic_for if t not in valid_tension_ids]
+            if invalid_tensions:
+                log.warning(
+                    "phase2_invalid_tension_ids",
+                    beat_id=assessment.beat_id,
+                    invalid_ids=invalid_tensions,
+                )
             valid_tensions = [t for t in assessment.agnostic_for if t in valid_tension_ids]
             if valid_tensions:
                 valid_assessments.append(
