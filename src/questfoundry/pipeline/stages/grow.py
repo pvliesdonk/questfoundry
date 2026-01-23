@@ -775,6 +775,22 @@ class GrowStage:
             if gap.before_beat and gap.before_beat not in valid_beat_ids:
                 log.warning("phase4b_invalid_before_beat", beat_id=gap.before_beat)
                 continue
+            # Validate ordering: after_beat must come before before_beat
+            if gap.after_beat and gap.before_beat:
+                sequence = get_thread_beat_sequence(graph, prefixed_tid)
+                try:
+                    after_idx = sequence.index(gap.after_beat)
+                    before_idx = sequence.index(gap.before_beat)
+                    if after_idx >= before_idx:
+                        log.warning(
+                            "phase4b_invalid_beat_order",
+                            after_beat=gap.after_beat,
+                            before_beat=gap.before_beat,
+                        )
+                        continue
+                except ValueError:
+                    log.warning("phase4b_beat_not_in_sequence", thread_id=gap.thread_id)
+                    continue
 
             insert_gap_beat(
                 graph,
@@ -803,6 +819,7 @@ class GrowStage:
         """
         from questfoundry.graph.grow_algorithms import (
             detect_pacing_issues,
+            get_thread_beat_sequence,
             insert_gap_beat,
         )
         from questfoundry.models.grow import Phase4bOutput
@@ -885,6 +902,22 @@ class GrowStage:
             if gap.before_beat and gap.before_beat not in beat_nodes:
                 log.warning("phase4c_invalid_before_beat", beat_id=gap.before_beat)
                 continue
+            # Validate ordering: after_beat must come before before_beat
+            if gap.after_beat and gap.before_beat:
+                sequence = get_thread_beat_sequence(graph, prefixed_tid)
+                try:
+                    after_idx = sequence.index(gap.after_beat)
+                    before_idx = sequence.index(gap.before_beat)
+                    if after_idx >= before_idx:
+                        log.warning(
+                            "phase4c_invalid_beat_order",
+                            after_beat=gap.after_beat,
+                            before_beat=gap.before_beat,
+                        )
+                        continue
+                except ValueError:
+                    log.warning("phase4c_beat_not_in_sequence", thread_id=gap.thread_id)
+                    continue
 
             insert_gap_beat(
                 graph,

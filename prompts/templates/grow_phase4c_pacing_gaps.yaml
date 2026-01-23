@@ -26,6 +26,7 @@ system: |
   - Do NOT propose correction beats of the SAME type as the issue
   - Do NOT use IDs not listed in the Valid IDs section
   - Do NOT insert more than 2 correction beats per issue
+  - Do NOT add explanatory prose before or after the JSON output
 
   ## Valid IDs
   Valid thread_ids: {valid_thread_ids}

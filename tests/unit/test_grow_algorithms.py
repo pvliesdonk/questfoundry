@@ -1713,8 +1713,8 @@ class TestInsertGapBeat:
         graph.create_node("thread::t1", {"type": "thread", "raw_id": "t1"})
         graph.create_node("beat::a", {"type": "beat", "summary": "A"})
         # Simulate existing gap beats (gap_1 exists, gap_2 was deleted)
-        graph.create_node("beat::gap_1", {"type": "beat", "summary": "Gap 1"})
-        graph.create_node("beat::gap_3", {"type": "beat", "summary": "Gap 3"})
+        graph.create_node("beat::gap_1", {"type": "beat", "summary": "Gap 1", "is_gap_beat": True})
+        graph.create_node("beat::gap_3", {"type": "beat", "summary": "Gap 3", "is_gap_beat": True})
         graph.add_edge("belongs_to", "beat::a", "thread::t1")
 
         beat_id = insert_gap_beat(

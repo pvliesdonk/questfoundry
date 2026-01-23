@@ -22,6 +22,11 @@ system: |
   ## Beats to Classify
   {beat_summaries}
 
+  ## What NOT to Do
+  - Do NOT use IDs not listed in the Valid IDs section
+  - Do NOT leave any beat unclassified
+  - Do NOT add explanatory prose before or after the JSON output
+
   ## Valid IDs
   Valid beat_ids (use ONLY these): {valid_beat_ids}
   Total beats: {beat_count}

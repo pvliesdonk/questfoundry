@@ -924,14 +924,12 @@ class PacingIssue:
     thread_id: str
     beat_ids: list[str]
     scene_type: str
-    start_index: int
 
 
 def get_thread_beat_sequence(graph: Graph, thread_id: str) -> list[str]:
     """Get ordered beat sequence for a thread using topological sort on requires edges.
 
-    Beats belonging to the thread are sorted by their requires (dependency) edges.
-    The result is a list of beat IDs in execution order (dependencies first).
+    Delegates to topological_sort_beats() for the sorting logic.
 
     Args:
         graph: Graph with beat nodes and requires edges.
@@ -939,45 +937,17 @@ def get_thread_beat_sequence(graph: Graph, thread_id: str) -> list[str]:
 
     Returns:
         Ordered list of beat IDs in the thread.
+
+    Raises:
+        ValueError: If a cycle is detected among the thread's beats.
     """
-    # Collect beats belonging to this thread
     belongs_to_edges = graph.get_edges(from_id=None, to_id=thread_id, edge_type="belongs_to")
-    thread_beats = {e["from"] for e in belongs_to_edges}
+    thread_beats = [e["from"] for e in belongs_to_edges]
 
     if not thread_beats:
         return []
 
-    # Build adjacency list: prerequisite -> list of dependents (successors)
-    # requires: A requires B means B comes before A (B -> A in the DAG)
-    adj: dict[str, list[str]] = {bid: [] for bid in thread_beats}
-    in_degree: dict[str, int] = dict.fromkeys(thread_beats, 0)
-
-    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="requires")
-    for edge in requires_edges:
-        dependent = edge["from"]
-        prerequisite = edge["to"]
-        if dependent in thread_beats and prerequisite in thread_beats:
-            adj[prerequisite].append(dependent)
-            in_degree[dependent] += 1
-
-    # Topological sort (Kahn's algorithm)
-    queue = sorted(bid for bid, deg in in_degree.items() if deg == 0)
-    result: list[str] = []
-
-    while queue:
-        current = queue.pop(0)
-        result.append(current)
-        for successor in sorted(adj[current]):
-            in_degree[successor] -= 1
-            if in_degree[successor] == 0:
-                queue.append(successor)
-
-    if len(result) != len(thread_beats):
-        raise ValueError(
-            f"Cycle detected in thread {thread_id}: sorted {len(result)}/{len(thread_beats)} beats"
-        )
-
-    return result
+    return topological_sort_beats(graph, thread_beats)
 
 
 def detect_pacing_issues(graph: Graph) -> list[PacingIssue]:
@@ -1027,7 +997,6 @@ def detect_pacing_issues(graph: Graph) -> list[PacingIssue]:
                         thread_id=tid,
                         beat_ids=[bt[0] for bt in beat_types[run_start:run_end]],
                         scene_type=current_type,
-                        start_index=run_start,
                     )
                 )
 
@@ -1060,11 +1029,11 @@ def insert_gap_beat(
     Returns:
         The new beat's node ID.
     """
-    # Generate unique beat ID using max existing index + 1
+    # Generate unique beat ID using max existing gap index + 1
     existing_beats = graph.get_nodes_by_type("beat")
     max_gap_index = 0
-    for bid in existing_beats:
-        if "gap_" in bid:
+    for bid, data in existing_beats.items():
+        if data.get("is_gap_beat", False):
             parts = bid.split("gap_")
             if len(parts) > 1:
                 with contextlib.suppress(ValueError):

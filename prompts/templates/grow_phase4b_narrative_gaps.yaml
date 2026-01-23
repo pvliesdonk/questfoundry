@@ -29,6 +29,7 @@ system: |
   - Do NOT propose gaps between beats that already flow naturally
   - Do NOT use IDs not listed in the Valid IDs section
   - Do NOT propose more than 2 gap beats per thread
+  - Do NOT add explanatory prose before or after the JSON output
 
   ## Valid IDs
   Valid thread_ids: {valid_thread_ids}
