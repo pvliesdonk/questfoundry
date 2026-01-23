@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path  # noqa: TC003 - used at runtime
 from typing import TYPE_CHECKING, Any
@@ -34,13 +33,8 @@ class ProvidersConfig:
     LLM providers. Each phase (discuss, summarize, serialize) can optionally
     override the default provider.
 
-    Resolution order for each phase (within this class):
-    1. Environment variable (e.g., QF_PROVIDER_SERIALIZE)
-    2. Project config (e.g., providers.serialize)
-    3. Default provider (from providers.default)
-
-    Note: CLI flags and QF_PROVIDER are handled by the orchestrator for
-    backward compatibility, not by this class.
+    This class resolves only from project config. Environment variables and
+    CLI flags are handled by the orchestrator's full precedence chain.
 
     Attributes:
         default: Default provider string (e.g., "ollama/qwen3:4b-instruct-32k"). Required.
@@ -73,28 +67,28 @@ class ProvidersConfig:
         return self.settings.get(phase) or get_default_phase_settings(phase)
 
     def get_discuss_provider(self) -> str:
-        """Get the effective provider for the discuss phase.
+        """Get the config-level provider for the discuss phase.
 
-        Checks environment variable QF_PROVIDER_DISCUSS, then config,
-        then falls back to default.
+        Returns phase-specific config if set, otherwise default.
+        Environment variables are resolved by the orchestrator.
         """
-        return os.getenv("QF_PROVIDER_DISCUSS") or self.discuss or self.default
+        return self.discuss or self.default
 
     def get_summarize_provider(self) -> str:
-        """Get the effective provider for the summarize phase.
+        """Get the config-level provider for the summarize phase.
 
-        Checks environment variable QF_PROVIDER_SUMMARIZE, then config,
-        then falls back to default.
+        Returns phase-specific config if set, otherwise default.
+        Environment variables are resolved by the orchestrator.
         """
-        return os.getenv("QF_PROVIDER_SUMMARIZE") or self.summarize or self.default
+        return self.summarize or self.default
 
     def get_serialize_provider(self) -> str:
-        """Get the effective provider for the serialize phase.
+        """Get the config-level provider for the serialize phase.
 
-        Checks environment variable QF_PROVIDER_SERIALIZE, then config,
-        then falls back to default.
+        Returns phase-specific config if set, otherwise default.
+        Environment variables are resolved by the orchestrator.
         """
-        return os.getenv("QF_PROVIDER_SERIALIZE") or self.serialize or self.default
+        return self.serialize or self.default
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProvidersConfig:

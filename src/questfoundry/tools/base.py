@@ -80,7 +80,7 @@ class Tool(Protocol):
         ...             parameters={...},
         ...         )
         ...
-        ...     def execute(self, arguments: dict[str, Any]) -> str:
+        ...     async def execute(self, arguments: dict[str, Any]) -> str:
         ...         query = arguments["query"]
         ...         return search_results
     """
@@ -90,7 +90,7 @@ class Tool(Protocol):
         """Return the tool definition for LLM binding."""
         ...
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         """Execute the tool with given arguments.
 
         Args:
@@ -98,9 +98,5 @@ class Tool(Protocol):
 
         Returns:
             String result to send back to LLM.
-
-        Note:
-            Execute is synchronous. For async operations, use
-            asyncio.get_event_loop().run_until_complete() internally.
         """
         ...

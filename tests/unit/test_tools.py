@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from questfoundry.tools import (
     ToolCall,
     ToolDefinition,
@@ -67,11 +69,12 @@ class MockTool:
             parameters={"type": "object", "properties": {"input": {"type": "string"}}},
         )
 
-    def execute(self, arguments: dict) -> str:
+    async def execute(self, arguments: dict) -> str:
         return f"Executed with: {arguments.get('input', 'none')}"
 
 
-def test_tool_protocol_implementation() -> None:
+@pytest.mark.asyncio
+async def test_tool_protocol_implementation() -> None:
     """Custom tool implements Tool protocol correctly."""
     tool = MockTool()
 
@@ -82,7 +85,7 @@ def test_tool_protocol_implementation() -> None:
     definition = tool.definition
     assert isinstance(definition, ToolDefinition)
 
-    result = tool.execute({"input": "test"})
+    result = await tool.execute({"input": "test"})
     assert "test" in result
 
 

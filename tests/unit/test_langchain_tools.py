@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import json
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from questfoundry.tools.langchain_tools import (
     get_all_research_tools,
@@ -83,227 +85,266 @@ class TestToolCollections:
 class TestSearchCorpusExecution:
     """Test search_corpus tool execution."""
 
-    @patch("questfoundry.tools.langchain_tools._search_corpus_tool")
-    def test_search_corpus_delegates(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_search_corpus_delegates(self) -> None:
         """search_corpus should delegate to SearchCorpusTool."""
-        mock_tool.execute.return_value = json.dumps(
-            {"result": "success", "content": "test content", "action": "use this"}
-        )
+        with patch("questfoundry.tools.langchain_tools._search_corpus_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(
+                return_value=json.dumps(
+                    {"result": "success", "content": "test content", "action": "use this"}
+                )
+            )
 
-        result = search_corpus.invoke({"query": "test", "limit": 3})
+            result = await search_corpus.ainvoke({"query": "test", "limit": 3})
 
-        mock_tool.execute.assert_called_once_with({"query": "test", "limit": 3, "cluster": None})
-        assert "success" in result
-        assert "test content" in result
+            mock_tool.execute.assert_called_once_with(
+                {"query": "test", "limit": 3, "cluster": None}
+            )
+            assert "success" in result
+            assert "test content" in result
 
-    @patch("questfoundry.tools.langchain_tools._search_corpus_tool")
-    def test_search_corpus_with_cluster(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_search_corpus_with_cluster(self) -> None:
         """search_corpus should pass cluster parameter."""
-        mock_tool.execute.return_value = json.dumps({"result": "success"})
+        with patch("questfoundry.tools.langchain_tools._search_corpus_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value=json.dumps({"result": "success"}))
 
-        search_corpus.invoke({"query": "mystery", "cluster": "genre-conventions", "limit": 5})
+            await search_corpus.ainvoke(
+                {"query": "mystery", "cluster": "genre-conventions", "limit": 5}
+            )
 
-        call_args = mock_tool.execute.call_args[0][0]
-        assert call_args["query"] == "mystery"
-        assert call_args["cluster"] == "genre-conventions"
-        assert call_args["limit"] == 5
+            call_args = mock_tool.execute.call_args[0][0]
+            assert call_args["query"] == "mystery"
+            assert call_args["cluster"] == "genre-conventions"
+            assert call_args["limit"] == 5
 
-    @patch("questfoundry.tools.langchain_tools._search_corpus_tool")
-    def test_search_corpus_default_limit(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_search_corpus_default_limit(self) -> None:
         """search_corpus should use default limit of 5."""
-        mock_tool.execute.return_value = json.dumps({"result": "success"})
+        with patch("questfoundry.tools.langchain_tools._search_corpus_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value=json.dumps({"result": "success"}))
 
-        search_corpus.invoke({"query": "test"})
+            await search_corpus.ainvoke({"query": "test"})
 
-        call_args = mock_tool.execute.call_args[0][0]
-        assert call_args["limit"] == 5
+            call_args = mock_tool.execute.call_args[0][0]
+            assert call_args["limit"] == 5
 
 
 class TestGetDocumentExecution:
     """Test get_document tool execution."""
 
-    @patch("questfoundry.tools.langchain_tools._get_document_tool")
-    def test_get_document_delegates(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_get_document_delegates(self) -> None:
         """get_document should delegate to GetDocumentTool."""
-        mock_tool.execute.return_value = json.dumps(
-            {
-                "result": "success",
-                "title": "Test Doc",
-                "content": "document content",
-                "action": "use this",
-            }
-        )
+        with patch("questfoundry.tools.langchain_tools._get_document_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(
+                return_value=json.dumps(
+                    {
+                        "result": "success",
+                        "title": "Test Doc",
+                        "content": "document content",
+                        "action": "use this",
+                    }
+                )
+            )
 
-        result = get_document.invoke({"name": "test_doc"})
+            result = await get_document.ainvoke({"name": "test_doc"})
 
-        mock_tool.execute.assert_called_once_with({"name": "test_doc"})
-        assert "success" in result
-        assert "Test Doc" in result
+            mock_tool.execute.assert_called_once_with({"name": "test_doc"})
+            assert "success" in result
+            assert "Test Doc" in result
 
 
 class TestListClustersExecution:
     """Test list_clusters tool execution."""
 
-    @patch("questfoundry.tools.langchain_tools._list_clusters_tool")
-    def test_list_clusters_delegates(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_list_clusters_delegates(self) -> None:
         """list_clusters should delegate to ListClustersTool."""
-        mock_tool.execute.return_value = json.dumps(
-            {
-                "result": "success",
-                "clusters": ["genre-conventions", "narrative-structure"],
-                "content": "cluster list",
-                "action": "use search_corpus",
-            }
-        )
+        with patch("questfoundry.tools.langchain_tools._list_clusters_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(
+                return_value=json.dumps(
+                    {
+                        "result": "success",
+                        "clusters": ["genre-conventions", "narrative-structure"],
+                        "content": "cluster list",
+                        "action": "use search_corpus",
+                    }
+                )
+            )
 
-        result = list_clusters.invoke({})
+            result = await list_clusters.ainvoke({})
 
-        mock_tool.execute.assert_called_once_with({})
-        assert "success" in result
-        assert "genre-conventions" in result
+            mock_tool.execute.assert_called_once_with({})
+            assert "success" in result
+            assert "genre-conventions" in result
 
 
 class TestWebSearchExecution:
     """Test web_search tool execution."""
 
-    @patch("questfoundry.tools.langchain_tools._web_search_tool")
-    def test_web_search_delegates(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_web_search_delegates(self) -> None:
         """web_search should delegate to WebSearchTool."""
-        mock_tool.execute.return_value = json.dumps(
-            {"result": "success", "content": "search results", "action": "use this"}
-        )
+        with patch("questfoundry.tools.langchain_tools._web_search_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(
+                return_value=json.dumps(
+                    {"result": "success", "content": "search results", "action": "use this"}
+                )
+            )
 
-        result = web_search.invoke({"query": "test search", "max_results": 3})
+            result = await web_search.ainvoke({"query": "test search", "max_results": 3})
 
-        mock_tool.execute.assert_called_once_with(
-            {"query": "test search", "max_results": 3, "recency": "all_time"}
-        )
-        assert "success" in result
+            mock_tool.execute.assert_called_once_with(
+                {"query": "test search", "max_results": 3, "recency": "all_time"}
+            )
+            assert "success" in result
 
-    @patch("questfoundry.tools.langchain_tools._web_search_tool")
-    def test_web_search_with_recency(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_web_search_with_recency(self) -> None:
         """web_search should pass recency parameter."""
-        mock_tool.execute.return_value = json.dumps({"result": "success"})
+        with patch("questfoundry.tools.langchain_tools._web_search_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value=json.dumps({"result": "success"}))
 
-        web_search.invoke({"query": "recent news", "max_results": 5, "recency": "week"})
+            await web_search.ainvoke({"query": "recent news", "max_results": 5, "recency": "week"})
 
-        call_args = mock_tool.execute.call_args[0][0]
-        assert call_args["recency"] == "week"
+            call_args = mock_tool.execute.call_args[0][0]
+            assert call_args["recency"] == "week"
 
-    @patch("questfoundry.tools.langchain_tools._web_search_tool")
-    def test_web_search_defaults(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_web_search_defaults(self) -> None:
         """web_search should use default values."""
-        mock_tool.execute.return_value = json.dumps({"result": "success"})
+        with patch("questfoundry.tools.langchain_tools._web_search_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value=json.dumps({"result": "success"}))
 
-        web_search.invoke({"query": "test"})
+            await web_search.ainvoke({"query": "test"})
 
-        call_args = mock_tool.execute.call_args[0][0]
-        assert call_args["max_results"] == 5
-        assert call_args["recency"] == "all_time"
+            call_args = mock_tool.execute.call_args[0][0]
+            assert call_args["max_results"] == 5
+            assert call_args["recency"] == "all_time"
 
 
 class TestWebFetchExecution:
     """Test web_fetch tool execution."""
 
-    @patch("questfoundry.tools.langchain_tools._web_fetch_tool")
-    def test_web_fetch_delegates(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_web_fetch_delegates(self) -> None:
         """web_fetch should delegate to WebFetchTool."""
-        mock_tool.execute.return_value = json.dumps(
-            {
-                "result": "success",
-                "url": "https://example.com",
-                "content": "page content",
-                "action": "use this",
-            }
-        )
+        with patch("questfoundry.tools.langchain_tools._web_fetch_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(
+                return_value=json.dumps(
+                    {
+                        "result": "success",
+                        "url": "https://example.com",
+                        "content": "page content",
+                        "action": "use this",
+                    }
+                )
+            )
 
-        result = web_fetch.invoke({"url": "https://example.com"})
+            result = await web_fetch.ainvoke({"url": "https://example.com"})
 
-        mock_tool.execute.assert_called_once_with(
-            {"url": "https://example.com", "extract_mode": "markdown"}
-        )
-        assert "success" in result
-        assert "page content" in result
+            mock_tool.execute.assert_called_once_with(
+                {"url": "https://example.com", "extract_mode": "markdown"}
+            )
+            assert "success" in result
+            assert "page content" in result
 
-    @patch("questfoundry.tools.langchain_tools._web_fetch_tool")
-    def test_web_fetch_with_extract_mode(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_web_fetch_with_extract_mode(self) -> None:
         """web_fetch should pass extract_mode parameter."""
-        mock_tool.execute.return_value = json.dumps({"result": "success"})
+        with patch("questfoundry.tools.langchain_tools._web_fetch_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value=json.dumps({"result": "success"}))
 
-        web_fetch.invoke({"url": "https://example.com", "extract_mode": "article"})
+            await web_fetch.ainvoke({"url": "https://example.com", "extract_mode": "article"})
 
-        call_args = mock_tool.execute.call_args[0][0]
-        assert call_args["extract_mode"] == "article"
+            call_args = mock_tool.execute.call_args[0][0]
+            assert call_args["extract_mode"] == "article"
 
 
 class TestToolReturnTypes:
     """Test that all tools return strings (required for LangChain)."""
 
-    @patch("questfoundry.tools.langchain_tools._search_corpus_tool")
-    def test_search_corpus_returns_string(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_search_corpus_returns_string(self) -> None:
         """search_corpus must return a string."""
-        mock_tool.execute.return_value = '{"result": "success"}'
+        with patch("questfoundry.tools.langchain_tools._search_corpus_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value='{"result": "success"}')
 
-        result = search_corpus.invoke({"query": "test"})
-        assert isinstance(result, str)
+            result = await search_corpus.ainvoke({"query": "test"})
+            assert isinstance(result, str)
 
-    @patch("questfoundry.tools.langchain_tools._get_document_tool")
-    def test_get_document_returns_string(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_get_document_returns_string(self) -> None:
         """get_document must return a string."""
-        mock_tool.execute.return_value = '{"result": "success"}'
+        with patch("questfoundry.tools.langchain_tools._get_document_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value='{"result": "success"}')
 
-        result = get_document.invoke({"name": "test"})
-        assert isinstance(result, str)
+            result = await get_document.ainvoke({"name": "test"})
+            assert isinstance(result, str)
 
-    @patch("questfoundry.tools.langchain_tools._list_clusters_tool")
-    def test_list_clusters_returns_string(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_list_clusters_returns_string(self) -> None:
         """list_clusters must return a string."""
-        mock_tool.execute.return_value = '{"result": "success"}'
+        with patch("questfoundry.tools.langchain_tools._list_clusters_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value='{"result": "success"}')
 
-        result = list_clusters.invoke({})
-        assert isinstance(result, str)
+            result = await list_clusters.ainvoke({})
+            assert isinstance(result, str)
 
-    @patch("questfoundry.tools.langchain_tools._web_search_tool")
-    def test_web_search_returns_string(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_web_search_returns_string(self) -> None:
         """web_search must return a string."""
-        mock_tool.execute.return_value = '{"result": "success"}'
+        with patch("questfoundry.tools.langchain_tools._web_search_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value='{"result": "success"}')
 
-        result = web_search.invoke({"query": "test"})
-        assert isinstance(result, str)
+            result = await web_search.ainvoke({"query": "test"})
+            assert isinstance(result, str)
 
-    @patch("questfoundry.tools.langchain_tools._web_fetch_tool")
-    def test_web_fetch_returns_string(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_web_fetch_returns_string(self) -> None:
         """web_fetch must return a string."""
-        mock_tool.execute.return_value = '{"result": "success"}'
+        with patch("questfoundry.tools.langchain_tools._web_fetch_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value='{"result": "success"}')
 
-        result = web_fetch.invoke({"url": "https://example.com"})
-        assert isinstance(result, str)
+            result = await web_fetch.ainvoke({"url": "https://example.com"})
+            assert isinstance(result, str)
 
 
 class TestErrorHandling:
     """Test that tools handle errors gracefully."""
 
-    @patch("questfoundry.tools.langchain_tools._search_corpus_tool")
-    def test_search_corpus_error_propagates(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_search_corpus_error_propagates(self) -> None:
         """search_corpus should return error JSON from underlying tool."""
-        mock_tool.execute.return_value = json.dumps(
-            {"result": "error", "error": "Corpus not available", "action": "proceed"}
-        )
+        with patch("questfoundry.tools.langchain_tools._search_corpus_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(
+                return_value=json.dumps(
+                    {"result": "error", "error": "Corpus not available", "action": "proceed"}
+                )
+            )
 
-        result = search_corpus.invoke({"query": "test"})
+            result = await search_corpus.ainvoke({"query": "test"})
 
-        data = json.loads(result)
-        assert data["result"] == "error"
-        assert "error" in data
+            data = json.loads(result)
+            assert data["result"] == "error"
+            assert "error" in data
 
-    @patch("questfoundry.tools.langchain_tools._web_search_tool")
-    def test_web_search_error_propagates(self, mock_tool: MagicMock) -> None:
+    @pytest.mark.asyncio
+    async def test_web_search_error_propagates(self) -> None:
         """web_search should return error JSON from underlying tool."""
-        mock_tool.execute.return_value = json.dumps(
-            {"result": "error", "error": "SEARXNG_URL not configured", "action": "proceed"}
-        )
+        with patch("questfoundry.tools.langchain_tools._web_search_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(
+                return_value=json.dumps(
+                    {
+                        "result": "error",
+                        "error": "SEARXNG_URL not configured",
+                        "action": "proceed",
+                    }
+                )
+            )
 
-        result = web_search.invoke({"query": "test"})
+            result = await web_search.ainvoke({"query": "test"})
 
-        data = json.loads(result)
-        assert data["result"] == "error"
+            data = json.loads(result)
+            assert data["result"] == "error"
