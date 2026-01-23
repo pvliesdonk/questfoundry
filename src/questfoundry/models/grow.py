@@ -107,7 +107,7 @@ class KnotProposal(BaseModel):
 
     beat_ids: list[str] = Field(min_length=2)
     resolved_location: str | None = None
-    rationale: str = ""
+    rationale: str = Field(min_length=1)
 
 
 class Phase3Output(BaseModel):

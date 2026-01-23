@@ -458,6 +458,7 @@ class TestPhase3Knots:
                 KnotProposal(
                     beat_ids=["beat::mentor_commits_canonical", "beat::mentor_commits_alt"],
                     resolved_location="market",
+                    rationale="Same tension beats",
                 ),
             ]
         )
@@ -487,6 +488,7 @@ class TestPhase3Knots:
                 KnotProposal(
                     beat_ids=["beat::nonexistent_a", "beat::nonexistent_b"],
                     resolved_location="market",
+                    rationale="Nonexistent beats",
                 ),
             ]
         )
@@ -520,6 +522,7 @@ class TestPhase3Knots:
                 KnotProposal(
                     beat_ids=["beat::mentor_meet", "beat::artifact_discover"],
                     resolved_location="market",
+                    rationale="Requires dependency between these beats",
                 ),
             ]
         )

@@ -524,21 +524,24 @@ class GrowStage:
         beat_summaries: list[str] = []
         valid_beat_ids: set[str] = set()
 
+        beat_info: dict[str, str] = {}
         for candidate in candidates:
             for bid in candidate.beat_ids:
                 valid_beat_ids.add(bid)
+                if bid in beat_info:
+                    continue
                 data = beat_nodes.get(bid, {})
                 location = data.get("location", "unspecified")
                 alternatives = data.get("location_alternatives", [])
                 summary = data.get("summary", "")
                 entities = data.get("entities", [])
-                beat_summaries.append(
+                beat_info[bid] = (
                     f'- {bid}: summary="{summary}", '
                     f'location="{location}", '
                     f"location_alternatives={alternatives}, "
-                    f"entities={entities}, "
-                    f"signal={candidate.signal_type}({candidate.shared_value})"
+                    f"entities={entities}"
                 )
+        beat_summaries = list(beat_info.values())
 
         valid_beat_ids_list = sorted(valid_beat_ids)
 
@@ -590,8 +593,16 @@ class GrowStage:
                 skipped_count += 1
                 continue
 
-            # Resolve location
-            location = proposal.resolved_location or resolve_knot_location(graph, valid_ids)
+            # Resolve location (prefer LLM proposal, fallback to algorithm)
+            if proposal.resolved_location:
+                location = proposal.resolved_location
+            else:
+                location = resolve_knot_location(graph, valid_ids)
+                log.debug(
+                    "phase3_location_resolved",
+                    beat_ids=valid_ids,
+                    resolved=location,
+                )
 
             # Apply the knot
             apply_knot_mark(graph, valid_ids, location)

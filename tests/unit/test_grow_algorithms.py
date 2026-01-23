@@ -1163,7 +1163,7 @@ class TestCheckKnotCompatibility:
             graph, ["beat::mentor_commits_canonical", "beat::mentor_commits_alt"]
         )
         assert len(errors) > 0
-        assert any("same tension" in e.issue for e in errors)
+        assert any("at least 2 different tensions" in e.issue for e in errors)
 
     def test_incompatible_requires_conflict(self) -> None:
         """Beats with requires edge are incompatible."""

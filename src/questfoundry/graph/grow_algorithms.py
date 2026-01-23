@@ -672,14 +672,14 @@ def _group_by_entity(
         if beat_id in beat_nodes:
             entity_beats[entity_id].append(beat_id)
 
-    # Also check entity references in beat data
+    # Also check entity references in beat data.
+    # beat_data["entities"] may contain raw IDs ("mentor") or prefixed ("entity::mentor").
+    # Normalize to prefixed form to match features edges.
     for beat_id, beat_data in beat_nodes.items():
         entities = beat_data.get("entities", [])
         for entity_ref in entities:
-            entity_id = (
-                f"entity::{entity_ref}" if not entity_ref.startswith("entity::") else entity_ref
-            )
-            entity_beats[entity_id].append(beat_id)
+            prefixed = entity_ref if entity_ref.startswith("entity::") else f"entity::{entity_ref}"
+            entity_beats[prefixed].append(beat_id)
 
     candidates: list[KnotCandidate] = []
     seen_pairs: set[tuple[str, ...]] = set()
@@ -772,17 +772,16 @@ def check_knot_compatibility(
     beat_tensions = _build_beat_tensions(graph, beat_nodes)
     tension_sets = [beat_tensions.get(bid, set()) for bid in beat_ids]
 
-    # All beats share the same single tension = invalid (same tension = alternative)
-    common_tensions = set.intersection(*tension_sets) if tension_sets else set()
+    # Knots must span at least 2 different tensions
     all_tensions = set.union(*tension_sets) if tension_sets else set()
 
-    if len(all_tensions) < 2 and common_tensions:
+    if len(all_tensions) < 2:
         errors.append(
             GrowValidationError(
                 field_path="knot.tensions",
                 issue=(
-                    f"All beats belong to the same tension(s): {sorted(common_tensions)}. "
-                    f"Knots must span different tensions."
+                    f"Beats span only {len(all_tensions)} tension(s): {sorted(all_tensions)}. "
+                    f"Knots must span at least 2 different tensions."
                 ),
                 category=GrowErrorCategory.STRUCTURAL,
             )
@@ -892,7 +891,14 @@ def apply_knot_mark(
         if edge["from"] in beat_set:
             all_thread_ids.add(edge["to"])
 
-    # Update each beat
+    # Collect new edges to add (batch to avoid stale reads)
+    new_edges: list[tuple[str, str]] = []
+    for bid in beat_ids:
+        current_threads = {e["to"] for e in belongs_to_edges if e["from"] == bid}
+        for thread_id in all_thread_ids - current_threads:
+            new_edges.append((bid, thread_id))
+
+    # Update each beat's node data
     for bid in beat_ids:
         others = sorted(b for b in beat_ids if b != bid)
         update_data: dict[str, Any] = {"knot_group": others}
@@ -900,7 +906,6 @@ def apply_knot_mark(
             update_data["location"] = resolved_location
         graph.update_node(bid, **update_data)
 
-        # Add belongs_to edges for threads this beat isn't yet assigned to
-        current_threads = {e["to"] for e in belongs_to_edges if e["from"] == bid}
-        for thread_id in all_thread_ids - current_threads:
-            graph.add_edge("belongs_to", bid, thread_id)
+    # Apply cross-thread edges
+    for from_id, to_id in new_edges:
+        graph.add_edge("belongs_to", from_id, to_id)
