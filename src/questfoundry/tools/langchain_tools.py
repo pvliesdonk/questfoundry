@@ -39,7 +39,7 @@ _present_options_tool = PresentOptionsTool()
 
 
 @tool
-def search_corpus(query: str, cluster: str | None = None, limit: int = 5) -> str:
+async def search_corpus(query: str, cluster: str | None = None, limit: int = 5) -> str:
     """Search the IF Craft Corpus knowledge base for relevant craft guidance.
 
     The corpus contains curated writing guidance on interactive fiction craft,
@@ -60,11 +60,11 @@ def search_corpus(query: str, cluster: str | None = None, limit: int = 5) -> str
         - {"result": "error", "error": "...", "action": "..."}
     """
     arguments = {"query": query, "limit": limit, "cluster": cluster}
-    return _search_corpus_tool.execute(arguments)
+    return await _search_corpus_tool.execute(arguments)
 
 
 @tool
-def get_document(name: str) -> str:
+async def get_document(name: str) -> str:
     """Retrieve a full document from the IF Craft Corpus by name.
 
     Use this after search_corpus identifies a relevant document that needs
@@ -80,11 +80,11 @@ def get_document(name: str) -> str:
         - {"result": "no_results", "document": "...", "action": "..."}
         - {"result": "error", "error": "...", "action": "..."}
     """
-    return _get_document_tool.execute({"name": name})
+    return await _get_document_tool.execute({"name": name})
 
 
 @tool
-def list_clusters() -> str:
+async def list_clusters() -> str:
     """List available topic clusters in the IF Craft Corpus.
 
     Discovers what categories of craft knowledge are available for targeted
@@ -95,11 +95,11 @@ def list_clusters() -> str:
         - {"result": "success", "clusters": [...], "content": "...", "action": "..."}
         - {"result": "error", "error": "...", "action": "..."}
     """
-    return _list_clusters_tool.execute({})
+    return await _list_clusters_tool.execute({})
 
 
 @tool
-def web_search(query: str, max_results: int = 5, recency: str = "all_time") -> str:
+async def web_search(query: str, max_results: int = 5, recency: str = "all_time") -> str:
     """Search the web using SearXNG for current information and trends.
 
     Useful for researching contemporary topics, current events, or information
@@ -118,13 +118,13 @@ def web_search(query: str, max_results: int = 5, recency: str = "all_time") -> s
         - {"result": "no_results", "query": "...", "action": "..."}
         - {"result": "error", "error": "...", "action": "..."}
     """
-    return _web_search_tool.execute(
+    return await _web_search_tool.execute(
         {"query": query, "max_results": max_results, "recency": recency}
     )
 
 
 @tool
-def web_fetch(url: str, extract_mode: str = "markdown") -> str:
+async def web_fetch(url: str, extract_mode: str = "markdown") -> str:
     """Fetch and extract content from a URL as markdown.
 
     Retrieves web page content with intelligent extraction that strips
@@ -139,11 +139,11 @@ def web_fetch(url: str, extract_mode: str = "markdown") -> str:
         - {"result": "success", "content": "...", "url": "...", "action": "..."}
         - {"result": "error", "url": "...", "error": "...", "action": "..."}
     """
-    return _web_fetch_tool.execute({"url": url, "extract_mode": extract_mode})
+    return await _web_fetch_tool.execute({"url": url, "extract_mode": extract_mode})
 
 
 @tool
-def present_options(question: str, options: list[dict[str, str | bool]]) -> str:
+async def present_options(question: str, options: list[dict[str, str | bool]]) -> str:
     """Present structured choices to the user during conversation.
 
     Use when offering clear alternatives for decisions like genre, tone,
@@ -174,7 +174,7 @@ def present_options(question: str, options: list[dict[str, str | bool]]) -> str:
             ]
         )
     """
-    return _present_options_tool.execute({"question": question, "options": options})
+    return await _present_options_tool.execute({"question": question, "options": options})
 
 
 def get_all_research_tools() -> list[BaseTool]:

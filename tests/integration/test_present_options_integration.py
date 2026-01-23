@@ -202,15 +202,14 @@ class TestPresentOptionsToolIntegration:
 
         # Execute tool
         tool = PresentOptionsTool()
-        result = await tool._execute_async(
+        result = await tool.execute(
             {
                 "question": "What genre?",
                 "options": [
                     {"label": "Mystery", "recommended": True},
                     {"label": "Horror"},
                 ],
-            },
-            get_interactive_callbacks(),
+            }
         )
 
         parsed = json.loads(result)
@@ -228,7 +227,8 @@ class TestPresentOptionsToolIntegration:
         # Verify user input was awaited
         user_input_fn.assert_awaited_once()
 
-    def test_langchain_wrapper_available(self) -> None:
+    @pytest.mark.asyncio
+    async def test_langchain_wrapper_available(self) -> None:
         """present_options is available as a LangChain tool."""
         from questfoundry.tools import get_interactive_tools, present_options
 
@@ -237,7 +237,7 @@ class TestPresentOptionsToolIntegration:
         assert tools[0].name == "present_options"
 
         # Verify tool can be invoked (returns skipped in non-interactive)
-        result = present_options.invoke(
+        result = await present_options.ainvoke(
             {
                 "question": "Test?",
                 "options": [{"label": "A"}, {"label": "B"}],

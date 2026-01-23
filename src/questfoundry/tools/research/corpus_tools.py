@@ -158,7 +158,7 @@ class SearchCorpusTool:
             },
         )
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         """Execute corpus search.
 
         Args:
@@ -272,7 +272,7 @@ class GetDocumentTool:
             },
         )
 
-    def execute(self, arguments: dict[str, Any]) -> str:
+    async def execute(self, arguments: dict[str, Any]) -> str:
         """Execute document retrieval.
 
         Args:
@@ -355,7 +355,7 @@ class ListClustersTool:
             },
         )
 
-    def execute(self, arguments: dict[str, Any]) -> str:  # noqa: ARG002
+    async def execute(self, arguments: dict[str, Any]) -> str:  # noqa: ARG002
         """Execute cluster listing.
 
         Args:

@@ -25,14 +25,12 @@ Example tool call:
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any, NotRequired, TypedDict
 
 from questfoundry.observability.logging import get_logger
 from questfoundry.tools.base import Tool, ToolDefinition
 from questfoundry.tools.interactive_context import (
-    InteractiveCallbacks,
     get_interactive_callbacks,
 )
 
@@ -116,11 +114,11 @@ class PresentOptionsTool:
             parameters=PRESENT_OPTIONS_SCHEMA,
         )
 
-    def execute(self, arguments: dict[str, Any]) -> str:
-        """Execute the tool synchronously.
+    async def execute(self, arguments: dict[str, Any]) -> str:
+        """Execute the tool.
 
         In non-interactive mode, returns immediately with guidance.
-        In interactive mode, runs the async logic via the event loop.
+        In interactive mode, awaits user input via callbacks.
 
         Args:
             arguments: Tool arguments with question and options.
@@ -140,39 +138,6 @@ class PresentOptionsTool:
                 }
             )
 
-        # Run async logic using the stored event loop
-        # (The loop is stored in callbacks because this sync tool may be
-        # executed in a thread pool where get_running_loop() would fail)
-        try:
-            future = asyncio.run_coroutine_threadsafe(
-                self._execute_async(arguments, callbacks),
-                callbacks.event_loop,
-            )
-            return future.result(timeout=300)  # 5 minute timeout for user input
-        except TimeoutError:
-            log.warning("present_options_timeout")
-            return json.dumps(
-                {
-                    "result": "error",
-                    "error": "User input timed out",
-                    "action": "Proceed with your best judgment on this decision.",
-                }
-            )
-
-    async def _execute_async(
-        self,
-        arguments: dict[str, Any],
-        callbacks: InteractiveCallbacks,
-    ) -> str:
-        """Async implementation that uses interactive callbacks.
-
-        Args:
-            arguments: Tool arguments with question and options.
-            callbacks: InteractiveCallbacks with user_input_fn and display_fn.
-
-        Returns:
-            JSON string with user's selection.
-        """
         question = arguments.get("question", "Please choose an option:")
         options: list[dict[str, Any]] = arguments.get("options", [])
 

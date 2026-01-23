@@ -6,6 +6,8 @@ import sys
 from dataclasses import dataclass
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
+
 from questfoundry.tools.research.web_tools import (
     WebFetchTool,
     WebSearchTool,
@@ -48,7 +50,8 @@ class TestWebSearchTool:
         assert "query" in defn.parameters["properties"]
         assert "query" in defn.parameters["required"]
 
-    def test_execute_without_webtools_installed(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_without_webtools_installed(self) -> None:
         """Should return error when pvl-webtools not installed."""
         tool = WebSearchTool()
 
@@ -56,11 +59,12 @@ class TestWebSearchTool:
             "questfoundry.tools.research.web_tools._web_tools_available",
             return_value=False,
         ):
-            result = tool.execute({"query": "test"})
+            result = await tool.execute({"query": "test"})
 
         assert "not installed" in result.lower() or "not available" in result.lower()
 
-    def test_execute_without_searxng_configured(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_without_searxng_configured(self) -> None:
         """Should return error when SEARXNG_URL not set."""
         tool = WebSearchTool()
 
@@ -74,11 +78,12 @@ class TestWebSearchTool:
                 return_value=False,
             ),
         ):
-            result = tool.execute({"query": "test"})
+            result = await tool.execute({"query": "test"})
 
         assert "searxng" in result.lower() or "not configured" in result.lower()
 
-    def test_execute_with_results(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_with_results(self) -> None:
         """Should return formatted results when search succeeds."""
         tool = WebSearchTool()
 
@@ -107,13 +112,14 @@ class TestWebSearchTool:
                 return_value=True,
             ),
         ):
-            result = tool.execute({"query": "interactive fiction guide"})
+            result = await tool.execute({"query": "interactive fiction guide"})
 
         assert "Interactive Fiction Guide" in result
         assert "example.com" in result
         assert "comprehensive guide" in result
 
-    def test_execute_no_results(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_no_results(self) -> None:
         """Should return structured JSON with no_results status (ADR-008)."""
         import json
 
@@ -135,7 +141,7 @@ class TestWebSearchTool:
                 return_value=True,
             ),
         ):
-            result = tool.execute({"query": "xyz123unique"})
+            result = await tool.execute({"query": "xyz123unique"})
 
         # ADR-008: Structured JSON response
         data = json.loads(result)
@@ -144,7 +150,8 @@ class TestWebSearchTool:
         assert "action" in data
         assert "proceed" in data["action"].lower()
 
-    def test_execute_handles_exception(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_handles_exception(self) -> None:
         """Should return error message when search fails."""
         tool = WebSearchTool()
 
@@ -164,7 +171,7 @@ class TestWebSearchTool:
                 return_value=True,
             ),
         ):
-            result = tool.execute({"query": "test"})
+            result = await tool.execute({"query": "test"})
 
         assert "failed" in result.lower()
         assert "timeout" in result.lower()
@@ -183,7 +190,8 @@ class TestWebFetchTool:
         assert "url" in defn.parameters["properties"]
         assert "url" in defn.parameters["required"]
 
-    def test_execute_without_webtools_installed(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_without_webtools_installed(self) -> None:
         """Should return error when pvl-webtools not installed."""
         tool = WebFetchTool()
 
@@ -191,11 +199,12 @@ class TestWebFetchTool:
             "questfoundry.tools.research.web_tools._web_tools_available",
             return_value=False,
         ):
-            result = tool.execute({"url": "https://example.com"})
+            result = await tool.execute({"url": "https://example.com"})
 
         assert "not installed" in result.lower()
 
-    def test_execute_success(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_success(self) -> None:
         """Should return formatted content when fetch succeeds."""
         tool = WebFetchTool()
 
@@ -218,13 +227,14 @@ class TestWebFetchTool:
                 return_value=True,
             ),
         ):
-            result = tool.execute({"url": "https://example.com/article"})
+            result = await tool.execute({"url": "https://example.com/article"})
 
         assert "example.com/article" in result
         assert "Article Title" in result
         assert "markdown" in result.lower()
 
-    def test_execute_with_extract_mode(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_with_extract_mode(self) -> None:
         """Should pass extract_mode to fetch."""
         tool = WebFetchTool()
 
@@ -247,13 +257,14 @@ class TestWebFetchTool:
                 return_value=True,
             ),
         ):
-            result = tool.execute({"url": "https://example.com", "extract_mode": "metadata"})
+            result = await tool.execute({"url": "https://example.com", "extract_mode": "metadata"})
 
         # Verify web_fetch was called
         assert mock_web_fetch.called
         assert "Metadata" in result
 
-    def test_execute_truncates_long_content(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_truncates_long_content(self) -> None:
         """Should truncate content that exceeds limit."""
         tool = WebFetchTool()
 
@@ -277,12 +288,13 @@ class TestWebFetchTool:
                 return_value=True,
             ),
         ):
-            result = tool.execute({"url": "https://example.com"})
+            result = await tool.execute({"url": "https://example.com"})
 
         assert "truncated" in result.lower()
         assert len(result) < len(long_content)
 
-    def test_execute_handles_exception(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_handles_exception(self) -> None:
         """Should return error message when fetch fails."""
         tool = WebFetchTool()
 
@@ -298,7 +310,7 @@ class TestWebFetchTool:
                 return_value=True,
             ),
         ):
-            result = tool.execute({"url": "https://example.com/missing"})
+            result = await tool.execute({"url": "https://example.com/missing"})
 
         assert "failed" in result.lower()
         assert "404" in result

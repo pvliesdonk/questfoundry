@@ -6,6 +6,8 @@ import sys
 from dataclasses import dataclass
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from questfoundry.tools.research.corpus_tools import (
     CorpusNotAvailableError,
     GetDocumentTool,
@@ -50,7 +52,8 @@ class TestSearchCorpusTool:
         assert "query" in defn.parameters["properties"]
         assert "query" in defn.parameters["required"]
 
-    def test_execute_without_corpus_installed(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_without_corpus_installed(self) -> None:
         """Should return error when corpus not installed."""
         tool = SearchCorpusTool()
 
@@ -61,11 +64,12 @@ class TestSearchCorpusTool:
             # Clear thread-local corpus cache
             _clear_corpus_cache()
 
-            result = tool.execute({"query": "test"})
+            result = await tool.execute({"query": "test"})
 
         assert "not available" in result.lower() or "not installed" in result.lower()
 
-    def test_execute_with_results(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_with_results(self) -> None:
         """Should return formatted results when search succeeds."""
         _clear_corpus_cache()
 
@@ -103,14 +107,15 @@ class TestSearchCorpusTool:
             ),
         ):
             _clear_corpus_cache()
-            result = tool.execute({"query": "dialogue"})
+            result = await tool.execute({"query": "dialogue"})
 
         assert "dialogue_craft" in result
         assert "0.85" in result
         assert "subtext" in result.lower()
         mock_corpus.search.assert_called_once_with("dialogue", cluster=None, limit=5, mode="hybrid")
 
-    def test_execute_with_cluster_filter(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_with_cluster_filter(self) -> None:
         """Should pass cluster filter to search."""
         _clear_corpus_cache()
 
@@ -136,13 +141,14 @@ class TestSearchCorpusTool:
             ),
         ):
             _clear_corpus_cache()
-            tool.execute({"query": "mystery", "cluster": "genre-conventions", "limit": 3})
+            await tool.execute({"query": "mystery", "cluster": "genre-conventions", "limit": 3})
 
         mock_corpus.search.assert_called_once_with(
             "mystery", cluster="genre-conventions", limit=3, mode="hybrid"
         )
 
-    def test_execute_no_results(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_no_results(self) -> None:
         """Should return structured JSON with no_results status (ADR-008)."""
         import json
 
@@ -170,7 +176,7 @@ class TestSearchCorpusTool:
             ),
         ):
             _clear_corpus_cache()
-            result = tool.execute({"query": "xyz123"})
+            result = await tool.execute({"query": "xyz123"})
 
         # ADR-008: Structured JSON response
         data = json.loads(result)
@@ -193,7 +199,8 @@ class TestGetDocumentTool:
         assert "name" in defn.parameters["properties"]
         assert "name" in defn.parameters["required"]
 
-    def test_execute_document_found(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_document_found(self) -> None:
         """Should return formatted document when found."""
         tool = GetDocumentTool()
 
@@ -216,14 +223,15 @@ class TestGetDocumentTool:
                 return_value=mock_corpus,
             ),
         ):
-            result = tool.execute({"name": "horror_atmosphere"})
+            result = await tool.execute({"name": "horror_atmosphere"})
 
         assert "Horror Atmosphere" in result
         assert "emotional-design" in result
         assert "dread" in result
         mock_corpus.get_document.assert_called_once_with("horror_atmosphere")
 
-    def test_execute_document_not_found(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_document_not_found(self) -> None:
         """Should return helpful message when document not found."""
         tool = GetDocumentTool()
 
@@ -240,7 +248,7 @@ class TestGetDocumentTool:
                 return_value=mock_corpus,
             ),
         ):
-            result = tool.execute({"name": "nonexistent"})
+            result = await tool.execute({"name": "nonexistent"})
 
         assert "not found" in result.lower()
 
@@ -257,7 +265,8 @@ class TestListClustersTool:
         assert "cluster" in defn.description.lower()
         assert defn.parameters["type"] == "object"
 
-    def test_execute_returns_formatted_clusters(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_returns_formatted_clusters(self) -> None:
         """Should return formatted cluster list with descriptions."""
         tool = ListClustersTool()
 
@@ -276,7 +285,7 @@ class TestListClustersTool:
                 return_value=mock_corpus,
             ),
         ):
-            result = tool.execute({})
+            result = await tool.execute({})
 
         assert "genre-conventions" in result
         assert "narrative-structure" in result

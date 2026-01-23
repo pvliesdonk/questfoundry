@@ -69,15 +69,15 @@ class TestProvidersConfig:
         with patch.dict("os.environ", {}, clear=True):
             assert config.get_discuss_provider() == "ollama/qwen3:4b-instruct-32k"
 
-    def test_get_discuss_provider_env_override(self) -> None:
-        """Environment variable overrides config value."""
+    def test_get_discuss_provider_ignores_env(self) -> None:
+        """ProvidersConfig returns config value, not env var (SRP: orchestrator handles env)."""
         config = ProvidersConfig(
             default="ollama/qwen3:4b-instruct-32k",
             discuss="openai/gpt-5-mini",
         )
 
         with patch.dict("os.environ", {"QF_PROVIDER_DISCUSS": "anthropic/claude-3"}):
-            assert config.get_discuss_provider() == "anthropic/claude-3"
+            assert config.get_discuss_provider() == "openai/gpt-5-mini"
 
     def test_get_summarize_provider_from_config(self) -> None:
         """get_summarize_provider returns config value when set."""
@@ -96,15 +96,15 @@ class TestProvidersConfig:
         with patch.dict("os.environ", {}, clear=True):
             assert config.get_summarize_provider() == "ollama/qwen3:4b-instruct-32k"
 
-    def test_get_summarize_provider_env_override(self) -> None:
-        """Environment variable overrides config value."""
+    def test_get_summarize_provider_ignores_env(self) -> None:
+        """ProvidersConfig returns config value, not env var (SRP: orchestrator handles env)."""
         config = ProvidersConfig(
             default="ollama/qwen3:4b-instruct-32k",
             summarize="openai/gpt-5-mini",
         )
 
         with patch.dict("os.environ", {"QF_PROVIDER_SUMMARIZE": "anthropic/claude-3"}):
-            assert config.get_summarize_provider() == "anthropic/claude-3"
+            assert config.get_summarize_provider() == "openai/gpt-5-mini"
 
     def test_get_serialize_provider_from_config(self) -> None:
         """get_serialize_provider returns config value when set."""
@@ -123,15 +123,15 @@ class TestProvidersConfig:
         with patch.dict("os.environ", {}, clear=True):
             assert config.get_serialize_provider() == "ollama/qwen3:4b-instruct-32k"
 
-    def test_get_serialize_provider_env_override(self) -> None:
-        """Environment variable overrides config value."""
+    def test_get_serialize_provider_ignores_env(self) -> None:
+        """ProvidersConfig returns config value, not env var (SRP: orchestrator handles env)."""
         config = ProvidersConfig(
             default="ollama/qwen3:4b-instruct-32k",
             serialize="openai/o1-mini",
         )
 
         with patch.dict("os.environ", {"QF_PROVIDER_SERIALIZE": "openai/o3-mini"}):
-            assert config.get_serialize_provider() == "openai/o3-mini"
+            assert config.get_serialize_provider() == "openai/o1-mini"
 
 
 # --- Tests for ProjectConfig with hybrid providers ---

@@ -133,10 +133,11 @@ class TestPresentOptionsToolNonInteractive:
         """Clear context before each test."""
         clear_interactive_callbacks()
 
-    def test_returns_skipped_when_not_interactive(self) -> None:
+    @pytest.mark.asyncio
+    async def test_returns_skipped_when_not_interactive(self) -> None:
         """Tool returns skipped result when callbacks not available."""
         tool = PresentOptionsTool()
-        result = tool.execute(
+        result = await tool.execute(
             {
                 "question": "What genre?",
                 "options": [
@@ -296,27 +297,31 @@ class TestPresentOptionsToolAsync:
     @pytest.mark.asyncio
     async def test_execute_async_success(self, mock_callbacks: InteractiveCallbacks) -> None:
         """Async execution returns success with selection."""
-        tool = PresentOptionsTool()
-        arguments: dict[str, Any] = {
-            "question": "What genre?",
-            "options": [
-                {"label": "Mystery", "description": "Focus on clues"},
-                {"label": "Horror", "description": "Focus on fear"},
-            ],
-        }
+        set_interactive_callbacks(mock_callbacks.user_input_fn, mock_callbacks.display_fn)
+        try:
+            tool = PresentOptionsTool()
+            arguments: dict[str, Any] = {
+                "question": "What genre?",
+                "options": [
+                    {"label": "Mystery", "description": "Focus on clues"},
+                    {"label": "Horror", "description": "Focus on fear"},
+                ],
+            }
 
-        result = await tool._execute_async(arguments, mock_callbacks)
-        parsed = json.loads(result)
+            result = await tool.execute(arguments)
+            parsed = json.loads(result)
 
-        assert parsed["result"] == "success"
-        assert parsed["question"] == "What genre?"
-        assert parsed["selected"] == "Mystery"
-        assert "action" in parsed
+            assert parsed["result"] == "success"
+            assert parsed["question"] == "What genre?"
+            assert parsed["selected"] == "Mystery"
+            assert "action" in parsed
 
-        # Verify display was called
-        mock_callbacks.display_fn.assert_called_once()
-        display_call = mock_callbacks.display_fn.call_args[0][0]
-        assert "What genre?" in display_call
+            # Verify display was called
+            mock_callbacks.display_fn.assert_called_once()
+            display_call = mock_callbacks.display_fn.call_args[0][0]
+            assert "What genre?" in display_call
+        finally:
+            clear_interactive_callbacks()
 
     @pytest.mark.asyncio
     async def test_execute_async_with_freeform_response(
@@ -324,38 +329,45 @@ class TestPresentOptionsToolAsync:
     ) -> None:
         """Async execution handles freeform user response."""
         mock_callbacks.user_input_fn = AsyncMock(return_value="Something dark and moody")
+        set_interactive_callbacks(mock_callbacks.user_input_fn, mock_callbacks.display_fn)
+        try:
+            tool = PresentOptionsTool()
+            arguments: dict[str, Any] = {
+                "question": "What tone?",
+                "options": [
+                    {"label": "Light"},
+                    {"label": "Dark"},
+                ],
+            }
 
-        tool = PresentOptionsTool()
-        arguments: dict[str, Any] = {
-            "question": "What tone?",
-            "options": [
-                {"label": "Light"},
-                {"label": "Dark"},
-            ],
-        }
+            result = await tool.execute(arguments)
+            parsed = json.loads(result)
 
-        result = await tool._execute_async(arguments, mock_callbacks)
-        parsed = json.loads(result)
-
-        assert parsed["result"] == "success"
-        assert parsed["selected"] == "Something dark and moody"
+            assert parsed["result"] == "success"
+            assert parsed["selected"] == "Something dark and moody"
+        finally:
+            clear_interactive_callbacks()
 
     @pytest.mark.asyncio
     async def test_execute_async_insufficient_options(
         self, mock_callbacks: InteractiveCallbacks
     ) -> None:
         """Async execution returns error with insufficient options."""
-        tool = PresentOptionsTool()
-        arguments: dict[str, Any] = {
-            "question": "What genre?",
-            "options": [{"label": "Only one"}],  # Need at least 2
-        }
+        set_interactive_callbacks(mock_callbacks.user_input_fn, mock_callbacks.display_fn)
+        try:
+            tool = PresentOptionsTool()
+            arguments: dict[str, Any] = {
+                "question": "What genre?",
+                "options": [{"label": "Only one"}],  # Need at least 2
+            }
 
-        result = await tool._execute_async(arguments, mock_callbacks)
-        parsed = json.loads(result)
+            result = await tool.execute(arguments)
+            parsed = json.loads(result)
 
-        assert parsed["result"] == "error"
-        assert "2 options" in parsed["error"].lower()
+            assert parsed["result"] == "error"
+            assert "2 options" in parsed["error"].lower()
+        finally:
+            clear_interactive_callbacks()
 
 
 class TestPresentOptionsToolProtocol:
@@ -368,12 +380,13 @@ class TestPresentOptionsToolProtocol:
         tool = PresentOptionsTool()
         assert isinstance(tool, Tool)
 
-    def test_execute_returns_string(self) -> None:
+    @pytest.mark.asyncio
+    async def test_execute_returns_string(self) -> None:
         """execute() returns a string."""
         clear_interactive_callbacks()
         tool = PresentOptionsTool()
 
-        result = tool.execute(
+        result = await tool.execute(
             {
                 "question": "Test?",
                 "options": [{"label": "A"}, {"label": "B"}],
