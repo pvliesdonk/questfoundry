@@ -1542,6 +1542,23 @@ class TestGetThreadBeatSequence:
             "beat::mentor_commits_alt",
         ]
 
+    def test_cycle_raises_value_error(self) -> None:
+        """Cycle in thread beat dependencies raises ValueError."""
+        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+
+        graph = Graph.empty()
+        graph.create_node("thread::t1", {"type": "thread", "raw_id": "t1"})
+        graph.create_node("beat::a", {"type": "beat", "summary": "A"})
+        graph.create_node("beat::b", {"type": "beat", "summary": "B"})
+        graph.add_edge("belongs_to", "beat::a", "thread::t1")
+        graph.add_edge("belongs_to", "beat::b", "thread::t1")
+        # Create a cycle: a requires b, b requires a
+        graph.add_edge("requires", "beat::a", "beat::b")
+        graph.add_edge("requires", "beat::b", "beat::a")
+
+        with pytest.raises(ValueError, match="Cycle detected"):
+            get_thread_beat_sequence(graph, "thread::t1")
+
 
 class TestDetectPacingIssues:
     def test_no_issues_without_scene_types(self) -> None:
@@ -1687,3 +1704,27 @@ class TestInsertGapBeat:
             from_id="beat::opening", to_id=beat_id, edge_type="requires"
         )
         assert len(requires_to_new) == 1
+
+    def test_id_avoids_collision_with_existing_gaps(self) -> None:
+        """Gap IDs increment past highest existing gap index."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("thread::t1", {"type": "thread", "raw_id": "t1"})
+        graph.create_node("beat::a", {"type": "beat", "summary": "A"})
+        # Simulate existing gap beats (gap_1 exists, gap_2 was deleted)
+        graph.create_node("beat::gap_1", {"type": "beat", "summary": "Gap 1"})
+        graph.create_node("beat::gap_3", {"type": "beat", "summary": "Gap 3"})
+        graph.add_edge("belongs_to", "beat::a", "thread::t1")
+
+        beat_id = insert_gap_beat(
+            graph,
+            thread_id="thread::t1",
+            after_beat="beat::a",
+            before_beat=None,
+            summary="New gap",
+            scene_type="sequel",
+        )
+
+        # Should be gap_4 (max existing is 3, so next is 4)
+        assert beat_id == "beat::gap_4"
