@@ -533,8 +533,8 @@ class GrowStage:
     def _phase_11_prune(self, graph: Graph) -> GrowPhaseResult:
         """Phase 11: Prune unreachable passages.
 
-        Uses BFS from the first passage (topologically) to find reachable
-        passages via arc_contains edges. Deletes unreachable passages.
+        Uses arc membership to identify reachable passages.
+        Deletes unreachable passages.
 
         Note: Without choices (Phase 9), reachability is determined via
         arc_contains edges - passages whose beats are in any arc are reachable.

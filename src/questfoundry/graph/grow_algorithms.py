@@ -14,7 +14,7 @@ Algorithm summary:
 from __future__ import annotations
 
 from collections import defaultdict, deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from itertools import product
 from typing import TYPE_CHECKING
 
@@ -251,7 +251,7 @@ def enumerate_arcs(graph: Graph) -> list[Arc]:
 
     For each tension, collects its threads. Takes the Cartesian product across
     all tensions to produce arc combinations. Each arc gets the beats that
-    belong to all its constituent threads, topologically sorted.
+    belong to ANY of its constituent threads, topologically sorted.
 
     The spine arc contains all canonical threads. Branch arcs contain at least
     one non-canonical thread.
@@ -350,15 +350,6 @@ def enumerate_arcs(graph: Graph) -> list[Arc]:
 # ---------------------------------------------------------------------------
 # Phase 6: Divergence Points
 # ---------------------------------------------------------------------------
-
-
-@dataclass
-class _ArcPair:
-    """Internal: tracks comparison state between spine and branch arc."""
-
-    branch_arc_id: str
-    spine_sequence: list[str] = field(default_factory=list)
-    branch_sequence: list[str] = field(default_factory=list)
 
 
 def compute_divergence_points(
