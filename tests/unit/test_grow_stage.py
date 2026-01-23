@@ -58,7 +58,7 @@ class TestGrowStageExecute:
         assert tokens == 0
         # All phases run to completion (empty graph = no work to do)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 12
+        assert len(phases) == 13
         for phase in phases:
             assert phase["status"] == "completed"
 
@@ -99,10 +99,10 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_twelve_phases(self) -> None:
+    def test_phase_order_returns_thirteen_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 12
+        assert len(phases) == 13
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -119,6 +119,7 @@ class TestGrowStagePhaseOrder:
             "convergence",
             "passages",
             "codewords",
+            "overlays",
             "prune",
         ]
 
@@ -834,3 +835,290 @@ class TestPhase4cPacingGaps:
 
         assert result.status == "completed"
         assert "No beats" in result.detail
+
+
+class TestPhase8cOverlays:
+    @pytest.mark.asyncio
+    async def test_phase_8c_creates_overlays(self) -> None:
+        """Phase 8c creates overlays on entity nodes from LLM proposals."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import OverlayProposal, Phase8cOutput
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::mentor",
+            {
+                "type": "entity",
+                "raw_id": "mentor",
+                "entity_category": "character",
+                "concept": "A guide",
+            },
+        )
+        graph.create_node(
+            "consequence::mentor_trusted",
+            {
+                "type": "consequence",
+                "raw_id": "mentor_trusted",
+                "description": "Mentor becomes ally",
+            },
+        )
+        graph.create_node(
+            "codeword::mentor_trusted_committed",
+            {
+                "type": "codeword",
+                "raw_id": "mentor_trusted_committed",
+                "tracks": "consequence::mentor_trusted",
+                "codeword_type": "granted",
+            },
+        )
+        graph.add_edge(
+            "tracks", "codeword::mentor_trusted_committed", "consequence::mentor_trusted"
+        )
+
+        stage = GrowStage()
+        phase8c_output = Phase8cOutput(
+            overlays=[
+                OverlayProposal(
+                    entity_id="entity::mentor",
+                    when=["codeword::mentor_trusted_committed"],
+                    details={
+                        "attitude": "Warm and supportive",
+                        "access": "Shares secret knowledge",
+                    },
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase8c_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_8c_overlays(graph, mock_model)
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert "1" in result.detail
+
+        # Verify overlay stored on entity node
+        entity_data = graph.get_node("entity::mentor")
+        assert entity_data is not None
+        assert len(entity_data["overlays"]) == 1
+        assert entity_data["overlays"][0]["when"] == ["codeword::mentor_trusted_committed"]
+        assert entity_data["overlays"][0]["details"]["attitude"] == "Warm and supportive"
+
+    @pytest.mark.asyncio
+    async def test_phase_8c_skips_invalid_entity(self) -> None:
+        """Phase 8c skips overlays referencing non-existent entities."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import OverlayProposal, Phase8cOutput
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "entity_category": "character",
+                "concept": "Protagonist",
+            },
+        )
+        graph.create_node(
+            "codeword::cw1",
+            {
+                "type": "codeword",
+                "raw_id": "cw1",
+                "tracks": "consequence::c1",
+                "codeword_type": "granted",
+            },
+        )
+
+        stage = GrowStage()
+        phase8c_output = Phase8cOutput(
+            overlays=[
+                OverlayProposal(
+                    entity_id="entity::nonexistent",
+                    when=["codeword::cw1"],
+                    details={"attitude": "Changed"},
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase8c_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_8c_overlays(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "0" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_8c_skips_invalid_codeword(self) -> None:
+        """Phase 8c skips overlays referencing non-existent codewords."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import OverlayProposal, Phase8cOutput
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "entity_category": "character",
+                "concept": "Protagonist",
+            },
+        )
+        graph.create_node(
+            "codeword::cw1",
+            {
+                "type": "codeword",
+                "raw_id": "cw1",
+                "tracks": "consequence::c1",
+                "codeword_type": "granted",
+            },
+        )
+
+        stage = GrowStage()
+        phase8c_output = Phase8cOutput(
+            overlays=[
+                OverlayProposal(
+                    entity_id="entity::hero",
+                    when=["codeword::nonexistent"],
+                    details={"attitude": "Changed"},
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase8c_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_8c_overlays(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "0" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_8c_skips_empty_details(self) -> None:
+        """Phase 8c skips overlays with empty details dict."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import OverlayProposal, Phase8cOutput
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "entity_category": "character",
+                "concept": "Protagonist",
+            },
+        )
+        graph.create_node(
+            "codeword::cw1",
+            {
+                "type": "codeword",
+                "raw_id": "cw1",
+                "tracks": "consequence::c1",
+                "codeword_type": "granted",
+            },
+        )
+
+        stage = GrowStage()
+        phase8c_output = Phase8cOutput(
+            overlays=[
+                OverlayProposal(
+                    entity_id="entity::hero",
+                    when=["codeword::cw1"],
+                    details={},
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase8c_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_8c_overlays(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "0" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_8c_no_codewords(self) -> None:
+        """Phase 8c returns completed when no codewords exist."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "entity_category": "character",
+                "concept": "Protagonist",
+            },
+        )
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        result = await stage._phase_8c_overlays(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "No codewords or entities" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_8c_unprefixed_entity_id(self) -> None:
+        """Phase 8c handles entity IDs without prefix by adding it."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import OverlayProposal, Phase8cOutput
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::mentor",
+            {
+                "type": "entity",
+                "raw_id": "mentor",
+                "entity_category": "character",
+                "concept": "A guide",
+            },
+        )
+        graph.create_node(
+            "codeword::cw1",
+            {
+                "type": "codeword",
+                "raw_id": "cw1",
+                "tracks": "consequence::c1",
+                "codeword_type": "granted",
+            },
+        )
+
+        stage = GrowStage()
+        phase8c_output = Phase8cOutput(
+            overlays=[
+                OverlayProposal(
+                    entity_id="mentor",  # No prefix
+                    when=["codeword::cw1"],
+                    details={"attitude": "Friendly"},
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase8c_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_8c_overlays(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "1" in result.detail
+
+        entity_data = graph.get_node("entity::mentor")
+        assert entity_data is not None
+        assert len(entity_data["overlays"]) == 1
