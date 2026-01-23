@@ -62,7 +62,9 @@ def format_scoped_id(scope: str, raw_id: str) -> str:
 def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
     """Format thread IDs for beat serialization with inline constraints.
 
-    Uses pipe-delimited format for easy scanning by small models.
+    Includes thread→tension mapping so the model knows which tension_id
+    to use in tension_impacts for each beat's thread.
+
     Small models don't "look back" at referenced sections, so we
     embed constraints at the point of use.
 
@@ -89,17 +91,46 @@ def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
         "",
         f"Allowed: {id_list}",
         "",
-        "Rules:",
-        "- Use ONLY IDs from the list above in the `threads` array",
-        "- Include the `thread::` prefix in your output",
-        "- Do NOT derive IDs from tension concepts",
-        "- If a concept has no matching thread, omit it - do NOT invent an ID",
-        "",
-        "WRONG (will fail validation):",
-        "- `clock_distortion` - NOT a valid thread ID (derived from concept)",
-        "- `host_motive` - WRONG: missing scope prefix, use `thread::host_motive`",
-        "",
     ]
+
+    # Build thread→tension mapping for tension_impacts guidance
+    thread_tension_pairs = []
+    for t in sorted(threads, key=lambda x: x.get("thread_id", "")):
+        tid = t.get("thread_id")
+        tension_id = t.get("tension_id", "")
+        if tid and tension_id:
+            # Strip scope prefix if present for clean display
+            raw_tension = tension_id.split("::", 1)[-1] if "::" in tension_id else tension_id
+            thread_tension_pairs.append((tid, raw_tension))
+
+    if thread_tension_pairs:
+        lines.append("## THREAD → TENSION MAPPING (use in tension_impacts)")
+        lines.append("Each beat's tension_impacts should use its thread's parent tension:")
+        lines.append("")
+        for tid, tension in thread_tension_pairs:
+            lines.append(
+                f"  - `{format_scoped_id(SCOPE_THREAD, tid)}` → "
+                f"`{format_scoped_id(SCOPE_TENSION, tension)}`"
+            )
+        lines.append("")
+
+    lines.extend(
+        [
+            "Rules:",
+            "- Use ONLY IDs from the list above in the `threads` array",
+            "- Include the `thread::` prefix in your output",
+            "- For tension_impacts, use the tension from the mapping above",
+            "- Do NOT derive IDs from tension concepts",
+            "- Do NOT use entity IDs as tension_ids",
+            "- If a concept has no matching thread, omit it - do NOT invent an ID",
+            "",
+            "WRONG (will fail validation):",
+            "- `clock_distortion` - NOT a valid thread ID (derived from concept)",
+            "- `host_motive` - WRONG: missing scope prefix, use `thread::host_motive`",
+            "- `tension::seed_of_stillness` - WRONG: entity ID used as tension",
+            "",
+        ]
+    )
 
     return "\n".join(lines)
 
@@ -183,6 +214,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
 
         lines.append(f"### Tension IDs (TOTAL: {tension_count} - generate decision for ALL)")
         lines.append("Format: tension::id → [alternative_ids]")
+        lines.append("Note: Every tension_id contains `_or_` — entity IDs never do.")
         lines.append("")
 
         for tid, tdata in sorted(tensions.items()):

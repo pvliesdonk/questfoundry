@@ -2176,3 +2176,295 @@ class TestFormatSemanticErrorsAsContent:
 
         assert "ensuring you only reference" in result
         assert "BRAINSTORM" in result
+
+
+class TestTypeAwareFeedback:
+    """Tests for type-aware cross-type error messages in validate_seed_mutations.
+
+    When an ID is used as the wrong type (e.g., entity used as tension_id),
+    the error message should indicate what type it actually is, rather than
+    the generic "not in BRAINSTORM" message.
+    """
+
+    def test_type_aware_feedback_entity_as_tension(self) -> None:
+        """Entity faction name used as tension_id gives helpful message."""
+        graph = Graph.empty()
+        # isolation_protocol is a faction entity in brainstorm
+        graph.create_node(
+            "entity::isolation_protocol",
+            {"type": "entity", "raw_id": "isolation_protocol", "entity_type": "faction"},
+        )
+        graph.create_node(
+            "tension::trust_or_betray",
+            {"type": "tension", "raw_id": "trust_or_betray"},
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "isolation_protocol", "disposition": "retained"},
+            ],
+            "tensions": [
+                {"tension_id": "trust_or_betray", "explored": [], "implicit": []},
+            ],
+            "threads": [],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "Test",
+                    "tension_impacts": [
+                        # Using entity name as tension_id (the seq-9 bug)
+                        {"tension_id": "isolation_protocol", "effect": "advances"}
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Should get a type-aware error, not generic "not in BRAINSTORM"
+        tension_errors = [e for e in errors if "tension_impacts" in e.field_path]
+        assert len(tension_errors) == 1
+        assert "is an entity (faction), not a tension" in tension_errors[0].issue
+        assert "subject_X_or_Y" in tension_errors[0].issue
+
+    def test_type_aware_feedback_thread_as_tension(self) -> None:
+        """Thread ID used as tension_id gives helpful message."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "tension::trust_or_betray",
+            {"type": "tension", "raw_id": "trust_or_betray"},
+        )
+        graph.create_node(
+            "tension::trust_or_betray::alt::trust",
+            {"type": "alternative", "raw_id": "trust"},
+        )
+        graph.add_edge(
+            "has_alternative",
+            "tension::trust_or_betray",
+            "tension::trust_or_betray::alt::trust",
+        )
+
+        output = {
+            "entities": [{"entity_id": "hero", "disposition": "retained"}],
+            "tensions": [
+                {"tension_id": "trust_or_betray", "explored": ["trust"], "implicit": []},
+            ],
+            "threads": [
+                {
+                    "thread_id": "mentor_arc",
+                    "name": "Mentor Arc",
+                    "tension_id": "trust_or_betray",
+                    "alternative_id": "trust",
+                }
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "Test",
+                    "tension_impacts": [
+                        # Using thread ID as tension_id
+                        {"tension_id": "mentor_arc", "effect": "advances"}
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        tension_errors = [e for e in errors if "tension_impacts" in e.field_path]
+        assert len(tension_errors) == 1
+        assert "is a thread ID, not a tension" in tension_errors[0].issue
+
+    def test_type_aware_feedback_tension_as_entity(self) -> None:
+        """Tension ID used as entity in beat gives helpful message."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "tension::trust_or_betray",
+            {"type": "tension", "raw_id": "trust_or_betray"},
+        )
+
+        output = {
+            "entities": [{"entity_id": "hero", "disposition": "retained"}],
+            "tensions": [
+                {"tension_id": "trust_or_betray", "explored": [], "implicit": []},
+            ],
+            "threads": [],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "Test",
+                    # Using tension ID as entity reference
+                    "entities": ["trust_or_betray"],
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        entity_errors = [e for e in errors if "initial_beats.0.entities" in e.field_path]
+        assert len(entity_errors) == 1
+        assert "is a tension ID, not an entity" in entity_errors[0].issue
+
+
+class TestCutEntityInBeats:
+    """Tests for cut-entity-in-beats validation.
+
+    Beats should not reference entities that have disposition 'cut'.
+    This catches the seq-10 scenario where cut entities are still
+    referenced in beats.
+    """
+
+    def test_cut_entity_in_beat_entities_detected(self) -> None:
+        """Cut entity in beat entities[] raises error."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::chrono_lock",
+            {"type": "entity", "raw_id": "chrono_lock", "entity_type": "object"},
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "hero", "disposition": "retained"},
+                {"entity_id": "chrono_lock", "disposition": "cut"},
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "Test",
+                    "entities": ["hero", "chrono_lock"],  # chrono_lock is cut!
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        cut_errors = [e for e in errors if "disposition 'cut'" in e.issue]
+        assert len(cut_errors) == 1
+        assert "chrono_lock" in cut_errors[0].issue
+        assert "initial_beats.0.entities" in cut_errors[0].field_path
+
+    def test_cut_entity_in_beat_location_detected(self) -> None:
+        """Cut entity as beat location raises error."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::watchers_guild",
+            {"type": "entity", "raw_id": "watchers_guild", "entity_type": "location"},
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "hero", "disposition": "retained"},
+                {"entity_id": "watchers_guild", "disposition": "cut"},
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "Test",
+                    "entities": ["hero"],
+                    "location": "watchers_guild",  # watchers_guild is cut!
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        cut_errors = [e for e in errors if "disposition 'cut'" in e.issue]
+        assert len(cut_errors) == 1
+        assert "watchers_guild" in cut_errors[0].issue
+        assert "initial_beats.0.location" in cut_errors[0].field_path
+
+    def test_retained_entity_in_beat_no_error(self) -> None:
+        """Retained entity in beat passes fine."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::tavern",
+            {"type": "entity", "raw_id": "tavern", "entity_type": "location"},
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "hero", "disposition": "retained"},
+                {"entity_id": "tavern", "disposition": "retained"},
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "Test",
+                    "entities": ["hero"],
+                    "location": "tavern",
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        cut_errors = [e for e in errors if "disposition 'cut'" in e.issue]
+        assert cut_errors == []
+
+    def test_cut_entity_in_location_alternatives_detected(self) -> None:
+        """Cut entity in beat location_alternatives raises error."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::tavern",
+            {"type": "entity", "raw_id": "tavern", "entity_type": "location"},
+        )
+        graph.create_node(
+            "entity::ruins",
+            {"type": "entity", "raw_id": "ruins", "entity_type": "location"},
+        )
+
+        output = {
+            "entities": [
+                {"entity_id": "hero", "disposition": "retained"},
+                {"entity_id": "tavern", "disposition": "retained"},
+                {"entity_id": "ruins", "disposition": "cut"},
+            ],
+            "tensions": [],
+            "threads": [],
+            "initial_beats": [
+                {
+                    "beat_id": "opening",
+                    "summary": "Test",
+                    "entities": ["hero"],
+                    "location": "tavern",
+                    "location_alternatives": ["ruins"],  # ruins is cut!
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        cut_errors = [e for e in errors if "disposition 'cut'" in e.issue]
+        assert len(cut_errors) == 1
+        assert "ruins" in cut_errors[0].issue
+        assert "initial_beats.0.location_alternatives" in cut_errors[0].field_path

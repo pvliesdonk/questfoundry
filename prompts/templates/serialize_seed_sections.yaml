@@ -190,6 +190,7 @@ beats_prompt: |
   - `"clock_distortion"` - NOT a valid thread (derived from concept)
   - `"the_garden"` - WRONG, use `"garden"` (no prefix)
   - `"murder_intent"` - This is a tension ID, not a thread ID
+  - `"seed_of_stillness"` as tension_id - WRONG, this is an entity (no `_or_` = not a tension)
 
   ## Schema
   Return a JSON object with an "initial_beats" array:
@@ -222,6 +223,9 @@ beats_prompt: |
   - All ID fields must use the correct type (see FIELD → ID TYPE MAPPING below)
   - location can be null; location_alternatives can be empty array
   - Generate 2-4 beats for EACH thread in the VALID THREAD IDs list
+  - tension_impacts MUST use tension IDs from the Tension IDs list — NOT entity names
+  - If a beat involves an entity that has no matching tension, use the thread's
+    parent tension or the most thematically related tension from the list
 
   ## FIELD → ID TYPE MAPPING (prevents all ID confusion)
 
@@ -235,6 +239,15 @@ beats_prompt: |
   | `location` | `entity::` | Entity IDs (locations only) | varies |
 
   Thread IDs are SHORT storyline names. Tension IDs are LONG binary questions.
+
+  ## HOW TO TELL TENSION IDs FROM ENTITY IDs (CRITICAL)
+
+  Tension IDs ALWAYS contain `_or_` in their name (e.g., `host_benevolent_or_selfish`).
+  Entity IDs NEVER contain `_or_`.
+
+  If an ID does NOT have `_or_` in it, it is an ENTITY — not a tension.
+  Do NOT use entity IDs like `seed_of_stillness` as tension_ids — `_of_` is NOT `_or_`.
+
   Do NOT put a thread ID in tension_impacts or a tension ID in threads.
   Do NOT put a location in entities or a non-location in location.
   Do NOT invent IDs - copy exactly from the manifest.
@@ -246,6 +259,7 @@ beats_prompt: |
   Your beat count should stay at 2-4 beats per thread.
 
   ## What NOT to Do
+  - Do NOT use entity IDs as tension_ids (entity IDs lack `_or_`)
   - Do NOT derive thread IDs from tension names or concepts
   - Do NOT add prefixes like "the_" to entity IDs
   - Do NOT generate fewer than 2 beats per thread
@@ -255,9 +269,10 @@ beats_prompt: |
   Before returning JSON, check each beat against the field→ID type table:
   1. Every `threads` item appears in VALID THREAD IDs (short names)
   2. Every `tension_impacts.tension_id` appears in Tension IDs (long binary questions)
-  3. Every `entities` item appears in Entity IDs (characters, objects, factions)
-  4. `location` is a location-category entity from Entity IDs
-  5. No invented IDs - copy-paste from the manifest, don't retype
+  3. Every `tension_impacts.tension_id` contains `_or_` — if it doesn't, you used an entity ID by mistake
+  4. Every `entities` item appears in Entity IDs (characters, objects, factions)
+  5. `location` is a location-category entity from Entity IDs
+  6. No invented IDs - copy-paste from the manifest, don't retype
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array.
