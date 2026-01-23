@@ -107,6 +107,13 @@ class KnotProposal(BaseModel):
 
     beat_ids: list[str] = Field(min_length=2)
     resolved_location: str | None = None
+    rationale: str = Field(min_length=1)
+
+
+class Phase3Output(BaseModel):
+    """Wrapper for Phase 3 structured output (knot proposals)."""
+
+    knots: list[KnotProposal] = Field(default_factory=list)
 
 
 class SceneTypeTag(BaseModel):

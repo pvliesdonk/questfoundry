@@ -196,9 +196,11 @@ class TestKnotProposal:
         knot = KnotProposal(
             beat_ids=["beat_1", "beat_2", "beat_3"],
             resolved_location="beat_4",
+            rationale="Shared location signal",
         )
         assert len(knot.beat_ids) == 3
         assert knot.resolved_location == "beat_4"
+        assert knot.rationale == "Shared location signal"
 
     def test_single_beat_rejected(self) -> None:
         with pytest.raises(ValidationError, match="beat_ids"):
@@ -209,7 +211,7 @@ class TestKnotProposal:
             KnotProposal(beat_ids=[])
 
     def test_no_resolved_location_allowed(self) -> None:
-        knot = KnotProposal(beat_ids=["b1", "b2"])
+        knot = KnotProposal(beat_ids=["b1", "b2"], rationale="Entity overlap")
         assert knot.resolved_location is None
 
 

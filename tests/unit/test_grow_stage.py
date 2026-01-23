@@ -58,7 +58,7 @@ class TestGrowStageExecute:
         assert tokens == 0
         # All phases run to completion (empty graph = no work to do)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 8
+        assert len(phases) == 9
         for phase in phases:
             assert phase["status"] == "completed"
 
@@ -99,10 +99,10 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_eight_phases(self) -> None:
+    def test_phase_order_returns_nine_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 8
+        assert len(phases) == 9
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -110,6 +110,7 @@ class TestGrowStagePhaseOrder:
         assert names == [
             "validate_dag",
             "thread_agnostic",
+            "knots",
             "enumerate_arcs",
             "divergence",
             "convergence",
@@ -385,3 +386,154 @@ class TestGrowLlmCall:
                 },
                 output_schema=Phase2Output,
             )
+
+
+class TestPhase3Knots:
+    @pytest.mark.asyncio
+    async def test_phase_3_with_valid_proposals(self) -> None:
+        """Phase 3 with mocked LLM returns valid knot proposals."""
+        from questfoundry.models.grow import KnotProposal, Phase3Output
+        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+
+        graph = make_knot_candidate_graph()
+        stage = GrowStage()
+
+        # Mock model returns a knot grouping the two location-overlapping beats
+        phase3_output = Phase3Output(
+            knots=[
+                KnotProposal(
+                    beat_ids=["beat::mentor_meet", "beat::artifact_discover"],
+                    resolved_location="market",
+                    rationale="Both beats share the market location",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase3_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_3_knots(graph, mock_model)
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert "1 applied" in result.detail
+
+        # Verify knot was applied
+        mentor_beat = graph.get_node("beat::mentor_meet")
+        assert mentor_beat["knot_group"] == ["beat::artifact_discover"]
+        assert mentor_beat["location"] == "market"
+
+        artifact_beat = graph.get_node("beat::artifact_discover")
+        assert artifact_beat["knot_group"] == ["beat::mentor_meet"]
+        assert artifact_beat["location"] == "market"
+
+    @pytest.mark.asyncio
+    async def test_phase_3_skips_no_candidates(self) -> None:
+        """Phase 3 skips when no knot candidates found."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        stage = GrowStage()
+        mock_model = MagicMock()
+        result = await stage._phase_3_knots(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "No knot candidates" in result.detail
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_phase_3_skips_incompatible_knots(self) -> None:
+        """Phase 3 skips knots that fail compatibility check."""
+        from questfoundry.models.grow import KnotProposal, Phase3Output
+        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+
+        graph = make_knot_candidate_graph()
+        stage = GrowStage()
+
+        # Propose a knot with beats from the SAME tension (invalid)
+        phase3_output = Phase3Output(
+            knots=[
+                KnotProposal(
+                    beat_ids=["beat::mentor_commits_canonical", "beat::mentor_commits_alt"],
+                    resolved_location="market",
+                    rationale="Same tension beats",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase3_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_3_knots(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "0 applied" in result.detail
+        assert "1 skipped" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_3_filters_invalid_beat_ids(self) -> None:
+        """Phase 3 skips proposals with nonexistent beat IDs."""
+        from questfoundry.models.grow import KnotProposal, Phase3Output
+        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+
+        graph = make_knot_candidate_graph()
+        stage = GrowStage()
+
+        phase3_output = Phase3Output(
+            knots=[
+                KnotProposal(
+                    beat_ids=["beat::nonexistent_a", "beat::nonexistent_b"],
+                    resolved_location="market",
+                    rationale="Nonexistent beats",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase3_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_3_knots(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "0 applied" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_3_skips_requires_conflict(self) -> None:
+        """Phase 3 skips knots where beats have requires dependency."""
+        from questfoundry.models.grow import KnotProposal, Phase3Output
+        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+
+        graph = make_knot_candidate_graph()
+        stage = GrowStage()
+
+        # opening requires mentor_meet — these have a requires dependency
+        # But they're also from different tensions in this graph.
+        # Add a cross-tension requires to test: artifact_discover requires mentor_meet
+        graph.add_edge("requires", "beat::artifact_discover", "beat::mentor_meet")
+
+        phase3_output = Phase3Output(
+            knots=[
+                KnotProposal(
+                    beat_ids=["beat::mentor_meet", "beat::artifact_discover"],
+                    resolved_location="market",
+                    rationale="Requires dependency between these beats",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase3_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_3_knots(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "0 applied" in result.detail
+        assert "1 skipped" in result.detail

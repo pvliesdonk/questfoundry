@@ -366,3 +366,34 @@ def make_two_tension_graph() -> Graph:
         graph.add_edge("has_consequence", f"thread::{thread_id}", f"consequence::{cons_id}")
 
     return graph
+
+
+def make_knot_candidate_graph() -> Graph:
+    """Create a graph with beats from different tensions that share locations.
+
+    Structure:
+        tension: mentor_trust (2 threads)
+        tension: artifact_quest (2 threads)
+
+    Key beats for knot testing:
+        beat::mentor_meet: location="market", mentor_trust threads
+        beat::artifact_discover: location="docks", location_alternatives=["market"],
+                                 artifact_quest threads
+
+    These beats share "market" as a location signal and are from different
+    tensions, making them valid knot candidates.
+
+    Returns:
+        Graph with location-overlap knot candidates.
+    """
+    graph = make_two_tension_graph()
+
+    # Add location data to some beats for knot detection
+    graph.update_node("beat::mentor_meet", location="market")
+    graph.update_node(
+        "beat::artifact_discover",
+        location="docks",
+        location_alternatives=["market"],
+    )
+
+    return graph

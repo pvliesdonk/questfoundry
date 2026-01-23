@@ -106,6 +106,7 @@ class GrowStage:
         return [
             (self._phase_1_validate_dag, "validate_dag"),
             (self._phase_2_thread_agnostic, "thread_agnostic"),
+            (self._phase_3_knots, "knots"),
             (self._phase_5_enumerate_arcs, "enumerate_arcs"),
             (self._phase_6_divergence, "divergence"),
             (self._phase_7_convergence, "convergence"),
@@ -485,6 +486,140 @@ class GrowStage:
             phase="thread_agnostic",
             status="completed",
             detail=f"Assessed {len(candidate_beats)} beats, {agnostic_count} marked agnostic",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    async def _phase_3_knots(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 3: Knot detection.
+
+        Clusters beats from different threads (different tensions) into
+        scenes where multiple tensions intersect. Uses LLM to propose
+        knots, then validates with deterministic compatibility checks.
+
+        A knot is valid when:
+        - Beats are from different tensions
+        - No requires conflicts between the beats
+        - Location is resolvable (shared location exists)
+        """
+        from questfoundry.graph.grow_algorithms import (
+            apply_knot_mark,
+            build_knot_candidates,
+            check_knot_compatibility,
+            resolve_knot_location,
+        )
+        from questfoundry.models.grow import Phase3Output
+
+        # Build candidate pool
+        candidates = build_knot_candidates(graph)
+        if not candidates:
+            return GrowPhaseResult(
+                phase="knots",
+                status="completed",
+                detail="No knot candidates found (no beats share signals across tensions)",
+            )
+
+        # Build context for LLM
+        beat_nodes = graph.get_nodes_by_type("beat")
+        beat_summaries: list[str] = []
+        valid_beat_ids: set[str] = set()
+
+        beat_info: dict[str, str] = {}
+        for candidate in candidates:
+            for bid in candidate.beat_ids:
+                valid_beat_ids.add(bid)
+                if bid in beat_info:
+                    continue
+                data = beat_nodes.get(bid, {})
+                location = data.get("location", "unspecified")
+                alternatives = data.get("location_alternatives", [])
+                summary = data.get("summary", "")
+                entities = data.get("entities", [])
+                beat_info[bid] = (
+                    f'- {bid}: summary="{summary}", '
+                    f'location="{location}", '
+                    f"location_alternatives={alternatives}, "
+                    f"entities={entities}"
+                )
+        beat_summaries = list(beat_info.values())
+
+        valid_beat_ids_list = sorted(valid_beat_ids)
+
+        context = {
+            "beat_summaries": "\n".join(beat_summaries),
+            "valid_beat_ids": ", ".join(valid_beat_ids_list),
+            "candidate_count": str(len(valid_beat_ids_list)),
+        }
+
+        # Call LLM for knot proposals
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model=model,
+                template_name="grow_phase3_knots",
+                context=context,
+                output_schema=Phase3Output,
+            )
+        except GrowStageError as e:
+            return GrowPhaseResult(
+                phase="knots",
+                status="failed",
+                detail=str(e),
+            )
+
+        # Validate and apply knots
+        applied_count = 0
+        skipped_count = 0
+
+        for proposal in result.knots:
+            # Filter to valid beat IDs
+            valid_ids = [bid for bid in proposal.beat_ids if bid in beat_nodes]
+            if len(valid_ids) < 2:
+                log.warning(
+                    "phase3_insufficient_valid_beats",
+                    proposed=proposal.beat_ids,
+                    valid=valid_ids,
+                )
+                skipped_count += 1
+                continue
+
+            # Run compatibility check
+            errors = check_knot_compatibility(graph, valid_ids)
+            if errors:
+                log.warning(
+                    "phase3_incompatible_knot",
+                    beat_ids=valid_ids,
+                    errors=[e.issue for e in errors],
+                )
+                skipped_count += 1
+                continue
+
+            # Resolve location (prefer LLM proposal, fallback to algorithm)
+            if proposal.resolved_location:
+                location = proposal.resolved_location
+            else:
+                location = resolve_knot_location(graph, valid_ids)
+                log.debug(
+                    "phase3_location_resolved",
+                    beat_ids=valid_ids,
+                    resolved=location,
+                )
+
+            # Apply the knot
+            apply_knot_mark(graph, valid_ids, location)
+            applied_count += 1
+            log.debug(
+                "phase3_knot_applied",
+                beat_ids=valid_ids,
+                location=location,
+            )
+
+        return GrowPhaseResult(
+            phase="knots",
+            status="completed",
+            detail=(
+                f"Proposed {len(result.knots)} knots: "
+                f"{applied_count} applied, {skipped_count} skipped"
+            ),
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
