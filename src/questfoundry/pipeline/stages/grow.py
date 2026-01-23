@@ -115,6 +115,7 @@ class GrowStage:
             (self._phase_7_convergence, "convergence"),
             (self._phase_8a_passages, "passages"),
             (self._phase_8b_codewords, "codewords"),
+            (self._phase_8c_overlays, "overlays"),
             (self._phase_11_prune, "prune"),
         ]
 
@@ -211,6 +212,7 @@ class GrowStage:
         arc_nodes = graph.get_nodes_by_type("arc")
         passage_nodes = graph.get_nodes_by_type("passage")
         codeword_nodes = graph.get_nodes_by_type("codeword")
+        entity_nodes = graph.get_nodes_by_type("entity")
 
         spine_arc_id = None
         for arc_id, arc_data in arc_nodes.items():
@@ -218,10 +220,13 @@ class GrowStage:
                 spine_arc_id = arc_id
                 break
 
+        overlay_count = sum(len(data.get("overlays", [])) for data in entity_nodes.values())
+
         grow_result = GrowResult(
             arc_count=len(arc_nodes),
             passage_count=len(passage_nodes),
             codeword_count=len(codeword_nodes),
+            overlay_count=overlay_count,
             phases_completed=phase_results,
             spine_arc_id=spine_arc_id,
         )
@@ -1264,6 +1269,120 @@ class GrowStage:
             phase="codewords",
             status="completed",
             detail=f"Created {codeword_count} codewords",
+        )
+
+    async def _phase_8c_overlays(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 8c: Create entity overlays conditioned on codewords.
+
+        For each consequence/codeword pair, proposes entity modifications
+        that activate when those codewords are granted. Validates that
+        entity_ids and codeword IDs exist in the graph before storing.
+        """
+        from questfoundry.models.grow import Phase8cOutput
+
+        codeword_nodes = graph.get_nodes_by_type("codeword")
+        entity_nodes = graph.get_nodes_by_type("entity")
+
+        if not codeword_nodes or not entity_nodes:
+            return GrowPhaseResult(
+                phase="overlays",
+                status="completed",
+                detail="No codewords or entities to process",
+            )
+
+        # Build consequence context: consequence description + its codeword
+        consequence_nodes = graph.get_nodes_by_type("consequence")
+        consequence_lines: list[str] = []
+        valid_codeword_ids: list[str] = []
+
+        for cw_id, cw_data in sorted(codeword_nodes.items()):
+            valid_codeword_ids.append(cw_id)
+            tracks_id = cw_data.get("tracks", "")
+            cons_data = consequence_nodes.get(tracks_id, {})
+            cons_desc = cons_data.get("description", "unknown consequence")
+            consequence_lines.append(f"- {cw_id}: tracks '{tracks_id}' ({cons_desc})")
+
+        consequence_context = "\n".join(consequence_lines)
+
+        # Build entity context: entity details for overlay candidates
+        entity_lines: list[str] = []
+        valid_entity_ids: list[str] = []
+
+        for ent_id, ent_data in sorted(entity_nodes.items()):
+            valid_entity_ids.append(ent_id)
+            category = ent_data.get("entity_category", ent_data.get("entity_type", "unknown"))
+            concept = ent_data.get("concept", "")
+            entity_lines.append(f"- {ent_id} ({category}): {concept}")
+
+        entity_context = "\n".join(entity_lines)
+
+        context = {
+            "consequence_context": consequence_context,
+            "entity_context": entity_context,
+            "valid_entity_ids": ", ".join(valid_entity_ids),
+            "valid_codeword_ids": ", ".join(valid_codeword_ids),
+        }
+
+        result, llm_calls, tokens = await self._grow_llm_call(
+            model, "grow_phase8c_overlays", context, Phase8cOutput
+        )
+
+        # Validate and apply overlays
+        valid_entity_set = set(valid_entity_ids)
+        valid_codeword_set = set(valid_codeword_ids)
+        overlay_count = 0
+
+        for overlay in result.overlays:
+            # Validate entity_id exists
+            prefixed_eid = (
+                f"entity::{overlay.entity_id}"
+                if "::" not in overlay.entity_id
+                else overlay.entity_id
+            )
+            if prefixed_eid not in valid_entity_set:
+                log.warning(
+                    "phase8c_invalid_entity",
+                    entity_id=overlay.entity_id,
+                    prefixed=prefixed_eid,
+                )
+                continue
+
+            # Validate all codeword IDs in 'when' exist
+            invalid_codewords = [cw for cw in overlay.when if cw not in valid_codeword_set]
+            if invalid_codewords:
+                log.warning(
+                    "phase8c_invalid_codewords",
+                    entity_id=overlay.entity_id,
+                    invalid=invalid_codewords,
+                )
+                continue
+
+            # Validate details is non-empty
+            if not overlay.details:
+                log.warning("phase8c_empty_details", entity_id=overlay.entity_id)
+                continue
+
+            # Store overlay on entity node
+            entity_data = graph.get_node(prefixed_eid)
+            if entity_data is None:
+                continue
+
+            existing_overlays: list[dict[str, Any]] = entity_data.get("overlays", [])
+            existing_overlays.append(
+                {
+                    "when": overlay.when,
+                    "details": overlay.details,
+                }
+            )
+            graph.update_node(prefixed_eid, overlays=existing_overlays)
+            overlay_count += 1
+
+        return GrowPhaseResult(
+            phase="overlays",
+            status="completed",
+            detail=f"Created {overlay_count} overlays",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
         )
 
     async def _phase_11_prune(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002

@@ -153,6 +153,12 @@ class OverlayProposal(BaseModel):
     details: dict[str, str] = Field(default_factory=dict)
 
 
+class Phase8cOutput(BaseModel):
+    """Wrapper for Phase 8c structured output (entity overlay proposals)."""
+
+    overlays: list[OverlayProposal] = Field(default_factory=list)
+
+
 class ChoiceLabel(BaseModel):
     """Phase 9: Labels for player choices between passages."""
 
