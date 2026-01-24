@@ -53,7 +53,7 @@ def validate_phase2_output(
                         field_path=f"assessments.{i}.agnostic_for",
                         issue=f"Tension ID not found: {tension_id}",
                         provided=tension_id,
-                        available=sorted(valid_tension_ids),
+                        available=sorted(valid_tension_ids)[:10],
                     )
                 )
     return errors
@@ -204,7 +204,12 @@ def format_semantic_errors(errors: list[GrowValidationError]) -> str:
 
 
 def count_entries(result: object) -> int:
-    """Count the number of entries in a phase output for threshold calculation."""
+    """Count the number of entries in a phase output for threshold calculation.
+
+    Note: Relies on known attribute names (assessments, knots, tags, gaps,
+    overlays, labels). If adding a new phase output type, ensure its entries
+    attribute is listed here, otherwise the fallback of 1 is used.
+    """
     for attr in ("assessments", "knots", "tags", "gaps", "overlays", "labels"):
         entries = getattr(result, attr, None)
         if entries is not None:

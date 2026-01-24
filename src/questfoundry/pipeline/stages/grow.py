@@ -20,6 +20,7 @@ context from graph state → single LLM call → validate → retry (max 3).
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -371,6 +372,8 @@ class GrowStage:
                             entries=entry_count,
                             ratio=f"{error_ratio:.0%}",
                         )
+                        # Retry when >50% of entries have errors (majority invalid).
+                        # Below threshold, return and let caller filter minor hallucinations.
                         if error_ratio > 0.5 and attempt < max_retries - 1:
                             feedback = format_semantic_errors(sem_errors)
                             messages = list(base_messages)
@@ -529,8 +532,6 @@ class GrowStage:
         }
 
         # Call LLM with semantic validation
-        from functools import partial
-
         from questfoundry.graph.grow_validators import validate_phase2_output
 
         validator = partial(
@@ -658,8 +659,6 @@ class GrowStage:
         }
 
         # Call LLM for knot proposals
-        from functools import partial
-
         from questfoundry.graph.grow_validators import validate_phase3_output
 
         validator = partial(validate_phase3_output, valid_beat_ids=valid_beat_ids)
@@ -769,8 +768,6 @@ class GrowStage:
             "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
             "beat_count": str(len(beat_nodes)),
         }
-
-        from functools import partial
 
         from questfoundry.graph.grow_validators import validate_phase4a_output
 
@@ -1426,8 +1423,6 @@ class GrowStage:
             "valid_codeword_ids": ", ".join(valid_codeword_ids),
         }
 
-        from functools import partial
-
         from questfoundry.graph.grow_validators import validate_phase8c_output
 
         validator = partial(
@@ -1587,8 +1582,6 @@ class GrowStage:
                 "valid_from_ids": ", ".join(valid_from_ids),
                 "valid_to_ids": ", ".join(valid_to_ids),
             }
-
-            from functools import partial
 
             from questfoundry.graph.grow_validators import validate_phase9_output
 
