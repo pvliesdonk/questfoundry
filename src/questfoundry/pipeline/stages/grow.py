@@ -103,8 +103,39 @@ class GrowStage:
         self._serialize_model: BaseChatModel | None = None
         self._serialize_provider_name: str | None = None
 
+    CHECKPOINT_DIR = "snapshots"
+
     # Type for async phase functions: (Graph, BaseChatModel) -> GrowPhaseResult
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[GrowPhaseResult]]
+
+    def _get_checkpoint_path(self, project_path: Path, phase_name: str) -> Path:
+        """Return the checkpoint file path for a given phase."""
+        return project_path / self.CHECKPOINT_DIR / f"grow-pre-{phase_name}.json"
+
+    def _save_checkpoint(self, graph: Graph, project_path: Path, phase_name: str) -> None:
+        """Save graph state before a phase runs.
+
+        Creates a snapshot file that can be used to resume from this phase
+        if execution is interrupted or needs to be re-run.
+        """
+        path = self._get_checkpoint_path(project_path, phase_name)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        graph.save(path)
+        log.debug("checkpoint_saved", phase=phase_name, path=str(path))
+
+    def _load_checkpoint(self, project_path: Path, phase_name: str) -> Graph:
+        """Load graph state from a checkpoint.
+
+        Raises:
+            GrowStageError: If checkpoint file doesn't exist.
+        """
+        path = self._get_checkpoint_path(project_path, phase_name)
+        if not path.exists():
+            raise GrowStageError(
+                f"No checkpoint found for phase '{phase_name}'. Expected at: {path}"
+            )
+        log.info("checkpoint_loaded", phase=phase_name, path=str(path))
+        return Graph.load_from_file(path)
 
     def _phase_order(self) -> list[tuple[PhaseFunc, str]]:
         """Return ordered list of (phase_function, phase_name) tuples.
@@ -150,6 +181,7 @@ class GrowStage:
         serialize_model: BaseChatModel | None = None,
         summarize_provider_name: str | None = None,  # noqa: ARG002
         serialize_provider_name: str | None = None,
+        resume_from: str | None = None,
         **kwargs: Any,  # noqa: ARG002
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the GROW stage.
@@ -172,6 +204,7 @@ class GrowStage:
             serialize_model: Model for structured output (falls back to model).
             summarize_provider_name: Summarize provider name (unused).
             serialize_provider_name: Provider name for structured output strategy.
+            resume_from: Phase name to resume from (skips earlier phases).
             **kwargs: Additional keyword arguments (ignored).
 
         Returns:
@@ -193,12 +226,35 @@ class GrowStage:
         self._serialize_model = serialize_model
         self._serialize_provider_name = serialize_provider_name
         log.info("stage_start", stage="grow")
-        graph = Graph.load(resolved_path)
+
+        phases = self._phase_order()
+        phase_map = {name: i for i, (_, name) in enumerate(phases)}
+        start_idx = 0
+
+        if resume_from:
+            if resume_from not in phase_map:
+                raise GrowStageError(
+                    f"Unknown phase: '{resume_from}'. Valid phases: {', '.join(phase_map)}"
+                )
+            start_idx = phase_map[resume_from]
+            graph = self._load_checkpoint(resolved_path, resume_from)
+            log.info(
+                "resume_from_checkpoint",
+                phase=resume_from,
+                skipped=start_idx,
+            )
+        else:
+            graph = Graph.load(resolved_path)
+
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0
         total_tokens = 0
 
-        for phase_fn, phase_name in self._phase_order():
+        for idx, (phase_fn, phase_name) in enumerate(phases):
+            if idx < start_idx:
+                continue
+
+            self._save_checkpoint(graph, resolved_path, phase_name)
             log.debug("phase_start", phase=phase_name)
             snapshot = graph.to_dict()
 
