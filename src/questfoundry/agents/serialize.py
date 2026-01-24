@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -17,6 +18,7 @@ from questfoundry.graph.context import format_thread_ids_context, format_valid_i
 from questfoundry.graph.mutations import (
     SeedMutationError,
     SeedValidationError,
+    _format_available_with_suggestions,
     validate_seed_mutations,
 )
 from questfoundry.observability.logging import get_logger
@@ -724,6 +726,19 @@ async def serialize_seed_iteratively(
     return seed_output, total_tokens
 
 
+# Maps SeedOutput field_path prefixes to section names used in serialization.
+# Note: "initial_beats" → "beats" because the section config uses "beats" as the
+# section_name while SeedOutput uses "initial_beats" as the field name.
+_FIELD_PATH_TO_SECTION = {
+    "entities": "entities",
+    "tensions": "tensions",
+    "threads": "threads",
+    "consequences": "consequences",
+    "initial_beats": "beats",
+    "convergence_sketch": "convergence",
+}
+
+
 def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
     """Determine which sections need re-serialization based on error field paths.
 
@@ -733,23 +748,13 @@ def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
     Returns:
         Set of section names that have errors.
     """
-    # Map field path prefixes to section names
-    field_to_section = {
-        "entities": "entities",
-        "tensions": "tensions",
-        "threads": "threads",
-        "consequences": "consequences",
-        "initial_beats": "beats",
-        "convergence_sketch": "convergence",
-    }
-
     sections = set()
     for error in errors:
         field_path = error.field_path
         # Extract the top-level field (e.g., "threads.0.tension_id" -> "threads")
         top_level = field_path.split(".")[0] if field_path else ""
-        if top_level in field_to_section:
-            sections.add(field_to_section[top_level])
+        if top_level in _FIELD_PATH_TO_SECTION:
+            sections.add(_FIELD_PATH_TO_SECTION[top_level])
 
     return sections
 
@@ -759,24 +764,12 @@ def _group_errors_by_section(
 ) -> dict[str, list[SeedValidationError]]:
     """Group semantic errors by their originating section.
 
-    Maps field_path prefixes to section names used in serialize_seed_as_function.
+    Maps field_path prefixes to section names using _FIELD_PATH_TO_SECTION.
     """
-    # Map field_path prefix → section name
-    prefix_to_section = {
-        "entities": "entities",
-        "tensions": "tensions",
-        "threads": "threads",
-        "consequences": "consequences",
-        "initial_beats": "beats",
-    }
-
     by_section: dict[str, list[SeedValidationError]] = {}
     for error in errors:
-        section = None
-        for prefix, sec_name in prefix_to_section.items():
-            if error.field_path.startswith(prefix):
-                section = sec_name
-                break
+        top_level = error.field_path.split(".")[0] if error.field_path else ""
+        section = _FIELD_PATH_TO_SECTION.get(top_level)
         if section:
             by_section.setdefault(section, []).append(error)
     return by_section
@@ -788,10 +781,6 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
     Produces a substitution-table format that small models can follow:
     explicit WRONG → RIGHT replacements with no ambiguity.
     """
-    import re
-
-    from questfoundry.graph.mutations import _format_available_with_suggestions
-
     corrections: list[str] = []
     for error in errors:
         if not error.provided or not error.available:
@@ -1001,8 +990,12 @@ async def serialize_seed_as_function(
                     if output_field in section_data:
                         collected[output_field] = section_data[output_field]
                         retried_any = True
-                except Exception:
-                    log.debug("serialize_section_retry_failed", section=section_name)
+                except SerializationError as e:
+                    log.warning(
+                        "serialize_section_retry_failed",
+                        section=section_name,
+                        error=str(e),
+                    )
 
             if not retried_any:
                 # No correctable errors — can't improve, stop retrying

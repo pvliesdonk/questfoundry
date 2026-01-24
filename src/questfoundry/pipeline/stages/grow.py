@@ -29,6 +29,7 @@ from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
+from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
@@ -1370,8 +1371,7 @@ class GrowStage:
         thread_tension: dict[str, str] = {}
         for thread_id, thread_data in thread_nodes.items():
             tid = thread_data.get("tension_id", "")
-            prefixed = tid if tid.startswith("tension::") else f"tension::{tid}"
-            thread_tension[thread_id] = prefixed
+            thread_tension[thread_id] = normalize_scoped_id(tid, "tension")
 
         # Build beat → thread mapping via belongs_to
         beat_threads: dict[str, list[str]] = {}

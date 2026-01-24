@@ -15,6 +15,8 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
+from questfoundry.graph.context import normalize_scoped_id
+
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
@@ -442,7 +444,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
     for thread_id, thread_data in thread_nodes.items():
         tid = thread_data.get("tension_id")
         if tid:
-            prefixed = tid if tid.startswith("tension::") else f"tension::{tid}"
+            prefixed = normalize_scoped_id(tid, "tension")
             if prefixed in tension_nodes:
                 thread_tension[thread_id] = prefixed
 

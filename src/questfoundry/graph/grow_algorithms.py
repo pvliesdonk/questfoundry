@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from itertools import product
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.graph.mutations import GrowErrorCategory, GrowValidationError
 from questfoundry.models.grow import Arc
 
@@ -49,10 +50,7 @@ def build_tension_threads(graph: Graph) -> dict[str, list[str]]:
     for thread_id, thread_data in thread_nodes.items():
         tension_id = thread_data.get("tension_id")
         if tension_id:
-            # Support both prefixed ("tension::foo") and unprefixed ("foo") tension_id
-            prefixed = (
-                tension_id if tension_id.startswith("tension::") else f"tension::{tension_id}"
-            )
+            prefixed = normalize_scoped_id(tension_id, "tension")
             if prefixed in tension_nodes:
                 tension_threads[prefixed].append(thread_id)
     return tension_threads
@@ -616,9 +614,7 @@ def _build_beat_tensions(graph: Graph, beat_nodes: dict[str, Any]) -> dict[str, 
     for thread_id, thread_data in thread_nodes.items():
         tension_id = thread_data.get("tension_id")
         if tension_id:
-            prefixed = (
-                tension_id if tension_id.startswith("tension::") else f"tension::{tension_id}"
-            )
+            prefixed = normalize_scoped_id(tension_id, "tension")
             if prefixed in tension_nodes:
                 tension_raw = tension_nodes[prefixed].get("raw_id", prefixed)
                 thread_tension[thread_id] = tension_raw
