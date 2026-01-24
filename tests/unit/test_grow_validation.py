@@ -243,7 +243,7 @@ class TestTensionsResolved:
                 "type": "beat",
                 "raw_id": "b1",
                 "summary": "No commits",
-                "tension_impacts": [{"tension_id": "t1", "effect": "reveals"}],
+                "tension_impacts": [{"tension_id": "tension::t1", "effect": "reveals"}],
             },
         )
         graph.add_edge("belongs_to", "beat::b1", "thread::th1")
@@ -397,7 +397,7 @@ class TestCommitsTiming:
         for i in range(6):
             effects: list[dict[str, str]] = []
             if i == 1:
-                effects = [{"tension_id": "t1", "effect": "commits"}]
+                effects = [{"tension_id": "tension::t1", "effect": "commits"}]
             graph.create_node(
                 f"beat::b{i}",
                 {
@@ -429,9 +429,9 @@ class TestCommitsTiming:
         for i in range(10):
             effects: list[dict[str, str]] = []
             if i == 8:
-                effects = [{"tension_id": "t1", "effect": "commits"}]
+                effects = [{"tension_id": "tension::t1", "effect": "commits"}]
             elif i == 2:
-                effects = [{"tension_id": "t1", "effect": "reveals"}]
+                effects = [{"tension_id": "tension::t1", "effect": "reveals"}]
             graph.create_node(
                 f"beat::b{i}",
                 {
@@ -464,7 +464,7 @@ class TestCommitsTiming:
         for i in range(5):
             effects: list[dict[str, str]] = []
             if i == 3:
-                effects = [{"tension_id": "t1", "effect": "commits"}]
+                effects = [{"tension_id": "tension::t1", "effect": "commits"}]
             graph.create_node(
                 f"beat::b{i}",
                 {
@@ -497,9 +497,9 @@ class TestCommitsTiming:
         for i in range(12):
             effects: list[dict[str, str]] = []
             if i == 1:
-                effects = [{"tension_id": "t1", "effect": "reveals"}]
+                effects = [{"tension_id": "tension::t1", "effect": "reveals"}]
             elif i == 10:
-                effects = [{"tension_id": "t1", "effect": "commits"}]
+                effects = [{"tension_id": "tension::t1", "effect": "commits"}]
             graph.create_node(
                 f"beat::b{i}",
                 {
@@ -532,11 +532,11 @@ class TestCommitsTiming:
         for i in range(8):
             effects: list[dict[str, str]] = []
             if i == 2:
-                effects = [{"tension_id": "t1", "effect": "reveals"}]
+                effects = [{"tension_id": "tension::t1", "effect": "reveals"}]
             elif i == 4:
-                effects = [{"tension_id": "t1", "effect": "advances"}]
+                effects = [{"tension_id": "tension::t1", "effect": "advances"}]
             elif i == 5:
-                effects = [{"tension_id": "t1", "effect": "commits"}]
+                effects = [{"tension_id": "tension::t1", "effect": "commits"}]
             graph.create_node(
                 f"beat::b{i}",
                 {
@@ -572,7 +572,7 @@ class TestRunAllChecks:
                 "type": "beat",
                 "raw_id": "b0",
                 "summary": "Beat 0",
-                "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+                "tension_impacts": [{"tension_id": "tension::t1", "effect": "commits"}],
             },
         )
         graph.create_node(
@@ -690,7 +690,7 @@ class TestPhase10Integration:
                 "type": "beat",
                 "raw_id": "b0",
                 "summary": "Beat 0",
-                "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+                "tension_impacts": [{"tension_id": "tension::t1", "effect": "commits"}],
             },
         )
         graph.create_node(

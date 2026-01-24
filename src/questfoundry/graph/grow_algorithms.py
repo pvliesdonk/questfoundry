@@ -179,10 +179,7 @@ def validate_commits_beats(graph: Graph) -> list[GrowValidationError]:
                 beat_data = beat_nodes.get(beat_id, {})
                 impacts = beat_data.get("tension_impacts", [])
                 for impact in impacts:
-                    impact_tid = impact.get("tension_id", "")
-                    if impact_tid.startswith("tension::"):
-                        impact_tid = impact_tid[len("tension::") :]
-                    if impact_tid == tension_raw and impact.get("effect") == "commits":
+                    if impact.get("tension_id") == tension_id and impact.get("effect") == "commits":
                         has_commits = True
                         break
                 if has_commits:

@@ -1366,17 +1366,12 @@ class GrowStage:
             cons_id = edge["to"]
             thread_consequences.setdefault(thread_id, []).append(cons_id)
 
-        # Build thread → tension raw_id mapping for commits beat lookup
-        tension_nodes = graph.get_nodes_by_type("tension")
+        # Build thread → tension node ID mapping for commits beat lookup
         thread_tension: dict[str, str] = {}
         for thread_id, thread_data in thread_nodes.items():
             tid = thread_data.get("tension_id", "")
-            # Resolve to raw_id (beat impacts use raw tension IDs)
             prefixed = tid if tid.startswith("tension::") else f"tension::{tid}"
-            if prefixed in tension_nodes:
-                thread_tension[thread_id] = tension_nodes[prefixed].get("raw_id", tid)
-            else:
-                thread_tension[thread_id] = tid
+            thread_tension[thread_id] = prefixed
 
         # Build beat → thread mapping via belongs_to
         beat_threads: dict[str, list[str]] = {}

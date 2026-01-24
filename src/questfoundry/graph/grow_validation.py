@@ -295,10 +295,7 @@ def check_tensions_resolved(graph: Graph) -> ValidationCheck:
                 beat_data = beat_nodes.get(beat_id, {})
                 impacts = beat_data.get("tension_impacts", [])
                 for impact in impacts:
-                    if (
-                        impact.get("tension_id") == tension_raw
-                        and impact.get("effect") == "commits"
-                    ):
+                    if impact.get("tension_id") == tension_id and impact.get("effect") == "commits":
                         has_commits = True
                         break
                 if has_commits:
@@ -440,15 +437,14 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
     if not thread_nodes or not beat_nodes:
         return []
 
-    # Build thread → tension mapping from thread node tension_id properties
+    # Build thread → tension node ID mapping for beat impact comparison
     thread_tension: dict[str, str] = {}
     for thread_id, thread_data in thread_nodes.items():
         tid = thread_data.get("tension_id")
         if tid:
             prefixed = tid if tid.startswith("tension::") else f"tension::{tid}"
             if prefixed in tension_nodes:
-                tension_raw = tension_nodes[prefixed].get("raw_id", prefixed)
-                thread_tension[thread_id] = tension_raw
+                thread_tension[thread_id] = prefixed
 
     # Build thread → beats mapping (ordered by requires)
     thread_beats: dict[str, list[str]] = {}
@@ -474,7 +470,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
     for thread_id, beat_sequence in sorted(thread_beats.items()):
         if thread_id not in thread_tension:
             continue
-        tension_raw = thread_tension[thread_id]
+        tension_node_id = thread_tension[thread_id]
         thread_raw = thread_nodes[thread_id].get("raw_id", thread_id)
 
         # Find commits beat index and buildup beats
@@ -485,7 +481,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
             beat_data = beat_nodes.get(beat_id, {})
             impacts = beat_data.get("tension_impacts", [])
             for impact in impacts:
-                if impact.get("tension_id") != tension_raw:
+                if impact.get("tension_id") != tension_node_id:
                     continue
                 effect = impact.get("effect", "")
                 if effect == "commits":
