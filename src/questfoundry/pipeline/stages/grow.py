@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
+from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
@@ -333,7 +334,7 @@ class GrowStage:
                 log.debug("grow_llm_validation_pass", template=template_name)
                 return validated, llm_calls, 0
 
-            except (ValidationError, TypeError, AttributeError) as e:
+            except (ValidationError, TypeError) as e:
                 log.warning(
                     "grow_llm_validation_fail",
                     template=template_name,
@@ -344,11 +345,7 @@ class GrowStage:
                 if attempt < max_retries - 1:
                     # Reset to base messages + error feedback to avoid
                     # unbounded message history growth across retries
-                    error_msg = (
-                        f"Your previous response had validation errors:\n{e}\n\n"
-                        f"Please fix these issues and try again. "
-                        f"Ensure all IDs are valid and all required fields are present."
-                    )
+                    error_msg = self._build_grow_error_feedback(e, output_schema)
                     messages = list(base_messages)
                     messages.append(HumanMessage(content=error_msg))
 
@@ -356,6 +353,33 @@ class GrowStage:
             f"LLM call for {template_name} failed after {max_retries} attempts. "
             f"Could not produce valid {output_schema.__name__} output."
         )
+
+    def _build_grow_error_feedback(self, error: Exception, output_schema: type[BaseModel]) -> str:
+        """Build structured error feedback for LLM retry.
+
+        Converts validation errors into field-level feedback the LLM can
+        act on, including the list of required fields.
+
+        Args:
+            error: The validation or type error from parsing.
+            output_schema: The Pydantic model class expected.
+
+        Returns:
+            Formatted error feedback string for the LLM.
+        """
+        if isinstance(error, ValidationError):
+            lines: list[str] = []
+            for e in error.errors():
+                loc = ".".join(str(p) for p in e["loc"]) or "(root)"
+                lines.append(f"  - {loc}: {e['msg']}")
+            required_fields = ", ".join(sorted(get_all_field_paths(output_schema)))
+            return (
+                "Validation errors in your response:\n"
+                + "\n".join(lines)
+                + f"\n\nRequired fields: {required_fields}"
+                + "\nEnsure all IDs are from the Valid IDs list."
+            )
+        return f"Error: {error}\n\nPlease produce valid output matching the expected schema."
 
     # -------------------------------------------------------------------------
     # LLM phases
@@ -1341,9 +1365,12 @@ class GrowStage:
             "valid_codeword_ids": ", ".join(valid_codeword_ids),
         }
 
-        result, llm_calls, tokens = await self._grow_llm_call(
-            model, "grow_phase8c_overlays", context, Phase8cOutput
-        )
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model, "grow_phase8c_overlays", context, Phase8cOutput
+            )
+        except GrowStageError as e:
+            return GrowPhaseResult(phase="overlays", status="failed", detail=str(e))
 
         # Validate and apply overlays
         valid_entity_set = set(valid_entity_ids)
@@ -1487,9 +1514,12 @@ class GrowStage:
                 "valid_to_ids": ", ".join(valid_to_ids),
             }
 
-            result, llm_calls, tokens = await self._grow_llm_call(
-                model, "grow_phase9_choices", context, Phase9Output
-            )
+            try:
+                result, llm_calls, tokens = await self._grow_llm_call(
+                    model, "grow_phase9_choices", context, Phase9Output
+                )
+            except GrowStageError as e:
+                return GrowPhaseResult(phase="choices", status="failed", detail=str(e))
 
             # Build a lookup for LLM labels
             label_lookup: dict[tuple[str, str], str] = {}
