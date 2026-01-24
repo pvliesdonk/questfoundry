@@ -274,11 +274,16 @@ class GrowStage:
         context: dict[str, Any],
         output_schema: type[T],
         max_retries: int = 3,
+        semantic_validator: Callable[[T], list[GrowValidationError]] | None = None,
     ) -> tuple[T, int, int]:
         """Call LLM with structured output and retry on validation failure.
 
         Loads prompt template, injects context, calls model.with_structured_output(),
         validates with Pydantic, retries with error feedback on failure.
+
+        If a semantic_validator is provided, it runs after Pydantic succeeds.
+        When >50% of entries have semantic errors, retries the LLM call.
+        Otherwise returns the result for the caller to filter.
 
         Args:
             model: LangChain chat model.
@@ -286,6 +291,8 @@ class GrowStage:
             context: Variables to inject into the prompt template.
             output_schema: Pydantic model class for structured output.
             max_retries: Maximum retry attempts on validation failure.
+            semantic_validator: Optional callable that checks ID validity.
+                Should accept the validated result and return a list of errors.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -345,6 +352,32 @@ class GrowStage:
                     else output_schema.model_validate(result)
                 )
                 log.debug("grow_llm_validation_pass", template=template_name)
+
+                # Semantic validation: check IDs exist in graph
+                if semantic_validator:
+                    from questfoundry.graph.grow_validators import (
+                        count_entries,
+                        format_semantic_errors,
+                    )
+
+                    sem_errors = semantic_validator(validated)
+                    if sem_errors:
+                        entry_count = count_entries(validated)
+                        error_ratio = len(sem_errors) / max(entry_count, 1)
+                        log.warning(
+                            "grow_semantic_validation_fail",
+                            template=template_name,
+                            errors=len(sem_errors),
+                            entries=entry_count,
+                            ratio=f"{error_ratio:.0%}",
+                        )
+                        if error_ratio > 0.5 and attempt < max_retries - 1:
+                            feedback = format_semantic_errors(sem_errors)
+                            messages = list(base_messages)
+                            messages.append(HumanMessage(content=feedback))
+                            continue  # retry
+                        # Below threshold or last attempt: return for caller to filter
+
                 return validated, llm_calls, total_tokens
 
             except (ValidationError, TypeError) as e:
@@ -495,13 +528,23 @@ class GrowStage:
             "valid_tension_ids": ", ".join(valid_tension_ids),
         }
 
-        # Call LLM
+        # Call LLM with semantic validation
+        from functools import partial
+
+        from questfoundry.graph.grow_validators import validate_phase2_output
+
+        validator = partial(
+            validate_phase2_output,
+            valid_beat_ids=set(valid_beat_ids),
+            valid_tension_ids=set(valid_tension_ids),
+        )
         try:
             result, llm_calls, tokens = await self._grow_llm_call(
                 model=model,
                 template_name="grow_phase2_agnostic",
                 context=context,
                 output_schema=Phase2Output,
+                semantic_validator=validator,
             )
         except GrowStageError as e:
             return GrowPhaseResult(
@@ -615,12 +658,18 @@ class GrowStage:
         }
 
         # Call LLM for knot proposals
+        from functools import partial
+
+        from questfoundry.graph.grow_validators import validate_phase3_output
+
+        validator = partial(validate_phase3_output, valid_beat_ids=valid_beat_ids)
         try:
             result, llm_calls, tokens = await self._grow_llm_call(
                 model=model,
                 template_name="grow_phase3_knots",
                 context=context,
                 output_schema=Phase3Output,
+                semantic_validator=validator,
             )
         except GrowStageError as e:
             return GrowPhaseResult(
@@ -721,12 +770,18 @@ class GrowStage:
             "beat_count": str(len(beat_nodes)),
         }
 
+        from functools import partial
+
+        from questfoundry.graph.grow_validators import validate_phase4a_output
+
+        validator = partial(validate_phase4a_output, valid_beat_ids=set(beat_nodes.keys()))
         try:
             result, llm_calls, tokens = await self._grow_llm_call(
                 model=model,
                 template_name="grow_phase4a_scene_types",
                 context=context,
                 output_schema=Phase4aOutput,
+                semantic_validator=validator,
             )
         except GrowStageError as e:
             return GrowPhaseResult(
@@ -1371,9 +1426,22 @@ class GrowStage:
             "valid_codeword_ids": ", ".join(valid_codeword_ids),
         }
 
+        from functools import partial
+
+        from questfoundry.graph.grow_validators import validate_phase8c_output
+
+        validator = partial(
+            validate_phase8c_output,
+            valid_entity_ids=set(valid_entity_ids),
+            valid_codeword_ids=set(valid_codeword_ids),
+        )
         try:
             result, llm_calls, tokens = await self._grow_llm_call(
-                model, "grow_phase8c_overlays", context, Phase8cOutput
+                model,
+                "grow_phase8c_overlays",
+                context,
+                Phase8cOutput,
+                semantic_validator=validator,
             )
         except GrowStageError as e:
             return GrowPhaseResult(phase="overlays", status="failed", detail=str(e))
@@ -1520,9 +1588,21 @@ class GrowStage:
                 "valid_to_ids": ", ".join(valid_to_ids),
             }
 
+            from functools import partial
+
+            from questfoundry.graph.grow_validators import validate_phase9_output
+
+            validator = partial(
+                validate_phase9_output,
+                valid_passage_ids=set(valid_from_ids + valid_to_ids),
+            )
             try:
                 result, llm_calls, tokens = await self._grow_llm_call(
-                    model, "grow_phase9_choices", context, Phase9Output
+                    model,
+                    "grow_phase9_choices",
+                    context,
+                    Phase9Output,
+                    semantic_validator=validator,
                 )
             except GrowStageError as e:
                 return GrowPhaseResult(phase="choices", status="failed", detail=str(e))

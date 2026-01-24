@@ -2053,3 +2053,241 @@ class TestPhase9ErrorHandling:
         assert result.status == "failed"
         assert result.phase == "choices"
         assert "LLM failed" in result.detail
+
+
+class TestGrowSemanticValidation:
+    @pytest.mark.asyncio
+    async def test_retry_when_majority_errors(self) -> None:
+        """_grow_llm_call retries when >50% entries have semantic errors."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.mutations import GrowValidationError
+        from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
+
+        # First call: both tags have bad beat_ids → 2/2 errors → 100% → retry
+        # Second call: both tags have good beat_ids → 0 errors → pass
+        bad_result = Phase4aOutput(
+            tags=[
+                SceneTypeTag(beat_id="beat::bad1", scene_type="scene"),
+                SceneTypeTag(beat_id="beat::bad2", scene_type="sequel"),
+            ]
+        )
+        good_result = Phase4aOutput(
+            tags=[
+                SceneTypeTag(beat_id="beat::b1", scene_type="scene"),
+                SceneTypeTag(beat_id="beat::b2", scene_type="sequel"),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(side_effect=[bad_result, good_result])
+
+        valid_ids = {"beat::b1", "beat::b2"}
+
+        def validator(result: Phase4aOutput) -> list[GrowValidationError]:
+            errors = []
+            for i, tag in enumerate(result.tags):
+                if tag.beat_id not in valid_ids:
+                    errors.append(
+                        GrowValidationError(
+                            field_path=f"tags.{i}.beat_id",
+                            issue=f"Invalid: {tag.beat_id}",
+                            provided=tag.beat_id,
+                            available=sorted(valid_ids),
+                        )
+                    )
+            return errors
+
+        stage = GrowStage()
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.grow.with_structured_output",
+                return_value=mock_structured,
+            ),
+            patch(
+                "questfoundry.pipeline.stages.grow.extract_tokens",
+                return_value=50,
+            ),
+            patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
+        ):
+            mock_path.return_value = Path(__file__).parents[2] / "prompts"
+            result, llm_calls, tokens = await stage._grow_llm_call(
+                MagicMock(),
+                "grow_phase2_agnostic",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                Phase4aOutput,
+                semantic_validator=validator,
+            )
+
+        # Should have retried (2 calls), returning the good result
+        assert llm_calls == 2
+        assert result.tags[0].beat_id == "beat::b1"
+        assert tokens == 100  # 50 + 50
+
+    @pytest.mark.asyncio
+    async def test_no_retry_when_minority_errors(self) -> None:
+        """_grow_llm_call returns without retry when <=50% entries have errors."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.mutations import GrowValidationError
+        from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
+
+        # 4 tags, 1 bad → 25% error ratio → no retry
+        partial_result = Phase4aOutput(
+            tags=[
+                SceneTypeTag(beat_id="beat::b1", scene_type="scene"),
+                SceneTypeTag(beat_id="beat::b2", scene_type="sequel"),
+                SceneTypeTag(beat_id="beat::b3", scene_type="scene"),
+                SceneTypeTag(beat_id="beat::bad", scene_type="sequel"),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=partial_result)
+
+        valid_ids = {"beat::b1", "beat::b2", "beat::b3"}
+
+        def validator(result: Phase4aOutput) -> list[GrowValidationError]:
+            errors = []
+            for i, tag in enumerate(result.tags):
+                if tag.beat_id not in valid_ids:
+                    errors.append(
+                        GrowValidationError(
+                            field_path=f"tags.{i}.beat_id",
+                            issue=f"Invalid: {tag.beat_id}",
+                            provided=tag.beat_id,
+                        )
+                    )
+            return errors
+
+        stage = GrowStage()
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.grow.with_structured_output",
+                return_value=mock_structured,
+            ),
+            patch(
+                "questfoundry.pipeline.stages.grow.extract_tokens",
+                return_value=80,
+            ),
+            patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
+        ):
+            mock_path.return_value = Path(__file__).parents[2] / "prompts"
+            result, llm_calls, _tokens = await stage._grow_llm_call(
+                MagicMock(),
+                "grow_phase2_agnostic",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                Phase4aOutput,
+                semantic_validator=validator,
+            )
+
+        # Should return on first call (no retry)
+        assert llm_calls == 1
+        assert len(result.tags) == 4
+
+    @pytest.mark.asyncio
+    async def test_returns_on_last_attempt_even_with_high_errors(self) -> None:
+        """_grow_llm_call returns result on last attempt regardless of error ratio."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.mutations import GrowValidationError
+        from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
+
+        # All attempts return bad data
+        bad_result = Phase4aOutput(
+            tags=[
+                SceneTypeTag(beat_id="beat::bad1", scene_type="scene"),
+                SceneTypeTag(beat_id="beat::bad2", scene_type="sequel"),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=bad_result)
+
+        def validator(result: Phase4aOutput) -> list[GrowValidationError]:
+            return [
+                GrowValidationError(
+                    field_path=f"tags.{i}.beat_id",
+                    issue=f"Invalid: {tag.beat_id}",
+                    provided=tag.beat_id,
+                    available=["beat::b1"],
+                )
+                for i, tag in enumerate(result.tags)
+            ]
+
+        stage = GrowStage()
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.grow.with_structured_output",
+                return_value=mock_structured,
+            ),
+            patch(
+                "questfoundry.pipeline.stages.grow.extract_tokens",
+                return_value=60,
+            ),
+            patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
+        ):
+            mock_path.return_value = Path(__file__).parents[2] / "prompts"
+            result, llm_calls, tokens = await stage._grow_llm_call(
+                MagicMock(),
+                "grow_phase2_agnostic",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                Phase4aOutput,
+                max_retries=3,
+                semantic_validator=validator,
+            )
+
+        # Should exhaust retries and return the last result
+        assert llm_calls == 3
+        assert result.tags[0].beat_id == "beat::bad1"
+        assert tokens == 180  # 60 * 3
+
+    @pytest.mark.asyncio
+    async def test_no_retry_when_validator_returns_no_errors(self) -> None:
+        """_grow_llm_call returns immediately when semantic validator passes."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.mutations import GrowValidationError
+        from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
+
+        good_result = Phase4aOutput(
+            tags=[
+                SceneTypeTag(beat_id="beat::b1", scene_type="scene"),
+                SceneTypeTag(beat_id="beat::b2", scene_type="sequel"),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=good_result)
+
+        def validator(_result: Phase4aOutput) -> list[GrowValidationError]:
+            return []  # No errors
+
+        stage = GrowStage()
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.grow.with_structured_output",
+                return_value=mock_structured,
+            ),
+            patch(
+                "questfoundry.pipeline.stages.grow.extract_tokens",
+                return_value=100,
+            ),
+            patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
+        ):
+            mock_path.return_value = Path(__file__).parents[2] / "prompts"
+            result, llm_calls, tokens = await stage._grow_llm_call(
+                MagicMock(),
+                "grow_phase2_agnostic",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                Phase4aOutput,
+                semantic_validator=validator,
+            )
+
+        assert llm_calls == 1
+        assert result.tags[0].beat_id == "beat::b1"
+        assert tokens == 100
