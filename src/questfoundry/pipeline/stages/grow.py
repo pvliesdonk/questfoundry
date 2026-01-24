@@ -108,15 +108,18 @@ class GrowStage:
     # Type for async phase functions: (Graph, BaseChatModel) -> GrowPhaseResult
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[GrowPhaseResult]]
 
+    def _get_checkpoint_path(self, project_path: Path, phase_name: str) -> Path:
+        """Return the checkpoint file path for a given phase."""
+        return project_path / self.CHECKPOINT_DIR / f"grow-pre-{phase_name}.json"
+
     def _save_checkpoint(self, graph: Graph, project_path: Path, phase_name: str) -> None:
         """Save graph state before a phase runs.
 
         Creates a snapshot file that can be used to resume from this phase
         if execution is interrupted or needs to be re-run.
         """
-        checkpoint_dir = project_path / self.CHECKPOINT_DIR
-        checkpoint_dir.mkdir(parents=True, exist_ok=True)
-        path = checkpoint_dir / f"grow-pre-{phase_name}.json"
+        path = self._get_checkpoint_path(project_path, phase_name)
+        path.parent.mkdir(parents=True, exist_ok=True)
         graph.save(path)
         log.debug("checkpoint_saved", phase=phase_name, path=str(path))
 
@@ -126,7 +129,7 @@ class GrowStage:
         Raises:
             GrowStageError: If checkpoint file doesn't exist.
         """
-        path = project_path / self.CHECKPOINT_DIR / f"grow-pre-{phase_name}.json"
+        path = self._get_checkpoint_path(project_path, phase_name)
         if not path.exists():
             raise GrowStageError(
                 f"No checkpoint found for phase '{phase_name}'. Expected at: {path}"
@@ -225,15 +228,15 @@ class GrowStage:
         log.info("stage_start", stage="grow")
 
         phases = self._phase_order()
-        phase_names = [name for _, name in phases]
+        phase_map = {name: i for i, (_, name) in enumerate(phases)}
         start_idx = 0
 
         if resume_from:
-            if resume_from not in phase_names:
+            if resume_from not in phase_map:
                 raise GrowStageError(
-                    f"Unknown phase: '{resume_from}'. Valid phases: {', '.join(phase_names)}"
+                    f"Unknown phase: '{resume_from}'. Valid phases: {', '.join(phase_map)}"
                 )
-            start_idx = phase_names.index(resume_from)
+            start_idx = phase_map[resume_from]
             graph = self._load_checkpoint(resolved_path, resume_from)
             log.info(
                 "resume_from_checkpoint",
