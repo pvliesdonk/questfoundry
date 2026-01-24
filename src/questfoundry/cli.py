@@ -549,10 +549,8 @@ def _preview_brainstorm_artifact(artifact: dict[str, Any]) -> None:
         console.print(f"    {category}: {ids_display}")
 
     console.print(f"  Tensions: [bold]{len(tensions)}[/bold]")
-    for tension in tensions[:3]:
+    for tension in tensions:
         console.print(f"    • {tension.get('question', '?')}")
-    if len(tensions) > 3:
-        console.print(f"    ... and {len(tensions) - 3} more")
 
 
 def _preview_seed_artifact(artifact: dict[str, Any]) -> None:

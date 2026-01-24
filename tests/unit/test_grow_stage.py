@@ -15,10 +15,11 @@ from questfoundry.pipeline.stages.grow import GrowStage, GrowStageError, create_
 
 @pytest.fixture
 def tmp_project(tmp_path: Path) -> Path:
-    """Create a temporary project directory with an empty graph."""
+    """Create a temporary project directory with a SEED-completed graph."""
     from questfoundry.graph.graph import Graph
 
     graph = Graph.empty()
+    graph.set_last_stage("seed")
     graph.save(tmp_path / "graph.json")
     return tmp_path
 
@@ -74,6 +75,31 @@ class TestGrowStageExecute:
     async def test_execute_missing_project_path_raises(self, mock_model: MagicMock) -> None:
         stage = GrowStage()
         with pytest.raises(GrowStageError, match="project_path is required"):
+            await stage.execute(model=mock_model, user_prompt="")
+
+    @pytest.mark.asyncio
+    async def test_execute_requires_seed_stage(self, tmp_path: Path, mock_model: MagicMock) -> None:
+        from questfoundry.graph.graph import Graph
+
+        # Graph without last_stage set (no SEED completed)
+        graph = Graph.empty()
+        graph.save(tmp_path / "graph.json")
+        stage = GrowStage(project_path=tmp_path)
+        with pytest.raises(GrowStageError, match="GROW requires completed SEED stage"):
+            await stage.execute(model=mock_model, user_prompt="")
+
+    @pytest.mark.asyncio
+    async def test_execute_requires_seed_not_other_stage(
+        self, tmp_path: Path, mock_model: MagicMock
+    ) -> None:
+        from questfoundry.graph.graph import Graph
+
+        # Graph with last_stage set to "dream" (wrong stage)
+        graph = Graph.empty()
+        graph.set_last_stage("dream")
+        graph.save(tmp_path / "graph.json")
+        stage = GrowStage(project_path=tmp_path)
+        with pytest.raises(GrowStageError, match="Current last_stage: 'dream'"):
             await stage.execute(model=mock_model, user_prompt="")
 
     @pytest.mark.asyncio
@@ -2351,6 +2377,7 @@ class TestGrowCheckpoints:
 
         # Save a checkpoint for "enumerate_arcs" phase
         graph = Graph.empty()
+        graph.set_last_stage("seed")
         stage._save_checkpoint(graph, tmp_project, "enumerate_arcs")
 
         # Track which phases are called

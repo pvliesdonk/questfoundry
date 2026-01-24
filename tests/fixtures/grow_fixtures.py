@@ -69,13 +69,29 @@ def make_single_tension_graph() -> Graph:
         },
     )
 
+    # Alternatives
+    graph.create_node(
+        "tension::mentor_trust::alt::trust_yes",
+        {"type": "alternative", "raw_id": "trust_yes", "tension_id": "mentor_trust"},
+    )
+    graph.create_node(
+        "tension::mentor_trust::alt::trust_no",
+        {"type": "alternative", "raw_id": "trust_no", "tension_id": "mentor_trust"},
+    )
+    graph.add_edge(
+        "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::trust_yes"
+    )
+    graph.add_edge(
+        "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::trust_no"
+    )
+
     # Threads
     graph.create_node(
         "thread::mentor_trust_canonical",
         {
             "type": "thread",
             "raw_id": "mentor_trust_canonical",
-            "tension_id": "mentor_trust",
+            "tension_id": "tension::mentor_trust",
             "alternative_id": "trust_yes",
             "thread_importance": "major",
             "is_canonical": True,
@@ -86,16 +102,18 @@ def make_single_tension_graph() -> Graph:
         {
             "type": "thread",
             "raw_id": "mentor_trust_alt",
-            "tension_id": "mentor_trust",
+            "tension_id": "tension::mentor_trust",
             "alternative_id": "trust_no",
             "thread_importance": "major",
             "is_canonical": False,
         },
     )
 
-    # Thread → Tension edges
-    graph.add_edge("explores", "thread::mentor_trust_canonical", "tension::mentor_trust")
-    graph.add_edge("explores", "thread::mentor_trust_alt", "tension::mentor_trust")
+    # Thread → Alternative edges (explores)
+    graph.add_edge(
+        "explores", "thread::mentor_trust_canonical", "tension::mentor_trust::alt::trust_yes"
+    )
+    graph.add_edge("explores", "thread::mentor_trust_alt", "tension::mentor_trust::alt::trust_no")
 
     # Beats
     graph.create_node(
@@ -123,7 +141,7 @@ def make_single_tension_graph() -> Graph:
             "raw_id": "mentor_commits_canonical",
             "summary": "Hero trusts the mentor fully.",
             "threads": ["mentor_trust_canonical"],
-            "tension_impacts": [{"tension_id": "mentor_trust", "effect": "commits"}],
+            "tension_impacts": [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
         },
     )
     graph.create_node(
@@ -133,7 +151,7 @@ def make_single_tension_graph() -> Graph:
             "raw_id": "mentor_commits_alt",
             "summary": "Hero rejects the mentor.",
             "threads": ["mentor_trust_alt"],
-            "tension_impacts": [{"tension_id": "mentor_trust", "effect": "commits"}],
+            "tension_impacts": [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
         },
     )
 
@@ -174,6 +192,7 @@ def make_single_tension_graph() -> Graph:
     )
     graph.add_edge("has_consequence", "thread::mentor_trust_alt", "consequence::mentor_distrusted")
 
+    graph.set_last_stage("seed")
     return graph
 
 
@@ -256,6 +275,20 @@ def make_two_tension_graph() -> Graph:
         },
     )
 
+    # Alternatives
+    for tension_id, alt_id in [
+        ("mentor_trust", "trust_yes"),
+        ("mentor_trust", "trust_no"),
+        ("artifact_quest", "use_good"),
+        ("artifact_quest", "use_selfish"),
+    ]:
+        alt_node_id = f"tension::{tension_id}::alt::{alt_id}"
+        graph.create_node(
+            alt_node_id,
+            {"type": "alternative", "raw_id": alt_id, "tension_id": tension_id},
+        )
+        graph.add_edge("has_alternative", f"tension::{tension_id}", alt_node_id)
+
     # Threads
     for thread_id, tension_id, alt_id, is_canon in [
         ("mentor_trust_canonical", "mentor_trust", "trust_yes", True),
@@ -268,13 +301,13 @@ def make_two_tension_graph() -> Graph:
             {
                 "type": "thread",
                 "raw_id": thread_id,
-                "tension_id": tension_id,
+                "tension_id": f"tension::{tension_id}",
                 "alternative_id": alt_id,
                 "thread_importance": "major",
                 "is_canonical": is_canon,
             },
         )
-        graph.add_edge("explores", f"thread::{thread_id}", f"tension::{tension_id}")
+        graph.add_edge("explores", f"thread::{thread_id}", f"tension::{tension_id}::alt::{alt_id}")
 
     # Beats
     all_threads = [
@@ -294,25 +327,25 @@ def make_two_tension_graph() -> Graph:
             "mentor_commits_canonical",
             "Hero trusts the mentor.",
             ["mentor_trust_canonical"],
-            [{"tension_id": "mentor_trust", "effect": "commits"}],
+            [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
         ),
         (
             "mentor_commits_alt",
             "Hero distrusts the mentor.",
             ["mentor_trust_alt"],
-            [{"tension_id": "mentor_trust", "effect": "commits"}],
+            [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
         ),
         (
             "artifact_commits_canonical",
             "Hero uses artifact for good.",
             ["artifact_quest_canonical"],
-            [{"tension_id": "artifact_quest", "effect": "commits"}],
+            [{"tension_id": "tension::artifact_quest", "effect": "commits"}],
         ),
         (
             "artifact_commits_alt",
             "Hero uses artifact selfishly.",
             ["artifact_quest_alt"],
-            [{"tension_id": "artifact_quest", "effect": "commits"}],
+            [{"tension_id": "tension::artifact_quest", "effect": "commits"}],
         ),
         ("finale", "The conclusion.", all_threads, []),
     ]
@@ -365,6 +398,7 @@ def make_two_tension_graph() -> Graph:
         )
         graph.add_edge("has_consequence", f"thread::{thread_id}", f"consequence::{cons_id}")
 
+    graph.set_last_stage("seed")
     return graph
 
 
@@ -433,6 +467,20 @@ def make_e2e_fixture_graph() -> Graph:
         },
     )
 
+    # Alternatives
+    for tension_id, alt_id in [
+        ("mentor_trust", "trust_yes"),
+        ("mentor_trust", "trust_no"),
+        ("artifact_quest", "use_good"),
+        ("artifact_quest", "use_selfish"),
+    ]:
+        alt_node_id = f"tension::{tension_id}::alt::{alt_id}"
+        graph.create_node(
+            alt_node_id,
+            {"type": "alternative", "raw_id": alt_id, "tension_id": tension_id},
+        )
+        graph.add_edge("has_alternative", f"tension::{tension_id}", alt_node_id)
+
     # Threads
     thread_defs = [
         ("mentor_trust_canonical", "mentor_trust", "trust_yes", True),
@@ -450,13 +498,13 @@ def make_e2e_fixture_graph() -> Graph:
             {
                 "type": "thread",
                 "raw_id": thread_id,
-                "tension_id": tension_id,
+                "tension_id": f"tension::{tension_id}",
                 "alternative_id": alt_id,
                 "thread_importance": "major",
                 "is_canonical": is_canon,
             },
         )
-        graph.add_edge("explores", f"thread::{thread_id}", f"tension::{tension_id}")
+        graph.add_edge("explores", f"thread::{thread_id}", f"tension::{tension_id}::alt::{alt_id}")
 
     # Beats with lifecycle effects
     beat_defs: list[tuple[str, str, list[str], list[dict[str, str]]]] = [
@@ -466,49 +514,49 @@ def make_e2e_fixture_graph() -> Graph:
             "mt_encounter",
             "The hero meets a mysterious sage on the road.",
             mentor_thread_ids,
-            [{"tension_id": "mentor_trust", "effect": "reveals"}],
+            [{"tension_id": "tension::mentor_trust", "effect": "reveals"}],
         ),
         (
             "mt_test",
             "The mentor offers a dangerous shortcut through the caves.",
             mentor_thread_ids,
-            [{"tension_id": "mentor_trust", "effect": "advances"}],
+            [{"tension_id": "tension::mentor_trust", "effect": "advances"}],
         ),
         (
             "mt_trust",
             "The hero follows the mentor's guidance completely.",
             ["mentor_trust_canonical"],
-            [{"tension_id": "mentor_trust", "effect": "commits"}],
+            [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
         ),
         (
             "mt_distrust",
             "The hero rejects the mentor and goes alone.",
             ["mentor_trust_alt"],
-            [{"tension_id": "mentor_trust", "effect": "commits"}],
+            [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
         ),
         (
             "aq_discovery",
             "The hero finds the crystal in the temple ruins.",
             artifact_thread_ids,
-            [{"tension_id": "artifact_quest", "effect": "reveals"}],
+            [{"tension_id": "tension::artifact_quest", "effect": "reveals"}],
         ),
         (
             "aq_trial",
             "The crystal whispers promises of power to the hero.",
             artifact_thread_ids,
-            [{"tension_id": "artifact_quest", "effect": "advances"}],
+            [{"tension_id": "tension::artifact_quest", "effect": "advances"}],
         ),
         (
             "aq_wield",
             "The hero channels the crystal to heal the village.",
             ["artifact_quest_canonical"],
-            [{"tension_id": "artifact_quest", "effect": "commits"}],
+            [{"tension_id": "tension::artifact_quest", "effect": "commits"}],
         ),
         (
             "aq_corrupt",
             "The hero uses the crystal for personal gain.",
             ["artifact_quest_alt"],
-            [{"tension_id": "artifact_quest", "effect": "commits"}],
+            [{"tension_id": "tension::artifact_quest", "effect": "commits"}],
         ),
         ("climax", "The consequences of all choices converge.", all_thread_ids, []),
     ]
@@ -567,6 +615,7 @@ def make_e2e_fixture_graph() -> Graph:
         )
         graph.add_edge("has_consequence", f"thread::{thread_id}", f"consequence::{cons_id}")
 
+    graph.set_last_stage("seed")
     return graph
 
 

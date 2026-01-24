@@ -15,6 +15,7 @@ from questfoundry.graph.context import (
     format_scoped_id,
     format_summarize_manifest,
     format_valid_ids_context,
+    normalize_scoped_id,
     parse_scoped_id,
 )
 from questfoundry.graph.errors import (
@@ -84,6 +85,7 @@ __all__ = [
     "format_valid_ids_context",
     "has_mutation_handler",
     "list_snapshots",
+    "normalize_scoped_id",
     "parse_scoped_id",
     "rollback_to_snapshot",
     "save_snapshot",

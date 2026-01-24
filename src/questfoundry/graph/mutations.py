@@ -846,6 +846,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     8. Tension impacts reference valid tensions
     9. All BRAINSTORM entities have decisions (completeness)
     10. All BRAINSTORM tensions have decisions (completeness)
+    11. All tensions have at least one thread (completeness)
 
     Args:
         graph: Graph containing BRAINSTORM data (entities, tensions, alternatives).
@@ -1116,6 +1117,30 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 )
             )
 
+    # 11. Check completeness: all tensions should have at least one thread
+    tensions_with_threads: set[str] = set()
+    for thread in output.get("threads", []):
+        raw_tension_id = thread.get("tension_id")
+        if raw_tension_id:
+            normalized_tid, scope_error = _normalize_id(raw_tension_id, "tension")
+            if not scope_error:
+                tensions_with_threads.add(normalized_tid)
+
+    tensions_without_threads = valid_tension_ids - tensions_with_threads
+    for tension_id in sorted(tensions_without_threads):
+        errors.append(
+            SeedValidationError(
+                field_path="threads",
+                issue=(
+                    f"Tension '{tension_id}' has no thread. "
+                    f"Create at least one thread exploring this tension."
+                ),
+                available=[],
+                provided="",
+                category=SeedErrorCategory.COMPLETENESS,
+            )
+        )
+
     return errors
 
 
@@ -1318,35 +1343,48 @@ def format_semantic_errors_as_content(errors: list[SeedValidationError]) -> str:
     by_category = categorize_errors(errors)
     lines: list[str] = ["I found some issues with the summary that need correction:"]
 
-    # Completeness errors (missing decisions)
+    # Completeness errors (missing decisions and missing threads)
     completeness_errors = by_category.get(SeedErrorCategory.COMPLETENESS, [])
     if completeness_errors:
-        lines.append("")
-        lines.append("**Missing items** - these need decisions:")
-        for e in completeness_errors[:_MAX_ERRORS_DISPLAY]:
-            # Extract item ID from issue message (e.g., "Missing decision for entity 'X'")
-            # The provided field is empty for completeness errors, so we parse the issue
-            # Use regex for robust extraction in case of multiple quotes
-            match = re.search(r"'([^']+)'", e.issue)
-            if match:
-                item_id = match.group(1)
-                lines.append(f"  - {item_id}")
-            else:
-                lines.append(f"  - {e.field_path}: {e.issue}")
-        if len(completeness_errors) > _MAX_ERRORS_DISPLAY:
-            lines.append(f"  ... and {len(completeness_errors) - _MAX_ERRORS_DISPLAY} more")
+        decision_errors = [e for e in completeness_errors if "has no thread" not in e.issue]
+        thread_errors = [e for e in completeness_errors if "has no thread" in e.issue]
+
+        if decision_errors:
+            lines.append("")
+            lines.append("**Missing items** - these need decisions:")
+            for e in decision_errors[:_MAX_ERRORS_DISPLAY]:
+                # Extract item ID from issue message (e.g., "Missing decision for entity 'X'")
+                match = re.search(r"'([^']+)'", e.issue)
+                if match:
+                    lines.append(f"  - {match.group(1)}")
+                else:
+                    lines.append(f"  - {e.field_path}: {e.issue}")
+            if len(decision_errors) > _MAX_ERRORS_DISPLAY:
+                lines.append(f"  ... and {len(decision_errors) - _MAX_ERRORS_DISPLAY} more")
+
+        if thread_errors:
+            lines.append("")
+            lines.append("**Missing threads** - each tension must have at least one thread:")
+            for e in thread_errors[:_MAX_ERRORS_DISPLAY]:
+                match = re.search(r"'([^']+)'", e.issue)
+                if match:
+                    lines.append(f"  - tension '{match.group(1)}' has no thread")
+                else:
+                    lines.append(f"  - {e.field_path}: {e.issue}")
+            if len(thread_errors) > _MAX_ERRORS_DISPLAY:
+                lines.append(f"  ... and {len(thread_errors) - _MAX_ERRORS_DISPLAY} more")
 
     # Semantic errors (invalid references)
     semantic_errors = by_category.get(SeedErrorCategory.SEMANTIC, [])
     if semantic_errors:
         lines.append("")
-        lines.append("**Invalid references** - these don't exist in BRAINSTORM:")
+        lines.append("**Invalid references** - fix these fields:")
         for e in semantic_errors[:_MAX_ERRORS_DISPLAY]:
             if e.provided:
-                lines.append(f"  - '{e.provided}' was referenced but isn't defined")
+                lines.append(f"  - {e.field_path}: '{e.provided}' is not valid")
                 # Add suggestion if available
                 suggestion = _format_error_available(e.provided, e.available)
-                if suggestion and not suggestion.startswith("Available"):
+                if suggestion:
                     lines.append(f"    {suggestion}")
             else:
                 lines.append(f"  - {e.field_path}: {e.issue}")

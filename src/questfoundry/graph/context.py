@@ -61,6 +61,20 @@ def format_scoped_id(scope: str, raw_id: str) -> str:
     return f"{scope}::{raw_id}"
 
 
+def normalize_scoped_id(raw_id: str, scope: str) -> str:
+    """Ensure an ID has the scope prefix, adding it if missing.
+
+    Args:
+        raw_id: ID that may or may not already have the scope prefix.
+        scope: The scope type (e.g., 'tension', 'thread').
+
+    Returns:
+        ID with scope prefix guaranteed (e.g., 'tension::mentor_trust').
+    """
+    prefix = f"{scope}::"
+    return raw_id if raw_id.startswith(prefix) else f"{prefix}{raw_id}"
+
+
 def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
     """Format thread IDs for beat serialization with inline constraints.
 

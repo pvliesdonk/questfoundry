@@ -19,6 +19,7 @@ from dataclasses import dataclass, field
 from itertools import product
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.graph.mutations import GrowErrorCategory, GrowValidationError
 from questfoundry.models.grow import Arc
 
@@ -29,6 +30,30 @@ if TYPE_CHECKING:
 # With 2 tensions x 2 threads each = 4 arcs. With 5 tensions x 2 threads = 32 arcs.
 # Beyond 32, the combinatorial explosion makes the story unmanageable.
 _MAX_ARC_COUNT = 32
+
+
+def build_tension_threads(graph: Graph) -> dict[str, list[str]]:
+    """Build tension → threads mapping from thread node tension_id properties.
+
+    Uses the tension_id property on thread nodes instead of explores edges,
+    since explores edges point to alternatives (not tensions) in real SEED output.
+
+    Args:
+        graph: Graph containing tension and thread nodes.
+
+    Returns:
+        Dict mapping tension node ID → list of thread node IDs.
+    """
+    tension_nodes = graph.get_nodes_by_type("tension")
+    thread_nodes = graph.get_nodes_by_type("thread")
+    tension_threads: dict[str, list[str]] = defaultdict(list)
+    for thread_id, thread_data in thread_nodes.items():
+        tension_id = thread_data.get("tension_id")
+        if tension_id:
+            prefixed = normalize_scoped_id(tension_id, "tension")
+            if prefixed in tension_nodes:
+                tension_threads[prefixed].append(thread_id)
+    return tension_threads
 
 
 @dataclass
@@ -128,14 +153,8 @@ def validate_commits_beats(graph: Graph) -> list[GrowValidationError]:
     tension_nodes = graph.get_nodes_by_type("tension")
     thread_nodes = graph.get_nodes_by_type("thread")
 
-    # Build tension → threads mapping via explores edges
-    tension_threads: dict[str, list[str]] = defaultdict(list)
-    explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
-    for edge in explores_edges:
-        thread_id = edge["from"]
-        tension_id = edge["to"]
-        if thread_id in thread_nodes and tension_id in tension_nodes:
-            tension_threads[tension_id].append(thread_id)
+    # Build tension → threads mapping from thread node tension_id properties
+    tension_threads = build_tension_threads(graph)
 
     # Build thread → beats mapping via belongs_to edges
     thread_beats: dict[str, list[str]] = defaultdict(list)
@@ -158,10 +177,7 @@ def validate_commits_beats(graph: Graph) -> list[GrowValidationError]:
                 beat_data = beat_nodes.get(beat_id, {})
                 impacts = beat_data.get("tension_impacts", [])
                 for impact in impacts:
-                    if (
-                        impact.get("tension_id") == tension_raw
-                        and impact.get("effect") == "commits"
-                    ):
+                    if impact.get("tension_id") == tension_id and impact.get("effect") == "commits":
                         has_commits = True
                         break
                 if has_commits:
@@ -272,14 +288,8 @@ def enumerate_arcs(graph: Graph) -> list[Arc]:
     if not tension_nodes or not thread_nodes:
         return []
 
-    # Build tension → threads mapping (sorted for determinism)
-    tension_threads: dict[str, list[str]] = defaultdict(list)
-    explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
-    for edge in explores_edges:
-        thread_id = edge["from"]
-        tension_id = edge["to"]
-        if thread_id in thread_nodes and tension_id in tension_nodes:
-            tension_threads[tension_id].append(thread_id)
+    # Build tension → threads mapping from thread node tension_id properties
+    tension_threads = build_tension_threads(graph)
 
     # Sort threads within each tension for determinism
     for threads in tension_threads.values():
@@ -597,15 +607,17 @@ def _build_beat_tensions(graph: Graph, beat_nodes: dict[str, Any]) -> dict[str, 
     Returns:
         Dict mapping beat_id → set of tension raw_ids.
     """
-    # thread → tension mapping
+    # thread → tension mapping (from thread node tension_id properties)
     thread_tension: dict[str, str] = {}
-    explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
-    for edge in explores_edges:
-        thread_node = graph.get_node(edge["from"])
-        if thread_node:
-            tension_node = graph.get_node(edge["to"])
-            if tension_node:
-                thread_tension[edge["from"]] = tension_node.get("raw_id", edge["to"])
+    thread_nodes = graph.get_nodes_by_type("thread")
+    tension_nodes = graph.get_nodes_by_type("tension")
+    for thread_id, thread_data in thread_nodes.items():
+        tension_id = thread_data.get("tension_id")
+        if tension_id:
+            prefixed = normalize_scoped_id(tension_id, "tension")
+            if prefixed in tension_nodes:
+                tension_raw = tension_nodes[prefixed].get("raw_id", prefixed)
+                thread_tension[thread_id] = tension_raw
 
     # beat → tensions via belongs_to
     beat_tensions: dict[str, set[str]] = {bid: set() for bid in beat_nodes}

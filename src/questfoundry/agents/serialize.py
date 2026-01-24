@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -17,6 +18,7 @@ from questfoundry.graph.context import format_thread_ids_context, format_valid_i
 from questfoundry.graph.mutations import (
     SeedMutationError,
     SeedValidationError,
+    _format_available_with_suggestions,
     validate_seed_mutations,
 )
 from questfoundry.observability.logging import get_logger
@@ -724,6 +726,19 @@ async def serialize_seed_iteratively(
     return seed_output, total_tokens
 
 
+# Maps SeedOutput field_path prefixes to section names used in serialization.
+# Note: "initial_beats" → "beats" because the section config uses "beats" as the
+# section_name while SeedOutput uses "initial_beats" as the field name.
+_FIELD_PATH_TO_SECTION = {
+    "entities": "entities",
+    "tensions": "tensions",
+    "threads": "threads",
+    "consequences": "consequences",
+    "initial_beats": "beats",
+    "convergence_sketch": "convergence",
+}
+
+
 def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
     """Determine which sections need re-serialization based on error field paths.
 
@@ -733,25 +748,69 @@ def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
     Returns:
         Set of section names that have errors.
     """
-    # Map field path prefixes to section names
-    field_to_section = {
-        "entities": "entities",
-        "tensions": "tensions",
-        "threads": "threads",
-        "consequences": "consequences",
-        "initial_beats": "beats",
-        "convergence_sketch": "convergence",
-    }
-
     sections = set()
     for error in errors:
         field_path = error.field_path
         # Extract the top-level field (e.g., "threads.0.tension_id" -> "threads")
         top_level = field_path.split(".")[0] if field_path else ""
-        if top_level in field_to_section:
-            sections.add(field_to_section[top_level])
+        if top_level in _FIELD_PATH_TO_SECTION:
+            sections.add(_FIELD_PATH_TO_SECTION[top_level])
 
     return sections
+
+
+def _group_errors_by_section(
+    errors: list[SeedValidationError],
+) -> dict[str, list[SeedValidationError]]:
+    """Group semantic errors by their originating section.
+
+    Maps field_path prefixes to section names using _FIELD_PATH_TO_SECTION.
+    """
+    by_section: dict[str, list[SeedValidationError]] = {}
+    for error in errors:
+        top_level = error.field_path.split(".")[0] if error.field_path else ""
+        section = _FIELD_PATH_TO_SECTION.get(top_level)
+        if section:
+            by_section.setdefault(section, []).append(error)
+    return by_section
+
+
+def _format_section_corrections(errors: list[SeedValidationError]) -> str:
+    """Format semantic errors as directive corrections for a section retry.
+
+    Produces a substitution-table format that small models can follow:
+    explicit WRONG → RIGHT replacements with no ambiguity.
+    """
+    corrections: list[str] = []
+    for error in errors:
+        if not error.provided or not error.available:
+            continue
+        suggestion = _format_available_with_suggestions(error.provided, error.available)
+        if not suggestion:
+            corrections.append(
+                f"- '{error.provided}' is INVALID. Valid options: {', '.join(error.available[:5])}"
+            )
+            continue
+
+        # Extract the target ID from "Use 'X' instead." format
+        match = re.search(r"Use '([^']+)' instead", suggestion)
+        if match:
+            corrections.append(f"- '{error.provided}' → '{match.group(1)}'")
+        else:
+            corrections.append(f"- '{error.provided}' is INVALID. {suggestion}")
+
+    if not corrections:
+        return ""
+
+    lines = [
+        "## MANDATORY CORRECTIONS",
+        "The following values are WRONG. Use the corrected values EXACTLY:",
+        "",
+        *corrections,
+        "",
+        "Copy the corrected values exactly as shown. Do not pluralize or modify them.",
+    ]
+    return "\n".join(lines)
 
 
 @traceable(
@@ -764,16 +823,17 @@ async def serialize_seed_as_function(
     max_retries: int = 3,
     callbacks: list[BaseCallbackHandler] | None = None,
     graph: Graph | None = None,
+    max_semantic_retries: int = 2,
 ) -> SerializeResult:
     """Serialize SEED brief to structured output, returning result for outer loop.
 
-    This function performs ONE pass of section-by-section serialization and ONE
-    semantic validation. Unlike serialize_seed_iteratively(), it does not retry
-    on semantic errors internally. Instead, it returns a SerializeResult that
-    the caller (SeedStage.execute()) can use to implement conversation-level retry.
-
-    The inner Pydantic validation loop is still handled internally - only semantic
-    errors (phantom IDs, missing decisions) are surfaced to the caller.
+    Performs section-by-section serialization with two retry layers:
+    1. Inner Pydantic retry (per section, handled by serialize_to_artifact)
+    2. Semantic retry: after all sections serialize, validate cross-references.
+       If errors are transcription-class (typos/misspellings with close matches),
+       retry only the failing sections with corrections in the system prompt.
+       If errors persist after max_semantic_retries, surface them to the caller
+       for conversation-level retry (re-summarize).
 
     Args:
         model: Chat model to use for generation.
@@ -783,6 +843,7 @@ async def serialize_seed_as_function(
         callbacks: LangChain callback handlers for logging LLM calls.
         graph: Graph containing BRAINSTORM data for semantic validation.
             If None, semantic validation is skipped.
+        max_semantic_retries: Maximum section-level retries for semantic errors.
 
     Returns:
         SerializeResult with artifact and any semantic errors.
@@ -871,15 +932,80 @@ async def serialize_seed_as_function(
     # Merge all sections into SeedOutput
     seed_output = SeedOutput.model_validate(collected)
 
-    # Semantic validation (if graph provided) - single pass, no retry
+    # Semantic validation with section-level retry loop
     semantic_errors: list[SeedValidationError] = []
     if graph is not None:
-        semantic_errors = validate_seed_mutations(graph, seed_output.model_dump())
-        if semantic_errors:
+        for semantic_attempt in range(1, max_semantic_retries + 1):
+            semantic_errors = validate_seed_mutations(graph, seed_output.model_dump())
+            if not semantic_errors:
+                break
+
             log.warning(
                 "serialize_seed_semantic_errors",
+                attempt=semantic_attempt,
+                max_attempts=max_semantic_retries,
                 error_count=len(semantic_errors),
             )
+
+            # Re-serialize only failing sections with corrections in system prompt
+            section_errors = _group_errors_by_section(semantic_errors)
+            retried_any = False
+
+            for section_name, errors_for_section in section_errors.items():
+                section_config = next((s for s in sections if s[0] == section_name), None)
+                if section_config is None:
+                    continue
+
+                _, schema, output_field = section_config
+                corrections = _format_section_corrections(errors_for_section)
+                if not corrections:
+                    continue
+
+                log.debug(
+                    "serialize_section_retry",
+                    section=section_name,
+                    attempt=semantic_attempt,
+                    error_count=len(errors_for_section),
+                )
+
+                corrected_prompt = f"{prompts[section_name]}\n\n{corrections}"
+                current_brief = (
+                    brief_with_threads
+                    if section_name in ("beats", "consequences")
+                    else enhanced_brief
+                )
+
+                try:
+                    section_result, section_tokens = await serialize_to_artifact(
+                        model=model,
+                        brief=current_brief,
+                        schema=schema,
+                        provider_name=provider_name,
+                        max_retries=max_retries,
+                        system_prompt=corrected_prompt,
+                        callbacks=callbacks,
+                    )
+                    total_tokens += section_tokens
+                    section_data = section_result.model_dump()
+                    if output_field in section_data:
+                        collected[output_field] = section_data[output_field]
+                        retried_any = True
+                except SerializationError as e:
+                    log.warning(
+                        "serialize_section_retry_failed",
+                        section=section_name,
+                        error=str(e),
+                    )
+
+            if not retried_any:
+                # No correctable errors — can't improve, stop retrying
+                break
+
+            # Re-merge and continue loop for re-validation
+            seed_output = SeedOutput.model_validate(collected)
+
+        # Return with remaining errors if any
+        if semantic_errors:
             return SerializeResult(
                 artifact=seed_output,
                 tokens_used=total_tokens,
