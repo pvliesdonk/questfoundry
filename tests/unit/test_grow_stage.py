@@ -1537,7 +1537,7 @@ class TestGrowErrorFeedback:
             result = stage._build_grow_error_feedback(e, TestSchema)
 
         assert "Validation errors in your response:" in result
-        assert "name:" in result or "count:" in result
+        assert "name:" in result and "count:" in result
         assert "Required fields:" in result
         assert "Valid IDs" in result
 
