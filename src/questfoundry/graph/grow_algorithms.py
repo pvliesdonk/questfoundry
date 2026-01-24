@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import contextlib
 from collections import defaultdict, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import product
 from typing import TYPE_CHECKING, Any
 
@@ -1067,3 +1067,94 @@ def insert_gap_beat(
         graph.add_edge("requires", before_beat, beat_id)
 
     return beat_id
+
+
+# ---------------------------------------------------------------------------
+# Phase 9: Choice derivation helpers
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PassageSuccessor:
+    """A successor passage reachable from a given passage on a specific arc."""
+
+    to_passage: str
+    arc_id: str
+    grants: list[str] = field(default_factory=list)
+
+
+def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
+    """Find unique successor passages for each passage across all arcs.
+
+    For each arc's beat sequence, converts to passage sequence and records
+    which passages follow which. Deduplicates successors (same target passage
+    across multiple arcs is recorded once, keeping the first encountered in
+    arc sort order).
+
+    Returns:
+        Mapping of passage_id -> list of unique PassageSuccessor objects.
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+    passage_nodes = graph.get_nodes_by_type("passage")
+
+    if not arc_nodes or not passage_nodes:
+        return {}
+
+    # Build beat → passage mapping
+    beat_to_passage: dict[str, str] = {}
+    for p_id, p_data in passage_nodes.items():
+        from_beat = p_data.get("from_beat", "")
+        if from_beat:
+            beat_to_passage[from_beat] = p_id
+
+    # Collect grants edges: beat → codeword
+    grants_edges = graph.get_edges(from_id=None, to_id=None, edge_type="grants")
+    beat_grants: dict[str, list[str]] = {}
+    for edge in grants_edges:
+        beat_grants.setdefault(edge["from"], []).append(edge["to"])
+
+    successors: dict[str, list[PassageSuccessor]] = {}
+    seen_targets: dict[str, set[str]] = {}
+
+    for arc_id, arc_data in sorted(arc_nodes.items()):
+        sequence: list[str] = arc_data.get("sequence", [])
+        if len(sequence) < 2:
+            continue
+
+        # Convert beat sequence to passage sequence, preserving original beat index.
+        # Beats without passages are intentionally skipped - not all beats become
+        # passages (Phase 8a selects which beats get interactive passages).
+        passage_seq: list[tuple[str, int]] = []
+        for beat_idx, beat_id in enumerate(sequence):
+            if beat_id in beat_to_passage:
+                passage_seq.append((beat_to_passage[beat_id], beat_idx))
+
+        for i in range(len(passage_seq) - 1):
+            p_id, beat_idx = passage_seq[i]
+            next_p, _ = passage_seq[i + 1]
+
+            if p_id not in successors:
+                successors[p_id] = []
+                seen_targets[p_id] = set()
+
+            # Skip if we already recorded this successor target
+            if next_p in seen_targets[p_id]:
+                continue
+            seen_targets[p_id].add(next_p)
+
+            # Grants: codewords from beats AFTER this beat's position on this arc.
+            # Includes beats without passages - codewords are granted by beat
+            # traversal regardless of passage representation.
+            arc_grants: list[str] = []
+            for beat_id in sequence[beat_idx + 1 :]:
+                arc_grants.extend(beat_grants.get(beat_id, []))
+
+            successors[p_id].append(
+                PassageSuccessor(
+                    to_passage=next_p,
+                    arc_id=arc_id,
+                    grants=arc_grants,
+                )
+            )
+
+    return successors

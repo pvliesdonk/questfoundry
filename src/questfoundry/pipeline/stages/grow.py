@@ -36,6 +36,7 @@ from questfoundry.providers.structured_output import with_structured_output
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
+    from questfoundry.graph.grow_algorithms import PassageSuccessor
     from questfoundry.pipeline.gates import PhaseGateHook
     from questfoundry.pipeline.stages.base import (
         AssistantMessageFn,
@@ -116,6 +117,7 @@ class GrowStage:
             (self._phase_8a_passages, "passages"),
             (self._phase_8b_codewords, "codewords"),
             (self._phase_8c_overlays, "overlays"),
+            (self._phase_9_choices, "choices"),
             (self._phase_11_prune, "prune"),
         ]
 
@@ -212,6 +214,7 @@ class GrowStage:
         arc_nodes = graph.get_nodes_by_type("arc")
         passage_nodes = graph.get_nodes_by_type("passage")
         codeword_nodes = graph.get_nodes_by_type("codeword")
+        choice_nodes = graph.get_nodes_by_type("choice")
         entity_nodes = graph.get_nodes_by_type("entity")
 
         spine_arc_id = None
@@ -226,6 +229,7 @@ class GrowStage:
             arc_count=len(arc_nodes),
             passage_count=len(passage_nodes),
             codeword_count=len(codeword_nodes),
+            choice_count=len(choice_nodes),
             overlay_count=overlay_count,
             phases_completed=phase_results,
             spine_arc_id=spine_arc_id,
@@ -1386,14 +1390,139 @@ class GrowStage:
             tokens_used=tokens,
         )
 
+    async def _phase_9_choices(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 9: Create choice edges between passages.
+
+        Single-successor passages get implicit "continue" edges.
+        Multi-successor passages (divergence points) get LLM-generated
+        diegetic labels describing the player's action.
+        """
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+        from questfoundry.models.grow import Phase9Output
+
+        passage_nodes = graph.get_nodes_by_type("passage")
+        if not passage_nodes:
+            return GrowPhaseResult(
+                phase="choices",
+                status="completed",
+                detail="No passages to process",
+            )
+
+        successors = find_passage_successors(graph)
+        if not successors:
+            return GrowPhaseResult(
+                phase="choices",
+                status="completed",
+                detail="No passage successors found",
+            )
+
+        # Separate single-successor vs multi-successor passages
+        single_successors: dict[str, list[PassageSuccessor]] = {}
+        multi_successors: dict[str, list[PassageSuccessor]] = {}
+
+        for p_id, succ_list in successors.items():
+            if len(succ_list) == 1:
+                single_successors[p_id] = succ_list
+            elif len(succ_list) > 1:
+                multi_successors[p_id] = succ_list
+
+        choice_count = 0
+
+        # Create implicit "continue" edges for single-successor passages
+        for p_id, succ_list in single_successors.items():
+            succ = succ_list[0]
+            choice_id = f"choice::{p_id.removeprefix('passage::')}__{succ.to_passage.removeprefix('passage::')}"
+            graph.create_node(
+                choice_id,
+                {
+                    "type": "choice",
+                    "from_passage": p_id,
+                    "to_passage": succ.to_passage,
+                    "label": "continue",
+                    "requires": [],
+                    "grants": succ.grants,
+                },
+            )
+            graph.add_edge("choice_from", choice_id, p_id)
+            graph.add_edge("choice_to", choice_id, succ.to_passage)
+            choice_count += 1
+
+        # For multi-successor passages, call LLM for diegetic labels
+        llm_calls = 0
+        tokens = 0
+
+        if multi_successors:
+            # Build context for LLM
+            divergence_lines: list[str] = []
+            valid_from_ids: list[str] = []
+            valid_to_ids: list[str] = []
+
+            for p_id, succ_list in sorted(multi_successors.items()):
+                valid_from_ids.append(p_id)
+                p_summary = passage_nodes.get(p_id, {}).get("summary", "")
+                divergence_lines.append(f'\nDivergence at {p_id}: "{p_summary}"')
+                divergence_lines.append("  Successors:")
+                for succ in succ_list:
+                    valid_to_ids.append(succ.to_passage)
+                    succ_summary = passage_nodes.get(succ.to_passage, {}).get("summary", "")
+                    divergence_lines.append(f'  - {succ.to_passage}: "{succ_summary}"')
+
+            context = {
+                "divergence_context": "\n".join(divergence_lines),
+                "valid_from_ids": ", ".join(valid_from_ids),
+                "valid_to_ids": ", ".join(valid_to_ids),
+            }
+
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model, "grow_phase9_choices", context, Phase9Output
+            )
+
+            # Build a lookup for LLM labels
+            label_lookup: dict[tuple[str, str], str] = {}
+            for label_item in result.labels:
+                label_lookup[(label_item.from_passage, label_item.to_passage)] = label_item.label
+
+            # Create choice edges for multi-successor passages
+            for p_id, succ_list in multi_successors.items():
+                for succ in succ_list:
+                    label = label_lookup.get((p_id, succ.to_passage))
+                    if not label:
+                        log.warning(
+                            "phase9_fallback_label",
+                            from_passage=p_id,
+                            to_passage=succ.to_passage,
+                        )
+                        label = "take this path"
+                    choice_id = f"choice::{p_id.removeprefix('passage::')}__{succ.to_passage.removeprefix('passage::')}"
+                    graph.create_node(
+                        choice_id,
+                        {
+                            "type": "choice",
+                            "from_passage": p_id,
+                            "to_passage": succ.to_passage,
+                            "label": label,
+                            "requires": [],
+                            "grants": succ.grants,
+                        },
+                    )
+                    graph.add_edge("choice_from", choice_id, p_id)
+                    graph.add_edge("choice_to", choice_id, succ.to_passage)
+                    choice_count += 1
+
+        return GrowPhaseResult(
+            phase="choices",
+            status="completed",
+            detail=f"Created {choice_count} choices ({len(multi_successors)} divergence points)",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
     async def _phase_11_prune(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
         """Phase 11: Prune unreachable passages.
 
-        Uses arc membership to identify reachable passages.
-        Deletes unreachable passages.
-
-        Note: Without choices (Phase 9), reachability is determined via
-        arc_contains edges - passages whose beats are in any arc are reachable.
+        When choice edges exist (Phase 9 ran), uses BFS via choice_to edges
+        from the first passage in the spine arc to find reachable passages.
+        Falls back to arc_contains membership when no choices exist.
         """
         passage_nodes = graph.get_nodes_by_type("passage")
         if not passage_nodes:
@@ -1403,16 +1532,14 @@ class GrowStage:
                 detail="No passages to prune",
             )
 
-        # Find all beats that are in any arc (via arc_contains edges)
-        arc_contains_edges = graph.get_edges(from_id=None, to_id=None, edge_type="arc_contains")
-        beats_in_arcs: set[str] = {edge["to"] for edge in arc_contains_edges}
+        choice_nodes = graph.get_nodes_by_type("choice")
 
-        # A passage is reachable if its from_beat is in any arc
-        reachable_passages: set[str] = set()
-        for passage_id, passage_data in passage_nodes.items():
-            from_beat = passage_data.get("from_beat", "")
-            if from_beat in beats_in_arcs:
-                reachable_passages.add(passage_id)
+        if choice_nodes:
+            # Use choice edge BFS for reachability
+            reachable_passages = self._reachable_via_choices(graph, passage_nodes)
+        else:
+            # Fallback: arc_contains membership
+            reachable_passages = self._reachable_via_arcs(graph, passage_nodes)
 
         # Prune unreachable passages
         unreachable = set(passage_nodes.keys()) - reachable_passages
@@ -1431,6 +1558,69 @@ class GrowStage:
             status="completed",
             detail="All passages reachable",
         )
+
+    def _reachable_via_choices(
+        self, graph: Graph, passage_nodes: dict[str, dict[str, Any]]
+    ) -> set[str]:
+        """BFS from first spine passage via choice_to edges."""
+        # Find spine arc's first passage
+        arc_nodes = graph.get_nodes_by_type("arc")
+        start_passage: str | None = None
+
+        for _arc_id, arc_data in arc_nodes.items():
+            if arc_data.get("arc_type") == "spine":
+                sequence = arc_data.get("sequence", [])
+                if sequence:
+                    # First beat → its passage
+                    first_beat = sequence[0]
+                    for p_id, p_data in passage_nodes.items():
+                        if p_data.get("from_beat") == first_beat:
+                            start_passage = p_id
+                            break
+                break
+
+        if not start_passage:
+            log.warning("phase9_no_spine_arc", detail="Cannot BFS without spine; all passages kept")
+            return set(passage_nodes.keys())
+
+        # BFS via choice edges
+        from collections import deque
+
+        reachable: set[str] = {start_passage}
+        queue: deque[str] = deque([start_passage])
+
+        # Build passage → successors mapping directly from choice node data
+        choice_nodes = graph.get_nodes_by_type("choice")
+        choice_successors: dict[str, list[str]] = {}
+        for choice_data in choice_nodes.values():
+            from_passage = choice_data.get("from_passage")
+            to_passage = choice_data.get("to_passage")
+            if from_passage and to_passage:
+                choice_successors.setdefault(from_passage, []).append(to_passage)
+
+        while queue:
+            current = queue.popleft()
+            for next_p in choice_successors.get(current, []):
+                if next_p not in reachable:
+                    reachable.add(next_p)
+                    queue.append(next_p)
+
+        return reachable
+
+    def _reachable_via_arcs(
+        self, graph: Graph, passage_nodes: dict[str, dict[str, Any]]
+    ) -> set[str]:
+        """Fallback: passages whose beats are in any arc."""
+        arc_contains_edges = graph.get_edges(from_id=None, to_id=None, edge_type="arc_contains")
+        beats_in_arcs: set[str] = {edge["to"] for edge in arc_contains_edges}
+
+        reachable: set[str] = set()
+        for passage_id, passage_data in passage_nodes.items():
+            from_beat = passage_data.get("from_beat", "")
+            if from_beat in beats_in_arcs:
+                reachable.add(passage_id)
+
+        return reachable
 
 
 def create_grow_stage(

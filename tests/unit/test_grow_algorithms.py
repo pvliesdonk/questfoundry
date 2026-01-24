@@ -1089,6 +1089,71 @@ class TestPhase11Integration:
         assert result.status == "completed"
         assert "No passages" in result.detail
 
+    @pytest.mark.asyncio
+    async def test_prune_via_choice_edges(self) -> None:
+        """Prune uses choice edge BFS when choice nodes exist."""
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = Graph.empty()
+        # Create spine arc with 2 beats
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a", "beat::b"],
+            },
+        )
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        graph.add_edge("arc_contains", "arc::spine", "beat::a")
+        graph.add_edge("arc_contains", "arc::spine", "beat::b")
+
+        # Create passages
+        graph.create_node(
+            "passage::a",
+            {"type": "passage", "raw_id": "a", "from_beat": "beat::a", "summary": "A"},
+        )
+        graph.create_node(
+            "passage::b",
+            {"type": "passage", "raw_id": "b", "from_beat": "beat::b", "summary": "B"},
+        )
+        # Create an orphan passage not linked by choices
+        graph.create_node(
+            "passage::orphan",
+            {"type": "passage", "raw_id": "orphan", "from_beat": "beat::x", "summary": "X"},
+        )
+
+        # Create choice edges: a → b (but not → orphan)
+        graph.create_node(
+            "choice::a_b",
+            {
+                "type": "choice",
+                "from_passage": "passage::a",
+                "to_passage": "passage::b",
+                "label": "continue",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::a_b", "passage::a")
+        graph.add_edge("choice_to", "choice::a_b", "passage::b")
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+        result = await stage._phase_11_prune(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "Pruned 1" in result.detail
+
+        # Orphan should be gone
+        passage_nodes = graph.get_nodes_by_type("passage")
+        assert "passage::orphan" not in passage_nodes
+        assert "passage::a" in passage_nodes
+        assert "passage::b" in passage_nodes
+
 
 # ---------------------------------------------------------------------------
 # Phase 3: Knot Algorithms
@@ -1318,6 +1383,7 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         Phase4aOutput,
         Phase4bOutput,
         Phase8cOutput,
+        Phase9Output,
         SceneTypeTag,
         ThreadAgnosticAssessment,
     )
@@ -1376,6 +1442,9 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
     # Phase 8c: no overlays proposed (keeps test graphs simple)
     phase8c_output = Phase8cOutput(overlays=[])
 
+    # Phase 9: no labels proposed (fallback "choose this path" used)
+    phase9_output = Phase9Output(labels=[])
+
     # Map schema -> output
     output_by_schema: dict[type, object] = {
         Phase2Output: phase2_output,
@@ -1383,6 +1452,7 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         Phase4aOutput: phase4a_output,
         Phase4bOutput: phase4b_output,
         Phase8cOutput: phase8c_output,
+        Phase9Output: phase9_output,
     }
 
     def _with_structured_output(schema: type, **_kwargs: object) -> AsyncMock:
@@ -1410,9 +1480,9 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All 13 phases should run (completed or skipped)
+        # All 14 phases should run (completed or skipped)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 13
+        assert len(phases) == 14
         for phase in phases:
             assert phase["status"] in ("completed", "skipped")
 
@@ -1425,6 +1495,9 @@ class TestPhaseIntegrationEndToEnd:
 
         # Should have codewords (one per consequence)
         assert result_dict["codeword_count"] == 4  # 4 consequences
+
+        # Should have choices (from Phase 9)
+        assert result_dict["choice_count"] > 0
 
     @pytest.mark.asyncio
     async def test_single_tension_full_run(self, tmp_path: Path) -> None:
@@ -1734,3 +1807,238 @@ class TestInsertGapBeat:
 
         # Should be gap_4 (max existing is 3, so next is 4)
         assert beat_id == "beat::gap_4"
+
+
+# ---------------------------------------------------------------------------
+# Phase 9: find_passage_successors
+# ---------------------------------------------------------------------------
+
+
+class TestFindPassageSuccessors:
+    def test_linear_arc_single_successors(self) -> None:
+        """Linear arc produces single-successor mapping for each passage."""
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+
+        graph = Graph.empty()
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        graph.create_node("beat::c", {"type": "beat", "raw_id": "c"})
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a", "beat::b", "beat::c"],
+            },
+        )
+        for bid in ["a", "b", "c"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}"},
+            )
+
+        result = find_passage_successors(graph)
+
+        assert "passage::a" in result
+        assert len(result["passage::a"]) == 1
+        assert result["passage::a"][0].to_passage == "passage::b"
+
+        assert "passage::b" in result
+        assert len(result["passage::b"]) == 1
+        assert result["passage::b"][0].to_passage == "passage::c"
+
+        # Last passage has no successors
+        assert "passage::c" not in result
+
+    def test_diverging_arcs_multi_successors(self) -> None:
+        """Diverging arcs produce multi-successor at divergence point."""
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+
+        graph = Graph.empty()
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        graph.create_node("beat::c", {"type": "beat", "raw_id": "c"})
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a", "beat::b"],
+            },
+        )
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "arc_type": "branch",
+                "threads": ["t2"],
+                "sequence": ["beat::a", "beat::c"],
+            },
+        )
+        for bid in ["a", "b", "c"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}"},
+            )
+
+        result = find_passage_successors(graph)
+
+        assert "passage::a" in result
+        assert len(result["passage::a"]) == 2
+        targets = {s.to_passage for s in result["passage::a"]}
+        assert targets == {"passage::b", "passage::c"}
+
+    def test_deduplicates_same_successor(self) -> None:
+        """Same successor from multiple arcs is recorded only once."""
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+
+        graph = Graph.empty()
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        # Two arcs with same sequence
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a", "beat::b"],
+            },
+        )
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "arc_type": "branch",
+                "threads": ["t2"],
+                "sequence": ["beat::a", "beat::b"],
+            },
+        )
+        for bid in ["a", "b"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}"},
+            )
+
+        result = find_passage_successors(graph)
+
+        # Only one successor recorded (deduplicated)
+        assert len(result["passage::a"]) == 1
+
+    def test_collects_grants_from_successor_beats(self) -> None:
+        """Grants from beats after the successor are collected."""
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+
+        graph = Graph.empty()
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
+        graph.add_edge("grants", "beat::b", "codeword::cw1")
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a", "beat::b"],
+            },
+        )
+        for bid in ["a", "b"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}"},
+            )
+
+        result = find_passage_successors(graph)
+
+        assert "passage::a" in result
+        assert "codeword::cw1" in result["passage::a"][0].grants
+
+    def test_empty_graph_returns_empty(self) -> None:
+        """Empty graph returns empty dict."""
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+
+        graph = Graph.empty()
+        assert find_passage_successors(graph) == {}
+
+    def test_no_arcs_returns_empty(self) -> None:
+        """No arcs means no successors."""
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+
+        graph = Graph.empty()
+        graph.create_node("passage::a", {"type": "passage", "raw_id": "a", "from_beat": "beat::a"})
+        assert find_passage_successors(graph) == {}
+
+    def test_single_beat_arc_skipped(self) -> None:
+        """Arcs with fewer than 2 beats are skipped."""
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+
+        graph = Graph.empty()
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node(
+            "arc::tiny",
+            {
+                "type": "arc",
+                "raw_id": "tiny",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a"],
+            },
+        )
+        graph.create_node("passage::a", {"type": "passage", "raw_id": "a", "from_beat": "beat::a"})
+
+        assert find_passage_successors(graph) == {}
+
+    def test_beats_without_passages_skipped_correctly(self) -> None:
+        """Beats without passages are skipped; grants use beat index not passage index."""
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+
+        graph = Graph.empty()
+        # Arc: beat::a → beat::mid (no passage) → beat::b
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::mid", {"type": "beat", "raw_id": "mid"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+
+        # beat::mid grants a codeword
+        graph.create_node("codeword::mid_cw", {"type": "codeword", "raw_id": "mid_cw"})
+        graph.add_edge("grants", "beat::mid", "codeword::mid_cw")
+
+        # beat::b also grants a codeword
+        graph.create_node("codeword::b_cw", {"type": "codeword", "raw_id": "b_cw"})
+        graph.add_edge("grants", "beat::b", "codeword::b_cw")
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a", "beat::mid", "beat::b"],
+            },
+        )
+        # Only a and b have passages (mid is skipped)
+        graph.create_node("passage::a", {"type": "passage", "raw_id": "a", "from_beat": "beat::a"})
+        graph.create_node("passage::b", {"type": "passage", "raw_id": "b", "from_beat": "beat::b"})
+
+        result = find_passage_successors(graph)
+
+        # passage::a → passage::b (skipping beat::mid which has no passage)
+        assert "passage::a" in result
+        assert len(result["passage::a"]) == 1
+        assert result["passage::a"][0].to_passage == "passage::b"
+
+        # Grants should include both beat::mid's and beat::b's codewords
+        # (all beats after beat::a in the arc sequence)
+        grants = result["passage::a"][0].grants
+        assert "codeword::mid_cw" in grants
+        assert "codeword::b_cw" in grants
