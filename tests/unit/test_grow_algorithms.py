@@ -1480,9 +1480,9 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All 14 phases should run (completed or skipped)
+        # All 15 phases should run (completed or skipped)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 14
+        assert len(phases) == 15
         for phase in phases:
             assert phase["status"] in ("completed", "skipped")
 

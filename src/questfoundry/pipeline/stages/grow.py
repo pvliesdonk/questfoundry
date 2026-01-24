@@ -118,6 +118,7 @@ class GrowStage:
             (self._phase_8b_codewords, "codewords"),
             (self._phase_8c_overlays, "overlays"),
             (self._phase_9_choices, "choices"),
+            (self._phase_10_validation, "validation"),
             (self._phase_11_prune, "prune"),
         ]
 
@@ -1516,6 +1517,47 @@ class GrowStage:
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
+
+    async def _phase_10_validation(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
+        """Phase 10: Graph validation.
+
+        Runs structural and timing checks on the assembled story graph.
+        Failures block execution; warnings are advisory.
+        """
+        from questfoundry.graph.grow_validation import run_all_checks
+
+        report = run_all_checks(graph)
+
+        pass_count = len([c for c in report.checks if c.severity == "pass"])
+        warn_count = len([c for c in report.checks if c.severity == "warn"])
+        fail_count = len([c for c in report.checks if c.severity == "fail"])
+
+        if report.has_failures:
+            log.warning(
+                "validation_failed",
+                failures=fail_count,
+                warnings=warn_count,
+                passes=pass_count,
+                summary=report.summary,
+            )
+            return GrowPhaseResult(
+                phase="validation",
+                status="failed",
+                detail=report.summary,
+            )
+
+        if report.has_warnings:
+            log.info(
+                "validation_passed_with_warnings",
+                warnings=warn_count,
+                passes=pass_count,
+            )
+            detail = f"Passed with warnings: {report.summary}"
+        else:
+            log.info("validation_passed", passes=pass_count)
+            detail = report.summary
+
+        return GrowPhaseResult(phase="validation", status="completed", detail=detail)
 
     async def _phase_11_prune(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
         """Phase 11: Prune unreachable passages.
