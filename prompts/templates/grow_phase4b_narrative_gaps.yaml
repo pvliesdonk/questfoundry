@@ -48,4 +48,6 @@ system: |
 user: |
   Analyze the thread sequences above and propose gap beats where needed.
 
+  REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section. Do NOT add prose before or after the JSON.
+
 components: []

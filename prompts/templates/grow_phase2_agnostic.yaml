@@ -56,4 +56,6 @@ system: |
 user: |
   Analyze the candidate beats above and return your thread-agnostic assessments.
 
+  REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section. Do NOT add prose before or after the JSON.
+
 components: []

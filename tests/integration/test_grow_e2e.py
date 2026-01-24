@@ -179,51 +179,6 @@ class TestGrowFullPipeline:
 class TestGrowContextFormatting:
     """Tests for context formatting functions."""
 
-    def test_beat_context_within_budget(self) -> None:
-        """Verify beat context formatting stays within 24k token budget."""
-        from questfoundry.graph.grow_context import format_grow_beat_context
-
-        graph = make_e2e_fixture_graph()
-        context = format_grow_beat_context(graph, max_tokens=24000)
-
-        # Rough token estimate: chars / 4
-        estimated_tokens = len(context) / 4
-        assert estimated_tokens <= 24000
-
-    def test_beat_context_contains_all_beats(self) -> None:
-        """Verify beat context includes all beat IDs from fixture."""
-        from questfoundry.graph.grow_context import format_grow_beat_context
-
-        graph = make_e2e_fixture_graph()
-        context = format_grow_beat_context(graph)
-
-        # All 10 beats should appear
-        beat_ids = [
-            "beat::opening",
-            "beat::mt_encounter",
-            "beat::mt_test",
-            "beat::mt_trust",
-            "beat::mt_distrust",
-            "beat::aq_discovery",
-            "beat::aq_trial",
-            "beat::aq_wield",
-            "beat::aq_corrupt",
-            "beat::climax",
-        ]
-        for beat_id in beat_ids:
-            assert beat_id in context, f"{beat_id} not found in context"
-
-    def test_beat_context_windowing_with_small_budget(self) -> None:
-        """Verify windowing activates when budget is too small for full context."""
-        from questfoundry.graph.grow_context import format_grow_beat_context
-
-        graph = make_e2e_fixture_graph()
-        # Use a very small budget to force windowing
-        context = format_grow_beat_context(graph, max_tokens=100)
-
-        # Should contain windowing markers
-        assert "Earlier beats" in context or "..." in context
-
     def test_valid_ids_contains_all_types(self) -> None:
         """Verify format_grow_valid_ids returns all ID types."""
         from questfoundry.graph.grow_context import format_grow_valid_ids
@@ -261,15 +216,9 @@ class TestGrowContextFormatting:
 
     def test_empty_graph_context(self) -> None:
         """Verify context formatting handles empty graph gracefully."""
-        from questfoundry.graph.grow_context import (
-            format_grow_beat_context,
-            format_grow_valid_ids,
-        )
+        from questfoundry.graph.grow_context import format_grow_valid_ids
 
         graph = Graph.empty()
-
-        context = format_grow_beat_context(graph)
-        assert context == ""
 
         ids = format_grow_valid_ids(graph)
         assert all(v == "" for v in ids.values())

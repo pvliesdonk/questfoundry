@@ -54,4 +54,6 @@ system: |
 user: |
   Write diegetic choice labels for each divergence point described above.
 
+  REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section. Do NOT add prose before or after the JSON.
+
 components: []

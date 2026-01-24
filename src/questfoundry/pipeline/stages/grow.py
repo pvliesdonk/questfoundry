@@ -715,6 +715,84 @@ class GrowStage:
             tokens_used=tokens,
         )
 
+    def _validate_and_insert_gaps(
+        self,
+        graph: Graph,
+        gaps: list[Any],
+        valid_thread_ids: set[str] | dict[str, Any],
+        valid_beat_ids: set[str] | dict[str, Any],
+        phase_name: str,
+    ) -> int:
+        """Validate gap proposals and insert valid ones into the graph.
+
+        Checks thread_id prefixing, beat ID existence, and ordering
+        before inserting each gap beat.
+
+        Args:
+            graph: Graph to insert beats into.
+            gaps: List of GapProposal instances from LLM output.
+            valid_thread_ids: Set or dict of valid thread IDs.
+            valid_beat_ids: Set or dict of valid beat IDs.
+            phase_name: Phase name for log event prefixing.
+
+        Returns:
+            Number of gap beats successfully inserted.
+        """
+        from questfoundry.graph.grow_algorithms import (
+            get_thread_beat_sequence,
+            insert_gap_beat,
+        )
+
+        inserted = 0
+        for gap in gaps:
+            prefixed_tid = (
+                gap.thread_id
+                if gap.thread_id.startswith("thread::")
+                else f"thread::{gap.thread_id}"
+            )
+            if prefixed_tid != gap.thread_id:
+                log.warning(
+                    f"{phase_name}_unprefixed_thread_id",
+                    thread_id=gap.thread_id,
+                    prefixed=prefixed_tid,
+                )
+            if prefixed_tid not in valid_thread_ids:
+                log.warning(f"{phase_name}_invalid_thread_id", thread_id=gap.thread_id)
+                continue
+            if gap.after_beat and gap.after_beat not in valid_beat_ids:
+                log.warning(f"{phase_name}_invalid_after_beat", beat_id=gap.after_beat)
+                continue
+            if gap.before_beat and gap.before_beat not in valid_beat_ids:
+                log.warning(f"{phase_name}_invalid_before_beat", beat_id=gap.before_beat)
+                continue
+            # Validate ordering: after_beat must come before before_beat
+            if gap.after_beat and gap.before_beat:
+                sequence = get_thread_beat_sequence(graph, prefixed_tid)
+                try:
+                    after_idx = sequence.index(gap.after_beat)
+                    before_idx = sequence.index(gap.before_beat)
+                    if after_idx >= before_idx:
+                        log.warning(
+                            f"{phase_name}_invalid_beat_order",
+                            after_beat=gap.after_beat,
+                            before_beat=gap.before_beat,
+                        )
+                        continue
+                except ValueError:
+                    log.warning(f"{phase_name}_beat_not_in_sequence", thread_id=gap.thread_id)
+                    continue
+
+            insert_gap_beat(
+                graph,
+                thread_id=prefixed_tid,
+                after_beat=gap.after_beat,
+                before_beat=gap.before_beat,
+                summary=gap.summary,
+                scene_type=gap.scene_type,
+            )
+            inserted += 1
+        return inserted
+
     async def _phase_4b_narrative_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4b: Detect narrative gaps in thread beat sequences.
 
@@ -723,10 +801,7 @@ class GrowStage:
         to climax without a development beat). Inserts proposed gap
         beats into the graph.
         """
-        from questfoundry.graph.grow_algorithms import (
-            get_thread_beat_sequence,
-            insert_gap_beat,
-        )
+        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
         from questfoundry.models.grow import Phase4bOutput
 
         thread_nodes = graph.get_nodes_by_type("thread")
@@ -782,48 +857,9 @@ class GrowStage:
             )
 
         # Validate and insert gap beats
-        inserted = 0
-        for gap in result.gaps:
-            prefixed_tid = (
-                gap.thread_id
-                if gap.thread_id.startswith("thread::")
-                else f"thread::{gap.thread_id}"
-            )
-            if prefixed_tid not in thread_nodes:
-                log.warning("phase4b_invalid_thread_id", thread_id=gap.thread_id)
-                continue
-            if gap.after_beat and gap.after_beat not in valid_beat_ids:
-                log.warning("phase4b_invalid_after_beat", beat_id=gap.after_beat)
-                continue
-            if gap.before_beat and gap.before_beat not in valid_beat_ids:
-                log.warning("phase4b_invalid_before_beat", beat_id=gap.before_beat)
-                continue
-            # Validate ordering: after_beat must come before before_beat
-            if gap.after_beat and gap.before_beat:
-                sequence = get_thread_beat_sequence(graph, prefixed_tid)
-                try:
-                    after_idx = sequence.index(gap.after_beat)
-                    before_idx = sequence.index(gap.before_beat)
-                    if after_idx >= before_idx:
-                        log.warning(
-                            "phase4b_invalid_beat_order",
-                            after_beat=gap.after_beat,
-                            before_beat=gap.before_beat,
-                        )
-                        continue
-                except ValueError:
-                    log.warning("phase4b_beat_not_in_sequence", thread_id=gap.thread_id)
-                    continue
-
-            insert_gap_beat(
-                graph,
-                thread_id=prefixed_tid,
-                after_beat=gap.after_beat,
-                before_beat=gap.before_beat,
-                summary=gap.summary,
-                scene_type=gap.scene_type,
-            )
-            inserted += 1
+        inserted = self._validate_and_insert_gaps(
+            graph, result.gaps, thread_nodes, valid_beat_ids, "phase4b"
+        )
 
         return GrowPhaseResult(
             phase="narrative_gaps",
@@ -840,11 +876,7 @@ class GrowStage:
         asks the LLM to propose correction beats. Only proceeds if
         Phase 4a has tagged beats with scene types.
         """
-        from questfoundry.graph.grow_algorithms import (
-            detect_pacing_issues,
-            get_thread_beat_sequence,
-            insert_gap_beat,
-        )
+        from questfoundry.graph.grow_algorithms import detect_pacing_issues
         from questfoundry.models.grow import Phase4bOutput
 
         beat_nodes = graph.get_nodes_by_type("beat")
@@ -909,48 +941,9 @@ class GrowStage:
             )
 
         # Insert correction beats
-        inserted = 0
-        for gap in result.gaps:
-            prefixed_tid = (
-                gap.thread_id
-                if gap.thread_id.startswith("thread::")
-                else f"thread::{gap.thread_id}"
-            )
-            if prefixed_tid not in thread_nodes:
-                log.warning("phase4c_invalid_thread_id", thread_id=gap.thread_id)
-                continue
-            if gap.after_beat and gap.after_beat not in beat_nodes:
-                log.warning("phase4c_invalid_after_beat", beat_id=gap.after_beat)
-                continue
-            if gap.before_beat and gap.before_beat not in beat_nodes:
-                log.warning("phase4c_invalid_before_beat", beat_id=gap.before_beat)
-                continue
-            # Validate ordering: after_beat must come before before_beat
-            if gap.after_beat and gap.before_beat:
-                sequence = get_thread_beat_sequence(graph, prefixed_tid)
-                try:
-                    after_idx = sequence.index(gap.after_beat)
-                    before_idx = sequence.index(gap.before_beat)
-                    if after_idx >= before_idx:
-                        log.warning(
-                            "phase4c_invalid_beat_order",
-                            after_beat=gap.after_beat,
-                            before_beat=gap.before_beat,
-                        )
-                        continue
-                except ValueError:
-                    log.warning("phase4c_beat_not_in_sequence", thread_id=gap.thread_id)
-                    continue
-
-            insert_gap_beat(
-                graph,
-                thread_id=prefixed_tid,
-                after_beat=gap.after_beat,
-                before_beat=gap.before_beat,
-                summary=gap.summary,
-                scene_type=gap.scene_type,
-            )
-            inserted += 1
+        inserted = self._validate_and_insert_gaps(
+            graph, result.gaps, thread_nodes, beat_nodes, "phase4c"
+        )
 
         return GrowPhaseResult(
             phase="pacing_gaps",
