@@ -9,8 +9,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from questfoundry.observability.logging import get_logger
+
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
+
+log = get_logger(__name__)
 
 
 # Rough chars-per-token estimate for budget calculations
@@ -57,9 +61,18 @@ def format_grow_beat_context(graph: Graph, max_tokens: int = 24000) -> str:
             thread_list = ", ".join(threads)
             lines.append(f"  threads: [{thread_list}]")
         if impacts:
-            impact_strs = [
-                f"{imp.get('tension_id', '?')}:{imp.get('effect', '?')}" for imp in impacts
-            ]
+            impact_strs: list[str] = []
+            for imp in impacts:
+                tension_id = imp.get("tension_id")
+                effect = imp.get("effect")
+                if not tension_id or not effect:
+                    log.warning(
+                        "beat_impact_missing_fields",
+                        beat_id=beat_id,
+                        tension_id=tension_id,
+                        effect=effect,
+                    )
+                impact_strs.append(f"{tension_id or '?'}:{effect or '?'}")
             lines.append(f"  impacts: [{', '.join(impact_strs)}]")
         entries.append("\n".join(lines))
 
@@ -83,20 +96,17 @@ def format_grow_beat_context(graph: Graph, max_tokens: int = 24000) -> str:
         recent_entries.insert(0, entry)
         recent_chars += len(entry) + 1
 
-    # Summarize remaining entries (just ID + truncated summary)
+    # Summarize earlier beats (just ID + truncated summary)
     summarized_entries: list[str] = []
     summarized_chars = 0
-    remaining_count = len(entries) - len(recent_entries)
-    for entry in entries[:remaining_count]:
-        # Extract beat_id from first line
-        first_line = entry.split("\n")[0]
-        beat_id = first_line.replace("- beat_id: ", "")
-        # Get truncated summary
+    early_beats_count = len(entries) - len(recent_entries)
+    early_beat_ids = sorted(beat_nodes.keys())[:early_beats_count]
+    for beat_id in early_beat_ids:
         beat_data = beat_nodes.get(beat_id, {})
         summary = beat_data.get("summary", "")[:40]
         short = f"- {beat_id}: {summary}..."
         if summarized_chars + len(short) + 1 > summary_budget:
-            summarized_entries.append(f"  ... ({remaining_count - len(summarized_entries)} more)")
+            summarized_entries.append(f"  ... ({early_beats_count - len(summarized_entries)} more)")
             break
         summarized_entries.append(short)
         summarized_chars += len(short) + 1
@@ -126,30 +136,16 @@ def format_grow_valid_ids(graph: Graph) -> dict[str, str]:
         'valid_tension_ids', 'valid_entity_ids'. Each value is a
         comma-separated string of scoped IDs, or empty string if none.
     """
-    result: dict[str, str] = {}
 
-    # Beat IDs
-    beat_nodes = graph.get_nodes_by_type("beat")
-    result["valid_beat_ids"] = ", ".join(sorted(beat_nodes.keys())) if beat_nodes else ""
+    def _get_sorted_ids(node_type: str) -> str:
+        nodes = graph.get_nodes_by_type(node_type)
+        return ", ".join(sorted(nodes.keys())) if nodes else ""
 
-    # Thread IDs
-    thread_nodes = graph.get_nodes_by_type("thread")
-    result["valid_thread_ids"] = ", ".join(sorted(thread_nodes.keys())) if thread_nodes else ""
-
-    # Tension IDs
-    tension_nodes = graph.get_nodes_by_type("tension")
-    result["valid_tension_ids"] = ", ".join(sorted(tension_nodes.keys())) if tension_nodes else ""
-
-    # Entity IDs
-    entity_nodes = graph.get_nodes_by_type("entity")
-    result["valid_entity_ids"] = ", ".join(sorted(entity_nodes.keys())) if entity_nodes else ""
-
-    # Passage IDs (created during GROW phases)
-    passage_nodes = graph.get_nodes_by_type("passage")
-    result["valid_passage_ids"] = ", ".join(sorted(passage_nodes.keys())) if passage_nodes else ""
-
-    # Choice IDs (created during GROW phases)
-    choice_nodes = graph.get_nodes_by_type("choice")
-    result["valid_choice_ids"] = ", ".join(sorted(choice_nodes.keys())) if choice_nodes else ""
-
-    return result
+    return {
+        "valid_beat_ids": _get_sorted_ids("beat"),
+        "valid_thread_ids": _get_sorted_ids("thread"),
+        "valid_tension_ids": _get_sorted_ids("tension"),
+        "valid_entity_ids": _get_sorted_ids("entity"),
+        "valid_passage_ids": _get_sorted_ids("passage"),
+        "valid_choice_ids": _get_sorted_ids("choice"),
+    }

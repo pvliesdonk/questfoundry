@@ -8,6 +8,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.graph.grow_context import format_grow_valid_ids
+
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
@@ -167,8 +169,6 @@ def _format_grow_valid_ids(graph: Graph) -> str:
     Returns:
         Formatted context string with valid IDs.
     """
-    from questfoundry.graph.grow_context import format_grow_valid_ids
-
     ids = format_grow_valid_ids(graph)
     lines = ["## VALID IDs FOR GROW PHASES", ""]
 

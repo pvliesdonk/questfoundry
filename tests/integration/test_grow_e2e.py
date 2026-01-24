@@ -7,16 +7,13 @@ structure. Also tests context formatting stays within token budgets.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from questfoundry.graph.graph import Graph
 from tests.fixtures.grow_fixtures import make_e2e_fixture_graph
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 def _make_e2e_mock_model(graph: Graph) -> MagicMock:
@@ -101,121 +98,69 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
     return mock_model
 
 
+@pytest.fixture(scope="module")
+def pipeline_result(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+    """Run the full GROW pipeline once and share the result across tests.
+
+    Uses tmp_path_factory for module-scoped temp directory.
+    Returns a dict with result_dict, llm_calls, and tokens.
+    """
+    import asyncio
+
+    from questfoundry.pipeline.stages.grow import GrowStage
+
+    tmp_path = tmp_path_factory.mktemp("grow_e2e")
+    graph = make_e2e_fixture_graph()
+    graph.save(tmp_path / "graph.json")
+
+    stage = GrowStage(project_path=tmp_path)
+    mock_model = _make_e2e_mock_model(graph)
+
+    result_dict, llm_calls, tokens = asyncio.run(stage.execute(model=mock_model, user_prompt=""))
+
+    return {"result_dict": result_dict, "llm_calls": llm_calls, "tokens": tokens}
+
+
 class TestGrowFullPipeline:
     """E2E tests running all 15 GROW phases on the fixture graph."""
 
-    @pytest.mark.asyncio
-    async def test_all_phases_complete(self, tmp_path: Path) -> None:
-        """Run all 15 GROW phases on the E2E fixture with mocked LLM.
-
-        Verifies:
-        - All 15 phases complete (no failures)
-        - Each phase returns completed or skipped status
-        """
-        from questfoundry.pipeline.stages.grow import GrowStage
-
-        graph = make_e2e_fixture_graph()
-        graph.save(tmp_path / "graph.json")
-
-        stage = GrowStage(project_path=tmp_path)
-        mock_model = _make_e2e_mock_model(graph)
-        result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
-
-        phases = result_dict["phases_completed"]
+    def test_all_phases_complete(self, pipeline_result: dict[str, Any]) -> None:
+        """Verify all 15 phases complete with no failures."""
+        phases = pipeline_result["result_dict"]["phases_completed"]
         assert len(phases) == 15
         for phase in phases:
             assert phase["status"] in ("completed", "skipped"), (
                 f"Phase {phase['phase']} has unexpected status: {phase['status']}"
             )
 
-    @pytest.mark.asyncio
-    async def test_arc_enumeration(self, tmp_path: Path) -> None:
+    def test_arc_enumeration(self, pipeline_result: dict[str, Any]) -> None:
         """Verify 4 arcs are enumerated from 2 tensions x 2 threads."""
-        from questfoundry.pipeline.stages.grow import GrowStage
-
-        graph = make_e2e_fixture_graph()
-        graph.save(tmp_path / "graph.json")
-
-        stage = GrowStage(project_path=tmp_path)
-        mock_model = _make_e2e_mock_model(graph)
-        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
-
+        result_dict = pipeline_result["result_dict"]
         assert result_dict["arc_count"] == 4
         assert result_dict["spine_arc_id"] is not None
 
-    @pytest.mark.asyncio
-    async def test_passages_created(self, tmp_path: Path) -> None:
+    def test_passages_created(self, pipeline_result: dict[str, Any]) -> None:
         """Verify passages are created for all beats (10 beats = 10 passages)."""
-        from questfoundry.pipeline.stages.grow import GrowStage
+        assert pipeline_result["result_dict"]["passage_count"] == 10
 
-        graph = make_e2e_fixture_graph()
-        graph.save(tmp_path / "graph.json")
-
-        stage = GrowStage(project_path=tmp_path)
-        mock_model = _make_e2e_mock_model(graph)
-        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
-
-        assert result_dict["passage_count"] == 10
-
-    @pytest.mark.asyncio
-    async def test_codewords_derived(self, tmp_path: Path) -> None:
+    def test_codewords_derived(self, pipeline_result: dict[str, Any]) -> None:
         """Verify codewords are created from consequences (4 consequences)."""
-        from questfoundry.pipeline.stages.grow import GrowStage
+        assert pipeline_result["result_dict"]["codeword_count"] == 4
 
-        graph = make_e2e_fixture_graph()
-        graph.save(tmp_path / "graph.json")
-
-        stage = GrowStage(project_path=tmp_path)
-        mock_model = _make_e2e_mock_model(graph)
-        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
-
-        assert result_dict["codeword_count"] == 4
-
-    @pytest.mark.asyncio
-    async def test_choices_created(self, tmp_path: Path) -> None:
+    def test_choices_created(self, pipeline_result: dict[str, Any]) -> None:
         """Verify choices are created at divergence points."""
-        from questfoundry.pipeline.stages.grow import GrowStage
+        assert pipeline_result["result_dict"]["choice_count"] > 0
 
-        graph = make_e2e_fixture_graph()
-        graph.save(tmp_path / "graph.json")
-
-        stage = GrowStage(project_path=tmp_path)
-        mock_model = _make_e2e_mock_model(graph)
-        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
-
-        assert result_dict["choice_count"] > 0
-
-    @pytest.mark.asyncio
-    async def test_validation_phase_passes(self, tmp_path: Path) -> None:
+    def test_validation_phase_passes(self, pipeline_result: dict[str, Any]) -> None:
         """Verify Phase 10 validation passes on the fixture graph."""
-        from questfoundry.pipeline.stages.grow import GrowStage
-
-        graph = make_e2e_fixture_graph()
-        graph.save(tmp_path / "graph.json")
-
-        stage = GrowStage(project_path=tmp_path)
-        mock_model = _make_e2e_mock_model(graph)
-        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
-
-        # Find the validation phase in results
-        phases = result_dict["phases_completed"]
+        phases = pipeline_result["result_dict"]["phases_completed"]
         validation_phase = next((p for p in phases if p["phase"] == "validation"), None)
         assert validation_phase is not None
         assert validation_phase["status"] == "completed"
 
-    @pytest.mark.asyncio
-    async def test_result_structure(self, tmp_path: Path) -> None:
+    def test_result_structure(self, pipeline_result: dict[str, Any]) -> None:
         """Verify GrowResult contains expected keys and counts."""
-        from questfoundry.pipeline.stages.grow import GrowStage
-
-        graph = make_e2e_fixture_graph()
-        graph.save(tmp_path / "graph.json")
-
-        stage = GrowStage(project_path=tmp_path)
-        mock_model = _make_e2e_mock_model(graph)
-        result_dict, llm_calls, tokens = await stage.execute(model=mock_model, user_prompt="")
-
-        # Verify result dict structure
+        result_dict = pipeline_result["result_dict"]
         expected_keys = {
             "phases_completed",
             "arc_count",
@@ -227,8 +172,8 @@ class TestGrowFullPipeline:
         assert expected_keys.issubset(set(result_dict.keys()))
 
         # LLM calls should be tracked
-        assert llm_calls >= 0
-        assert tokens >= 0
+        assert pipeline_result["llm_calls"] >= 0
+        assert pipeline_result["tokens"] >= 0
 
 
 class TestGrowContextFormatting:
