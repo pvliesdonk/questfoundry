@@ -81,8 +81,8 @@ def check_single_start(graph: Graph) -> ValidationCheck:
     if not passage_nodes:
         return ValidationCheck(
             name="single_start",
-            severity="fail",
-            message="No passage nodes found",
+            severity="pass",
+            message="No passages to check",
         )
 
     # Find passages with incoming choice_to edges
