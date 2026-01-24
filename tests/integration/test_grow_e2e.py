@@ -1,0 +1,330 @@
+"""End-to-end integration tests for the GROW stage.
+
+Runs all 15 GROW phases on the E2E fixture graph with a mocked LLM,
+verifying that phases execute correctly and produce valid output
+structure. Also tests context formatting stays within token budgets.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from questfoundry.graph.graph import Graph
+from tests.fixtures.grow_fixtures import make_e2e_fixture_graph
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+
+def _make_e2e_mock_model(graph: Graph) -> MagicMock:
+    """Create a mock model that returns valid structured output for all LLM phases.
+
+    Builds realistic Phase 2 assessments from the fixture graph structure.
+    Other phases return empty/minimal results for simplicity.
+    """
+    from questfoundry.models.grow import (
+        Phase2Output,
+        Phase3Output,
+        Phase4aOutput,
+        Phase4bOutput,
+        Phase8cOutput,
+        Phase9Output,
+        SceneTypeTag,
+        ThreadAgnosticAssessment,
+    )
+
+    # Build Phase 2: identify shared beats (thread-agnostic)
+    tension_nodes = graph.get_nodes_by_type("tension")
+    thread_nodes = graph.get_nodes_by_type("thread")
+    beat_nodes = graph.get_nodes_by_type("beat")
+
+    tension_threads: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="explores"):
+        thread_id = edge["from"]
+        tension_id = edge["to"]
+        if thread_id in thread_nodes and tension_id in tension_nodes:
+            tension_threads.setdefault(tension_id, []).append(thread_id)
+
+    beat_thread_map: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        beat_thread_map.setdefault(edge["from"], []).append(edge["to"])
+
+    assessments: list[ThreadAgnosticAssessment] = []
+    for beat_id, bt_list in beat_thread_map.items():
+        if beat_id not in beat_nodes:
+            continue
+        agnostic_tensions: list[str] = []
+        for tension_id, t_threads in tension_threads.items():
+            shared = [t for t in bt_list if t in t_threads]
+            if len(shared) > 1:
+                raw_tid = tension_nodes[tension_id].get("raw_id", tension_id)
+                agnostic_tensions.append(raw_tid)
+        if agnostic_tensions:
+            assessments.append(
+                ThreadAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_tensions)
+            )
+
+    phase2_output = Phase2Output(assessments=assessments)
+    phase3_output = Phase3Output(knots=[])
+
+    # Phase 4a: scene type tags for all beats
+    scene_types = ["scene", "sequel", "micro_beat"]
+    tags = [
+        SceneTypeTag(beat_id=bid, scene_type=scene_types[i % 3])
+        for i, bid in enumerate(sorted(beat_nodes.keys()))
+    ]
+    phase4a_output = Phase4aOutput(tags=tags)
+    phase4b_output = Phase4bOutput(gaps=[])
+    phase8c_output = Phase8cOutput(overlays=[])
+    phase9_output = Phase9Output(labels=[])
+
+    output_by_schema: dict[type, object] = {
+        Phase2Output: phase2_output,
+        Phase3Output: phase3_output,
+        Phase4aOutput: phase4a_output,
+        Phase4bOutput: phase4b_output,
+        Phase8cOutput: phase8c_output,
+        Phase9Output: phase9_output,
+    }
+
+    def _with_structured_output(schema: type, **_kwargs: object) -> AsyncMock:
+        output = output_by_schema.get(schema, phase2_output)
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=output)
+        return mock_structured
+
+    mock_model = MagicMock()
+    mock_model.with_structured_output = MagicMock(side_effect=_with_structured_output)
+    return mock_model
+
+
+class TestGrowFullPipeline:
+    """E2E tests running all 15 GROW phases on the fixture graph."""
+
+    @pytest.mark.asyncio
+    async def test_all_phases_complete(self, tmp_path: Path) -> None:
+        """Run all 15 GROW phases on the E2E fixture with mocked LLM.
+
+        Verifies:
+        - All 15 phases complete (no failures)
+        - Each phase returns completed or skipped status
+        """
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_e2e_fixture_graph()
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        mock_model = _make_e2e_mock_model(graph)
+        result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
+
+        phases = result_dict["phases_completed"]
+        assert len(phases) == 15
+        for phase in phases:
+            assert phase["status"] in ("completed", "skipped"), (
+                f"Phase {phase['phase']} has unexpected status: {phase['status']}"
+            )
+
+    @pytest.mark.asyncio
+    async def test_arc_enumeration(self, tmp_path: Path) -> None:
+        """Verify 4 arcs are enumerated from 2 tensions x 2 threads."""
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_e2e_fixture_graph()
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        mock_model = _make_e2e_mock_model(graph)
+        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
+
+        assert result_dict["arc_count"] == 4
+        assert result_dict["spine_arc_id"] is not None
+
+    @pytest.mark.asyncio
+    async def test_passages_created(self, tmp_path: Path) -> None:
+        """Verify passages are created for all beats (10 beats = 10 passages)."""
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_e2e_fixture_graph()
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        mock_model = _make_e2e_mock_model(graph)
+        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
+
+        assert result_dict["passage_count"] == 10
+
+    @pytest.mark.asyncio
+    async def test_codewords_derived(self, tmp_path: Path) -> None:
+        """Verify codewords are created from consequences (4 consequences)."""
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_e2e_fixture_graph()
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        mock_model = _make_e2e_mock_model(graph)
+        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
+
+        assert result_dict["codeword_count"] == 4
+
+    @pytest.mark.asyncio
+    async def test_choices_created(self, tmp_path: Path) -> None:
+        """Verify choices are created at divergence points."""
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_e2e_fixture_graph()
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        mock_model = _make_e2e_mock_model(graph)
+        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
+
+        assert result_dict["choice_count"] > 0
+
+    @pytest.mark.asyncio
+    async def test_validation_phase_passes(self, tmp_path: Path) -> None:
+        """Verify Phase 10 validation passes on the fixture graph."""
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_e2e_fixture_graph()
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        mock_model = _make_e2e_mock_model(graph)
+        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
+
+        # Find the validation phase in results
+        phases = result_dict["phases_completed"]
+        validation_phase = next((p for p in phases if p["phase"] == "validation"), None)
+        assert validation_phase is not None
+        assert validation_phase["status"] == "completed"
+
+    @pytest.mark.asyncio
+    async def test_result_structure(self, tmp_path: Path) -> None:
+        """Verify GrowResult contains expected keys and counts."""
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = make_e2e_fixture_graph()
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        mock_model = _make_e2e_mock_model(graph)
+        result_dict, llm_calls, tokens = await stage.execute(model=mock_model, user_prompt="")
+
+        # Verify result dict structure
+        expected_keys = {
+            "phases_completed",
+            "arc_count",
+            "spine_arc_id",
+            "passage_count",
+            "codeword_count",
+            "choice_count",
+        }
+        assert expected_keys.issubset(set(result_dict.keys()))
+
+        # LLM calls should be tracked
+        assert llm_calls >= 0
+        assert tokens >= 0
+
+
+class TestGrowContextFormatting:
+    """Tests for context formatting functions."""
+
+    def test_beat_context_within_budget(self) -> None:
+        """Verify beat context formatting stays within 24k token budget."""
+        from questfoundry.graph.grow_context import format_grow_beat_context
+
+        graph = make_e2e_fixture_graph()
+        context = format_grow_beat_context(graph, max_tokens=24000)
+
+        # Rough token estimate: chars / 4
+        estimated_tokens = len(context) / 4
+        assert estimated_tokens <= 24000
+
+    def test_beat_context_contains_all_beats(self) -> None:
+        """Verify beat context includes all beat IDs from fixture."""
+        from questfoundry.graph.grow_context import format_grow_beat_context
+
+        graph = make_e2e_fixture_graph()
+        context = format_grow_beat_context(graph)
+
+        # All 10 beats should appear
+        beat_ids = [
+            "beat::opening",
+            "beat::mt_encounter",
+            "beat::mt_test",
+            "beat::mt_trust",
+            "beat::mt_distrust",
+            "beat::aq_discovery",
+            "beat::aq_trial",
+            "beat::aq_wield",
+            "beat::aq_corrupt",
+            "beat::climax",
+        ]
+        for beat_id in beat_ids:
+            assert beat_id in context, f"{beat_id} not found in context"
+
+    def test_beat_context_windowing_with_small_budget(self) -> None:
+        """Verify windowing activates when budget is too small for full context."""
+        from questfoundry.graph.grow_context import format_grow_beat_context
+
+        graph = make_e2e_fixture_graph()
+        # Use a very small budget to force windowing
+        context = format_grow_beat_context(graph, max_tokens=100)
+
+        # Should contain windowing markers
+        assert "Earlier beats" in context or "..." in context
+
+    def test_valid_ids_contains_all_types(self) -> None:
+        """Verify format_grow_valid_ids returns all ID types."""
+        from questfoundry.graph.grow_context import format_grow_valid_ids
+
+        graph = make_e2e_fixture_graph()
+        ids = format_grow_valid_ids(graph)
+
+        assert "valid_beat_ids" in ids
+        assert "valid_thread_ids" in ids
+        assert "valid_tension_ids" in ids
+        assert "valid_entity_ids" in ids
+        assert "valid_passage_ids" in ids
+        assert "valid_choice_ids" in ids
+
+        # Before GROW runs, only SEED-stage IDs should be populated
+        assert ids["valid_beat_ids"] != ""
+        assert ids["valid_thread_ids"] != ""
+        assert ids["valid_tension_ids"] != ""
+        assert ids["valid_entity_ids"] != ""
+        # Passages and choices are created during GROW
+        assert ids["valid_passage_ids"] == ""
+        assert ids["valid_choice_ids"] == ""
+
+    def test_valid_ids_context_for_grow_stage(self) -> None:
+        """Verify format_valid_ids_context handles stage='grow'."""
+        from questfoundry.graph.context import format_valid_ids_context
+
+        graph = make_e2e_fixture_graph()
+        context = format_valid_ids_context(graph, stage="grow")
+
+        assert "VALID IDs FOR GROW PHASES" in context
+        assert "Beat IDs" in context
+        assert "Thread IDs" in context
+        assert "Tension IDs" in context
+
+    def test_empty_graph_context(self) -> None:
+        """Verify context formatting handles empty graph gracefully."""
+        from questfoundry.graph.grow_context import (
+            format_grow_beat_context,
+            format_grow_valid_ids,
+        )
+
+        graph = Graph.empty()
+
+        context = format_grow_beat_context(graph)
+        assert context == ""
+
+        ids = format_grow_valid_ids(graph)
+        assert all(v == "" for v in ids.values())
