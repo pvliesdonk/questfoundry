@@ -94,6 +94,7 @@ class GrowStage:
         self.project_path = project_path
         self.gate = gate or AutoApprovePhaseGate()
         self._callbacks: list[BaseCallbackHandler] | None = None
+        self._provider_name: str | None = None
 
     # Type for async phase functions: (Graph, BaseChatModel) -> GrowPhaseResult
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[GrowPhaseResult]]
@@ -128,7 +129,7 @@ class GrowStage:
         self,
         model: BaseChatModel,
         user_prompt: str,  # noqa: ARG002
-        provider_name: str | None = None,  # noqa: ARG002
+        provider_name: str | None = None,
         *,
         interactive: bool = False,  # noqa: ARG002
         user_input_fn: UserInputFn | None = None,  # noqa: ARG002
@@ -151,7 +152,7 @@ class GrowStage:
         Args:
             model: LangChain chat model (unused in deterministic phases).
             user_prompt: User guidance (unused in deterministic phases).
-            provider_name: Provider name (unused).
+            provider_name: Provider name for structured output strategy selection.
             interactive: Interactive mode flag (unused).
             user_input_fn: User input function (unused).
             on_assistant_message: Assistant message callback (unused).
@@ -180,6 +181,7 @@ class GrowStage:
             )
 
         self._callbacks = callbacks
+        self._provider_name = provider_name
         log.info("stage_start", stage="grow")
         graph = Graph.load(resolved_path)
         phase_results: list[GrowPhaseResult] = []
@@ -291,7 +293,9 @@ class GrowStage:
         system_text = template.system.format(**context) if context else template.system
         user_text = template.user.format(**context) if template.user else None
 
-        structured_model = with_structured_output(model, output_schema)
+        structured_model = with_structured_output(
+            model, output_schema, provider_name=self._provider_name
+        )
 
         messages: list[SystemMessage | HumanMessage] = [SystemMessage(content=system_text)]
         if user_text:

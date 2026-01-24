@@ -464,6 +464,52 @@ class TestGrowLlmCall:
         assert isinstance(result, Phase2Output)
         assert llm_calls == 1
 
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        ("provider_name", "expected_provider"),
+        [
+            pytest.param("ollama", "ollama", id="with_provider"),
+            pytest.param(None, None, id="without_provider"),
+        ],
+    )
+    async def test_provider_name_forwarding(
+        self, provider_name: str | None, expected_provider: str | None
+    ) -> None:
+        """_grow_llm_call forwards provider_name to with_structured_output."""
+        from unittest.mock import patch
+
+        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+
+        stage = GrowStage()
+        stage._provider_name = provider_name
+
+        valid_output = Phase2Output(
+            assessments=[ThreadAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+        )
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=valid_output)
+
+        mock_model = MagicMock()
+
+        with patch(
+            "questfoundry.pipeline.stages.grow.with_structured_output",
+            return_value=mock_structured,
+        ) as mock_wso:
+            await stage._grow_llm_call(
+                model=mock_model,
+                template_name="grow_phase2_agnostic",
+                context={
+                    "beat_summaries": "test",
+                    "valid_beat_ids": "beat::a",
+                    "valid_tension_ids": "t1",
+                },
+                output_schema=Phase2Output,
+            )
+
+            mock_wso.assert_called_once_with(
+                mock_model, Phase2Output, provider_name=expected_provider
+            )
+
 
 class TestPhase3Knots:
     @pytest.mark.asyncio
