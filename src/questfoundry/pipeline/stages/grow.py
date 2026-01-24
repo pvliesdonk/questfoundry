@@ -515,14 +515,10 @@ class GrowStage:
                 detail="No tensions/threads/beats to assess",
             )
 
-        # Build tension → threads mapping
-        tension_threads: dict[str, list[str]] = {}
-        explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
-        for edge in explores_edges:
-            thread_id = edge["from"]
-            tension_id = edge["to"]
-            if thread_id in thread_nodes and tension_id in tension_nodes:
-                tension_threads.setdefault(tension_id, []).append(thread_id)
+        # Build tension → threads mapping from thread node tension_id properties
+        from questfoundry.graph.grow_algorithms import build_tension_threads
+
+        tension_threads = build_tension_threads(graph)
 
         # Only assess tensions with multiple threads
         multi_thread_tensions = {
@@ -1362,11 +1358,17 @@ class GrowStage:
             cons_id = edge["to"]
             thread_consequences.setdefault(thread_id, []).append(cons_id)
 
-        # Build thread → tension mapping for commits beat lookup
+        # Build thread → tension raw_id mapping for commits beat lookup
+        tension_nodes = graph.get_nodes_by_type("tension")
         thread_tension: dict[str, str] = {}
         for thread_id, thread_data in thread_nodes.items():
-            tension_id = thread_data.get("tension_id", "")
-            thread_tension[thread_id] = tension_id
+            tid = thread_data.get("tension_id", "")
+            # Resolve to raw_id (beat impacts use raw tension IDs)
+            prefixed = tid if tid.startswith("tension::") else f"tension::{tid}"
+            if prefixed in tension_nodes:
+                thread_tension[thread_id] = tension_nodes[prefixed].get("raw_id", tid)
+            else:
+                thread_tension[thread_id] = tid
 
         # Build beat → thread mapping via belongs_to
         beat_threads: dict[str, list[str]] = {}

@@ -69,13 +69,29 @@ def make_single_tension_graph() -> Graph:
         },
     )
 
+    # Alternatives
+    graph.create_node(
+        "tension::mentor_trust::alt::trust_yes",
+        {"type": "alternative", "raw_id": "trust_yes", "tension_id": "mentor_trust"},
+    )
+    graph.create_node(
+        "tension::mentor_trust::alt::trust_no",
+        {"type": "alternative", "raw_id": "trust_no", "tension_id": "mentor_trust"},
+    )
+    graph.add_edge(
+        "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::trust_yes"
+    )
+    graph.add_edge(
+        "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::trust_no"
+    )
+
     # Threads
     graph.create_node(
         "thread::mentor_trust_canonical",
         {
             "type": "thread",
             "raw_id": "mentor_trust_canonical",
-            "tension_id": "mentor_trust",
+            "tension_id": "tension::mentor_trust",
             "alternative_id": "trust_yes",
             "thread_importance": "major",
             "is_canonical": True,
@@ -86,16 +102,18 @@ def make_single_tension_graph() -> Graph:
         {
             "type": "thread",
             "raw_id": "mentor_trust_alt",
-            "tension_id": "mentor_trust",
+            "tension_id": "tension::mentor_trust",
             "alternative_id": "trust_no",
             "thread_importance": "major",
             "is_canonical": False,
         },
     )
 
-    # Thread → Tension edges
-    graph.add_edge("explores", "thread::mentor_trust_canonical", "tension::mentor_trust")
-    graph.add_edge("explores", "thread::mentor_trust_alt", "tension::mentor_trust")
+    # Thread → Alternative edges (explores)
+    graph.add_edge(
+        "explores", "thread::mentor_trust_canonical", "tension::mentor_trust::alt::trust_yes"
+    )
+    graph.add_edge("explores", "thread::mentor_trust_alt", "tension::mentor_trust::alt::trust_no")
 
     # Beats
     graph.create_node(
@@ -256,6 +274,20 @@ def make_two_tension_graph() -> Graph:
         },
     )
 
+    # Alternatives
+    for tension_id, alt_id in [
+        ("mentor_trust", "trust_yes"),
+        ("mentor_trust", "trust_no"),
+        ("artifact_quest", "use_good"),
+        ("artifact_quest", "use_selfish"),
+    ]:
+        alt_node_id = f"tension::{tension_id}::alt::{alt_id}"
+        graph.create_node(
+            alt_node_id,
+            {"type": "alternative", "raw_id": alt_id, "tension_id": tension_id},
+        )
+        graph.add_edge("has_alternative", f"tension::{tension_id}", alt_node_id)
+
     # Threads
     for thread_id, tension_id, alt_id, is_canon in [
         ("mentor_trust_canonical", "mentor_trust", "trust_yes", True),
@@ -268,13 +300,13 @@ def make_two_tension_graph() -> Graph:
             {
                 "type": "thread",
                 "raw_id": thread_id,
-                "tension_id": tension_id,
+                "tension_id": f"tension::{tension_id}",
                 "alternative_id": alt_id,
                 "thread_importance": "major",
                 "is_canonical": is_canon,
             },
         )
-        graph.add_edge("explores", f"thread::{thread_id}", f"tension::{tension_id}")
+        graph.add_edge("explores", f"thread::{thread_id}", f"tension::{tension_id}::alt::{alt_id}")
 
     # Beats
     all_threads = [
@@ -433,6 +465,20 @@ def make_e2e_fixture_graph() -> Graph:
         },
     )
 
+    # Alternatives
+    for tension_id, alt_id in [
+        ("mentor_trust", "trust_yes"),
+        ("mentor_trust", "trust_no"),
+        ("artifact_quest", "use_good"),
+        ("artifact_quest", "use_selfish"),
+    ]:
+        alt_node_id = f"tension::{tension_id}::alt::{alt_id}"
+        graph.create_node(
+            alt_node_id,
+            {"type": "alternative", "raw_id": alt_id, "tension_id": tension_id},
+        )
+        graph.add_edge("has_alternative", f"tension::{tension_id}", alt_node_id)
+
     # Threads
     thread_defs = [
         ("mentor_trust_canonical", "mentor_trust", "trust_yes", True),
@@ -450,13 +496,13 @@ def make_e2e_fixture_graph() -> Graph:
             {
                 "type": "thread",
                 "raw_id": thread_id,
-                "tension_id": tension_id,
+                "tension_id": f"tension::{tension_id}",
                 "alternative_id": alt_id,
                 "thread_importance": "major",
                 "is_canonical": is_canon,
             },
         )
-        graph.add_edge("explores", f"thread::{thread_id}", f"tension::{tension_id}")
+        graph.add_edge("explores", f"thread::{thread_id}", f"tension::{tension_id}::alt::{alt_id}")
 
     # Beats with lifecycle effects
     beat_defs: list[tuple[str, str, list[str], list[dict[str, str]]]] = [

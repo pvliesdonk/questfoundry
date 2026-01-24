@@ -251,6 +251,14 @@ class TestTensionsResolved:
         assert result.severity == "fail"
         assert "th1/t1" in result.message
 
+    def test_tensions_resolved_with_prefixed_tension_id(self) -> None:
+        """Works when thread nodes use prefixed tension_id (real SEED output)."""
+        from tests.fixtures.grow_fixtures import make_two_tension_graph
+
+        graph = make_two_tension_graph()
+        result = check_tensions_resolved(graph)
+        assert result.severity == "pass"
+
     def test_tensions_empty(self) -> None:
         graph = Graph.empty()
         result = check_tensions_resolved(graph)

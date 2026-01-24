@@ -10,6 +10,7 @@ import pytest
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_algorithms import (
     bfs_reachable,
+    build_tension_threads,
     compute_divergence_points,
     enumerate_arcs,
     find_convergence_points,
@@ -26,6 +27,54 @@ from tests.fixtures.grow_fixtures import (
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+
+# ---------------------------------------------------------------------------
+# build_tension_threads
+# ---------------------------------------------------------------------------
+
+
+class TestBuildTensionThreads:
+    def test_prefixed_tension_id(self) -> None:
+        """Handles prefixed tension_id on thread nodes."""
+        graph = make_single_tension_graph()
+        result = build_tension_threads(graph)
+        assert "tension::mentor_trust" in result
+        assert len(result["tension::mentor_trust"]) == 2
+
+    def test_unprefixed_tension_id(self) -> None:
+        """Handles unprefixed tension_id by adding prefix."""
+        graph = Graph.empty()
+        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node(
+            "thread::th1",
+            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+        )
+        result = build_tension_threads(graph)
+        assert "tension::t1" in result
+        assert "thread::th1" in result["tension::t1"]
+
+    def test_missing_tension_node_excluded(self) -> None:
+        """Threads referencing nonexistent tensions are excluded."""
+        graph = Graph.empty()
+        graph.create_node(
+            "thread::th1",
+            {"type": "thread", "raw_id": "th1", "tension_id": "tension::missing"},
+        )
+        result = build_tension_threads(graph)
+        assert result == {}
+
+    def test_empty_graph(self) -> None:
+        graph = Graph.empty()
+        result = build_tension_threads(graph)
+        assert result == {}
+
+    def test_two_tension_graph(self) -> None:
+        graph = make_two_tension_graph()
+        result = build_tension_threads(graph)
+        assert len(result) == 2
+        assert len(result["tension::mentor_trust"]) == 2
+        assert len(result["tension::artifact_quest"]) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -316,6 +365,54 @@ class TestEnumerateArcs:
             for thread in arc.threads:
                 # Should be raw_id, not prefixed
                 assert "::" not in thread
+
+    def test_enumerate_arcs_with_alternative_pointing_explores(self) -> None:
+        """Enumerate arcs works when explores edges point to alternatives, not tensions."""
+        graph = Graph.empty()
+        # Create tension and alternatives
+        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node(
+            "tension::t1::alt::yes",
+            {"type": "alternative", "raw_id": "yes", "tension_id": "t1"},
+        )
+        graph.create_node(
+            "tension::t1::alt::no",
+            {"type": "alternative", "raw_id": "no", "tension_id": "t1"},
+        )
+        graph.add_edge("has_alternative", "tension::t1", "tension::t1::alt::yes")
+        graph.add_edge("has_alternative", "tension::t1", "tension::t1::alt::no")
+
+        # Threads with tension_id property (prefixed), explores pointing to alternatives
+        graph.create_node(
+            "thread::t1_canon",
+            {
+                "type": "thread",
+                "raw_id": "t1_canon",
+                "tension_id": "tension::t1",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "thread::t1_alt",
+            {
+                "type": "thread",
+                "raw_id": "t1_alt",
+                "tension_id": "tension::t1",
+                "is_canonical": False,
+            },
+        )
+        graph.add_edge("explores", "thread::t1_canon", "tension::t1::alt::yes")
+        graph.add_edge("explores", "thread::t1_alt", "tension::t1::alt::no")
+
+        # Add beats so arcs have sequences
+        graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        graph.add_edge("belongs_to", "beat::b1", "thread::t1_canon")
+        graph.add_edge("belongs_to", "beat::b1", "thread::t1_alt")
+
+        arcs = enumerate_arcs(graph)
+        assert len(arcs) == 2
+        spine_arcs = [a for a in arcs if a.arc_type == "spine"]
+        assert len(spine_arcs) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -1390,17 +1487,13 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
 
     # Build Phase 2 response based on graph structure
     tension_nodes = graph.get_nodes_by_type("tension")
-    thread_nodes = graph.get_nodes_by_type("thread")
     beat_nodes = graph.get_nodes_by_type("beat")
 
-    # Build tension -> threads mapping
-    tension_threads: dict[str, list[str]] = {}
-    explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
-    for edge in explores_edges:
-        thread_id = edge["from"]
-        tension_id = edge["to"]
-        if thread_id in thread_nodes and tension_id in tension_nodes:
-            tension_threads.setdefault(tension_id, []).append(thread_id)
+    # Build tension -> threads mapping from thread node tension_id properties
+    from questfoundry.graph.grow_algorithms import build_tension_threads
+
+    tension_threads_raw = build_tension_threads(graph)
+    tension_threads: dict[str, list[str]] = dict(tension_threads_raw)
 
     # Build beat -> threads via belongs_to
     beat_threads: dict[str, list[str]] = {}

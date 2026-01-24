@@ -271,14 +271,10 @@ def check_tensions_resolved(graph: Graph) -> ValidationCheck:
             message="No tensions/threads to check",
         )
 
-    # Build tension → threads mapping
-    tension_threads: dict[str, list[str]] = {}
-    explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
-    for edge in explores_edges:
-        thread_id = edge["from"]
-        tension_id = edge["to"]
-        if thread_id in thread_nodes and tension_id in tension_nodes:
-            tension_threads.setdefault(tension_id, []).append(thread_id)
+    # Build tension → threads mapping from thread node tension_id properties
+    from questfoundry.graph.grow_algorithms import build_tension_threads
+
+    tension_threads = build_tension_threads(graph)
 
     # Build thread → beats mapping
     thread_beats: dict[str, list[str]] = {}
@@ -444,15 +440,15 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
     if not thread_nodes or not beat_nodes:
         return []
 
-    # Build thread → tension mapping
+    # Build thread → tension mapping from thread node tension_id properties
     thread_tension: dict[str, str] = {}
-    explores_edges = graph.get_edges(from_id=None, to_id=None, edge_type="explores")
-    for edge in explores_edges:
-        thread_id = edge["from"]
-        tension_id = edge["to"]
-        if thread_id in thread_nodes and tension_id in tension_nodes:
-            tension_raw = tension_nodes[tension_id].get("raw_id", tension_id)
-            thread_tension[thread_id] = tension_raw
+    for thread_id, thread_data in thread_nodes.items():
+        tid = thread_data.get("tension_id")
+        if tid:
+            prefixed = tid if tid.startswith("tension::") else f"tension::{tid}"
+            if prefixed in tension_nodes:
+                tension_raw = tension_nodes[prefixed].get("raw_id", prefixed)
+                thread_tension[thread_id] = tension_raw
 
     # Build thread → beats mapping (ordered by requires)
     thread_beats: dict[str, list[str]] = {}
