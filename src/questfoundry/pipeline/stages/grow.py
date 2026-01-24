@@ -246,6 +246,14 @@ class GrowStage:
         else:
             graph = Graph.load(resolved_path)
 
+        # Verify SEED has completed before running GROW
+        last_stage = graph.get_last_stage()
+        if last_stage != "seed":
+            raise GrowStageError(
+                f"GROW requires completed SEED stage. Current last_stage: '{last_stage}'. "
+                f"Run SEED before GROW."
+            )
+
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0
         total_tokens = 0

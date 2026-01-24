@@ -192,6 +192,7 @@ def make_single_tension_graph() -> Graph:
     )
     graph.add_edge("has_consequence", "thread::mentor_trust_alt", "consequence::mentor_distrusted")
 
+    graph.set_last_stage("seed")
     return graph
 
 
@@ -397,6 +398,7 @@ def make_two_tension_graph() -> Graph:
         )
         graph.add_edge("has_consequence", f"thread::{thread_id}", f"consequence::{cons_id}")
 
+    graph.set_last_stage("seed")
     return graph
 
 
@@ -613,6 +615,7 @@ def make_e2e_fixture_graph() -> Graph:
         )
         graph.add_edge("has_consequence", f"thread::{thread_id}", f"consequence::{cons_id}")
 
+    graph.set_last_stage("seed")
     return graph
 
 
