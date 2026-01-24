@@ -266,7 +266,7 @@ async def serialize_to_artifact(
                 result = await structured_model.ainvoke(messages, config=config)
 
                 # Extract token usage from response if available
-                tokens = _extract_tokens(result)
+                tokens = extract_tokens(result)
                 total_tokens += tokens
 
                 # If result is already a Pydantic model, validate succeeded
@@ -384,7 +384,7 @@ async def serialize_to_artifact(
     )
 
 
-def _extract_tokens(result: object) -> int:
+def extract_tokens(result: object) -> int:
     """Extract token usage from response metadata.
 
     LangChain tracks token usage in different places:
