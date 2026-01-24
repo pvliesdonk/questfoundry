@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.graph.grow_algorithms import PassageSuccessor
+    from questfoundry.models.grow import GapProposal
     from questfoundry.pipeline.gates import PhaseGateHook
     from questfoundry.pipeline.stages.base import (
         AssistantMessageFn,
@@ -718,7 +719,7 @@ class GrowStage:
     def _validate_and_insert_gaps(
         self,
         graph: Graph,
-        gaps: list[Any],
+        gaps: list[GapProposal],
         valid_thread_ids: set[str] | dict[str, Any],
         valid_beat_ids: set[str] | dict[str, Any],
         phase_name: str,
