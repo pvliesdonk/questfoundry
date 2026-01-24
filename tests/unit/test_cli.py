@@ -9,6 +9,7 @@ from typer.testing import CliRunner
 
 from questfoundry import __version__
 from questfoundry.cli import (
+    DEFAULT_GROW_PROMPT,
     DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT,
     DEFAULT_INTERACTIVE_DREAM_PROMPT,
     DEFAULT_INTERACTIVE_SEED_PROMPT,
@@ -16,6 +17,7 @@ from questfoundry.cli import (
     DEFAULT_NONINTERACTIVE_SEED_PROMPT,
     STAGE_ORDER,
     STAGE_PROMPTS,
+    _preview_grow_artifact,
     _resolve_project_path,
     app,
 )
@@ -580,7 +582,7 @@ def test_seed_no_prompt_noninteractive_uses_default(tmp_path: Path) -> None:
 
 def test_stage_order_constant() -> None:
     """Test STAGE_ORDER contains expected stages in order."""
-    assert STAGE_ORDER == ["dream", "brainstorm", "seed"]
+    assert STAGE_ORDER == ["dream", "brainstorm", "seed", "grow"]
 
 
 def test_stage_prompts_has_all_stages() -> None:
@@ -1099,3 +1101,208 @@ def test_run_help_shows_phase_provider_flags() -> None:
     # Rich may truncate long option names in help
     assert "--provider-summari" in output or "--provider-summarize" in output
     assert "--provider-seriali" in output or "--provider-serialize" in output
+
+
+# --- GROW Command Tests ---
+
+
+def test_grow_command_exists() -> None:
+    """Test qf grow command is registered and shows help."""
+    result = runner.invoke(app, ["grow", "--help"])
+    output = _strip_ansi(result.stdout)
+
+    assert result.exit_code == 0
+    assert "branching structure" in output.lower()
+    assert "--project" in output
+    assert "--provider" in output
+
+
+def test_grow_no_project_fails() -> None:
+    """Test qf grow fails without project.yaml."""
+    with runner.isolated_filesystem():
+        result = runner.invoke(app, ["grow"])
+
+        assert result.exit_code == 1
+        assert "No project.yaml found" in result.stdout
+
+
+def test_grow_with_mock_provider(tmp_path: Path) -> None:
+    """Test qf grow runs stage with mocked provider."""
+    from questfoundry.pipeline import StageResult
+
+    # Create project
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    # Mock the orchestrator
+    mock_result = StageResult(
+        stage="grow",
+        status="completed",
+        artifact_path=project_path / "artifacts" / "grow.yaml",
+        llm_calls=5,
+        tokens_used=2000,
+        duration_seconds=10.0,
+    )
+
+    # Create mock artifact
+    import yaml
+
+    artifact = {
+        "arc_count": 3,
+        "passage_count": 12,
+        "choice_count": 8,
+        "codeword_count": 4,
+        "overlay_count": 2,
+        "spine_arc_id": "arc_main",
+        "phases_completed": [
+            {"phase": 1, "status": "completed"},
+            {"phase": 2, "status": "completed"},
+        ],
+    }
+    with (project_path / "artifacts" / "grow.yaml").open("w") as f:
+        yaml.safe_dump(artifact, f)
+
+    with patch("questfoundry.cli._get_orchestrator") as mock_get:
+        mock_orchestrator = MagicMock()
+        mock_orchestrator.run_stage = AsyncMock(return_value=mock_result)
+        mock_orchestrator.close = AsyncMock()
+        mock_orchestrator.config.provider.name = "test"
+        mock_get.return_value = mock_orchestrator
+
+        result = runner.invoke(
+            app,
+            ["grow", "--project", str(project_path)],
+        )
+
+    assert result.exit_code == 0
+    assert "GROW stage completed" in result.stdout
+    assert "Tokens: 2,000" in result.stdout
+
+
+def test_grow_has_no_interactive_flag() -> None:
+    """Test qf grow does not offer --interactive flag."""
+    result = runner.invoke(app, ["grow", "--help"])
+    output = _strip_ansi(result.stdout)
+
+    assert "--interactive" not in output
+
+
+def test_grow_preview_function_basic() -> None:
+    """Test _preview_grow_artifact displays arc/passage/choice counts."""
+    from io import StringIO
+
+    from rich.console import Console
+
+    import questfoundry.cli as cli_module
+
+    artifact = {
+        "arc_count": 3,
+        "passage_count": 12,
+        "choice_count": 8,
+        "codeword_count": 4,
+        "overlay_count": 0,
+        "spine_arc_id": "arc_main",
+        "phases_completed": [
+            {"phase": 1, "status": "completed"},
+            {"phase": 2, "status": "completed"},
+            {"phase": 3, "status": "completed"},
+        ],
+    }
+
+    # Capture console output
+    output = StringIO()
+    test_console = Console(file=output, highlight=False)
+    original_console = cli_module.console
+    try:
+        cli_module.console = test_console
+        _preview_grow_artifact(artifact)
+    finally:
+        cli_module.console = original_console
+
+    text = output.getvalue()
+    assert "3" in text  # arc_count
+    assert "12" in text  # passage_count
+    assert "8" in text  # choice_count
+    assert "4" in text  # codeword_count
+    assert "arc_main" in text  # spine_arc_id
+    assert "3 completed" in text  # phases
+
+
+def test_grow_preview_function_with_failures() -> None:
+    """Test _preview_grow_artifact shows failed phases."""
+    from io import StringIO
+
+    from rich.console import Console
+
+    import questfoundry.cli as cli_module
+
+    artifact = {
+        "arc_count": 1,
+        "passage_count": 5,
+        "choice_count": 3,
+        "codeword_count": 2,
+        "overlay_count": 0,
+        "spine_arc_id": "arc_main",
+        "phases_completed": [
+            {"phase": 1, "status": "completed"},
+            {"phase": 2, "status": "failed", "detail": "Validation error"},
+        ],
+    }
+
+    output = StringIO()
+    test_console = Console(file=output, highlight=False)
+    original_console = cli_module.console
+    try:
+        cli_module.console = test_console
+        _preview_grow_artifact(artifact)
+    finally:
+        cli_module.console = original_console
+
+    text = output.getvalue()
+    assert "Failed phases: 1" in text
+
+
+def test_grow_preview_function_with_overlays() -> None:
+    """Test _preview_grow_artifact shows overlay count when non-zero."""
+    from io import StringIO
+
+    from rich.console import Console
+
+    import questfoundry.cli as cli_module
+
+    artifact = {
+        "arc_count": 2,
+        "passage_count": 8,
+        "choice_count": 5,
+        "codeword_count": 3,
+        "overlay_count": 4,
+        "spine_arc_id": "arc_spine",
+        "phases_completed": [],
+    }
+
+    output = StringIO()
+    test_console = Console(file=output, highlight=False)
+    original_console = cli_module.console
+    try:
+        cli_module.console = test_console
+        _preview_grow_artifact(artifact)
+    finally:
+        cli_module.console = original_console
+
+    text = output.getvalue()
+    assert "Overlays" in text
+    assert "4" in text
+
+
+def test_stage_prompts_grow_has_defaults() -> None:
+    """Test GROW stage has both interactive and non-interactive prompts (same value)."""
+    interactive_prompt, noninteractive_prompt = STAGE_PROMPTS["grow"]
+    assert interactive_prompt == DEFAULT_GROW_PROMPT
+    assert noninteractive_prompt == DEFAULT_GROW_PROMPT
+
+
+def test_grow_prompt_constant() -> None:
+    """Test DEFAULT_GROW_PROMPT is defined and describes branching."""
+    assert DEFAULT_GROW_PROMPT
+    assert "branching" in DEFAULT_GROW_PROMPT.lower()
+    assert "arcs" in DEFAULT_GROW_PROMPT.lower()

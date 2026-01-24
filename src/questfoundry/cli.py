@@ -78,8 +78,13 @@ DEFAULT_NONINTERACTIVE_SEED_PROMPT = (
     "and sketch convergence points."
 )
 
+DEFAULT_GROW_PROMPT = (
+    "Build the complete branching structure from the SEED graph: "
+    "enumerate arcs, create passages, derive choices and codewords."
+)
+
 # Pipeline stage order and configuration
-STAGE_ORDER = ["dream", "brainstorm", "seed"]  # GROW, FILL, SHIP added later
+STAGE_ORDER = ["dream", "brainstorm", "seed", "grow"]
 
 # Stage prompt configuration for the run command
 # Maps stage name to (default_interactive_prompt, default_noninteractive_prompt)
@@ -95,6 +100,10 @@ STAGE_PROMPTS: dict[str, tuple[str, str | None]] = {
     "seed": (
         DEFAULT_INTERACTIVE_SEED_PROMPT,
         DEFAULT_NONINTERACTIVE_SEED_PROMPT,
+    ),
+    "grow": (
+        DEFAULT_GROW_PROMPT,
+        DEFAULT_GROW_PROMPT,  # Same for both modes (GROW ignores prompt)
     ),
 }
 
@@ -568,11 +577,41 @@ def _preview_seed_artifact(artifact: dict[str, Any]) -> None:
     console.print(f"  Initial beats: [bold]{len(beats)}[/bold]")
 
 
+def _preview_grow_artifact(artifact: dict[str, Any]) -> None:
+    """Display preview of GROW artifact."""
+    arc_count = artifact.get("arc_count", 0)
+    passage_count = artifact.get("passage_count", 0)
+    choice_count = artifact.get("choice_count", 0)
+    codeword_count = artifact.get("codeword_count", 0)
+    overlay_count = artifact.get("overlay_count", 0)
+    spine = artifact.get("spine_arc_id", "?")
+
+    console.print(f"  Arcs: [bold]{arc_count}[/bold] (spine: {spine})")
+    console.print(f"  Passages: [bold]{passage_count}[/bold]")
+    console.print(f"  Choices: [bold]{choice_count}[/bold]")
+    console.print(f"  Codewords: [bold]{codeword_count}[/bold]")
+    if overlay_count:
+        console.print(f"  Overlays: [bold]{overlay_count}[/bold]")
+
+    # Show phase summary
+    phases = artifact.get("phases_completed", [])
+    if phases:
+        failed = [p for p in phases if p.get("status") == "failed"]
+        warnings = [p for p in phases if "warning" in (p.get("detail") or "").lower()]
+        if failed:
+            console.print(f"  [red]Failed phases: {len(failed)}[/red]")
+        elif warnings:
+            console.print(f"  [yellow]Warnings: {len(warnings)} phases[/yellow]")
+        else:
+            console.print(f"  Phases: [green]{len(phases)} completed[/green]")
+
+
 # Stage preview function mapping (defined after functions exist)
 STAGE_PREVIEW_FNS: dict[str, PreviewFn] = {
     "dream": _preview_dream_artifact,
     "brainstorm": _preview_brainstorm_artifact,
     "seed": _preview_seed_artifact,
+    "grow": _preview_grow_artifact,
 }
 
 
@@ -866,13 +905,73 @@ def seed(
 
 
 @app.command()
+def grow(
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option(
+            "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
+        ),
+    ] = None,
+    provider_discuss: Annotated[
+        str | None,
+        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+    ] = None,
+    provider_summarize: Annotated[
+        str | None,
+        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+    ] = None,
+    provider_serialize: Annotated[
+        str | None,
+        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
+    ] = None,
+) -> None:
+    """Run GROW stage - build complete branching structure.
+
+    Takes the threads and beats from SEED and builds the full
+    branching story graph: arcs, passages, choices, codewords,
+    and state overlays.
+
+    This stage runs 15 phases (mostly deterministic, some LLM-assisted)
+    and manages graph mutations internally.
+
+    Requires SEED stage to have completed first.
+    """
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+    _configure_project_logging(project_path)
+
+    _run_stage_command(
+        stage_name="grow",
+        project_path=project_path,
+        prompt=None,  # Uses DEFAULT_GROW_PROMPT via STAGE_PROMPTS
+        provider=provider,
+        interactive=False,  # GROW is never interactive (deterministic, graph-driven)
+        default_interactive_prompt=DEFAULT_GROW_PROMPT,
+        default_noninteractive_prompt=DEFAULT_GROW_PROMPT,
+        preview_fn=_preview_grow_artifact,
+        next_step_hint="qf fill",
+        provider_discuss=provider_discuss,
+        provider_summarize=provider_summarize,
+        provider_serialize=provider_serialize,
+    )
+
+
+@app.command()
 def run(
     to_stage: Annotated[
         str,
         typer.Option(
             "--to",
             "-t",
-            help="Run stages up to and including this stage (dream, brainstorm, seed).",
+            help="Run stages up to and including this stage (dream, brainstorm, seed, grow).",
         ),
     ],
     from_stage: Annotated[
