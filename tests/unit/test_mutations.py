@@ -2277,7 +2277,7 @@ class TestFormatSemanticErrorsAsContent:
         result = format_semantic_errors_as_content(errors)
 
         assert "Invalid references" in result
-        assert "'ghost' was referenced but isn't defined" in result
+        assert "entities.0.entity_id: 'ghost' is not valid" in result
 
     def test_formats_mixed_error_categories(self) -> None:
         """Should handle multiple error categories in one output."""

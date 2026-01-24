@@ -1378,13 +1378,13 @@ def format_semantic_errors_as_content(errors: list[SeedValidationError]) -> str:
     semantic_errors = by_category.get(SeedErrorCategory.SEMANTIC, [])
     if semantic_errors:
         lines.append("")
-        lines.append("**Invalid references** - these don't exist in BRAINSTORM:")
+        lines.append("**Invalid references** - fix these fields:")
         for e in semantic_errors[:_MAX_ERRORS_DISPLAY]:
             if e.provided:
-                lines.append(f"  - '{e.provided}' was referenced but isn't defined")
+                lines.append(f"  - {e.field_path}: '{e.provided}' is not valid")
                 # Add suggestion if available
                 suggestion = _format_error_available(e.provided, e.available)
-                if suggestion and not suggestion.startswith("Available"):
+                if suggestion:
                     lines.append(f"    {suggestion}")
             else:
                 lines.append(f"  - {e.field_path}: {e.issue}")
