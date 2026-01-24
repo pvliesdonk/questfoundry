@@ -1354,7 +1354,7 @@ class TestPhase9Choices:
         choice_nodes = graph.get_nodes_by_type("choice")
         assert len(choice_nodes) == 2
         for cdata in choice_nodes.values():
-            assert cdata["label"] == "choose this path"
+            assert cdata["label"] == "take this path"
 
     @pytest.mark.asyncio
     async def test_phase_9_grants_codewords_on_choice(self) -> None:

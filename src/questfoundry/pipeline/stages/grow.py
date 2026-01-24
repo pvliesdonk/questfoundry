@@ -36,6 +36,7 @@ from questfoundry.providers.structured_output import with_structured_output
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
+    from questfoundry.graph.grow_algorithms import PassageSuccessor
     from questfoundry.pipeline.gates import PhaseGateHook
     from questfoundry.pipeline.stages.base import (
         AssistantMessageFn,
@@ -1416,8 +1417,8 @@ class GrowStage:
             )
 
         # Separate single-successor vs multi-successor passages
-        single_successors: dict[str, list[Any]] = {}
-        multi_successors: dict[str, list[Any]] = {}
+        single_successors: dict[str, list[PassageSuccessor]] = {}
+        multi_successors: dict[str, list[PassageSuccessor]] = {}
 
         for p_id, succ_list in successors.items():
             if len(succ_list) == 1:
@@ -1430,7 +1431,7 @@ class GrowStage:
         # Create implicit "continue" edges for single-successor passages
         for p_id, succ_list in single_successors.items():
             succ = succ_list[0]
-            choice_id = f"choice::{p_id.removeprefix('passage::')}_{succ.to_passage.removeprefix('passage::')}"
+            choice_id = f"choice::{p_id.removeprefix('passage::')}__{succ.to_passage.removeprefix('passage::')}"
             graph.create_node(
                 choice_id,
                 {
@@ -1484,8 +1485,15 @@ class GrowStage:
             # Create choice edges for multi-successor passages
             for p_id, succ_list in multi_successors.items():
                 for succ in succ_list:
-                    label = label_lookup.get((p_id, succ.to_passage), "choose this path")
-                    choice_id = f"choice::{p_id.removeprefix('passage::')}_{succ.to_passage.removeprefix('passage::')}"
+                    label = label_lookup.get((p_id, succ.to_passage))
+                    if not label:
+                        log.warning(
+                            "phase9_fallback_label",
+                            from_passage=p_id,
+                            to_passage=succ.to_passage,
+                        )
+                        label = "take this path"
+                    choice_id = f"choice::{p_id.removeprefix('passage::')}__{succ.to_passage.removeprefix('passage::')}"
                     graph.create_node(
                         choice_id,
                         {
@@ -1572,7 +1580,7 @@ class GrowStage:
                 break
 
         if not start_passage:
-            # No spine arc found; fall back to all passages reachable
+            log.warning("phase9_no_spine_arc", detail="Cannot BFS without spine; all passages kept")
             return set(passage_nodes.keys())
 
         # BFS via choice edges
@@ -1581,21 +1589,14 @@ class GrowStage:
         reachable: set[str] = {start_passage}
         queue: deque[str] = deque([start_passage])
 
-        # Build passage → successors mapping from choice nodes
-        choice_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_from")
-        choice_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_to")
-
-        # choice_from: choice_id → from_passage
-        # choice_to: choice_id → to_passage
+        # Build passage → successors mapping directly from choice node data
+        choice_nodes = graph.get_nodes_by_type("choice")
         choice_successors: dict[str, list[str]] = {}
-        choice_from_map: dict[str, str] = {}
-        for edge in choice_edges:
-            choice_from_map[edge["from"]] = edge["to"]
-
-        for edge in choice_to_edges:
-            from_passage = choice_from_map.get(edge["from"], "")
-            if from_passage:
-                choice_successors.setdefault(from_passage, []).append(edge["to"])
+        for choice_data in choice_nodes.values():
+            from_passage = choice_data.get("from_passage")
+            to_passage = choice_data.get("to_passage")
+            if from_passage and to_passage:
+                choice_successors.setdefault(from_passage, []).append(to_passage)
 
         while queue:
             current = queue.popleft()

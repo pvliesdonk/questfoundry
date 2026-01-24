@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import contextlib
 from collections import defaultdict, deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from itertools import product
 from typing import TYPE_CHECKING, Any
 
@@ -1080,7 +1080,7 @@ class PassageSuccessor:
 
     to_passage: str
     arc_id: str
-    grants: list[str]
+    grants: list[str] = field(default_factory=list)
 
 
 def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
@@ -1088,7 +1088,8 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
 
     For each arc's beat sequence, converts to passage sequence and records
     which passages follow which. Deduplicates successors (same target passage
-    across multiple arcs is recorded once, with grants from the first arc).
+    across multiple arcs is recorded once, keeping the first encountered in
+    arc sort order).
 
     Returns:
         Mapping of passage_id -> list of unique PassageSuccessor objects.
@@ -1113,6 +1114,7 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
         beat_grants.setdefault(edge["from"], []).append(edge["to"])
 
     successors: dict[str, list[PassageSuccessor]] = {}
+    seen_targets: dict[str, set[str]] = {}
 
     for arc_id, arc_data in sorted(arc_nodes.items()):
         sequence: list[str] = arc_data.get("sequence", [])
@@ -1127,10 +1129,12 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
 
             if p_id not in successors:
                 successors[p_id] = []
+                seen_targets.setdefault(p_id, set())
 
             # Skip if we already recorded this successor target
-            if any(s.to_passage == next_p for s in successors[p_id]):
+            if next_p in seen_targets.get(p_id, set()):
                 continue
+            seen_targets.setdefault(p_id, set()).add(next_p)
 
             # Grants: codewords from beats AFTER this point on this arc only
             arc_grants: list[str] = []
