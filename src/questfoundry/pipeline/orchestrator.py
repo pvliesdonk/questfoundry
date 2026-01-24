@@ -496,6 +496,11 @@ class PipelineOrchestrator:
             on_llm_end = context.get("on_llm_end")
             resume_from = context.get("resume_from")
 
+            # Build stage kwargs, only including resume_from if set (GROW-specific)
+            stage_kwargs: dict[str, Any] = {}
+            if resume_from:
+                stage_kwargs["resume_from"] = resume_from
+
             artifact_data, llm_calls, tokens_used = await stage.execute(
                 model=model,
                 user_prompt=user_prompt,
@@ -512,8 +517,7 @@ class PipelineOrchestrator:
                 serialize_model=serialize_model,
                 summarize_provider_name=self._summarize_provider_name,
                 serialize_provider_name=self._serialize_provider_name,
-                # Checkpoint resume support
-                resume_from=resume_from,
+                **stage_kwargs,
             )
 
             # Validate artifact
