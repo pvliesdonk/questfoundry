@@ -26,6 +26,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
+from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
@@ -366,8 +367,6 @@ class GrowStage:
         Returns:
             Formatted error feedback string for the LLM.
         """
-        from questfoundry.artifacts.validator import get_all_field_paths
-
         if isinstance(error, ValidationError):
             lines: list[str] = []
             for e in error.errors():
@@ -380,7 +379,7 @@ class GrowStage:
                 + f"\n\nRequired fields: {required_fields}"
                 + "\nEnsure all IDs are from the Valid IDs list."
             )
-        return f"Error: {error}\n\nPlease produce valid JSON matching the schema."
+        return f"Error: {error}\n\nPlease produce valid output matching the expected schema."
 
     # -------------------------------------------------------------------------
     # LLM phases

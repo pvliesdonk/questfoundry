@@ -1553,7 +1553,32 @@ class TestGrowErrorFeedback:
         result = stage._build_grow_error_feedback(error, TestSchema)
 
         assert "Error: unexpected keyword argument" in result
-        assert "valid JSON" in result
+        assert "valid output matching the expected schema" in result
+
+    def test_build_error_feedback_nested_list_errors(self) -> None:
+        """_build_grow_error_feedback handles nested list item errors with integer indices."""
+        from pydantic import BaseModel, ValidationError
+
+        class Overlay(BaseModel):
+            entity_id: str
+            state_key: str
+
+        class TestSchema(BaseModel):
+            overlays: list[Overlay]
+
+        stage = GrowStage()
+        try:
+            TestSchema.model_validate(
+                {"overlays": [{"entity_id": "ent::x"}, {"state_key": "mood"}]}
+            )
+        except ValidationError as e:
+            result = stage._build_grow_error_feedback(e, TestSchema)
+
+        # Integer indices should be converted to dot-notation (e.g. overlays.0.state_key)
+        assert "overlays.0.state_key" in result
+        assert "overlays.1.entity_id" in result
+        assert "Validation errors in your response:" in result
+        assert "Required fields:" in result
 
 
 class TestPhase8cErrorHandling:
