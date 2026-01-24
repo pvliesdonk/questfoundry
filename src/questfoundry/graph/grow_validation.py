@@ -18,6 +18,12 @@ from typing import TYPE_CHECKING, Literal
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
+# Narrative pacing thresholds for commits timing validation.
+# Based on three-act structure: setup requires buildup before resolution.
+MIN_BEATS_BEFORE_COMMITS = 3  # Minimum beats for narrative setup
+MAX_COMMITS_POSITION_RATIO = 0.8  # Commits should allow 20% for denouement
+MAX_BUILDUP_GAP_BEATS = 5  # Maximum beats between last buildup and commits
+
 
 @dataclass
 class ValidationCheck:
@@ -69,6 +75,50 @@ class ValidationReport:
         if passes:
             parts.append(f"{len(passes)} passed")
         return ", ".join(parts)
+
+
+def _find_start_passage(graph: Graph) -> str | None:
+    """Find the unique start passage (no incoming choice_to edges).
+
+    Returns the passage ID if exactly one start exists, None otherwise.
+    """
+    passage_nodes = graph.get_nodes_by_type("passage")
+    if not passage_nodes:
+        return None
+    # choice_to edges point TO destination passages
+    choice_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_to")
+    passages_with_incoming: set[str] = {edge["to"] for edge in choice_to_edges}
+    start_passages = [pid for pid in passage_nodes if pid not in passages_with_incoming]
+    return start_passages[0] if len(start_passages) == 1 else None
+
+
+def _build_passage_successors(graph: Graph) -> dict[str, list[str]]:
+    """Build passage->passage successor map from choice nodes.
+
+    Each choice node has from_passage and to_passage fields defining
+    the directed edge in the passage graph.
+    """
+    choice_nodes = graph.get_nodes_by_type("choice")
+    successors: dict[str, list[str]] = {}
+    for choice_data in choice_nodes.values():
+        from_p = choice_data.get("from_passage")
+        to_p = choice_data.get("to_passage")
+        if from_p and to_p:
+            successors.setdefault(from_p, []).append(to_p)
+    return successors
+
+
+def _bfs_reachable(start: str, successors: dict[str, list[str]]) -> set[str]:
+    """BFS to find all reachable passages from start."""
+    reachable: set[str] = {start}
+    queue: deque[str] = deque([start])
+    while queue:
+        current = queue.popleft()
+        for next_p in successors.get(current, []):
+            if next_p not in reachable:
+                reachable.add(next_p)
+                queue.append(next_p)
+    return reachable
 
 
 def check_single_start(graph: Graph) -> ValidationCheck:
@@ -125,38 +175,16 @@ def check_all_passages_reachable(graph: Graph) -> ValidationCheck:
             message="No passages to check",
         )
 
-    # Find start passage
-    choice_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_to")
-    passages_with_incoming: set[str] = {edge["to"] for edge in choice_to_edges}
-    start_passages = [pid for pid in passage_nodes if pid not in passages_with_incoming]
-
-    if len(start_passages) != 1:
+    start = _find_start_passage(graph)
+    if start is None:
         return ValidationCheck(
             name="all_passages_reachable",
             severity="fail",
             message="Cannot check reachability: no unique start passage",
         )
 
-    start = start_passages[0]
-
-    # Build successor map from choice nodes
-    choice_nodes = graph.get_nodes_by_type("choice")
-    successors: dict[str, list[str]] = {}
-    for choice_data in choice_nodes.values():
-        from_p = choice_data.get("from_passage")
-        to_p = choice_data.get("to_passage")
-        if from_p and to_p:
-            successors.setdefault(from_p, []).append(to_p)
-
-    # BFS
-    reachable: set[str] = {start}
-    queue: deque[str] = deque([start])
-    while queue:
-        current = queue.popleft()
-        for next_p in successors.get(current, []):
-            if next_p not in reachable:
-                reachable.add(next_p)
-                queue.append(next_p)
+    successors = _build_passage_successors(graph)
+    reachable = _bfs_reachable(start, successors)
 
     unreachable = set(passage_nodes.keys()) - reachable
     if not unreachable:
@@ -177,6 +205,10 @@ def check_all_endings_reachable(graph: Graph) -> ValidationCheck:
 
     Endings are passages with no outgoing choice_from edges. At least one
     ending must be reachable for the story to be completable.
+
+    Edge semantics:
+    - choice_from: choice -> originating_passage (passage the choice leads FROM)
+    - choice_to: choice -> destination_passage (passage the choice leads TO)
     """
     passage_nodes = graph.get_nodes_by_type("passage")
     if not passage_nodes:
@@ -186,21 +218,15 @@ def check_all_endings_reachable(graph: Graph) -> ValidationCheck:
             message="No passages to check",
         )
 
-    # Find start passage
-    choice_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_to")
-    passages_with_incoming: set[str] = {edge["to"] for edge in choice_to_edges}
-    start_passages = [pid for pid in passage_nodes if pid not in passages_with_incoming]
-
-    if len(start_passages) != 1:
+    start = _find_start_passage(graph)
+    if start is None:
         return ValidationCheck(
             name="all_endings_reachable",
             severity="fail",
             message="Cannot check endings: no unique start passage",
         )
 
-    start = start_passages[0]
-
-    # Find endings (passages with no outgoing choice_from edges)
+    # Find endings: passages with no outgoing choices (choice_from -> passage)
     choice_from_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_from")
     passages_with_outgoing: set[str] = {edge["to"] for edge in choice_from_edges}
     endings = [pid for pid in passage_nodes if pid not in passages_with_outgoing]
@@ -212,25 +238,9 @@ def check_all_endings_reachable(graph: Graph) -> ValidationCheck:
             message="No ending passages found (all passages have outgoing edges)",
         )
 
-    # BFS from start to find reachable passages
-    choice_nodes = graph.get_nodes_by_type("choice")
-    successors: dict[str, list[str]] = {}
-    for choice_data in choice_nodes.values():
-        from_p = choice_data.get("from_passage")
-        to_p = choice_data.get("to_passage")
-        if from_p and to_p:
-            successors.setdefault(from_p, []).append(to_p)
+    successors = _build_passage_successors(graph)
+    reachable = _bfs_reachable(start, successors)
 
-    reachable: set[str] = {start}
-    queue: deque[str] = deque([start])
-    while queue:
-        current = queue.popleft()
-        for next_p in successors.get(current, []):
-            if next_p not in reachable:
-                reachable.add(next_p)
-                queue.append(next_p)
-
-    # Check if at least one ending is reachable
     reachable_endings = [e for e in endings if e in reachable]
     if reachable_endings:
         return ValidationCheck(
@@ -453,7 +463,8 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
         if beat_id in beat_nodes:
             thread_beats.setdefault(thread_id, []).append(beat_id)
 
-    # Sort beats within each thread by topological order if possible
+    # Sort beats within each thread by topological order if possible.
+    # Import here to avoid circular dependency (grow_algorithms imports Graph types).
     from questfoundry.graph.grow_algorithms import topological_sort_beats
 
     for thread_id in thread_beats:
@@ -493,13 +504,13 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
         if total_beats < 2:
             continue
 
-        # Check 1: commits too early (<3 beats from start)
-        if commits_idx < 3:
+        # Check 1: commits too early
+        if commits_idx < MIN_BEATS_BEFORE_COMMITS:
             checks.append(
                 ValidationCheck(
                     name="commits_timing",
                     severity="warn",
-                    message=f"Thread '{thread_raw}': commits at beat {commits_idx + 1}/{total_beats} (too early, <3 beats)",
+                    message=f"Thread '{thread_raw}': commits at beat {commits_idx + 1}/{total_beats} (too early, <{MIN_BEATS_BEFORE_COMMITS} beats)",
                 )
             )
 
@@ -513,8 +524,8 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
                 )
             )
 
-        # Check 3: commits too late (final 20% of arc)
-        threshold = total_beats * 0.8
+        # Check 3: commits too late (final portion of arc)
+        threshold = total_beats * MAX_COMMITS_POSITION_RATIO
         if commits_idx >= threshold:
             checks.append(
                 ValidationCheck(
@@ -524,8 +535,8 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
                 )
             )
 
-        # Check 4: Large gap after last buildup (>5 beats)
-        if last_buildup_idx is not None and commits_idx - last_buildup_idx > 5:
+        # Check 4: Large gap after last buildup
+        if last_buildup_idx is not None and commits_idx - last_buildup_idx > MAX_BUILDUP_GAP_BEATS:
             gap = commits_idx - last_buildup_idx
             checks.append(
                 ValidationCheck(

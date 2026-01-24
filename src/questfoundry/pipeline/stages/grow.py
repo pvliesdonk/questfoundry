@@ -1528,16 +1528,34 @@ class GrowStage:
 
         report = run_all_checks(graph)
 
+        pass_count = len([c for c in report.checks if c.severity == "pass"])
+        warn_count = len([c for c in report.checks if c.severity == "warn"])
+        fail_count = len([c for c in report.checks if c.severity == "fail"])
+
         if report.has_failures:
+            log.warning(
+                "validation_failed",
+                failures=fail_count,
+                warnings=warn_count,
+                passes=pass_count,
+                summary=report.summary,
+            )
             return GrowPhaseResult(
                 phase="validation",
                 status="failed",
                 detail=report.summary,
             )
 
-        detail = report.summary
         if report.has_warnings:
+            log.info(
+                "validation_passed_with_warnings",
+                warnings=warn_count,
+                passes=pass_count,
+            )
             detail = f"Passed with warnings: {report.summary}"
+        else:
+            log.info("validation_passed", passes=pass_count)
+            detail = report.summary
 
         return GrowPhaseResult(phase="validation", status="completed", detail=detail)
 
