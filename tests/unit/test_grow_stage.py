@@ -2291,3 +2291,117 @@ class TestGrowSemanticValidation:
         assert llm_calls == 1
         assert result.tags[0].beat_id == "beat::b1"
         assert tokens == 100
+
+
+class TestGrowCheckpoints:
+    def test_save_checkpoint_creates_file(self, tmp_project: Path) -> None:
+        """_save_checkpoint creates a snapshot file in the snapshots dir."""
+        from questfoundry.graph.graph import Graph
+
+        stage = GrowStage()
+        graph = Graph.empty()
+        graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1", "summary": "test"})
+
+        stage._save_checkpoint(graph, tmp_project, "thread_agnostic")
+
+        checkpoint_path = tmp_project / "snapshots" / "grow-pre-thread_agnostic.json"
+        assert checkpoint_path.exists()
+
+    def test_load_checkpoint_restores_graph(self, tmp_project: Path) -> None:
+        """_load_checkpoint restores graph from snapshot."""
+        from questfoundry.graph.graph import Graph
+
+        stage = GrowStage()
+        graph = Graph.empty()
+        graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1", "summary": "test"})
+
+        stage._save_checkpoint(graph, tmp_project, "knots")
+        loaded = stage._load_checkpoint(tmp_project, "knots")
+
+        assert "beat::b1" in loaded.get_nodes_by_type("beat")
+
+    def test_load_checkpoint_missing_raises(self, tmp_project: Path) -> None:
+        """_load_checkpoint raises GrowStageError when file doesn't exist."""
+        stage = GrowStage()
+
+        with pytest.raises(GrowStageError, match="No checkpoint found"):
+            stage._load_checkpoint(tmp_project, "nonexistent_phase")
+
+    @pytest.mark.asyncio
+    async def test_resume_from_invalid_phase_raises(self, tmp_project: Path) -> None:
+        """execute() raises GrowStageError for unknown phase name."""
+        stage = GrowStage()
+
+        with pytest.raises(GrowStageError, match="Unknown phase"):
+            await stage.execute(
+                model=MagicMock(),
+                user_prompt="test",
+                project_path=tmp_project,
+                resume_from="nonexistent_phase",
+            )
+
+    @pytest.mark.asyncio
+    async def test_resume_from_skips_earlier_phases(self, tmp_project: Path) -> None:
+        """execute() skips phases before resume_from."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+
+        stage = GrowStage()
+
+        # Save a checkpoint for "enumerate_arcs" phase
+        graph = Graph.empty()
+        stage._save_checkpoint(graph, tmp_project, "enumerate_arcs")
+
+        # Track which phases are called
+        called_phases: list[str] = []
+
+        # Build mock phases that track their execution
+        original_phase_order = stage._phase_order()
+        phase_names = [name for _, name in original_phase_order]
+        mock_phases = []
+        for _, name in original_phase_order:
+
+            async def phase_fn(_g: Graph, _m: object, n: str = name) -> GrowPhaseResult:
+                called_phases.append(n)
+                return GrowPhaseResult(phase=n, status="completed")
+
+            mock_phases.append((phase_fn, name))
+
+        with patch.object(stage, "_phase_order", return_value=mock_phases):
+            await stage.execute(
+                model=MagicMock(),
+                user_prompt="test",
+                project_path=tmp_project,
+                resume_from="enumerate_arcs",
+            )
+
+        # Should only have phases from enumerate_arcs onwards
+        enumerate_idx = phase_names.index("enumerate_arcs")
+        expected_phases = phase_names[enumerate_idx:]
+        assert called_phases == expected_phases
+
+    @pytest.mark.asyncio
+    async def test_checkpoints_saved_before_each_phase(self, tmp_project: Path) -> None:
+        """execute() saves a checkpoint before each phase runs."""
+        from unittest.mock import patch
+
+        stage = GrowStage()
+
+        async def mock_validate(_g: object, _m: object) -> GrowPhaseResult:
+            return GrowPhaseResult(phase="validate_dag", status="completed")
+
+        with patch.object(
+            stage,
+            "_phase_order",
+            return_value=[(mock_validate, "validate_dag")],
+        ):
+            await stage.execute(
+                model=MagicMock(),
+                user_prompt="test",
+                project_path=tmp_project,
+            )
+
+        # Checkpoint should exist for the phase
+        checkpoint_path = tmp_project / "snapshots" / "grow-pre-validate_dag.json"
+        assert checkpoint_path.exists()

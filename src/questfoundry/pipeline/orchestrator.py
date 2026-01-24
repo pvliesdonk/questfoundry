@@ -494,6 +494,7 @@ class PipelineOrchestrator:
             on_assistant_message = context.get("on_assistant_message")
             on_llm_start = context.get("on_llm_start")
             on_llm_end = context.get("on_llm_end")
+            resume_from = context.get("resume_from")
 
             artifact_data, llm_calls, tokens_used = await stage.execute(
                 model=model,
@@ -511,6 +512,8 @@ class PipelineOrchestrator:
                 serialize_model=serialize_model,
                 summarize_provider_name=self._summarize_provider_name,
                 serialize_provider_name=self._serialize_provider_name,
+                # Checkpoint resume support
+                resume_from=resume_from,
             )
 
             # Validate artifact

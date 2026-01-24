@@ -373,6 +373,7 @@ def _run_stage_command(
     provider_discuss: str | None = None,
     provider_summarize: str | None = None,
     provider_serialize: str | None = None,
+    resume_from: str | None = None,
 ) -> None:
     """Common logic for running a stage command.
 
@@ -416,6 +417,8 @@ def _run_stage_command(
 
     # Build context
     context: dict[str, Any] = {"user_prompt": prompt, "interactive": use_interactive}
+    if resume_from:
+        context["resume_from"] = resume_from
 
     if use_interactive:
         log.debug("interactive_mode", mode="enabled")
@@ -932,6 +935,10 @@ def grow(
         str | None,
         typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
     ] = None,
+    resume_from: Annotated[
+        str | None,
+        typer.Option("--resume-from", help="Resume from named phase (skips earlier phases)"),
+    ] = None,
 ) -> None:
     """Run GROW stage - build complete branching structure.
 
@@ -961,6 +968,7 @@ def grow(
         provider_discuss=provider_discuss,
         provider_summarize=provider_summarize,
         provider_serialize=provider_serialize,
+        resume_from=resume_from,
     )
 
 
