@@ -740,6 +740,194 @@ class TestPhase4aSceneTypes:
         assert result.llm_calls == 0
 
 
+class TestValidateAndInsertGaps:
+    def test_unprefixed_thread_id_gets_warning_and_prefix(self) -> None:
+        """Helper auto-prefixes thread_id and logs warning."""
+        from questfoundry.models.grow import GapProposal
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        gaps = [
+            GapProposal(
+                thread_id="mentor_trust_canonical",  # Missing "thread::" prefix
+                after_beat="beat::opening",
+                before_beat="beat::mentor_meet",
+                summary="Auto-prefixed gap",
+                scene_type="sequel",
+            ),
+        ]
+        thread_nodes = graph.get_nodes_by_type("thread")
+        beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_canonical"}
+
+        inserted = stage._validate_and_insert_gaps(
+            graph, gaps, thread_nodes, beat_ids, "test_phase"
+        )
+
+        assert inserted == 1
+        # Verify the beat was inserted
+        beat_nodes = graph.get_nodes_by_type("beat")
+        gap_beats = [bid for bid in beat_nodes if "gap" in bid]
+        assert len(gap_beats) == 1
+
+    def test_invalid_thread_id_skipped(self) -> None:
+        """Helper skips gaps with thread_ids not in valid set."""
+        from questfoundry.models.grow import GapProposal
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        gaps = [
+            GapProposal(
+                thread_id="thread::nonexistent",
+                after_beat="beat::opening",
+                before_beat="beat::mentor_meet",
+                summary="Invalid thread",
+                scene_type="sequel",
+            ),
+        ]
+        thread_nodes = graph.get_nodes_by_type("thread")
+        beat_ids = {"beat::opening", "beat::mentor_meet"}
+
+        inserted = stage._validate_and_insert_gaps(
+            graph, gaps, thread_nodes, beat_ids, "test_phase"
+        )
+        assert inserted == 0
+
+    def test_invalid_beat_order_skipped(self) -> None:
+        """Helper skips gaps where after_beat comes after before_beat."""
+        from questfoundry.models.grow import GapProposal
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        gaps = [
+            GapProposal(
+                thread_id="thread::mentor_trust_canonical",
+                after_beat="beat::mentor_commits_canonical",  # Comes AFTER mentor_meet
+                before_beat="beat::mentor_meet",  # Comes BEFORE commits
+                summary="Wrong order gap",
+                scene_type="sequel",
+            ),
+        ]
+        thread_nodes = graph.get_nodes_by_type("thread")
+        beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_canonical"}
+
+        inserted = stage._validate_and_insert_gaps(
+            graph, gaps, thread_nodes, beat_ids, "test_phase"
+        )
+        assert inserted == 0
+
+    def test_invalid_after_beat_skipped(self) -> None:
+        """Helper skips gaps with after_beat not in valid IDs."""
+        from questfoundry.models.grow import GapProposal
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        gaps = [
+            GapProposal(
+                thread_id="thread::mentor_trust_canonical",
+                after_beat="beat::phantom",
+                before_beat="beat::mentor_meet",
+                summary="Phantom after_beat",
+                scene_type="sequel",
+            ),
+        ]
+        thread_nodes = graph.get_nodes_by_type("thread")
+        beat_ids = {"beat::opening", "beat::mentor_meet"}
+
+        inserted = stage._validate_and_insert_gaps(
+            graph, gaps, thread_nodes, beat_ids, "test_phase"
+        )
+        assert inserted == 0
+
+    def test_invalid_before_beat_skipped(self) -> None:
+        """Helper skips gaps with before_beat not in valid IDs."""
+        from questfoundry.models.grow import GapProposal
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        gaps = [
+            GapProposal(
+                thread_id="thread::mentor_trust_canonical",
+                after_beat="beat::opening",
+                before_beat="beat::phantom_before",
+                summary="Phantom before_beat",
+                scene_type="sequel",
+            ),
+        ]
+        thread_nodes = graph.get_nodes_by_type("thread")
+        beat_ids = {"beat::opening", "beat::mentor_meet"}
+
+        inserted = stage._validate_and_insert_gaps(
+            graph, gaps, thread_nodes, beat_ids, "test_phase"
+        )
+        assert inserted == 0
+
+    def test_beat_in_valid_ids_but_not_in_sequence_skipped(self) -> None:
+        """Helper skips gaps where beat is valid but not in the thread's sequence."""
+        from questfoundry.models.grow import GapProposal
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        # mentor_commits_alt is a valid beat but belongs to thread::mentor_trust_alt,
+        # not thread::mentor_trust_canonical's sequence
+        gaps = [
+            GapProposal(
+                thread_id="thread::mentor_trust_canonical",
+                after_beat="beat::opening",
+                before_beat="beat::mentor_commits_alt",
+                summary="Beat not in this thread sequence",
+                scene_type="sequel",
+            ),
+        ]
+        thread_nodes = graph.get_nodes_by_type("thread")
+        beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_alt"}
+
+        inserted = stage._validate_and_insert_gaps(
+            graph, gaps, thread_nodes, beat_ids, "test_phase"
+        )
+        assert inserted == 0
+
+    def test_gap_with_only_after_beat_inserted(self) -> None:
+        """Helper inserts gap when only after_beat is set (no ordering check)."""
+        from questfoundry.models.grow import GapProposal
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        stage = GrowStage()
+
+        gaps = [
+            GapProposal(
+                thread_id="thread::mentor_trust_canonical",
+                after_beat="beat::opening",
+                before_beat=None,
+                summary="Gap after opening only",
+                scene_type="sequel",
+            ),
+        ]
+        thread_nodes = graph.get_nodes_by_type("thread")
+        beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_canonical"}
+
+        inserted = stage._validate_and_insert_gaps(
+            graph, gaps, thread_nodes, beat_ids, "test_phase"
+        )
+        assert inserted == 1
+        # Verify gap beat was created
+        beat_nodes = graph.get_nodes_by_type("beat")
+        gap_beats = [bid for bid in beat_nodes if "gap" in bid]
+        assert len(gap_beats) == 1
+
+
 class TestPhase4bNarrativeGaps:
     @pytest.mark.asyncio
     async def test_phase_4b_inserts_gap_beats(self) -> None:
