@@ -118,6 +118,7 @@ class GrowStage:
             (self._phase_8b_codewords, "codewords"),
             (self._phase_8c_overlays, "overlays"),
             (self._phase_9_choices, "choices"),
+            (self._phase_10_validation, "validation"),
             (self._phase_11_prune, "prune"),
         ]
 
@@ -1516,6 +1517,29 @@ class GrowStage:
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
+
+    async def _phase_10_validation(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
+        """Phase 10: Graph validation.
+
+        Runs structural and timing checks on the assembled story graph.
+        Failures block execution; warnings are advisory.
+        """
+        from questfoundry.graph.grow_validation import run_all_checks
+
+        report = run_all_checks(graph)
+
+        if report.has_failures:
+            return GrowPhaseResult(
+                phase="validation",
+                status="failed",
+                detail=report.summary,
+            )
+
+        detail = report.summary
+        if report.has_warnings:
+            detail = f"Passed with warnings: {report.summary}"
+
+        return GrowPhaseResult(phase="validation", status="completed", detail=detail)
 
     async def _phase_11_prune(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
         """Phase 11: Prune unreachable passages.
