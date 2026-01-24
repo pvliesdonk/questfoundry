@@ -393,6 +393,77 @@ class TestGrowLlmCall:
                 output_schema=Phase2Output,
             )
 
+    @pytest.mark.asyncio
+    async def test_callbacks_passed_to_ainvoke(self) -> None:
+        """_grow_llm_call passes callbacks via RunnableConfig to ainvoke."""
+        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+
+        stage = GrowStage()
+        mock_callback = MagicMock()
+        stage._callbacks = [mock_callback]
+
+        valid_output = Phase2Output(
+            assessments=[ThreadAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+        )
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=valid_output)
+
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        await stage._grow_llm_call(
+            model=mock_model,
+            template_name="grow_phase2_agnostic",
+            context={
+                "beat_summaries": "test",
+                "valid_beat_ids": "beat::a",
+                "valid_tension_ids": "t1",
+            },
+            output_schema=Phase2Output,
+        )
+
+        # Verify ainvoke was called with a config containing callbacks
+        call_args = mock_structured.ainvoke.call_args
+        assert call_args is not None
+        config = call_args.kwargs.get("config") or call_args[1] if len(call_args[0]) < 2 else None
+        if config is None and len(call_args[0]) >= 2:
+            config = call_args[0][1]
+        assert config is not None, "ainvoke must be called with a config"
+        assert "callbacks" in config
+        assert mock_callback in config["callbacks"]
+        assert config["metadata"]["stage"] == "grow"
+
+    @pytest.mark.asyncio
+    async def test_no_callbacks_still_works(self) -> None:
+        """_grow_llm_call works when no callbacks are set."""
+        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+
+        stage = GrowStage()
+        # _callbacks is None by default
+
+        valid_output = Phase2Output(
+            assessments=[ThreadAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+        )
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=valid_output)
+
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result, llm_calls, _ = await stage._grow_llm_call(
+            model=mock_model,
+            template_name="grow_phase2_agnostic",
+            context={
+                "beat_summaries": "test",
+                "valid_beat_ids": "beat::a",
+                "valid_tension_ids": "t1",
+            },
+            output_schema=Phase2Output,
+        )
+
+        assert isinstance(result, Phase2Output)
+        assert llm_calls == 1
+
 
 class TestPhase3Knots:
     @pytest.mark.asyncio

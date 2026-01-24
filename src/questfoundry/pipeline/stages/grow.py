@@ -34,6 +34,7 @@ from questfoundry.pipeline.gates import AutoApprovePhaseGate
 from questfoundry.providers.structured_output import with_structured_output
 
 if TYPE_CHECKING:
+    from langchain_core.callbacks import BaseCallbackHandler
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.graph.grow_algorithms import PassageSuccessor
@@ -92,6 +93,7 @@ class GrowStage:
         """
         self.project_path = project_path
         self.gate = gate or AutoApprovePhaseGate()
+        self._callbacks: list[BaseCallbackHandler] | None = None
 
     # Type for async phase functions: (Graph, BaseChatModel) -> GrowPhaseResult
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[GrowPhaseResult]]
@@ -134,6 +136,7 @@ class GrowStage:
         on_llm_start: LLMCallbackFn | None = None,  # noqa: ARG002
         on_llm_end: LLMCallbackFn | None = None,  # noqa: ARG002
         project_path: Path | None = None,
+        callbacks: list[BaseCallbackHandler] | None = None,
         summarize_model: BaseChatModel | None = None,  # noqa: ARG002
         serialize_model: BaseChatModel | None = None,  # noqa: ARG002
         summarize_provider_name: str | None = None,  # noqa: ARG002
@@ -155,6 +158,7 @@ class GrowStage:
             on_llm_start: LLM start callback (unused).
             on_llm_end: LLM end callback (unused).
             project_path: Override for project path.
+            callbacks: LangChain callback handlers for logging LLM calls.
             summarize_model: Summarize model (unused).
             serialize_model: Serialize model (unused).
             summarize_provider_name: Summarize provider name (unused).
@@ -175,6 +179,7 @@ class GrowStage:
                 "Provide it in constructor or execute() call."
             )
 
+        self._callbacks = callbacks
         log.info("stage_start", stage="grow")
         graph = Graph.load(resolved_path)
         phase_results: list[GrowPhaseResult] = []
@@ -276,6 +281,7 @@ class GrowStage:
         Raises:
             GrowStageError: After max_retries exhausted.
         """
+        from questfoundry.observability.tracing import build_runnable_config
         from questfoundry.prompts.loader import PromptLoader
 
         loader = PromptLoader(_get_prompts_path())
@@ -291,10 +297,13 @@ class GrowStage:
         if user_text:
             messages.append(HumanMessage(content=user_text))
 
-        # Token counting is not available via with_structured_output() since
-        # it returns a Pydantic object, not an AIMessage with response_metadata.
-        # Track only llm_calls; tokens remain 0 until a callback-based approach
-        # is implemented.
+        # Build config with callbacks for LLM call logging
+        config = build_runnable_config(
+            run_name=f"grow_{template_name}",
+            metadata={"stage": "grow", "phase": template_name},
+            callbacks=self._callbacks,
+        )
+
         llm_calls = 0
         base_messages = list(messages)  # Preserve original for retry resets
 
@@ -307,7 +316,7 @@ class GrowStage:
             )
 
             try:
-                result = await structured_model.ainvoke(messages)
+                result = await structured_model.ainvoke(messages, config=config)
                 llm_calls += 1
 
                 # with_structured_output returns validated Pydantic instance directly.
