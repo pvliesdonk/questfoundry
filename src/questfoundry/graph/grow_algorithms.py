@@ -1067,3 +1067,82 @@ def insert_gap_beat(
         graph.add_edge("requires", before_beat, beat_id)
 
     return beat_id
+
+
+# ---------------------------------------------------------------------------
+# Phase 9: Choice derivation helpers
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PassageSuccessor:
+    """A successor passage reachable from a given passage on a specific arc."""
+
+    to_passage: str
+    arc_id: str
+    grants: list[str]
+
+
+def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
+    """Find unique successor passages for each passage across all arcs.
+
+    For each arc's beat sequence, converts to passage sequence and records
+    which passages follow which. Deduplicates successors (same target passage
+    across multiple arcs is recorded once, with grants from the first arc).
+
+    Returns:
+        Mapping of passage_id -> list of unique PassageSuccessor objects.
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+    passage_nodes = graph.get_nodes_by_type("passage")
+
+    if not arc_nodes or not passage_nodes:
+        return {}
+
+    # Build beat → passage mapping
+    beat_to_passage: dict[str, str] = {}
+    for p_id, p_data in passage_nodes.items():
+        from_beat = p_data.get("from_beat", "")
+        if from_beat:
+            beat_to_passage[from_beat] = p_id
+
+    # Collect grants edges: beat → codeword
+    grants_edges = graph.get_edges(from_id=None, to_id=None, edge_type="grants")
+    beat_grants: dict[str, list[str]] = {}
+    for edge in grants_edges:
+        beat_grants.setdefault(edge["from"], []).append(edge["to"])
+
+    successors: dict[str, list[PassageSuccessor]] = {}
+
+    for arc_id, arc_data in sorted(arc_nodes.items()):
+        sequence: list[str] = arc_data.get("sequence", [])
+        if len(sequence) < 2:
+            continue
+
+        # Convert beat sequence to passage sequence
+        passage_seq = [beat_to_passage[b] for b in sequence if b in beat_to_passage]
+
+        for i, p_id in enumerate(passage_seq[:-1]):
+            next_p = passage_seq[i + 1]
+
+            if p_id not in successors:
+                successors[p_id] = []
+
+            # Skip if we already recorded this successor target
+            if any(s.to_passage == next_p for s in successors[p_id]):
+                continue
+
+            # Grants: codewords from beats AFTER this point on this arc only
+            arc_grants: list[str] = []
+            for beat_id in sequence[i + 1 :]:
+                arc_grants.extend(beat_grants.get(beat_id, []))
+
+            successors[p_id].append(
+                PassageSuccessor(
+                    to_passage=next_p,
+                    arc_id=arc_id,
+                    grants=arc_grants,
+                )
+            )
+
+    return successors
