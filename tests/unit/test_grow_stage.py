@@ -1895,6 +1895,85 @@ class TestGrowLLMCallTokens:
         assert tokens == 220  # 100 + 120
 
 
+class TestGrowHybridProviders:
+    @pytest.mark.asyncio
+    async def test_serialize_model_used_when_provided(self) -> None:
+        """_grow_llm_call uses serialize_model over default model when set."""
+        from unittest.mock import patch
+
+        from pydantic import BaseModel
+
+        class SimpleOutput(BaseModel):
+            value: str
+
+        output_instance = SimpleOutput(value="test")
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=output_instance)
+
+        serialize_model = MagicMock(name="serialize_model")
+        default_model = MagicMock(name="default_model")
+
+        stage = GrowStage()
+        stage._serialize_model = serialize_model
+        stage._serialize_provider_name = "openai"
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.grow.with_structured_output",
+                return_value=mock_structured,
+            ) as mock_wso,
+            patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
+        ):
+            mock_path.return_value = Path(__file__).parents[2] / "prompts"
+            await stage._grow_llm_call(
+                default_model,
+                "grow_phase2_agnostic",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                SimpleOutput,
+            )
+
+        # Verify with_structured_output was called with serialize_model, not default
+        mock_wso.assert_called_once_with(serialize_model, SimpleOutput, provider_name="openai")
+
+    @pytest.mark.asyncio
+    async def test_falls_back_to_default_model(self) -> None:
+        """_grow_llm_call falls back to default model when serialize_model is None."""
+        from unittest.mock import patch
+
+        from pydantic import BaseModel
+
+        class SimpleOutput(BaseModel):
+            value: str
+
+        output_instance = SimpleOutput(value="test")
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=output_instance)
+
+        default_model = MagicMock(name="default_model")
+
+        stage = GrowStage()
+        stage._provider_name = "ollama"
+        # _serialize_model stays None (default)
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.grow.with_structured_output",
+                return_value=mock_structured,
+            ) as mock_wso,
+            patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
+        ):
+            mock_path.return_value = Path(__file__).parents[2] / "prompts"
+            await stage._grow_llm_call(
+                default_model,
+                "grow_phase2_agnostic",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                SimpleOutput,
+            )
+
+        # Verify with_structured_output was called with default model
+        mock_wso.assert_called_once_with(default_model, SimpleOutput, provider_name="ollama")
+
+
 class TestPhase8cErrorHandling:
     @pytest.mark.asyncio
     async def test_phase_8c_returns_failed_on_grow_error(self) -> None:
