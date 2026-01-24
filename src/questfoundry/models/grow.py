@@ -167,6 +167,12 @@ class ChoiceLabel(BaseModel):
     label: str = Field(min_length=1)
 
 
+class Phase9Output(BaseModel):
+    """Wrapper for Phase 9 structured output (choice labels)."""
+
+    labels: list[ChoiceLabel] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # Stage result
 # ---------------------------------------------------------------------------
