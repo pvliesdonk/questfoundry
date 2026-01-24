@@ -150,8 +150,43 @@ def format_valid_ids_context(graph: Graph, stage: str) -> str:
     """
     if stage == "seed":
         return _format_seed_valid_ids(graph)
-    # Future: add "grow" when GROW stage is implemented
+    if stage == "grow":
+        return _format_grow_valid_ids(graph)
     return ""
+
+
+def _format_grow_valid_ids(graph: Graph) -> str:
+    """Format GROW-stage valid IDs for LLM serialization.
+
+    Delegates to grow_context module and formats the result as a
+    human-readable context string with all ID types.
+
+    Args:
+        graph: Graph containing SEED/GROW data.
+
+    Returns:
+        Formatted context string with valid IDs.
+    """
+    from questfoundry.graph.grow_context import format_grow_valid_ids
+
+    ids = format_grow_valid_ids(graph)
+    lines = ["## VALID IDs FOR GROW PHASES", ""]
+
+    for label, key in [
+        ("Beat IDs", "valid_beat_ids"),
+        ("Thread IDs", "valid_thread_ids"),
+        ("Tension IDs", "valid_tension_ids"),
+        ("Entity IDs", "valid_entity_ids"),
+        ("Passage IDs", "valid_passage_ids"),
+        ("Choice IDs", "valid_choice_ids"),
+    ]:
+        value = ids.get(key, "")
+        if value:
+            lines.append(f"### {label}")
+            lines.append(value)
+            lines.append("")
+
+    return "\n".join(lines) if any(ids.values()) else ""
 
 
 def _format_seed_valid_ids(graph: Graph) -> str:
