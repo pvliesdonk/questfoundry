@@ -1997,3 +1997,48 @@ class TestFindPassageSuccessors:
         graph.create_node("passage::a", {"type": "passage", "raw_id": "a", "from_beat": "beat::a"})
 
         assert find_passage_successors(graph) == {}
+
+    def test_beats_without_passages_skipped_correctly(self) -> None:
+        """Beats without passages are skipped; grants use beat index not passage index."""
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+
+        graph = Graph.empty()
+        # Arc: beat::a → beat::mid (no passage) → beat::b
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::mid", {"type": "beat", "raw_id": "mid"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+
+        # beat::mid grants a codeword
+        graph.create_node("codeword::mid_cw", {"type": "codeword", "raw_id": "mid_cw"})
+        graph.add_edge("grants", "beat::mid", "codeword::mid_cw")
+
+        # beat::b also grants a codeword
+        graph.create_node("codeword::b_cw", {"type": "codeword", "raw_id": "b_cw"})
+        graph.add_edge("grants", "beat::b", "codeword::b_cw")
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a", "beat::mid", "beat::b"],
+            },
+        )
+        # Only a and b have passages (mid is skipped)
+        graph.create_node("passage::a", {"type": "passage", "raw_id": "a", "from_beat": "beat::a"})
+        graph.create_node("passage::b", {"type": "passage", "raw_id": "b", "from_beat": "beat::b"})
+
+        result = find_passage_successors(graph)
+
+        # passage::a → passage::b (skipping beat::mid which has no passage)
+        assert "passage::a" in result
+        assert len(result["passage::a"]) == 1
+        assert result["passage::a"][0].to_passage == "passage::b"
+
+        # Grants should include both beat::mid's and beat::b's codewords
+        # (all beats after beat::a in the arc sequence)
+        grants = result["passage::a"][0].grants
+        assert "codeword::mid_cw" in grants
+        assert "codeword::b_cw" in grants

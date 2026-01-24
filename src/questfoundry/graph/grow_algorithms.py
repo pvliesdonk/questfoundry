@@ -1121,24 +1121,32 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
         if len(sequence) < 2:
             continue
 
-        # Convert beat sequence to passage sequence
-        passage_seq = [beat_to_passage[b] for b in sequence if b in beat_to_passage]
+        # Convert beat sequence to passage sequence, preserving original beat index.
+        # Beats without passages are intentionally skipped - not all beats become
+        # passages (Phase 8a selects which beats get interactive passages).
+        passage_seq: list[tuple[str, int]] = []
+        for beat_idx, beat_id in enumerate(sequence):
+            if beat_id in beat_to_passage:
+                passage_seq.append((beat_to_passage[beat_id], beat_idx))
 
-        for i, p_id in enumerate(passage_seq[:-1]):
-            next_p = passage_seq[i + 1]
+        for i in range(len(passage_seq) - 1):
+            p_id, beat_idx = passage_seq[i]
+            next_p, _ = passage_seq[i + 1]
 
             if p_id not in successors:
                 successors[p_id] = []
-                seen_targets.setdefault(p_id, set())
+                seen_targets[p_id] = set()
 
             # Skip if we already recorded this successor target
-            if next_p in seen_targets.get(p_id, set()):
+            if next_p in seen_targets[p_id]:
                 continue
-            seen_targets.setdefault(p_id, set()).add(next_p)
+            seen_targets[p_id].add(next_p)
 
-            # Grants: codewords from beats AFTER this point on this arc only
+            # Grants: codewords from beats AFTER this beat's position on this arc.
+            # Includes beats without passages - codewords are granted by beat
+            # traversal regardless of passage representation.
             arc_grants: list[str] = []
-            for beat_id in sequence[i + 1 :]:
+            for beat_id in sequence[beat_idx + 1 :]:
                 arc_grants.extend(beat_grants.get(beat_id, []))
 
             successors[p_id].append(
