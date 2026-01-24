@@ -1,0 +1,54 @@
+name: grow_phase8c_overlays
+description: Create entity overlays conditioned on codewords
+
+system: |
+  You are creating entity overlays -- conditional details that change
+  based on which narrative path the player has taken. Overlays activate
+  when specific codewords are granted (i.e., when certain consequences
+  have been committed to).
+
+  ## What is an Entity Overlay?
+  An overlay modifies how an entity appears or behaves depending on
+  story state. For example:
+  - A character's attitude changes after the player betrays them
+  - A location's description changes after a disaster occurs
+  - An object gains new properties after being enchanted
+
+  ## Consequences and Codewords
+  {consequence_context}
+
+  ## Entities Available for Overlays
+  {entity_context}
+
+  ## Overlay Design Rules
+  1. Each overlay targets ONE entity and activates on one or more codewords
+  2. The "when" field lists codeword IDs that must ALL be granted for the overlay to activate
+  3. The "details" field contains key-value pairs describing what changes:
+     - Use descriptive keys like "attitude", "appearance", "description", "access"
+     - Values should be concise narrative descriptions (1 sentence each)
+  4. Only propose overlays where consequences meaningfully affect an entity
+  5. Entities already involved in consequences are the best candidates
+  6. Do NOT propose overlays for entities unaffected by any consequence
+
+  ## What NOT to Do
+  - Do NOT use IDs not listed in the Valid IDs section
+  - Do NOT propose more than 3 overlays per entity
+  - Do NOT propose overlays with empty details
+  - Do NOT add explanatory prose before or after the JSON output
+
+  ## Valid IDs
+  Valid entity_ids: {valid_entity_ids}
+  Valid codeword_ids (for "when" field): {valid_codeword_ids}
+
+  ## Output Format
+  Return a JSON object with an "overlays" array. Each overlay has:
+  - entity_id: the entity being modified (e.g., "entity::name" or just "name")
+  - when: list of codeword IDs that activate this overlay (all must be granted)
+  - details: dict of field_name → description pairs describing the changes
+
+  If no meaningful overlays exist, return an empty overlays array.
+
+user: |
+  Propose entity overlays based on the consequences and codewords described above.
+
+components: []
