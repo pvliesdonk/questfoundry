@@ -2,11 +2,9 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Literal
+from pathlib import Path
+from typing import Literal
 from unittest.mock import AsyncMock, MagicMock
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 import pytest
 
@@ -1767,6 +1765,134 @@ class TestGrowErrorFeedback:
         assert "overlays.1.entity_id" in result
         assert "Validation errors in your response:" in result
         assert "Required fields:" in result
+
+
+class TestGrowLLMCallTokens:
+    @pytest.mark.asyncio
+    async def test_tokens_extracted_from_result(self) -> None:
+        """_grow_llm_call passes result through _extract_tokens and returns total."""
+        from unittest.mock import patch
+
+        from pydantic import BaseModel
+
+        class SimpleOutput(BaseModel):
+            value: str
+
+        output_instance = SimpleOutput(value="test")
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=output_instance)
+
+        stage = GrowStage()
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.grow.with_structured_output",
+                return_value=mock_structured,
+            ),
+            patch(
+                "questfoundry.pipeline.stages.grow._extract_tokens",
+                return_value=150,
+            ),
+            patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
+        ):
+            mock_path.return_value = Path(__file__).parents[2] / "prompts"
+            result, llm_calls, tokens = await stage._grow_llm_call(
+                MagicMock(),
+                "grow_phase2_agnostic",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                SimpleOutput,
+            )
+
+        assert result.value == "test"
+        assert llm_calls == 1
+        assert tokens == 150
+
+    @pytest.mark.asyncio
+    async def test_tokens_zero_when_no_metadata(self) -> None:
+        """_grow_llm_call returns 0 tokens when _extract_tokens finds nothing."""
+        from unittest.mock import patch
+
+        from pydantic import BaseModel
+
+        class SimpleOutput(BaseModel):
+            value: str
+
+        output_instance = SimpleOutput(value="test")
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=output_instance)
+
+        stage = GrowStage()
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.grow.with_structured_output",
+                return_value=mock_structured,
+            ),
+            patch(
+                "questfoundry.pipeline.stages.grow._extract_tokens",
+                return_value=0,
+            ),
+            patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
+        ):
+            mock_path.return_value = Path(__file__).parents[2] / "prompts"
+            result, llm_calls, tokens = await stage._grow_llm_call(
+                MagicMock(),
+                "grow_phase2_agnostic",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                SimpleOutput,
+            )
+
+        assert result.value == "test"
+        assert llm_calls == 1
+        assert tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_tokens_accumulate_across_retries(self) -> None:
+        """_grow_llm_call accumulates tokens across successful attempts."""
+        from unittest.mock import patch
+
+        from pydantic import BaseModel
+
+        class SimpleOutput(BaseModel):
+            value: str
+
+        # First call returns a dict (not Pydantic instance), triggering model_validate
+        # which will fail and cause a retry. Second call returns valid output.
+        bad_result = {"wrong_field": "bad"}
+        good_result = SimpleOutput(value="ok")
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(side_effect=[bad_result, good_result])
+
+        # First call extracts 100 tokens, second extracts 120
+        extract_tokens_calls = iter([100, 120])
+
+        stage = GrowStage()
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.grow.with_structured_output",
+                return_value=mock_structured,
+            ),
+            patch(
+                "questfoundry.pipeline.stages.grow._extract_tokens",
+                side_effect=extract_tokens_calls,
+            ),
+            patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
+        ):
+            mock_path.return_value = Path(__file__).parents[2] / "prompts"
+            result, llm_calls, tokens = await stage._grow_llm_call(
+                MagicMock(),
+                "grow_phase2_agnostic",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                SimpleOutput,
+            )
+
+        assert result.value == "ok"
+        assert llm_calls == 2
+        assert tokens == 220  # 100 + 120
 
 
 class TestPhase8cErrorHandling:

@@ -26,11 +26,13 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
+from questfoundry.agents.serialize import _extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
 from questfoundry.observability.logging import get_logger
+from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
 from questfoundry.providers.structured_output import with_structured_output
 
@@ -127,6 +129,7 @@ class GrowStage:
             (self._phase_11_prune, "prune"),
         ]
 
+    @traceable(name="GROW Stage", run_type="chain", tags=["stage:grow"])
     async def execute(
         self,
         model: BaseChatModel,
@@ -169,7 +172,7 @@ class GrowStage:
             **kwargs: Additional keyword arguments (ignored).
 
         Returns:
-            Tuple of (GrowResult dict, llm_calls=0, tokens_used=0).
+            Tuple of (GrowResult dict, total_llm_calls, total_tokens).
 
         Raises:
             GrowStageError: If project_path is not provided.
@@ -259,6 +262,7 @@ class GrowStage:
     # LLM helper
     # -------------------------------------------------------------------------
 
+    @traceable(name="GROW LLM Call", run_type="llm", tags=["stage:grow"])
     async def _grow_llm_call(
         self,
         model: BaseChatModel,
@@ -311,6 +315,7 @@ class GrowStage:
         )
 
         llm_calls = 0
+        total_tokens = 0
         base_messages = list(messages)  # Preserve original for retry resets
 
         for attempt in range(max_retries):
@@ -324,16 +329,17 @@ class GrowStage:
             try:
                 result = await structured_model.ainvoke(messages, config=config)
                 llm_calls += 1
+                total_tokens += _extract_tokens(result)
 
                 # with_structured_output returns validated Pydantic instance directly.
                 # Defensive fallback for providers that return dicts instead.
                 if isinstance(result, output_schema):
                     log.debug("grow_llm_validation_pass", template=template_name)
-                    return result, llm_calls, 0
+                    return result, llm_calls, total_tokens
 
                 validated = output_schema.model_validate(result)
                 log.debug("grow_llm_validation_pass", template=template_name)
-                return validated, llm_calls, 0
+                return validated, llm_calls, total_tokens
 
             except (ValidationError, TypeError) as e:
                 log.warning(
