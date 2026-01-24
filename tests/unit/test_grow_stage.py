@@ -58,7 +58,7 @@ class TestGrowStageExecute:
         assert tokens == 0
         # All phases run to completion (empty graph = no work to do)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 13
+        assert len(phases) == 14
         for phase in phases:
             assert phase["status"] == "completed"
 
@@ -99,10 +99,10 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_thirteen_phases(self) -> None:
+    def test_phase_order_returns_fourteen_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 13
+        assert len(phases) == 14
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -120,6 +120,7 @@ class TestGrowStagePhaseOrder:
             "passages",
             "codewords",
             "overlays",
+            "choices",
             "prune",
         ]
 
@@ -1122,3 +1123,281 @@ class TestPhase8cOverlays:
         entity_data = graph.get_node("entity::mentor")
         assert entity_data is not None
         assert len(entity_data["overlays"]) == 1
+
+
+class TestPhase9Choices:
+    @pytest.mark.asyncio
+    async def test_phase_9_single_successor_creates_continue_edges(self) -> None:
+        """Phase 9 creates implicit 'continue' choice edges for single-successor passages."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        # Create a simple linear arc: a → b → c
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Middle"})
+        graph.create_node("beat::c", {"type": "beat", "raw_id": "c", "summary": "End"})
+        graph.add_edge("requires", "beat::b", "beat::a")
+        graph.add_edge("requires", "beat::c", "beat::b")
+
+        # Create arc with sequence
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a", "beat::b", "beat::c"],
+            },
+        )
+        graph.add_edge("arc_contains", "arc::spine", "beat::a")
+        graph.add_edge("arc_contains", "arc::spine", "beat::b")
+        graph.add_edge("arc_contains", "arc::spine", "beat::c")
+
+        # Create passages
+        for bid in ["a", "b", "c"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}", "summary": bid},
+            )
+            graph.add_edge("passage_from", f"passage::{bid}", f"beat::{bid}")
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+        result = await stage._phase_9_choices(graph, mock_model)
+
+        assert result.status == "completed"
+        assert result.llm_calls == 0  # No LLM needed for single-successor
+
+        # Should have 2 choice nodes (a→b, b→c)
+        choice_nodes = graph.get_nodes_by_type("choice")
+        assert len(choice_nodes) == 2
+
+        # All labels should be "continue"
+        for _cid, cdata in choice_nodes.items():
+            assert cdata["label"] == "continue"
+
+        # Verify choice edges exist
+        choice_from_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_from")
+        choice_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_to")
+        assert len(choice_from_edges) == 2
+        assert len(choice_to_edges) == 2
+
+    @pytest.mark.asyncio
+    async def test_phase_9_multi_successor_calls_llm(self) -> None:
+        """Phase 9 calls LLM for divergence points with multiple successors."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import ChoiceLabel, Phase9Output
+
+        graph = Graph.empty()
+        # Create beats for diverging arcs: a → b (spine), a → c (branch)
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Opening"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Trust mentor"})
+        graph.create_node("beat::c", {"type": "beat", "raw_id": "c", "summary": "Reject mentor"})
+
+        # Two arcs diverging at 'a'
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1_canon"],
+                "sequence": ["beat::a", "beat::b"],
+            },
+        )
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "arc_type": "branch",
+                "threads": ["t1_alt"],
+                "sequence": ["beat::a", "beat::c"],
+            },
+        )
+
+        # Create passages
+        for bid in ["a", "b", "c"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}", "summary": bid},
+            )
+            graph.add_edge("passage_from", f"passage::{bid}", f"beat::{bid}")
+
+        stage = GrowStage()
+
+        # Mock LLM returns diegetic labels
+        phase9_output = Phase9Output(
+            labels=[
+                ChoiceLabel(
+                    from_passage="passage::a",
+                    to_passage="passage::b",
+                    label="Trust the mentor's guidance",
+                ),
+                ChoiceLabel(
+                    from_passage="passage::a",
+                    to_passage="passage::c",
+                    label="Reject the offered help",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase9_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_9_choices(graph, mock_model)
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert "1 divergence points" in result.detail
+
+        # Should have 2 choice nodes at the divergence
+        choice_nodes = graph.get_nodes_by_type("choice")
+        assert len(choice_nodes) == 2
+
+        # Verify labels are from LLM output (not "continue")
+        labels = sorted(cdata["label"] for cdata in choice_nodes.values())
+        assert "Reject the offered help" in labels
+        assert "Trust the mentor's guidance" in labels
+
+    @pytest.mark.asyncio
+    async def test_phase_9_no_passages(self) -> None:
+        """Phase 9 returns early when no passages exist."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        result = await stage._phase_9_choices(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "No passages" in result.detail
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_phase_9_no_successors(self) -> None:
+        """Phase 9 returns early when passages have no successors."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        # Create passage but no arcs (no sequence to derive successors from)
+        graph.create_node(
+            "passage::lonely",
+            {"type": "passage", "raw_id": "lonely", "from_beat": "beat::x", "summary": "Alone"},
+        )
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        result = await stage._phase_9_choices(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "No passage successors" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_9_fallback_label_for_missing_llm_labels(self) -> None:
+        """Phase 9 uses fallback label when LLM doesn't provide one for a successor."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import Phase9Output
+
+        graph = Graph.empty()
+        # Create diverging structure
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Fork"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Left"})
+        graph.create_node("beat::c", {"type": "beat", "raw_id": "c", "summary": "Right"})
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a", "beat::b"],
+            },
+        )
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "arc_type": "branch",
+                "threads": ["t2"],
+                "sequence": ["beat::a", "beat::c"],
+            },
+        )
+
+        for bid in ["a", "b", "c"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}", "summary": bid},
+            )
+
+        stage = GrowStage()
+
+        # LLM returns empty labels
+        phase9_output = Phase9Output(labels=[])
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase9_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_9_choices(graph, mock_model)
+
+        assert result.status == "completed"
+
+        # Both choices should use fallback label
+        choice_nodes = graph.get_nodes_by_type("choice")
+        assert len(choice_nodes) == 2
+        for cdata in choice_nodes.values():
+            assert cdata["label"] == "choose this path"
+
+    @pytest.mark.asyncio
+    async def test_phase_9_grants_codewords_on_choice(self) -> None:
+        """Phase 9 attaches grants from arc beats to choice nodes."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Commit"})
+        graph.add_edge("requires", "beat::b", "beat::a")
+
+        # beat::b grants a codeword
+        graph.create_node(
+            "codeword::cw1",
+            {"type": "codeword", "raw_id": "cw1", "tracks": "consequence::c1"},
+        )
+        graph.add_edge("grants", "beat::b", "codeword::cw1")
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1"],
+                "sequence": ["beat::a", "beat::b"],
+            },
+        )
+
+        for bid in ["a", "b"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}", "summary": bid},
+            )
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        result = await stage._phase_9_choices(graph, mock_model)
+
+        assert result.status == "completed"
+
+        choice_nodes = graph.get_nodes_by_type("choice")
+        assert len(choice_nodes) == 1
+        choice_data = next(iter(choice_nodes.values()))
+        assert "codeword::cw1" in choice_data["grants"]
