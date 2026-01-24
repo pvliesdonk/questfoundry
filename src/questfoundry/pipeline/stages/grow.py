@@ -99,6 +99,8 @@ class GrowStage:
         self.gate = gate or AutoApprovePhaseGate()
         self._callbacks: list[BaseCallbackHandler] | None = None
         self._provider_name: str | None = None
+        self._serialize_model: BaseChatModel | None = None
+        self._serialize_provider_name: str | None = None
 
     # Type for async phase functions: (Graph, BaseChatModel) -> GrowPhaseResult
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[GrowPhaseResult]]
@@ -144,9 +146,9 @@ class GrowStage:
         project_path: Path | None = None,
         callbacks: list[BaseCallbackHandler] | None = None,
         summarize_model: BaseChatModel | None = None,  # noqa: ARG002
-        serialize_model: BaseChatModel | None = None,  # noqa: ARG002
+        serialize_model: BaseChatModel | None = None,
         summarize_provider_name: str | None = None,  # noqa: ARG002
-        serialize_provider_name: str | None = None,  # noqa: ARG002
+        serialize_provider_name: str | None = None,
         **kwargs: Any,  # noqa: ARG002
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the GROW stage.
@@ -166,9 +168,9 @@ class GrowStage:
             project_path: Override for project path.
             callbacks: LangChain callback handlers for logging LLM calls.
             summarize_model: Summarize model (unused).
-            serialize_model: Serialize model (unused).
+            serialize_model: Model for structured output (falls back to model).
             summarize_provider_name: Summarize provider name (unused).
-            serialize_provider_name: Serialize provider name (unused).
+            serialize_provider_name: Provider name for structured output strategy.
             **kwargs: Additional keyword arguments (ignored).
 
         Returns:
@@ -187,6 +189,8 @@ class GrowStage:
 
         self._callbacks = callbacks
         self._provider_name = provider_name
+        self._serialize_model = serialize_model
+        self._serialize_provider_name = serialize_provider_name
         log.info("stage_start", stage="grow")
         graph = Graph.load(resolved_path)
         phase_results: list[GrowPhaseResult] = []
@@ -299,8 +303,10 @@ class GrowStage:
         system_text = template.system.format(**context) if context else template.system
         user_text = template.user.format(**context) if template.user else None
 
+        effective_model = self._serialize_model or model
+        effective_provider = self._serialize_provider_name or self._provider_name
         structured_model = with_structured_output(
-            model, output_schema, provider_name=self._provider_name
+            effective_model, output_schema, provider_name=effective_provider
         )
 
         messages: list[SystemMessage | HumanMessage] = [SystemMessage(content=system_text)]
