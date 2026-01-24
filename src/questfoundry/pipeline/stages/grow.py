@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 from langchain_core.messages import HumanMessage, SystemMessage
 from pydantic import BaseModel, ValidationError
 
-from questfoundry.agents.serialize import _extract_tokens
+from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
@@ -329,15 +329,15 @@ class GrowStage:
             try:
                 result = await structured_model.ainvoke(messages, config=config)
                 llm_calls += 1
-                total_tokens += _extract_tokens(result)
+                total_tokens += extract_tokens(result)
 
                 # with_structured_output returns validated Pydantic instance directly.
                 # Defensive fallback for providers that return dicts instead.
-                if isinstance(result, output_schema):
-                    log.debug("grow_llm_validation_pass", template=template_name)
-                    return result, llm_calls, total_tokens
-
-                validated = output_schema.model_validate(result)
+                validated = (
+                    result
+                    if isinstance(result, output_schema)
+                    else output_schema.model_validate(result)
+                )
                 log.debug("grow_llm_validation_pass", template=template_name)
                 return validated, llm_calls, total_tokens
 

@@ -1770,7 +1770,7 @@ class TestGrowErrorFeedback:
 class TestGrowLLMCallTokens:
     @pytest.mark.asyncio
     async def test_tokens_extracted_from_result(self) -> None:
-        """_grow_llm_call passes result through _extract_tokens and returns total."""
+        """_grow_llm_call passes result through extract_tokens and returns total."""
         from unittest.mock import patch
 
         from pydantic import BaseModel
@@ -1791,7 +1791,7 @@ class TestGrowLLMCallTokens:
                 return_value=mock_structured,
             ),
             patch(
-                "questfoundry.pipeline.stages.grow._extract_tokens",
+                "questfoundry.pipeline.stages.grow.extract_tokens",
                 return_value=150,
             ),
             patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
@@ -1810,7 +1810,7 @@ class TestGrowLLMCallTokens:
 
     @pytest.mark.asyncio
     async def test_tokens_zero_when_no_metadata(self) -> None:
-        """_grow_llm_call returns 0 tokens when _extract_tokens finds nothing."""
+        """_grow_llm_call returns 0 tokens when extract_tokens finds nothing."""
         from unittest.mock import patch
 
         from pydantic import BaseModel
@@ -1831,7 +1831,7 @@ class TestGrowLLMCallTokens:
                 return_value=mock_structured,
             ),
             patch(
-                "questfoundry.pipeline.stages.grow._extract_tokens",
+                "questfoundry.pipeline.stages.grow.extract_tokens",
                 return_value=0,
             ),
             patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,
@@ -1877,7 +1877,7 @@ class TestGrowLLMCallTokens:
                 return_value=mock_structured,
             ),
             patch(
-                "questfoundry.pipeline.stages.grow._extract_tokens",
+                "questfoundry.pipeline.stages.grow.extract_tokens",
                 side_effect=extract_tokens_calls,
             ),
             patch("questfoundry.pipeline.stages.grow._get_prompts_path") as mock_path,

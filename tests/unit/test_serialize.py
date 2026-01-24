@@ -11,8 +11,8 @@ from questfoundry.agents.prompts import get_serialize_prompt
 from questfoundry.agents.serialize import (
     SerializationError,
     _build_error_feedback,
-    _extract_tokens,
     _format_validation_errors,
+    extract_tokens,
     serialize_to_artifact,
 )
 from questfoundry.providers.structured_output import StructuredOutputStrategy
@@ -139,15 +139,15 @@ class TestSerializeToArtifact:
 
     @pytest.mark.asyncio
     async def test_serialize_extracts_tokens_from_response(self) -> None:
-        """serialize_to_artifact should call _extract_tokens on response."""
+        """serialize_to_artifact should call extract_tokens on response."""
         mock_model = MagicMock()
         mock_model.with_structured_output.return_value.ainvoke = AsyncMock(
             return_value={"title": "Test", "count": 5}
         )
 
-        # Patch _extract_tokens to return a known value
+        # Patch extract_tokens to return a known value
         with patch(
-            "questfoundry.agents.serialize._extract_tokens", return_value=150
+            "questfoundry.agents.serialize.extract_tokens", return_value=150
         ) as mock_extract:
             _artifact, tokens = await serialize_to_artifact(
                 mock_model,
@@ -171,7 +171,7 @@ class TestSerializeToArtifact:
         mock_model.with_structured_output.return_value.ainvoke = mock_invoke
 
         # Return 100 tokens per call
-        with patch("questfoundry.agents.serialize._extract_tokens", return_value=100):
+        with patch("questfoundry.agents.serialize.extract_tokens", return_value=100):
             _artifact, tokens = await serialize_to_artifact(
                 mock_model,
                 "A test brief",
@@ -280,47 +280,47 @@ class TestSerializeToArtifact:
 class TestHelperFunctions:
     """Test helper functions."""
 
-    def test_extract_tokens_from_usage_metadata_attribute(self) -> None:
-        """_extract_tokens should extract from usage_metadata attribute (Ollama)."""
+    def testextract_tokens_from_usage_metadata_attribute(self) -> None:
+        """extract_tokens should extract from usage_metadata attribute (Ollama)."""
         mock_result = MagicMock()
         mock_result.usage_metadata = {"total_tokens": 200}
 
-        assert _extract_tokens(mock_result) == 200
+        assert extract_tokens(mock_result) == 200
 
-    def test_extract_tokens_from_response_metadata_token_usage(self) -> None:
-        """_extract_tokens should extract from response_metadata (OpenAI)."""
+    def testextract_tokens_from_response_metadata_token_usage(self) -> None:
+        """extract_tokens should extract from response_metadata (OpenAI)."""
         mock_result = MagicMock(spec=["response_metadata"])
         mock_result.response_metadata = {"token_usage": {"total_tokens": 100}}
 
-        assert _extract_tokens(mock_result) == 100
+        assert extract_tokens(mock_result) == 100
 
-    def test_extract_tokens_prefers_usage_metadata_over_response_metadata(self) -> None:
-        """_extract_tokens should prefer usage_metadata attribute."""
+    def testextract_tokens_prefers_usage_metadata_over_response_metadata(self) -> None:
+        """extract_tokens should prefer usage_metadata attribute."""
         mock_result = MagicMock()
         mock_result.usage_metadata = {"total_tokens": 150}
         mock_result.response_metadata = {"token_usage": {"total_tokens": 200}}
 
-        assert _extract_tokens(mock_result) == 150  # From usage_metadata
+        assert extract_tokens(mock_result) == 150  # From usage_metadata
 
-    def test_extract_tokens_returns_zero_when_no_metadata(self) -> None:
-        """_extract_tokens should return 0 when no metadata."""
+    def testextract_tokens_returns_zero_when_no_metadata(self) -> None:
+        """extract_tokens should return 0 when no metadata."""
         mock_result = MagicMock(spec=[])  # No attributes
 
-        assert _extract_tokens(mock_result) == 0
+        assert extract_tokens(mock_result) == 0
 
-    def test_extract_tokens_handles_none_total_tokens_in_usage_metadata(self) -> None:
-        """_extract_tokens should handle None total_tokens in usage_metadata."""
+    def testextract_tokens_handles_none_total_tokens_in_usage_metadata(self) -> None:
+        """extract_tokens should handle None total_tokens in usage_metadata."""
         mock_result = MagicMock(spec=["usage_metadata"])
         mock_result.usage_metadata = {"total_tokens": None}
 
-        assert _extract_tokens(mock_result) == 0
+        assert extract_tokens(mock_result) == 0
 
-    def test_extract_tokens_handles_none_total_tokens_in_response_metadata(self) -> None:
-        """_extract_tokens should handle None total_tokens in response_metadata."""
+    def testextract_tokens_handles_none_total_tokens_in_response_metadata(self) -> None:
+        """extract_tokens should handle None total_tokens in response_metadata."""
         mock_result = MagicMock(spec=["response_metadata"])
         mock_result.response_metadata = {"token_usage": {"total_tokens": None}}
 
-        assert _extract_tokens(mock_result) == 0
+        assert extract_tokens(mock_result) == 0
 
     def test_format_validation_errors_with_location(self) -> None:
         """_format_validation_errors should include field location."""
