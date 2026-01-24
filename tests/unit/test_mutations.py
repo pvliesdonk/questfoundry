@@ -892,7 +892,14 @@ class TestSeedCompletenessValidation:
             "tensions": [
                 {"tension_id": "trust", "explored": ["yes"], "implicit": []},
             ],
-            "threads": [],
+            "threads": [
+                {
+                    "thread_id": "trust_arc",
+                    "name": "Trust Arc",
+                    "tension_id": "trust",
+                    "alternative_id": "yes",
+                }
+            ],
             "initial_beats": [],
         }
 
@@ -1017,6 +1024,105 @@ class TestSeedCompletenessValidation:
         # Should find 1 missing entity decision with "faction" in message
         assert len(errors) == 1
         assert "Missing decision for faction 'the_family'" in errors[0].issue
+
+    def test_tension_without_thread_detected(self) -> None:
+        """Detects when a tension has no corresponding thread."""
+        graph = Graph.empty()
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "trust", "explored": ["yes"], "implicit": []},
+                {"tension_id": "loyalty", "explored": [], "implicit": []},
+            ],
+            "threads": [
+                {
+                    "thread_id": "trust_arc",
+                    "name": "Trust Arc",
+                    "tension_id": "trust",
+                    "alternative_id": "yes",
+                }
+                # Missing: no thread for loyalty
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        thread_errors = [e for e in errors if "has no thread" in e.issue]
+        assert len(thread_errors) == 1
+        assert "loyalty" in thread_errors[0].issue
+        assert thread_errors[0].category == SeedErrorCategory.COMPLETENESS
+
+    def test_all_tensions_with_threads_valid(self) -> None:
+        """All tensions having threads passes thread completeness check."""
+        graph = Graph.empty()
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.create_node(
+            "tension::loyalty::alt::stand", {"type": "alternative", "raw_id": "stand"}
+        )
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.add_edge("has_alternative", "tension::loyalty", "tension::loyalty::alt::stand")
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "trust", "explored": ["yes"], "implicit": []},
+                {"tension_id": "loyalty", "explored": ["stand"], "implicit": []},
+            ],
+            "threads": [
+                {
+                    "thread_id": "trust_arc",
+                    "name": "Trust Arc",
+                    "tension_id": "trust",
+                    "alternative_id": "yes",
+                },
+                {
+                    "thread_id": "loyalty_arc",
+                    "name": "Loyalty Arc",
+                    "tension_id": "loyalty",
+                    "alternative_id": "stand",
+                },
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        thread_errors = [e for e in errors if "has no thread" in e.issue]
+        assert thread_errors == []
+
+    def test_scoped_tension_id_in_thread_satisfies_completeness(self) -> None:
+        """Scoped tension_id (tension::trust) in thread satisfies completeness."""
+        graph = Graph.empty()
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+
+        output = {
+            "entities": [],
+            "tensions": [{"tension_id": "trust", "explored": ["yes"], "implicit": []}],
+            "threads": [
+                {
+                    "thread_id": "trust_arc",
+                    "name": "Trust Arc",
+                    "tension_id": "tension::trust",  # Scoped
+                    "alternative_id": "yes",
+                }
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        thread_errors = [e for e in errors if "has no thread" in e.issue]
+        assert thread_errors == []
 
     def test_empty_brainstorm_valid(self) -> None:
         """Empty BRAINSTORM data (no entities/tensions) is valid."""
@@ -1529,11 +1635,20 @@ class TestScopedIdValidation:
         """Scoped tension IDs (tension::trust) are accepted in tension decisions."""
         graph = Graph.empty()
         graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
 
         output = {
             "entities": [],
-            "tensions": [{"tension_id": "tension::trust", "explored": [], "implicit": []}],
-            "threads": [],
+            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "threads": [
+                {
+                    "thread_id": "trust_arc",
+                    "name": "Trust Arc",
+                    "tension_id": "tension::trust",
+                    "alternative_id": "yes",
+                }
+            ],
             "initial_beats": [],
         }
 
@@ -2116,6 +2231,35 @@ class TestFormatSemanticErrorsAsContent:
         assert "Missing items" in result
         assert "hollow_key" in result
         assert "ancient_scroll" in result
+
+    def test_formats_thread_completeness_errors(self) -> None:
+        """Should format thread completeness errors in Missing threads section."""
+        from questfoundry.graph.mutations import format_semantic_errors_as_content
+
+        errors = [
+            SeedValidationError(
+                field_path="threads",
+                issue="Tension 'loyalty' has no thread. Create at least one thread exploring this tension.",
+                available=[],
+                provided="",
+                category=SeedErrorCategory.COMPLETENESS,
+            ),
+            SeedValidationError(
+                field_path="threads",
+                issue="Tension 'trust' has no thread. Create at least one thread exploring this tension.",
+                available=[],
+                provided="",
+                category=SeedErrorCategory.COMPLETENESS,
+            ),
+        ]
+
+        result = format_semantic_errors_as_content(errors)
+
+        assert "Missing threads" in result
+        assert "loyalty" in result
+        assert "trust" in result
+        # Should NOT appear in decision-missing section
+        assert "Missing items" not in result
 
     def test_formats_semantic_errors_with_suggestions(self) -> None:
         """Should format semantic errors with similarity-based suggestions."""
