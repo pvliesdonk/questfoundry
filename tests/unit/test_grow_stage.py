@@ -1519,3 +1519,119 @@ class TestPhase9Choices:
         assert len(choice_nodes) == 1
         choice_data = next(iter(choice_nodes.values()))
         assert "codeword::cw1" in choice_data["grants"]
+
+
+class TestGrowErrorFeedback:
+    def test_build_error_feedback_validation_error(self) -> None:
+        """_build_grow_error_feedback formats ValidationError with field paths."""
+        from pydantic import BaseModel, ValidationError
+
+        class TestSchema(BaseModel):
+            name: str
+            count: int
+
+        stage = GrowStage()
+        try:
+            TestSchema.model_validate({"name": 123, "count": "not_int"})
+        except ValidationError as e:
+            result = stage._build_grow_error_feedback(e, TestSchema)
+
+        assert "Validation errors in your response:" in result
+        assert "name:" in result or "count:" in result
+        assert "Required fields:" in result
+        assert "Valid IDs" in result
+
+    def test_build_error_feedback_type_error(self) -> None:
+        """_build_grow_error_feedback formats TypeError as generic message."""
+        from pydantic import BaseModel
+
+        class TestSchema(BaseModel):
+            name: str
+
+        stage = GrowStage()
+        error = TypeError("unexpected keyword argument")
+        result = stage._build_grow_error_feedback(error, TestSchema)
+
+        assert "Error: unexpected keyword argument" in result
+        assert "valid JSON" in result
+
+
+class TestPhase8cErrorHandling:
+    @pytest.mark.asyncio
+    async def test_phase_8c_returns_failed_on_grow_error(self) -> None:
+        """Phase 8c returns failed GrowPhaseResult when LLM call fails."""
+        from unittest.mock import patch
+
+        from tests.fixtures.grow_fixtures import make_single_tension_graph
+
+        graph = make_single_tension_graph()
+        # Add codeword and consequence nodes so we pass the early guard
+        graph.create_node(
+            "consequence::trust_gain",
+            {"type": "consequence", "description": "Trust is gained"},
+        )
+        graph.create_node(
+            "codeword::cw_trust",
+            {"type": "codeword", "tracks": "consequence::trust_gain", "codeword_type": "granted"},
+        )
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        with patch.object(
+            stage, "_grow_llm_call", side_effect=GrowStageError("LLM failed after 3 attempts")
+        ):
+            result = await stage._phase_8c_overlays(graph, mock_model)
+
+        assert result.status == "failed"
+        assert result.phase == "overlays"
+        assert "LLM failed" in result.detail
+
+
+class TestPhase9ErrorHandling:
+    @pytest.mark.asyncio
+    async def test_phase_9_returns_failed_on_grow_error(self) -> None:
+        """Phase 9 returns failed GrowPhaseResult when LLM call fails."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        # Build a graph with multi-successor passages
+        graph.create_node(
+            "arc::spine",
+            {"type": "arc", "arc_type": "spine", "sequence": ["beat::a", "beat::b", "beat::c"]},
+        )
+        graph.create_node(
+            "arc::alt", {"type": "arc", "arc_type": "branch", "sequence": ["beat::a", "beat::d"]}
+        )
+        graph.create_node(
+            "passage::a", {"type": "passage", "from_beat": "beat::a", "summary": "Start"}
+        )
+        graph.create_node(
+            "passage::b", {"type": "passage", "from_beat": "beat::b", "summary": "Path B"}
+        )
+        graph.create_node(
+            "passage::c", {"type": "passage", "from_beat": "beat::c", "summary": "Path C"}
+        )
+        graph.create_node(
+            "passage::d", {"type": "passage", "from_beat": "beat::d", "summary": "Path D"}
+        )
+        # Arc contains edges
+        graph.add_edge("arc_contains", "arc::spine", "passage::a")
+        graph.add_edge("arc_contains", "arc::spine", "passage::b")
+        graph.add_edge("arc_contains", "arc::spine", "passage::c")
+        graph.add_edge("arc_contains", "arc::alt", "passage::a")
+        graph.add_edge("arc_contains", "arc::alt", "passage::d")
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        with patch.object(
+            stage, "_grow_llm_call", side_effect=GrowStageError("LLM failed after 3 attempts")
+        ):
+            result = await stage._phase_9_choices(graph, mock_model)
+
+        assert result.status == "failed"
+        assert result.phase == "choices"
+        assert "LLM failed" in result.detail
