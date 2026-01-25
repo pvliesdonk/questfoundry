@@ -355,7 +355,7 @@ def format_retained_entity_ids(
         entity_id = decision.get("entity_id", "")
         disposition = decision.get("disposition", "retained")
         # Handle both scoped and unscoped IDs
-        raw_id = entity_id.split("::", 1)[1] if "::" in entity_id else entity_id
+        _, raw_id = parse_scoped_id(entity_id)
         if disposition == "cut":
             cut_ids.add(raw_id)
 
