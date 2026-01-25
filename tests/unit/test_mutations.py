@@ -28,6 +28,62 @@ from questfoundry.graph.mutations import (
 )
 
 
+def _build_minimal_seed_graph_and_output() -> tuple[Graph, dict[str, Any]]:
+    """Build a minimal graph and output that passes arc count validation.
+
+    Returns graph with 2 tensions (each having 2 alternatives) and output
+    with 4 threads (2 per tension) and 4 beats (1 commits beat per thread).
+    This satisfies the minimum 4-arc requirement for SEED validation.
+    """
+    graph = Graph.empty()
+
+    # Add 2 tensions with both alternatives
+    for i in range(2):
+        tid = f"tension::t{i}"
+        graph.create_node(tid, {"type": "tension", "raw_id": f"t{i}"})
+        for alt in ["a", "b"]:
+            alt_id = f"{tid}::alt::{alt}"
+            graph.create_node(alt_id, {"type": "alternative", "raw_id": alt})
+            graph.add_edge("has_alternative", tid, alt_id)
+
+    output: dict[str, Any] = {
+        "entities": [],
+        "tensions": [
+            {"tension_id": "t0", "explored": ["a", "b"], "implicit": []},
+            {"tension_id": "t1", "explored": ["a", "b"], "implicit": []},
+        ],
+        "threads": [
+            {"thread_id": "thread_0", "tension_id": "t0", "alternative_id": "a"},
+            {"thread_id": "thread_1", "tension_id": "t0", "alternative_id": "b"},
+            {"thread_id": "thread_2", "tension_id": "t1", "alternative_id": "a"},
+            {"thread_id": "thread_3", "tension_id": "t1", "alternative_id": "b"},
+        ],
+        "initial_beats": [
+            {
+                "beat_id": "b0",
+                "threads": ["thread_0"],
+                "tension_impacts": [{"tension_id": "t0", "effect": "commits"}],
+            },
+            {
+                "beat_id": "b1",
+                "threads": ["thread_1"],
+                "tension_impacts": [{"tension_id": "t0", "effect": "commits"}],
+            },
+            {
+                "beat_id": "b2",
+                "threads": ["thread_2"],
+                "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+            },
+            {
+                "beat_id": "b3",
+                "threads": ["thread_3"],
+                "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+            },
+        ],
+    }
+    return graph, output
+
+
 class TestHasMutationHandler:
     """Test the mutation handler check function."""
 
@@ -132,16 +188,55 @@ class TestApplyMutations:
     def test_routes_to_seed(self) -> None:
         """Routes seed stage to apply_seed_mutations."""
         graph = Graph.empty()
-        # Pre-populate with entity from brainstorm (using prefixed ID + raw_id for validation)
+        # Pre-populate with entity from brainstorm
         graph.create_node(
             "entity::char_001",
             {"type": "entity", "raw_id": "char_001", "disposition": "proposed"},
         )
+        # Add 2 tensions with both alternatives (required for minimum arc count)
+        for i in range(2):
+            tid = f"tension::t{i}"
+            graph.create_node(tid, {"type": "tension", "raw_id": f"t{i}"})
+            for alt in ["a", "b"]:
+                alt_id = f"{tid}::alt::{alt}"
+                graph.create_node(alt_id, {"type": "alternative", "raw_id": alt})
+                graph.add_edge("has_alternative", tid, alt_id)
 
         output = {
             "entities": [{"entity_id": "char_001", "disposition": "retained"}],
-            "threads": [],
-            "initial_beats": [],
+            "tensions": [
+                {"tension_id": "t0", "explored": ["a", "b"], "implicit": []},
+                {"tension_id": "t1", "explored": ["a", "b"], "implicit": []},
+            ],
+            "threads": [
+                {"thread_id": "thread_0", "tension_id": "t0", "alternative_id": "a"},
+                {"thread_id": "thread_1", "tension_id": "t0", "alternative_id": "b"},
+                {"thread_id": "thread_2", "tension_id": "t1", "alternative_id": "a"},
+                {"thread_id": "thread_3", "tension_id": "t1", "alternative_id": "b"},
+            ],
+            "initial_beats": [
+                # Minimal beats with commits for each thread
+                {
+                    "beat_id": "b0",
+                    "threads": ["thread_0"],
+                    "tension_impacts": [{"tension_id": "t0", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b1",
+                    "threads": ["thread_1"],
+                    "tension_impacts": [{"tension_id": "t0", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b2",
+                    "threads": ["thread_2"],
+                    "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b3",
+                    "threads": ["thread_3"],
+                    "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+                },
+            ],
         }
 
         apply_mutations(graph, "seed", output)
