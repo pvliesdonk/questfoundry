@@ -762,6 +762,98 @@ class TestSeedMutations:
         assert len(edges) == 1
         assert edges[0]["to"] == "tension::mentor_trust::alt::protector"
 
+    def test_thread_is_canonical_from_alternative(self) -> None:
+        """Thread's is_canonical is set from alternative's is_default_path."""
+        graph = Graph.empty()
+        # Create tension with two alternatives - one canonical, one not
+        graph.create_node(
+            "tension::mentor_trust",
+            {"type": "tension", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
+        )
+        graph.create_node(
+            "tension::mentor_trust::alt::protector",
+            {
+                "type": "alternative",
+                "raw_id": "protector",
+                "description": "Mentor protects",
+                "is_default_path": True,  # This is the canonical path
+            },
+        )
+        graph.create_node(
+            "tension::mentor_trust::alt::manipulator",
+            {
+                "type": "alternative",
+                "raw_id": "manipulator",
+                "description": "Mentor manipulates",
+                "is_default_path": False,  # Branch path
+            },
+        )
+        graph.add_edge(
+            "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::protector"
+        )
+        graph.add_edge(
+            "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::manipulator"
+        )
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {
+                    "tension_id": "mentor_trust",
+                    "explored": ["protector", "manipulator"],
+                    "implicit": [],
+                },
+            ],
+            "threads": [
+                {
+                    "thread_id": "mentor_protects",
+                    "name": "Mentor Protects Arc",
+                    "tension_id": "mentor_trust",
+                    "alternative_id": "protector",  # Canonical
+                    "description": "The mentor genuinely protects",
+                    "consequence_ids": [],
+                },
+                {
+                    "thread_id": "mentor_manipulates",
+                    "name": "Mentor Manipulates Arc",
+                    "tension_id": "mentor_trust",
+                    "alternative_id": "manipulator",  # Non-canonical
+                    "description": "The mentor is manipulating",
+                    "consequence_ids": [],
+                },
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "protects_beat_01",
+                    "summary": "Mentor reveals protection",
+                    "threads": ["mentor_protects"],
+                    "tension_impacts": [
+                        {"tension_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                    ],
+                },
+                {
+                    "beat_id": "manipulates_beat_01",
+                    "summary": "Mentor reveals manipulation",
+                    "threads": ["mentor_manipulates"],
+                    "tension_impacts": [
+                        {"tension_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                    ],
+                },
+            ],
+        }
+
+        apply_seed_mutations(graph, output)
+
+        # Thread from canonical alternative should have is_canonical=True
+        protects_thread = graph.get_node("thread::mentor_protects")
+        assert protects_thread is not None
+        assert protects_thread.get("is_canonical") is True
+
+        # Thread from non-canonical alternative should have is_canonical=False
+        manipulates_thread = graph.get_node("thread::mentor_manipulates")
+        assert manipulates_thread is not None
+        assert manipulates_thread.get("is_canonical") is False
+
     def test_creates_beats(self) -> None:
         """Creates beat nodes from seed output."""
         graph = Graph.empty()
