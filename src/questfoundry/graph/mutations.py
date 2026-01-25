@@ -1211,6 +1211,15 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 full_unexplored_id = f"{prefixed_tension_id}::alt::{unexplored_alt_id}"
                 prefixed_unexplored.append(full_unexplored_id)
 
+        # Look up alternative's is_default_path to determine if thread is canonical (spine)
+        is_canonical = False
+        if prefixed_tension_id and "alternative_id" in thread:
+            alt_local_id = thread["alternative_id"]
+            full_alt_id = f"{prefixed_tension_id}::alt::{alt_local_id}"
+            alt_node = graph.get_node(full_alt_id)
+            if alt_node is not None:
+                is_canonical = alt_node.get("is_default_path", False)
+
         thread_data = {
             "type": "thread",
             "raw_id": raw_id,
@@ -1221,6 +1230,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "thread_importance": thread.get("thread_importance"),
             "description": thread.get("description"),
             "consequence_ids": thread.get("consequence_ids", []),
+            "is_canonical": is_canonical,  # True if exploring default path (for spine arc)
         }
         thread_data = _clean_dict(thread_data)
         graph.create_node(thread_id, thread_data)
