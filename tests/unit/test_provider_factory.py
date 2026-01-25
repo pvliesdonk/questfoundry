@@ -417,7 +417,7 @@ def test_create_model_structured_without_schema() -> None:
 
 
 def test_create_model_structured_explicit_strategy() -> None:
-    """Factory uses explicit strategy over auto-detect."""
+    """Factory ignores explicit strategy (deprecated, uses json_schema for all)."""
     mock_chat = MagicMock()
     mock_structured = MagicMock()
     mock_chat.with_structured_output.return_value = mock_structured
@@ -426,7 +426,7 @@ def test_create_model_structured_explicit_strategy() -> None:
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch("langchain_openai.ChatOpenAI", return_value=mock_chat),
     ):
-        # Force tool strategy on OpenAI (normally would use JSON mode)
+        # Strategy parameter is deprecated and ignored
         result = create_model_for_structured_output(
             "openai",
             model_name="gpt-5-mini",
@@ -436,7 +436,8 @@ def test_create_model_structured_explicit_strategy() -> None:
 
     assert result is mock_structured
     call_args = mock_chat.with_structured_output.call_args
-    assert call_args[1]["method"] == "function_calling"
+    # Always uses json_schema regardless of strategy parameter
+    assert call_args[1]["method"] == "json_schema"
 
 
 def test_create_model_structured_default_model_ollama() -> None:

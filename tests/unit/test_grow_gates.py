@@ -59,8 +59,11 @@ class TestAutoApprovePhaseGate:
 
 
 class TestHasMutationHandlerGrow:
-    def test_grow_is_registered(self) -> None:
-        assert has_mutation_handler("grow") is True
+    def test_grow_not_in_standard_mutation_handler(self) -> None:
+        """GROW has its own mutation logic, not the standard handler."""
+        # See issue #296: GROW manages its own graph mutations during phase execution
+        # rather than using apply_mutations() after stage completion.
+        assert has_mutation_handler("grow") is False
 
     def test_other_stages_still_registered(self) -> None:
         assert has_mutation_handler("dream") is True

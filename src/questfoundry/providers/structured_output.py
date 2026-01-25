@@ -21,6 +21,11 @@ class StructuredOutputStrategy(str, Enum):
         TOOL: Use tool/function calling to force schema adherence.
         JSON_MODE: Use provider's native JSON schema support.
         AUTO: Auto-select based on provider capabilities.
+
+    Note:
+        JSON_MODE is preferred for all providers. Schemas must have all fields
+        marked as required (no default_factory for optional fields) to ensure
+        compatibility with OpenAI's strict JSON schema mode.
     """
 
     TOOL = "tool"
@@ -28,69 +33,31 @@ class StructuredOutputStrategy(str, Enum):
     AUTO = "auto"
 
 
-def get_default_strategy(provider_name: str) -> StructuredOutputStrategy:
-    """Get default structured output strategy for a provider.
-
-    Strategy selection per provider:
-    - OpenAI: TOOL (function_calling) - json_schema strict mode rejects optional fields
-    - Ollama: JSON_MODE (json_schema) - TOOL returns None for complex nested schemas
-    - Anthropic: JSON_MODE (json_schema) - native JSON mode support
-
-    Args:
-        provider_name: Provider name (ollama, openai, anthropic) or full string
-            like "openai/gpt-5".
-
-    Returns:
-        Default strategy for the provider.
-    """
-    provider_lower = provider_name.lower()
-
-    # OpenAI: Use function_calling because json_schema strict mode requires
-    # all properties in 'required', which breaks schemas with optional fields
-    # (e.g., Field(default_factory=dict))
-    if provider_lower.startswith("openai"):
-        return StructuredOutputStrategy.TOOL
-
-    # Ollama: JSON_MODE works better for complex nested schemas
-    # (TOOL strategy returns None for complex schemas like BrainstormOutput)
-    if provider_lower.startswith("ollama"):
-        return StructuredOutputStrategy.JSON_MODE
-
-    # Anthropic and others: JSON_MODE
-    return StructuredOutputStrategy.JSON_MODE
-
-
 def with_structured_output(
     model: BaseChatModel,
     schema: type[T],
-    strategy: StructuredOutputStrategy | None = None,
-    provider_name: str | None = None,
+    strategy: StructuredOutputStrategy | None = None,  # noqa: ARG001
+    provider_name: str | None = None,  # noqa: ARG001
 ) -> Runnable[Any, Any]:
     """Wrap a model with structured output capability.
 
     This function configures a LangChain model to produce structured output
-    according to a Pydantic schema. The strategy determines how the model
-    enforces the schema (tool calling vs JSON mode).
+    according to a Pydantic schema using the provider's native JSON mode.
+
+    All providers use json_schema method. Schemas must have all fields marked
+    as required (use empty values like [] or {} instead of optionality) to
+    ensure compatibility across providers including OpenAI's strict mode.
 
     Args:
         model: Base chat model to configure.
         schema: Pydantic model class for output schema validation.
-        strategy: Output strategy. If None or AUTO, auto-detects from provider_name.
-        provider_name: Provider name for strategy auto-detection.
+        strategy: Deprecated, ignored. Kept for backward compatibility.
+        provider_name: Deprecated, ignored. Kept for backward compatibility.
 
     Returns:
         Model configured for structured output with the specified schema.
-
-    Note:
-        If strategy is AUTO and provider_name is not provided, defaults to TOOL
-        strategy as the safest option.
     """
-    if strategy is None or strategy == StructuredOutputStrategy.AUTO:
-        if not provider_name:
-            # Default to TOOL when strategy is None and no provider specified
-            strategy = StructuredOutputStrategy.TOOL
-        else:
-            strategy = get_default_strategy(provider_name)
-
-    method = "function_calling" if strategy == StructuredOutputStrategy.TOOL else "json_schema"
-    return model.with_structured_output(schema, method=method)
+    # Use json_schema for all providers. This requires schemas to have all
+    # fields marked as required (no default_factory), which ensures
+    # compatibility with OpenAI's strict JSON schema mode.
+    return model.with_structured_output(schema, method="json_schema")

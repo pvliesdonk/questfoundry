@@ -89,17 +89,28 @@ class EntityOverlay(BaseModel):
 # ---------------------------------------------------------------------------
 
 
+class OverlayDetail(BaseModel):
+    """A single key-value detail for an entity overlay.
+
+    Used instead of dict[str, str] for OpenAI JSON schema compatibility.
+    OpenAI strict mode doesn't support additionalProperties with type constraints.
+    """
+
+    key: str = Field(min_length=1, description="The attribute name being modified")
+    value: str = Field(min_length=1, description="The new attribute value")
+
+
 class ThreadAgnosticAssessment(BaseModel):
     """Phase 2: Marks beats that are thread-agnostic for specific tensions."""
 
     beat_id: str = Field(min_length=1)
-    agnostic_for: list[str] = Field(default_factory=list)
+    agnostic_for: list[str]  # Required; use [] if beat is not agnostic
 
 
 class Phase2Output(BaseModel):
     """Wrapper for Phase 2 structured output (thread-agnostic assessment)."""
 
-    assessments: list[ThreadAgnosticAssessment] = Field(default_factory=list)
+    assessments: list[ThreadAgnosticAssessment]  # Required; use [] if no assessments
 
 
 class KnotProposal(BaseModel):
@@ -113,7 +124,7 @@ class KnotProposal(BaseModel):
 class Phase3Output(BaseModel):
     """Wrapper for Phase 3 structured output (knot proposals)."""
 
-    knots: list[KnotProposal] = Field(default_factory=list)
+    knots: list[KnotProposal]  # Required; use [] if no knots
 
 
 class SceneTypeTag(BaseModel):
@@ -126,7 +137,7 @@ class SceneTypeTag(BaseModel):
 class Phase4aOutput(BaseModel):
     """Wrapper for Phase 4a structured output (scene-type tags)."""
 
-    tags: list[SceneTypeTag] = Field(default_factory=list)
+    tags: list[SceneTypeTag]  # Required; use [] if no tags
 
 
 class GapProposal(BaseModel):
@@ -142,7 +153,7 @@ class GapProposal(BaseModel):
 class Phase4bOutput(BaseModel):
     """Wrapper for Phase 4b/4c structured output (gap proposals)."""
 
-    gaps: list[GapProposal] = Field(default_factory=list)
+    gaps: list[GapProposal]  # Required; use [] if no gaps
 
 
 class OverlayProposal(BaseModel):
@@ -150,13 +161,13 @@ class OverlayProposal(BaseModel):
 
     entity_id: str = Field(min_length=1)
     when: list[str] = Field(min_length=1)
-    details: dict[str, str] = Field(default_factory=dict)
+    details: list[OverlayDetail]  # Required; use [] if no additional details
 
 
 class Phase8cOutput(BaseModel):
     """Wrapper for Phase 8c structured output (entity overlay proposals)."""
 
-    overlays: list[OverlayProposal] = Field(default_factory=list)
+    overlays: list[OverlayProposal]  # Required; use [] if no overlays
 
 
 class ChoiceLabel(BaseModel):
@@ -170,7 +181,7 @@ class ChoiceLabel(BaseModel):
 class Phase9Output(BaseModel):
     """Wrapper for Phase 9 structured output (choice labels)."""
 
-    labels: list[ChoiceLabel] = Field(default_factory=list)
+    labels: list[ChoiceLabel]  # Required; use [] if no labels
 
 
 # ---------------------------------------------------------------------------

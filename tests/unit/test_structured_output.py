@@ -8,7 +8,6 @@ from pydantic import BaseModel
 
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
-    get_default_strategy,
     with_structured_output,
 )
 
@@ -18,33 +17,6 @@ class SampleSchema(BaseModel):
 
     name: str
     value: int
-
-
-class TestGetDefaultStrategy:
-    """Test get_default_strategy function."""
-
-    def test_get_default_strategy_ollama(self) -> None:
-        """Should return JSON_MODE strategy for Ollama (better for complex schemas)."""
-        assert get_default_strategy("ollama") == StructuredOutputStrategy.JSON_MODE
-
-    def test_get_default_strategy_openai(self) -> None:
-        """Should return JSON_MODE strategy for OpenAI."""
-        assert get_default_strategy("openai") == StructuredOutputStrategy.JSON_MODE
-
-    def test_get_default_strategy_anthropic(self) -> None:
-        """Should return JSON_MODE strategy for Anthropic."""
-        assert get_default_strategy("anthropic") == StructuredOutputStrategy.JSON_MODE
-
-    def test_get_default_strategy_unknown(self) -> None:
-        """Should return JSON_MODE for unknown providers (TOOL can fail on complex schemas)."""
-        assert get_default_strategy("unknown") == StructuredOutputStrategy.JSON_MODE
-        assert get_default_strategy("custom-provider") == StructuredOutputStrategy.JSON_MODE
-
-    def test_get_default_strategy_case_insensitive(self) -> None:
-        """Should handle uppercase provider names."""
-        assert get_default_strategy("OLLAMA") == StructuredOutputStrategy.JSON_MODE
-        assert get_default_strategy("OpenAI") == StructuredOutputStrategy.JSON_MODE
-        assert get_default_strategy("ANTHROPIC") == StructuredOutputStrategy.JSON_MODE
 
 
 class TestStructuredOutputStrategy:
@@ -64,102 +36,80 @@ class TestStructuredOutputStrategy:
 
 
 class TestWithStructuredOutput:
-    """Test with_structured_output function."""
+    """Test with_structured_output function.
 
-    def test_with_structured_output_tool_strategy(self) -> None:
-        """Should call with_structured_output with function_calling method."""
+    Note: The function now uses json_schema for all providers. The strategy
+    and provider_name parameters are deprecated and ignored for backward
+    compatibility.
+    """
+
+    def test_with_structured_output_uses_json_schema(self) -> None:
+        """Should always use json_schema method for all providers."""
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_model)
 
-        result = with_structured_output(
+        result = with_structured_output(mock_model, SampleSchema)
+
+        mock_model.with_structured_output.assert_called_once_with(
+            SampleSchema,
+            method="json_schema",
+        )
+        assert result is mock_model
+
+    def test_with_structured_output_ignores_tool_strategy(self) -> None:
+        """Should use json_schema even when TOOL strategy is requested.
+
+        Strategy parameter is deprecated and ignored for backward compatibility.
+        """
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_model)
+
+        with_structured_output(
             mock_model,
             SampleSchema,
             strategy=StructuredOutputStrategy.TOOL,
         )
 
-        mock_model.with_structured_output.assert_called_once_with(
-            SampleSchema,
-            method="function_calling",
-        )
-        assert result is mock_model
-
-    def test_with_structured_output_json_mode_strategy(self) -> None:
-        """Should call with_structured_output with json_schema method."""
-        mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_model)
-
-        result = with_structured_output(
-            mock_model,
-            SampleSchema,
-            strategy=StructuredOutputStrategy.JSON_MODE,
-        )
-
+        # Still uses json_schema despite TOOL strategy request
         mock_model.with_structured_output.assert_called_once_with(
             SampleSchema,
             method="json_schema",
         )
-        assert result is mock_model
 
-    def test_with_structured_output_auto_with_provider(self) -> None:
-        """Should auto-select strategy based on provider."""
+    def test_with_structured_output_ignores_provider_name(self) -> None:
+        """Should use json_schema regardless of provider name.
+
+        Provider-specific strategy selection is no longer used. All providers
+        use json_schema with schemas that have all fields required.
+        """
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_model)
 
-        # Test Ollama (JSON_MODE - better for complex schemas)
-        with_structured_output(
-            mock_model,
-            SampleSchema,
-            strategy=StructuredOutputStrategy.AUTO,
-            provider_name="ollama",
-        )
-        mock_model.with_structured_output.assert_called_with(
-            SampleSchema,
-            method="json_schema",
-        )
+        # Test various providers - all should use json_schema
+        for provider in ["ollama", "openai", "anthropic", "unknown"]:
+            mock_model.reset_mock()
+            with_structured_output(
+                mock_model,
+                SampleSchema,
+                provider_name=provider,
+            )
+            mock_model.with_structured_output.assert_called_once_with(
+                SampleSchema,
+                method="json_schema",
+            )
 
-        # Test OpenAI (JSON_MODE)
-        mock_model.reset_mock()
+    def test_with_structured_output_with_auto_strategy(self) -> None:
+        """Should use json_schema with AUTO strategy."""
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_model)
+
         with_structured_output(
             mock_model,
             SampleSchema,
             strategy=StructuredOutputStrategy.AUTO,
             provider_name="openai",
         )
-        mock_model.with_structured_output.assert_called_with(
-            SampleSchema,
-            method="json_schema",
-        )
 
-    def test_with_structured_output_none_strategy_defaults_to_tool(self) -> None:
-        """Should default to TOOL when strategy is None and no provider."""
-        mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_model)
-
-        with_structured_output(
-            mock_model,
-            SampleSchema,
-            strategy=None,
-            provider_name=None,
-        )
-
-        mock_model.with_structured_output.assert_called_once_with(
-            SampleSchema,
-            method="function_calling",
-        )
-
-    def test_with_structured_output_none_strategy_with_provider(self) -> None:
-        """Should auto-detect strategy when strategy is None but provider given."""
-        mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_model)
-
-        with_structured_output(
-            mock_model,
-            SampleSchema,
-            strategy=None,
-            provider_name="anthropic",
-        )
-
-        # Anthropic defaults to JSON_MODE (which uses json_schema method)
         mock_model.with_structured_output.assert_called_once_with(
             SampleSchema,
             method="json_schema",

@@ -16,7 +16,6 @@ from questfoundry.providers.model_info import (
 )
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
-    get_default_strategy,
     with_structured_output,
 )
 
@@ -29,7 +28,6 @@ __all__ = [
     "StructuredOutputStrategy",
     "create_chat_model",
     "create_model_for_structured_output",
-    "get_default_strategy",
     "get_model_info",
     "with_structured_output",
 ]

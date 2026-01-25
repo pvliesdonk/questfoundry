@@ -183,7 +183,8 @@ class TestThreadAgnosticAssessment:
         assert ta.agnostic_for == ["tension_mentor_trust"]
 
     def test_empty_agnostic_for_allowed(self) -> None:
-        ta = ThreadAgnosticAssessment(beat_id="b1")
+        """Empty agnostic_for is valid but must be explicitly provided."""
+        ta = ThreadAgnosticAssessment(beat_id="b1", agnostic_for=[])
         assert ta.agnostic_for == []
 
     def test_empty_beat_id_rejected(self) -> None:
@@ -261,17 +262,22 @@ class TestGapProposal:
 
 class TestOverlayProposal:
     def test_valid_proposal(self) -> None:
+        from questfoundry.models.grow import OverlayDetail
+
         op = OverlayProposal(
             entity_id="e1",
             when=["cw1", "cw2"],
-            details={"state": "active"},
+            details=[OverlayDetail(key="state", value="active")],
         )
         assert op.entity_id == "e1"
         assert len(op.when) == 2
+        assert len(op.details) == 1
+        assert op.details[0].key == "state"
+        assert op.details[0].value == "active"
 
     def test_empty_when_rejected(self) -> None:
         with pytest.raises(ValidationError, match="when"):
-            OverlayProposal(entity_id="e1", when=[])
+            OverlayProposal(entity_id="e1", when=[], details=[])
 
 
 class TestChoiceLabel:
