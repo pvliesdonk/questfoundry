@@ -27,7 +27,10 @@ system: |
     "implicit": ["alt_id_3"]                // Alternatives NOT explored
   }
   ```
-  NOTE: The default path alternative (is_default_path=true) MUST be in "explored", never in "implicit".
+  NOTES:
+  - The default path alternative (is_default_path=true) MUST be in "explored", never in "implicit".
+  - **Arc Count**: At least 2 tensions should have BOTH alternatives in "explored" for proper IF branching.
+  - Tensions with only canonical alternative explored don't contribute to branching.
 
   ### 3. threads (Plot Threads)
   For each explored alternative, create a Thread:

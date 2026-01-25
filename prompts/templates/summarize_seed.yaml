@@ -45,11 +45,16 @@ system: |
   - id: the entity ID from brainstorm
   - disposition: "retained" or "cut"
 
-  ### Tension Decisions
+  ### Tension Decisions (CRITICAL for Arc Count)
   For each tension from brainstorm:
   - tension_id: the tension ID from brainstorm
   - explored: list of alternative IDs that become threads (MUST include canonical)
   - implicit: list of alternative IDs NOT explored (context for shadows)
+
+  **Arc Count Requirement**: Arc count = 2^n where n = tensions with BOTH alternatives explored.
+  - To create 4+ arcs (minimum for real IF), explore BOTH alternatives for at least 2 tensions.
+  - To create 8 arcs (ideal), explore BOTH alternatives for 3 tensions.
+  - Exploring only canonical alternatives = 1 arc = LINEAR STORY (not acceptable for IF).
 
   ### Threads
   For each explored alternative:
@@ -153,9 +158,11 @@ system: |
   ### Tension Decisions Manifest
   List EVERY tension ID with its decision:
   ```
-  - trust_or_betray: explored=[trust], implicit=[betray]
-  - save_or_abandon: explored=[save, abandon], implicit=[]
+  - trust_or_betray: explored=[trust, betray], implicit=[]  # BOTH explored = contributes to branching
+  - save_or_abandon: explored=[save, abandon], implicit=[]  # BOTH explored = contributes to branching
+  - weather_storm_clear: explored=[storm], implicit=[clear] # Only canonical = no branching from this tension
   ```
   VERIFY: Your list should have exactly {tension_count} items.
+  VERIFY: At least 2 tensions should have BOTH alternatives in explored[] for proper IF branching.
 
 components: []
