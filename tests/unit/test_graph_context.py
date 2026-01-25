@@ -719,6 +719,133 @@ class TestFormatSummarizeManifest:
         assert "**Characters:**\n  - `entity::hero`\n\n**Locations:**" in result["entity_manifest"]
 
 
+class TestFormatRetainedEntityIds:
+    """Tests for format_retained_entity_ids function."""
+
+    def test_returns_empty_for_no_retained_entities(self) -> None:
+        """Returns empty string when all entities are cut."""
+        from questfoundry.graph.context import format_retained_entity_ids
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        decisions = [{"entity_id": "hero", "disposition": "cut"}]
+
+        result = format_retained_entity_ids(graph, decisions)
+
+        assert result == ""
+
+    def test_filters_out_cut_entities(self) -> None:
+        """Only retained entities appear in output."""
+        from questfoundry.graph.context import format_retained_entity_ids
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::villain",
+            {"type": "entity", "raw_id": "villain", "entity_type": "character"},
+        )
+        decisions = [
+            {"entity_id": "hero", "disposition": "retained"},
+            {"entity_id": "villain", "disposition": "cut"},
+        ]
+
+        result = format_retained_entity_ids(graph, decisions)
+
+        assert "`entity::hero`" in result
+        assert "villain" not in result
+
+    def test_handles_scoped_entity_ids_in_decisions(self) -> None:
+        """Works with both scoped and unscoped IDs in decisions."""
+        from questfoundry.graph.context import format_retained_entity_ids
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::villain",
+            {"type": "entity", "raw_id": "villain", "entity_type": "character"},
+        )
+        # Mix of scoped and unscoped IDs in decisions
+        decisions = [
+            {"entity_id": "entity::hero", "disposition": "retained"},
+            {"entity_id": "villain", "disposition": "cut"},
+        ]
+
+        result = format_retained_entity_ids(graph, decisions)
+
+        assert "`entity::hero`" in result
+        assert "villain" not in result
+
+    def test_includes_count_of_retained_entities(self) -> None:
+        """Output includes count of retained entities."""
+        from questfoundry.graph.context import format_retained_entity_ids
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::castle",
+            {"type": "entity", "raw_id": "castle", "entity_type": "location"},
+        )
+        decisions = [
+            {"entity_id": "hero", "disposition": "retained"},
+            {"entity_id": "castle", "disposition": "retained"},
+        ]
+
+        result = format_retained_entity_ids(graph, decisions)
+
+        assert "2 entities are RETAINED" in result
+
+    def test_groups_by_category(self) -> None:
+        """Retained entities are grouped by category."""
+        from questfoundry.graph.context import format_retained_entity_ids
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::castle",
+            {"type": "entity", "raw_id": "castle", "entity_type": "location"},
+        )
+        decisions = [
+            {"entity_id": "hero", "disposition": "retained"},
+            {"entity_id": "castle", "disposition": "retained"},
+        ]
+
+        result = format_retained_entity_ids(graph, decisions)
+
+        assert "**Characters" in result
+        assert "**Locations" in result
+
+    def test_includes_warning_about_cut_entities(self) -> None:
+        """Output warns not to use cut entities."""
+        from questfoundry.graph.context import format_retained_entity_ids
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        decisions = [{"entity_id": "hero", "disposition": "retained"}]
+
+        result = format_retained_entity_ids(graph, decisions)
+
+        assert "RETAINED" in result
+        assert "cut" in result.lower()
+
+
 class TestCheckStructuralCompleteness:
     """Tests for check_structural_completeness function."""
 
