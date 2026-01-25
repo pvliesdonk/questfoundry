@@ -49,6 +49,7 @@ if TYPE_CHECKING:
         LLMCallbackFn,
         UserInputFn,
     )
+    from questfoundry.pipeline.stages.base import PhaseProgressFn
 
 
 class SeedStageError(Exception):
@@ -235,6 +236,7 @@ class SeedStage:
         summarize_provider_name: str | None = None,  # noqa: ARG002 - for future use
         serialize_provider_name: str | None = None,
         max_outer_retries: int = 2,
+        on_phase_progress: PhaseProgressFn | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the SEED stage using the 3-phase pattern.
 
@@ -254,6 +256,7 @@ class SeedStage:
             summarize_provider_name: Provider name for summarize phase (for future use).
             serialize_provider_name: Provider name for serialize phase.
             max_outer_retries: Maximum outer loop retries for semantic errors (default 2).
+            on_phase_progress: Callback for reporting phase progress (phase, status, detail).
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
@@ -320,6 +323,11 @@ class SeedStage:
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
+        # Report discuss phase completion with turn count
+        turn_count = sum(1 for m in messages if isinstance(m, HumanMessage))
+        if on_phase_progress:
+            on_phase_progress("discuss", "completed", f"{turn_count} turns")
+
         # Load graph once for summarize manifest and serialize validation
         graph = Graph.load(resolved_path)
 
@@ -341,8 +349,17 @@ class SeedStage:
         result: SerializeResult | None = None
 
         for outer_attempt in range(max_outer_retries + 1):
+            # Report outer loop retry if not first attempt
+            if outer_attempt > 0 and on_phase_progress:
+                on_phase_progress(
+                    "retry",
+                    "started",
+                    f"{len(result.semantic_errors)} errors",  # type: ignore[union-attr]
+                )
+
             # Phase 2: Summarize (use summarize_model if provided)
             log.debug("seed_phase", phase="summarize", outer_attempt=outer_attempt + 1)
+            summarize_phase_name = "retry summarize" if outer_attempt > 0 else "summarize"
             brief, summarize_tokens = await summarize_discussion(
                 model=summarize_model or model,
                 messages=messages,
@@ -353,8 +370,21 @@ class SeedStage:
             total_llm_calls += 1
             total_tokens += summarize_tokens
 
+            if on_phase_progress:
+                on_phase_progress(summarize_phase_name, "completed", None)
+
             # Track brief in conversation history as assistant output
             messages.append(AIMessage(content=brief))
+
+            # Create section progress callback for serialize phase
+            def _section_progress(
+                section: str,
+                status: str,
+                detail: str | None,
+                _callback: PhaseProgressFn | None = on_phase_progress,
+            ) -> None:
+                if _callback:
+                    _callback(f"serialize {section}", status, detail)
 
             # Phase 3: Serialize (use serialize_model if provided)
             log.debug("seed_phase", phase="serialize", outer_attempt=outer_attempt + 1)
@@ -364,6 +394,7 @@ class SeedStage:
                 provider_name=serialize_provider_name or provider_name,
                 callbacks=callbacks,
                 graph=graph,  # Enables semantic validation
+                on_section_progress=_section_progress,
             )
             # Iterative serialization makes one call per section plus potential retries
             # (actual count depends on serialize_seed_as_function implementation)

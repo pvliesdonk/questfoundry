@@ -420,14 +420,17 @@ def _run_stage_command(
     if resume_from:
         context["resume_from"] = resume_from
 
-    # Add phase progress callback for GROW stage (shows phase-by-phase progress)
-    if stage_name == "grow":
+    # Add phase progress callback for stages that support it
+    # (DREAM, BRAINSTORM, SEED, GROW all show phase-by-phase progress)
+    if stage_name in ("dream", "brainstorm", "seed", "grow"):
 
-        def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
-            """Display phase progress for GROW stage."""
+        def _on_phase_progress(
+            phase: str, status: str, detail: str | None, _stage: str = stage_name
+        ) -> None:
+            """Display phase progress for stage."""
             status_icon = "[green]✓[/green]" if status == "completed" else "[yellow]○[/yellow]"
             detail_str = f" ({detail})" if detail else ""
-            console.print(f"  {status_icon} {phase}{detail_str}")
+            console.print(f"  {_stage.upper()}: {phase}{detail_str} {status_icon}")
 
         context["on_phase_progress"] = _on_phase_progress
 
@@ -458,8 +461,8 @@ def _run_stage_command(
         )
     else:
         # Non-interactive mode
-        if stage_name == "grow":
-            # GROW shows phase-by-phase progress instead of spinner
+        if stage_name in ("dream", "brainstorm", "seed", "grow"):
+            # These stages show phase-by-phase progress instead of spinner
             console.print(f"[dim]Running {stage_name.upper()} stage...[/dim]")
             result = asyncio.run(
                 _run_stage_async(

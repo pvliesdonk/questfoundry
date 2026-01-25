@@ -14,6 +14,8 @@ from __future__ import annotations
 from pathlib import Path  # noqa: TC003 - used at runtime for Graph.load()
 from typing import TYPE_CHECKING, Any
 
+from langchain_core.messages import HumanMessage
+
 from questfoundry.agents import (
     get_brainstorm_discuss_prompt,
     get_brainstorm_serialize_prompt,
@@ -46,6 +48,7 @@ if TYPE_CHECKING:
         LLMCallbackFn,
         UserInputFn,
     )
+    from questfoundry.pipeline.stages.base import PhaseProgressFn
 
 
 class BrainstormStageError(Exception):
@@ -165,6 +168,7 @@ class BrainstormStage:
         serialize_model: BaseChatModel | None = None,
         summarize_provider_name: str | None = None,  # noqa: ARG002 - for future use
         serialize_provider_name: str | None = None,
+        on_phase_progress: PhaseProgressFn | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the BRAINSTORM stage using the 3-phase pattern.
 
@@ -183,6 +187,7 @@ class BrainstormStage:
             serialize_model: Optional model for serialize phase (defaults to model).
             summarize_provider_name: Provider name for summarize phase (for future use).
             serialize_provider_name: Provider name for serialize phase.
+            on_phase_progress: Callback for reporting phase progress (phase, status, detail).
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
@@ -249,6 +254,11 @@ class BrainstormStage:
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
+        # Report discuss phase completion with turn count
+        turn_count = sum(1 for m in messages if isinstance(m, HumanMessage))
+        if on_phase_progress:
+            on_phase_progress("discuss", "completed", f"{turn_count} turns")
+
         # Phase 2: Summarize (use summarize_model if provided)
         log.debug("brainstorm_phase", phase="summarize")
         summarize_prompt = get_brainstorm_summarize_prompt()
@@ -261,6 +271,9 @@ class BrainstormStage:
         )
         total_llm_calls += 1
         total_tokens += summarize_tokens
+
+        if on_phase_progress:
+            on_phase_progress("summarize", "completed", None)
 
         # Phase 3: Serialize (use serialize_model if provided)
         log.debug("brainstorm_phase", phase="serialize")
@@ -277,6 +290,14 @@ class BrainstormStage:
         )
         total_llm_calls += 1
         total_tokens += serialize_tokens
+
+        # Report serialize phase completion with entity/tension counts
+        entity_count = len(artifact.entities)
+        tension_count = len(artifact.tensions)
+        if on_phase_progress:
+            on_phase_progress(
+                "serialize", "completed", f"{entity_count} entities, {tension_count} tensions"
+            )
 
         # Convert to dict for return
         artifact_data = artifact.model_dump()

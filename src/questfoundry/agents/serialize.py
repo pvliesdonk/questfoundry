@@ -101,6 +101,9 @@ class SerializeResult:
 # Type alias for semantic validator functions
 SemanticValidator = Callable[[dict[str, Any]], list[Any]]
 
+# Type alias for section progress callbacks: (section_name, status, detail) -> None
+SectionProgressFn = Callable[[str, str, str | None], None]
+
 
 class SemanticErrorFormatter(Protocol):
     """Protocol for error classes that format validation errors as LLM feedback.
@@ -1062,6 +1065,7 @@ async def serialize_seed_as_function(
     callbacks: list[BaseCallbackHandler] | None = None,
     graph: Graph | None = None,
     max_semantic_retries: int = 2,
+    on_section_progress: SectionProgressFn | None = None,
 ) -> SerializeResult:
     """Serialize SEED brief to structured output, returning result for outer loop.
 
@@ -1082,6 +1086,7 @@ async def serialize_seed_as_function(
         graph: Graph containing BRAINSTORM data for semantic validation.
             If None, semantic validation is skipped.
         max_semantic_retries: Maximum section-level retries for semantic errors.
+        on_section_progress: Callback for reporting section progress (section, status, detail).
 
     Returns:
         SerializeResult with artifact and any semantic errors.
@@ -1165,6 +1170,13 @@ async def serialize_seed_as_function(
             )
         collected[output_field] = section_data[output_field]
 
+        # Report section progress
+        item_count = (
+            len(collected[output_field]) if isinstance(collected[output_field], list) else 1
+        )
+        if on_section_progress:
+            on_section_progress(f"{section_name}...", "completed", None)
+
         # After entities are serialized, update entity_context to only include retained
         # entities. This prevents beats from referencing cut entities.
         if section_name == "entities" and graph is not None and collected.get("entities"):
@@ -1178,10 +1190,14 @@ async def serialize_seed_as_function(
         # 1. Inject thread IDs for subsequent sections (consequences)
         # 2. Generate beats per-thread in parallel
         if section_name == "threads" and collected.get("threads"):
+            thread_count = len(collected["threads"])
+            if on_section_progress:
+                on_section_progress("threads...", "completed", f"{thread_count} threads")
+
             thread_ids_context = format_thread_ids_context(collected["threads"])
             if thread_ids_context:
                 brief_with_threads = f"{enhanced_brief}\n\n{thread_ids_context}"
-                log.debug("thread_ids_context_injected", thread_count=len(collected["threads"]))
+                log.debug("thread_ids_context_injected", thread_count=thread_count)
 
             # Generate beats per-thread in parallel
             # This replaces the old all-at-once beats serialization
@@ -1197,10 +1213,14 @@ async def serialize_seed_as_function(
             collected["initial_beats"] = beats
             total_tokens += beats_tokens
 
+            # Report beats progress
+            if on_section_progress:
+                on_section_progress("beats...", "completed", f"{len(beats)} beats")
+
         log.debug(
             "serialize_section_completed",
             section=section_name,
-            items=len(collected[output_field]) if isinstance(collected[output_field], list) else 1,
+            items=item_count,
             tokens=section_tokens,
         )
 

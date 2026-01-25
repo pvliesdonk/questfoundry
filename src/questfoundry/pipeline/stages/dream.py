@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from langchain_core.messages import HumanMessage
+
 from questfoundry.agents import (
     run_discuss_phase,
     serialize_to_artifact,
@@ -37,6 +39,7 @@ if TYPE_CHECKING:
         LLMCallbackFn,
         UserInputFn,
     )
+    from questfoundry.pipeline.stages.base import PhaseProgressFn
 
 
 class DreamStage:
@@ -74,6 +77,7 @@ class DreamStage:
         serialize_model: BaseChatModel | None = None,
         summarize_provider_name: str | None = None,  # noqa: ARG002 - for future use
         serialize_provider_name: str | None = None,
+        on_phase_progress: PhaseProgressFn | None = None,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the DREAM stage using the 3-phase pattern.
 
@@ -92,6 +96,7 @@ class DreamStage:
             serialize_model: Optional model for serialize phase (defaults to model).
             summarize_provider_name: Provider name for summarize phase (for future use).
             serialize_provider_name: Provider name for serialize phase.
+            on_phase_progress: Callback for reporting phase progress (phase, status, detail).
 
         Returns:
             Tuple of (artifact_data, llm_calls, tokens_used).
@@ -135,6 +140,11 @@ class DreamStage:
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
+        # Report discuss phase completion with turn count
+        turn_count = sum(1 for m in messages if isinstance(m, HumanMessage))
+        if on_phase_progress:
+            on_phase_progress("discuss", "completed", f"{turn_count} turns")
+
         # Phase 2: Summarize (use summarize_model if provided)
         log.debug("dream_phase", phase="summarize")
         brief, summarize_tokens = await summarize_discussion(
@@ -144,6 +154,9 @@ class DreamStage:
         )
         total_llm_calls += 1  # Summarize is a single call
         total_tokens += summarize_tokens
+
+        if on_phase_progress:
+            on_phase_progress("summarize", "completed", None)
 
         # Phase 3: Serialize (use serialize_model if provided)
         log.debug("dream_phase", phase="serialize")
@@ -156,6 +169,9 @@ class DreamStage:
         )
         total_llm_calls += 1  # Count as 1 even with retries (simplification)
         total_tokens += serialize_tokens
+
+        if on_phase_progress:
+            on_phase_progress("serialize", "completed", None)
 
         # Convert to dict for return
         artifact_data = artifact.model_dump()
