@@ -1021,3 +1021,74 @@ class TestSerializeSeedAsFunction:
             assert call_count[0] == 5
             assert result.success is False
             assert len(result.semantic_errors) == 1
+
+    @pytest.mark.asyncio
+    async def test_retries_on_completeness_errors(self) -> None:
+        """Should retry when COMPLETENESS errors are present (missing decisions)."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        # COMPLETENESS error - missing entity decision
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for entity 'the_patterned_scroll'",
+                available=[],
+                provided="",
+                category=SeedErrorCategory.COMPLETENESS,
+            )
+        ]
+
+        call_count = [0]
+
+        def mock_serialize_side_effect(*_args, **_kwargs):
+            call_count[0] += 1
+            # 5 sections (beats handled separately)
+            section_map = {
+                1: "entities",
+                2: "tensions",
+                3: "threads",
+                4: "consequences",
+                5: "convergence_sketch",
+                # Retry calls for entities (calls 6, 7 after max_semantic_retries=2)
+                6: "entities",
+                7: "entities",
+            }
+            section = section_map.get(call_count[0], "unknown")
+            if section == "convergence_sketch":
+                return (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                )
+            return (MagicMock(model_dump=lambda s=section: {s: []}), 10)
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_to_artifact",
+                side_effect=mock_serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                return_value=([], 20),
+            ),
+            patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
+        ):
+            result = await serialize_seed_as_function(
+                model=mock_model,
+                brief="Test brief",
+                graph=mock_graph,
+                max_semantic_retries=2,
+            )
+
+            # Should retry entities section for COMPLETENESS errors
+            # 5 initial sections + 2 retries for entities = 7 calls
+            assert call_count[0] == 7
+            assert result.success is False
+            assert len(result.semantic_errors) == 1
