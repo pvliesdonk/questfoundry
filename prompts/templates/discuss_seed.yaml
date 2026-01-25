@@ -120,6 +120,27 @@ system: |
 
   **REQUIRED**: At minimum, explore both alternatives for at least 2 tensions to create 4+ arcs.
 
+  ### Example: 6 Tensions, Proper Exploration Balance
+
+  Given 6 tensions, here's a valid exploration pattern:
+
+  | Tension | Score | Explored | Implicit | Why |
+  |---------|-------|----------|----------|-----|
+  | mentor_trust_or_betray | 8 | BOTH | - | Identity-defining (+3), genuine dilemma (+2), distinct content (+2), replay (+1) |
+  | artifact_sacred_or_weapon | 7 | BOTH | - | Genuine dilemma (+2), distinct content (+2), replay (+1), identity (+2) |
+  | guild_ally_or_enemy | 6 | BOTH | - | Distinct content (+2), dilemma (+2), replay (+1), some identity (+1) |
+  | weather_storm_or_calm | 3 | storm only | calm | Atmosphere, not identity - keep as shadow |
+  | messenger_honest_or_spy | 4 | honest only | spy | Support thread - spy suspicion adds subtext without branching |
+  | ritual_success_or_failure | 5 | success only | failure | Good tension but lower priority - failure shadow adds stakes |
+
+  **Result**: 3 fully explored = **8 arcs** (ideal for medium IF)
+  **Shadows**: 3 implicit alternatives enrich prose without multiplying arcs
+
+  ### BAD Example (what NOT to do)
+
+  Exploring all 6 tensions fully = 2^6 = **64 arcs** = GROW stage will FAIL.
+  Even with excellent tensions, you MUST choose only the top 3-4 for full exploration.
+
   ## Your Goal
   Transform the raw brainstorm material into committed story structure:
 
