@@ -1390,6 +1390,135 @@ class TestSeedCompletenessValidation:
         arc_errors = [e for e in errors if "arc count" in e.issue.lower()]
         assert arc_errors == []
 
+    def test_arc_count_below_minimum(self) -> None:
+        """Arc count below 4 (fewer than 2 fully-explored tensions) triggers error."""
+        graph = Graph.empty()
+        # Create 4 tensions, each with 2 alternatives
+        for i in range(4):
+            graph.create_node(f"tension::t{i}", {"type": "tension", "raw_id": f"t{i}"})
+            graph.create_node(f"tension::t{i}::alt::a", {"type": "alternative", "raw_id": "a"})
+            graph.create_node(f"tension::t{i}::alt::b", {"type": "alternative", "raw_id": "b"})
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::a")
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::b")
+
+        # Output has only 1 tension fully explored (2^1 = 2 arcs < 4 minimum)
+        output: dict[str, Any] = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "t0", "explored": ["a", "b"], "implicit": []},  # 1 fully explored
+                {"tension_id": "t1", "explored": ["a"], "implicit": ["b"]},
+                {"tension_id": "t2", "explored": ["a"], "implicit": ["b"]},
+                {"tension_id": "t3", "explored": ["a"], "implicit": ["b"]},
+            ],
+            "threads": [
+                {
+                    "thread_id": "t0_a",
+                    "name": "Thread 0 a",
+                    "tension_id": "t0",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t0_b",
+                    "name": "Thread 0 b",
+                    "tension_id": "t0",
+                    "alternative_id": "b",
+                },
+                {
+                    "thread_id": "t1_a",
+                    "name": "Thread 1 a",
+                    "tension_id": "t1",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t2_a",
+                    "name": "Thread 2 a",
+                    "tension_id": "t2",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t3_a",
+                    "name": "Thread 3 a",
+                    "tension_id": "t3",
+                    "alternative_id": "a",
+                },
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        arc_errors = [e for e in errors if "arc count" in e.issue.lower()]
+        assert len(arc_errors) == 1
+        assert "2" in arc_errors[0].issue  # 2^1 = 2 arcs
+        assert "below minimum of 4" in arc_errors[0].issue
+        assert arc_errors[0].category == SeedErrorCategory.SEMANTIC
+
+    def test_arc_count_at_minimum_passes(self) -> None:
+        """Arc count of exactly 4 (2 fully-explored tensions) passes validation."""
+        graph = Graph.empty()
+        # Create 4 tensions, each with 2 alternatives
+        for i in range(4):
+            graph.create_node(f"tension::t{i}", {"type": "tension", "raw_id": f"t{i}"})
+            graph.create_node(f"tension::t{i}::alt::a", {"type": "alternative", "raw_id": "a"})
+            graph.create_node(f"tension::t{i}::alt::b", {"type": "alternative", "raw_id": "b"})
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::a")
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::b")
+
+        # Output has 2 tensions fully explored (2^2 = 4 arcs = exactly at minimum)
+        output: dict[str, Any] = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "t0", "explored": ["a", "b"], "implicit": []},  # fully explored
+                {"tension_id": "t1", "explored": ["a", "b"], "implicit": []},  # fully explored
+                {"tension_id": "t2", "explored": ["a"], "implicit": ["b"]},
+                {"tension_id": "t3", "explored": ["a"], "implicit": ["b"]},
+            ],
+            "threads": [
+                {
+                    "thread_id": "t0_a",
+                    "name": "Thread 0 a",
+                    "tension_id": "t0",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t0_b",
+                    "name": "Thread 0 b",
+                    "tension_id": "t0",
+                    "alternative_id": "b",
+                },
+                {
+                    "thread_id": "t1_a",
+                    "name": "Thread 1 a",
+                    "tension_id": "t1",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t1_b",
+                    "name": "Thread 1 b",
+                    "tension_id": "t1",
+                    "alternative_id": "b",
+                },
+                {
+                    "thread_id": "t2_a",
+                    "name": "Thread 2 a",
+                    "tension_id": "t2",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t3_a",
+                    "name": "Thread 3 a",
+                    "tension_id": "t3",
+                    "alternative_id": "a",
+                },
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        arc_errors = [e for e in errors if "arc count" in e.issue.lower()]
+        assert arc_errors == []
+
     def test_empty_brainstorm_valid(self) -> None:
         """Empty BRAINSTORM data (no entities/tensions) is valid."""
         graph = Graph.empty()

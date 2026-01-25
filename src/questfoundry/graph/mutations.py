@@ -1206,6 +1206,22 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             )
         )
 
+    # 11d. Check minimum arc count (at least 4 arcs = 2 fully-explored tensions for real IF)
+    if projected_arc_count < 4:
+        errors.append(
+            SeedValidationError(
+                field_path="tensions",
+                issue=(
+                    f"Projected arc count ({projected_arc_count}) is below minimum of 4. "
+                    f"You have {tensions_with_both_alts} tensions with both alternatives explored. "
+                    f"Minimum required is 2 fully-explored tensions for interactive fiction branching."
+                ),
+                available=[],
+                provided=str(tensions_with_both_alts),
+                category=SeedErrorCategory.SEMANTIC,
+            )
+        )
+
     # 12. Check beats reference their thread's parent tension
     # 13. Check each thread has at least one commits beat for its tension
     threads_with_commits: set[str] = set()  # thread_ids that have a commits beat
