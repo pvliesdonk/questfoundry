@@ -14,7 +14,11 @@ from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.prompts import get_serialize_prompt
 from questfoundry.artifacts.validator import strip_null_values
-from questfoundry.graph.context import format_thread_ids_context, format_valid_ids_context
+from questfoundry.graph.context import (
+    format_thread_ids_context,
+    format_valid_ids_context,
+    normalize_scoped_id,
+)
 from questfoundry.graph.mutations import (
     SeedMutationError,
     SeedValidationError,
@@ -539,10 +543,8 @@ def _build_per_thread_beat_context(
     description = thread_data.get("description", "")
 
     # Normalize IDs to include prefixes if missing
-    if not thread_id.startswith("thread::"):
-        thread_id = f"thread::{thread_id}"
-    if not tension_id.startswith("tension::"):
-        tension_id = f"tension::{tension_id}"
+    thread_id = normalize_scoped_id(thread_id, "thread")
+    tension_id = normalize_scoped_id(tension_id, "tension")
 
     lines = [
         "## Thread Context",
@@ -590,14 +592,8 @@ async def _serialize_thread_beats(
     tension_id = thread_data.get("tension_id", "")
 
     # Normalize IDs
-    if not thread_id.startswith("thread::"):
-        prefixed_thread_id = f"thread::{thread_id}"
-    else:
-        prefixed_thread_id = thread_id
-    if not tension_id.startswith("tension::"):
-        prefixed_tension_id = f"tension::{tension_id}"
-    else:
-        prefixed_tension_id = tension_id
+    prefixed_thread_id = normalize_scoped_id(thread_id, "thread")
+    prefixed_tension_id = normalize_scoped_id(tension_id, "tension")
 
     # Format prompt with thread-specific values
     prompt = per_thread_prompt_template.format(
