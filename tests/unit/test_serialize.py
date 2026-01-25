@@ -735,13 +735,32 @@ class TestSerializeSeedAsFunction:
         mock_model = MagicMock()
         mock_graph = MagicMock()
 
-        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
+        # Mock thread so _serialize_beats_per_thread gets called
+        mock_thread = {
+            "thread_id": "test_thread",
+            "tension_id": "test_tension",
+            "name": "Test Thread",
+            "description": "A test thread",
+            "alternative_id": "alt1",
+            "unexplored_alternative_ids": [],
+            "thread_importance": "major",
+            "consequence_ids": [],
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                return_value=([], 20),  # Returns (beats_list, tokens)
+            ),
+        ):
+            # Per-thread serialization: entities, tensions, threads, consequences, convergence
+            # (beats handled separately by _serialize_beats_per_thread)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
                 (MagicMock(model_dump=lambda: {"tensions": []}), 10),
-                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                (MagicMock(model_dump=lambda: {"threads": [mock_thread]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
                 (
                     MagicMock(
                         model_dump=lambda: {
@@ -763,7 +782,8 @@ class TestSerializeSeedAsFunction:
                 assert result.success is True
                 assert result.artifact is not None
                 assert result.semantic_errors == []
-                assert result.tokens_used == 60  # 6 sections * 10 tokens
+                # 5 sections * 10 tokens + 20 from beats
+                assert result.tokens_used == 70
 
     @pytest.mark.asyncio
     async def test_returns_result_with_errors_when_semantic_validation_fails(self) -> None:
@@ -783,14 +803,19 @@ class TestSerializeSeedAsFunction:
             )
         ]
 
-        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                return_value=([], 20),
+            ),
+        ):
             mock_serialize.side_effect = [
-                # Initial 6 sections
+                # Initial 5 sections (beats handled separately)
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
                 (MagicMock(model_dump=lambda: {"tensions": []}), 10),
                 (MagicMock(model_dump=lambda: {"threads": []}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
                 (
                     MagicMock(
                         model_dump=lambda: {
@@ -826,13 +851,19 @@ class TestSerializeSeedAsFunction:
 
         mock_model = MagicMock()
 
-        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                return_value=([], 20),
+            ),
+        ):
+            # 5 sections (beats handled separately)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
                 (MagicMock(model_dump=lambda: {"tensions": []}), 10),
                 (MagicMock(model_dump=lambda: {"threads": []}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
                 (
                     MagicMock(
                         model_dump=lambda: {
@@ -879,16 +910,16 @@ class TestSerializeSeedAsFunction:
 
         def mock_serialize_side_effect(*_args, **_kwargs):
             call_count[0] += 1
+            # 5 sections (beats handled separately), then retries
             section_map = {
                 1: "entities",
                 2: "tensions",
                 3: "threads",
                 4: "consequences",
-                5: "initial_beats",
-                6: "convergence_sketch",
+                5: "convergence_sketch",
                 # Semantic retry calls (2 retries for entities section)
+                6: "entities",
                 7: "entities",
-                8: "entities",
             }
             section = section_map.get(call_count[0], "unknown")
             if section == "convergence_sketch":
@@ -907,6 +938,10 @@ class TestSerializeSeedAsFunction:
                 "questfoundry.agents.serialize.serialize_to_artifact",
                 side_effect=mock_serialize_side_effect,
             ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                return_value=([], 20),
+            ),
             patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
         ):
             result = await serialize_seed_as_function(
@@ -916,8 +951,8 @@ class TestSerializeSeedAsFunction:
                 max_semantic_retries=2,
             )
 
-            # 6 initial + 2 retries for entities (max_semantic_retries=2)
-            assert call_count[0] == 8
+            # 5 initial + 2 retries for entities (max_semantic_retries=2)
+            assert call_count[0] == 7
             # Still fails because validate always returns errors in this mock
             assert result.success is False
             assert len(result.semantic_errors) == 1
@@ -945,13 +980,13 @@ class TestSerializeSeedAsFunction:
 
         def mock_serialize_side_effect(*_args, **_kwargs):
             call_count[0] += 1
+            # 5 sections (beats handled separately)
             section_map = {
                 1: "entities",
                 2: "tensions",
                 3: "threads",
                 4: "consequences",
-                5: "initial_beats",
-                6: "convergence_sketch",
+                5: "convergence_sketch",
             }
             section = section_map.get(call_count[0], "unknown")
             if section == "convergence_sketch":
@@ -970,6 +1005,10 @@ class TestSerializeSeedAsFunction:
                 "questfoundry.agents.serialize.serialize_to_artifact",
                 side_effect=mock_serialize_side_effect,
             ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                return_value=([], 20),
+            ),
             patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
         ):
             result = await serialize_seed_as_function(
@@ -979,6 +1018,6 @@ class TestSerializeSeedAsFunction:
             )
 
             # No retries — corrections not possible (empty available list)
-            assert call_count[0] == 6
+            assert call_count[0] == 5
             assert result.success is False
             assert len(result.semantic_errors) == 1
