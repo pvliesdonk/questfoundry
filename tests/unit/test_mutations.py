@@ -736,7 +736,16 @@ class TestSeedMutations:
                     "consequence_ids": ["consequence_trust"],
                 }
             ],
-            "initial_beats": [],
+            "initial_beats": [
+                {
+                    "beat_id": "resolution",
+                    "summary": "Mentor's true nature revealed",
+                    "threads": ["thread_mentor_trust"],
+                    "tension_impacts": [
+                        {"tension_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                }
+            ],
         }
 
         apply_seed_mutations(graph, output)
@@ -812,7 +821,17 @@ class TestSeedMutations:
                     ],
                     "entities": ["kay", "mentor"],  # Raw entity IDs from LLM
                     "location": "archive",  # Raw location ID from LLM
-                }
+                },
+                {
+                    "beat_id": "resolution_001",
+                    "summary": "Mentor's loyalty confirmed",
+                    "threads": ["thread_mentor_trust"],
+                    "tension_impacts": [
+                        {"tension_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                    "entities": ["kay", "mentor"],
+                    "location": "archive",
+                },
             ],
         }
 
@@ -900,7 +919,16 @@ class TestSeedCompletenessValidation:
                     "alternative_id": "yes",
                 }
             ],
-            "initial_beats": [],
+            "initial_beats": [
+                {
+                    "beat_id": "resolution",
+                    "summary": "Trust resolved",
+                    "threads": ["trust_arc"],
+                    "tension_impacts": [
+                        {"tension_id": "trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                }
+            ],
         }
 
         errors = validate_seed_mutations(graph, output)
@@ -1164,6 +1192,214 @@ class TestSeedCompletenessValidation:
         assert "nonexistent" in invalid_errors[0].provided
 
 
+class TestBeatTensionAlignment:
+    """Test SEED validation checks 12 and 13: beat-thread-tension alignment."""
+
+    def _make_graph(self) -> Graph:
+        """Create graph with one tension and one alternative."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        # Second tension for cross-reference tests
+        graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
+        graph.create_node(
+            "tension::loyalty::alt::faithful", {"type": "alternative", "raw_id": "faithful"}
+        )
+        graph.add_edge("has_alternative", "tension::loyalty", "tension::loyalty::alt::faithful")
+        return graph
+
+    def _base_output(self) -> dict:
+        """Output with one thread for tension::trust."""
+        return {
+            "entities": [{"entity_id": "hero", "disposition": "retained"}],
+            "tensions": [
+                {"tension_id": "trust", "explored": ["yes"], "implicit": []},
+                {"tension_id": "loyalty", "explored": ["faithful"], "implicit": []},
+            ],
+            "threads": [
+                {
+                    "thread_id": "trust_arc",
+                    "name": "Trust Arc",
+                    "tension_id": "trust",
+                    "alternative_id": "yes",
+                }
+            ],
+            "initial_beats": [],
+        }
+
+    def test_beat_wrong_tension_detected(self) -> None:
+        """Beat referencing wrong tension triggers semantic error."""
+        graph = self._make_graph()
+        output = self._base_output()
+        output["initial_beats"] = [
+            {
+                "beat_id": "opening",
+                "summary": "Start",
+                "threads": ["trust_arc"],
+                "tension_impacts": [
+                    # Wrong tension - should be 'trust' for thread trust_arc
+                    {"tension_id": "loyalty", "effect": "commits", "note": "Wrong"}
+                ],
+            }
+        ]
+
+        errors = validate_seed_mutations(graph, output)
+
+        alignment_errors = [e for e in errors if "does not reference its parent tension" in e.issue]
+        assert len(alignment_errors) == 1
+        assert "trust_arc" in alignment_errors[0].issue
+        assert "trust" in alignment_errors[0].available
+
+    def test_beat_no_tension_impacts_detected(self) -> None:
+        """Beat with no tension_impacts triggers error for missing parent tension."""
+        graph = self._make_graph()
+        output = self._base_output()
+        output["initial_beats"] = [
+            {
+                "beat_id": "opening",
+                "summary": "Start",
+                "threads": ["trust_arc"],
+                # No tension_impacts at all
+            }
+        ]
+
+        errors = validate_seed_mutations(graph, output)
+
+        alignment_errors = [e for e in errors if "does not reference its parent tension" in e.issue]
+        assert len(alignment_errors) == 1
+
+    def test_thread_no_commits_beat_detected(self) -> None:
+        """Thread without commits beat triggers completeness error."""
+        graph = self._make_graph()
+        output = self._base_output()
+        output["initial_beats"] = [
+            {
+                "beat_id": "opening",
+                "summary": "Start",
+                "threads": ["trust_arc"],
+                "tension_impacts": [
+                    {"tension_id": "trust", "effect": "advances", "note": "Begins"}
+                ],
+            }
+        ]
+
+        errors = validate_seed_mutations(graph, output)
+
+        commits_errors = [e for e in errors if "no beat with effect='commits'" in e.issue]
+        assert len(commits_errors) == 1
+        assert "trust_arc" in commits_errors[0].issue
+        assert commits_errors[0].category == SeedErrorCategory.COMPLETENESS
+
+    def test_beat_with_additional_tensions_allowed(self) -> None:
+        """Beat can reference additional tensions beyond its own thread's tension."""
+        graph = self._make_graph()
+        output = self._base_output()
+        # Add thread for loyalty so check 11 (all tensions need threads) passes
+        output["threads"].append(
+            {
+                "thread_id": "loyalty_arc",
+                "name": "Loyalty Arc",
+                "tension_id": "loyalty",
+                "alternative_id": "faithful",
+            }
+        )
+        output["initial_beats"] = [
+            {
+                "beat_id": "opening",
+                "summary": "Start",
+                "threads": ["trust_arc"],
+                "tension_impacts": [
+                    {"tension_id": "trust", "effect": "commits", "note": "Primary"},
+                    {"tension_id": "loyalty", "effect": "advances", "note": "Secondary"},
+                ],
+            },
+            {
+                "beat_id": "loyalty_commit",
+                "summary": "Loyalty locked",
+                "threads": ["loyalty_arc"],
+                "tension_impacts": [
+                    {"tension_id": "loyalty", "effect": "commits", "note": "Locked"}
+                ],
+            },
+        ]
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+    def test_multiple_threads_all_need_commits(self) -> None:
+        """Each thread independently needs a commits beat."""
+        graph = self._make_graph()
+        output = self._base_output()
+        # Add second thread for loyalty tension
+        output["threads"].append(
+            {
+                "thread_id": "loyalty_arc",
+                "name": "Loyalty Arc",
+                "tension_id": "loyalty",
+                "alternative_id": "faithful",
+            }
+        )
+        output["initial_beats"] = [
+            {
+                "beat_id": "trust_commit",
+                "summary": "Trust resolved",
+                "threads": ["trust_arc"],
+                "tension_impacts": [{"tension_id": "trust", "effect": "commits", "note": "Locked"}],
+            },
+            # loyalty_arc has no commits beat
+            {
+                "beat_id": "loyalty_advance",
+                "summary": "Loyalty tested",
+                "threads": ["loyalty_arc"],
+                "tension_impacts": [
+                    {"tension_id": "loyalty", "effect": "advances", "note": "Tested"}
+                ],
+            },
+        ]
+
+        errors = validate_seed_mutations(graph, output)
+
+        commits_errors = [e for e in errors if "no beat with effect='commits'" in e.issue]
+        assert len(commits_errors) == 1
+        assert "loyalty_arc" in commits_errors[0].issue
+
+    def test_all_threads_with_commits_passes(self) -> None:
+        """All threads having commits beats produces no errors."""
+        graph = self._make_graph()
+        output = self._base_output()
+        output["threads"].append(
+            {
+                "thread_id": "loyalty_arc",
+                "name": "Loyalty Arc",
+                "tension_id": "loyalty",
+                "alternative_id": "faithful",
+            }
+        )
+        output["initial_beats"] = [
+            {
+                "beat_id": "trust_commit",
+                "summary": "Trust resolved",
+                "threads": ["trust_arc"],
+                "tension_impacts": [{"tension_id": "trust", "effect": "commits", "note": "Locked"}],
+            },
+            {
+                "beat_id": "loyalty_commit",
+                "summary": "Loyalty locked",
+                "threads": ["loyalty_arc"],
+                "tension_impacts": [
+                    {"tension_id": "loyalty", "effect": "commits", "note": "Locked"}
+                ],
+            },
+        ]
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+
 class TestSeedDuplicateValidation:
     """Test SEED validation detects duplicate entity/tension IDs.
 
@@ -1339,6 +1575,9 @@ class TestMutationIntegration:
                     "beat_id": "opening",
                     "summary": "Kay meets the mentor",
                     "threads": ["thread_mentor"],  # Raw thread IDs
+                    "tension_impacts": [
+                        {"tension_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
+                    ],
                 }
             ],
         }
@@ -1649,7 +1888,16 @@ class TestScopedIdValidation:
                     "alternative_id": "yes",
                 }
             ],
-            "initial_beats": [],
+            "initial_beats": [
+                {
+                    "beat_id": "resolution",
+                    "summary": "Trust resolved",
+                    "threads": ["trust_arc"],
+                    "tension_impacts": [
+                        {"tension_id": "tension::trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                }
+            ],
         }
 
         errors = validate_seed_mutations(graph, output)
@@ -1682,6 +1930,9 @@ class TestScopedIdValidation:
                     "summary": "The beginning",
                     "threads": ["thread::mentor"],  # Scoped thread ID
                     "entities": ["entity::hero"],
+                    "tension_impacts": [
+                        {"tension_id": "tension::trust", "effect": "commits", "note": "Locked in"}
+                    ],
                 }
             ],
         }
@@ -1861,6 +2112,9 @@ class TestScopedIdValidation:
                     "entities": ["entity::hero", "entity::mentor"],  # Scoped IDs
                     "location": "entity::hero",  # Scoped location
                     "threads": ["thread::mentor_arc"],
+                    "tension_impacts": [
+                        {"tension_id": "tension::trust", "effect": "commits", "note": "Locked in"}
+                    ],
                 }
             ],
         }
@@ -1897,7 +2151,13 @@ class TestScopedIdValidation:
                     "tension_impacts": [
                         {"tension_id": "tension::trust", "effect": "advances"}  # Scoped ID
                     ],
-                }
+                },
+                {
+                    "beat_id": "resolution",
+                    "summary": "Trust locked in",
+                    "threads": ["thread::mentor_arc"],
+                    "tension_impacts": [{"tension_id": "tension::trust", "effect": "commits"}],
+                },
             ],
         }
 
@@ -1931,7 +2191,16 @@ class TestScopedIdValidation:
                     "description": "Trust is earned",
                 }
             ],
-            "initial_beats": [],
+            "initial_beats": [
+                {
+                    "beat_id": "resolution",
+                    "summary": "Trust resolved",
+                    "threads": ["mentor_arc"],
+                    "tension_impacts": [
+                        {"tension_id": "tension::trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                }
+            ],
         }
 
         errors = validate_seed_mutations(graph, output)
@@ -1969,7 +2238,16 @@ class TestScopedIdValidation:
                     "description": "Trust is earned",
                 }
             ],
-            "initial_beats": [],
+            "initial_beats": [
+                {
+                    "beat_id": "resolution",
+                    "summary": "Trust resolved",
+                    "threads": ["thread::mentor_arc"],
+                    "tension_impacts": [
+                        {"tension_id": "tension::trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                }
+            ],
         }
 
         errors = validate_seed_mutations(graph, output)
