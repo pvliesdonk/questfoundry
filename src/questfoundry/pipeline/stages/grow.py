@@ -1550,11 +1550,14 @@ class GrowStage:
                 log.error("phase8c_entity_disappeared", entity_id=prefixed_eid)
                 continue
 
+            # Convert list[OverlayDetail] to dict for graph storage
+            details_dict = {d.key: d.value for d in overlay.details}
+
             existing_overlays: list[dict[str, Any]] = entity_data.get("overlays", [])
             existing_overlays.append(
                 {
                     "when": overlay.when,
-                    "details": overlay.details,
+                    "details": details_dict,
                 }
             )
             graph.update_node(prefixed_eid, overlays=existing_overlays)

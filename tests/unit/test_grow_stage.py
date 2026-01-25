@@ -1206,16 +1206,18 @@ class TestPhase8cOverlays:
             "tracks", "codeword::mentor_trusted_committed", "consequence::mentor_trusted"
         )
 
+        from questfoundry.models.grow import OverlayDetail
+
         stage = GrowStage()
         phase8c_output = Phase8cOutput(
             overlays=[
                 OverlayProposal(
                     entity_id="entity::mentor",
                     when=["codeword::mentor_trusted_committed"],
-                    details={
-                        "attitude": "Warm and supportive",
-                        "access": "Shares secret knowledge",
-                    },
+                    details=[
+                        OverlayDetail(key="attitude", value="Warm and supportive"),
+                        OverlayDetail(key="access", value="Shares secret knowledge"),
+                    ],
                 ),
             ]
         )
@@ -1264,13 +1266,15 @@ class TestPhase8cOverlays:
             },
         )
 
+        from questfoundry.models.grow import OverlayDetail
+
         stage = GrowStage()
         phase8c_output = Phase8cOutput(
             overlays=[
                 OverlayProposal(
                     entity_id="entity::nonexistent",
                     when=["codeword::cw1"],
-                    details={"attitude": "Changed"},
+                    details=[OverlayDetail(key="attitude", value="Changed")],
                 ),
             ]
         )
@@ -1311,13 +1315,15 @@ class TestPhase8cOverlays:
             },
         )
 
+        from questfoundry.models.grow import OverlayDetail
+
         stage = GrowStage()
         phase8c_output = Phase8cOutput(
             overlays=[
                 OverlayProposal(
                     entity_id="entity::hero",
                     when=["codeword::nonexistent"],
-                    details={"attitude": "Changed"},
+                    details=[OverlayDetail(key="attitude", value="Changed")],
                 ),
             ]
         )
@@ -1334,7 +1340,7 @@ class TestPhase8cOverlays:
 
     @pytest.mark.asyncio
     async def test_phase_8c_skips_empty_details(self) -> None:
-        """Phase 8c skips overlays with empty details dict."""
+        """Phase 8c skips overlays with empty details list."""
         from questfoundry.graph.graph import Graph
         from questfoundry.models.grow import OverlayProposal, Phase8cOutput
 
@@ -1364,7 +1370,7 @@ class TestPhase8cOverlays:
                 OverlayProposal(
                     entity_id="entity::hero",
                     when=["codeword::cw1"],
-                    details={},
+                    details=[],  # Empty details list
                 ),
             ]
         )
@@ -1429,13 +1435,15 @@ class TestPhase8cOverlays:
             },
         )
 
+        from questfoundry.models.grow import OverlayDetail
+
         stage = GrowStage()
         phase8c_output = Phase8cOutput(
             overlays=[
                 OverlayProposal(
                     entity_id="mentor",  # No prefix
                     when=["codeword::cw1"],
-                    details={"attitude": "Friendly"},
+                    details=[OverlayDetail(key="attitude", value="Friendly")],
                 ),
             ]
         )
