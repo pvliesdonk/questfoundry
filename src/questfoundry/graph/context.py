@@ -330,6 +330,69 @@ def get_expected_counts(graph: Graph) -> dict[str, int]:
     }
 
 
+def format_retained_entity_ids(
+    graph: Graph,
+    entity_decisions: list[dict[str, Any]],
+) -> str:
+    """Format only RETAINED entity IDs for beat generation.
+
+    After entity decisions are serialized, beats should only reference
+    entities that were marked as 'retained', not 'cut'. This function
+    filters the full entity list to just retained entities.
+
+    Args:
+        graph: Graph containing BRAINSTORM entity data.
+        entity_decisions: List of EntityDecision dicts from serialization.
+            Each must have 'entity_id' and 'disposition' fields.
+
+    Returns:
+        Formatted context string with only retained entity IDs, or empty
+        string if no retained entities.
+    """
+    # Build set of cut entity IDs for O(1) lookup
+    cut_ids: set[str] = set()
+    for decision in entity_decisions:
+        entity_id = decision.get("entity_id", "")
+        disposition = decision.get("disposition", "retained")
+        # Handle both scoped and unscoped IDs
+        _, raw_id = parse_scoped_id(entity_id)
+        if disposition == "cut":
+            cut_ids.add(raw_id)
+
+    # Get all entities from graph, filter out cut ones
+    entities = graph.get_nodes_by_type("entity")
+    by_category: dict[str, list[str]] = {}
+    for node in entities.values():
+        cat = node.get("entity_type", "unknown")
+        raw_id = node.get("raw_id", "")
+        if raw_id and raw_id not in cut_ids:
+            by_category.setdefault(cat, []).append(raw_id)
+
+    if not by_category:
+        return ""
+
+    # Count retained entities
+    retained_count = sum(len(ids) for ids in by_category.values())
+
+    lines = [
+        "## RETAINED ENTITY IDs (use ONLY these in beats)",
+        "",
+        f"The following {retained_count} entities are RETAINED for the story.",
+        "Do NOT use cut entities - validation will fail.",
+        "",
+    ]
+
+    for category in _ENTITY_CATEGORIES:
+        if category in by_category:
+            cat_count = len(by_category[category])
+            lines.append(f"**{category.title()}s ({cat_count}):**")
+            for raw_id in sorted(by_category[category]):
+                lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
+            lines.append("")
+
+    return "\n".join(lines)
+
+
 def format_summarize_manifest(graph: Graph) -> dict[str, str]:
     """Format entity and tension manifests for SEED summarize prompt.
 
