@@ -87,6 +87,27 @@ Combinatorial complexity depends on:
 
 SEED surfaces this complexity early so humans can scope appropriately.
 
+### Over-Generate-and-Select Pattern
+
+LLMs are poor at counting and self-constraint. Instead of teaching the LLM to stay within arc limits, QuestFoundry uses an **over-generate-and-select** pattern:
+
+1. **LLM generates freely** - The LLM explores all alternatives it finds compelling without worrying about arc limits
+2. **Runtime scores tensions** - Each tension is scored by quality criteria:
+   - Beat richness: How many beats explore the non-canonical thread
+   - Consequence depth: How many narrative effects cascade from the thread
+   - Entity coverage: How many unique entities appear in beats
+   - Location variety: How many distinct locations the thread uses
+   - Thread tier: Major threads score higher than minor
+   - Content distinctiveness: How different the paths are (Jaccard distance)
+3. **Runtime selects top N** - The highest-scoring tensions are kept fully explored (up to 4 tensions = 16 arcs)
+4. **Runtime prunes excess** - Demoted tensions have their non-canonical alternatives moved to `implicit`, and associated threads, consequences, and beats are removed
+
+This pattern:
+- Simplifies prompts (no arc math, verification checklists, or hard limits)
+- Lets the LLM focus on narrative quality instead of constraint compliance
+- Produces consistent, predictable arc counts
+- Avoids validation ping-pong where the LLM over/under-corrects
+
 ---
 
 ## Algorithm Phases
@@ -349,6 +370,8 @@ viability_analysis:
   recommendation: "Scope is sustainable for medium-length story"
 ```
 
+**Note on Arc Limits:** The runtime enforces arc limits programmatically via the over-generate-and-select pattern (see Core Concepts). If the LLM generates more than 4 fully-explored tensions (16+ arcs), the runtime automatically selects the best tensions by quality score and demotes the rest. This removes the need for LLM self-constraint on arc counts.
+
 **Human Gate:** Yes
 
 Human reviews viability:
@@ -481,9 +504,14 @@ Fits comfortably in modern context windows.
 
 **Cause:** Exploring too many non-canonical alternatives
 
-**Recovery:**
+**Recovery:** In most cases, the runtime's over-generate-and-select pattern handles this automatically by:
+1. Scoring tensions by quality criteria
+2. Selecting the top N tensions for full exploration (up to 4 = 16 arcs)
+3. Demoting excess tensions (moving non-canonical to `implicit`)
+
+If automatic pruning produces unsatisfactory results:
 1. Return to Phase 2
-2. Convert some explored alternatives back to shadows
+2. Manually specify which alternatives to explore
 3. Focus on most narratively distinct branches
 
 ### Failure: Disconnected Threads
