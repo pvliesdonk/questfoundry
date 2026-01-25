@@ -1201,7 +1201,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             expected_tension = thread_tension_map[thread_id]
             errors.append(
                 SeedValidationError(
-                    field_path=f"threads.{thread_id}.commits",
+                    field_path=f"threads.{thread_id}",
                     issue=(
                         f"Thread '{thread_id}' has no beat with effect='commits' "
                         f"for its parent tension '{expected_tension}'. "
