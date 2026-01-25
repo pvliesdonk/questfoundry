@@ -133,14 +133,30 @@ system: |
 
   If your story needs a scene in a character's personal space, use a retained location and put details in the beat summary.
 
+  ## ARC COUNT VERIFICATION (do this BEFORE submitting)
+
+  Count your fully-explored tensions (those with empty implicit[] or both alternatives in explored[]):
+
+  **Your count**: ___ tensions with BOTH alternatives explored
+  **Arc count**: 2^___ = ___ arcs
+
+  **HARD LIMITS:**
+  - If arc count > 16: You MUST move some alternatives to implicit
+  - Maximum 4 tensions can have both alternatives explored
+  - At least 40% of tensions should have implicit alternatives
+
+  **If over limit**: Select the lowest-scoring tensions (per the ranking criteria from
+  the discussion) and move their non-canonical alternatives from explored to implicit.
+
   ## FINAL CHECK (verify before submitting)
   COUNT your output before submitting:
   - Entity decisions: Do you have exactly {entity_count} decisions?
   - Tension decisions: Do you have exactly {tension_count} decisions?
+  - Arc count: Is it 16 or fewer? (max 4 tensions fully explored)
   - Beat count: Did you create 2-4 beats PER thread? (3 threads = 6-12 beats)
   - Location diversity: Are you using at least 2 different locations across all beats?
 
-  If your counts don't match, you have missed items. Add them before submitting.
+  If your counts don't match or arc count exceeds 16, FIX before submitting.
 
   ## Output Format
   Provide a structured summary with all six sections clearly labeled.
