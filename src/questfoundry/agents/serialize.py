@@ -1115,6 +1115,7 @@ async def serialize_seed_as_function(
 
     collected: dict[str, Any] = {}
     brief_with_threads = enhanced_brief
+    thread_ids_context = ""  # Will be populated after threads are serialized
 
     # Extract entity IDs context for per-thread beat generation
     # This is injected into each per-thread brief for character/location refs
@@ -1129,6 +1130,13 @@ async def serialize_seed_as_function(
         current_brief = brief_with_threads if section_name == "consequences" else enhanced_brief
 
         section_prompt = prompts[section_name]
+
+        # For consequences, inject thread IDs directly into the prompt (not just brief)
+        # Small models follow instructions in the prompt more reliably than in the brief
+        if section_name == "consequences" and thread_ids_context:
+            section_prompt = f"{section_prompt}\n\n{thread_ids_context}"
+            log.debug("thread_ids_injected_into_consequences_prompt")
+
         section_result, section_tokens = await serialize_to_artifact(
             model=model,
             brief=current_brief,
