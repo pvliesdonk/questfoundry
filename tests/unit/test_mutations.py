@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from questfoundry.graph import Graph, MutationError, SeedMutationError
@@ -24,6 +26,62 @@ from questfoundry.graph.mutations import (
     validate_brainstorm_mutations,
     validate_seed_mutations,
 )
+
+
+def _build_minimal_seed_graph_and_output() -> tuple[Graph, dict[str, Any]]:
+    """Build a minimal graph and output that passes arc count validation.
+
+    Returns graph with 2 tensions (each having 2 alternatives) and output
+    with 4 threads (2 per tension) and 4 beats (1 commits beat per thread).
+    This satisfies the minimum 4-arc requirement for SEED validation.
+    """
+    graph = Graph.empty()
+
+    # Add 2 tensions with both alternatives
+    for i in range(2):
+        tid = f"tension::t{i}"
+        graph.create_node(tid, {"type": "tension", "raw_id": f"t{i}"})
+        for alt in ["a", "b"]:
+            alt_id = f"{tid}::alt::{alt}"
+            graph.create_node(alt_id, {"type": "alternative", "raw_id": alt})
+            graph.add_edge("has_alternative", tid, alt_id)
+
+    output: dict[str, Any] = {
+        "entities": [],
+        "tensions": [
+            {"tension_id": "t0", "explored": ["a", "b"], "implicit": []},
+            {"tension_id": "t1", "explored": ["a", "b"], "implicit": []},
+        ],
+        "threads": [
+            {"thread_id": "thread_0", "tension_id": "t0", "alternative_id": "a"},
+            {"thread_id": "thread_1", "tension_id": "t0", "alternative_id": "b"},
+            {"thread_id": "thread_2", "tension_id": "t1", "alternative_id": "a"},
+            {"thread_id": "thread_3", "tension_id": "t1", "alternative_id": "b"},
+        ],
+        "initial_beats": [
+            {
+                "beat_id": "b0",
+                "threads": ["thread_0"],
+                "tension_impacts": [{"tension_id": "t0", "effect": "commits"}],
+            },
+            {
+                "beat_id": "b1",
+                "threads": ["thread_1"],
+                "tension_impacts": [{"tension_id": "t0", "effect": "commits"}],
+            },
+            {
+                "beat_id": "b2",
+                "threads": ["thread_2"],
+                "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+            },
+            {
+                "beat_id": "b3",
+                "threads": ["thread_3"],
+                "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+            },
+        ],
+    }
+    return graph, output
 
 
 class TestHasMutationHandler:
@@ -130,16 +188,55 @@ class TestApplyMutations:
     def test_routes_to_seed(self) -> None:
         """Routes seed stage to apply_seed_mutations."""
         graph = Graph.empty()
-        # Pre-populate with entity from brainstorm (using prefixed ID + raw_id for validation)
+        # Pre-populate with entity from brainstorm
         graph.create_node(
             "entity::char_001",
             {"type": "entity", "raw_id": "char_001", "disposition": "proposed"},
         )
+        # Add 2 tensions with both alternatives (required for minimum arc count)
+        for i in range(2):
+            tid = f"tension::t{i}"
+            graph.create_node(tid, {"type": "tension", "raw_id": f"t{i}"})
+            for alt in ["a", "b"]:
+                alt_id = f"{tid}::alt::{alt}"
+                graph.create_node(alt_id, {"type": "alternative", "raw_id": alt})
+                graph.add_edge("has_alternative", tid, alt_id)
 
         output = {
             "entities": [{"entity_id": "char_001", "disposition": "retained"}],
-            "threads": [],
-            "initial_beats": [],
+            "tensions": [
+                {"tension_id": "t0", "explored": ["a", "b"], "implicit": []},
+                {"tension_id": "t1", "explored": ["a", "b"], "implicit": []},
+            ],
+            "threads": [
+                {"thread_id": "thread_0", "tension_id": "t0", "alternative_id": "a"},
+                {"thread_id": "thread_1", "tension_id": "t0", "alternative_id": "b"},
+                {"thread_id": "thread_2", "tension_id": "t1", "alternative_id": "a"},
+                {"thread_id": "thread_3", "tension_id": "t1", "alternative_id": "b"},
+            ],
+            "initial_beats": [
+                # Minimal beats with commits for each thread
+                {
+                    "beat_id": "b0",
+                    "threads": ["thread_0"],
+                    "tension_impacts": [{"tension_id": "t0", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b1",
+                    "threads": ["thread_1"],
+                    "tension_impacts": [{"tension_id": "t0", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b2",
+                    "threads": ["thread_2"],
+                    "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b3",
+                    "threads": ["thread_3"],
+                    "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+                },
+            ],
         }
 
         apply_mutations(graph, "seed", output)
@@ -1314,6 +1411,208 @@ class TestSeedCompletenessValidation:
 
         missing_thread_errors = [e for e in errors if "explored alternatives" in e.issue]
         assert missing_thread_errors == []
+
+    def test_arc_count_exceeds_limit(self) -> None:
+        """Arc count over 16 (more than 4 fully-explored tensions) triggers error."""
+        graph = Graph.empty()
+        # Create 5 tensions, each with 2 alternatives
+        for i in range(5):
+            graph.create_node(f"tension::t{i}", {"type": "tension", "raw_id": f"t{i}"})
+            graph.create_node(f"tension::t{i}::alt::a", {"type": "alternative", "raw_id": "a"})
+            graph.create_node(f"tension::t{i}::alt::b", {"type": "alternative", "raw_id": "b"})
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::a")
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::b")
+
+        # Output has all 5 tensions fully explored (2^5 = 32 arcs > 16 limit)
+        output: dict[str, Any] = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": f"t{i}", "explored": ["a", "b"], "implicit": []} for i in range(5)
+            ],
+            "threads": [
+                {
+                    "thread_id": f"t{i}_{alt}",
+                    "name": f"Thread {i} {alt}",
+                    "tension_id": f"t{i}",
+                    "alternative_id": alt,
+                }
+                for i in range(5)
+                for alt in ["a", "b"]
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        arc_errors = [e for e in errors if "arc count" in e.issue.lower()]
+        assert len(arc_errors) == 1
+        assert "32" in arc_errors[0].issue  # 2^5 = 32
+        assert "exceeds limit of 16" in arc_errors[0].issue
+        assert arc_errors[0].category == SeedErrorCategory.SEMANTIC
+
+    def test_arc_count_at_limit_passes(self) -> None:
+        """Arc count of exactly 16 (4 fully-explored tensions) passes validation."""
+        graph = Graph.empty()
+        # Create 4 tensions, each with 2 alternatives
+        for i in range(4):
+            graph.create_node(f"tension::t{i}", {"type": "tension", "raw_id": f"t{i}"})
+            graph.create_node(f"tension::t{i}::alt::a", {"type": "alternative", "raw_id": "a"})
+            graph.create_node(f"tension::t{i}::alt::b", {"type": "alternative", "raw_id": "b"})
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::a")
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::b")
+
+        # Output has all 4 tensions fully explored (2^4 = 16 arcs = exactly at limit)
+        output: dict[str, Any] = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": f"t{i}", "explored": ["a", "b"], "implicit": []} for i in range(4)
+            ],
+            "threads": [
+                {
+                    "thread_id": f"t{i}_{alt}",
+                    "name": f"Thread {i} {alt}",
+                    "tension_id": f"t{i}",
+                    "alternative_id": alt,
+                }
+                for i in range(4)
+                for alt in ["a", "b"]
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        arc_errors = [e for e in errors if "arc count" in e.issue.lower()]
+        assert arc_errors == []
+
+    def test_arc_count_below_minimum(self) -> None:
+        """Arc count below 4 (fewer than 2 fully-explored tensions) triggers error."""
+        graph = Graph.empty()
+        # Create 4 tensions, each with 2 alternatives
+        for i in range(4):
+            graph.create_node(f"tension::t{i}", {"type": "tension", "raw_id": f"t{i}"})
+            graph.create_node(f"tension::t{i}::alt::a", {"type": "alternative", "raw_id": "a"})
+            graph.create_node(f"tension::t{i}::alt::b", {"type": "alternative", "raw_id": "b"})
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::a")
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::b")
+
+        # Output has only 1 tension fully explored (2^1 = 2 arcs < 4 minimum)
+        output: dict[str, Any] = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "t0", "explored": ["a", "b"], "implicit": []},  # 1 fully explored
+                {"tension_id": "t1", "explored": ["a"], "implicit": ["b"]},
+                {"tension_id": "t2", "explored": ["a"], "implicit": ["b"]},
+                {"tension_id": "t3", "explored": ["a"], "implicit": ["b"]},
+            ],
+            "threads": [
+                {
+                    "thread_id": "t0_a",
+                    "name": "Thread 0 a",
+                    "tension_id": "t0",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t0_b",
+                    "name": "Thread 0 b",
+                    "tension_id": "t0",
+                    "alternative_id": "b",
+                },
+                {
+                    "thread_id": "t1_a",
+                    "name": "Thread 1 a",
+                    "tension_id": "t1",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t2_a",
+                    "name": "Thread 2 a",
+                    "tension_id": "t2",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t3_a",
+                    "name": "Thread 3 a",
+                    "tension_id": "t3",
+                    "alternative_id": "a",
+                },
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        arc_errors = [e for e in errors if "arc count" in e.issue.lower()]
+        assert len(arc_errors) == 1
+        assert "2" in arc_errors[0].issue  # 2^1 = 2 arcs
+        assert "below minimum of 4" in arc_errors[0].issue
+        assert arc_errors[0].category == SeedErrorCategory.SEMANTIC
+
+    def test_arc_count_at_minimum_passes(self) -> None:
+        """Arc count of exactly 4 (2 fully-explored tensions) passes validation."""
+        graph = Graph.empty()
+        # Create 4 tensions, each with 2 alternatives
+        for i in range(4):
+            graph.create_node(f"tension::t{i}", {"type": "tension", "raw_id": f"t{i}"})
+            graph.create_node(f"tension::t{i}::alt::a", {"type": "alternative", "raw_id": "a"})
+            graph.create_node(f"tension::t{i}::alt::b", {"type": "alternative", "raw_id": "b"})
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::a")
+            graph.add_edge("has_alternative", f"tension::t{i}", f"tension::t{i}::alt::b")
+
+        # Output has 2 tensions fully explored (2^2 = 4 arcs = exactly at minimum)
+        output: dict[str, Any] = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "t0", "explored": ["a", "b"], "implicit": []},  # fully explored
+                {"tension_id": "t1", "explored": ["a", "b"], "implicit": []},  # fully explored
+                {"tension_id": "t2", "explored": ["a"], "implicit": ["b"]},
+                {"tension_id": "t3", "explored": ["a"], "implicit": ["b"]},
+            ],
+            "threads": [
+                {
+                    "thread_id": "t0_a",
+                    "name": "Thread 0 a",
+                    "tension_id": "t0",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t0_b",
+                    "name": "Thread 0 b",
+                    "tension_id": "t0",
+                    "alternative_id": "b",
+                },
+                {
+                    "thread_id": "t1_a",
+                    "name": "Thread 1 a",
+                    "tension_id": "t1",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t1_b",
+                    "name": "Thread 1 b",
+                    "tension_id": "t1",
+                    "alternative_id": "b",
+                },
+                {
+                    "thread_id": "t2_a",
+                    "name": "Thread 2 a",
+                    "tension_id": "t2",
+                    "alternative_id": "a",
+                },
+                {
+                    "thread_id": "t3_a",
+                    "name": "Thread 3 a",
+                    "tension_id": "t3",
+                    "alternative_id": "a",
+                },
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        arc_errors = [e for e in errors if "arc count" in e.issue.lower()]
+        assert arc_errors == []
 
     def test_empty_brainstorm_valid(self) -> None:
         """Empty BRAINSTORM data (no entities/tensions) is valid."""

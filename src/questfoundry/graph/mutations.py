@@ -1186,25 +1186,46 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 )
             )
 
-    # 11c. Calculate projected arc count and warn if high
+    # 11c. Calculate projected arc count and error if too high
     # Arc count = 2^n where n = tensions with 2+ threads (both alternatives explored)
+    # Hard limit: 16 arcs (4 fully-explored tensions) to prevent GROW stage failure
     tensions_with_both_alts = sum(1 for count in tension_thread_counts.values() if count >= 2)
     projected_arc_count = 2**tensions_with_both_alts if tensions_with_both_alts > 0 else 1
-    if projected_arc_count > 32:
-        # This is a warning, not an error - included as INFO category
-        # to alert users about story complexity
-        from questfoundry.observability.logging import get_logger
+    if projected_arc_count > 16:
+        errors.append(
+            SeedValidationError(
+                field_path="tensions",
+                issue=(
+                    f"Projected arc count ({projected_arc_count}) exceeds limit of 16. "
+                    f"You have {tensions_with_both_alts} tensions with both alternatives explored. "
+                    f"Maximum allowed is 4 fully-explored tensions."
+                ),
+                available=[],
+                provided=str(tensions_with_both_alts),
+                category=SeedErrorCategory.SEMANTIC,
+            )
+        )
 
-        log = get_logger(__name__)
-        log.warning(
-            "seed_high_arc_count",
-            projected_arcs=projected_arc_count,
-            tensions_with_both_alts=tensions_with_both_alts,
-            detail=(
-                f"Story will have {projected_arc_count} arcs ({tensions_with_both_alts} tensions "
-                f"with both alternatives explored). Consider exploring fewer alternatives for "
-                f"a more focused narrative."
-            ),
+    # 11d. Check minimum arc count (at least 4 arcs = 2 fully-explored tensions for real IF)
+    # Only check when there's a meaningful SEED with multiple tensions that have alternatives
+    # This avoids triggering on unit tests that only define partial fixture data
+    tension_decisions = output.get("tensions", [])
+    has_multi_tension_seed = len(tension_decisions) >= 2 and any(
+        len(t.get("explored", [])) >= 2 for t in tension_decisions
+    )
+    if has_multi_tension_seed and projected_arc_count < 4:
+        errors.append(
+            SeedValidationError(
+                field_path="tensions",
+                issue=(
+                    f"Projected arc count ({projected_arc_count}) is below minimum of 4. "
+                    f"You have {tensions_with_both_alts} tensions with both alternatives explored. "
+                    f"Minimum required is 2 fully-explored tensions for interactive fiction branching."
+                ),
+                available=[],
+                provided=str(tensions_with_both_alts),
+                category=SeedErrorCategory.SEMANTIC,
+            )
         )
 
     # 12. Check beats reference their thread's parent tension
