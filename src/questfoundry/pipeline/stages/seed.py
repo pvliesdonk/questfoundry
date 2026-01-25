@@ -30,6 +30,7 @@ from questfoundry.agents import (
 from questfoundry.graph import Graph
 from questfoundry.graph.context import format_summarize_manifest, get_expected_counts
 from questfoundry.graph.mutations import format_semantic_errors_as_content
+from questfoundry.graph.seed_pruning import compute_arc_count, prune_to_arc_limit
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
 from questfoundry.tools.langchain_tools import (
@@ -400,28 +401,42 @@ class SeedStage:
             # This shouldn't happen with current logic, but handle defensively
             raise SeedStageError("SEED serialization failed: artifact is None after all retries")
 
+        # Phase 4: Prune to arc limit (over-generate-and-select pattern)
+        # LLM may have explored more tensions than the arc limit allows.
+        # Instead of retrying, we programmatically select the best tensions.
+        original_arc_count = compute_arc_count(result.artifact)
+        pruned_artifact = prune_to_arc_limit(result.artifact, max_arcs=16)
+        final_arc_count = compute_arc_count(pruned_artifact)
+
+        if original_arc_count != final_arc_count:
+            log.info(
+                "seed_pruned_for_arc_limit",
+                original_arcs=original_arc_count,
+                final_arcs=final_arc_count,
+                original_threads=len(result.artifact.threads),
+                final_threads=len(pruned_artifact.threads),
+            )
+
         # Convert to dict for return
-        artifact_data = result.artifact.model_dump()
+        artifact_data = pruned_artifact.model_dump()
 
         # Log summary statistics
         entity_count = len(artifact_data.get("entities", []))
         thread_count = len(artifact_data.get("threads", []))
         beat_count = len(artifact_data.get("initial_beats", []))
 
-        # Calculate arc count: 2^n where n = tensions with both alternatives explored
-        tensions_fully_explored = sum(
-            1 for t in artifact_data.get("tensions", []) if len(t.get("explored", [])) >= 2
-        )
-        arc_count = 2**tensions_fully_explored
-
         # Warn if arc count is too low (linear story instead of IF)
-        if arc_count < 4:
+        # This indicates the LLM didn't generate enough branching content
+        if final_arc_count < 4:
+            tensions_fully_explored = sum(
+                1 for t in artifact_data.get("tensions", []) if len(t.get("explored", [])) >= 2
+            )
             log.warning(
                 "seed_low_arc_count",
-                arc_count=arc_count,
+                arc_count=final_arc_count,
                 tensions_fully_explored=tensions_fully_explored,
                 message=(
-                    f"Only {arc_count} arc(s) - this is {'a linear story' if arc_count == 1 else 'minimal branching'}. "
+                    f"Only {final_arc_count} arc(s) - this is {'a linear story' if final_arc_count == 1 else 'minimal branching'}. "
                     f"For real IF, explore BOTH alternatives for at least 2 tensions (4+ arcs)."
                 ),
             )
@@ -433,7 +448,7 @@ class SeedStage:
             entities=entity_count,
             threads=thread_count,
             beats=beat_count,
-            arcs=arc_count,
+            arcs=final_arc_count,
         )
 
         return artifact_data, total_llm_calls, total_tokens
