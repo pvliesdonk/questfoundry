@@ -455,7 +455,9 @@ def _clean_dict(data: dict[str, Any]) -> dict[str, Any]:
 
 
 # Registry of stages with mutation handlers
-_MUTATION_STAGES = frozenset({"dream", "brainstorm", "seed", "grow"})
+# Note: GROW is not included because it modifies the graph directly during execution,
+# not via post-stage mutation application.
+_MUTATION_STAGES = frozenset({"dream", "brainstorm", "seed"})
 
 
 def has_mutation_handler(stage: str) -> bool:
