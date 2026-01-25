@@ -1244,6 +1244,77 @@ class TestSeedCompletenessValidation:
         thread_errors = [e for e in errors if "has no thread" in e.issue]
         assert thread_errors == []
 
+    def test_missing_threads_for_explored_alternatives(self) -> None:
+        """Each explored alternative needs its own thread - missing threads caught."""
+        graph = Graph.empty()
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.create_node("tension::trust::alt::no", {"type": "alternative", "raw_id": "no"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::no")
+
+        output = {
+            "entities": [],
+            "tensions": [
+                # Both alternatives explored, but only 1 thread created
+                {"tension_id": "trust", "explored": ["yes", "no"], "implicit": []},
+            ],
+            "threads": [
+                {
+                    "thread_id": "trust_yes",
+                    "name": "Trust Yes",
+                    "tension_id": "trust",
+                    "alternative_id": "yes",
+                },
+                # Missing thread for 'no' alternative!
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        missing_thread_errors = [e for e in errors if "explored alternatives" in e.issue]
+        assert len(missing_thread_errors) == 1
+        assert "2 explored alternatives" in missing_thread_errors[0].issue
+        assert "1 thread" in missing_thread_errors[0].issue
+        assert missing_thread_errors[0].category == SeedErrorCategory.COMPLETENESS
+
+    def test_all_explored_alternatives_have_threads(self) -> None:
+        """When each explored alternative has a thread, validation passes."""
+        graph = Graph.empty()
+        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
+        graph.create_node("tension::trust::alt::no", {"type": "alternative", "raw_id": "no"})
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::no")
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "trust", "explored": ["yes", "no"], "implicit": []},
+            ],
+            "threads": [
+                {
+                    "thread_id": "trust_yes",
+                    "name": "Trust Yes",
+                    "tension_id": "trust",
+                    "alternative_id": "yes",
+                },
+                {
+                    "thread_id": "trust_no",
+                    "name": "Trust No",
+                    "tension_id": "trust",
+                    "alternative_id": "no",
+                },
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        missing_thread_errors = [e for e in errors if "explored alternatives" in e.issue]
+        assert missing_thread_errors == []
+
     def test_empty_brainstorm_valid(self) -> None:
         """Empty BRAINSTORM data (no entities/tensions) is valid."""
         graph = Graph.empty()

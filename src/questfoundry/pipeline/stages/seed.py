@@ -408,6 +408,24 @@ class SeedStage:
         thread_count = len(artifact_data.get("threads", []))
         beat_count = len(artifact_data.get("initial_beats", []))
 
+        # Calculate arc count: 2^n where n = tensions with both alternatives explored
+        tensions_fully_explored = sum(
+            1 for t in artifact_data.get("tensions", []) if len(t.get("explored", [])) >= 2
+        )
+        arc_count = 2**tensions_fully_explored
+
+        # Warn if arc count is too low (linear story instead of IF)
+        if arc_count < 4:
+            log.warning(
+                "seed_low_arc_count",
+                arc_count=arc_count,
+                tensions_fully_explored=tensions_fully_explored,
+                message=(
+                    f"Only {arc_count} arc(s) - this is {'a linear story' if arc_count == 1 else 'minimal branching'}. "
+                    f"For real IF, explore BOTH alternatives for at least 2 tensions (4+ arcs)."
+                ),
+            )
+
         log.info(
             "seed_stage_completed",
             llm_calls=total_llm_calls,
@@ -415,6 +433,7 @@ class SeedStage:
             entities=entity_count,
             threads=thread_count,
             beats=beat_count,
+            arcs=arc_count,
         )
 
         return artifact_data, total_llm_calls, total_tokens
