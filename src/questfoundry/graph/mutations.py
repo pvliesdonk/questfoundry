@@ -910,6 +910,9 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     for field_path, id_field, scope in [
         ("entities", "entity_id", "entity"),
         ("tensions", "tension_id", "tension"),
+        ("threads", "thread_id", "thread"),
+        ("consequences", "consequence_id", "consequence"),
+        ("initial_beats", "beat_id", "beat"),
     ]:
         id_counts: Counter[str] = Counter()
         for decision in output.get(field_path, []):
