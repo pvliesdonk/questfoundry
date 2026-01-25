@@ -15,6 +15,7 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.prompts import get_serialize_prompt
 from questfoundry.artifacts.validator import strip_null_values
 from questfoundry.graph.context import (
+    format_retained_entity_ids,
     format_thread_ids_context,
     format_valid_ids_context,
     normalize_scoped_id,
@@ -1097,6 +1098,15 @@ async def serialize_seed_as_function(
                 f"Expected field '{output_field}', got: {list(section_data.keys())}"
             )
         collected[output_field] = section_data[output_field]
+
+        # After entities are serialized, update entity_context to only include retained
+        # entities. This prevents beats from referencing cut entities.
+        if section_name == "entities" and graph is not None and collected.get("entities"):
+            entity_context = format_retained_entity_ids(graph, collected["entities"])
+            log.debug(
+                "retained_entity_context_updated",
+                entity_decisions=len(collected["entities"]),
+            )
 
         # After threads are serialized:
         # 1. Inject thread IDs for subsequent sections (consequences)
