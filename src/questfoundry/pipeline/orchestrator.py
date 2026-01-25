@@ -580,9 +580,7 @@ class PipelineOrchestrator:
                     except GraphCorruptionError:
                         # Re-raise corruption errors - already logged and rolled back above
                         raise
-                    except Exception as e:
-                        # Other graph operations are non-critical - artifact was written successfully
-                        log.warning("graph_update_failed", stage=stage_name, error=str(e))
+                    # All other exceptions propagate - never swallow errors
 
             # Calculate duration
             duration = time.perf_counter() - start_time
