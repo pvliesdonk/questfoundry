@@ -983,8 +983,17 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
                 missing_items.append(f"- {error.issue}")
             continue
 
+        # Handle limit-exceeded errors (e.g., arc count too high)
+        # These have provided but no available suggestions
+        if error.provided and not error.available:
+            if "exceeds limit" in error.issue.lower() or "maximum" in error.issue.lower():
+                corrections.append(f"- LIMIT EXCEEDED: {error.issue}")
+                continue
+            # Skip other errors without available suggestions
+            continue
+
         # Handle SEMANTIC errors (invalid IDs) - need both provided and available
-        if not error.provided or not error.available:
+        if not error.provided:
             continue
 
         suggestion = _format_available_with_suggestions(error.provided, error.available)

@@ -1092,3 +1092,67 @@ class TestSerializeSeedAsFunction:
             assert call_count[0] == 7
             assert result.success is False
             assert len(result.semantic_errors) == 1
+
+
+class TestFormatSectionCorrections:
+    """Tests for _format_section_corrections helper function."""
+
+    def test_formats_limit_exceeded_errors(self) -> None:
+        """Should format arc count exceeded errors as LIMIT EXCEEDED corrections."""
+        from questfoundry.agents.serialize import _format_section_corrections
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="tensions",
+                issue="Projected arc count (64) exceeds limit of 16. You have 6 tensions.",
+                available=[],
+                provided="6",
+                category=SeedErrorCategory.SEMANTIC,
+            )
+        ]
+
+        result = _format_section_corrections(errors)
+
+        assert "LIMIT EXCEEDED" in result
+        assert "Projected arc count (64)" in result
+        assert "exceeds limit of 16" in result
+
+    def test_formats_maximum_exceeded_errors(self) -> None:
+        """Should format errors with 'maximum' as LIMIT EXCEEDED corrections."""
+        from questfoundry.agents.serialize import _format_section_corrections
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="tensions",
+                issue="Maximum allowed is 4 fully-explored tensions.",
+                available=[],
+                provided="6",
+                category=SeedErrorCategory.SEMANTIC,
+            )
+        ]
+
+        result = _format_section_corrections(errors)
+
+        assert "LIMIT EXCEEDED" in result
+        assert "Maximum allowed" in result
+
+    def test_skips_errors_without_limit_keywords(self) -> None:
+        """Should skip semantic errors without limit/maximum when available is empty."""
+        from questfoundry.agents.serialize import _format_section_corrections
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="tensions",
+                issue="Some other error without limit keywords",
+                available=[],
+                provided="x",
+                category=SeedErrorCategory.SEMANTIC,
+            )
+        ]
+
+        result = _format_section_corrections(errors)
+
+        assert result == ""
