@@ -420,6 +420,17 @@ def _run_stage_command(
     if resume_from:
         context["resume_from"] = resume_from
 
+    # Add phase progress callback for GROW stage (shows phase-by-phase progress)
+    if stage_name == "grow":
+
+        def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
+            """Display phase progress for GROW stage."""
+            status_icon = "[green]✓[/green]" if status == "completed" else "[yellow]○[/yellow]"
+            detail_str = f" ({detail})" if detail else ""
+            console.print(f"  {status_icon} {phase}{detail_str}")
+
+        context["on_phase_progress"] = _on_phase_progress
+
     if use_interactive:
         log.debug("interactive_mode", mode="enabled")
         context.update(_setup_interactive_context(console))
@@ -446,14 +457,10 @@ def _run_stage_command(
             )
         )
     else:
-        # Non-interactive: use progress spinner
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            console=console,
-            transient=True,
-        ) as progress:
-            progress.add_task(f"Running {stage_name.upper()} stage...", total=None)
+        # Non-interactive mode
+        if stage_name == "grow":
+            # GROW shows phase-by-phase progress instead of spinner
+            console.print(f"[dim]Running {stage_name.upper()} stage...[/dim]")
             result = asyncio.run(
                 _run_stage_async(
                     stage_name,
@@ -465,6 +472,26 @@ def _run_stage_command(
                     provider_serialize,
                 )
             )
+        else:
+            # Other stages use progress spinner
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+                transient=True,
+            ) as progress:
+                progress.add_task(f"Running {stage_name.upper()} stage...", total=None)
+                result = asyncio.run(
+                    _run_stage_async(
+                        stage_name,
+                        project_path,
+                        context,
+                        provider,
+                        provider_discuss,
+                        provider_summarize,
+                        provider_serialize,
+                    )
+                )
 
     if result.status == "failed":
         log.error("stage_failed", stage=stage_name, errors=result.errors)
