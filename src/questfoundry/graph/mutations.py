@@ -1186,41 +1186,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 )
             )
 
-    # 11c. Calculate projected arc count and error if too high
-    # Arc count = 2^n where n = tensions with 2+ threads (both alternatives explored)
-    # Hard limit: 16 arcs (4 fully-explored tensions) to prevent GROW stage failure
-    tensions_with_both_alts = sum(1 for count in tension_thread_counts.values() if count >= 2)
-    projected_arc_count = 2**tensions_with_both_alts if tensions_with_both_alts > 0 else 1
-    if projected_arc_count > 16:
-        errors.append(
-            SeedValidationError(
-                field_path="tensions",
-                issue=(
-                    f"Projected arc count ({projected_arc_count}) exceeds limit of 16. "
-                    f"You have {tensions_with_both_alts} tensions with both alternatives explored. "
-                    f"Maximum allowed is 4 fully-explored tensions."
-                ),
-                available=[],
-                provided=str(tensions_with_both_alts),
-                category=SeedErrorCategory.SEMANTIC,
-            )
-        )
-
-    # 11d. Check minimum arc count (at least 4 arcs = 2 fully-explored tensions for real IF)
-    if projected_arc_count < 4:
-        errors.append(
-            SeedValidationError(
-                field_path="tensions",
-                issue=(
-                    f"Projected arc count ({projected_arc_count}) is below minimum of 4. "
-                    f"You have {tensions_with_both_alts} tensions with both alternatives explored. "
-                    f"Minimum required is 2 fully-explored tensions for interactive fiction branching."
-                ),
-                available=[],
-                provided=str(tensions_with_both_alts),
-                category=SeedErrorCategory.SEMANTIC,
-            )
-        )
+    # NOTE: Arc count validation removed - now handled by runtime pruning (over-generate-and-select)
+    # See seed_pruning.py for the new approach: LLM generates freely, runtime selects best tensions
 
     # 12. Check beats reference their thread's parent tension
     # 13. Check each thread has at least one commits beat for its tension
