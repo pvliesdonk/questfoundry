@@ -1186,6 +1186,27 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 )
             )
 
+    # 11c. Calculate projected arc count and warn if high
+    # Arc count = 2^n where n = tensions with 2+ threads (both alternatives explored)
+    tensions_with_both_alts = sum(1 for count in tension_thread_counts.values() if count >= 2)
+    projected_arc_count = 2**tensions_with_both_alts if tensions_with_both_alts > 0 else 1
+    if projected_arc_count > 32:
+        # This is a warning, not an error - included as INFO category
+        # to alert users about story complexity
+        from questfoundry.observability.logging import get_logger
+
+        log = get_logger(__name__)
+        log.warning(
+            "seed_high_arc_count",
+            projected_arcs=projected_arc_count,
+            tensions_with_both_alts=tensions_with_both_alts,
+            detail=(
+                f"Story will have {projected_arc_count} arcs ({tensions_with_both_alts} tensions "
+                f"with both alternatives explored). Consider exploring fewer alternatives for "
+                f"a more focused narrative."
+            ),
+        )
+
     # 12. Check beats reference their thread's parent tension
     # 13. Check each thread has at least one commits beat for its tension
     threads_with_commits: set[str] = set()  # thread_ids that have a commits beat

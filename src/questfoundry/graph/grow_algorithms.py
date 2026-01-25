@@ -28,8 +28,9 @@ if TYPE_CHECKING:
 
 # Maximum number of arcs before triggering COMBINATORIAL error.
 # With 2 tensions x 2 threads each = 4 arcs. With 5 tensions x 2 threads = 32 arcs.
-# Beyond 32, the combinatorial explosion makes the story unmanageable.
-_MAX_ARC_COUNT = 32
+# With 6 tensions x 2 threads = 64 arcs. Beyond 64 arcs, processing becomes very
+# expensive and the story structure may be difficult to navigate.
+_MAX_ARC_COUNT = 64
 
 
 def build_tension_threads(graph: Graph) -> dict[str, list[str]]:
