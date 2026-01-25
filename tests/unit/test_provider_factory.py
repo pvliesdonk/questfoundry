@@ -395,7 +395,9 @@ def test_create_model_structured_openai_with_schema() -> None:
     assert result is mock_structured
     mock_chat.with_structured_output.assert_called_once()
     call_args = mock_chat.with_structured_output.call_args
-    assert call_args[1]["method"] == "json_schema"  # JSON schema for OpenAI
+    assert (
+        call_args[1]["method"] == "function_calling"
+    )  # function_calling for OpenAI (handles optional fields)
 
 
 def test_create_model_structured_without_schema() -> None:

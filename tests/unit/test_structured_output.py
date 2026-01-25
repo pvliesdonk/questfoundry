@@ -28,8 +28,8 @@ class TestGetDefaultStrategy:
         assert get_default_strategy("ollama") == StructuredOutputStrategy.JSON_MODE
 
     def test_get_default_strategy_openai(self) -> None:
-        """Should return JSON_MODE strategy for OpenAI."""
-        assert get_default_strategy("openai") == StructuredOutputStrategy.JSON_MODE
+        """Should return TOOL strategy for OpenAI (function_calling handles optional fields)."""
+        assert get_default_strategy("openai") == StructuredOutputStrategy.TOOL
 
     def test_get_default_strategy_anthropic(self) -> None:
         """Should return JSON_MODE strategy for Anthropic."""
@@ -43,7 +43,7 @@ class TestGetDefaultStrategy:
     def test_get_default_strategy_case_insensitive(self) -> None:
         """Should handle uppercase provider names."""
         assert get_default_strategy("OLLAMA") == StructuredOutputStrategy.JSON_MODE
-        assert get_default_strategy("OpenAI") == StructuredOutputStrategy.JSON_MODE
+        assert get_default_strategy("OpenAI") == StructuredOutputStrategy.TOOL
         assert get_default_strategy("ANTHROPIC") == StructuredOutputStrategy.JSON_MODE
 
 
@@ -117,7 +117,7 @@ class TestWithStructuredOutput:
             method="json_schema",
         )
 
-        # Test OpenAI (JSON_MODE)
+        # Test OpenAI (TOOL - function_calling handles optional fields)
         mock_model.reset_mock()
         with_structured_output(
             mock_model,
@@ -127,7 +127,7 @@ class TestWithStructuredOutput:
         )
         mock_model.with_structured_output.assert_called_with(
             SampleSchema,
-            method="json_schema",
+            method="function_calling",
         )
 
     def test_with_structured_output_none_strategy_defaults_to_tool(self) -> None:

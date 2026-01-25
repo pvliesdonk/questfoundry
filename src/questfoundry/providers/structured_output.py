@@ -31,30 +31,32 @@ class StructuredOutputStrategy(str, Enum):
 def get_default_strategy(provider_name: str) -> StructuredOutputStrategy:
     """Get default structured output strategy for a provider.
 
-    All known providers use JSON_MODE (json_schema method) for structured output.
-    This uses the provider's native JSON mode to constrain output to match the schema.
-
-    The alternative TOOL strategy (function_calling method) creates a fake tool
-    with the schema and forces the model to call it. This was tried for Ollama
-    but returned None for complex nested schemas like BrainstormOutput.
+    Strategy selection per provider:
+    - OpenAI: TOOL (function_calling) - json_schema strict mode rejects optional fields
+    - Ollama: JSON_MODE (json_schema) - TOOL returns None for complex nested schemas
+    - Anthropic: JSON_MODE (json_schema) - native JSON mode support
 
     Args:
-        provider_name: Provider name (ollama, openai, anthropic).
+        provider_name: Provider name (ollama, openai, anthropic) or full string
+            like "openai/gpt-5".
 
     Returns:
         Default strategy for the provider.
     """
     provider_lower = provider_name.lower()
 
-    # All known providers use JSON_MODE:
-    # - Ollama: JSON_MODE works for complex nested schemas (TOOL returns None)
-    # - OpenAI: Native json_mode (gpt-4-turbo, gpt-4o support structured output)
-    # - Anthropic: Native JSON mode
-    if provider_lower in ("ollama", "openai", "anthropic"):
+    # OpenAI: Use function_calling because json_schema strict mode requires
+    # all properties in 'required', which breaks schemas with optional fields
+    # (e.g., Field(default_factory=dict))
+    if provider_lower.startswith("openai"):
+        return StructuredOutputStrategy.TOOL
+
+    # Ollama: JSON_MODE works better for complex nested schemas
+    # (TOOL strategy returns None for complex schemas like BrainstormOutput)
+    if provider_lower.startswith("ollama"):
         return StructuredOutputStrategy.JSON_MODE
 
-    # Default to JSON_MODE for unknown providers
-    # (TOOL strategy can return None for complex nested schemas)
+    # Anthropic and others: JSON_MODE
     return StructuredOutputStrategy.JSON_MODE
 
 
