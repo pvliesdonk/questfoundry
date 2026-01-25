@@ -1574,11 +1574,17 @@ class GrowStage:
     async def _phase_9_choices(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 9: Create choice edges between passages.
 
-        Single-successor passages get implicit "continue" edges.
-        Multi-successor passages (divergence points) get LLM-generated
-        diegetic labels describing the player's action.
+        Handles three cases:
+        1. Single-successor passages get implicit "continue" edges.
+        2. Multi-successor passages (divergence points) get LLM-generated
+           diegetic labels describing the player's action.
+        3. Multiple orphan starts (arcs diverging at beat 0) get a synthetic
+           "prologue" passage that branches to each start.
         """
-        from questfoundry.graph.grow_algorithms import find_passage_successors
+        from questfoundry.graph.grow_algorithms import (
+            PassageSuccessor,
+            find_passage_successors,
+        )
         from questfoundry.models.grow import Phase9Output
 
         passage_nodes = graph.get_nodes_by_type("passage")
@@ -1596,6 +1602,43 @@ class GrowStage:
                 status="completed",
                 detail="No passage successors found",
             )
+
+        # Find orphan start passages - passages that are not successors of anyone
+        all_successor_targets: set[str] = set()
+        for succ_list in successors.values():
+            for succ in succ_list:
+                all_successor_targets.add(succ.to_passage)
+
+        orphan_starts = [p for p in passage_nodes if p not in all_successor_targets]
+
+        # If multiple orphan starts exist, create a synthetic prologue passage
+        prologue_created = False
+        if len(orphan_starts) > 1:
+            log.info(
+                "creating_prologue_passage",
+                orphan_count=len(orphan_starts),
+                orphans=orphan_starts[:5],
+            )
+            prologue_id = "passage::prologue"
+            graph.create_node(
+                prologue_id,
+                {
+                    "type": "passage",
+                    "raw_id": "prologue",
+                    "from_beat": None,
+                    "summary": "The story begins...",
+                    "entities": [],
+                    "is_synthetic": True,
+                },
+            )
+            # Add prologue to successors with all orphan starts as its successors
+            successors[prologue_id] = [
+                PassageSuccessor(to_passage=orphan, arc_id="", grants=[])
+                for orphan in sorted(orphan_starts)
+            ]
+            prologue_created = True
+            # Update passage_nodes to include prologue
+            passage_nodes = graph.get_nodes_by_type("passage")
 
         # Separate single-successor vs multi-successor passages
         single_successors: dict[str, list[PassageSuccessor]] = {}
@@ -1703,10 +1746,11 @@ class GrowStage:
                     graph.add_edge("choice_to", choice_id, succ.to_passage)
                     choice_count += 1
 
+        prologue_note = " (with synthetic prologue)" if prologue_created else ""
         return GrowPhaseResult(
             phase="choices",
             status="completed",
-            detail=f"Created {choice_count} choices ({len(multi_successors)} divergence points)",
+            detail=f"Created {choice_count} choices ({len(multi_successors)} divergence points){prologue_note}",
             llm_calls=llm_calls,
             tokens_used=tokens,
         )

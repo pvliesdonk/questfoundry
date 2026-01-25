@@ -1740,6 +1740,117 @@ class TestPhase9Choices:
         choice_data = next(iter(choice_nodes.values()))
         assert "codeword::cw1" in choice_data["grants"]
 
+    @pytest.mark.asyncio
+    async def test_phase_9_creates_prologue_for_orphan_starts(self) -> None:
+        """Phase 9 creates a synthetic prologue when arcs diverge at the start.
+
+        When arcs have no shared first beat (divergence at beat 0), there would be
+        multiple start passages with no predecessors. The fix creates a synthetic
+        "prologue" passage that branches to each orphan start, ensuring a single
+        unified entry point.
+        """
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import ChoiceLabel, Phase9Output
+
+        graph = Graph.empty()
+        # Two independent arcs with different starting beats
+        graph.create_node(
+            "beat::path1_start",
+            {"type": "beat", "raw_id": "path1_start", "summary": "Begin path 1"},
+        )
+        graph.create_node(
+            "beat::path1_end", {"type": "beat", "raw_id": "path1_end", "summary": "End path 1"}
+        )
+        graph.create_node(
+            "beat::path2_start",
+            {"type": "beat", "raw_id": "path2_start", "summary": "Begin path 2"},
+        )
+        graph.create_node(
+            "beat::path2_end", {"type": "beat", "raw_id": "path2_end", "summary": "End path 2"}
+        )
+
+        graph.add_edge("requires", "beat::path1_end", "beat::path1_start")
+        graph.add_edge("requires", "beat::path2_end", "beat::path2_start")
+
+        # Arc 1: path1_start → path1_end
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "threads": ["t1_canon"],
+                "sequence": ["beat::path1_start", "beat::path1_end"],
+            },
+        )
+
+        # Arc 2: path2_start → path2_end (different start!)
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "arc_type": "branch",
+                "threads": ["t1_alt"],
+                "sequence": ["beat::path2_start", "beat::path2_end"],
+            },
+        )
+
+        # Create passages for all beats
+        for bid in ["path1_start", "path1_end", "path2_start", "path2_end"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}", "summary": bid},
+            )
+            graph.add_edge("passage_from", f"passage::{bid}", f"beat::{bid}")
+
+        stage = GrowStage()
+
+        # Mock LLM for the prologue divergence labels
+        phase9_output = Phase9Output(
+            labels=[
+                ChoiceLabel(
+                    from_passage="passage::prologue",
+                    to_passage="passage::path1_start",
+                    label="Take the first path",
+                ),
+                ChoiceLabel(
+                    from_passage="passage::prologue",
+                    to_passage="passage::path2_start",
+                    label="Take the second path",
+                ),
+            ]
+        )
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase9_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_9_choices(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "with synthetic prologue" in result.detail
+
+        # Verify prologue passage was created
+        passage_nodes = graph.get_nodes_by_type("passage")
+        assert "passage::prologue" in passage_nodes
+        prologue = passage_nodes["passage::prologue"]
+        assert prologue.get("is_synthetic") is True
+
+        # Verify prologue has choices to both orphan starts
+        choice_nodes = graph.get_nodes_by_type("choice")
+
+        # Should have: prologue→path1_start, prologue→path2_start, path1_start→path1_end, path2_start→path2_end
+        assert len(choice_nodes) == 4
+
+        # Verify prologue choices exist
+        prologue_choices = [
+            c for c in choice_nodes.values() if c["from_passage"] == "passage::prologue"
+        ]
+        assert len(prologue_choices) == 2
+        prologue_targets = {c["to_passage"] for c in prologue_choices}
+        assert prologue_targets == {"passage::path1_start", "passage::path2_start"}
+
 
 class TestGrowErrorFeedback:
     def test_build_error_feedback_validation_error(self) -> None:

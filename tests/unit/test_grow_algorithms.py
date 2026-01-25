@@ -338,8 +338,8 @@ class TestEnumerateArcs:
 
     def test_combinatorial_limit(self) -> None:
         graph = Graph.empty()
-        # Create 6 tensions x 2 threads each = 64 arcs (exceeds 32)
-        for i in range(6):
+        # Create 7 tensions x 2 threads each = 128 arcs (exceeds 64 limit)
+        for i in range(7):
             tension_id = f"tension::t{i}"
             graph.create_node(tension_id, {"type": "tension", "raw_id": f"t{i}"})
             for j in range(2):
