@@ -5,7 +5,7 @@ system: |
   You are summarizing a story architecture discussion into structured output.
   This is the SEED stage output - the committed foundation for the story.
 
-  ## CRITICAL: Manifest Completeness (read first!)
+  ## CRITICAL: Manifest Completeness
   Your summary MUST include explicit decisions for:
   - ALL {entity_count} entities listed below
   - ALL {tension_count} tensions listed below
@@ -15,23 +15,21 @@ system: |
 
   ## Summarization Priority Order
 
-  When condensing the discussion, prioritize:
-
   1. **Completeness over elegance** - Missing an entity is worse than verbose descriptions
   2. **Exact ID matching** - Use IDs exactly as they appear in BRAINSTORM (copy-paste)
-  3. **Transformation clarity** - Show how alternatives became threads (not just list threads)
+  3. **Transformation clarity** - Show how alternatives became threads
 
-  ## Common Summarization Errors to Avoid
+  ## Common Errors to Avoid
 
   - **Typos in IDs**: `dr_elara_vinoss` vs `dr_elara_voss` - these FAIL validation
-  - **Invented locations**: You cannot create `character_office` or `building_basement` - only BRAINSTORM locations exist
-  - **Duplicate decisions**: Each entity gets ONE decision, each tension gets ONE decision
-  - **Missing factions**: Factions are easy to forget - check you have decisions for ALL faction entities
+  - **Invented locations**: Only BRAINSTORM locations exist
+  - **Duplicate decisions**: Each entity/tension gets ONE decision
+  - **Missing factions**: Check you have decisions for ALL faction entities
 
-  ## Required Entity IDs ({entity_count} total - MUST all appear in output)
+  ## Required Entity IDs ({entity_count} total)
   {entity_manifest}
 
-  ## Required Tension IDs ({tension_count} total - MUST all appear in output)
+  ## Required Tension IDs ({tension_count} total)
   {tension_manifest}
 
   ## Brainstorm Reference
@@ -45,20 +43,18 @@ system: |
   - id: the entity ID from brainstorm
   - disposition: "retained" or "cut"
 
-  ### Tension Decisions (CRITICAL for Arc Count)
+  ### Tension Decisions
   For each tension from brainstorm:
   - tension_id: the tension ID from brainstorm
   - explored: list of alternative IDs that become threads (MUST include canonical)
-  - implicit: list of alternative IDs NOT explored (context for shadows)
+  - implicit: list of alternative IDs NOT explored (shadows for narrative depth)
 
-  **Arc Count Requirement**: Arc count = 2^n where n = tensions with BOTH alternatives explored.
-  - To create 4+ arcs (minimum for real IF), explore BOTH alternatives for at least 2 tensions.
-  - To create 8 arcs (ideal), explore BOTH alternatives for 3 tensions.
-  - Exploring only canonical alternatives = 1 arc = LINEAR STORY (not acceptable for IF).
+  Include all alternatives you explored in the discussion. The system will
+  balance scope automatically if needed.
 
   ### Threads
   For each explored alternative:
-  - id: unique thread identifier
+  - id: unique thread identifier (different from tension ID!)
   - name: human-readable name
   - tension_id: which tension this explores
   - alternative_id: which alternative this explores
@@ -74,12 +70,7 @@ system: |
   - description: what happens narratively
   - ripples: story effects this implies
 
-  ### Initial Beats (2-4 per thread) - CRITICAL
-  Create 2-4 initial beats PER THREAD (not just 1 total).
-  With 3 threads, expect 6-12 beats. Each thread needs multiple entry points.
-
-  **This is non-negotiable**: If you have 3 threads, you need at least 6 beats.
-
+  ### Initial Beats (2-4 per thread)
   For each opening beat:
   - id: unique beat identifier
   - summary: what happens in this beat
@@ -90,77 +81,30 @@ system: |
     - note: explanation of the impact
   - entities: entity IDs present in this beat
   - location: primary location entity ID (must be a retained location)
-  - location_alternatives: other valid location IDs for knot flexibility
+  - location_alternatives: other valid location IDs for flexibility
 
   **Location Diversity**: Use at least 2 different locations across your beats.
-  Locations can be shared across threads. Don't place all beats in one setting - vary locations for scene contrast and pacing.
 
   ### Convergence Sketch
   - convergence_points: where threads should merge
   - residue_notes: what differences persist after convergence
 
-  ## Guidelines
-  - Be complete - capture ALL decisions discussed
-  - Entity IDs must match those from brainstorm
-  - Every tension must have a decision (explored vs implicit)
-  - Canonical alternative MUST be in the explored list
-  - Every thread needs at least one consequence
-  - Use clear, consistent IDs (snake_case recommended)
+  ## Location Constraint (CRITICAL)
 
-  ## PRE-BEAT CHECKLIST (verify before writing beats)
-
-  Before writing initial beats, list your available options:
-
-  1. **Retained Locations** (you should have at least 2 locations):
-     List the location IDs you marked as "retained" - these are your ONLY valid location choices.
-
-  2. **Retained Characters** (for entities field):
-     List the character IDs you marked as "retained" - beats should feature these characters.
-
-  3. **Beat Math**:
-     - You have N threads (count them)
-     - Each needs 2-4 beats
-     - Total beats needed: 2N to 4N
-
-  ## LOCATION CONSTRAINT (CRITICAL)
-
-  You cannot invent new locations. The location field MUST use an ID from your retained locations list.
+  You cannot invent new locations. The location field MUST use an ID from
+  your retained locations list.
 
   WRONG patterns that will fail:
   - `character_name_office` (invented from character)
   - `building_basement` (invented suffix)
   - Using an object ID as location
 
-  If your story needs a scene in a character's personal space, use a retained location and put details in the beat summary.
-
-  ## ARC COUNT VERIFICATION (do this BEFORE submitting)
-
-  Count your fully-explored tensions (those with empty implicit[] or both alternatives in explored[]):
-
-  **Your count**: ___ tensions with BOTH alternatives explored
-  **Arc count**: 2^___ = ___ arcs
-
-  **HARD LIMITS:**
-  - If arc count > 16: You MUST move some alternatives to implicit
-  - Maximum 4 tensions can have both alternatives explored
-  - At least 40% of tensions should have implicit alternatives
-
-  **If over limit**: Select the lowest-scoring tensions (per the ranking criteria from
-  the discussion) and move their non-canonical alternatives from explored to implicit.
-
-  ## FINAL CHECK (verify before submitting)
-  COUNT your output before submitting:
-  - Entity decisions: Do you have exactly {entity_count} decisions?
-  - Tension decisions: Do you have exactly {tension_count} decisions?
-  - Arc count: Is it 16 or fewer? (max 4 tensions fully explored)
-  - Beat count: Did you create 2-4 beats PER thread? (3 threads = 6-12 beats)
-  - Location diversity: Are you using at least 2 different locations across all beats?
-
-  If your counts don't match or arc count exceeds 16, FIX before submitting.
+  If your story needs a scene in a character's personal space, use a retained
+  location and put details in the beat summary.
 
   ## Output Format
-  Provide a structured summary with all six sections clearly labeled.
-  Use consistent formatting so the serialize phase can extract it accurately.
+
+  Provide a structured summary with all sections clearly labeled.
 
   ### Entity Decisions Manifest
   List EVERY entity ID with its decision:
@@ -174,11 +118,9 @@ system: |
   ### Tension Decisions Manifest
   List EVERY tension ID with its decision:
   ```
-  - trust_or_betray: explored=[trust, betray], implicit=[]  # BOTH explored = contributes to branching
-  - save_or_abandon: explored=[save, abandon], implicit=[]  # BOTH explored = contributes to branching
-  - weather_storm_clear: explored=[storm], implicit=[clear] # Only canonical = no branching from this tension
+  - trust_or_betray: explored=[trust, betray], implicit=[]
+  - weather_storm_clear: explored=[storm], implicit=[clear]
   ```
   VERIFY: Your list should have exactly {tension_count} items.
-  VERIFY: At least 2 tensions should have BOTH alternatives in explored[] for proper IF branching.
 
 components: []
