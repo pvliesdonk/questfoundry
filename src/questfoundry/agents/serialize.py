@@ -21,9 +21,11 @@ from questfoundry.graph.context import (
     normalize_scoped_id,
 )
 from questfoundry.graph.mutations import (
+    SeedErrorCategory,
     SeedMutationError,
     SeedValidationError,
     _format_available_with_suggestions,
+    categorize_error,
     validate_seed_mutations,
 )
 from questfoundry.observability.logging import get_logger
@@ -959,15 +961,32 @@ def _group_errors_by_section(
 
 
 def _format_section_corrections(errors: list[SeedValidationError]) -> str:
-    """Format semantic errors as directive corrections for a section retry.
+    """Format semantic and completeness errors as directive corrections for a section retry.
 
-    Produces a substitution-table format that small models can follow:
-    explicit WRONG → RIGHT replacements with no ambiguity.
+    Produces two types of corrections:
+    1. Substitutions for invalid IDs (WRONG → RIGHT)
+    2. Missing items that need to be added (COMPLETENESS errors)
     """
     corrections: list[str] = []
+    missing_items: list[str] = []
+
     for error in errors:
+        category = categorize_error(error)
+
+        # Handle COMPLETENESS errors (missing decisions)
+        if category == SeedErrorCategory.COMPLETENESS:
+            # Extract item ID from issue message (e.g., "Missing decision for entity 'X'")
+            match = re.search(r"'([^']+)'", error.issue)
+            if match:
+                missing_items.append(f"- {match.group(1)}")
+            else:
+                missing_items.append(f"- {error.issue}")
+            continue
+
+        # Handle SEMANTIC errors (invalid IDs) - need both provided and available
         if not error.provided or not error.available:
             continue
+
         suggestion = _format_available_with_suggestions(error.provided, error.available)
         if not suggestion:
             corrections.append(
@@ -982,17 +1001,37 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
         else:
             corrections.append(f"- '{error.provided}' is INVALID. {suggestion}")
 
-    if not corrections:
+    if not corrections and not missing_items:
         return ""
 
-    lines = [
-        "## MANDATORY CORRECTIONS",
-        "The following values are WRONG. Use the corrected values EXACTLY:",
-        "",
-        *corrections,
-        "",
-        "Copy the corrected values exactly as shown. Do not pluralize or modify them.",
-    ]
+    lines: list[str] = []
+
+    if corrections:
+        lines.extend(
+            [
+                "## MANDATORY CORRECTIONS",
+                "The following values are WRONG. Use the corrected values EXACTLY:",
+                "",
+                *corrections,
+                "",
+                "Copy the corrected values exactly as shown. Do not pluralize or modify them.",
+            ]
+        )
+
+    if missing_items:
+        if lines:
+            lines.append("")
+        lines.extend(
+            [
+                "## MISSING ITEMS",
+                "The following items are MISSING and MUST be included:",
+                "",
+                *missing_items,
+                "",
+                "Add a decision for each missing item. Use the exact IDs shown above.",
+            ]
+        )
+
     return "\n".join(lines)
 
 
