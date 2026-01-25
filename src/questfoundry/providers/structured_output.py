@@ -91,4 +91,8 @@ def with_structured_output(
             strategy = get_default_strategy(provider_name)
 
     method = "function_calling" if strategy == StructuredOutputStrategy.TOOL else "json_schema"
+    # For json_schema method with OpenAI, disable strict mode to allow optional fields
+    # with defaults. Strict mode requires all properties to be in 'required'.
+    if method == "json_schema" and provider_name and provider_name.lower() == "openai":
+        return model.with_structured_output(schema, method=method, strict=False)
     return model.with_structured_output(schema, method=method)
