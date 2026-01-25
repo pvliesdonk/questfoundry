@@ -14,7 +14,11 @@ from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.prompts import get_serialize_prompt
 from questfoundry.artifacts.validator import strip_null_values
-from questfoundry.graph.context import format_thread_ids_context, format_valid_ids_context
+from questfoundry.graph.context import (
+    format_thread_ids_context,
+    format_valid_ids_context,
+    normalize_scoped_id,
+)
 from questfoundry.graph.mutations import (
     SeedMutationError,
     SeedValidationError,
@@ -463,6 +467,7 @@ _REQUIRED_SECTION_PROMPT_KEYS = [
     "threads_prompt",
     "consequences_prompt",
     "beats_prompt",
+    "per_thread_beats_prompt",
     "convergence_prompt",
 ]
 
@@ -510,8 +515,182 @@ def _load_seed_section_prompts() -> dict[str, str]:
         "threads": data["threads_prompt"],
         "consequences": data["consequences_prompt"],
         "beats": data["beats_prompt"],
+        "per_thread_beats": data["per_thread_beats_prompt"],
         "convergence": data["convergence_prompt"],
     }
+
+
+def _build_per_thread_beat_context(
+    thread_data: dict[str, Any],
+    entity_context: str,
+) -> str:
+    """Build a brief for generating beats for a single thread.
+
+    Creates a minimal context containing only:
+    - The thread's ID and parent tension
+    - Entity IDs for character/location references
+
+    Args:
+        thread_data: Thread dict with thread_id and tension_id.
+        entity_context: Entity IDs section from the full brief.
+
+    Returns:
+        Per-thread brief for beat generation.
+    """
+    thread_id = thread_data.get("thread_id", "")
+    tension_id = thread_data.get("tension_id", "")
+    thread_name = thread_data.get("name", "")
+    description = thread_data.get("description", "")
+
+    # Normalize IDs to include prefixes if missing
+    thread_id = normalize_scoped_id(thread_id, "thread")
+    tension_id = normalize_scoped_id(tension_id, "tension")
+
+    lines = [
+        "## Thread Context",
+        f"You are generating beats for thread: `{thread_id}`",
+        f"- Name: {thread_name}",
+        f"- Parent tension: `{tension_id}`",
+    ]
+    if description:
+        lines.append(f"- Description: {description}")
+
+    lines.append("")
+    lines.append(entity_context)
+
+    return "\n".join(lines)
+
+
+async def _serialize_thread_beats(
+    model: BaseChatModel,
+    thread_data: dict[str, Any],
+    per_thread_prompt_template: str,
+    entity_context: str,
+    provider_name: str | None,
+    max_retries: int,
+    callbacks: list[BaseCallbackHandler] | None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Serialize beats for a single thread.
+
+    Uses a constrained prompt with the thread's ID and tension hard-coded.
+
+    Args:
+        model: Chat model to use.
+        thread_data: Thread dict with thread_id, tension_id, etc.
+        per_thread_prompt_template: Prompt template with {thread_id} and {tension_id} placeholders.
+        entity_context: Entity IDs context for character/location references.
+        provider_name: Provider name for strategy selection.
+        max_retries: Maximum Pydantic validation retries.
+        callbacks: LangChain callback handlers.
+
+    Returns:
+        Tuple of (list of beat dicts, tokens used).
+    """
+    from questfoundry.models.seed import ThreadBeatsSection
+
+    thread_id = thread_data.get("thread_id", "")
+    tension_id = thread_data.get("tension_id", "")
+
+    # Normalize IDs
+    prefixed_thread_id = normalize_scoped_id(thread_id, "thread")
+    prefixed_tension_id = normalize_scoped_id(tension_id, "tension")
+
+    # Format prompt with thread-specific values
+    prompt = per_thread_prompt_template.format(
+        thread_id=prefixed_thread_id,
+        tension_id=prefixed_tension_id,
+    )
+
+    # Build per-thread brief
+    brief = _build_per_thread_beat_context(thread_data, entity_context)
+
+    log.debug(
+        "serialize_thread_beats_started",
+        thread_id=thread_id,
+        tension_id=tension_id,
+    )
+
+    result, tokens = await serialize_to_artifact(
+        model=model,
+        brief=brief,
+        schema=ThreadBeatsSection,
+        provider_name=provider_name,
+        max_retries=max_retries,
+        system_prompt=prompt,
+        callbacks=callbacks,
+    )
+
+    beats = result.model_dump().get("initial_beats", [])
+
+    log.debug(
+        "serialize_thread_beats_completed",
+        thread_id=thread_id,
+        beat_count=len(beats),
+        tokens=tokens,
+    )
+
+    return beats, tokens
+
+
+async def _serialize_beats_per_thread(
+    model: BaseChatModel,
+    threads: list[dict[str, Any]],
+    per_thread_prompt: str,
+    entity_context: str,
+    provider_name: str | None,
+    max_retries: int,
+    callbacks: list[BaseCallbackHandler] | None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Serialize beats for all threads in parallel.
+
+    Uses asyncio.gather() to run per-thread serialization concurrently.
+
+    Args:
+        model: Chat model to use.
+        threads: List of thread dicts from ThreadsSection serialization.
+        per_thread_prompt: Prompt template for per-thread beat generation.
+        entity_context: Entity IDs context for character/location references.
+        provider_name: Provider name for strategy selection.
+        max_retries: Maximum Pydantic validation retries per thread.
+        callbacks: LangChain callback handlers.
+
+    Returns:
+        Tuple of (all beats merged, total tokens used).
+    """
+    log.info("serialize_beats_per_thread_started", thread_count=len(threads))
+
+    # Create tasks for parallel execution
+    tasks = [
+        _serialize_thread_beats(
+            model=model,
+            thread_data=thread,
+            per_thread_prompt_template=per_thread_prompt,
+            entity_context=entity_context,
+            provider_name=provider_name,
+            max_retries=max_retries,
+            callbacks=callbacks,
+        )
+        for thread in threads
+    ]
+
+    # Run all thread serializations in parallel
+    results = await asyncio.gather(*tasks)
+
+    # Merge results
+    all_beats: list[dict[str, Any]] = []
+    total_tokens = 0
+    for beats, tokens in results:
+        all_beats.extend(beats)
+        total_tokens += tokens
+
+    log.info(
+        "serialize_beats_per_thread_completed",
+        thread_count=len(threads),
+        total_beats=len(all_beats),
+        total_tokens=total_tokens,
+    )
+
+    return all_beats, total_tokens
 
 
 @traceable(
@@ -852,7 +1031,6 @@ async def serialize_seed_as_function(
         SerializationError: If Pydantic validation fails after max_retries.
     """
     from questfoundry.models.seed import (
-        BeatsSection,
         ConsequencesSection,
         ConvergenceSection,
         EntitiesSection,
@@ -875,25 +1053,30 @@ async def serialize_seed_as_function(
             log.debug("valid_ids_context_injected", context_length=len(valid_ids_context))
 
     # Section configuration: (section_name, schema, output_field)
+    # Note: "beats" is handled specially with per-thread serialization
     sections: list[tuple[str, type[BaseModel], str]] = [
         ("entities", EntitiesSection, "entities"),
         ("tensions", TensionsSection, "tensions"),
         ("threads", ThreadsSection, "threads"),
         ("consequences", ConsequencesSection, "consequences"),
-        ("beats", BeatsSection, "initial_beats"),
+        # beats handled via per-thread serialization after threads
         ("convergence", ConvergenceSection, "convergence_sketch"),
     ]
 
     collected: dict[str, Any] = {}
     brief_with_threads = enhanced_brief
 
+    # Extract entity IDs context for per-thread beat generation
+    # This is injected into each per-thread brief for character/location refs
+    entity_context = ""
+    if graph is not None:
+        entity_context = format_valid_ids_context(graph, stage="seed")
+
     for section_name, schema, output_field in sections:
         log.debug("serialize_section_started", section=section_name)
 
-        # Use brief with thread IDs for consequences and beats
-        current_brief = (
-            brief_with_threads if section_name in ("beats", "consequences") else enhanced_brief
-        )
+        # Use brief with thread IDs for consequences
+        current_brief = brief_with_threads if section_name == "consequences" else enhanced_brief
 
         section_prompt = prompts[section_name]
         section_result, section_tokens = await serialize_to_artifact(
@@ -915,12 +1098,28 @@ async def serialize_seed_as_function(
             )
         collected[output_field] = section_data[output_field]
 
-        # After threads are serialized, inject thread IDs for subsequent sections
+        # After threads are serialized:
+        # 1. Inject thread IDs for subsequent sections (consequences)
+        # 2. Generate beats per-thread in parallel
         if section_name == "threads" and collected.get("threads"):
             thread_ids_context = format_thread_ids_context(collected["threads"])
             if thread_ids_context:
                 brief_with_threads = f"{enhanced_brief}\n\n{thread_ids_context}"
                 log.debug("thread_ids_context_injected", thread_count=len(collected["threads"]))
+
+            # Generate beats per-thread in parallel
+            # This replaces the old all-at-once beats serialization
+            beats, beats_tokens = await _serialize_beats_per_thread(
+                model=model,
+                threads=collected["threads"],
+                per_thread_prompt=prompts["per_thread_beats"],
+                entity_context=entity_context,
+                provider_name=provider_name,
+                max_retries=max_retries,
+                callbacks=callbacks,
+            )
+            collected["initial_beats"] = beats
+            total_tokens += beats_tokens
 
         log.debug(
             "serialize_section_completed",

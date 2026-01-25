@@ -299,6 +299,22 @@ class BeatsSection(BaseModel):
     )
 
 
+class ThreadBeatsSection(BaseModel):
+    """Wrapper for serializing beats for a single thread.
+
+    Used by per-thread beat serialization to constrain the LLM to generating
+    beats for exactly one thread with a fixed tension_id. This makes the
+    thread→tension alignment trivial since the context only contains one valid
+    tension for tension_impacts.
+    """
+
+    initial_beats: list[InitialBeat] = Field(
+        min_length=2,
+        max_length=4,
+        description="2-4 initial beats for this specific thread",
+    )
+
+
 class ConvergenceSection(BaseModel):
     """Wrapper for serializing convergence sketch separately."""
 
