@@ -847,6 +847,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     9. All BRAINSTORM entities have decisions (completeness)
     10. All BRAINSTORM tensions have decisions (completeness)
     11. All tensions have at least one thread (completeness)
+    12. Each beat references its thread's parent tension in tension_impacts
+    13. Each thread has at least one beat with effect="commits" for its tension
 
     Args:
         graph: Graph containing BRAINSTORM data (entities, tensions, alternatives).
@@ -1119,12 +1121,17 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
     # 11. Check completeness: all tensions should have at least one thread
     tensions_with_threads: set[str] = set()
+    thread_tension_map: dict[str, str] = {}  # thread_id -> tension_id (normalized)
     for thread in output.get("threads", []):
         raw_tension_id = thread.get("tension_id")
+        raw_thread_id = thread.get("thread_id")
         if raw_tension_id:
             normalized_tid, scope_error = _normalize_id(raw_tension_id, "tension")
             if not scope_error:
                 tensions_with_threads.add(normalized_tid)
+                if raw_thread_id:
+                    normalized_thid, _ = _normalize_id(raw_thread_id, "thread")
+                    thread_tension_map[normalized_thid] = normalized_tid
 
     tensions_without_threads = valid_tension_ids - tensions_with_threads
     for tension_id in sorted(tensions_without_threads):
@@ -1140,6 +1147,72 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 category=SeedErrorCategory.COMPLETENESS,
             )
         )
+
+    # 12. Check beats reference their thread's parent tension
+    # 13. Check each thread has at least one commits beat for its tension
+    threads_with_commits: set[str] = set()  # thread_ids that have a commits beat
+    for i, beat in enumerate(output.get("initial_beats", [])):
+        beat_thread_ids: list[str] = []
+        for raw_thread_id in beat.get("threads", []):
+            normalized_thid, _ = _normalize_id(raw_thread_id, "thread")
+            beat_thread_ids.append(normalized_thid)
+
+        # Collect normalized tension_ids referenced in this beat's impacts
+        beat_impact_tensions: set[str] = set()
+        beat_impact_commits_tensions: set[str] = set()
+        for impact in beat.get("tension_impacts", []):
+            raw_tid = impact.get("tension_id")
+            if raw_tid:
+                normalized_tid, _ = _normalize_id(raw_tid, "tension")
+                beat_impact_tensions.add(normalized_tid)
+                if impact.get("effect") == "commits":
+                    beat_impact_commits_tensions.add(normalized_tid)
+
+        # For each thread this beat belongs to, check it references the parent tension
+        for thread_id in beat_thread_ids:
+            expected_tension = thread_tension_map.get(thread_id)
+            if not expected_tension:
+                continue  # Thread not found in output; already caught by check 6
+
+            if expected_tension not in beat_impact_tensions:
+                beat_id = beat.get("beat_id", f"beat_{i}")
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"initial_beats.{i}.tension_impacts",
+                        issue=(
+                            f"Beat '{beat_id}' belongs to thread '{thread_id}' "
+                            f"but does not reference its parent tension "
+                            f"'{expected_tension}' in tension_impacts. "
+                            f"Each beat must impact its own thread's tension."
+                        ),
+                        available=[expected_tension],
+                        provided=", ".join(sorted(beat_impact_tensions)) or "(none)",
+                        category=SeedErrorCategory.SEMANTIC,
+                    )
+                )
+
+            # Track commits beats per thread
+            if expected_tension in beat_impact_commits_tensions:
+                threads_with_commits.add(thread_id)
+
+    # Report threads missing commits beats
+    for thread_id in sorted(thread_tension_map.keys()):
+        if thread_id not in threads_with_commits:
+            expected_tension = thread_tension_map[thread_id]
+            errors.append(
+                SeedValidationError(
+                    field_path=f"threads.{thread_id}",
+                    issue=(
+                        f"Thread '{thread_id}' has no beat with effect='commits' "
+                        f"for its parent tension '{expected_tension}'. "
+                        f"Each thread must have at least one beat that commits "
+                        f"its tension resolution."
+                    ),
+                    available=[expected_tension],
+                    provided="",
+                    category=SeedErrorCategory.COMPLETENESS,
+                )
+            )
 
     return errors
 
