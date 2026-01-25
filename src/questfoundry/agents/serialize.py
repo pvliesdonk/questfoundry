@@ -592,14 +592,17 @@ async def _serialize_thread_beats(
     thread_id = thread_data.get("thread_id", "")
     tension_id = thread_data.get("tension_id", "")
 
-    # Normalize IDs
+    # Normalize IDs and extract thread name for beat ID prefixing
     prefixed_thread_id = normalize_scoped_id(thread_id, "thread")
     prefixed_tension_id = normalize_scoped_id(tension_id, "tension")
+    # Extract raw thread name (without prefix) for beat ID prefixing
+    thread_name = thread_id.removeprefix("thread::")
 
     # Format prompt with thread-specific values
     prompt = per_thread_prompt_template.format(
         thread_id=prefixed_thread_id,
         tension_id=prefixed_tension_id,
+        thread_name=thread_name,
     )
 
     # Build per-thread brief
