@@ -1127,6 +1127,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     # 11. Check completeness: all tensions should have at least one thread
     tensions_with_threads: set[str] = set()
     thread_tension_map: dict[str, str] = {}  # thread_id -> tension_id (normalized)
+    tension_thread_counts: dict[str, int] = {}  # tension_id -> count of threads
     for thread in output.get("threads", []):
         raw_tension_id = thread.get("tension_id")
         raw_thread_id = thread.get("thread_id")
@@ -1134,6 +1135,9 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             normalized_tid, scope_error = _normalize_id(raw_tension_id, "tension")
             if not scope_error:
                 tensions_with_threads.add(normalized_tid)
+                tension_thread_counts[normalized_tid] = (
+                    tension_thread_counts.get(normalized_tid, 0) + 1
+                )
                 if raw_thread_id:
                     normalized_thid, _ = _normalize_id(raw_thread_id, "thread")
                     thread_tension_map[normalized_thid] = normalized_tid
@@ -1152,6 +1156,35 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 category=SeedErrorCategory.COMPLETENESS,
             )
         )
+
+    # 11b. Check each explored alternative has a thread
+    # For each tension decision, verify thread count matches explored count
+    for tension_decision in output.get("tensions", []):
+        raw_tid = tension_decision.get("tension_id")
+        if not raw_tid:
+            continue
+        normalized_tid, scope_error = _normalize_id(raw_tid, "tension")
+        if scope_error:
+            continue
+
+        explored = tension_decision.get("explored", [])
+        thread_count = tension_thread_counts.get(normalized_tid, 0)
+
+        if len(explored) > thread_count:
+            missing_count = len(explored) - thread_count
+            errors.append(
+                SeedValidationError(
+                    field_path="threads",
+                    issue=(
+                        f"Tension '{normalized_tid}' has {len(explored)} explored alternatives "
+                        f"but only {thread_count} thread(s). "
+                        f"Create {missing_count} more thread(s) - one for EACH explored alternative."
+                    ),
+                    available=explored,
+                    provided=str(thread_count),
+                    category=SeedErrorCategory.COMPLETENESS,
+                )
+            )
 
     # 12. Check beats reference their thread's parent tension
     # 13. Check each thread has at least one commits beat for its tension
