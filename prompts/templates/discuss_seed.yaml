@@ -50,21 +50,40 @@ system: |
 
   CHECKPOINT: Before finishing entities, count your retained locations. If fewer than 3, reconsider cuts.
 
-  ### Alternative Exploration Criteria
+  ### Alternative Exploration Criteria (CRITICAL for Interactive Fiction)
 
-  Not every tension needs both alternatives explored. Ask:
+  Interactive fiction requires BRANCHING. Exploring only canonical alternatives creates a linear story, not IF.
 
-  1. **Does exploring both create meaningfully different stories?** "Trust vs betray" - yes. "Door is blue vs red" - probably not.
+  **Arc Count = 2^n** where n = tensions with BOTH alternatives explored:
+  - 0 tensions fully explored = 1 arc (LINEAR - not acceptable for IF)
+  - 1 tension fully explored = 2 arcs (minimal branching)
+  - 2 tensions fully explored = 4 arcs (good for short IF)
+  - 3 tensions fully explored = 8 arcs (ideal for medium IF)
+  - 4 tensions fully explored = 16 arcs (maximum recommended)
 
-  2. **Is the scope worth it?** Each explored alternative adds a thread with 2-4 beats. With 8 tensions, exploring all 16 alternatives creates 16 threads and 32-64 beats - too much.
+  **Target: 4-8 arcs** for medium-length IF. This means exploring BOTH alternatives for 2-3 of your tensions.
 
-  3. **What's essential for your story length?**
-     - Micro (3-5 total beats): 1-2 threads
-     - Short (5-10 beats): 2-4 threads
-     - Medium (10-20 beats): 4-6 threads
-     - Long (20+ beats): 6-8 threads
+  ### Which Tensions Deserve Both Alternatives Explored?
 
-  **Recommended scope**: Start with canonical alternatives only (1 thread per tension = N threads). Add non-canonical alternatives selectively for your most interesting tensions.
+  Rank tensions by these criteria (highest scores = explore both):
+
+  1. **Identity-defining** (+3): Does this tension define WHO the protagonist is or their core values?
+     - "Betray friend vs stay loyal" = identity-defining
+     - "Take shortcut vs scenic route" = not identity-defining
+
+  2. **Genuine dilemma** (+2): Are BOTH alternatives compelling with real costs on each side?
+     - GOOD: "Save village but lose kidnapper's trail" vs "Pursue kidnapper while village burns"
+     - BAD: "Help the innocent" vs "Be pointlessly cruel" (obvious answer)
+
+  3. **Distinct content** (+2): Do the alternatives lead to genuinely different scenes, not just flavor?
+     - GOOD: Alternative A leads to confrontation scene, Alternative B leads to investigation scene
+     - BAD: Both alternatives lead to the same scene with slightly different dialogue
+
+  4. **Replay value** (+1): Would a player who finished via Alternative A want to replay for Alternative B?
+
+  **Selection process**: Score all tensions. Explore both alternatives for the top 2-3 by score.
+
+  **REQUIRED**: At minimum, explore both alternatives for at least 2 tensions to create 4+ arcs.
 
   ## Your Goal
   Transform the raw brainstorm material into committed story structure:
@@ -154,8 +173,11 @@ system: |
 
   For a focused story, aim for:
   - 10-15 retained entities (enough variety without sprawl)
-  - 3-5 threads (canonical alternatives + 1-2 carefully chosen branches)
-  - 8-15 initial beats (solid foundation for GROW)
+  - **Thread count**: All canonical alternatives + 2-3 non-canonical from fully explored tensions
+    - With 5 tensions: expect 7-8 threads (5 canonical + 2-3 branches)
+    - With 8 tensions: expect 10-11 threads (8 canonical + 2-3 branches)
+  - **Arc count**: 4-8 arcs (requires 2-3 tensions with BOTH alternatives explored)
+  - 2-3 initial beats per thread (solid foundation for GROW)
 
   ## Guidelines
   - THREAD FREEZE: After SEED, no new threads can be created
@@ -168,7 +190,8 @@ system: |
   ## Thread Tier Guidance
   - **Major threads** define the story. They must interweave with other majors.
   - **Minor threads** support and enrich. They touch the story but can be more independent.
-  - Start with 1-2 major threads and 1-3 minor threads for manageable scope.
+  - Canonical threads from core tensions should be major; non-canonical branches can be minor.
+  - Non-canonical threads create the branching that makes IF interactive - don't undervalue them.
 
   ## Tension Impact Effects
   - **advances**: Moves toward resolution without revealing answer
