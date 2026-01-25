@@ -495,11 +495,14 @@ class PipelineOrchestrator:
             on_llm_start = context.get("on_llm_start")
             on_llm_end = context.get("on_llm_end")
             resume_from = context.get("resume_from")
+            on_phase_progress = context.get("on_phase_progress")
 
-            # Build stage kwargs, only including resume_from if set (GROW-specific)
+            # Build stage kwargs, only including optional params if set
             stage_kwargs: dict[str, Any] = {}
             if resume_from:
                 stage_kwargs["resume_from"] = resume_from
+            if on_phase_progress:
+                stage_kwargs["on_phase_progress"] = on_phase_progress
 
             artifact_data, llm_calls, tokens_used = await stage.execute(
                 model=model,
@@ -580,9 +583,7 @@ class PipelineOrchestrator:
                     except GraphCorruptionError:
                         # Re-raise corruption errors - already logged and rolled back above
                         raise
-                    except Exception as e:
-                        # Other graph operations are non-critical - artifact was written successfully
-                        log.warning("graph_update_failed", stage=stage_name, error=str(e))
+                    # All other exceptions propagate - never swallow errors
 
             # Calculate duration
             duration = time.perf_counter() - start_time

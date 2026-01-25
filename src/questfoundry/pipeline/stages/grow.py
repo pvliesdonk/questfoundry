@@ -48,6 +48,7 @@ if TYPE_CHECKING:
     from questfoundry.pipeline.stages.base import (
         AssistantMessageFn,
         LLMCallbackFn,
+        PhaseProgressFn,
         UserInputFn,
     )
 
@@ -183,6 +184,7 @@ class GrowStage:
         summarize_provider_name: str | None = None,  # noqa: ARG002
         serialize_provider_name: str | None = None,
         resume_from: str | None = None,
+        on_phase_progress: PhaseProgressFn | None = None,
         **kwargs: Any,  # noqa: ARG002
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the GROW stage.
@@ -206,6 +208,7 @@ class GrowStage:
             summarize_provider_name: Summarize provider name (unused).
             serialize_provider_name: Provider name for structured output strategy.
             resume_from: Phase name to resume from (skips earlier phases).
+            on_phase_progress: Callback for phase progress (phase, status, detail).
             **kwargs: Additional keyword arguments (ignored).
 
         Returns:
@@ -290,6 +293,10 @@ class GrowStage:
                 break
 
             log.debug("phase_complete", phase=phase_name, status=result.status)
+
+            # Notify progress callback if provided
+            if on_phase_progress is not None:
+                on_phase_progress(phase_name, result.status, result.detail)
 
         graph.save(resolved_path / "graph.json")
 

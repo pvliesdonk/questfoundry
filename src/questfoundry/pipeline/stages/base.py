@@ -12,6 +12,8 @@ if TYPE_CHECKING:
 UserInputFn = Callable[[], Awaitable[str | None]]
 AssistantMessageFn = Callable[[str], None]
 LLMCallbackFn = Callable[[str], None]
+# Phase progress callback: (phase_name, status, detail) -> None
+PhaseProgressFn = Callable[[str, str, str | None], None]
 
 
 class Stage(Protocol):

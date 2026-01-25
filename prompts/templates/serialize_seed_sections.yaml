@@ -323,10 +323,26 @@ per_thread_beats_prompt: |
   - Thread ID: {thread_id}
   - Parent tension: {tension_id}
 
+  ## BEAT ID NAMING (CRITICAL - ensures uniqueness)
+
+  Beat IDs MUST be derived from your thread ID to ensure global uniqueness.
+
+  FORMAT: `{thread_name}_beat_[number]`
+
+  Your thread name is `{thread_name}`. Use it as prefix with `_beat_01`, `_beat_02`, etc.
+
+  EXAMPLES (for illustration only - use YOUR thread name):
+  - Thread `keeper_loyalty` → beat IDs: `keeper_loyalty_beat_01`, `keeper_loyalty_beat_02`
+  - Thread `artifact_origin` → beat IDs: `artifact_origin_beat_01`, `artifact_origin_beat_02`
+
+  WRONG: `beat_001`, `beat_01`, `initial_beat_1` (no thread prefix = collision)
+  RIGHT: `{thread_name}_beat_01` (thread prefix = globally unique)
+
   ALL beats you generate MUST:
-  1. Have `threads: ["{thread_id}"]` (exactly this thread ID)
-  2. Have at least one tension_impact with `tension_id: "{tension_id}"`
-  3. Include at least one beat with `effect: "commits"` for `{tension_id}`
+  1. Have beat_id starting with `{thread_name}_beat_` (see BEAT ID NAMING above)
+  2. Have `threads: ["{thread_id}"]` (exactly this thread ID)
+  3. Have at least one tension_impact with `tension_id: "{tension_id}"`
+  4. Include at least one beat with `effect: "commits"` for `{tension_id}`
 
   ## Schema
   Return a JSON object with an "initial_beats" array of 2-4 beats:
@@ -334,7 +350,7 @@ per_thread_beats_prompt: |
   {{
     "initial_beats": [
       {{
-        "beat_id": "unique_beat_id",
+        "beat_id": "{thread_name}_beat_01",
         "summary": "What happens in this beat",
         "threads": ["{thread_id}"],
         "tension_impacts": [
@@ -354,6 +370,7 @@ per_thread_beats_prompt: |
 
   ## Rules
   - Generate exactly 2-4 beats for thread `{thread_id}`
+  - Beat IDs MUST start with `{thread_name}_beat_` (e.g., `{thread_name}_beat_01`)
   - EVERY beat must include `{thread_id}` in its `threads` array
   - EVERY beat must have at least one tension_impact for `{tension_id}`
   - At least ONE beat must have `effect: "commits"` for `{tension_id}`
@@ -369,6 +386,7 @@ per_thread_beats_prompt: |
   RIGHT: Including one beat with `effect: "commits"`.
 
   ## What NOT to Do
+  - Do NOT use generic beat IDs like `beat_001` (must include thread name prefix)
   - Do NOT generate beats for other threads
   - Do NOT reference other tension_ids in your first tension_impact
   - Do NOT skip the commits beat
