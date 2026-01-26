@@ -377,10 +377,34 @@ beats_prompt: |
 per_thread_beats_prompt: |
   You are generating INITIAL BEATS for ONE SPECIFIC THREAD.
 
-  ## YOUR THREAD (CRITICAL - read first!)
-  You are generating beats ONLY for this thread:
-  - Thread ID: {thread_id}
-  - Parent tension: {tension_id}
+  ## YOUR THREAD ID (MEMORIZE THIS)
+
+  You are generating beats for thread: `{thread_id}`
+
+  The `threads` field in EVERY beat MUST contain EXACTLY: `["{thread_id}"]`
+
+  ## COMMON MISTAKE - DO NOT MAKE THIS ERROR
+
+  Thread IDs are SHORT (e.g., `thread::ai_hostile`).
+  Tension IDs are LONG and contain `_or_` (e.g., `tension::ai_orion_benevolent_or_hostile`).
+
+  WRONG OUTPUT (will fail validation):
+  ```json
+  "threads": ["{tension_id}"]  // WRONG! This is a TENSION ID (has _or_)
+  ```
+
+  CORRECT OUTPUT:
+  ```json
+  "threads": ["{thread_id}"]  // RIGHT! This is the THREAD ID (short, no _or_)
+  ```
+
+  RULE: If the ID contains `_or_`, it's a TENSION. Never put it in `threads`.
+
+  ## YOUR TENSION ID (for tension_impacts only)
+
+  Parent tension: `{tension_id}`
+
+  This goes in `tension_impacts[].tension_id`, NOT in `threads`.
 
   ## BEAT ID NAMING (CRITICAL - ensures uniqueness)
 
@@ -450,6 +474,15 @@ per_thread_beats_prompt: |
   - Do NOT reference other tension_ids in your first tension_impact
   - Do NOT skip the commits beat
   - Do NOT use IDs not in the manifest
+  - Do NOT put the tension ID in the `threads` field (see COMMON MISTAKE above)
+
+  ## FINAL VERIFICATION (check before outputting)
+
+  For EACH beat you generate, verify:
+  1. `threads` contains `{thread_id}` (SHORT id, NO `_or_` in it)
+  2. `tension_impacts[0].tension_id` is `{tension_id}` (LONG id, HAS `_or_`)
+
+  If you see `_or_` in your `threads` value, YOU MADE A MISTAKE. Fix it.
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array (2-4 beats).

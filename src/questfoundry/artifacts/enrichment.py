@@ -134,8 +134,8 @@ def _enrich_tensions(graph: Graph, tension_decisions: list[dict[str, Any]]) -> l
         if value := node.get("central_entity_ids"):
             enriched["central_entity_ids"] = [eid.split("::")[-1] for eid in value]
 
-        # Add SEED decision fields
-        enriched["explored"] = decision.get("explored", [])
+        # Add SEED decision fields (support both old 'explored' and new 'considered')
+        enriched["considered"] = decision.get("considered", decision.get("explored", []))
         enriched["implicit"] = decision.get("implicit", [])
 
         enriched_tensions.append(enriched)
