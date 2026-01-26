@@ -12,6 +12,7 @@ from questfoundry.graph.context import (
     format_thread_ids_context,
     get_expected_counts,
     parse_scoped_id,
+    strip_scope_prefix,
 )
 
 
@@ -999,6 +1000,40 @@ class TestParseScopedId:
         scope, raw_id = parse_scoped_id("entity:hero")
         assert scope == ""
         assert raw_id == "entity:hero"
+
+
+class TestStripScopePrefix:
+    """Tests for strip_scope_prefix function."""
+
+    def test_strips_entity_prefix(self) -> None:
+        """Entity prefix is stripped correctly."""
+        result = strip_scope_prefix("entity::hero")
+        assert result == "hero"
+
+    def test_strips_tension_prefix(self) -> None:
+        """Tension prefix is stripped correctly."""
+        result = strip_scope_prefix("tension::trust_betrayal")
+        assert result == "trust_betrayal"
+
+    def test_strips_thread_prefix(self) -> None:
+        """Thread prefix is stripped correctly."""
+        result = strip_scope_prefix("thread::host_motive")
+        assert result == "host_motive"
+
+    def test_returns_unscoped_id_unchanged(self) -> None:
+        """Unscoped ID is returned unchanged."""
+        result = strip_scope_prefix("hero")
+        assert result == "hero"
+
+    def test_handles_empty_string(self) -> None:
+        """Empty string returns empty string."""
+        result = strip_scope_prefix("")
+        assert result == ""
+
+    def test_handles_id_with_multiple_colons(self) -> None:
+        """Only first :: is treated as scope delimiter."""
+        result = strip_scope_prefix("entity::node::with::colons")
+        assert result == "node::with::colons"
 
 
 class TestFormatScopedId:

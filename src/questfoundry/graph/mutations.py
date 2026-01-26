@@ -15,6 +15,8 @@ from difflib import SequenceMatcher
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.graph.context import parse_scoped_id, strip_scope_prefix
+
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
@@ -52,15 +54,11 @@ def _sort_by_similarity(invalid_id: str, available: list[str]) -> list[tuple[str
         List of (id, score) tuples sorted by score descending.
     """
 
-    def strip_scope(s: str) -> str:
-        """Remove scope prefix if present (e.g., 'entity::hero' -> 'hero')."""
-        return s.split("::")[-1] if "::" in s else s
-
-    invalid_raw_lower = strip_scope(invalid_id).lower()
+    invalid_raw_lower = strip_scope_prefix(invalid_id).lower()
     matcher = SequenceMatcher(a=invalid_raw_lower)
     scored = []
     for aid in available:
-        matcher.set_seq2(strip_scope(aid).lower())
+        matcher.set_seq2(strip_scope_prefix(aid).lower())
         scored.append((aid, matcher.ratio()))
     return sorted(scored, key=lambda x: x[1], reverse=True)
 
@@ -432,7 +430,7 @@ def _normalize_id(provided_id: str, expected_scope: str) -> tuple[str, str | Non
         ('tension::hero', "Wrong scope prefix: expected 'entity::', got 'tension::'")
     """
     if "::" in provided_id:
-        scope, raw_id = provided_id.split("::", 1)
+        scope, raw_id = parse_scoped_id(provided_id)
         if scope != expected_scope:
             return (
                 provided_id,
@@ -471,10 +469,7 @@ def _backfill_considered_from_threads(output: dict[str, Any]) -> None:
     # Build mapping: tension_id -> set of alternative_ids from threads
     thread_alts: dict[str, set[str]] = {}
     for thread in output.get("threads", []):
-        tid = thread.get("tension_id", "")
-        # Strip scope prefix if present
-        if "::" in tid:
-            tid = tid.split("::", 1)[-1]
+        tid = strip_scope_prefix(thread.get("tension_id", ""))
         alt = thread.get("alternative_id")
         if alt:
             thread_alts.setdefault(tid, set()).add(alt)
@@ -484,10 +479,7 @@ def _backfill_considered_from_threads(output: dict[str, Any]) -> None:
         # Support both new 'considered' and old 'explored' field names
         considered = tension.get("considered", tension.get("explored", []))
         if not considered:
-            tid = tension.get("tension_id", "")
-            # Strip scope prefix if present
-            if "::" in tid:
-                tid = tid.split("::", 1)[-1]
+            tid = strip_scope_prefix(tension.get("tension_id", ""))
             thread_alt_ids = thread_alts.get(tid, set())
             if thread_alt_ids:
                 tension["considered"] = sorted(thread_alt_ids)
@@ -1240,9 +1232,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         # Find the corresponding tension decision
         for tension_decision in output.get("tensions", []):
             decision_tid = tension_decision.get("tension_id", "")
-            # Strip scope prefix if present
-            if "::" in decision_tid:
-                decision_tid = decision_tid.split("::", 1)[-1]
+            decision_tid = strip_scope_prefix(decision_tid)
             if decision_tid == normalized_tid:
                 considered = tension_decision.get(
                     "considered", tension_decision.get("explored", [])
