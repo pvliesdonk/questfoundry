@@ -4,6 +4,15 @@ description: Convert seed brief into SeedOutput artifact
 system: |
   You are converting a SEED stage brief into a structured SeedOutput artifact.
 
+  ## Scoped ID Format (CRITICAL)
+
+  All IDs use type prefixes for disambiguation. Copy IDs EXACTLY as shown in the brief:
+  - Entity IDs: `entity::butler`, `entity::manor`
+  - Tension IDs: `tension::host_benevolent_or_selfish`
+  - Thread IDs: `thread::host_motive`
+
+  The manifest shows which IDs are valid - copy them with their prefixes.
+
   ## Schema Overview
 
   SeedOutput contains six main sections that must be populated from the brief:
@@ -12,8 +21,8 @@ system: |
   For EVERY entity from brainstorm (characters, locations, objects, AND factions), create an EntityDecision:
   ```json
   {
-    "entity_id": "entity_id_from_brainstorm",
-    "disposition": "retained" or "cut"
+    "entity_id": "entity::butler",
+    "disposition": "retained"
   }
   ```
   IMPORTANT: Include ALL entity types - don't skip factions!
@@ -22,28 +31,28 @@ system: |
   For each tension from brainstorm, create a TensionDecision:
   ```json
   {
-    "tension_id": "tension_id_from_brainstorm",
-    "explored": ["alt_id_1", "alt_id_2"],  // Alternatives that become threads
-    "implicit": ["alt_id_3"]                // Alternatives NOT explored
+    "tension_id": "tension::host_benevolent_or_selfish",
+    "considered": ["protector", "manipulator"],
+    "implicit": []
   }
   ```
   NOTES:
-  - The default path alternative (is_default_path=true) MUST be in "explored", never in "implicit".
-  - **Arc Count**: At least 2 tensions should have BOTH alternatives in "explored" for proper IF branching.
+  - The default path alternative (is_default_path=true) MUST be in "considered", never in "implicit".
+  - **Arc Count**: At least 2 tensions should have BOTH alternatives in "considered" for proper IF branching.
   - Tensions with only canonical alternative explored don't contribute to branching.
 
   ### 3. threads (Plot Threads)
   For each explored alternative, create a Thread:
   ```json
   {
-    "thread_id": "unique_thread_id",
+    "thread_id": "thread::host_motive",
     "name": "Human Readable Thread Name",
-    "tension_id": "which_tension",
-    "alternative_id": "which_alternative_this_explores",
-    "unexplored_alternative_ids": ["unexplored_alt_ids"],  // Implicit alternatives
-    "thread_importance": "major" or "minor",
+    "tension_id": "tension::host_benevolent_or_selfish",
+    "alternative_id": "protector",
+    "unexplored_alternative_ids": ["manipulator"],
+    "thread_importance": "major",
     "description": "What this thread is about",
-    "consequence_ids": ["consequence_id_1", "consequence_id_2"]
+    "consequence_ids": ["host_revealed"]
   }
   ```
 
@@ -51,8 +60,8 @@ system: |
   For each thread, create its Consequences:
   ```json
   {
-    "consequence_id": "unique_consequence_id",
-    "thread_id": "which_thread_this_belongs_to",
+    "consequence_id": "host_revealed",
+    "thread_id": "thread::host_motive",
     "description": "What happens narratively",
     "narrative_effects": ["story effect 1", "story effect 2"]
   }
@@ -62,19 +71,19 @@ system: |
   Create 2-4 InitialBeat objects PER THREAD. With 3 threads, expect 6-12 beats total.
   ```json
   {
-    "beat_id": "unique_beat_id",
+    "beat_id": "host_motive_beat_01",
     "summary": "What happens in this beat",
-    "threads": ["thread_id_1", "thread_id_2"],
+    "threads": ["thread::host_motive"],
     "tension_impacts": [
       {
-        "tension_id": "which_tension",
-        "effect": "advances" or "reveals" or "commits" or "complicates",
+        "tension_id": "tension::host_benevolent_or_selfish",
+        "effect": "advances",
         "note": "Explanation of the impact"
       }
     ],
-    "entities": ["entity_id_1", "entity_id_2"],
-    "location": "location_entity_id" or null,
-    "location_alternatives": ["other_location_id"]
+    "entities": ["entity::butler", "entity::guest"],
+    "location": "entity::manor",
+    "location_alternatives": ["entity::garden"]
   }
   ```
 
@@ -101,11 +110,11 @@ system: |
 
   - Extract ALL information from the brief - do not invent new details
   - Use snake_case for all IDs
-  - Entity and tension IDs must match those shown in the brief (use the IDs as displayed)
-  - Every thread must reference a valid tension_id and alternative_id
-  - Every consequence must reference a valid thread_id
+  - Copy IDs EXACTLY as shown in the brief, INCLUDING the type prefix
+  - Every thread must reference a valid tension_id (with `tension::` prefix) and alternative_id
+  - Every consequence must reference a valid thread_id (with `thread::` prefix)
   - Create 2-4 initial_beats PER THREAD (not 1 per thread!)
-  - Every initial_beat must reference valid thread IDs
+  - Every initial_beat must reference valid thread IDs (with `thread::` prefix)
   - thread_importance must be exactly "major" or "minor" (lowercase)
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
   - disposition must be exactly "retained" or "cut"

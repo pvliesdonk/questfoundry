@@ -223,7 +223,7 @@ class TestEnrichTensions:
             "tensions": [
                 {
                     "tension_id": "host_motivation",
-                    "explored": ["benevolent"],
+                    "considered": ["benevolent"],
                     "implicit": ["self_serving"],
                 },
             ],
@@ -237,14 +237,14 @@ class TestEnrichTensions:
         assert tension["why_it_matters"] == "Determines whether protagonist can trust their guide"
         # Entity IDs should have prefix stripped
         assert tension["central_entity_ids"] == ["the_host", "the_manor"]
-        assert tension["explored"] == ["benevolent"]
+        assert tension["considered"] == ["benevolent"]
         assert tension["implicit"] == ["self_serving"]
 
     def test_handles_unknown_tension(self, graph_with_tensions: Graph) -> None:
         """Enrichment handles tensions not in graph gracefully."""
         artifact = {
             "tensions": [
-                {"tension_id": "unknown_tension", "explored": ["option_a"], "implicit": []},
+                {"tension_id": "unknown_tension", "considered": ["option_a"], "implicit": []},
             ],
         }
 
@@ -254,7 +254,7 @@ class TestEnrichTensions:
         assert tension["tension_id"] == "unknown_tension"
         assert "question" not in tension
         assert "why_it_matters" not in tension
-        assert tension["explored"] == ["option_a"]
+        assert tension["considered"] == ["option_a"]
 
     def test_handles_prefixed_tension_ids(self, graph_with_tensions: Graph) -> None:
         """Enrichment strips prefix from tension_id for graph lookup."""
@@ -262,7 +262,7 @@ class TestEnrichTensions:
             "tensions": [
                 {
                     "tension_id": "tension::host_motivation",
-                    "explored": ["benevolent"],
+                    "considered": ["benevolent"],
                     "implicit": [],
                 },
             ],
@@ -276,14 +276,14 @@ class TestEnrichTensions:
         # But graph lookup succeeds with prefix stripped
         assert tension["question"] == "Is the host benevolent or self-serving?"
         assert tension["why_it_matters"] == "Determines whether protagonist can trust their guide"
-        assert tension["explored"] == ["benevolent"]
+        assert tension["considered"] == ["benevolent"]
 
     def test_enriches_multiple_tensions(self, graph_with_tensions: Graph) -> None:
         """Enrichment works for multiple tensions."""
         artifact = {
             "tensions": [
-                {"tension_id": "host_motivation", "explored": ["benevolent"], "implicit": []},
-                {"tension_id": "killer_identity", "explored": ["suspect_a"], "implicit": []},
+                {"tension_id": "host_motivation", "considered": ["benevolent"], "implicit": []},
+                {"tension_id": "killer_identity", "considered": ["suspect_a"], "implicit": []},
             ],
         }
 

@@ -10,14 +10,22 @@ entities_prompt: |
   Missing items WILL cause validation failure. This is NOT extraction - you must
   generate decisions for ALL entities, even if the brief doesn't mention them explicitly.
 
+  ## Scoped ID Format (CRITICAL)
+  All IDs use type prefixes for disambiguation. Copy IDs EXACTLY as shown in the manifest,
+  including the `entity::` prefix.
+
   ## Schema
   Return a JSON object with an "entities" array. Each item is an EntityDecision:
   ```json
   {
     "entities": [
       {
-        "entity_id": "entity_id_from_brainstorm",
-        "disposition": "retained" or "cut"
+        "entity_id": "entity::butler",
+        "disposition": "retained"
+      },
+      {
+        "entity_id": "entity::manor",
+        "disposition": "cut"
       }
     ]
   }
@@ -25,13 +33,14 @@ entities_prompt: |
 
   ## Rules
   - disposition must be exactly "retained" or "cut" (lowercase)
-  - entity_id must match EXACTLY an ID from the Entity IDs manifest
+  - entity_id must include the `entity::` prefix and match EXACTLY an ID from the manifest
   - Generate a decision for EVERY entity in the manifest
 
   ## What NOT to Do
   - Do NOT skip entities because they aren't mentioned in the brief
   - Do NOT invent entities not in the manifest
   - Do NOT partially complete the list
+  - Do NOT omit the `entity::` prefix from IDs
 
   ## Output
   Return ONLY valid JSON with the "entities" array.
@@ -45,22 +54,29 @@ tensions_prompt: |
   Missing items WILL cause validation failure. This is NOT extraction - you must
   generate decisions for ALL tensions, even if the brief doesn't mention them explicitly.
 
+  ## Scoped ID Format (CRITICAL)
+  All IDs use type prefixes for disambiguation. Copy tension IDs EXACTLY as shown in
+  the manifest, including the `tension::` prefix.
+
   ## Schema
   Return a JSON object with a "tensions" array. Each item is a TensionDecision:
   ```json
   {
     "tensions": [
       {
-        "tension_id": "tension_id_from_brainstorm",
-        "considered": ["alt_id_1", "alt_id_2"],
-        "implicit": ["alt_id_3"]
+        "tension_id": "tension::host_benevolent_or_selfish",
+        "considered": ["protector", "manipulator"],
+        "implicit": []
       }
     ]
   }
   ```
 
+  Note: `considered` and `implicit` contain raw alternative IDs (no prefix) since
+  they are local to each tension.
+
   ## Rules
-  - tension_id must match EXACTLY an ID from the Tension IDs manifest
+  - tension_id must include the `tension::` prefix and match EXACTLY an ID from the manifest
   - considered: Alternative IDs to explore as threads (MUST include the default path)
   - implicit: Alternative IDs NOT explored (become shadows)
   - Generate a decision for EVERY tension in the manifest
@@ -79,6 +95,7 @@ tensions_prompt: |
   - Do NOT invent tensions not in the manifest
   - Do NOT partially complete the list
   - Do NOT leave `considered` empty if you plan to create threads for that tension
+  - Do NOT omit the `tension::` prefix from tension_id
 
   ## Output
   Return ONLY valid JSON with the "tensions" array.
@@ -90,6 +107,13 @@ threads_prompt: |
   ## Generation Requirements (CRITICAL)
   For each "considered" alternative in the tension decisions, you MUST generate a thread.
   Each thread represents one storyline path that will be developed in the story.
+
+  ## Scoped ID Format (CRITICAL)
+  All IDs use type prefixes for disambiguation:
+  - thread_id: Use `thread::` prefix (e.g., `thread::host_motive`)
+  - tension_id: Use `tension::` prefix (e.g., `tension::host_benevolent_or_selfish`)
+
+  Copy IDs EXACTLY as shown in the manifest, including the prefixes.
 
   ## CRITICAL INVARIANT: alternative_id MUST match considered
   Each thread's `alternative_id` MUST be one of the IDs listed in the tension's
@@ -104,35 +128,40 @@ threads_prompt: |
   {
     "threads": [
       {
-        "thread_id": "unique_thread_id",
-        "name": "Human Readable Thread Name",
-        "tension_id": "which_tension",
-        "alternative_id": "which_alternative_this_explores",
-        "unexplored_alternative_ids": ["unexplored_alt_ids"],
-        "thread_importance": "major" or "minor",
+        "thread_id": "thread::host_motive",
+        "name": "The Host's Hidden Motive",
+        "tension_id": "tension::host_benevolent_or_selfish",
+        "alternative_id": "protector",
+        "unexplored_alternative_ids": ["manipulator"],
+        "thread_importance": "major",
         "description": "What this thread is about",
-        "consequence_ids": ["consequence_id_1"]
+        "consequence_ids": ["host_revealed"]
       }
     ]
   }
   ```
 
+  Note: `alternative_id`, `unexplored_alternative_ids`, and `consequence_ids` are raw
+  IDs without prefixes since they are local identifiers.
+
   ## Thread ID Naming (CRITICAL)
 
-  Thread IDs must be DIFFERENT from tension IDs. Use short descriptive names.
+  Thread IDs must be DIFFERENT from tension IDs. Use short descriptive names WITH the
+  `thread::` prefix.
 
   FORMAT:
-  - Tension: `[subject]_[optionA]_or_[optionB]` (the binary question)
-  - Thread: `[subject]_[aspect]` (short storyline name)
+  - Tension: `tension::[subject]_[optionA]_or_[optionB]` (the binary question)
+  - Thread: `thread::[subject]_[aspect]` (short storyline name)
 
   Pattern examples (generate YOUR OWN based on your story):
-  - Tension about character loyalty → Thread: `[character]_loyalty`
-  - Tension about artifact's nature → Thread: `[artifact]_secret`
-  - Tension about faction's agenda → Thread: `[faction]_agenda`
+  - Tension about character loyalty → Thread: `thread::[character]_loyalty`
+  - Tension about artifact's nature → Thread: `thread::[artifact]_secret`
+  - Tension about faction's agenda → Thread: `thread::[faction]_agenda`
 
   BAD patterns (will cause validation failures):
   - Using the SAME ID for both tension and thread
   - Using the tension_id as the thread_id
+  - Omitting the `thread::` prefix
 
   Thread IDs should be short names for the storyline, NOT the binary question.
 
@@ -144,12 +173,15 @@ threads_prompt: |
   - consequence_ids: References to consequences for this thread
   - Generate a thread for EACH considered alternative from tension decisions
   - alternative_id MUST be one of the IDs from the tension's `considered` array
+  - thread_id MUST include the `thread::` prefix
+  - tension_id MUST include the `tension::` prefix
 
   ## What NOT to Do
   - Do NOT reuse tension IDs as thread IDs
   - Do NOT skip alternatives marked as "considered"
   - Do NOT create threads for "implicit" alternatives (they become shadows, not threads)
   - Do NOT use an alternative_id that isn't in the tension's `considered` list
+  - Do NOT omit the `thread::` or `tension::` prefixes
 
   ## Output
   Return ONLY valid JSON with the "threads" array.
@@ -162,14 +194,18 @@ consequences_prompt: |
   Every thread MUST have at least one consequence. Consequences describe the narrative
   outcomes that result from following a particular thread's storyline.
 
+  ## Scoped ID Format (CRITICAL)
+  Thread IDs use the `thread::` prefix for disambiguation.
+  Copy thread IDs EXACTLY as shown in the VALID THREAD IDs list.
+
   ## Schema
   Return a JSON object with a "consequences" array. Each item is a Consequence:
   ```json
   {
     "consequences": [
       {
-        "consequence_id": "unique_consequence_id",
-        "thread_id": "which_thread_this_belongs_to",
+        "consequence_id": "host_revealed",
+        "thread_id": "thread::host_motive",
         "description": "What happens narratively",
         "narrative_effects": ["story effect 1", "story effect 2"]
       }
@@ -177,16 +213,32 @@ consequences_prompt: |
   }
   ```
 
+  Note: `consequence_id` is a raw ID without prefix (local identifier).
+  `thread_id` MUST include the `thread::` prefix.
+
+  ## Consequence ID Naming Convention
+
+  Use descriptive names that capture the narrative outcome:
+  - FORMAT: `[subject]_[outcome]` (e.g., `host_revealed`, `trust_broken`, `secret_exposed`)
+  - Keep IDs short and descriptive (2-4 words joined by underscores)
+  - Avoid generic names like `consequence_1` or `result_a`
+
+  EXAMPLES:
+  - `vault_sealed` - The vault is permanently sealed
+  - `alliance_formed` - Characters form an alliance
+  - `identity_exposed` - A hidden identity is revealed
+
   ## Rules
-  - consequence_id must be unique
-  - thread_id must reference a thread from the VALID THREAD IDs list
+  - consequence_id must be unique (raw ID, no prefix, following naming convention above)
+  - thread_id must include the `thread::` prefix and reference a thread from the VALID THREAD IDs list
   - narrative_effects: Array of story effects this consequence implies
   - Generate at least one consequence for EACH thread
 
   ## What NOT to Do
   - Do NOT reference thread IDs that don't exist
   - Do NOT leave any thread without consequences
-  - Do NOT invent consequence_ids that don't follow the naming convention
+  - Do NOT use generic consequence IDs like `consequence_1` (use descriptive names)
+  - Do NOT omit the `thread::` prefix from thread_id
 
   ## Output
   Return ONLY valid JSON with the "consequences" array.
@@ -337,10 +389,34 @@ beats_prompt: |
 per_thread_beats_prompt: |
   You are generating INITIAL BEATS for ONE SPECIFIC THREAD.
 
-  ## YOUR THREAD (CRITICAL - read first!)
-  You are generating beats ONLY for this thread:
-  - Thread ID: {thread_id}
-  - Parent tension: {tension_id}
+  ## YOUR THREAD ID (MEMORIZE THIS)
+
+  You are generating beats for thread: `{thread_id}`
+
+  The `threads` field in EVERY beat MUST contain EXACTLY: `["{thread_id}"]`
+
+  ## COMMON MISTAKE - DO NOT MAKE THIS ERROR
+
+  Thread IDs are SHORT (e.g., `thread::ai_hostile`).
+  Tension IDs are LONG and contain `_or_` (e.g., `tension::ai_orion_benevolent_or_hostile`).
+
+  WRONG OUTPUT (will fail validation):
+  ```json
+  "threads": ["{tension_id}"]  // WRONG! This is a TENSION ID (has _or_)
+  ```
+
+  CORRECT OUTPUT:
+  ```json
+  "threads": ["{thread_id}"]  // RIGHT! This is the THREAD ID (short, no _or_)
+  ```
+
+  RULE: If the ID contains `_or_`, it's a TENSION. Never put it in `threads`.
+
+  ## YOUR TENSION ID (for tension_impacts only)
+
+  Parent tension: `{tension_id}`
+
+  This goes in `tension_impacts[].tension_id`, NOT in `threads`.
 
   ## BEAT ID NAMING (CRITICAL - ensures uniqueness)
 
@@ -410,6 +486,15 @@ per_thread_beats_prompt: |
   - Do NOT reference other tension_ids in your first tension_impact
   - Do NOT skip the commits beat
   - Do NOT use IDs not in the manifest
+  - Do NOT put the tension ID in the `threads` field (see COMMON MISTAKE above)
+
+  ## FINAL VERIFICATION (check before outputting)
+
+  For EACH beat you generate, verify:
+  1. `threads` contains `{thread_id}` (SHORT id, NO `_or_` in it)
+  2. `tension_impacts[0].tension_id` is `{tension_id}` (LONG id, HAS `_or_`)
+
+  If you see `_or_` in your `threads` value, YOU MADE A MISTAKE. Fix it.
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array (2-4 beats).

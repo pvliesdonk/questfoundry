@@ -13,6 +13,7 @@ The pruning process:
 
 from __future__ import annotations
 
+from questfoundry.graph.context import strip_scope_prefix
 from questfoundry.graph.tension_scoring import select_tensions_for_full_exploration
 from questfoundry.models.seed import (
     Consequence,
@@ -94,25 +95,44 @@ def _prune_demoted_tensions(
     after SEED - it records the LLM's original intent. Development state
     (committed vs deferred) is derived from thread existence, not stored fields.
 
+    NOTE: All ID comparisons use strip_scope_prefix() to handle both scoped
+    (thread::foo) and raw (foo) ID formats consistently. This is part of the
+    "scoped everywhere" standardization (see issue #219, PR #220).
+
     Args:
         seed_output: The full SEED output.
-        demoted_tension_ids: Set of tension IDs to demote.
+        demoted_tension_ids: Set of tension IDs to demote (may be scoped or raw).
 
     Returns:
         Pruned SeedOutput with threads removed but tensions unchanged.
     """
-    # Build lookup of which threads to drop
+    # Normalize demoted_tension_ids to raw format for consistent comparison
+    demoted_raw_ids = {strip_scope_prefix(tid) for tid in demoted_tension_ids}
+
+    # Build lookup of which threads to drop (using raw IDs for comparison)
     threads_to_drop: set[str] = set()
-    tension_lookup: dict[str, TensionDecision] = {t.tension_id: t for t in seed_output.tensions}
+    tension_lookup: dict[str, TensionDecision] = {
+        strip_scope_prefix(t.tension_id): t for t in seed_output.tensions
+    }
+
+    # Defensive check: ensure no ID collisions after stripping scope prefixes
+    if len(tension_lookup) != len(seed_output.tensions):
+        log.warning(
+            "tension_id_collision_detected",
+            expected=len(seed_output.tensions),
+            actual=len(tension_lookup),
+        )
 
     for thread in seed_output.threads:
-        if thread.tension_id in demoted_tension_ids:
-            tension = tension_lookup.get(thread.tension_id)
+        raw_tension_id = strip_scope_prefix(thread.tension_id)
+        if raw_tension_id in demoted_raw_ids:
+            tension = tension_lookup.get(raw_tension_id)
             if tension:
                 canonical_alt = _get_canonical_alternative(tension)
                 # Drop if not the canonical alternative
                 if thread.alternative_id != canonical_alt:
-                    threads_to_drop.add(thread.thread_id)
+                    # Store raw thread ID for consistent comparison
+                    threads_to_drop.add(strip_scope_prefix(thread.thread_id))
 
     log.info(
         "pruning_seed_output",
@@ -124,21 +144,25 @@ def _prune_demoted_tensions(
     # Tensions are NOT modified - considered field is immutable
     # Development state is derived from thread existence
 
-    # 1. Filter threads
+    # 1. Filter threads (compare raw IDs)
     pruned_threads: list[Thread] = [
-        t for t in seed_output.threads if t.thread_id not in threads_to_drop
+        t for t in seed_output.threads if strip_scope_prefix(t.thread_id) not in threads_to_drop
     ]
 
-    # 3. Filter consequences
+    # 2. Filter consequences (compare raw IDs)
     pruned_consequences: list[Consequence] = [
-        c for c in seed_output.consequences if c.thread_id not in threads_to_drop
+        c
+        for c in seed_output.consequences
+        if strip_scope_prefix(c.thread_id) not in threads_to_drop
     ]
 
-    # 4. Filter and update beats
+    # 3. Filter and update beats
     pruned_beats: list[InitialBeat] = []
     for beat in seed_output.initial_beats:
-        # Get threads that aren't being dropped
-        kept_threads = [t for t in beat.threads if t not in threads_to_drop]
+        # Get threads that aren't being dropped (compare raw IDs).
+        # Original ID format (scoped or raw) is intentionally preserved to maintain
+        # consistency with how the artifact was originally generated.
+        kept_threads = [t for t in beat.threads if strip_scope_prefix(t) not in threads_to_drop]
 
         if kept_threads:
             # Beat serves at least one kept thread
@@ -194,10 +218,10 @@ def compute_arc_count(seed_output: SeedOutput) -> int:
     Returns:
         The number of arcs this seed would produce.
     """
-    # Count threads per tension
+    # Count threads per tension (using raw IDs for grouping)
     threads_per_tension: dict[str, int] = {}
     for thread in seed_output.threads:
-        tid = thread.tension_id
+        tid = strip_scope_prefix(thread.tension_id)
         threads_per_tension[tid] = threads_per_tension.get(tid, 0) + 1
 
     # Fully developed = has 2+ threads
