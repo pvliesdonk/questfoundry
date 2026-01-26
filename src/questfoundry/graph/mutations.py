@@ -454,6 +454,50 @@ def _clean_dict(data: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in data.items() if v is not None}
 
 
+def _backfill_considered_from_threads(output: dict[str, Any]) -> dict[str, Any]:
+    """Backfill empty considered arrays from thread alternative_ids.
+
+    Handles legacy data where LLM serialized threads but left considered empty.
+    The thread's alternative_id IS what was considered - if a thread exists for
+    an alternative, that alternative was necessarily considered.
+
+    This migration runs BEFORE validation to fix data integrity issues in
+    existing graphs (e.g., grow-3, grow-4) where tensions have `considered: []`
+    but threads exist with valid `alternative_id` values.
+
+    Args:
+        output: SEED stage output dictionary (mutated in place).
+
+    Returns:
+        The same output dict (for chaining).
+    """
+    # Build mapping: tension_id -> set of alternative_ids from threads
+    thread_alts: dict[str, set[str]] = {}
+    for thread in output.get("threads", []):
+        tid = thread.get("tension_id", "")
+        # Strip scope prefix if present
+        if "::" in tid:
+            tid = tid.split("::", 1)[-1]
+        alt = thread.get("alternative_id")
+        if alt:
+            thread_alts.setdefault(tid, set()).add(alt)
+
+    # Backfill empty considered arrays
+    for tension in output.get("tensions", []):
+        # Support both new 'considered' and old 'explored' field names
+        considered = tension.get("considered", tension.get("explored", []))
+        if not considered:
+            tid = tension.get("tension_id", "")
+            # Strip scope prefix if present
+            if "::" in tid:
+                tid = tid.split("::", 1)[-1]
+            thread_alt_ids = thread_alts.get(tid, set())
+            if thread_alt_ids:
+                tension["considered"] = sorted(thread_alt_ids)
+
+    return output
+
+
 # Registry of stages with mutation handlers
 # Note: GROW is not included because it modifies the graph directly during execution,
 # not via post-stage mutation application.
@@ -1188,6 +1232,41 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 )
             )
 
+    # 11c. Check each thread's alternative_id is in its tension's considered list
+    # This catches data integrity issues where threads exist but considered is empty/mismatched
+    for i, thread in enumerate(output.get("threads", [])):
+        raw_tid = thread.get("tension_id")
+        raw_alt_id = thread.get("alternative_id")
+        if not raw_tid or not raw_alt_id:
+            continue
+
+        normalized_tid, _ = _normalize_id(raw_tid, "tension")
+
+        # Find the corresponding tension decision
+        for tension_decision in output.get("tensions", []):
+            decision_tid = tension_decision.get("tension_id", "")
+            # Strip scope prefix if present
+            if "::" in decision_tid:
+                decision_tid = decision_tid.split("::", 1)[-1]
+            if decision_tid == normalized_tid:
+                considered = tension_decision.get(
+                    "considered", tension_decision.get("explored", [])
+                )
+                if raw_alt_id not in considered:
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"threads.{i}.alternative_id",
+                            issue=(
+                                f"Thread alternative '{raw_alt_id}' is not in tension "
+                                f"'{normalized_tid}' considered list: {considered}"
+                            ),
+                            available=considered,
+                            provided=raw_alt_id,
+                            category=SeedErrorCategory.SEMANTIC,
+                        )
+                    )
+                break
+
     # NOTE: Arc count validation removed - now handled by runtime pruning (over-generate-and-select)
     # See seed_pruning.py for the new approach: LLM generates freely, runtime selects best tensions
 
@@ -1283,6 +1362,10 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         SeedMutationError: If semantic validation fails (with feedback for retry).
         MutationError: If required id fields are missing.
     """
+    # Migration: backfill empty considered arrays from thread alternative_ids
+    # This fixes legacy data where LLM serialized threads but left considered empty
+    _backfill_considered_from_threads(output)
+
     # Validate cross-references first
     errors = validate_seed_mutations(graph, output)
     if errors:
@@ -1304,7 +1387,8 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         tension_id = _prefix_id("tension", raw_id)
         if graph.has_node(tension_id):
             # Support both new 'considered' and old 'explored' field names
-            considered = tension_decision.get("considered") or tension_decision.get("explored", [])
+            # Use dict.get() chaining instead of 'or' to handle empty lists correctly
+            considered = tension_decision.get("considered", tension_decision.get("explored", []))
             graph.update_node(
                 tension_id,
                 considered=considered,

@@ -10,6 +10,7 @@ from questfoundry.graph.mutations import (
     BrainstormValidationError,
     SeedErrorCategory,
     SeedValidationError,
+    _backfill_considered_from_threads,
     _format_available_with_suggestions,
     _normalize_id,
     _prefix_id,
@@ -3098,3 +3099,468 @@ class TestCutEntityInBeats:
         assert len(cut_errors) == 1
         assert "ruins" in cut_errors[0].issue
         assert "initial_beats.0.location_alternatives" in cut_errors[0].field_path
+
+
+class TestBackfillConsideredFromThreads:
+    """Tests for _backfill_considered_from_threads migration function."""
+
+    def test_backfills_empty_considered_from_threads(self) -> None:
+        """Empty considered array is filled from thread alternative_ids."""
+        output = {
+            "tensions": [
+                {"tension_id": "choice_a_or_b", "considered": []},
+            ],
+            "threads": [
+                {
+                    "thread_id": "thread1",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_a",
+                },
+                {
+                    "thread_id": "thread2",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_b",
+                },
+            ],
+        }
+
+        result = _backfill_considered_from_threads(output)
+
+        assert result["tensions"][0]["considered"] == ["option_a", "option_b"]
+
+    def test_preserves_existing_considered(self) -> None:
+        """Non-empty considered array is not modified."""
+        output = {
+            "tensions": [
+                {"tension_id": "choice_a_or_b", "considered": ["existing_value"]},
+            ],
+            "threads": [
+                {
+                    "thread_id": "thread1",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_a",
+                },
+            ],
+        }
+
+        result = _backfill_considered_from_threads(output)
+
+        assert result["tensions"][0]["considered"] == ["existing_value"]
+
+    def test_handles_scoped_tension_ids(self) -> None:
+        """Handles tension IDs with scope prefix (tension::id)."""
+        output = {
+            "tensions": [
+                {"tension_id": "tension::choice_a_or_b", "considered": []},
+            ],
+            "threads": [
+                {
+                    "thread_id": "thread1",
+                    "tension_id": "tension::choice_a_or_b",
+                    "alternative_id": "option_a",
+                },
+            ],
+        }
+
+        result = _backfill_considered_from_threads(output)
+
+        assert result["tensions"][0]["considered"] == ["option_a"]
+
+    def test_handles_mixed_scoped_and_unscoped(self) -> None:
+        """Matches tension with scoped ID to thread with unscoped ID."""
+        output = {
+            "tensions": [
+                {"tension_id": "tension::choice_a_or_b", "considered": []},
+            ],
+            "threads": [
+                {
+                    "thread_id": "thread1",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_a",
+                },
+            ],
+        }
+
+        result = _backfill_considered_from_threads(output)
+
+        assert result["tensions"][0]["considered"] == ["option_a"]
+
+    def test_supports_old_explored_field(self) -> None:
+        """Checks both 'considered' and 'explored' for existing values."""
+        output = {
+            "tensions": [
+                {"tension_id": "choice_a_or_b", "explored": ["existing"]},
+            ],
+            "threads": [
+                {
+                    "thread_id": "thread1",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_a",
+                },
+            ],
+        }
+
+        result = _backfill_considered_from_threads(output)
+
+        # explored is not empty, so no backfill
+        assert "considered" not in result["tensions"][0]
+        assert result["tensions"][0]["explored"] == ["existing"]
+
+    def test_no_threads_no_backfill(self) -> None:
+        """Empty threads list does not modify tensions."""
+        output = {
+            "tensions": [
+                {"tension_id": "choice_a_or_b", "considered": []},
+            ],
+            "threads": [],
+        }
+
+        result = _backfill_considered_from_threads(output)
+
+        assert result["tensions"][0]["considered"] == []
+
+    def test_thread_without_alternative_id_ignored(self) -> None:
+        """Threads without alternative_id are skipped."""
+        output = {
+            "tensions": [
+                {"tension_id": "choice_a_or_b", "considered": []},
+            ],
+            "threads": [
+                {"thread_id": "thread1", "tension_id": "choice_a_or_b"},  # no alternative_id
+            ],
+        }
+
+        result = _backfill_considered_from_threads(output)
+
+        assert result["tensions"][0]["considered"] == []
+
+    def test_multiple_tensions_independently_backfilled(self) -> None:
+        """Each tension is backfilled from its own threads."""
+        output = {
+            "tensions": [
+                {"tension_id": "tension_one", "considered": []},
+                {"tension_id": "tension_two", "considered": []},
+            ],
+            "threads": [
+                {"thread_id": "t1", "tension_id": "tension_one", "alternative_id": "opt_a"},
+                {"thread_id": "t2", "tension_id": "tension_two", "alternative_id": "opt_x"},
+                {"thread_id": "t3", "tension_id": "tension_two", "alternative_id": "opt_y"},
+            ],
+        }
+
+        result = _backfill_considered_from_threads(output)
+
+        assert result["tensions"][0]["considered"] == ["opt_a"]
+        assert result["tensions"][1]["considered"] == ["opt_x", "opt_y"]
+
+
+class TestValidation11cThreadAlternativeInConsidered:
+    """Tests for validation check 11c: thread.alternative_id IN tension.considered."""
+
+    def test_thread_alternative_in_considered_passes(self) -> None:
+        """Thread with alternative_id matching considered passes validation."""
+        graph = Graph.empty()
+        graph.create_node(
+            "tension::choice_a_or_b",
+            {
+                "type": "tension",
+                "raw_id": "choice_a_or_b",
+                "alternatives": [
+                    {"alternative_id": "option_a", "is_default_path": True},
+                    {"alternative_id": "option_b", "is_default_path": False},
+                ],
+            },
+        )
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "choice_a_or_b", "considered": ["option_a", "option_b"]},
+            ],
+            "threads": [
+                {
+                    "thread_id": "thread1",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_a",
+                    "name": "Thread One",
+                },
+                {
+                    "thread_id": "thread2",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_b",
+                    "name": "Thread Two",
+                },
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "b1",
+                    "summary": "Test",
+                    "threads": ["thread1"],
+                    "tension_impacts": [
+                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    ],
+                },
+                {
+                    "beat_id": "b2",
+                    "summary": "Test",
+                    "threads": ["thread2"],
+                    "tension_impacts": [
+                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    ],
+                },
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Filter for 11c errors specifically
+        check_11c_errors = [
+            e for e in errors if "not in tension" in e.issue and "considered" in e.issue
+        ]
+        assert check_11c_errors == []
+
+    def test_thread_alternative_not_in_considered_detected(self) -> None:
+        """Thread with alternative_id NOT in considered fails validation."""
+        graph = Graph.empty()
+        graph.create_node(
+            "tension::choice_a_or_b",
+            {
+                "type": "tension",
+                "raw_id": "choice_a_or_b",
+                "alternatives": [
+                    {"alternative_id": "option_a", "is_default_path": True},
+                    {"alternative_id": "option_b", "is_default_path": False},
+                ],
+            },
+        )
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "choice_a_or_b", "considered": ["option_a"]},  # missing option_b!
+            ],
+            "threads": [
+                {
+                    "thread_id": "thread1",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_a",
+                    "name": "Thread One",
+                },
+                {
+                    "thread_id": "thread2",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_b",  # not in considered!
+                    "name": "Thread Two",
+                },
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "b1",
+                    "summary": "Test",
+                    "threads": ["thread1"],
+                    "tension_impacts": [
+                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    ],
+                },
+                {
+                    "beat_id": "b2",
+                    "summary": "Test",
+                    "threads": ["thread2"],
+                    "tension_impacts": [
+                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    ],
+                },
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Filter for 11c errors specifically
+        check_11c_errors = [
+            e for e in errors if "not in tension" in e.issue and "considered" in e.issue
+        ]
+        assert len(check_11c_errors) == 1
+        assert "option_b" in check_11c_errors[0].issue
+        assert "choice_a_or_b" in check_11c_errors[0].issue
+        assert check_11c_errors[0].field_path == "threads.1.alternative_id"
+        assert check_11c_errors[0].category == SeedErrorCategory.SEMANTIC
+
+    def test_empty_considered_detected(self) -> None:
+        """Thread with alternative_id but empty considered fails validation."""
+        graph = Graph.empty()
+        graph.create_node(
+            "tension::choice_a_or_b",
+            {
+                "type": "tension",
+                "raw_id": "choice_a_or_b",
+                "alternatives": [
+                    {"alternative_id": "option_a", "is_default_path": True},
+                ],
+            },
+        )
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "choice_a_or_b", "considered": []},  # empty!
+            ],
+            "threads": [
+                {
+                    "thread_id": "thread1",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_a",
+                    "name": "Thread One",
+                },
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "b1",
+                    "summary": "Test",
+                    "threads": ["thread1"],
+                    "tension_impacts": [
+                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    ],
+                },
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Filter for 11c errors
+        check_11c_errors = [
+            e for e in errors if "not in tension" in e.issue and "considered" in e.issue
+        ]
+        assert len(check_11c_errors) == 1
+        assert "option_a" in check_11c_errors[0].issue
+
+    def test_scoped_tension_ids_matched_correctly(self) -> None:
+        """Scoped tension IDs are normalized for matching."""
+        graph = Graph.empty()
+        graph.create_node(
+            "tension::choice_a_or_b",
+            {
+                "type": "tension",
+                "raw_id": "choice_a_or_b",
+                "alternatives": [
+                    {"alternative_id": "option_a", "is_default_path": True},
+                ],
+            },
+        )
+
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "tension::choice_a_or_b", "considered": ["option_a"]},  # scoped
+            ],
+            "threads": [
+                {
+                    "thread_id": "thread1",
+                    "tension_id": "choice_a_or_b",  # unscoped
+                    "alternative_id": "option_a",
+                    "name": "Thread One",
+                },
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "b1",
+                    "summary": "Test",
+                    "threads": ["thread1"],
+                    "tension_impacts": [
+                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    ],
+                },
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        # Filter for 11c errors
+        check_11c_errors = [
+            e for e in errors if "not in tension" in e.issue and "considered" in e.issue
+        ]
+        assert check_11c_errors == []
+
+
+class TestBackfillIntegrationWithApplySeedMutations:
+    """Test that backfill runs before validation in apply_seed_mutations."""
+
+    def test_backfill_runs_before_validation(self) -> None:
+        """Backfill fixes data before validation, preventing 11c errors."""
+        graph = Graph.empty()
+        # Create tension node
+        graph.create_node(
+            "tension::choice_a_or_b",
+            {
+                "type": "tension",
+                "raw_id": "choice_a_or_b",
+            },
+        )
+        # Create alternative nodes
+        graph.create_node(
+            "tension::choice_a_or_b::alt::option_a",
+            {"type": "alternative", "raw_id": "option_a", "is_default_path": True},
+        )
+        graph.create_node(
+            "tension::choice_a_or_b::alt::option_b",
+            {"type": "alternative", "raw_id": "option_b", "is_default_path": False},
+        )
+        # Create has_alternative edges (required for validation)
+        graph.add_edge(
+            "has_alternative",
+            "tension::choice_a_or_b",
+            "tension::choice_a_or_b::alt::option_a",
+        )
+        graph.add_edge(
+            "has_alternative",
+            "tension::choice_a_or_b",
+            "tension::choice_a_or_b::alt::option_b",
+        )
+
+        # Legacy data pattern: threads exist but considered is empty
+        output = {
+            "entities": [],
+            "tensions": [
+                {"tension_id": "choice_a_or_b", "considered": []},  # empty - should be backfilled
+            ],
+            "threads": [
+                {
+                    "thread_id": "thread1",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_a",
+                    "name": "Thread One",
+                },
+                {
+                    "thread_id": "thread2",
+                    "tension_id": "choice_a_or_b",
+                    "alternative_id": "option_b",
+                    "name": "Thread Two",
+                },
+            ],
+            "consequences": [],
+            "initial_beats": [
+                {
+                    "beat_id": "b1",
+                    "summary": "Test",
+                    "threads": ["thread1"],
+                    "tension_impacts": [
+                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    ],
+                },
+                {
+                    "beat_id": "b2",
+                    "summary": "Test",
+                    "threads": ["thread2"],
+                    "tension_impacts": [
+                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    ],
+                },
+            ],
+        }
+
+        # Should NOT raise because backfill fixes the data before validation
+        apply_seed_mutations(graph, output)
+
+        # Verify the tension node was updated with backfilled considered
+        tension_node = graph.get_node("tension::choice_a_or_b")
+        assert tension_node is not None
+        assert sorted(tension_node.get("considered", [])) == ["option_a", "option_b"]
