@@ -1281,7 +1281,8 @@ async def serialize_seed_as_function(
                     error_count=len(section_errors["beats"]),
                 )
                 try:
-                    # Re-generate all beats with current (possibly corrected) threads
+                    # Re-generate all beats with current (possibly corrected) threads.
+                    # If threads is empty, _serialize_beats_per_thread returns ([], 0) gracefully.
                     beats, beats_tokens = await _serialize_beats_per_thread(
                         model=model,
                         threads=collected["threads"],
