@@ -52,7 +52,7 @@ tensions_prompt: |
     "tensions": [
       {
         "tension_id": "tension_id_from_brainstorm",
-        "explored": ["alt_id_1", "alt_id_2"],
+        "considered": ["alt_id_1", "alt_id_2"],
         "implicit": ["alt_id_3"]
       }
     ]
@@ -61,7 +61,7 @@ tensions_prompt: |
 
   ## Rules
   - tension_id must match EXACTLY an ID from the Tension IDs manifest
-  - explored: Alternative IDs that become threads (MUST include the default path)
+  - considered: Alternative IDs to explore as threads (MUST include the default path)
   - implicit: Alternative IDs NOT explored (become shadows)
   - Generate a decision for EVERY tension in the manifest
 
@@ -78,7 +78,7 @@ threads_prompt: |
   You are generating THREADS for a SEED stage based on tension decisions.
 
   ## Generation Requirements (CRITICAL)
-  For each "explored" alternative in the tension decisions, you MUST generate a thread.
+  For each "considered" alternative in the tension decisions, you MUST generate a thread.
   Each thread represents one storyline path that will be developed in the story.
 
   ## Schema
@@ -125,11 +125,11 @@ threads_prompt: |
   - thread_importance must be exactly "major" or "minor" (lowercase)
   - unexplored_alternative_ids: IDs of alternatives NOT explored (implicit ones)
   - consequence_ids: References to consequences for this thread
-  - Generate a thread for EACH explored alternative from tension decisions
+  - Generate a thread for EACH considered alternative from tension decisions
 
   ## What NOT to Do
   - Do NOT reuse tension IDs as thread IDs
-  - Do NOT skip alternatives marked as "explored"
+  - Do NOT skip alternatives marked as "considered"
   - Do NOT create threads for "implicit" alternatives (they become shadows, not threads)
 
   ## Output
