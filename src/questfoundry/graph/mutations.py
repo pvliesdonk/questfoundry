@@ -1168,7 +1168,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             continue
 
         # Support both new 'considered' and old 'explored' field names
-        considered = tension_decision.get("considered") or tension_decision.get("explored", [])
+        # Use dict.get() chaining instead of 'or' to handle empty lists correctly
+        considered = tension_decision.get("considered", tension_decision.get("explored", []))
         thread_count = tension_thread_counts.get(normalized_tid, 0)
 
         if len(considered) > thread_count:

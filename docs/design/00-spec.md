@@ -337,9 +337,12 @@ tension:
   why_it_matters: string        # thematic stakes
   # Added by SEED:
   considered: alternative_id[]  # which alternatives LLM intended to explore
+  implicit: alternative_id[]    # alternatives not explored (for FILL shadows)
 ```
 
 **Lifecycle:** Created in BRAINSTORM, exploration decisions added in SEED. Not exported.
+
+**The `implicit` field** holds alternatives that are intentionally NOT explored as threads. These provide narrative context for the FILL stage—the "road not taken" that gives meaning to the chosen path. For example, if we explore "mentor is deceptive", the implicit "mentor is trustworthy" informs how the deception contrasts with what could have been.
 
 **Derived development states** (computed from thread existence, not stored):
 - **committed**: Alternative has a thread in the graph (will become a story path)
