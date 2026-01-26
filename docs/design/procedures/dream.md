@@ -52,9 +52,9 @@ DREAM captures **what kind of story** (vision), not **what happens in the story*
 | DREAM (Vision) | BRAINSTORM (Structure) |
 |----------------|------------------------|
 | "Dark fantasy mystery" | Characters, locations, factions |
-| "Themes of trust and sacrifice" | "Can the mentor be trusted?" tension |
+| "Themes of trust and sacrifice" | "Can the mentor be trusted?" dilemma |
 | "Morally ambiguous tone" | Specific moral dilemmas |
-| "Short length" | ~15 entities, ~6 tensions |
+| "Short length" | ~15 entities, ~6 dilemmas |
 
 DREAM stays abstract. BRAINSTORM makes it concrete.
 
