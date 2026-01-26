@@ -207,7 +207,7 @@ fill_output:
   flag_reason: "Character's emotional state too divergent—suspicious path requires hostile body language incompatible with trusting path"
 ```
 
-Flagged beats return to GROW for splitting into separate path-specific passages.
+Flagged beats return to GROW for splitting into separate route-specific passages.
 
 **When to flag (guidance for LLM):**
 - Internal monologue requires contradictory knowledge
