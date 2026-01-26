@@ -336,10 +336,17 @@ tension:
   involves: entity_id[]
   why_it_matters: string        # thematic stakes
   # Added by SEED:
-  explored: alternative_id[]    # which alternatives become threads
+  considered: alternative_id[]  # which alternatives LLM intended to explore
 ```
 
 **Lifecycle:** Created in BRAINSTORM, exploration decisions added in SEED. Not exported.
+
+**Derived development states** (computed from thread existence, not stored):
+- **committed**: Alternative has a thread in the graph (will become a story path)
+- **deferred**: Alternative in `considered` but no thread (LLM intended to explore but was pruned)
+- **latent**: Alternative not in `considered` (never intended for exploration, becomes shadow)
+
+The `considered` field records what the LLM *intended* to explore. Actual thread existence determines what was *committed*. This separation allows pruning to drop threads without modifying the tension's stored intent, keeping the field immutable after SEED.
 
 **Binary constraint:** Exactly two alternatives per tension. This keeps contrasts crisp.
 
