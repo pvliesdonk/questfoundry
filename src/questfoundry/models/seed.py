@@ -11,9 +11,9 @@ See docs/design/00-spec.md for details.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # Type aliases for clarity
 EntityDisposition = Literal["retained", "cut"]
@@ -49,21 +49,45 @@ class TensionDecision(BaseModel):
     explore as threads. The canonical alternative is always explored (spine).
     Non-canonical alternatives become branches only if explicitly explored.
 
+    The `considered` field records the LLM's *intent* - which alternatives it
+    wanted to explore. Actual thread existence is derived at runtime from the
+    graph, not from this field. This separation allows pruning to drop threads
+    without modifying the tension's stored intent.
+
+    Development states (computed, not stored):
+    - committed: Alternative has a thread in the graph
+    - deferred: Alternative in `considered` but no thread (pruned)
+    - latent: Alternative not in `considered` (never intended for exploration)
+
     Attributes:
         tension_id: Tension ID from BRAINSTORM.
-        explored: Alternative IDs that become threads.
+        considered: Alternative IDs the LLM intended to explore as threads.
         implicit: Alternative IDs not explored (context for FILL shadows).
     """
 
     tension_id: str = Field(min_length=1, description="Tension ID from BRAINSTORM")
-    explored: list[str] = Field(
+    considered: list[str] = Field(
         min_length=1,
-        description="Alternative IDs to explore as threads (always includes canonical)",
+        description="Alternative IDs the LLM intended to explore as threads",
     )
     implicit: list[str] = Field(
         default_factory=list,
         description="Alternative IDs not explored (become shadows)",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_explored_to_considered(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Handle old graphs with 'explored' field.
+
+        Provides backward compatibility by migrating the old 'explored' field
+        to the new 'considered' field name. This allows reading graphs created
+        before the ontology change.
+        """
+        if isinstance(data, dict) and "explored" in data and "considered" not in data:
+            data = dict(data)  # Avoid mutating input
+            data["considered"] = data.pop("explored")
+        return data
 
 
 class Consequence(BaseModel):
