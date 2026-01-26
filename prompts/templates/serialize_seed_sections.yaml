@@ -65,10 +65,20 @@ tensions_prompt: |
   - implicit: Alternative IDs NOT explored (become shadows)
   - Generate a decision for EVERY tension in the manifest
 
+  ## CRITICAL INVARIANT: considered ↔ threads linkage
+  The `considered` array defines which alternatives will have threads created.
+  For EACH alternative_id in `considered`, you MUST create a thread later.
+  The thread's `alternative_id` field MUST match an entry in `considered`.
+
+  WRONG: `considered: []` with threads that have `alternative_id` values
+  WRONG: `considered: ["opt_a"]` but thread uses `alternative_id: "opt_b"`
+  RIGHT: `considered: ["opt_a", "opt_b"]` and threads use those exact IDs
+
   ## What NOT to Do
   - Do NOT skip tensions because they aren't mentioned in the brief
   - Do NOT invent tensions not in the manifest
   - Do NOT partially complete the list
+  - Do NOT leave `considered` empty if you plan to create threads for that tension
 
   ## Output
   Return ONLY valid JSON with the "tensions" array.
@@ -80,6 +90,13 @@ threads_prompt: |
   ## Generation Requirements (CRITICAL)
   For each "considered" alternative in the tension decisions, you MUST generate a thread.
   Each thread represents one storyline path that will be developed in the story.
+
+  ## CRITICAL INVARIANT: alternative_id MUST match considered
+  Each thread's `alternative_id` MUST be one of the IDs listed in the tension's
+  `considered` array. This is a hard constraint enforced by validation.
+
+  WRONG: Thread with `alternative_id: "option_b"` when tension has `considered: ["option_a"]`
+  RIGHT: Thread with `alternative_id: "option_a"` when tension has `considered: ["option_a", "option_b"]`
 
   ## Schema
   Return a JSON object with a "threads" array. Each item is a Thread:
@@ -126,11 +143,13 @@ threads_prompt: |
   - unexplored_alternative_ids: IDs of alternatives NOT explored (implicit ones)
   - consequence_ids: References to consequences for this thread
   - Generate a thread for EACH considered alternative from tension decisions
+  - alternative_id MUST be one of the IDs from the tension's `considered` array
 
   ## What NOT to Do
   - Do NOT reuse tension IDs as thread IDs
   - Do NOT skip alternatives marked as "considered"
   - Do NOT create threads for "implicit" alternatives (they become shadows, not threads)
+  - Do NOT use an alternative_id that isn't in the tension's `considered` list
 
   ## Output
   Return ONLY valid JSON with the "threads" array.
