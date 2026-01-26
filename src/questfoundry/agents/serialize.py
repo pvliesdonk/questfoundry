@@ -1258,10 +1258,46 @@ async def serialize_seed_as_function(
                     if output_field in section_data:
                         collected[output_field] = section_data[output_field]
                         retried_any = True
+
+                        # Refresh thread context for dependent sections when threads change
+                        if section_name == "threads":
+                            thread_ids_context = format_thread_ids_context(collected["threads"])
+                            if thread_ids_context:
+                                brief_with_threads = f"{enhanced_brief}\n\n{thread_ids_context}"
+                                log.debug("thread_context_refreshed_on_retry")
+
                 except SerializationError as e:
                     log.warning(
                         "serialize_section_retry_failed",
                         section=section_name,
+                        error=str(e),
+                    )
+
+            # Handle beats separately - not in sections list but generated per-thread
+            if "beats" in section_errors:
+                log.debug(
+                    "serialize_beats_retry",
+                    attempt=semantic_attempt,
+                    error_count=len(section_errors["beats"]),
+                )
+                try:
+                    # Re-generate all beats with current (possibly corrected) threads.
+                    # If threads is empty, _serialize_beats_per_thread returns ([], 0) gracefully.
+                    beats, beats_tokens = await _serialize_beats_per_thread(
+                        model=model,
+                        threads=collected["threads"],
+                        per_thread_prompt=prompts["per_thread_beats"],
+                        entity_context=entity_context,
+                        provider_name=provider_name,
+                        max_retries=max_retries,
+                        callbacks=callbacks,
+                    )
+                    collected["initial_beats"] = beats
+                    total_tokens += beats_tokens
+                    retried_any = True
+                except SerializationError as e:
+                    log.warning(
+                        "serialize_beats_retry_failed",
                         error=str(e),
                     )
 
