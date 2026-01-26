@@ -1231,8 +1231,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
         # Find the corresponding tension decision
         for tension_decision in output.get("tensions", []):
-            decision_tid = tension_decision.get("tension_id", "")
-            decision_tid = strip_scope_prefix(decision_tid)
+            decision_tid = strip_scope_prefix(tension_decision.get("tension_id", ""))
             if decision_tid == normalized_tid:
                 considered = tension_decision.get(
                     "considered", tension_decision.get("explored", [])
