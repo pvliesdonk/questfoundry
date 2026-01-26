@@ -136,6 +136,30 @@ def parse_scoped_id(scoped_id: str) -> tuple[str, str]:
     return "", scoped_id
 
 
+def strip_scope_prefix(scoped_id: str) -> str:
+    """Strip scope prefix from ID, returning only the raw ID.
+
+    This is a convenience wrapper around parse_scoped_id() for the common
+    case where you only need the raw ID, not the scope.
+
+    Args:
+        scoped_id: An ID string, optionally scoped (e.g., 'entity::hero').
+
+    Returns:
+        Raw ID without scope prefix (e.g., 'hero').
+
+    Examples:
+        >>> strip_scope_prefix("entity::hero")
+        'hero'
+        >>> strip_scope_prefix("thread::host_motive")
+        'host_motive'
+        >>> strip_scope_prefix("hero")
+        'hero'
+    """
+    _, raw_id = parse_scoped_id(scoped_id)
+    return raw_id
+
+
 def format_scoped_id(scope: str, raw_id: str) -> str:
     """Format a raw ID with its scope prefix.
 
