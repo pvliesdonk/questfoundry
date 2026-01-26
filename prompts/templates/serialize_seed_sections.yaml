@@ -216,8 +216,20 @@ consequences_prompt: |
   Note: `consequence_id` is a raw ID without prefix (local identifier).
   `thread_id` MUST include the `thread::` prefix.
 
+  ## Consequence ID Naming Convention
+
+  Use descriptive names that capture the narrative outcome:
+  - FORMAT: `[subject]_[outcome]` (e.g., `host_revealed`, `trust_broken`, `secret_exposed`)
+  - Keep IDs short and descriptive (2-4 words joined by underscores)
+  - Avoid generic names like `consequence_1` or `result_a`
+
+  EXAMPLES:
+  - `vault_sealed` - The vault is permanently sealed
+  - `alliance_formed` - Characters form an alliance
+  - `identity_exposed` - A hidden identity is revealed
+
   ## Rules
-  - consequence_id must be unique (raw ID, no prefix)
+  - consequence_id must be unique (raw ID, no prefix, following naming convention above)
   - thread_id must include the `thread::` prefix and reference a thread from the VALID THREAD IDs list
   - narrative_effects: Array of story effects this consequence implies
   - Generate at least one consequence for EACH thread
@@ -225,7 +237,7 @@ consequences_prompt: |
   ## What NOT to Do
   - Do NOT reference thread IDs that don't exist
   - Do NOT leave any thread without consequences
-  - Do NOT invent consequence_ids that don't follow the naming convention
+  - Do NOT use generic consequence IDs like `consequence_1` (use descriptive names)
   - Do NOT omit the `thread::` prefix from thread_id
 
   ## Output

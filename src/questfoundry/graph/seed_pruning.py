@@ -115,6 +115,14 @@ def _prune_demoted_tensions(
         strip_scope_prefix(t.tension_id): t for t in seed_output.tensions
     }
 
+    # Defensive check: ensure no ID collisions after stripping scope prefixes
+    if len(tension_lookup) != len(seed_output.tensions):
+        log.warning(
+            "tension_id_collision_detected",
+            expected=len(seed_output.tensions),
+            actual=len(tension_lookup),
+        )
+
     for thread in seed_output.threads:
         raw_tension_id = strip_scope_prefix(thread.tension_id)
         if raw_tension_id in demoted_raw_ids:
@@ -141,17 +149,19 @@ def _prune_demoted_tensions(
         t for t in seed_output.threads if strip_scope_prefix(t.thread_id) not in threads_to_drop
     ]
 
-    # 3. Filter consequences (compare raw IDs)
+    # 2. Filter consequences (compare raw IDs)
     pruned_consequences: list[Consequence] = [
         c
         for c in seed_output.consequences
         if strip_scope_prefix(c.thread_id) not in threads_to_drop
     ]
 
-    # 4. Filter and update beats
+    # 3. Filter and update beats
     pruned_beats: list[InitialBeat] = []
     for beat in seed_output.initial_beats:
-        # Get threads that aren't being dropped (compare raw IDs, keep original format)
+        # Get threads that aren't being dropped (compare raw IDs).
+        # Original ID format (scoped or raw) is intentionally preserved to maintain
+        # consistency with how the artifact was originally generated.
         kept_threads = [t for t in beat.threads if strip_scope_prefix(t) not in threads_to_drop]
 
         if kept_threads:
