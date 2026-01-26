@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import re
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import lru_cache
@@ -713,6 +714,11 @@ async def serialize_seed_iteratively(
 ) -> tuple[Any, int]:
     """Serialize SEED brief in sections to avoid output truncation.
 
+    .. deprecated:: 5.2
+        Use serialize_seed_as_function() instead. This function raises
+        SeedMutationError on validation failures; the new function returns
+        a SerializeResult with errors for conversation-level retry.
+
     Instead of serializing the entire SeedOutput at once (which can cause
     truncation with complex schemas on smaller models), this function
     serializes each section independently and merges the results.
@@ -746,6 +752,11 @@ async def serialize_seed_iteratively(
         SerializationError: If any section fails validation after retries.
         SeedMutationError: If semantic validation fails after all retries.
     """
+    warnings.warn(
+        "serialize_seed_iteratively() is deprecated. Use serialize_seed_as_function() instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
     from questfoundry.models.seed import (
         BeatsSection,
         ConsequencesSection,
