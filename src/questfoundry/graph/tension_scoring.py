@@ -63,8 +63,8 @@ def _get_threads_for_tension(
     if not threads:
         return None, None
 
-    # Assume first explored alternative is canonical (typical pattern)
-    canonical_alt = tension_decision.explored[0] if tension_decision.explored else None
+    # Assume first considered alternative is canonical (typical pattern)
+    canonical_alt = tension_decision.considered[0] if tension_decision.considered else None
 
     canonical_thread = None
     noncanonical_thread = None
@@ -121,9 +121,11 @@ def score_tension(seed_output: SeedOutput, tension_id: str) -> ScoredTension:
             noncanonical_thread_id=None,
         )
 
-    is_fully_explored = len(tension_decision.explored) >= 2
-
     canonical_thread, noncanonical_thread = _get_threads_for_tension(seed_output, tension_id)
+
+    # is_fully_explored is derived from actual thread existence, not from considered field
+    # A tension is fully explored when BOTH canonical and non-canonical threads exist
+    is_fully_explored = canonical_thread is not None and noncanonical_thread is not None
 
     if not noncanonical_thread:
         # No non-canonical thread - nothing to score
