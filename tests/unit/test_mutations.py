@@ -147,8 +147,8 @@ class TestApplyMutations:
         output = {
             "entities": [{"entity_id": "char_001", "disposition": "retained"}],
             "tensions": [
-                {"tension_id": "t0", "explored": ["a", "b"], "implicit": []},
-                {"tension_id": "t1", "explored": ["a", "b"], "implicit": []},
+                {"tension_id": "t0", "considered": ["a", "b"], "implicit": []},
+                {"tension_id": "t1", "considered": ["a", "b"], "implicit": []},
             ],
             "threads": [
                 {"thread_id": "thread_0", "tension_id": "t0", "alternative_id": "a"},
@@ -763,7 +763,7 @@ class TestSeedMutations:
         output = {
             "entities": [],
             "tensions": [
-                {"tension_id": "mentor_trust", "explored": ["protector"], "implicit": []},
+                {"tension_id": "mentor_trust", "considered": ["protector"], "implicit": []},
             ],
             "threads": [
                 {
@@ -839,7 +839,7 @@ class TestSeedMutations:
             "tensions": [
                 {
                     "tension_id": "mentor_trust",
-                    "explored": ["protector", "manipulator"],
+                    "considered": ["protector", "manipulator"],
                     "implicit": [],
                 },
             ],
@@ -930,7 +930,7 @@ class TestSeedMutations:
             ],
             # Completeness: decisions for all tensions
             "tensions": [
-                {"tension_id": "mentor_trust", "explored": ["protector"], "implicit": []},
+                {"tension_id": "mentor_trust", "considered": ["protector"], "implicit": []},
             ],
             # Thread must be in SEED output for beat thread references to validate
             "threads": [
@@ -1040,7 +1040,7 @@ class TestSeedCompletenessValidation:
                 {"entity_id": "mentor", "disposition": "cut"},
             ],
             "tensions": [
-                {"tension_id": "trust", "explored": ["yes"], "implicit": []},
+                {"tension_id": "trust", "considered": ["yes"], "implicit": []},
             ],
             "threads": [
                 {
@@ -1114,7 +1114,7 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "tensions": [
-                {"tension_id": "trust", "explored": [], "implicit": []},
+                {"tension_id": "trust", "considered": [], "implicit": []},
                 # Missing: loyalty
             ],
             "threads": [],
@@ -1195,8 +1195,8 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "tensions": [
-                {"tension_id": "trust", "explored": ["yes"], "implicit": []},
-                {"tension_id": "loyalty", "explored": [], "implicit": []},
+                {"tension_id": "trust", "considered": ["yes"], "implicit": []},
+                {"tension_id": "loyalty", "considered": [], "implicit": []},
             ],
             "threads": [
                 {
@@ -1232,8 +1232,8 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "tensions": [
-                {"tension_id": "trust", "explored": ["yes"], "implicit": []},
-                {"tension_id": "loyalty", "explored": ["stand"], "implicit": []},
+                {"tension_id": "trust", "considered": ["yes"], "implicit": []},
+                {"tension_id": "loyalty", "considered": ["stand"], "implicit": []},
             ],
             "threads": [
                 {
@@ -1266,7 +1266,7 @@ class TestSeedCompletenessValidation:
 
         output = {
             "entities": [],
-            "tensions": [{"tension_id": "trust", "explored": ["yes"], "implicit": []}],
+            "tensions": [{"tension_id": "trust", "considered": ["yes"], "implicit": []}],
             "threads": [
                 {
                     "thread_id": "trust_arc",
@@ -1283,8 +1283,8 @@ class TestSeedCompletenessValidation:
         thread_errors = [e for e in errors if "has no thread" in e.issue]
         assert thread_errors == []
 
-    def test_missing_threads_for_explored_alternatives(self) -> None:
-        """Each explored alternative needs its own thread - missing threads caught."""
+    def test_missing_threads_for_considered_alternatives(self) -> None:
+        """Each considered alternative needs its own thread - missing threads caught."""
         graph = Graph.empty()
         graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
         graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
@@ -1295,8 +1295,8 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "tensions": [
-                # Both alternatives explored, but only 1 thread created
-                {"tension_id": "trust", "explored": ["yes", "no"], "implicit": []},
+                # Both alternatives considered, but only 1 thread created
+                {"tension_id": "trust", "considered": ["yes", "no"], "implicit": []},
             ],
             "threads": [
                 {
@@ -1312,14 +1312,14 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        missing_thread_errors = [e for e in errors if "explored alternatives" in e.issue]
+        missing_thread_errors = [e for e in errors if "considered alternatives" in e.issue]
         assert len(missing_thread_errors) == 1
-        assert "2 explored alternatives" in missing_thread_errors[0].issue
+        assert "2 considered alternatives" in missing_thread_errors[0].issue
         assert "1 thread" in missing_thread_errors[0].issue
         assert missing_thread_errors[0].category == SeedErrorCategory.COMPLETENESS
 
-    def test_all_explored_alternatives_have_threads(self) -> None:
-        """When each explored alternative has a thread, validation passes."""
+    def test_all_considered_alternatives_have_threads(self) -> None:
+        """When each considered alternative has a thread, validation passes."""
         graph = Graph.empty()
         graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
         graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
@@ -1330,7 +1330,7 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "tensions": [
-                {"tension_id": "trust", "explored": ["yes", "no"], "implicit": []},
+                {"tension_id": "trust", "considered": ["yes", "no"], "implicit": []},
             ],
             "threads": [
                 {
@@ -1351,7 +1351,7 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        missing_thread_errors = [e for e in errors if "explored alternatives" in e.issue]
+        missing_thread_errors = [e for e in errors if "considered alternatives" in e.issue]
         assert missing_thread_errors == []
 
     # NOTE: Arc count validation tests removed - now handled by runtime pruning
@@ -1420,8 +1420,8 @@ class TestBeatTensionAlignment:
         return {
             "entities": [{"entity_id": "hero", "disposition": "retained"}],
             "tensions": [
-                {"tension_id": "trust", "explored": ["yes"], "implicit": []},
-                {"tension_id": "loyalty", "explored": ["faithful"], "implicit": []},
+                {"tension_id": "trust", "considered": ["yes"], "implicit": []},
+                {"tension_id": "loyalty", "considered": ["faithful"], "implicit": []},
             ],
             "threads": [
                 {
@@ -1644,9 +1644,9 @@ class TestSeedDuplicateValidation:
         output = {
             "entities": [],
             "tensions": [
-                {"tension_id": "trust", "explored": ["yes"], "implicit": []},
-                {"tension_id": "trust", "explored": ["yes"], "implicit": []},  # Duplicate!
-                {"tension_id": "trust", "explored": ["yes"], "implicit": []},  # Triple!
+                {"tension_id": "trust", "considered": ["yes"], "implicit": []},
+                {"tension_id": "trust", "considered": ["yes"], "implicit": []},  # Duplicate!
+                {"tension_id": "trust", "considered": ["yes"], "implicit": []},  # Triple!
             ],
             "threads": [],
             "initial_beats": [],
@@ -1764,7 +1764,7 @@ class TestMutationIntegration:
             ],
             # Completeness: decisions for all tensions
             "tensions": [
-                {"tension_id": "mentor_trust", "explored": ["protector"], "implicit": []},
+                {"tension_id": "mentor_trust", "considered": ["protector"], "implicit": []},
             ],
             "threads": [
                 {
@@ -2084,7 +2084,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [],
-            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
             "threads": [
                 {
                     "thread_id": "trust_arc",
@@ -2120,7 +2120,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
             "threads": [
                 {
                     "thread_id": "mentor",
@@ -2173,7 +2173,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [],
-            "tensions": [{"tension_id": "entity::trust", "explored": [], "implicit": []}],
+            "tensions": [{"tension_id": "entity::trust", "considered": [], "implicit": []}],
             "threads": [],
             "initial_beats": [],
         }
@@ -2196,7 +2196,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
             "threads": [
                 {
                     "thread_id": "mentor",
@@ -2301,7 +2301,7 @@ class TestScopedIdValidation:
                 {"entity_id": "entity::hero", "disposition": "retained"},
                 {"entity_id": "entity::mentor", "disposition": "retained"},
             ],
-            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
             "threads": [
                 {
                     "thread_id": "mentor_arc",
@@ -2339,7 +2339,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
             "threads": [
                 {
                     "thread_id": "mentor_arc",
@@ -2380,7 +2380,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
             "threads": [
                 {
                     "thread_id": "mentor_arc",
@@ -2427,7 +2427,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [{"tension_id": "tension::trust", "explored": ["yes"], "implicit": []}],
+            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
             "threads": [
                 {
                     "thread_id": "thread::mentor_arc",  # Scoped ID in definition
@@ -2834,7 +2834,7 @@ class TestTypeAwareFeedback:
                 {"entity_id": "isolation_protocol", "disposition": "retained"},
             ],
             "tensions": [
-                {"tension_id": "trust_or_betray", "explored": [], "implicit": []},
+                {"tension_id": "trust_or_betray", "considered": [], "implicit": []},
             ],
             "threads": [],
             "initial_beats": [
@@ -2881,7 +2881,7 @@ class TestTypeAwareFeedback:
         output = {
             "entities": [{"entity_id": "hero", "disposition": "retained"}],
             "tensions": [
-                {"tension_id": "trust_or_betray", "explored": ["trust"], "implicit": []},
+                {"tension_id": "trust_or_betray", "considered": ["trust"], "implicit": []},
             ],
             "threads": [
                 {
@@ -2924,7 +2924,7 @@ class TestTypeAwareFeedback:
         output = {
             "entities": [{"entity_id": "hero", "disposition": "retained"}],
             "tensions": [
-                {"tension_id": "trust_or_betray", "explored": [], "implicit": []},
+                {"tension_id": "trust_or_betray", "considered": [], "implicit": []},
             ],
             "threads": [],
             "initial_beats": [

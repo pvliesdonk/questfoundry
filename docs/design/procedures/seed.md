@@ -100,7 +100,12 @@ LLMs are poor at counting and self-constraint. Instead of teaching the LLM to st
    - Thread tier: Major threads score higher than minor
    - Content distinctiveness: How different the paths are (Jaccard distance)
 3. **Runtime selects top N** - The highest-scoring tensions are kept fully explored (up to 4 tensions = 16 arcs)
-4. **Runtime prunes excess** - Demoted tensions have their non-canonical alternatives moved to `implicit`, and associated threads, consequences, and beats are removed
+4. **Runtime prunes excess** - Demoted tensions have their threads, consequences, and beats removed
+
+**Key invariant: The `considered` field is immutable after SEED.** Pruning only drops threads; it never modifies the tension's `considered` field. This separation between "LLM intent" (stored as `considered`) and "runtime state" (derived from thread existence) ensures:
+- The pruning operation is idempotent
+- Arc count is derived from actual threads, not potentially stale metadata
+- Debugging is simpler—you can see what the LLM originally intended vs what survived pruning
 
 This pattern:
 - Simplifies prompts (no arc math, verification checklists, or hard limits)
@@ -148,8 +153,8 @@ LLM proposes exploration map per tension:
 ```yaml
 tension_exploration:
   - tension_id: mentor_trust
-    explore:
-      - alternative_id: mentor_protector    # canonical, always explored
+    considered:
+      - alternative_id: mentor_protector    # canonical, always considered
         rationale: "Spine path - mentor as ally"
       - alternative_id: mentor_manipulator  # non-canonical
         rationale: "Dark branch - doubles content but adds replayability"

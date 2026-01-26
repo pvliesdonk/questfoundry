@@ -1157,8 +1157,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             )
         )
 
-    # 11b. Check each explored alternative has a thread
-    # For each tension decision, verify thread count matches explored count
+    # 11b. Check each considered alternative has a thread
+    # For each tension decision, verify thread count matches considered count
     for tension_decision in output.get("tensions", []):
         raw_tid = tension_decision.get("tension_id")
         if not raw_tid:
@@ -1167,20 +1167,22 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         if scope_error:
             continue
 
-        explored = tension_decision.get("explored", [])
+        # Support both new 'considered' and old 'explored' field names
+        # Use dict.get() chaining instead of 'or' to handle empty lists correctly
+        considered = tension_decision.get("considered", tension_decision.get("explored", []))
         thread_count = tension_thread_counts.get(normalized_tid, 0)
 
-        if len(explored) > thread_count:
-            missing_count = len(explored) - thread_count
+        if len(considered) > thread_count:
+            missing_count = len(considered) - thread_count
             errors.append(
                 SeedValidationError(
                     field_path="threads",
                     issue=(
-                        f"Tension '{normalized_tid}' has {len(explored)} explored alternatives "
+                        f"Tension '{normalized_tid}' has {len(considered)} considered alternatives "
                         f"but only {thread_count} thread(s). "
-                        f"Create {missing_count} more thread(s) - one for EACH explored alternative."
+                        f"Create {missing_count} more thread(s) - one for EACH considered alternative."
                     ),
-                    available=explored,
+                    available=considered,
                     provided=str(thread_count),
                     category=SeedErrorCategory.COMPLETENESS,
                 )
@@ -1263,7 +1265,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
 
     First validates all cross-references, then applies mutations.
 
-    Updates entity dispositions, creates threads from explored tensions,
+    Updates entity dispositions, creates threads from considered tensions,
     creates consequences, and creates initial beats.
 
     Node IDs are prefixed by type to match BRAINSTORM's namespacing:
@@ -1301,13 +1303,15 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         raw_id = _require_field(tension_decision, "tension_id", f"Tension decision at index {i}")
         tension_id = _prefix_id("tension", raw_id)
         if graph.has_node(tension_id):
+            # Support both new 'considered' and old 'explored' field names
+            considered = tension_decision.get("considered") or tension_decision.get("explored", [])
             graph.update_node(
                 tension_id,
-                explored=tension_decision.get("explored", []),
+                considered=considered,
                 implicit=tension_decision.get("implicit", []),
             )
 
-    # Create threads from explored tensions (must be created before consequences)
+    # Create threads from considered tensions (must be created before consequences)
     for i, thread in enumerate(output.get("threads", [])):
         raw_id = _require_field(thread, "thread_id", f"Thread at index {i}")
         thread_id = _prefix_id("thread", raw_id)

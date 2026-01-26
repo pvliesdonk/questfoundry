@@ -28,14 +28,14 @@ log = get_logger(__name__)
 
 def _get_canonical_alternative(tension: TensionDecision) -> str | None:
     """Get the canonical (first) alternative for a tension."""
-    return tension.explored[0] if tension.explored else None
+    return tension.considered[0] if tension.considered else None
 
 
 def _get_noncanonical_alternatives(tension: TensionDecision) -> list[str]:
-    """Get non-canonical alternatives (all explored except first)."""
-    if len(tension.explored) <= 1:
+    """Get non-canonical alternatives (all considered except first)."""
+    if len(tension.considered) <= 1:
         return []
-    return tension.explored[1:]
+    return tension.considered[1:]
 
 
 def prune_to_arc_limit(
@@ -85,18 +85,21 @@ def _prune_demoted_tensions(
     """Remove non-canonical content for demoted tensions.
 
     For each demoted tension:
-    1. Move non-canonical alternatives from "explored" to "implicit"
-    2. Remove the non-canonical thread(s)
-    3. Remove consequences linked to demoted threads
-    4. Remove beats that ONLY belong to demoted threads
-    5. Update beats that belong to both demoted and kept threads
+    1. Remove the non-canonical thread(s)
+    2. Remove consequences linked to demoted threads
+    3. Remove beats that ONLY belong to demoted threads
+    4. Update beats that belong to both demoted and kept threads
+
+    IMPORTANT: Tensions are NOT mutated. The `considered` field is immutable
+    after SEED - it records the LLM's original intent. Development state
+    (committed vs deferred) is derived from thread existence, not stored fields.
 
     Args:
         seed_output: The full SEED output.
         demoted_tension_ids: Set of tension IDs to demote.
 
     Returns:
-        Pruned SeedOutput.
+        Pruned SeedOutput with threads removed but tensions unchanged.
     """
     # Build lookup of which threads to drop
     threads_to_drop: set[str] = set()
@@ -118,25 +121,10 @@ def _prune_demoted_tensions(
         dropped_thread_ids=list(threads_to_drop)[:5],  # Log first 5
     )
 
-    # 1. Update tension decisions
-    pruned_tensions: list[TensionDecision] = []
-    for tension in seed_output.tensions:
-        if tension.tension_id in demoted_tension_ids:
-            # Move non-canonical to implicit
-            canonical = _get_canonical_alternative(tension)
-            noncanonical = _get_noncanonical_alternatives(tension)
-            pruned_tensions.append(
-                TensionDecision(
-                    tension_id=tension.tension_id,
-                    explored=[canonical] if canonical else [],
-                    implicit=noncanonical + tension.implicit,
-                )
-            )
-        else:
-            # Keep as-is
-            pruned_tensions.append(tension)
+    # Tensions are NOT modified - considered field is immutable
+    # Development state is derived from thread existence
 
-    # 2. Filter threads
+    # 1. Filter threads
     pruned_threads: list[Thread] = [
         t for t in seed_output.threads if t.thread_id not in threads_to_drop
     ]
@@ -183,7 +171,7 @@ def _prune_demoted_tensions(
 
     return SeedOutput(
         entities=seed_output.entities,
-        tensions=pruned_tensions,
+        tensions=list(seed_output.tensions),  # Tensions are immutable - keep as-is
         threads=pruned_threads,
         consequences=pruned_consequences,
         initial_beats=pruned_beats,
@@ -194,7 +182,11 @@ def _prune_demoted_tensions(
 def compute_arc_count(seed_output: SeedOutput) -> int:
     """Compute the arc count for a seed output.
 
-    Arc count = 2^n where n = tensions with both alternatives explored.
+    Arc count = 2^n where n = tensions with 2+ threads (fully developed).
+
+    IMPORTANT: This is derived from actual thread existence, NOT from the
+    `considered` field. The `considered` field records LLM intent; actual
+    thread existence determines what will become story arcs.
 
     Args:
         seed_output: The SEED output to analyze.
@@ -202,5 +194,12 @@ def compute_arc_count(seed_output: SeedOutput) -> int:
     Returns:
         The number of arcs this seed would produce.
     """
-    fully_explored_count = sum(1 for t in seed_output.tensions if len(t.explored) >= 2)
-    return 2**fully_explored_count if fully_explored_count > 0 else 1
+    # Count threads per tension
+    threads_per_tension: dict[str, int] = {}
+    for thread in seed_output.threads:
+        tid = thread.tension_id
+        threads_per_tension[tid] = threads_per_tension.get(tid, 0) + 1
+
+    # Fully developed = has 2+ threads
+    fully_developed_count = sum(1 for count in threads_per_tension.values() if count >= 2)
+    return 2**fully_developed_count if fully_developed_count > 0 else 1
