@@ -5,6 +5,7 @@ This module tests:
 2. Development state derivation from thread existence
 3. Arc count derivation from threads (not from considered field)
 4. Tension immutability during pruning
+5. Scoped ID standardization in pruning (issue #219, PR #220)
 """
 
 from __future__ import annotations
@@ -16,8 +17,13 @@ from questfoundry.graph.context import (
     count_threads_per_tension,
     get_tension_development_states,
 )
-from questfoundry.graph.seed_pruning import compute_arc_count, prune_to_arc_limit
+from questfoundry.graph.seed_pruning import (
+    _prune_demoted_tensions,
+    compute_arc_count,
+    prune_to_arc_limit,
+)
 from questfoundry.models.seed import (
+    Consequence,
     InitialBeat,
     SeedOutput,
     TensionDecision,
@@ -435,3 +441,236 @@ class TestPruningImmutability:
         original_ids = {t.tension_id for t in seed.tensions}
         pruned_ids = {t.tension_id for t in pruned.tensions}
         assert pruned_ids == original_ids
+
+
+class TestScopedIdStandardization:
+    """Tests for scoped ID handling in pruning.
+
+    Verifies that pruning works correctly when IDs use different formats:
+    - Raw IDs: `mira_fabrication`
+    - Scoped IDs: `thread::mira_fabrication`
+
+    This addresses the bug where beat.threads contained scoped IDs but
+    threads_to_drop contained raw IDs, causing comparison to fail.
+    See issue #219 and PR #220 for context.
+    """
+
+    def test_pruning_handles_scoped_thread_ids_in_beats(self) -> None:
+        """Pruning correctly drops threads when beats use scoped IDs."""
+        # Create seed with scoped thread IDs in beats
+        seed = SeedOutput(
+            tensions=[
+                TensionDecision(
+                    tension_id="tension::artifact_origin",
+                    considered=["natural", "crafted"],
+                    implicit=[],
+                ),
+            ],
+            threads=[
+                Thread(
+                    thread_id="thread::artifact_natural",
+                    name="Natural Origin",
+                    tension_id="tension::artifact_origin",
+                    alternative_id="natural",  # Canonical (first in considered)
+                    thread_importance="major",
+                    description="Artifact formed naturally",
+                ),
+                Thread(
+                    thread_id="thread::artifact_crafted",
+                    name="Crafted Origin",
+                    tension_id="tension::artifact_origin",
+                    alternative_id="crafted",  # Non-canonical
+                    thread_importance="major",
+                    description="Artifact was crafted",
+                ),
+            ],
+            initial_beats=[
+                InitialBeat(
+                    beat_id="artifact_beat_01",
+                    summary="Discovery of the artifact",
+                    threads=["thread::artifact_natural", "thread::artifact_crafted"],  # Scoped!
+                    tension_impacts=[
+                        {
+                            "tension_id": "tension::artifact_origin",
+                            "effect": "commits",
+                            "note": "Commits the tension",
+                        }
+                    ],
+                ),
+                InitialBeat(
+                    beat_id="artifact_beat_02",
+                    summary="Beat only for crafted thread",
+                    threads=["thread::artifact_crafted"],  # Scoped!
+                    tension_impacts=[
+                        {
+                            "tension_id": "tension::artifact_origin",
+                            "effect": "reveals",
+                            "note": "Reveals details",
+                        }
+                    ],
+                ),
+            ],
+        )
+
+        # Demote the tension - should drop non-canonical (crafted) thread
+        demoted = {"tension::artifact_origin"}
+        pruned = _prune_demoted_tensions(seed, demoted)
+
+        # Non-canonical thread should be dropped
+        thread_ids = [t.thread_id for t in pruned.threads]
+        assert "thread::artifact_natural" in thread_ids
+        assert "thread::artifact_crafted" not in thread_ids
+
+        # Beat 2 should be dropped (only served crafted thread)
+        beat_ids = [b.beat_id for b in pruned.initial_beats]
+        assert "artifact_beat_01" in beat_ids  # Kept - serves natural
+        assert "artifact_beat_02" not in beat_ids  # Dropped - only served crafted
+
+        # Beat 1 should have crafted thread removed from its threads list
+        beat_1 = next(b for b in pruned.initial_beats if b.beat_id == "artifact_beat_01")
+        assert "thread::artifact_natural" in beat_1.threads
+        assert "thread::artifact_crafted" not in beat_1.threads
+
+    def test_pruning_handles_scoped_thread_ids_in_consequences(self) -> None:
+        """Pruning correctly drops consequences when they use scoped IDs."""
+        seed = SeedOutput(
+            tensions=[
+                TensionDecision(
+                    tension_id="t1",
+                    considered=["alt_a", "alt_b"],
+                    implicit=[],
+                ),
+            ],
+            threads=[
+                Thread(
+                    thread_id="thread::th_a",
+                    name="Thread A",
+                    tension_id="t1",
+                    alternative_id="alt_a",  # Canonical
+                    thread_importance="major",
+                    description="desc",
+                ),
+                Thread(
+                    thread_id="thread::th_b",
+                    name="Thread B",
+                    tension_id="t1",
+                    alternative_id="alt_b",  # Non-canonical
+                    thread_importance="major",
+                    description="desc",
+                ),
+            ],
+            consequences=[
+                Consequence(
+                    consequence_id="cons_a",
+                    thread_id="thread::th_a",  # Scoped
+                    description="Consequence for thread A",
+                ),
+                Consequence(
+                    consequence_id="cons_b",
+                    thread_id="thread::th_b",  # Scoped
+                    description="Consequence for thread B",
+                ),
+            ],
+            initial_beats=[
+                InitialBeat(
+                    beat_id="beat_1",
+                    summary="Test beat",
+                    threads=["thread::th_a"],
+                    tension_impacts=[{"tension_id": "t1", "effect": "commits", "note": "n"}],
+                ),
+            ],
+        )
+
+        # Demote t1 - should drop non-canonical (alt_b / th_b) thread and its consequence
+        pruned = _prune_demoted_tensions(seed, {"t1"})
+
+        # Thread B and its consequence should be dropped
+        thread_ids = [t.thread_id for t in pruned.threads]
+        consequence_ids = [c.consequence_id for c in pruned.consequences]
+
+        assert "thread::th_a" in thread_ids
+        assert "thread::th_b" not in thread_ids
+        assert "cons_a" in consequence_ids
+        assert "cons_b" not in consequence_ids
+
+    def test_pruning_handles_mixed_scoped_and_raw_ids(self) -> None:
+        """Pruning works when demoted IDs are raw but model IDs are scoped."""
+        seed = SeedOutput(
+            tensions=[
+                TensionDecision(
+                    tension_id="tension::keeper_trust",  # Scoped in tension
+                    considered=["protector", "manipulator"],
+                    implicit=[],
+                ),
+            ],
+            threads=[
+                Thread(
+                    thread_id="thread::keeper_protector",
+                    name="Keeper as Protector",
+                    tension_id="tension::keeper_trust",  # Scoped
+                    alternative_id="protector",  # Canonical
+                    thread_importance="major",
+                    description="desc",
+                ),
+                Thread(
+                    thread_id="thread::keeper_manipulator",
+                    name="Keeper as Manipulator",
+                    tension_id="tension::keeper_trust",  # Scoped
+                    alternative_id="manipulator",  # Non-canonical
+                    thread_importance="minor",
+                    description="desc",
+                ),
+            ],
+            initial_beats=[
+                InitialBeat(
+                    beat_id="keeper_beat_1",
+                    summary="Meeting the keeper",
+                    threads=["thread::keeper_protector", "thread::keeper_manipulator"],
+                    tension_impacts=[
+                        {
+                            "tension_id": "tension::keeper_trust",
+                            "effect": "commits",
+                            "note": "n",
+                        }
+                    ],
+                ),
+            ],
+        )
+
+        # Demote using RAW ID (as might come from tension scoring)
+        pruned = _prune_demoted_tensions(seed, {"keeper_trust"})  # Raw!
+
+        # Non-canonical thread should still be dropped
+        thread_ids = [t.thread_id for t in pruned.threads]
+        assert "thread::keeper_protector" in thread_ids
+        assert "thread::keeper_manipulator" not in thread_ids
+
+    def test_compute_arc_count_handles_scoped_tension_ids(self) -> None:
+        """compute_arc_count groups threads correctly with scoped tension_ids."""
+        seed = SeedOutput(
+            tensions=[
+                TensionDecision(tension_id="t1", considered=["a", "b"], implicit=[]),
+            ],
+            threads=[
+                Thread(
+                    thread_id="th1",
+                    name="T1",
+                    tension_id="tension::t1",  # Scoped
+                    alternative_id="a",
+                    thread_importance="major",
+                    description="d",
+                ),
+                Thread(
+                    thread_id="th2",
+                    name="T2",
+                    tension_id="tension::t1",  # Scoped
+                    alternative_id="b",
+                    thread_importance="major",
+                    description="d",
+                ),
+            ],
+        )
+
+        # Should correctly count 2 threads for t1 → 2^1 = 2 arcs
+        arc_count = compute_arc_count(seed)
+        assert arc_count == 2
