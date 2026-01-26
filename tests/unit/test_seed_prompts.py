@@ -70,13 +70,14 @@ class TestGetSeedSummarizePrompt:
         assert "Manifest" in result or "manifest" in result
 
     def test_includes_verification_section(self) -> None:
-        """Prompt includes final verification check section."""
+        """Prompt includes verification instruction for manifest completeness."""
         result = get_seed_summarize_prompt(
             entity_count=3,
             tension_count=2,
         )
 
-        assert "FINAL CHECK" in result or "COUNT" in result
+        # Prompt should instruct LLM to verify manifest completeness
+        assert "VERIFY" in result or "exactly" in result.lower()
 
     def test_defaults_to_no_entities_when_empty(self) -> None:
         """Empty manifests show placeholder text."""
