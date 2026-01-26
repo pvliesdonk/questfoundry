@@ -12,6 +12,7 @@ from questfoundry.graph.grow_context import format_grow_valid_ids
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
+    from questfoundry.models.seed import SeedOutput
 
 # Standard entity categories for BRAINSTORM/SEED stages
 _ENTITY_CATEGORIES = ["character", "location", "object", "faction"]
@@ -20,6 +21,93 @@ _ENTITY_CATEGORIES = ["character", "location", "object", "faction"]
 SCOPE_ENTITY = "entity"
 SCOPE_TENSION = "tension"
 SCOPE_THREAD = "thread"
+
+# Development state names (computed, not stored)
+STATE_COMMITTED = "committed"
+STATE_DEFERRED = "deferred"
+STATE_LATENT = "latent"
+
+
+def count_threads_per_tension(seed_output: SeedOutput) -> dict[str, int]:
+    """Count how many threads exist for each tension.
+
+    This is the authoritative source for thread existence - used to derive
+    development state (committed vs deferred) and compute arc counts.
+
+    Args:
+        seed_output: The SEED output containing threads.
+
+    Returns:
+        Dict mapping tension_id (raw, unscoped) to count of threads.
+    """
+    counts: dict[str, int] = {}
+    for thread in seed_output.threads:
+        tid = thread.tension_id
+        # Handle scoped IDs (tension::foo -> foo)
+        if "::" in tid:
+            tid = tid.split("::", 1)[1]
+        counts[tid] = counts.get(tid, 0) + 1
+    return counts
+
+
+def get_tension_development_states(
+    seed_output: SeedOutput,
+) -> dict[str, dict[str, str]]:
+    """Compute development states for all alternatives in a SEED output.
+
+    Development states are derived from comparing the `considered` field
+    (LLM intent) against actual thread existence:
+    - **committed**: Alternative in `considered` AND has a thread
+    - **deferred**: Alternative in `considered` but NO thread (pruned)
+    - **latent**: Alternative not in `considered` (never intended for exploration)
+
+    Args:
+        seed_output: The SEED output containing tension decisions and threads.
+
+    Returns:
+        Dict mapping tension_id to dict mapping alternative_id to state.
+        Example: {"mentor_trust": {"protector": "committed", "manipulator": "deferred"}}
+    """
+    # Build lookup of which alternatives have threads
+    # thread.alternative_id is the raw local ID (not prefixed)
+    alt_has_thread: dict[str, set[str]] = {}
+    for thread in seed_output.threads:
+        tid = thread.tension_id
+        # Handle scoped IDs
+        if "::" in tid:
+            tid = tid.split("::", 1)[1]
+        if tid not in alt_has_thread:
+            alt_has_thread[tid] = set()
+        alt_has_thread[tid].add(thread.alternative_id)
+
+    # Compute states for each tension's alternatives
+    states: dict[str, dict[str, str]] = {}
+    for tension in seed_output.tensions:
+        tid = tension.tension_id
+        # Handle scoped IDs
+        if "::" in tid:
+            tid = tid.split("::", 1)[1]
+
+        tension_states: dict[str, str] = {}
+        considered_set = set(tension.considered)
+        implicit_set = set(tension.implicit)
+        thread_alts = alt_has_thread.get(tid, set())
+
+        # Process all known alternatives (from considered + implicit)
+        all_alts = considered_set | implicit_set
+        for alt_id in all_alts:
+            if alt_id in considered_set:
+                if alt_id in thread_alts:
+                    tension_states[alt_id] = STATE_COMMITTED
+                else:
+                    tension_states[alt_id] = STATE_DEFERRED
+            else:
+                # In implicit, never considered
+                tension_states[alt_id] = STATE_LATENT
+
+        states[tid] = tension_states
+
+    return states
 
 
 def parse_scoped_id(scoped_id: str) -> tuple[str, str]:
