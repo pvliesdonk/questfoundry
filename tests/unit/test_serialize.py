@@ -1156,3 +1156,200 @@ class TestFormatSectionCorrections:
         result = _format_section_corrections(errors)
 
         assert result == ""
+
+
+class TestBeatRetryAndContextRefresh:
+    """Tests for beat retry and thread context refresh functionality."""
+
+    @pytest.mark.asyncio
+    async def test_beat_errors_trigger_beat_retry(self) -> None:
+        """Should retry beats when semantic errors are in initial_beats section."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+        from questfoundry.graph.mutations import SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        # Beat error - will be in "beats" section after grouping
+        beat_errors = [
+            SeedValidationError(
+                field_path="initial_beats.0.threads",
+                issue="Thread 'bad_thread' not defined in SEED threads",
+                available=["good_thread"],
+                provided="bad_thread",
+            )
+        ]
+
+        beat_retry_count = [0]
+
+        def increment_and_return(*_args, **_kwargs):
+            beat_retry_count[0] += 1
+            return ([], 20)
+
+        mock_beats = AsyncMock(side_effect=increment_and_return)
+
+        validation_call_count = [0]
+
+        def mock_validate(_graph, _output):
+            validation_call_count[0] += 1
+            if validation_call_count[0] == 1:
+                # First validation: beat errors
+                return beat_errors
+            # After retry: no errors
+            return []
+
+        # Mock thread data so _serialize_beats_per_thread has threads to work with
+        mock_thread = {
+            "thread_id": "test_thread",
+            "name": "Test Thread",
+            "tension_id": "test_tension",
+            "alternative_id": "alt1",
+            "unexplored_alternative_ids": [],
+            "thread_importance": "major",
+            "description": "desc",
+            "consequence_ids": [],
+        }
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                new=mock_beats,
+            ),
+            patch(
+                "questfoundry.agents.serialize.validate_seed_mutations",
+                side_effect=mock_validate,
+            ),
+        ):
+            # 5 sections (beats handled separately)
+            mock_serialize.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
+                (MagicMock(model_dump=lambda: {"threads": [mock_thread]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                ),
+            ]
+
+            result = await serialize_seed_as_function(
+                model=mock_model,
+                brief="Test brief",
+                graph=mock_graph,
+                max_semantic_retries=2,
+            )
+
+            # Should have retried beats (initial call + 1 retry = 2 calls)
+            assert beat_retry_count[0] == 2
+            # Should succeed after retry
+            assert result.success is True
+
+    @pytest.mark.asyncio
+    async def test_thread_retry_refreshes_context(self) -> None:
+        """Should refresh brief_with_threads when threads are retried."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
+        from questfoundry.graph.mutations import SeedValidationError
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        # Thread error
+        thread_errors = [
+            SeedValidationError(
+                field_path="threads.0.tension_id",
+                issue="Tension not found",
+                available=["valid_tension"],
+                provided="invalid_tension",
+            )
+        ]
+
+        # Track briefs used in serialize_to_artifact calls
+        briefs_used = []
+
+        call_count = [0]
+
+        def mock_serialize_side_effect(*args, **kwargs):
+            call_count[0] += 1
+            brief = kwargs.get("brief", args[1] if len(args) > 1 else "")
+            briefs_used.append((call_count[0], brief[:50] if brief else ""))
+
+            section_map = {
+                1: "entities",
+                2: "tensions",
+                3: "threads",
+                4: "consequences",
+                5: "convergence_sketch",
+                # Retry call for threads
+                6: "threads",
+            }
+            section = section_map.get(call_count[0], "unknown")
+
+            if section == "convergence_sketch":
+                return (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                )
+            if section == "threads":
+                # Return a thread so format_thread_ids_context has something
+                return (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "threads": [
+                                {
+                                    "thread_id": "test_thread",
+                                    "name": "Test Thread",
+                                    "tension_id": "valid_tension",
+                                    "alternative_id": "alt1",
+                                    "unexplored_alternative_ids": [],
+                                    "thread_importance": "major",
+                                    "description": "desc",
+                                    "consequence_ids": [],
+                                }
+                            ]
+                        }
+                    ),
+                    10,
+                )
+            return (MagicMock(model_dump=lambda s=section: {s: []}), 10)
+
+        validation_call_count = [0]
+
+        def mock_validate(_graph, _output):
+            validation_call_count[0] += 1
+            if validation_call_count[0] == 1:
+                return thread_errors
+            return []
+
+        with (
+            patch(
+                "questfoundry.agents.serialize.serialize_to_artifact",
+                side_effect=mock_serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                return_value=([], 20),
+            ),
+            patch(
+                "questfoundry.agents.serialize.validate_seed_mutations",
+                side_effect=mock_validate,
+            ),
+        ):
+            result = await serialize_seed_as_function(
+                model=mock_model,
+                brief="Test brief",
+                graph=mock_graph,
+                max_semantic_retries=2,
+            )
+
+            # Thread retry happened
+            assert call_count[0] == 6
+            assert result.success is True
