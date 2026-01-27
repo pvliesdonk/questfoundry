@@ -319,7 +319,7 @@ Replace custom agent infrastructure with **LangChain-native patterns**:
 ### Context
 
 Different LLM providers excel at different tasks. Our model comparison analysis showed:
-- GPT-4o excels at creative discussion (22 entities, 8 tensions) but fails at JSON serialization (6 beats vs 10 expected)
+- GPT-4o excels at creative discussion (22 entities, 8 dilemmas) but fails at JSON serialization (6 beats vs 10 expected)
 - Smaller local models (qwen3:8b) can handle structured output but may lack creative depth
 - Reasoning models (o1/o1-mini) are designed for structured output but don't support tools
 

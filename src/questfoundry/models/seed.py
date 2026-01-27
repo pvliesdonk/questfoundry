@@ -9,9 +9,9 @@ CRITICAL: PATH FREEZE - No new paths can be created after SEED.
 See docs/design/00-spec.md for details.
 
 Terminology (v5):
-- dilemma (was: tension): Binary dramatic questions
-- path (was: thread): Routes exploring specific answers to dilemmas
-- answer (was: alternative): Possible resolutions to dilemmas
+- dilemma: Binary dramatic questions
+- path: Routes exploring specific answers to dilemmas
+- answer: Possible resolutions to dilemmas
 """
 
 from __future__ import annotations

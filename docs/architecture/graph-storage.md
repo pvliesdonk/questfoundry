@@ -235,9 +235,9 @@ High-level overview for quick review:
 - **femme_001** (character): Mysterious client with secrets [retained]
 - ...
 
-### Threads (2)
-- **mentor_protector_thread**: Trust arc exploring mentor as protector
-- **trust_betrayal_thread**: Trust arc exploring betrayal
+### Paths (2)
+- **mentor_protector_path**: Trust arc exploring mentor as protector
+- **trust_betrayal_path**: Trust arc exploring betrayal
 
 ### Beats (8)
 - opening_001: First meeting (scene, opening)
@@ -305,12 +305,12 @@ def apply_mutations(graph: Graph, stage: str, output: dict) -> None:
     elif stage == "brainstorm":
         for entity in output["entities"]:
             graph.add_node(entity["id"], {"type": "entity", **entity})
-        for dilemma in output["tensions"]:
+        for dilemma in output["dilemmas"]:
             graph.add_node(dilemma["id"], {"type": "dilemma", **dilemma})
-            for alt in dilemma["alternatives"]:
-                alt_id = f"{dilemma['id']}_{alt['id']}"
-                graph.add_node(alt_id, {"type": "alternative", **alt})
-                graph.add_edge("has_answer", dilemma["id"], alt_id)
+            for answer in dilemma["answers"]:
+                answer_id = f"{dilemma['id']}_{answer['id']}"
+                graph.add_node(answer_id, {"type": "answer", **answer})
+                graph.add_edge("has_answer", dilemma["id"], answer_id)
 
     elif stage == "seed":
         # Update entity dispositions
@@ -319,16 +319,16 @@ def apply_mutations(graph: Graph, stage: str, output: dict) -> None:
                 "disposition": entity_decision["disposition"]
             })
 
-        # Create paths from explored tensions
+        # Create paths from explored dilemmas
         for path in output["paths"]:
             graph.add_node(path["id"], {"type": "path", **path})
-            graph.add_edge("explores", path["id"], path["alternative_id"])
+            graph.add_edge("explores", path["id"], path["answer_id"])
 
         # Create initial beats
         for beat in output["beats"]:
             graph.add_node(beat["id"], {"type": "beat", **beat})
-            for thread_id in beat.get("paths", []):
-                graph.add_edge("belongs_to", beat["id"], thread_id)
+            for path_id in beat.get("paths", []):
+                graph.add_edge("belongs_to", beat["id"], path_id)
 ```
 
 ## Performance Considerations

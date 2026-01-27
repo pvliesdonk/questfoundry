@@ -959,14 +959,14 @@ class TestParseScopedId:
         assert scope == "entity"
         assert raw_id == "hero"
 
-    def test_parses_tension_scoped_id(self) -> None:
+    def test_parses_dilemma_scoped_id(self) -> None:
         """Dilemma scoped ID is correctly parsed."""
         scope, raw_id = parse_scoped_id("dilemma::trust_betrayal")
         assert scope == "dilemma"
         assert raw_id == "trust_betrayal"
 
-    def test_parses_thread_scoped_id(self) -> None:
-        """Thread scoped ID is correctly parsed."""
+    def test_parses_path_scoped_id(self) -> None:
+        """Path scoped ID is correctly parsed."""
         scope, raw_id = parse_scoped_id("path::host_motive")
         assert scope == "path"
         assert raw_id == "host_motive"
@@ -1010,13 +1010,13 @@ class TestStripScopePrefix:
         result = strip_scope_prefix("entity::hero")
         assert result == "hero"
 
-    def test_strips_tension_prefix(self) -> None:
+    def test_strips_dilemma_prefix(self) -> None:
         """Dilemma prefix is stripped correctly."""
         result = strip_scope_prefix("dilemma::trust_betrayal")
         assert result == "trust_betrayal"
 
-    def test_strips_thread_prefix(self) -> None:
-        """Thread prefix is stripped correctly."""
+    def test_strips_path_prefix(self) -> None:
+        """Path prefix is stripped correctly."""
         result = strip_scope_prefix("path::host_motive")
         assert result == "host_motive"
 
@@ -1044,13 +1044,13 @@ class TestFormatScopedId:
         result = format_scoped_id("entity", "hero")
         assert result == "entity::hero"
 
-    def test_formats_tension_scoped_id(self) -> None:
+    def test_formats_dilemma_scoped_id(self) -> None:
         """Dilemma ID is correctly formatted with scope."""
         result = format_scoped_id("dilemma", "trust_betrayal")
         assert result == "dilemma::trust_betrayal"
 
-    def test_formats_thread_scoped_id(self) -> None:
-        """Thread ID is correctly formatted with scope."""
+    def test_formats_path_scoped_id(self) -> None:
+        """Path ID is correctly formatted with scope."""
         result = format_scoped_id("path", "host_motive")
         assert result == "path::host_motive"
 

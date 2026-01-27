@@ -108,7 +108,7 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 **Lines:** ~500-600
 
 **Acceptance:**
-- Phase 1: Imports beats/paths/tensions from graph; validates DAG; validates commits beats exist
+- Phase 1: Imports beats/paths/dilemmas from graph; validates DAG; validates commits beats exist
 - Phase 5: Enumerates path combinations; topological sort; spine arc identification
 - Phase 6: Computes divergence points between arc pairs
 - Tests cover 2-dilemma and 3-dilemma scenarios
@@ -161,7 +161,7 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 - Validation: all IDs exist in graph
 - Inner retry loop (max 3) for Pydantic failures
 - Phase gate with assessment results
-- Beat nodes updated with `thread_agnostic_for`
+- Beat nodes updated with `path_agnostic_for`
 
 ---
 
@@ -173,7 +173,7 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 
 **Key files:**
 - `src/questfoundry/pipeline/stages/grow.py` — Phase 3
-- `prompts/templates/grow_phase3_knots.yaml`
+- `prompts/templates/grow_phase3_intersections.yaml`
 - `src/questfoundry/graph/grow_algorithms.py` — Intersection compatibility checker
 - `tests/unit/stages/test_grow_phase3.py`
 
@@ -181,7 +181,7 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 
 **Acceptance:**
 - LLM clusters beats by location/entity overlap
-- Compatibility check: different tensions, no requires conflicts, location resolvable
+- Compatibility check: different dilemmas, no requires conflicts, location resolvable
 - Approved: beats get multi-path assignment, locations resolved
 - Merge operation creates new beat replacing both
 - Rejected: beats stay separate

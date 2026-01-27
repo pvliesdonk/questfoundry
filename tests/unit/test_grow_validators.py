@@ -57,7 +57,7 @@ class TestValidatePhase2Output:
         assert "phantom" in errors[0].issue
         assert errors[0].provided == "beat::phantom"
 
-    def test_invalid_tension_id(self) -> None:
+    def test_invalid_dilemma_id(self) -> None:
         result = Phase2Output(
             assessments=[
                 PathAgnosticAssessment(beat_id="beat::b1", agnostic_for=["t_bad"]),
@@ -83,7 +83,7 @@ class TestValidatePhase2Output:
             valid_beat_ids={"beat::b1"},
             valid_dilemma_ids={"t1"},
         )
-        # 1 bad beat_id + 2 bad tension_ids = 3 errors
+        # 1 bad beat_id + 2 bad dilemma_ids = 3 errors
         assert len(errors) == 3
 
     def test_empty_assessments(self) -> None:

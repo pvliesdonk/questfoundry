@@ -124,7 +124,7 @@ This pattern:
 **LLM Involvement:** Generate
 
 LLM produces ranked entity list with rationale:
-- **Core:** Essential to story tensions
+- **Core:** Essential to story dilemmas
 - **Supporting:** Enriches but not essential
 - **Cut candidates:** Can be removed without story impact
 

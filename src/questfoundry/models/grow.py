@@ -12,8 +12,8 @@ Node types created by GROW:
 See docs/design/00-spec.md for ontology details.
 
 Terminology (v5):
-- path (was: thread): Routes exploring specific answers to dilemmas
-- intersection (was: knot): Beats serving multiple paths
+- path: Routes exploring specific answers to dilemmas
+- intersection: Beats serving multiple paths
 """
 
 from __future__ import annotations

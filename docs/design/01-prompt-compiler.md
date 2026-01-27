@@ -265,7 +265,7 @@ components:
     compression: full
     transform: |
       # Optional: Transform artifact before injection
-      Extract protagonist, setting, and central_tension.
+      Extract protagonist, setting, and central_dilemma.
       Omit selected_hooks (not needed for spine).
 ```
 

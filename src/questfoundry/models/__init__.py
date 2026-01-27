@@ -8,10 +8,10 @@ The ontology (node types, relationships, lifecycle) is defined in
 docs/design/00-spec.md. These models are implementations of that ontology.
 
 Terminology (v5):
-- dilemma (was: tension): Binary dramatic questions
-- path (was: thread): Routes exploring specific answers to dilemmas
-- answer (was: alternative): Possible resolutions to dilemmas
-- intersection (was: knot): Beats serving multiple paths
+- dilemma: Binary dramatic questions
+- path: Routes exploring specific answers to dilemmas
+- answer: Possible resolutions to dilemmas
+- intersection: Beats serving multiple paths
 """
 
 from questfoundry.models.brainstorm import (

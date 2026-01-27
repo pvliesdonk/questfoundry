@@ -588,8 +588,8 @@ class TestSerializeSeedIterativelySemanticValidation:
                     SeedValidationError(
                         field_path="paths.0.dilemma_id",
                         issue="Dilemma not found",
-                        available=["valid_tension"],
-                        provided="invalid_tension",
+                        available=["valid_dilemma"],
+                        provided="invalid_dilemma",
                     )
                 ]
             # Second validation: pass
@@ -632,8 +632,8 @@ class TestSerializeSeedIterativelySemanticValidation:
             SeedValidationError(
                 field_path="paths.0.dilemma_id",
                 issue="Dilemma not found",
-                available=["valid_tension"],
-                provided="invalid_tension",
+                available=["valid_dilemma"],
+                provided="invalid_dilemma",
             )
         ]
 
@@ -737,13 +737,13 @@ class TestSerializeSeedAsFunction:
 
         # Mock path so _serialize_beats_per_path gets called
         mock_path = {
-            "path_id": "test_thread",
-            "dilemma_id": "test_tension",
-            "name": "Test Thread",
+            "path_id": "path::test_dilemma__alt1",
+            "dilemma_id": "dilemma::test_dilemma",
+            "answer_id": "alt1",
+            "name": "Test Path",
             "description": "A test path",
-            "alternative_id": "alt1",
-            "unexplored_alternative_ids": [],
-            "thread_importance": "major",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
             "consequence_ids": [],
         }
 
@@ -798,8 +798,8 @@ class TestSerializeSeedAsFunction:
             SeedValidationError(
                 field_path="paths.0.dilemma_id",
                 issue="Dilemma not found",
-                available=["valid_tension"],
-                provided="invalid_tension",
+                available=["valid_dilemma"],
+                provided="invalid_dilemma",
             )
         ]
 
@@ -1174,9 +1174,9 @@ class TestBeatRetryAndContextRefresh:
         beat_errors = [
             SeedValidationError(
                 field_path="initial_beats.0.paths",
-                issue="Thread 'bad_thread' not defined in SEED paths",
-                available=["good_thread"],
-                provided="bad_thread",
+                issue="Path 'bad_path' not defined in SEED paths",
+                available=["good_path"],
+                provided="bad_path",
             )
         ]
 
@@ -1200,12 +1200,12 @@ class TestBeatRetryAndContextRefresh:
 
         # Mock path data so _serialize_beats_per_path has paths to work with
         mock_path = {
-            "path_id": "test_thread",
-            "name": "Test Thread",
-            "dilemma_id": "test_tension",
-            "alternative_id": "alt1",
-            "unexplored_alternative_ids": [],
-            "thread_importance": "major",
+            "path_id": "path::test_dilemma__alt1",
+            "name": "Test Path",
+            "dilemma_id": "dilemma::test_dilemma",
+            "answer_id": "alt1",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
             "description": "desc",
             "consequence_ids": [],
         }
@@ -1250,7 +1250,7 @@ class TestBeatRetryAndContextRefresh:
             assert result.success is True
 
     @pytest.mark.asyncio
-    async def test_thread_retry_refreshes_context(self) -> None:
+    async def test_path_retry_refreshes_context(self) -> None:
         """Should refresh brief_with_paths when paths are retried."""
         from questfoundry.agents.serialize import serialize_seed_as_function
         from questfoundry.graph.mutations import SeedValidationError
@@ -1258,13 +1258,13 @@ class TestBeatRetryAndContextRefresh:
         mock_model = MagicMock()
         mock_graph = MagicMock()
 
-        # Thread error
-        thread_errors = [
+        # Path serialization error (semantic)
+        path_errors = [
             SeedValidationError(
                 field_path="paths.0.dilemma_id",
                 issue="Dilemma not found",
-                available=["valid_tension"],
-                provided="invalid_tension",
+                available=["valid_dilemma"],
+                provided="invalid_dilemma",
             )
         ]
 
@@ -1305,12 +1305,12 @@ class TestBeatRetryAndContextRefresh:
                         model_dump=lambda: {
                             "paths": [
                                 {
-                                    "path_id": "test_thread",
-                                    "name": "Test Thread",
-                                    "dilemma_id": "valid_tension",
-                                    "alternative_id": "alt1",
-                                    "unexplored_alternative_ids": [],
-                                    "thread_importance": "major",
+                                    "path_id": "path::test_dilemma__alt1",
+                                    "name": "Test Path",
+                                    "dilemma_id": "dilemma::test_dilemma",
+                                    "answer_id": "alt1",
+                                    "unexplored_answer_ids": [],
+                                    "path_importance": "major",
                                     "description": "desc",
                                     "consequence_ids": [],
                                 }
@@ -1326,7 +1326,7 @@ class TestBeatRetryAndContextRefresh:
         def mock_validate(_graph, _output):
             validation_call_count[0] += 1
             if validation_call_count[0] == 1:
-                return thread_errors
+                return path_errors
             return []
 
         with (
@@ -1350,7 +1350,7 @@ class TestBeatRetryAndContextRefresh:
                 max_semantic_retries=2,
             )
 
-            # Thread retry happened
+            # Path retry happened
             assert call_count[0] == 6
             assert result.success is True
 
@@ -1379,9 +1379,9 @@ class TestBeatRetryAndContextRefresh:
         beat_errors = [
             SeedValidationError(
                 field_path="initial_beats.0.paths",
-                issue="Thread 'bad_thread' not defined",
-                available=["good_thread"],
-                provided="bad_thread",
+                issue="Path 'bad_path' not defined",
+                available=["good_path"],
+                provided="bad_path",
             )
         ]
 
@@ -1404,12 +1404,12 @@ class TestBeatRetryAndContextRefresh:
 
         # Mock path data for _serialize_beats_per_path
         mock_path = {
-            "path_id": "test_thread",
-            "name": "Test Thread",
-            "dilemma_id": "test_tension",
-            "alternative_id": "alt1",
-            "unexplored_alternative_ids": [],
-            "thread_importance": "major",
+            "path_id": "path::test_dilemma__alt1",
+            "name": "Test Path",
+            "dilemma_id": "dilemma::test_dilemma",
+            "answer_id": "alt1",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
             "description": "desc",
             "consequence_ids": [],
         }

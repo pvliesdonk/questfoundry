@@ -46,7 +46,7 @@ def prune_to_arc_limit(
     """Prune seed output to stay within arc count limits.
 
     This is the main entry point for the over-generate-and-select pattern.
-    It uses programmatic scoring to select the best tensions and prunes
+    It uses programmatic scoring to select the best dilemmas and prunes
     the rest.
 
     Args:

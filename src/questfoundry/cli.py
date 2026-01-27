@@ -58,23 +58,23 @@ DEFAULT_INTERACTIVE_DREAM_PROMPT = (
 
 DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT = (
     "Let's brainstorm story elements based on the creative vision. "
-    "Help me develop characters, locations, and dramatic tensions."
+    "Help me develop characters, locations, and dramatic dilemmas."
 )
 
 DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT = (
-    "Generate characters, locations, objects, factions, and dramatic tensions "
+    "Generate characters, locations, objects, factions, and dramatic dilemmas "
     "based on the creative vision from the DREAM stage."
 )
 
 DEFAULT_INTERACTIVE_SEED_PROMPT = (
     "Let's triage this brainstorm into a committed story structure. "
-    "Help me decide which entities to keep, which tensions to explore, "
+    "Help me decide which entities to keep, which dilemmas to explore, "
     "and what the initial beats should be."
 )
 
 DEFAULT_NONINTERACTIVE_SEED_PROMPT = (
     "Triage the brainstorm into committed story structure: curate entities, "
-    "decide which tensions to explore as threads, create initial beats, "
+    "decide which dilemmas to explore as paths, create initial beats, "
     "and sketch convergence points."
 )
 
@@ -826,11 +826,11 @@ def brainstorm(
         ),
     ] = None,
 ) -> None:
-    """Run BRAINSTORM stage - generate entities and tensions.
+    """Run BRAINSTORM stage - generate entities and dilemmas.
 
     Takes the creative vision from DREAM and generates raw creative
     material: characters, locations, objects, factions, and dramatic
-    tensions (binary questions with two alternatives each).
+    dilemmas (binary questions with two answers each).
 
     Requires DREAM stage to have completed first.
 
@@ -967,7 +967,7 @@ def grow(
 ) -> None:
     """Run GROW stage - build complete branching structure.
 
-    Takes the threads and beats from SEED and builds the full
+    Takes the paths and beats from SEED and builds the full
     branching story graph: arcs, passages, choices, codewords,
     and state overlays.
 

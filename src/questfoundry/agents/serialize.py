@@ -950,7 +950,7 @@ def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
     sections = set()
     for error in errors:
         field_path = error.field_path
-        # Extract the top-level field (e.g., "threads.0.tension_id" -> "threads")
+        # Extract the top-level field (e.g., "paths.0.dilemma_id" -> "paths")
         top_level = field_path.split(".")[0] if field_path else ""
         if top_level in _FIELD_PATH_TO_SECTION:
             sections.add(_FIELD_PATH_TO_SECTION[top_level])

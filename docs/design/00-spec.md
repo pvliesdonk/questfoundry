@@ -1139,7 +1139,7 @@ Because GROW operates on beats (summaries) rather than passages (prose), the dat
 |-----------|-------------|
 | ID & metadata | ~10 |
 | Summary (2-3 sentences) | ~40-60 |
-| Tags (paths, tensions, entities) | ~20-30 |
+| Tags (paths, dilemmas, entities) | ~20-30 |
 | Logic (requires, grants) | ~10-20 |
 | YAML overhead | ~10 |
 | **Total per beat** | **~100-130** |

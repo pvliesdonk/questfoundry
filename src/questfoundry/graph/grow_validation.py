@@ -319,10 +319,6 @@ def check_dilemmas_resolved(graph: Graph) -> ValidationCheck:
     )
 
 
-# Backward compatibility alias - will be removed in a future version
-check_tensions_resolved = check_dilemmas_resolved
-
-
 def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
     """Verify all choice requires are satisfiable (required codewords exist globally).
 

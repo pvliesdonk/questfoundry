@@ -481,10 +481,10 @@ def test_default_interactive_seed_prompt_constant() -> None:
 def test_default_noninteractive_brainstorm_prompt_constant() -> None:
     """Test DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT is defined and non-empty."""
     assert DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT
-    # Should reference entities/tensions from DREAM stage
+    # Should reference entities/dilemmas from DREAM stage
     assert (
         "entities" in DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT.lower()
-        or "tensions" in DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT.lower()
+        or "dilemmas" in DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT.lower()
     )
 
 
@@ -942,7 +942,7 @@ def test_brainstorm_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) 
     # Create mock artifact
     import yaml
 
-    artifact = {"type": "brainstorm", "version": 1, "entities": [], "tensions": []}
+    artifact = {"type": "brainstorm", "version": 1, "entities": [], "dilemmas": []}
     with (project_path / "artifacts" / "brainstorm.yaml").open("w") as f:
         yaml.safe_dump(artifact, f)
 

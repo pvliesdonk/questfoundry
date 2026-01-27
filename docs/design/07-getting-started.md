@@ -138,7 +138,7 @@ src/questfoundry/
 │       └── grow/
 │           ├── __init__.py
 │           ├── beat_import.py      # Phase 1
-│           ├── thread_agnostic.py  # Phase 2
+│           ├── path_agnostic.py    # Phase 2
 │           ├── intersections.py            # Phase 3
 │           ├── gaps.py             # Phase 4a-c
 │           ├── arcs.py             # Phase 5-6
@@ -152,8 +152,8 @@ src/questfoundry/
 │   └── state.py           # State consistency
 ├── prompts/
 │   └── templates/
-│       ├── grow_thread_agnostic.yaml
-│       ├── grow_knots.yaml
+│       ├── grow_phase2_agnostic.yaml
+│       ├── grow_phase3_intersections.yaml
 │       ├── grow_gaps.yaml
 │       └── grow_choice_labels.yaml
 └── artifacts/

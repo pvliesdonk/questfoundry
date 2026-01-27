@@ -46,7 +46,7 @@ DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP
 
 - **DREAM**: Establish creative vision (genre, tone, themes)
 - **BRAINSTORM**: Generate raw material (characters, settings, hooks)
-- **SEED**: Crystallize core elements (protagonist, setting, tension)
+- **SEED**: Crystallize core elements (protagonist, setting, dilemma)
 - **GROW**: Build complete branching structure (spine, anchors, branches)
 - **FILL**: Generate prose for scenes
 - **SHIP**: Export to playable formats (Twee, HTML, JSON)
@@ -390,7 +390,7 @@ If estimated diff will exceed the target size:
 # Example workflow for a large refactor
 git checkout origin/main
 # Make first logical change
-git add -p && git commit -m "refactor(models): rename Tension to Dilemma"
+git add -p && git commit -m "refactor(models): rename dilemma terminology"
 # Make second logical change
 git add -p && git commit -m "refactor(graph): update mutations for new names"
 # Make third logical change
@@ -466,7 +466,7 @@ questfoundry/
 
 ### Slice 3: Full GROW
 - 11-phase GROW algorithm
-- Thread-agnostic assessment, knot detection
+- Path-agnostic assessment, intersection detection
 - Arc enumeration and validation
 - State derivation (codewords, overlays)
 
@@ -700,8 +700,8 @@ When serializing structured output that references IDs from earlier stages:
 This is critical for preventing "phantom ID" errors where the model invents or
 misreferences IDs. Current implementation:
 
-- `graph/context.py`: `format_valid_ids_context()` builds entity and tension ID lists
-- `graph/context.py`: `format_thread_ids_context()` builds thread ID list after threads are serialized
+- `graph/context.py`: `format_valid_ids_context()` builds entity and dilemma ID lists
+- `graph/context.py`: `format_path_ids_context()` builds path ID list after paths are serialized
 - `agents/serialize.py`: Injects valid IDs before each serialization call
 
 When adding new ID types that downstream sections reference:
@@ -714,14 +714,14 @@ When adding new ID types that downstream sections reference:
 Use explicit good/bad examples to prevent common errors:
 
 ```yaml
-## Tension ID Naming (CRITICAL)
+## Dilemma ID Naming (CRITICAL)
 GOOD: `host_benevolent_or_self_serving` (binary pattern)
-BAD: `host_motivation` (ambiguous, could be confused with thread name)
+BAD: `host_motivation` (ambiguous, could be confused with path name)
 
 ## What NOT to Do
 - Do NOT write prose paragraphs with backstories
 - Do NOT end with "Good luck!" or similar pleasantries
-- Do NOT reuse tension IDs as thread IDs
+- Do NOT reuse dilemma IDs as path IDs
 ```
 
 These patterns help chat-optimized models (like GPT-4o) avoid over-helpful behaviors

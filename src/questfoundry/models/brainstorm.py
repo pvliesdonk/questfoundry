@@ -7,8 +7,8 @@ material: entities (characters, locations, objects, factions) and dilemmas
 See docs/design/00-spec.md and docs/design/procedures/brainstorm.md for details.
 
 Terminology (v5):
-- dilemma (was: tension): Binary dramatic questions
-- answer (was: alternative): Possible resolutions to dilemmas
+- dilemma: Binary dramatic questions
+- answer: Possible resolutions to dilemmas
 """
 
 from __future__ import annotations
