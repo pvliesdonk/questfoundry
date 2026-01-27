@@ -48,6 +48,7 @@ if TYPE_CHECKING:
 
     from questfoundry.graph.graph import Graph
     from questfoundry.models.seed import SeedOutput
+    from questfoundry.pipeline.stages.base import PhaseProgressFn
 
 log = get_logger(__name__)
 
@@ -649,6 +650,7 @@ async def _serialize_beats_per_path(
     provider_name: str | None,
     max_retries: int,
     callbacks: list[BaseCallbackHandler] | None,
+    on_phase_progress: PhaseProgressFn | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Serialize beats for all paths in parallel.
 
@@ -668,29 +670,38 @@ async def _serialize_beats_per_path(
     """
     log.info("serialize_beats_per_path_started", path_count=len(paths))
 
+    path_count = len(paths)
+
     # Create tasks for parallel execution
-    tasks = [
-        _serialize_path_beats(
-            model=model,
-            path_data=path,
-            per_path_prompt_template=per_path_prompt,
-            entity_context=entity_context,
-            provider_name=provider_name,
-            max_retries=max_retries,
-            callbacks=callbacks,
+    tasks: list[asyncio.Future[tuple[list[dict[str, Any]], int]]] = []
+    task_to_path_id: dict[asyncio.Future[tuple[list[dict[str, Any]], int]], str] = {}
+    for path in paths:
+        task = asyncio.create_task(
+            _serialize_path_beats(
+                model=model,
+                path_data=path,
+                per_path_prompt_template=per_path_prompt,
+                entity_context=entity_context,
+                provider_name=provider_name,
+                max_retries=max_retries,
+                callbacks=callbacks,
+            )
         )
-        for path in paths
-    ]
+        tasks.append(task)
+        task_to_path_id[task] = str(path.get("path_id", ""))
 
-    # Run all path serializations in parallel
-    results = await asyncio.gather(*tasks)
-
-    # Merge results
+    # Collect results as they complete (allows per-path progress reporting)
     all_beats: list[dict[str, Any]] = []
     total_tokens = 0
-    for beats, tokens in results:
+
+    for i, future in enumerate(asyncio.as_completed(tasks), start=1):
+        beats, tokens = await future
         all_beats.extend(beats)
         total_tokens += tokens
+        if on_phase_progress is not None:
+            path_id = task_to_path_id.get(future, "")
+            detail = f"{path_id} ({len(beats)} beats)" if path_id else f"{len(beats)} beats"
+            on_phase_progress(f"serialize beats (path {i}/{path_count})", "completed", detail)
 
     log.info(
         "serialize_beats_per_path_completed",
@@ -1069,6 +1080,7 @@ async def serialize_seed_as_function(
     callbacks: list[BaseCallbackHandler] | None = None,
     graph: Graph | None = None,
     max_semantic_retries: int = 2,
+    on_phase_progress: PhaseProgressFn | None = None,
 ) -> SerializeResult:
     """Serialize SEED brief to structured output, returning result for outer loop.
 
@@ -1171,6 +1183,11 @@ async def serialize_seed_as_function(
                 f"Expected field '{output_field}', got: {list(section_data.keys())}"
             )
         collected[output_field] = section_data[output_field]
+        if on_phase_progress is not None:
+            items = collected[output_field]
+            count = len(items) if isinstance(items, list) else 1
+            label = output_field.replace("_", " ")
+            on_phase_progress(f"serialize {label}", "completed", f"{count} {label}")
 
         # After entities are serialized, update entity_context to only include retained
         # entities. This prevents beats from referencing cut entities.
@@ -1200,6 +1217,7 @@ async def serialize_seed_as_function(
                 provider_name=provider_name,
                 max_retries=max_retries,
                 callbacks=callbacks,
+                on_phase_progress=on_phase_progress,
             )
             collected["initial_beats"] = beats
             total_tokens += beats_tokens
@@ -1228,6 +1246,12 @@ async def serialize_seed_as_function(
                 max_attempts=max_semantic_retries,
                 error_count=len(semantic_errors),
             )
+            if on_phase_progress is not None:
+                on_phase_progress(
+                    "semantic retry",
+                    "retry",
+                    f"attempt {semantic_attempt}/{max_semantic_retries}: {len(semantic_errors)} errors",
+                )
 
             # Re-serialize only failing sections with corrections in system prompt
             section_errors = _group_errors_by_section(semantic_errors)
@@ -1305,6 +1329,7 @@ async def serialize_seed_as_function(
                         provider_name=provider_name,
                         max_retries=max_retries,
                         callbacks=callbacks,
+                        on_phase_progress=on_phase_progress,
                     )
                     collected["initial_beats"] = beats
                     total_tokens += beats_tokens

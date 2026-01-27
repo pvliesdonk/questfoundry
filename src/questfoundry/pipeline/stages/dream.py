@@ -11,6 +11,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from langchain_core.messages import AIMessage
+
 from questfoundry.agents import (
     run_discuss_phase,
     serialize_to_artifact,
@@ -37,6 +39,7 @@ if TYPE_CHECKING:
         LLMCallbackFn,
         UserInputFn,
     )
+    from questfoundry.pipeline.stages.base import PhaseProgressFn
 
 
 class DreamStage:
@@ -68,6 +71,7 @@ class DreamStage:
         on_assistant_message: AssistantMessageFn | None = None,
         on_llm_start: LLMCallbackFn | None = None,
         on_llm_end: LLMCallbackFn | None = None,
+        on_phase_progress: PhaseProgressFn | None = None,
         project_path: Path | None = None,  # noqa: ARG002 - API consistency
         callbacks: list[BaseCallbackHandler] | None = None,
         summarize_model: BaseChatModel | None = None,
@@ -132,6 +136,9 @@ class DreamStage:
             on_llm_end=on_llm_end,
             callbacks=callbacks,
         )
+        if on_phase_progress is not None:
+            turns = sum(1 for m in messages if isinstance(m, AIMessage))
+            on_phase_progress("discuss", "completed", f"{turns} turns")
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
@@ -142,6 +149,8 @@ class DreamStage:
             messages=messages,
             callbacks=callbacks,
         )
+        if on_phase_progress is not None:
+            on_phase_progress("summarize", "completed", None)
         total_llm_calls += 1  # Summarize is a single call
         total_tokens += summarize_tokens
 
@@ -154,6 +163,8 @@ class DreamStage:
             provider_name=serialize_provider_name or provider_name,
             callbacks=callbacks,
         )
+        if on_phase_progress is not None:
+            on_phase_progress("serialize", "completed", None)
         total_llm_calls += 1  # Count as 1 even with retries (simplification)
         total_tokens += serialize_tokens
 

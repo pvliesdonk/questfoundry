@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -95,18 +95,18 @@ async def test_execute_calls_all_three_phases() -> None:
             entities=[
                 {"entity_id": "hero", "entity_category": "character", "concept": "A brave warrior"}
             ],
-            tensions=[
+            dilemmas=[
                 {
-                    "tension_id": "quest",
+                    "dilemma_id": "quest",
                     "question": "Will the hero succeed?",
-                    "alternatives": [
+                    "answers": [
                         {
-                            "alternative_id": "success",
+                            "answer_id": "success",
                             "description": "Hero wins",
                             "is_default_path": True,
                         },
                         {
-                            "alternative_id": "failure",
+                            "answer_id": "failure",
                             "description": "Hero fails",
                             "is_default_path": False,
                         },
@@ -134,6 +134,73 @@ async def test_execute_calls_all_three_phases() -> None:
         assert len(artifact["dilemmas"]) == 1
         assert llm_calls == 4  # 2 discuss + 1 summarize + 1 serialize
         assert tokens == 800  # 500 + 100 + 200
+
+
+@pytest.mark.asyncio
+async def test_execute_emits_phase_progress() -> None:
+    """Execute emits phase-level progress callbacks when provided."""
+    stage = BrainstormStage()
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+    mock_graph.get_node.return_value = {"genre": "fantasy"}
+    on_phase_progress = MagicMock()
+
+    with (
+        patch("questfoundry.pipeline.stages.brainstorm.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.brainstorm.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.brainstorm.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.brainstorm.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.brainstorm.get_all_research_tools") as mock_tools,
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = (
+            [HumanMessage(content="hi"), AIMessage(content="a"), AIMessage(content="b")],
+            2,
+            500,
+        )
+        mock_summarize.return_value = ("Brief summary", 100)
+        mock_artifact = BrainstormOutput(
+            entities=[
+                {"entity_id": "hero", "entity_category": "character", "concept": "A brave warrior"}
+            ],
+            dilemmas=[
+                {
+                    "dilemma_id": "quest",
+                    "question": "Will the hero succeed?",
+                    "answers": [
+                        {
+                            "answer_id": "success",
+                            "description": "Hero wins",
+                            "is_default_path": True,
+                        },
+                        {
+                            "answer_id": "failure",
+                            "description": "Hero fails",
+                            "is_default_path": False,
+                        },
+                    ],
+                    "central_entity_ids": ["hero"],
+                    "why_it_matters": "Core story dilemma",
+                }
+            ],
+        )
+        mock_serialize.return_value = (mock_artifact, 200)
+
+        await stage.execute(
+            model=mock_model,
+            user_prompt="Let's brainstorm",
+            project_path=Path("/test/project"),
+            on_phase_progress=on_phase_progress,
+        )
+
+    assert on_phase_progress.mock_calls == [
+        call("discuss", "completed", "2 turns"),
+        call("summarize", "completed", None),
+        call("serialize entities", "completed", "1 entities"),
+        call("serialize dilemmas", "completed", "1 dilemmas"),
+    ]
 
 
 @pytest.mark.asyncio
@@ -165,7 +232,7 @@ async def test_execute_passes_vision_context_to_discuss() -> None:
         mock_prompt.return_value = "System prompt with vision"
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(entities=[], tensions=[])
+        mock_artifact = BrainstormOutput(entities=[], dilemmas=[])
         mock_serialize.return_value = (mock_artifact, 100)
 
         await stage.execute(
@@ -202,7 +269,7 @@ async def test_execute_passes_brainstorm_output_schema() -> None:
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(entities=[], tensions=[])
+        mock_artifact = BrainstormOutput(entities=[], dilemmas=[])
         mock_serialize.return_value = (mock_artifact, 100)
 
         await stage.execute(
@@ -238,7 +305,7 @@ async def test_execute_uses_brainstorm_summarize_prompt() -> None:
         mock_prompt.return_value = "Brainstorm summarize prompt"
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = BrainstormOutput(entities=[], tensions=[])
+        mock_artifact = BrainstormOutput(entities=[], dilemmas=[])
         mock_serialize.return_value = (mock_artifact, 100)
 
         await stage.execute(
@@ -276,13 +343,13 @@ async def test_execute_returns_artifact_as_dict() -> None:
             entities=[
                 {"entity_id": "kay", "entity_category": "character", "concept": "Protagonist"}
             ],
-            tensions=[
+            dilemmas=[
                 {
-                    "tension_id": "trust",
+                    "dilemma_id": "trust",
                     "question": "Can Kay trust the mentor?",
-                    "alternatives": [
-                        {"alternative_id": "yes", "description": "Trust", "is_default_path": True},
-                        {"alternative_id": "no", "description": "Betray", "is_default_path": False},
+                    "answers": [
+                        {"answer_id": "yes", "description": "Trust", "is_default_path": True},
+                        {"answer_id": "no", "description": "Betray", "is_default_path": False},
                     ],
                     "central_entity_ids": ["kay"],
                     "why_it_matters": "Theme of trust",
@@ -357,18 +424,18 @@ def test_brainstorm_output_model_validates() -> None:
         entities=[
             {"entity_id": "hero", "entity_category": "character", "concept": "The protagonist"}
         ],
-        tensions=[
+        dilemmas=[
             {
-                "tension_id": "quest",
+                "dilemma_id": "quest",
                 "question": "Will the hero complete the quest?",
-                "alternatives": [
+                "answers": [
                     {
-                        "alternative_id": "success",
+                        "answer_id": "success",
                         "description": "Quest complete",
                         "is_default_path": True,
                     },
                     {
-                        "alternative_id": "failure",
+                        "answer_id": "failure",
                         "description": "Quest failed",
                         "is_default_path": False,
                     },
@@ -380,42 +447,40 @@ def test_brainstorm_output_model_validates() -> None:
     )
 
     assert len(output.entities) == 1
-    assert len(output.tensions) == 1
+    assert len(output.dilemmas) == 1
     assert output.entities[0].entity_id == "hero"
-    assert output.tensions[0].tension_id == "quest"
+    assert output.dilemmas[0].dilemma_id == "quest"
 
 
-def test_tension_requires_two_alternatives() -> None:
-    """Dilemma model requires exactly two alternatives."""
+def test_dilemma_requires_two_answers() -> None:
+    """Dilemma model requires exactly two answers."""
     from pydantic import ValidationError
 
     from questfoundry.models.brainstorm import Dilemma
 
     with pytest.raises(ValidationError, match="List should have at least 2 items"):
         Dilemma(
-            tension_id="test",
+            dilemma_id="test",
             question="Test?",
-            alternatives=[
-                {"alternative_id": "one", "description": "Only one", "is_default_path": True}
-            ],
+            answers=[{"answer_id": "one", "description": "Only one", "is_default_path": True}],
             central_entity_ids=[],
             why_it_matters="Test",
         )
 
 
-def test_tension_requires_one_canonical() -> None:
-    """Dilemma model requires exactly one default path alternative."""
+def test_dilemma_requires_one_default_path_answer() -> None:
+    """Dilemma model requires exactly one default path answer."""
     from pydantic import ValidationError
 
     from questfoundry.models.brainstorm import Dilemma
 
     with pytest.raises(ValidationError, match=r"one.*default path"):
         Dilemma(
-            tension_id="test",
+            dilemma_id="test",
             question="Test?",
-            alternatives=[
-                {"alternative_id": "one", "description": "First", "is_default_path": True},
-                {"alternative_id": "two", "description": "Second", "is_default_path": True},
+            answers=[
+                {"answer_id": "one", "description": "First", "is_default_path": True},
+                {"answer_id": "two", "description": "Second", "is_default_path": True},
             ],
             central_entity_ids=[],
             why_it_matters="Test",

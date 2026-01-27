@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -140,6 +140,58 @@ async def test_execute_calls_all_three_phases() -> None:
         # Note: This tests the stage's call accounting, not internal serialize behavior
         assert llm_calls == 9
         assert tokens == 800  # 500 + 100 + 200
+
+
+@pytest.mark.asyncio
+async def test_execute_emits_phase_progress() -> None:
+    """Execute emits phase-level progress callbacks when provided."""
+    stage = SeedStage()
+    mock_model = MagicMock()
+    on_phase_progress = MagicMock()
+
+    mock_graph = MagicMock()
+    mock_graph.get_nodes_by_type.side_effect = lambda t: (
+        {"kay": {"type": "entity", "concept": "Protagonist"}}
+        if t == "entity"
+        else {"trust": {"type": "dilemma", "question": "?"}}
+        if t == "dilemma"
+        else {}
+    )
+    mock_graph.get_edges.return_value = []
+
+    with (
+        patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = (
+            [HumanMessage(content="hi"), AIMessage(content="a"), AIMessage(content="b")],
+            2,
+            500,
+        )
+        mock_summarize.return_value = ("Brief summary", 100)
+        mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=200, semantic_errors=[]
+        )
+
+        await stage.execute(
+            model=mock_model,
+            user_prompt="Let's seed",
+            project_path=Path("/test/project"),
+            on_phase_progress=on_phase_progress,
+        )
+
+    # seed.execute emits progress for discuss + summarize; serialize progress is emitted by
+    # serialize_seed_as_function, which is patched in this test.
+    assert on_phase_progress.mock_calls == [
+        call("discuss", "completed", "2 turns"),
+        call("summarize", "completed", "attempt 1/3"),
+    ]
 
 
 @pytest.mark.asyncio

@@ -40,6 +40,7 @@ class Stage(Protocol):
         on_assistant_message: AssistantMessageFn | None = None,
         on_llm_start: LLMCallbackFn | None = None,
         on_llm_end: LLMCallbackFn | None = None,
+        on_phase_progress: PhaseProgressFn | None = None,
         summarize_model: BaseChatModel | None = None,
         serialize_model: BaseChatModel | None = None,
         summarize_provider_name: str | None = None,

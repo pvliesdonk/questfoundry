@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -75,6 +75,47 @@ async def test_execute_calls_all_three_phases() -> None:
         assert artifact["tone"] == ["epic"]
         assert llm_calls == 4  # 2 discuss + 1 summarize + 1 serialize
         assert tokens == 800  # 500 + 100 + 200
+
+
+@pytest.mark.asyncio
+async def test_execute_emits_phase_progress() -> None:
+    """Execute emits phase-level progress callbacks when provided."""
+    stage = DreamStage()
+    mock_model = MagicMock()
+    on_phase_progress = MagicMock()
+
+    with (
+        patch("questfoundry.pipeline.stages.dream.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.dream.summarize_discussion") as mock_summarize,
+        patch("questfoundry.pipeline.stages.dream.serialize_to_artifact") as mock_serialize,
+        patch("questfoundry.pipeline.stages.dream.get_all_research_tools") as mock_tools,
+    ):
+        mock_tools.return_value = []
+        mock_discuss.return_value = (
+            [HumanMessage(content="hi"), AIMessage(content="a"), AIMessage(content="b")],
+            2,
+            500,
+        )
+        mock_summarize.return_value = ("Brief summary", 100)
+        mock_artifact = DreamArtifact(
+            genre="fantasy",
+            tone=["epic"],
+            audience="adult",
+            themes=["heroism"],
+        )
+        mock_serialize.return_value = (mock_artifact, 200)
+
+        await stage.execute(
+            model=mock_model,
+            user_prompt="An epic quest",
+            on_phase_progress=on_phase_progress,
+        )
+
+    assert on_phase_progress.mock_calls == [
+        call("discuss", "completed", "2 turns"),
+        call("summarize", "completed", None),
+        call("serialize", "completed", None),
+    ]
 
 
 @pytest.mark.asyncio
