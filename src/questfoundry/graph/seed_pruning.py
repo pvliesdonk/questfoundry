@@ -5,7 +5,7 @@ Instead of teaching LLMs to self-constrain, we let them generate freely and
 programmatically select the best content.
 
 The pruning process:
-1. Rank dilemmas by quality score (see tension_scoring.py)
+1. Rank dilemmas by quality score (see dilemma_scoring.py)
 2. Select top N dilemmas for full exploration (N determined by arc limit)
 3. Demote remaining dilemmas: move non-canonical to implicit
 4. Drop paths, consequences, and beats for demoted non-canonical answers
@@ -14,7 +14,7 @@ The pruning process:
 from __future__ import annotations
 
 from questfoundry.graph.context import strip_scope_prefix
-from questfoundry.graph.tension_scoring import select_tensions_for_full_exploration
+from questfoundry.graph.dilemma_scoring import select_tensions_for_full_exploration
 from questfoundry.models.seed import (
     Consequence,
     InitialBeat,

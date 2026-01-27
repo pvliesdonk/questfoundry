@@ -1,15 +1,15 @@
-"""Tension scoring and ranking for over-generate-and-select pattern.
+"""Dilemma scoring and ranking for over-generate-and-select pattern.
 
-This module scores tensions by quality criteria and ranks them for full
+This module scores dilemmas by quality criteria and ranks them for full
 exploration. Instead of teaching LLMs to self-constrain arc counts, we let
-them generate freely and programmatically select the best tensions.
+them generate freely and programmatically select the best dilemmas.
 
 The scoring criteria are:
-- Beat richness: How many beats explore this tension's non-canonical thread
-- Consequence depth: How many narrative effects cascade from this thread
-- Entity coverage: How many unique entities appear in this thread's beats
-- Location variety: How many distinct locations this thread uses
-- Thread tier: Major threads score higher than minor
+- Beat richness: How many beats explore this dilemma's non-canonical path
+- Consequence depth: How many narrative effects cascade from this path
+- Entity coverage: How many unique entities appear in this path's beats
+- Location variety: How many distinct locations this path uses
+- Path tier: Major paths score higher than minor
 """
 
 from __future__ import annotations
