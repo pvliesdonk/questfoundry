@@ -134,9 +134,9 @@ def _format_brainstorm_context(graph: Graph) -> str:
     parts = []
 
     # Collect entities and dilemmas using proper Graph API
-    # Note: Graph stores dilemmas as "tension" nodes for backward compatibility
+    # Get dilemma nodes from graph
     entity_nodes = graph.get_nodes_by_type("entity")
-    dilemma_nodes = graph.get_nodes_by_type("tension")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
 
     entities = list(entity_nodes.items())
     dilemmas = list(dilemma_nodes.items())
@@ -203,9 +203,9 @@ class SeedStage:
         graph = Graph.load(project_path)
 
         # Check for entities (indicates brainstorm completed)
-        # Note: Graph stores dilemmas as "tension" nodes for backward compatibility
+        # Get dilemma nodes from graph
         entity_nodes = graph.get_nodes_by_type("entity")
-        dilemma_nodes = graph.get_nodes_by_type("tension")
+        dilemma_nodes = graph.get_nodes_by_type("dilemma")
 
         has_entities = bool(entity_nodes)
         has_dilemmas = bool(dilemma_nodes)

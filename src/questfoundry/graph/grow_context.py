@@ -33,9 +33,8 @@ def format_grow_valid_ids(graph: Graph) -> dict[str, str]:
 
     return {
         "valid_beat_ids": _get_sorted_ids("beat"),
-        # Graph still stores paths as "thread" and dilemmas as "tension"
-        "valid_path_ids": _get_sorted_ids("thread"),
-        "valid_dilemma_ids": _get_sorted_ids("tension"),
+        "valid_path_ids": _get_sorted_ids("path"),
+        "valid_dilemma_ids": _get_sorted_ids("dilemma"),
         "valid_entity_ids": _get_sorted_ids("entity"),
         "valid_passage_ids": _get_sorted_ids("passage"),
         "valid_choice_ids": _get_sorted_ids("choice"),

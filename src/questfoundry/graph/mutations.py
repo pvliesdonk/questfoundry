@@ -152,7 +152,7 @@ class SeedErrorCategory(Enum):
 
     INNER = auto()  # Schema/type error in a single section
     SEMANTIC = auto()  # Invalid ID reference (phantom IDs)
-    COMPLETENESS = auto()  # Missing entity/tension decisions
+    COMPLETENESS = auto()  # Missing entity/dilemma decisions
     # FATAL is reserved for future use - e.g., graph corruption that requires
     # manual intervention. Currently no errors are classified as FATAL since
     # all known error types can be retried with appropriate feedback.
@@ -455,34 +455,30 @@ def _clean_dict(data: dict[str, Any]) -> dict[str, Any]:
 def _backfill_considered_from_paths(output: dict[str, Any]) -> None:
     """Backfill empty considered arrays from path answer_ids (in-place mutation).
 
-    Handles legacy data where LLM serialized paths but left considered empty.
+    Handles cases where LLM serialized paths but left considered empty.
     The path's answer_id IS what was considered - if a path exists for
     an answer, that answer was necessarily considered.
 
-    This migration runs BEFORE validation to fix data integrity issues in
-    existing graphs where dilemmas have `considered: []` but paths exist
-    with valid `answer_id` (stored as `alternative_id`) values.
-
-    Note: Graph storage uses legacy field names (threads, alternative_id) for
-    backward compatibility.
+    This runs BEFORE validation to fix data integrity issues in
+    graphs where dilemmas have `considered: []` but paths exist
+    with valid `answer_id` values.
 
     Args:
         output: SEED stage output dictionary (mutated in place).
     """
     # Build mapping: dilemma_id -> set of answer_ids from paths
     path_answers: dict[str, set[str]] = {}
-    for path in output.get("threads", []):  # "threads" is legacy field name for paths
-        dilemma_id = strip_scope_prefix(path.get("tension_id", ""))  # legacy field name
-        answer_id = path.get("alternative_id")  # legacy field name
+    for path in output.get("paths", []):
+        dilemma_id = strip_scope_prefix(path.get("dilemma_id", ""))
+        answer_id = path.get("answer_id")
         if answer_id:
             path_answers.setdefault(dilemma_id, set()).add(answer_id)
 
     # Backfill empty considered arrays
-    for dilemma in output.get("tensions", []):  # "tensions" is legacy field name for dilemmas
-        # Support both new 'considered' and old 'explored' field names
-        considered = dilemma.get("considered", dilemma.get("explored", []))
+    for dilemma in output.get("dilemmas", []):
+        considered = dilemma.get("considered", [])
         if not considered:
-            dilemma_id = strip_scope_prefix(dilemma.get("tension_id", ""))
+            dilemma_id = strip_scope_prefix(dilemma.get("dilemma_id", ""))
             path_answer_ids = path_answers.get(dilemma_id, set())
             if path_answer_ids:
                 dilemma["considered"] = sorted(path_answer_ids)
@@ -573,11 +569,8 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
     2. All answer IDs within a dilemma are unique
     3. Each dilemma has exactly one is_default_path=true answer
 
-    Note: Graph storage still uses legacy field names (tensions, alternatives)
-    for backward compatibility. Error messages use LLM-facing terms (dilemmas, answers).
-
     Args:
-        output: BRAINSTORM stage output (entities, dilemmas/tensions).
+        output: BRAINSTORM stage output (entities, dilemmas).
 
     Returns:
         List of validation errors (empty if valid).
@@ -602,9 +595,9 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
             entity_ids.add(entity_id)
     sorted_entity_ids = sorted(entity_ids)
 
-    # Validate each dilemma (accept new "dilemmas" field or legacy "tensions")
-    for i, dilemma in enumerate(output.get("dilemmas", output.get("tensions", []))):
-        dilemma_id = dilemma.get("dilemma_id", dilemma.get("tension_id", f"<index {i}>"))
+    # Validate each dilemma
+    for i, dilemma in enumerate(output.get("dilemmas", [])):
+        dilemma_id = dilemma.get("dilemma_id", f"<index {i}>")
 
         # 1. Check central_entity_ids reference valid entities
         for eid in dilemma.get("central_entity_ids", []):
@@ -619,12 +612,8 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
                 )
 
         # 2. Check answer IDs are unique within this dilemma
-        answers = dilemma.get("answers", dilemma.get("alternatives", []))
-        answer_ids = [
-            a.get("answer_id", a.get("alternative_id"))
-            for a in answers
-            if a.get("answer_id", a.get("alternative_id"))
-        ]
+        answers = dilemma.get("answers", [])
+        answer_ids = [a.get("answer_id") for a in answers if a.get("answer_id")]
         answer_id_counts = Counter(answer_ids)
         for answer_id, count in answer_id_counts.items():
             if count > 1:
@@ -663,18 +652,14 @@ def _prefix_id(node_type: str, raw_id: str) -> str:
     """Prefix a raw ID with its node type for namespace isolation.
 
     This allows entities and dilemmas to have the same raw ID without collision.
-    E.g., both can use "cipher_journal" -> "entity::cipher_journal", "tension::cipher_journal"
-
-    Note: Graph storage still uses legacy node type names (tension, thread, alternative)
-    for backward compatibility with existing graphs. LLM-facing output uses new
-    terminology (dilemma, path, answer).
+    E.g., both can use "cipher_journal" -> "entity::cipher_journal", "dilemma::cipher_journal"
 
     This function is idempotent - if the ID already has the correct prefix,
     it returns it unchanged. If it has a different prefix or multiple prefixes,
     the raw part is extracted and re-prefixed.
 
     Args:
-        node_type: Node type prefix (entity, tension, thread, etc. for storage)
+        node_type: Node type prefix (entity, dilemma, path, etc.)
         raw_id: Raw ID from LLM output (may already be prefixed).
 
     Returns:
@@ -692,21 +677,16 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
     """Apply BRAINSTORM stage output to graph.
 
     Creates entity nodes and dilemma nodes with their answers.
-    Dilemmas are linked to their answers via has_alternative edges.
-
-    Note: Graph storage uses legacy node type names for backward compatibility:
-    - "tension" for dilemmas
-    - "alternative" for answers
-    LLM-facing output and error messages use new terminology.
+    Dilemmas are linked to their answers via has_answer edges.
 
     Node IDs are prefixed by type to avoid collisions:
     - entity::raw_id
-    - tension::raw_id (stores dilemma data)
-    - tension::dilemma_id::alt::answer_id (for answers)
+    - dilemma::raw_id
+    - dilemma::dilemma_id::alt::answer_id (for answers)
 
     Args:
         graph: Graph to mutate.
-        output: BRAINSTORM stage output (entities, dilemmas/tensions).
+        output: BRAINSTORM stage output (entities, dilemmas).
 
     Raises:
         MutationError: If entities or dilemmas are missing required id fields.
@@ -727,22 +707,21 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         node_data = _clean_dict(node_data)
         graph.create_node(entity_id, node_data)
 
-    # Add dilemmas with answers (accept new field names or legacy "tensions"/"alternatives")
-    for i, dilemma in enumerate(output.get("dilemmas", output.get("tensions", []))):
-        # Accept new "dilemma_id" or legacy "tension_id"
-        raw_id = dilemma.get("dilemma_id", dilemma.get("tension_id"))
+    # Add dilemmas with answers
+    for i, dilemma in enumerate(output.get("dilemmas", [])):
+        raw_id = dilemma.get("dilemma_id")
         if not raw_id:
             raise MutationError(f"Dilemma at index {i} missing dilemma_id")
-        dilemma_node_id = _prefix_id("tension", raw_id)  # Uses legacy "tension" prefix
+        dilemma_node_id = _prefix_id("dilemma", raw_id)
 
         # Prefix entity references in central_entity_ids list
         raw_central_entities = dilemma.get("central_entity_ids", [])
         prefixed_central_entities = [_prefix_id("entity", eid) for eid in raw_central_entities]
 
-        # Create dilemma node (stored as "tension" type for backward compat)
+        # Create dilemma node
         dilemma_data = {
-            "type": "tension",  # Legacy type name for backward compat
-            "raw_id": raw_id,  # Store original ID for reference
+            "type": "dilemma",
+            "raw_id": raw_id,
             "question": dilemma.get("question"),
             "central_entity_ids": prefixed_central_entities,
             "why_it_matters": dilemma.get("why_it_matters"),
@@ -750,23 +729,22 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         dilemma_data = _clean_dict(dilemma_data)
         graph.create_node(dilemma_node_id, dilemma_data)
 
-        # Create answer nodes and edges (accept new "answers" or legacy "alternatives")
-        for j, answer in enumerate(dilemma.get("answers", dilemma.get("alternatives", []))):
-            # Accept new "answer_id" or legacy "alternative_id"
-            answer_local_id = answer.get("answer_id", answer.get("alternative_id"))
+        # Create answer nodes and edges
+        for j, answer in enumerate(dilemma.get("answers", [])):
+            answer_local_id = answer.get("answer_id")
             if not answer_local_id:
                 raise MutationError(f"Answer at index {j} in dilemma '{raw_id}' missing answer_id")
-            # Answer ID format: tension::dilemma_raw_id::alt::answer_local_id
+            # Answer ID format: dilemma::dilemma_raw_id::alt::answer_local_id
             answer_node_id = f"{dilemma_node_id}::alt::{answer_local_id}"
             answer_data = {
-                "type": "alternative",  # Legacy type name for backward compat
+                "type": "answer",
                 "raw_id": answer_local_id,
                 "description": answer.get("description"),
                 "is_default_path": answer.get("is_default_path", False),
             }
             answer_data = _clean_dict(answer_data)
             graph.create_node(answer_node_id, answer_data)
-            graph.add_edge("has_alternative", dilemma_node_id, answer_node_id)
+            graph.add_edge("has_answer", dilemma_node_id, answer_node_id)
 
 
 def _cross_type_hint(
@@ -796,24 +774,24 @@ def _cross_type_hint(
     Returns:
         Descriptive error message indicating the type mismatch or fallback.
     """
-    if expected_type == "tension" and raw_id in valid_entity_ids:
+    if expected_type == "dilemma" and raw_id in valid_entity_ids:
         etype = entity_types.get(raw_id, "entity")
         return (
             f"'{raw_id}' is an entity ({etype}), not a dilemma. "
             "Dilemma IDs follow the pattern subject_X_or_Y"
         )
-    if expected_type == "tension" and raw_id in seed_path_ids:
+    if expected_type == "dilemma" and raw_id in seed_path_ids:
         return f"'{raw_id}' is a path ID, not a dilemma. Dilemma IDs are longer binary questions"
     if expected_type == "entity" and raw_id in valid_dilemma_ids:
         return f"'{raw_id}' is a dilemma ID, not an entity"
     if expected_type == "entity" and raw_id in seed_path_ids:
         return f"'{raw_id}' is a path ID, not an entity"
-    if expected_type == "thread" and raw_id in valid_entity_ids:
+    if expected_type == "path" and raw_id in valid_entity_ids:
         etype = entity_types.get(raw_id, "entity")
         return f"'{raw_id}' is an entity ({etype}), not a path"
-    if expected_type == "thread" and raw_id in valid_dilemma_ids:
+    if expected_type == "path" and raw_id in valid_dilemma_ids:
         return f"'{raw_id}' is a dilemma ID, not a path"
-    if expected_type == "thread":
+    if expected_type == "path":
         return f"Path '{raw_id}' not defined in SEED paths"
     return f"'{raw_id}' not in BRAINSTORM"
 
@@ -835,9 +813,7 @@ def _validate_id(
 
     Args:
         raw_id: The ID from LLM output (may be None, scoped, or bare).
-        expected_scope: Expected scope type (e.g., "entity", "tension", "thread").
-            Note: Uses storage-layer names; error messages use LLM-facing terms
-            (dilemma, path).
+        expected_scope: Expected scope type (e.g., "entity", "dilemma", "path").
         valid_ids: Set of valid raw IDs for the expected type.
         field_path: Field path for error reporting.
         errors: Error list to append to.
@@ -872,11 +848,10 @@ def _validate_id(
             issue = _cross_type_hint(
                 normalized_id, expected_scope, entity_ids, dilemma_ids, path_ids, entity_types
             )
-        elif expected_scope == "thread":
+        elif expected_scope == "path":
             issue = f"Path '{normalized_id}' not defined in SEED paths"
         else:
-            # Map storage type names to LLM-facing names for error messages
-            display_type = {"tension": "Dilemma", "thread": "Path"}.get(
+            display_type = {"dilemma": "Dilemma", "path": "Path"}.get(
                 expected_scope, expected_scope.title()
             )
             issue = f"{display_type} '{normalized_id}' not in BRAINSTORM"
@@ -912,9 +887,6 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     12. Each beat references its path's parent dilemma in dilemma_impacts
     13. Each path has at least one beat with effect="commits" for its dilemma
 
-    Note: Graph storage uses legacy field names (tensions, threads, alternatives)
-    for backward compatibility. Error messages use LLM-facing terminology.
-
     Args:
         graph: Graph containing BRAINSTORM data (entities, dilemmas, answers).
         output: SEED stage output to validate.
@@ -925,9 +897,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     errors: list[SeedValidationError] = []
 
     # Build lookup sets from graph (BRAINSTORM data)
-    # Note: graph stores dilemmas as "tension" type for backward compat
     entity_nodes = graph.get_nodes_by_type("entity")
-    dilemma_nodes = graph.get_nodes_by_type("tension")  # Legacy type name
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
 
     # Raw IDs (unprefixed) for validation - what LLM uses
     # Type annotation ensures mypy knows these are str sets (filter guarantees non-None)
@@ -947,7 +918,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     dilemma_id_to_raw: dict[str, str] = {
         did: ddata["raw_id"] for did, ddata in dilemma_nodes.items() if ddata.get("raw_id")
     }
-    for edge in graph.get_edges(edge_type="has_alternative"):
+    for edge in graph.get_edges(edge_type="has_answer"):
         from_node_id = edge.get("from", "")
         raw_dilemma_id = dilemma_id_to_raw.get(from_node_id)
         if not raw_dilemma_id:
@@ -958,11 +929,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
     # Extract path IDs from SEED output (for internal references)
     # Normalize IDs to handle both scoped (path::foo) and bare (foo) formats
-    # Note: output uses legacy field name "threads" for paths
     seed_path_ids: set[str] = {
-        _normalize_id(p["thread_id"], "thread")[0]  # Legacy field names
-        for p in output.get("threads", [])
-        if p.get("thread_id")
+        _normalize_id(p["path_id"], "path")[0] for p in output.get("paths", []) if p.get("path_id")
     }
 
     # Pre-sort available IDs once (used in error messages)
@@ -974,11 +942,10 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     cross_type_sets = (valid_entity_ids, valid_dilemma_ids, seed_path_ids, entity_types)
 
     # 0. Check for duplicate IDs in output (prevents LLM from outputting same item twice)
-    # Note: field_path and scope use storage-layer names; display_name is for error messages
     for field_path, id_field, scope, display_name in [
         ("entities", "entity_id", "entity", "entity"),
-        ("tensions", "tension_id", "tension", "dilemma"),  # Legacy field name
-        ("threads", "thread_id", "thread", "path"),  # Legacy field name
+        ("dilemmas", "dilemma_id", "dilemma", "dilemma"),
+        ("paths", "path_id", "path", "path"),
         ("consequences", "consequence_id", "consequence", "consequence"),
         ("initial_beats", "beat_id", "beat", "beat"),
     ]:
@@ -1011,25 +978,25 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             sorted_entity_ids,
         )
 
-    # 2. Validate dilemma decisions (stored as "tensions" for backward compat)
-    for i, decision in enumerate(output.get("tensions", [])):
+    # 2. Validate dilemma decisions
+    for i, decision in enumerate(output.get("dilemmas", [])):
         _validate_id(
-            decision.get("tension_id"),  # Legacy field name
-            "tension",  # Legacy scope for storage
+            decision.get("dilemma_id"),
+            "dilemma",
             valid_dilemma_ids,
             f"dilemmas.{i}.dilemma_id",
             errors,
             sorted_dilemma_ids,
         )
 
-    # 3-4. Validate paths (stored as "threads" for backward compat)
-    for i, path in enumerate(output.get("threads", [])):
-        raw_path_dilemma_id = path.get("tension_id")  # Legacy field name
-        raw_answer_id = path.get("alternative_id")  # Legacy field name
+    # 3-4. Validate paths
+    for i, path in enumerate(output.get("paths", [])):
+        raw_path_dilemma_id = path.get("dilemma_id")
+        raw_answer_id = path.get("answer_id")
 
         path_dilemma_id = _validate_id(
             raw_path_dilemma_id,
-            "tension",  # Legacy scope for storage
+            "dilemma",
             valid_dilemma_ids,
             f"paths.{i}.dilemma_id",
             errors,
@@ -1040,7 +1007,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         if raw_path_dilemma_id and raw_answer_id:
             # Need the normalized dilemma ID even if invalid for the answer check
             norm_did = (
-                _normalize_id(raw_path_dilemma_id, "tension")[0] if raw_path_dilemma_id else None
+                _normalize_id(raw_path_dilemma_id, "dilemma")[0] if raw_path_dilemma_id else None
             )
             if norm_did:
                 valid_answers = answers_by_dilemma.get(norm_did, set())
@@ -1118,11 +1085,11 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     )
                 )
 
-        # 6. Path references (stored as "threads" for backward compat)
-        for raw_path_id in beat.get("threads", []):  # Legacy field name
+        # 6. Path references
+        for raw_path_id in beat.get("paths", []):
             _validate_id(
                 raw_path_id,
-                "thread",  # Legacy scope for storage
+                "path",
                 seed_path_ids,
                 f"initial_beats.{i}.paths",
                 errors,
@@ -1130,11 +1097,11 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 cross_type_sets=cross_type_sets,
             )
 
-        # 8. Dilemma impacts (stored as "tension_impacts" for backward compat)
-        for j, impact in enumerate(beat.get("tension_impacts", [])):  # Legacy field name
+        # 8. Dilemma impacts
+        for j, impact in enumerate(beat.get("dilemma_impacts", [])):
             _validate_id(
-                impact.get("tension_id"),  # Legacy field name
-                "tension",  # Legacy scope for storage
+                impact.get("dilemma_id"),
+                "dilemma",
                 valid_dilemma_ids,
                 f"initial_beats.{i}.dilemma_impacts.{j}.dilemma_id",
                 errors,
@@ -1145,8 +1112,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     # 7. Validate consequence path references (internal to SEED)
     for i, consequence in enumerate(output.get("consequences", [])):
         _validate_id(
-            consequence.get("thread_id"),  # Legacy field name
-            "thread",  # Legacy scope for storage
+            consequence.get("path_id"),
+            "path",
             seed_path_ids,
             f"consequences.{i}.path_id",
             errors,
@@ -1154,10 +1121,9 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         )
 
     # 9 & 10. Check completeness: all BRAINSTORM entities and dilemmas should have decisions
-    # Note: field_path and storage_type use legacy names; display_type is for error messages
     completeness_checks = [
         ("entities", "entity", "entity", valid_entity_ids),
-        ("tensions", "tension", "dilemma", valid_dilemma_ids),  # Legacy field name
+        ("dilemmas", "dilemma", "dilemma", valid_dilemma_ids),
     ]
     for field_path, storage_type, display_type, valid_ids in completeness_checks:
         id_field = f"{storage_type}_id"
@@ -1193,16 +1159,16 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     dilemmas_with_paths: set[str] = set()
     path_dilemma_map: dict[str, str] = {}  # path_id -> dilemma_id (normalized)
     dilemma_path_counts: dict[str, int] = {}  # dilemma_id -> count of paths
-    for path in output.get("threads", []):  # Legacy field name
-        raw_dilemma_id = path.get("tension_id")  # Legacy field name
-        raw_path_id = path.get("thread_id")  # Legacy field name
+    for path in output.get("paths", []):
+        raw_dilemma_id = path.get("dilemma_id")
+        raw_path_id = path.get("path_id")
         if raw_dilemma_id:
-            normalized_did, scope_error = _normalize_id(raw_dilemma_id, "tension")
+            normalized_did, scope_error = _normalize_id(raw_dilemma_id, "dilemma")
             if not scope_error:
                 dilemmas_with_paths.add(normalized_did)
                 dilemma_path_counts[normalized_did] = dilemma_path_counts.get(normalized_did, 0) + 1
                 if raw_path_id:
-                    normalized_pid, _ = _normalize_id(raw_path_id, "thread")
+                    normalized_pid, _ = _normalize_id(raw_path_id, "path")
                     path_dilemma_map[normalized_pid] = normalized_did
 
     dilemmas_without_paths = valid_dilemma_ids - dilemmas_with_paths
@@ -1222,17 +1188,15 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
     # 11b. Check each considered answer has a path
     # For each dilemma decision, verify path count matches considered count
-    for dilemma_decision in output.get("tensions", []):  # Legacy field name
-        raw_did = dilemma_decision.get("tension_id")  # Legacy field name
+    for dilemma_decision in output.get("dilemmas", []):
+        raw_did = dilemma_decision.get("dilemma_id")
         if not raw_did:
             continue
-        normalized_did, scope_error = _normalize_id(raw_did, "tension")
+        normalized_did, scope_error = _normalize_id(raw_did, "dilemma")
         if scope_error:
             continue
 
-        # Support both new 'considered' and old 'explored' field names
-        # Use dict.get() chaining instead of 'or' to handle empty lists correctly
-        considered = dilemma_decision.get("considered", dilemma_decision.get("explored", []))
+        considered = dilemma_decision.get("considered", [])
         path_count = dilemma_path_counts.get(normalized_did, 0)
 
         if len(considered) > path_count:
@@ -1253,21 +1217,19 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
     # 11c. Check each path's answer_id is in its dilemma's considered list
     # This catches data integrity issues where paths exist but considered is empty/mismatched
-    for i, path in enumerate(output.get("threads", [])):  # Legacy field name
-        raw_did = path.get("tension_id")  # Legacy field name
-        raw_answer_id = path.get("alternative_id")  # Legacy field name
+    for i, path in enumerate(output.get("paths", [])):
+        raw_did = path.get("dilemma_id")
+        raw_answer_id = path.get("answer_id")
         if not raw_did or not raw_answer_id:
             continue
 
-        normalized_did, _ = _normalize_id(raw_did, "tension")
+        normalized_did, _ = _normalize_id(raw_did, "dilemma")
 
         # Find the corresponding dilemma decision
-        for dilemma_decision in output.get("tensions", []):  # Legacy field name
-            decision_did = strip_scope_prefix(dilemma_decision.get("tension_id", ""))
+        for dilemma_decision in output.get("dilemmas", []):
+            decision_did = strip_scope_prefix(dilemma_decision.get("dilemma_id", ""))
             if decision_did == normalized_did:
-                considered = dilemma_decision.get(
-                    "considered", dilemma_decision.get("explored", [])
-                )
+                considered = dilemma_decision.get("considered", [])
                 if raw_answer_id not in considered:
                     errors.append(
                         SeedValidationError(
@@ -1291,17 +1253,17 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     paths_with_commits: set[str] = set()  # path_ids that have a commits beat
     for i, beat in enumerate(output.get("initial_beats", [])):
         beat_path_ids: list[str] = []
-        for raw_path_id in beat.get("threads", []):  # Legacy field name
-            normalized_pid, _ = _normalize_id(raw_path_id, "thread")
+        for raw_path_id in beat.get("paths", []):
+            normalized_pid, _ = _normalize_id(raw_path_id, "path")
             beat_path_ids.append(normalized_pid)
 
         # Collect normalized dilemma_ids referenced in this beat's impacts
         beat_impact_dilemmas: set[str] = set()
         beat_impact_commits_dilemmas: set[str] = set()
-        for impact in beat.get("tension_impacts", []):  # Legacy field name
-            raw_did = impact.get("tension_id")  # Legacy field name
+        for impact in beat.get("dilemma_impacts", []):
+            raw_did = impact.get("dilemma_id")
             if raw_did:
-                normalized_did, _ = _normalize_id(raw_did, "tension")
+                normalized_did, _ = _normalize_id(raw_did, "dilemma")
                 beat_impact_dilemmas.add(normalized_did)
                 if impact.get("effect") == "commits":
                     beat_impact_commits_dilemmas.add(normalized_did)
@@ -1363,13 +1325,8 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
     Updates entity dispositions, creates paths from considered dilemmas,
     creates consequences, and creates initial beats.
 
-    Note: Graph storage uses legacy node/field names for backward compatibility:
-    - "thread" for paths (node type and field names)
-    - "tension" for dilemmas (field names)
-    - "alternative" for answers (field names)
-
     Node IDs are prefixed by type to match BRAINSTORM's namespacing:
-    - thread::raw_id (stores path data)
+    - path::raw_id
     - consequence::raw_id
     - beat::raw_id
 
@@ -1402,14 +1359,12 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 disposition=entity_decision.get("disposition", "retained"),
             )
 
-    # Update dilemma exploration decisions (stored as "tensions" for backward compat)
-    for i, dilemma_decision in enumerate(output.get("tensions", [])):
-        raw_id = _require_field(dilemma_decision, "tension_id", f"Dilemma decision at index {i}")
-        dilemma_node_id = _prefix_id("tension", raw_id)  # Uses legacy "tension" prefix
+    # Update dilemma exploration decisions
+    for i, dilemma_decision in enumerate(output.get("dilemmas", [])):
+        raw_id = _require_field(dilemma_decision, "dilemma_id", f"Dilemma decision at index {i}")
+        dilemma_node_id = _prefix_id("dilemma", raw_id)
         if graph.has_node(dilemma_node_id):
-            # Support both new 'considered' and old 'explored' field names
-            # Use dict.get() chaining instead of 'or' to handle empty lists correctly
-            considered = dilemma_decision.get("considered", dilemma_decision.get("explored", []))
+            considered = dilemma_decision.get("considered", [])
             graph.update_node(
                 dilemma_node_id,
                 considered=considered,
@@ -1417,44 +1372,41 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             )
 
     # Create paths from considered dilemmas (must be created before consequences)
-    # Note: output uses legacy field name "threads" for paths
-    for i, path in enumerate(output.get("threads", [])):
-        raw_id = _require_field(path, "thread_id", f"Path at index {i}")  # Legacy field name
-        path_node_id = _prefix_id("thread", raw_id)  # Uses legacy "thread" prefix
+    for i, path in enumerate(output.get("paths", [])):
+        raw_id = _require_field(path, "path_id", f"Path at index {i}")
+        path_node_id = _prefix_id("path", raw_id)
 
-        # Store prefixed dilemma reference (stored as "tension_id" for backward compat)
-        raw_dilemma_id = path.get("tension_id")  # Legacy field name
-        prefixed_dilemma_id = _prefix_id("tension", raw_dilemma_id) if raw_dilemma_id else None
+        # Store prefixed dilemma reference
+        raw_dilemma_id = path.get("dilemma_id")
+        prefixed_dilemma_id = _prefix_id("dilemma", raw_dilemma_id) if raw_dilemma_id else None
 
         # Prefix unexplored answers from the same dilemma
-        raw_unexplored = path.get("unexplored_alternative_ids", [])  # Legacy field name
+        raw_unexplored = path.get("unexplored_answer_ids", [])
         prefixed_unexplored = []
         if prefixed_dilemma_id:
             for unexplored_answer_id in raw_unexplored:
-                # Format: tension::dilemma_id::alt::answer_id (uses legacy prefixes)
+                # Format: dilemma::dilemma_id::alt::answer_id
                 full_unexplored_id = f"{prefixed_dilemma_id}::alt::{unexplored_answer_id}"
                 prefixed_unexplored.append(full_unexplored_id)
 
         # Look up answer's is_default_path to determine if path is canonical (spine)
         is_canonical = False
-        if prefixed_dilemma_id and "alternative_id" in path:  # Legacy field name
-            answer_local_id = path["alternative_id"]
+        if prefixed_dilemma_id and "answer_id" in path:
+            answer_local_id = path["answer_id"]
             full_answer_id = f"{prefixed_dilemma_id}::alt::{answer_local_id}"
             answer_node = graph.get_node(full_answer_id)
             if answer_node is not None:
                 is_canonical = answer_node.get("is_default_path", False)
 
-        # Build path node data (uses legacy field names for graph storage)
+        # Build path node data
         path_data = {
-            "type": "thread",  # Legacy type name for backward compat
+            "type": "path",
             "raw_id": raw_id,
             "name": path.get("name"),
-            "tension_id": prefixed_dilemma_id,  # Legacy field name
-            "alternative_id": path.get("alternative_id"),  # Legacy field name (answer_id)
-            "unexplored_alternative_ids": prefixed_unexplored,  # Legacy field name
-            "thread_importance": path.get(
-                "thread_importance"
-            ),  # Legacy field name (path_importance)
+            "dilemma_id": prefixed_dilemma_id,
+            "answer_id": path.get("answer_id"),
+            "unexplored_answer_ids": prefixed_unexplored,
+            "path_importance": path.get("path_importance"),
             "description": path.get("description"),
             "consequence_ids": path.get("consequence_ids", []),
             "is_canonical": is_canonical,  # True if exploring default answer (for spine arc)
@@ -1463,9 +1415,9 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         graph.create_node(path_node_id, path_data)
 
         # Link path to the answer it explores
-        if "alternative_id" in path and prefixed_dilemma_id:  # Legacy field name
-            answer_local_id = path["alternative_id"]
-            # Answer ID format: tension::dilemma_id::alt::answer_id (uses legacy prefixes)
+        if "answer_id" in path and prefixed_dilemma_id:
+            answer_local_id = path["answer_id"]
+            # Answer ID format: dilemma::dilemma_id::alt::answer_id
             full_answer_id = f"{prefixed_dilemma_id}::alt::{answer_local_id}"
             graph.add_edge("explores", path_node_id, full_answer_id)
 
@@ -1474,16 +1426,14 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         raw_id = _require_field(consequence, "consequence_id", f"Consequence at index {i}")
         consequence_id = _prefix_id("consequence", raw_id)
 
-        # Prefix path reference (stored as "thread_id" for backward compat)
-        raw_path_id = consequence.get("thread_id")  # Legacy field name
-        prefixed_path_id = (
-            _prefix_id("thread", raw_path_id) if raw_path_id else None
-        )  # Legacy prefix
+        # Prefix path reference
+        raw_path_id = consequence.get("path_id")
+        prefixed_path_id = _prefix_id("path", raw_path_id) if raw_path_id else None
 
         consequence_data = {
             "type": "consequence",
             "raw_id": raw_id,
-            "thread_id": prefixed_path_id,  # Legacy field name (path_id)
+            "path_id": prefixed_path_id,
             "description": consequence.get("description"),
             "narrative_effects": consequence.get("narrative_effects", []),
         }
@@ -1511,20 +1461,20 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         raw_location_alts = beat.get("location_alternatives", [])
         prefixed_location_alts = [_prefix_id("entity", eid) for eid in raw_location_alts]
 
-        # Prefix dilemma_id in dilemma_impacts (stored as "tension_impacts" for backward compat)
-        raw_impacts = beat.get("tension_impacts", [])  # Legacy field name
+        # Prefix dilemma_id in dilemma_impacts
+        raw_impacts = beat.get("dilemma_impacts", [])
         prefixed_impacts = []
         for impact in raw_impacts:
             prefixed_impact = dict(impact)
-            if "tension_id" in impact:  # Legacy field name
-                prefixed_impact["tension_id"] = _prefix_id("tension", impact["tension_id"])
+            if "dilemma_id" in impact:
+                prefixed_impact["dilemma_id"] = _prefix_id("dilemma", impact["dilemma_id"])
             prefixed_impacts.append(prefixed_impact)
 
         beat_data = {
             "type": "beat",
             "raw_id": raw_id,
             "summary": beat.get("summary"),
-            "tension_impacts": prefixed_impacts,  # Legacy field name (dilemma_impacts)
+            "dilemma_impacts": prefixed_impacts,
             "entities": prefixed_entities,
             "location": prefixed_location,
             "location_alternatives": prefixed_location_alts,
@@ -1532,9 +1482,9 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         beat_data = _clean_dict(beat_data)
         graph.create_node(beat_id, beat_data)
 
-        # Link beat to paths it belongs to (stored as "threads" for backward compat)
-        for raw_path_id in beat.get("threads", []):  # Legacy field name
-            prefixed_path_id = _prefix_id("thread", raw_path_id)  # Legacy prefix
+        # Link beat to paths it belongs to
+        for raw_path_id in beat.get("paths", []):
+            prefixed_path_id = _prefix_id("path", raw_path_id)
             graph.add_edge("belongs_to", beat_id, prefixed_path_id)
 
     # Store convergence sketch as metadata (upsert allows re-running SEED)
@@ -1574,7 +1524,7 @@ def format_semantic_errors_as_content(errors: list[SeedValidationError]) -> str:
           - 'ghost' was referenced but isn't defined
 
         Please reconsider the summary, ensuring you only reference
-        entities and tensions from the BRAINSTORM phase.
+        entities and dilemmas from the BRAINSTORM phase.
     """
     if not errors:
         return ""

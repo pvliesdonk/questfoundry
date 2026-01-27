@@ -5,12 +5,12 @@ that GROW expects from earlier stages (BRAINSTORM, SEED).
 
 Graph structure conventions:
 - Entity nodes: entity::{raw_id}
-- Tension nodes: tension::{raw_id}
-- Thread nodes: thread::{raw_id}
+- Dilemma nodes: dilemma::{raw_id}
+- Path nodes: path::{raw_id}
 - Beat nodes: beat::{raw_id}
 - Consequence nodes: consequence::{raw_id}
-- Edges: belongs_to (beat→thread), explores (thread→tension),
-         has_consequence (thread→consequence), requires (beat→beat)
+- Edges: belongs_to (beat→path), explores (path→dilemma),
+         has_consequence (path→consequence), requires (beat→beat)
 """
 
 from __future__ import annotations
@@ -18,12 +18,12 @@ from __future__ import annotations
 from questfoundry.graph.graph import Graph
 
 
-def make_single_tension_graph() -> Graph:
-    """Create a minimal graph with 1 tension, 2 threads, 4 beats.
+def make_single_dilemma_graph() -> Graph:
+    """Create a minimal graph with 1 dilemma, 2 paths, 4 beats.
 
     Structure:
-        tension: mentor_trust
-        threads: mentor_trust_canonical (canonical), mentor_trust_alt (alternative)
+        dilemma: mentor_trust
+        paths: mentor_trust_canonical (canonical), mentor_trust_alt (alternative)
         beats: opening, mentor_meet, mentor_commits_canonical, mentor_commits_alt
 
     Beat ordering (requires edges):
@@ -31,8 +31,8 @@ def make_single_tension_graph() -> Graph:
         opening → mentor_meet → mentor_commits_alt
 
     Consequences:
-        mentor_trusted (thread: mentor_trust_canonical)
-        mentor_distrusted (thread: mentor_trust_alt)
+        mentor_trusted (path: mentor_trust_canonical)
+        mentor_distrusted (path: mentor_trust_alt)
 
     Returns:
         Populated Graph instance.
@@ -59,61 +59,57 @@ def make_single_tension_graph() -> Graph:
         },
     )
 
-    # Tension
+    # Dilemma
     graph.create_node(
-        "tension::mentor_trust",
+        "dilemma::mentor_trust",
         {
-            "type": "tension",
+            "type": "dilemma",
             "raw_id": "mentor_trust",
             "question": "Does the hero trust the mentor?",
         },
     )
 
-    # Alternatives
+    # Answers
     graph.create_node(
-        "tension::mentor_trust::alt::trust_yes",
-        {"type": "alternative", "raw_id": "trust_yes", "tension_id": "mentor_trust"},
+        "dilemma::mentor_trust::alt::trust_yes",
+        {"type": "answer", "raw_id": "trust_yes", "dilemma_id": "mentor_trust"},
     )
     graph.create_node(
-        "tension::mentor_trust::alt::trust_no",
-        {"type": "alternative", "raw_id": "trust_no", "tension_id": "mentor_trust"},
+        "dilemma::mentor_trust::alt::trust_no",
+        {"type": "answer", "raw_id": "trust_no", "dilemma_id": "mentor_trust"},
     )
-    graph.add_edge(
-        "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::trust_yes"
-    )
-    graph.add_edge(
-        "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::trust_no"
-    )
+    graph.add_edge("has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::trust_yes")
+    graph.add_edge("has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::trust_no")
 
-    # Threads
+    # Paths
     graph.create_node(
-        "thread::mentor_trust_canonical",
+        "path::mentor_trust_canonical",
         {
-            "type": "thread",
+            "type": "path",
             "raw_id": "mentor_trust_canonical",
-            "tension_id": "tension::mentor_trust",
-            "alternative_id": "trust_yes",
-            "thread_importance": "major",
+            "dilemma_id": "dilemma::mentor_trust",
+            "answer_id": "trust_yes",
+            "path_importance": "major",
             "is_canonical": True,
         },
     )
     graph.create_node(
-        "thread::mentor_trust_alt",
+        "path::mentor_trust_alt",
         {
-            "type": "thread",
+            "type": "path",
             "raw_id": "mentor_trust_alt",
-            "tension_id": "tension::mentor_trust",
-            "alternative_id": "trust_no",
-            "thread_importance": "major",
+            "dilemma_id": "dilemma::mentor_trust",
+            "answer_id": "trust_no",
+            "path_importance": "major",
             "is_canonical": False,
         },
     )
 
-    # Thread → Alternative edges (explores)
+    # Path → Answer edges (explores)
     graph.add_edge(
-        "explores", "thread::mentor_trust_canonical", "tension::mentor_trust::alt::trust_yes"
+        "explores", "path::mentor_trust_canonical", "dilemma::mentor_trust::alt::trust_yes"
     )
-    graph.add_edge("explores", "thread::mentor_trust_alt", "tension::mentor_trust::alt::trust_no")
+    graph.add_edge("explores", "path::mentor_trust_alt", "dilemma::mentor_trust::alt::trust_no")
 
     # Beats
     graph.create_node(
@@ -122,7 +118,7 @@ def make_single_tension_graph() -> Graph:
             "type": "beat",
             "raw_id": "opening",
             "summary": "The story begins.",
-            "threads": ["mentor_trust_canonical", "mentor_trust_alt"],
+            "paths": ["mentor_trust_canonical", "mentor_trust_alt"],
         },
     )
     graph.create_node(
@@ -131,7 +127,7 @@ def make_single_tension_graph() -> Graph:
             "type": "beat",
             "raw_id": "mentor_meet",
             "summary": "Hero meets the mentor.",
-            "threads": ["mentor_trust_canonical", "mentor_trust_alt"],
+            "paths": ["mentor_trust_canonical", "mentor_trust_alt"],
         },
     )
     graph.create_node(
@@ -140,8 +136,8 @@ def make_single_tension_graph() -> Graph:
             "type": "beat",
             "raw_id": "mentor_commits_canonical",
             "summary": "Hero trusts the mentor fully.",
-            "threads": ["mentor_trust_canonical"],
-            "tension_impacts": [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
+            "paths": ["mentor_trust_canonical"],
+            "dilemma_impacts": [{"dilemma_id": "dilemma::mentor_trust", "effect": "commits"}],
         },
     )
     graph.create_node(
@@ -150,18 +146,18 @@ def make_single_tension_graph() -> Graph:
             "type": "beat",
             "raw_id": "mentor_commits_alt",
             "summary": "Hero rejects the mentor.",
-            "threads": ["mentor_trust_alt"],
-            "tension_impacts": [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
+            "paths": ["mentor_trust_alt"],
+            "dilemma_impacts": [{"dilemma_id": "dilemma::mentor_trust", "effect": "commits"}],
         },
     )
 
-    # Beat → Thread edges (belongs_to)
-    graph.add_edge("belongs_to", "beat::opening", "thread::mentor_trust_canonical")
-    graph.add_edge("belongs_to", "beat::opening", "thread::mentor_trust_alt")
-    graph.add_edge("belongs_to", "beat::mentor_meet", "thread::mentor_trust_canonical")
-    graph.add_edge("belongs_to", "beat::mentor_meet", "thread::mentor_trust_alt")
-    graph.add_edge("belongs_to", "beat::mentor_commits_canonical", "thread::mentor_trust_canonical")
-    graph.add_edge("belongs_to", "beat::mentor_commits_alt", "thread::mentor_trust_alt")
+    # Beat → Path edges (belongs_to)
+    graph.add_edge("belongs_to", "beat::opening", "path::mentor_trust_canonical")
+    graph.add_edge("belongs_to", "beat::opening", "path::mentor_trust_alt")
+    graph.add_edge("belongs_to", "beat::mentor_meet", "path::mentor_trust_canonical")
+    graph.add_edge("belongs_to", "beat::mentor_meet", "path::mentor_trust_alt")
+    graph.add_edge("belongs_to", "beat::mentor_commits_canonical", "path::mentor_trust_canonical")
+    graph.add_edge("belongs_to", "beat::mentor_commits_alt", "path::mentor_trust_alt")
 
     # Beat ordering (requires edges): opening → mentor_meet → commits
     graph.add_edge("requires", "beat::mentor_meet", "beat::opening")
@@ -174,7 +170,7 @@ def make_single_tension_graph() -> Graph:
         {
             "type": "consequence",
             "raw_id": "mentor_trusted",
-            "thread_id": "mentor_trust_canonical",
+            "path_id": "mentor_trust_canonical",
             "description": "The mentor becomes an ally.",
         },
     )
@@ -183,31 +179,29 @@ def make_single_tension_graph() -> Graph:
         {
             "type": "consequence",
             "raw_id": "mentor_distrusted",
-            "thread_id": "mentor_trust_alt",
+            "path_id": "mentor_trust_alt",
             "description": "The mentor becomes an adversary.",
         },
     )
-    graph.add_edge(
-        "has_consequence", "thread::mentor_trust_canonical", "consequence::mentor_trusted"
-    )
-    graph.add_edge("has_consequence", "thread::mentor_trust_alt", "consequence::mentor_distrusted")
+    graph.add_edge("has_consequence", "path::mentor_trust_canonical", "consequence::mentor_trusted")
+    graph.add_edge("has_consequence", "path::mentor_trust_alt", "consequence::mentor_distrusted")
 
     graph.set_last_stage("seed")
     return graph
 
 
-def make_two_tension_graph() -> Graph:
-    """Create a graph with 2 tensions, 4 threads, 8 beats.
+def make_two_dilemma_graph() -> Graph:
+    """Create a graph with 2 dilemmas, 4 paths, 8 beats.
 
     Structure:
-        tension: mentor_trust (2 threads: canonical, alt)
-        tension: artifact_quest (2 threads: canonical, alt)
+        dilemma: mentor_trust (2 paths: canonical, alt)
+        dilemma: artifact_quest (2 paths: canonical, alt)
 
-    Threads:
+    Paths:
         mentor_trust_canonical, mentor_trust_alt
         artifact_quest_canonical, artifact_quest_alt
 
-    Beats per thread (with shared opening/closing beats):
+    Beats per path (with shared opening/closing beats):
         opening (all threads)
         mentor_meet (mentor threads)
         artifact_discover (artifact threads)
@@ -257,39 +251,39 @@ def make_two_tension_graph() -> Graph:
         },
     )
 
-    # Tensions
+    # Dilemmas
     graph.create_node(
-        "tension::mentor_trust",
+        "dilemma::mentor_trust",
         {
-            "type": "tension",
+            "type": "dilemma",
             "raw_id": "mentor_trust",
             "question": "Does the hero trust the mentor?",
         },
     )
     graph.create_node(
-        "tension::artifact_quest",
+        "dilemma::artifact_quest",
         {
-            "type": "tension",
+            "type": "dilemma",
             "raw_id": "artifact_quest",
             "question": "Does the hero use the artifact for good?",
         },
     )
 
-    # Alternatives
+    # Answers
     for tension_id, alt_id in [
         ("mentor_trust", "trust_yes"),
         ("mentor_trust", "trust_no"),
         ("artifact_quest", "use_good"),
         ("artifact_quest", "use_selfish"),
     ]:
-        alt_node_id = f"tension::{tension_id}::alt::{alt_id}"
+        alt_node_id = f"dilemma::{tension_id}::alt::{alt_id}"
         graph.create_node(
             alt_node_id,
-            {"type": "alternative", "raw_id": alt_id, "tension_id": tension_id},
+            {"type": "answer", "raw_id": alt_id, "dilemma_id": tension_id},
         )
-        graph.add_edge("has_alternative", f"tension::{tension_id}", alt_node_id)
+        graph.add_edge("has_answer", f"dilemma::{tension_id}", alt_node_id)
 
-    # Threads
+    # Paths
     for thread_id, tension_id, alt_id, is_canon in [
         ("mentor_trust_canonical", "mentor_trust", "trust_yes", True),
         ("mentor_trust_alt", "mentor_trust", "trust_no", False),
@@ -297,57 +291,57 @@ def make_two_tension_graph() -> Graph:
         ("artifact_quest_alt", "artifact_quest", "use_selfish", False),
     ]:
         graph.create_node(
-            f"thread::{thread_id}",
+            f"path::{thread_id}",
             {
-                "type": "thread",
+                "type": "path",
                 "raw_id": thread_id,
-                "tension_id": f"tension::{tension_id}",
-                "alternative_id": alt_id,
-                "thread_importance": "major",
+                "dilemma_id": f"dilemma::{tension_id}",
+                "answer_id": alt_id,
+                "path_importance": "major",
                 "is_canonical": is_canon,
             },
         )
-        graph.add_edge("explores", f"thread::{thread_id}", f"tension::{tension_id}::alt::{alt_id}")
+        graph.add_edge("explores", f"path::{thread_id}", f"dilemma::{tension_id}::alt::{alt_id}")
 
     # Beats
-    all_threads = [
+    all_paths = [
         "mentor_trust_canonical",
         "mentor_trust_alt",
         "artifact_quest_canonical",
         "artifact_quest_alt",
     ]
-    mentor_threads = ["mentor_trust_canonical", "mentor_trust_alt"]
-    artifact_threads = ["artifact_quest_canonical", "artifact_quest_alt"]
+    mentor_paths = ["mentor_trust_canonical", "mentor_trust_alt"]
+    artifact_paths = ["artifact_quest_canonical", "artifact_quest_alt"]
 
     beats = [
-        ("opening", "The story begins.", all_threads, []),
-        ("mentor_meet", "Hero meets the mentor.", mentor_threads, []),
-        ("artifact_discover", "Hero discovers the artifact.", artifact_threads, []),
+        ("opening", "The story begins.", all_paths, []),
+        ("mentor_meet", "Hero meets the mentor.", mentor_paths, []),
+        ("artifact_discover", "Hero discovers the artifact.", artifact_paths, []),
         (
             "mentor_commits_canonical",
             "Hero trusts the mentor.",
             ["mentor_trust_canonical"],
-            [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
+            [{"dilemma_id": "dilemma::mentor_trust", "effect": "commits"}],
         ),
         (
             "mentor_commits_alt",
             "Hero distrusts the mentor.",
             ["mentor_trust_alt"],
-            [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
+            [{"dilemma_id": "dilemma::mentor_trust", "effect": "commits"}],
         ),
         (
             "artifact_commits_canonical",
             "Hero uses artifact for good.",
             ["artifact_quest_canonical"],
-            [{"tension_id": "tension::artifact_quest", "effect": "commits"}],
+            [{"dilemma_id": "dilemma::artifact_quest", "effect": "commits"}],
         ),
         (
             "artifact_commits_alt",
             "Hero uses artifact selfishly.",
             ["artifact_quest_alt"],
-            [{"tension_id": "tension::artifact_quest", "effect": "commits"}],
+            [{"dilemma_id": "dilemma::artifact_quest", "effect": "commits"}],
         ),
-        ("finale", "The conclusion.", all_threads, []),
+        ("finale", "The conclusion.", all_paths, []),
     ]
 
     for beat_id, summary, threads, impacts in beats:
@@ -357,12 +351,12 @@ def make_two_tension_graph() -> Graph:
                 "type": "beat",
                 "raw_id": beat_id,
                 "summary": summary,
-                "threads": threads,
-                "tension_impacts": impacts,
+                "paths": threads,
+                "dilemma_impacts": impacts,
             },
         )
         for thread_id in threads:
-            graph.add_edge("belongs_to", f"beat::{beat_id}", f"thread::{thread_id}")
+            graph.add_edge("belongs_to", f"beat::{beat_id}", f"path::{thread_id}")
 
     # Beat ordering (requires edges)
     # opening → mentor_meet, artifact_discover
@@ -392,11 +386,11 @@ def make_two_tension_graph() -> Graph:
             {
                 "type": "consequence",
                 "raw_id": cons_id,
-                "thread_id": thread_id,
+                "path_id": thread_id,
                 "description": desc,
             },
         )
-        graph.add_edge("has_consequence", f"thread::{thread_id}", f"consequence::{cons_id}")
+        graph.add_edge("has_consequence", f"path::{thread_id}", f"consequence::{cons_id}")
 
     graph.set_last_stage("seed")
     return graph
@@ -405,26 +399,26 @@ def make_two_tension_graph() -> Graph:
 def make_e2e_fixture_graph() -> Graph:
     """Create a detailed graph for E2E integration testing.
 
-    Structure: 2 tensions x 2 threads = 4 arcs, 10 unique beats with proper
+    Structure: 2 dilemmas x 2 paths = 4 arcs, 10 unique beats with proper
     lifecycle progression (introduces -> reveals -> advances -> commits).
 
-    Tensions:
+    Dilemmas:
         mentor_trust: Does the hero trust the mentor?
         artifact_quest: Does the hero use the artifact for good?
 
-    Threads (4 arcs):
+    Paths (4 arcs):
         mentor_trust_canonical: hero trusts the mentor
         mentor_trust_alt: hero distrusts the mentor
         artifact_quest_canonical: hero uses artifact for good
         artifact_quest_alt: hero uses artifact selfishly
 
-    Beats per thread (5 each, with shared beats):
+    Beats per path (5 each, with shared beats):
         mentor_trust_canonical: opening → mt_encounter → mt_test → mt_trust → climax
         mentor_trust_alt: opening → mt_encounter → mt_test → mt_distrust → climax
         artifact_quest_canonical: opening → aq_discovery → aq_trial → aq_wield → climax
         artifact_quest_alt: opening → aq_discovery → aq_trial → aq_corrupt → climax
 
-    Total unique beats: 10 (3 shared + 2 mentor-shared + 2 artifact-shared + 4 unique)
+    Total unique beats: 10 (3 shared + 2 mentor-shared + 2 artifact-shared + 4 unique arcs)
 
     Returns:
         Populated Graph instance ready for GROW processing.
@@ -449,116 +443,116 @@ def make_e2e_fixture_graph() -> Graph:
             },
         )
 
-    # Tensions
+    # Dilemmas
     graph.create_node(
-        "tension::mentor_trust",
+        "dilemma::mentor_trust",
         {
-            "type": "tension",
+            "type": "dilemma",
             "raw_id": "mentor_trust",
             "question": "Does the hero trust the mentor?",
         },
     )
     graph.create_node(
-        "tension::artifact_quest",
+        "dilemma::artifact_quest",
         {
-            "type": "tension",
+            "type": "dilemma",
             "raw_id": "artifact_quest",
             "question": "Does the hero use the artifact for good or selfish ends?",
         },
     )
 
-    # Alternatives
+    # Answers
     for tension_id, alt_id in [
         ("mentor_trust", "trust_yes"),
         ("mentor_trust", "trust_no"),
         ("artifact_quest", "use_good"),
         ("artifact_quest", "use_selfish"),
     ]:
-        alt_node_id = f"tension::{tension_id}::alt::{alt_id}"
+        alt_node_id = f"dilemma::{tension_id}::alt::{alt_id}"
         graph.create_node(
             alt_node_id,
-            {"type": "alternative", "raw_id": alt_id, "tension_id": tension_id},
+            {"type": "answer", "raw_id": alt_id, "dilemma_id": tension_id},
         )
-        graph.add_edge("has_alternative", f"tension::{tension_id}", alt_node_id)
+        graph.add_edge("has_answer", f"dilemma::{tension_id}", alt_node_id)
 
-    # Threads
-    thread_defs = [
+    # Paths
+    path_defs = [
         ("mentor_trust_canonical", "mentor_trust", "trust_yes", True),
         ("mentor_trust_alt", "mentor_trust", "trust_no", False),
         ("artifact_quest_canonical", "artifact_quest", "use_good", True),
         ("artifact_quest_alt", "artifact_quest", "use_selfish", False),
     ]
-    all_thread_ids = [t[0] for t in thread_defs]
-    mentor_thread_ids = [t[0] for t in thread_defs if "mentor" in t[0]]
-    artifact_thread_ids = [t[0] for t in thread_defs if "artifact" in t[0]]
+    all_path_ids = [t[0] for t in path_defs]
+    mentor_path_ids = [t[0] for t in path_defs if "mentor" in t[0]]
+    artifact_path_ids = [t[0] for t in path_defs if "artifact" in t[0]]
 
-    for thread_id, tension_id, alt_id, is_canon in thread_defs:
+    for thread_id, tension_id, alt_id, is_canon in path_defs:
         graph.create_node(
-            f"thread::{thread_id}",
+            f"path::{thread_id}",
             {
-                "type": "thread",
+                "type": "path",
                 "raw_id": thread_id,
-                "tension_id": f"tension::{tension_id}",
-                "alternative_id": alt_id,
-                "thread_importance": "major",
+                "dilemma_id": f"dilemma::{tension_id}",
+                "answer_id": alt_id,
+                "path_importance": "major",
                 "is_canonical": is_canon,
             },
         )
-        graph.add_edge("explores", f"thread::{thread_id}", f"tension::{tension_id}::alt::{alt_id}")
+        graph.add_edge("explores", f"path::{thread_id}", f"dilemma::{tension_id}::alt::{alt_id}")
 
     # Beats with lifecycle effects
     beat_defs: list[tuple[str, str, list[str], list[dict[str, str]]]] = [
         # (beat_id, summary, thread_ids, tension_impacts)
-        ("opening", "The hero leaves the village on a quest.", all_thread_ids, []),
+        ("opening", "The hero leaves the village on a quest.", all_path_ids, []),
         (
             "mt_encounter",
             "The hero meets a mysterious sage on the road.",
-            mentor_thread_ids,
-            [{"tension_id": "tension::mentor_trust", "effect": "reveals"}],
+            mentor_path_ids,
+            [{"dilemma_id": "dilemma::mentor_trust", "effect": "reveals"}],
         ),
         (
             "mt_test",
             "The mentor offers a dangerous shortcut through the caves.",
-            mentor_thread_ids,
-            [{"tension_id": "tension::mentor_trust", "effect": "advances"}],
+            mentor_path_ids,
+            [{"dilemma_id": "dilemma::mentor_trust", "effect": "advances"}],
         ),
         (
             "mt_trust",
             "The hero follows the mentor's guidance completely.",
             ["mentor_trust_canonical"],
-            [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
+            [{"dilemma_id": "dilemma::mentor_trust", "effect": "commits"}],
         ),
         (
             "mt_distrust",
             "The hero rejects the mentor and goes alone.",
             ["mentor_trust_alt"],
-            [{"tension_id": "tension::mentor_trust", "effect": "commits"}],
+            [{"dilemma_id": "dilemma::mentor_trust", "effect": "commits"}],
         ),
         (
             "aq_discovery",
             "The hero finds the crystal in the temple ruins.",
-            artifact_thread_ids,
-            [{"tension_id": "tension::artifact_quest", "effect": "reveals"}],
+            artifact_path_ids,
+            [{"dilemma_id": "dilemma::artifact_quest", "effect": "reveals"}],
         ),
         (
             "aq_trial",
             "The crystal whispers promises of power to the hero.",
-            artifact_thread_ids,
-            [{"tension_id": "tension::artifact_quest", "effect": "advances"}],
+            artifact_path_ids,
+            [{"dilemma_id": "dilemma::artifact_quest", "effect": "advances"}],
         ),
         (
             "aq_wield",
             "The hero channels the crystal to heal the village.",
             ["artifact_quest_canonical"],
-            [{"tension_id": "tension::artifact_quest", "effect": "commits"}],
+            [{"dilemma_id": "dilemma::artifact_quest", "effect": "commits"}],
         ),
         (
             "aq_corrupt",
             "The hero uses the crystal for personal gain.",
             ["artifact_quest_alt"],
-            [{"tension_id": "tension::artifact_quest", "effect": "commits"}],
+            [{"dilemma_id": "dilemma::artifact_quest", "effect": "commits"}],
         ),
-        ("climax", "The consequences of all choices converge.", all_thread_ids, []),
+        ("climax", "The consequences of all choices converge.", all_path_ids, []),
     ]
 
     for beat_id, summary, threads, impacts in beat_defs:
@@ -568,12 +562,12 @@ def make_e2e_fixture_graph() -> Graph:
                 "type": "beat",
                 "raw_id": beat_id,
                 "summary": summary,
-                "threads": threads,
-                "tension_impacts": impacts,
+                "paths": threads,
+                "dilemma_impacts": impacts,
             },
         )
         for thread_id in threads:
-            graph.add_edge("belongs_to", f"beat::{beat_id}", f"thread::{thread_id}")
+            graph.add_edge("belongs_to", f"beat::{beat_id}", f"path::{thread_id}")
 
     # Beat ordering (requires edges)
     ordering = [
@@ -609,35 +603,35 @@ def make_e2e_fixture_graph() -> Graph:
             {
                 "type": "consequence",
                 "raw_id": cons_id,
-                "thread_id": thread_id,
+                "path_id": thread_id,
                 "description": desc,
             },
         )
-        graph.add_edge("has_consequence", f"thread::{thread_id}", f"consequence::{cons_id}")
+        graph.add_edge("has_consequence", f"path::{thread_id}", f"consequence::{cons_id}")
 
     graph.set_last_stage("seed")
     return graph
 
 
-def make_knot_candidate_graph() -> Graph:
-    """Create a graph with beats from different tensions that share locations.
+def make_intersection_candidate_graph() -> Graph:
+    """Create a graph with beats from different dilemmas that share locations.
 
     Structure:
-        tension: mentor_trust (2 threads)
-        tension: artifact_quest (2 threads)
+        dilemma: mentor_trust (2 paths)
+        dilemma: artifact_quest (2 paths)
 
-    Key beats for knot testing:
+    Key beats for intersection testing:
         beat::mentor_meet: location="market", mentor_trust threads
         beat::artifact_discover: location="docks", location_alternatives=["market"],
                                  artifact_quest threads
 
     These beats share "market" as a location signal and are from different
-    tensions, making them valid knot candidates.
+    dilemmas, making them valid intersection candidates.
 
     Returns:
-        Graph with location-overlap knot candidates.
+        Graph with location-overlap intersection candidates.
     """
-    graph = make_two_tension_graph()
+    graph = make_two_dilemma_graph()
 
     # Add location data to some beats for knot detection
     graph.update_node("beat::mentor_meet", location="market")

@@ -23,6 +23,7 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
     Other phases return empty/minimal results for simplicity.
     """
     from questfoundry.models.grow import (
+        PathAgnosticAssessment,
         Phase2Output,
         Phase3Output,
         Phase4aOutput,
@@ -30,42 +31,41 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
         Phase8cOutput,
         Phase9Output,
         SceneTypeTag,
-        ThreadAgnosticAssessment,
     )
 
-    # Build Phase 2: identify shared beats (thread-agnostic)
-    tension_nodes = graph.get_nodes_by_type("tension")
-    thread_nodes = graph.get_nodes_by_type("thread")
+    # Build Phase 2: identify shared beats (path-agnostic)
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    path_nodes = graph.get_nodes_by_type("path")
     beat_nodes = graph.get_nodes_by_type("beat")
 
-    tension_threads: dict[str, list[str]] = {}
+    dilemma_paths: dict[str, list[str]] = {}
     for edge in graph.get_edges(edge_type="explores"):
-        thread_id = edge["from"]
-        tension_id = edge["to"]
-        if thread_id in thread_nodes and tension_id in tension_nodes:
-            tension_threads.setdefault(tension_id, []).append(thread_id)
+        path_id = edge["from"]
+        dilemma_id = edge["to"]
+        if path_id in path_nodes and dilemma_id in dilemma_nodes:
+            dilemma_paths.setdefault(dilemma_id, []).append(path_id)
 
-    beat_thread_map: dict[str, list[str]] = {}
+    beat_path_map: dict[str, list[str]] = {}
     for edge in graph.get_edges(edge_type="belongs_to"):
-        beat_thread_map.setdefault(edge["from"], []).append(edge["to"])
+        beat_path_map.setdefault(edge["from"], []).append(edge["to"])
 
-    assessments: list[ThreadAgnosticAssessment] = []
-    for beat_id, bt_list in beat_thread_map.items():
+    assessments: list[PathAgnosticAssessment] = []
+    for beat_id, bp_list in beat_path_map.items():
         if beat_id not in beat_nodes:
             continue
-        agnostic_tensions: list[str] = []
-        for tension_id, t_threads in tension_threads.items():
-            shared = [t for t in bt_list if t in t_threads]
+        agnostic_dilemmas: list[str] = []
+        for dilemma_id, d_paths in dilemma_paths.items():
+            shared = [p for p in bp_list if p in d_paths]
             if len(shared) > 1:
-                raw_tid = tension_nodes[tension_id].get("raw_id", tension_id)
-                agnostic_tensions.append(raw_tid)
-        if agnostic_tensions:
+                raw_did = dilemma_nodes[dilemma_id].get("raw_id", dilemma_id)
+                agnostic_dilemmas.append(raw_did)
+        if agnostic_dilemmas:
             assessments.append(
-                ThreadAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_tensions)
+                PathAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_dilemmas)
             )
 
     phase2_output = Phase2Output(assessments=assessments)
-    phase3_output = Phase3Output(knots=[])
+    phase3_output = Phase3Output(intersections=[])
 
     # Phase 4a: scene type tags for all beats
     scene_types = ["scene", "sequel", "micro_beat"]

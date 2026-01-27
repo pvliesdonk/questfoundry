@@ -82,10 +82,6 @@ class Answer(BaseModel):
         return self.answer_id
 
 
-# Backward compatibility alias
-Alternative = Answer
-
-
 class Dilemma(BaseModel):
     """A binary dramatic question with two possible answers.
 
@@ -156,10 +152,6 @@ class Dilemma(BaseModel):
     def alternatives(self) -> list[Answer]:
         """Deprecated: Use 'answers' instead."""
         return self.answers
-
-
-# Backward compatibility alias
-Tension = Dilemma
 
 
 class BrainstormOutput(BaseModel):

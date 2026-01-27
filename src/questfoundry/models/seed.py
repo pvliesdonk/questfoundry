@@ -25,10 +25,6 @@ EntityDisposition = Literal["retained", "cut"]
 PathTier = Literal["major", "minor"]
 DilemmaEffect = Literal["advances", "reveals", "commits", "complicates"]
 
-# Backward compatibility aliases
-ThreadTier = PathTier
-TensionEffect = DilemmaEffect
-
 
 class EntityDecision(BaseModel):
     """Entity curation decision from SEED.
@@ -106,10 +102,6 @@ class DilemmaDecision(BaseModel):
     def tension_id(self) -> str:
         """Deprecated: Use 'dilemma_id' instead."""
         return self.dilemma_id
-
-
-# Backward compatibility alias
-TensionDecision = DilemmaDecision
 
 
 class Consequence(BaseModel):
@@ -240,10 +232,6 @@ class Path(BaseModel):
         return self.path_importance
 
 
-# Backward compatibility alias
-Thread = Path
-
-
 class DilemmaImpact(BaseModel):
     """How a beat affects a dilemma.
 
@@ -274,10 +262,6 @@ class DilemmaImpact(BaseModel):
     def tension_id(self) -> str:
         """Deprecated: Use 'dilemma_id' instead."""
         return self.dilemma_id
-
-
-# Backward compatibility alias
-TensionImpact = DilemmaImpact
 
 
 class InitialBeat(BaseModel):

@@ -417,29 +417,29 @@ def _format_seed_valid_ids(graph: Graph) -> str:
 
     # Tensions with alternatives
     lines.append("")
-    lines.append("### Tension IDs with their Alternative IDs")
-    lines.append("Format: tension_id → [alternative_ids]")
+    lines.append("### Dilemma IDs with their Answer IDs")
+    lines.append("Format: dilemma_id → [answer_ids]")
     lines.append("")
 
-    tensions = graph.get_nodes_by_type("tension")
-    for tid, tdata in sorted(tensions.items()):
-        raw_id = tdata.get("raw_id")
-        alts = []
-        for edge in graph.get_edges(from_id=tid, edge_type="has_alternative"):
-            alt_node = graph.get_node(edge.get("to", ""))
-            if alt_node:
-                alt_id = alt_node.get("raw_id")
-                default = " (default)" if alt_node.get("is_default_path") else ""
-                alts.append(f"`{alt_id}`{default}")
+    dilemmas = graph.get_nodes_by_type("dilemma")
+    for did, ddata in sorted(dilemmas.items()):
+        raw_id = ddata.get("raw_id")
+        answers = []
+        for edge in graph.get_edges(from_id=did, edge_type="has_answer"):
+            answer_node = graph.get_node(edge.get("to", ""))
+            if answer_node:
+                answer_id = answer_node.get("raw_id")
+                default = " (default)" if answer_node.get("is_default_path") else ""
+                answers.append(f"`{answer_id}`{default}")
 
-        lines.append(f"- `{raw_id}` → [{', '.join(alts)}]")
+        lines.append(f"- `{raw_id}` → [{', '.join(answers)}]")
 
     lines.extend([
         "",
         "### Rules",
         "- Every entity above needs a decision (retained/cut)",
-        "- Every tension above needs a decision (explored/implicit alternatives)",
-        "- Thread alternative_id must be from that tension's alternatives list",
+        "- Every dilemma above needs a decision (explored/implicit answers)",
+        "- Path answer_id must be from that dilemma's answers list",
     ])
 
     return "\n".join(lines)

@@ -107,19 +107,16 @@ def _enrich_entities(graph: Graph, entity_decisions: list[dict[str, Any]]) -> li
 
 
 def _enrich_dilemmas(graph: Graph, dilemma_decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Enrich dilemma decisions with BRAINSTORM details.
-
-    Note: Graph stores dilemmas as "tension" nodes for backward compatibility.
-    """
-    # Build lookup: raw_id -> node data for dilemmas (stored as "tension" nodes)
-    dilemma_nodes = graph.get_nodes_by_type("tension")
+    """Enrich dilemma decisions with BRAINSTORM details."""
+    # Build lookup: raw_id -> node data for dilemmas
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
     dilemma_data: dict[str, dict[str, Any]] = {
         node["raw_id"]: node for node in dilemma_nodes.values() if node.get("raw_id")
     }
 
     enriched_dilemmas = []
     for decision in dilemma_decisions:
-        dilemma_id = decision.get("dilemma_id", decision.get("tension_id", ""))
+        dilemma_id = decision.get("dilemma_id", "")
         # Strip prefix if present (e.g., "d::host_motivation" -> "host_motivation")
         lookup_id = dilemma_id.split("::")[-1]
         node = dilemma_data.get(lookup_id, {}) if lookup_id else {}

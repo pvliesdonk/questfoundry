@@ -21,8 +21,8 @@ from questfoundry.graph.grow_algorithms import (
 from questfoundry.graph.mutations import GrowErrorCategory
 from questfoundry.models.grow import Arc
 from tests.fixtures.grow_fixtures import (
-    make_single_tension_graph,
-    make_two_tension_graph,
+    make_single_dilemma_graph,
+    make_two_dilemma_graph,
 )
 
 if TYPE_CHECKING:
@@ -37,7 +37,7 @@ if TYPE_CHECKING:
 class TestBuildTensionThreads:
     def test_prefixed_tension_id(self) -> None:
         """Handles prefixed tension_id on thread nodes."""
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         result = build_tension_threads(graph)
         assert "tension::mentor_trust" in result
         assert len(result["tension::mentor_trust"]) == 2
@@ -70,7 +70,7 @@ class TestBuildTensionThreads:
         assert result == {}
 
     def test_two_tension_graph(self) -> None:
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         result = build_tension_threads(graph)
         assert len(result) == 2
         assert len(result["tension::mentor_trust"]) == 2
@@ -84,7 +84,7 @@ class TestBuildTensionThreads:
 
 class TestValidateBeatDag:
     def test_valid_dag_returns_empty(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         errors = validate_beat_dag(graph)
         assert errors == []
 
@@ -127,7 +127,7 @@ class TestValidateBeatDag:
         assert errors == []
 
     def test_two_tension_graph_valid(self) -> None:
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         errors = validate_beat_dag(graph)
         assert errors == []
 
@@ -139,17 +139,17 @@ class TestValidateBeatDag:
 
 class TestValidateCommitsBeats:
     def test_complete_graph_valid(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         errors = validate_commits_beats(graph)
         assert errors == []
 
     def test_two_tension_complete(self) -> None:
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         errors = validate_commits_beats(graph)
         assert errors == []
 
     def test_missing_commits_beat(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         # Remove the tension_impacts from mentor_commits_canonical
         graph.update_node("beat::mentor_commits_canonical", tension_impacts=[])
 
@@ -284,7 +284,7 @@ class TestTopologicalSortBeats:
 
 class TestEnumerateArcs:
     def test_single_tension_two_threads(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
 
         assert len(arcs) == 2
@@ -295,18 +295,18 @@ class TestEnumerateArcs:
         assert len(branch_arcs) == 1
 
     def test_spine_is_first(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
         assert arcs[0].arc_type == "spine"
 
     def test_two_tensions_four_arcs(self) -> None:
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         arcs = enumerate_arcs(graph)
         # 2 threads x 2 threads = 4 arcs
         assert len(arcs) == 4
 
     def test_two_tensions_one_spine(self) -> None:
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         arcs = enumerate_arcs(graph)
         spine_arcs = [a for a in arcs if a.arc_type == "spine"]
         assert len(spine_arcs) == 1
@@ -316,7 +316,7 @@ class TestEnumerateArcs:
         assert "mentor_trust_canonical" in spine.threads
 
     def test_arc_id_format(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
         for arc in arcs:
             # Arc ID should be alphabetically sorted thread raw_ids joined by +
@@ -324,7 +324,7 @@ class TestEnumerateArcs:
             assert parts == sorted(parts)
 
     def test_arc_sequences_topologically_sorted(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
         for arc in arcs:
             # opening should always be first
@@ -359,7 +359,7 @@ class TestEnumerateArcs:
             enumerate_arcs(graph)
 
     def test_arc_threads_are_raw_ids(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
         for arc in arcs:
             for thread in arc.threads:
@@ -550,7 +550,7 @@ class TestPhase1Integration:
     async def test_phase_1_valid_graph(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
@@ -580,7 +580,7 @@ class TestPhase5Integration:
     async def test_phase_5_creates_arc_nodes(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         result = await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -593,7 +593,7 @@ class TestPhase5Integration:
     async def test_phase_5_creates_arc_contains_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -618,7 +618,7 @@ class TestPhase6Integration:
     async def test_phase_6_computes_divergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
 
@@ -639,7 +639,7 @@ class TestPhase6Integration:
     async def test_phase_6_creates_diverges_at_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -884,7 +884,7 @@ class TestPhase7Integration:
     async def test_phase_7_finds_convergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
 
@@ -900,7 +900,7 @@ class TestPhase7Integration:
     async def test_phase_7_creates_converges_at_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -926,7 +926,7 @@ class TestPhase7Integration:
     async def test_phase_7_updates_arc_nodes(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -946,7 +946,7 @@ class TestPhase8aIntegration:
     async def test_passages_match_beats(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         result = await stage._phase_8a_passages(graph, mock_model)
@@ -961,7 +961,7 @@ class TestPhase8aIntegration:
     async def test_passages_have_correct_structure(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_8a_passages(graph, mock_model)
@@ -977,7 +977,7 @@ class TestPhase8aIntegration:
     async def test_passage_from_edges_created(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_8a_passages(graph, mock_model)
@@ -990,7 +990,7 @@ class TestPhase8aIntegration:
     async def test_passages_from_two_tension_graph(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         result = await stage._phase_8a_passages(graph, mock_model)
@@ -1015,7 +1015,7 @@ class TestPhase8bIntegration:
     async def test_codewords_match_consequences(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         result = await stage._phase_8b_codewords(graph, mock_model)
@@ -1029,7 +1029,7 @@ class TestPhase8bIntegration:
     async def test_codeword_tracks_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_8b_codewords(graph, mock_model)
@@ -1042,7 +1042,7 @@ class TestPhase8bIntegration:
     async def test_grants_edges_assigned_to_commits_beats(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_8b_codewords(graph, mock_model)
@@ -1061,7 +1061,7 @@ class TestPhase8bIntegration:
     async def test_codeword_id_format(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_8b_codewords(graph, mock_model)
@@ -1076,7 +1076,7 @@ class TestPhase8bIntegration:
     async def test_two_tension_codewords(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         result = await stage._phase_8b_codewords(graph, mock_model)
@@ -1103,7 +1103,7 @@ class TestPhase11Integration:
     async def test_all_passages_reachable(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
 
@@ -1119,7 +1119,7 @@ class TestPhase11Integration:
     async def test_unreachable_passages_pruned(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
 
@@ -1151,7 +1151,7 @@ class TestPhase11Integration:
     async def test_prune_preserves_reachable(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -1262,16 +1262,16 @@ class TestBuildKnotCandidates:
         """No candidates when beats lack location/entity overlap."""
         from questfoundry.graph.grow_algorithms import build_knot_candidates
 
-        graph = make_two_tension_graph()  # No location data
+        graph = make_two_dilemma_graph()  # No location data
         candidates = build_knot_candidates(graph)
         assert candidates == []
 
     def test_finds_location_overlap_candidates(self) -> None:
         """Finds candidates when beats share locations across tensions."""
         from questfoundry.graph.grow_algorithms import build_knot_candidates
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
+        graph = make_intersection_candidate_graph()
         candidates = build_knot_candidates(graph)
 
         # Should find at least one candidate group with location signal
@@ -1290,7 +1290,7 @@ class TestBuildKnotCandidates:
         """No candidates when all beats belong to same tension."""
         from questfoundry.graph.grow_algorithms import build_knot_candidates
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         # Add location to single-tension beats
         graph.update_node("beat::opening", location="tavern")
         graph.update_node("beat::mentor_meet", location="tavern")
@@ -1310,9 +1310,9 @@ class TestCheckKnotCompatibility:
     def test_compatible_cross_tension_beats(self) -> None:
         """Beats from different tensions with no requires are compatible."""
         from questfoundry.graph.grow_algorithms import check_knot_compatibility
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
+        graph = make_intersection_candidate_graph()
         errors = check_knot_compatibility(graph, ["beat::mentor_meet", "beat::artifact_discover"])
         assert errors == []
 
@@ -1320,7 +1320,7 @@ class TestCheckKnotCompatibility:
         """Beats from same tension are incompatible."""
         from questfoundry.graph.grow_algorithms import check_knot_compatibility
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         errors = check_knot_compatibility(
             graph, ["beat::mentor_commits_canonical", "beat::mentor_commits_alt"]
         )
@@ -1331,7 +1331,7 @@ class TestCheckKnotCompatibility:
         """Beats with requires edge are incompatible."""
         from questfoundry.graph.grow_algorithms import check_knot_compatibility
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         # mentor_meet requires opening, and both are in the graph
         errors = check_knot_compatibility(graph, ["beat::opening", "beat::mentor_meet"])
         assert len(errors) > 0
@@ -1341,7 +1341,7 @@ class TestCheckKnotCompatibility:
         """Single beat is incompatible."""
         from questfoundry.graph.grow_algorithms import check_knot_compatibility
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         errors = check_knot_compatibility(graph, ["beat::opening"])
         assert len(errors) > 0
         assert any("at least 2" in e.issue for e in errors)
@@ -1350,7 +1350,7 @@ class TestCheckKnotCompatibility:
         """Nonexistent beat ID returns error."""
         from questfoundry.graph.grow_algorithms import check_knot_compatibility
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         errors = check_knot_compatibility(graph, ["beat::nonexistent", "beat::opening"])
         assert len(errors) > 0
         assert any("not found" in e.issue for e in errors)
@@ -1361,7 +1361,7 @@ class TestResolveKnotLocation:
         """Resolves to shared primary location."""
         from questfoundry.graph.grow_algorithms import resolve_knot_location
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         graph.update_node("beat::mentor_meet", location="market")
         graph.update_node("beat::artifact_discover", location="market")
 
@@ -1371,9 +1371,9 @@ class TestResolveKnotLocation:
     def test_primary_in_alternatives(self) -> None:
         """Resolves when primary of one is in alternatives of another."""
         from questfoundry.graph.grow_algorithms import resolve_knot_location
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
+        graph = make_intersection_candidate_graph()
         location = resolve_knot_location(graph, ["beat::mentor_meet", "beat::artifact_discover"])
         assert location == "market"
 
@@ -1381,7 +1381,7 @@ class TestResolveKnotLocation:
         """Returns None when no shared location exists."""
         from questfoundry.graph.grow_algorithms import resolve_knot_location
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         graph.update_node("beat::mentor_meet", location="market")
         graph.update_node("beat::artifact_discover", location="forest")
 
@@ -1392,7 +1392,7 @@ class TestResolveKnotLocation:
         """Returns None when beats have no location data."""
         from questfoundry.graph.grow_algorithms import resolve_knot_location
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         location = resolve_knot_location(graph, ["beat::mentor_meet", "beat::artifact_discover"])
         assert location is None
 
@@ -1401,9 +1401,9 @@ class TestApplyKnotMark:
     def test_marks_beats_with_intersection_group(self) -> None:
         """Applying knot mark updates beat nodes."""
         from questfoundry.graph.grow_algorithms import apply_knot_mark
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
+        graph = make_intersection_candidate_graph()
         apply_knot_mark(
             graph,
             ["beat::mentor_meet", "beat::artifact_discover"],
@@ -1421,9 +1421,9 @@ class TestApplyKnotMark:
     def test_adds_cross_thread_belongs_to_edges(self) -> None:
         """Knot marking adds belongs_to edges for cross-thread assignment."""
         from questfoundry.graph.grow_algorithms import apply_knot_mark
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
+        graph = make_intersection_candidate_graph()
         apply_knot_mark(
             graph,
             ["beat::mentor_meet", "beat::artifact_discover"],
@@ -1444,7 +1444,7 @@ class TestApplyKnotMark:
         """When resolved_location is None, location field is not added."""
         from questfoundry.graph.grow_algorithms import apply_knot_mark
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         apply_knot_mark(
             graph,
             ["beat::mentor_meet", "beat::artifact_discover"],
@@ -1475,6 +1475,7 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
     from unittest.mock import AsyncMock
 
     from questfoundry.models.grow import (
+        PathAgnosticAssessment,
         Phase2Output,
         Phase3Output,
         Phase4aOutput,
@@ -1482,44 +1483,42 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         Phase8cOutput,
         Phase9Output,
         SceneTypeTag,
-        ThreadAgnosticAssessment,
     )
 
     # Build Phase 2 response based on graph structure
-    tension_nodes = graph.get_nodes_by_type("tension")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
     beat_nodes = graph.get_nodes_by_type("beat")
 
-    # Build tension -> threads mapping from thread node tension_id properties
-    from questfoundry.graph.grow_algorithms import build_tension_threads
+    # Build dilemma -> paths mapping from path node dilemma_id properties
+    from questfoundry.graph.grow_algorithms import build_dilemma_paths
 
-    tension_threads_raw = build_tension_threads(graph)
-    tension_threads: dict[str, list[str]] = dict(tension_threads_raw)
+    dilemma_paths_raw = build_dilemma_paths(graph)
 
-    # Build beat -> threads via belongs_to
-    beat_threads: dict[str, list[str]] = {}
+    # Build beat -> paths via belongs_to
+    beat_paths: dict[str, list[str]] = {}
     belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
     for edge in belongs_to_edges:
-        beat_threads.setdefault(edge["from"], []).append(edge["to"])
+        beat_paths.setdefault(edge["from"], []).append(edge["to"])
 
     # Find shared beats and mark all as agnostic for simplicity
-    assessments: list[ThreadAgnosticAssessment] = []
-    for beat_id, bt_list in beat_threads.items():
+    assessments: list[PathAgnosticAssessment] = []
+    for beat_id, bp_list in beat_paths.items():
         if beat_id not in beat_nodes:
             continue
-        agnostic_tensions: list[str] = []
-        for tension_id, t_threads in tension_threads.items():
-            shared = [t for t in bt_list if t in t_threads]
+        agnostic_dilemmas: list[str] = []
+        for dilemma_id, d_paths in dilemma_paths_raw.items():
+            shared = [p for p in bp_list if p in d_paths]
             if len(shared) > 1:
-                raw_tid = tension_nodes[tension_id].get("raw_id", tension_id)
-                agnostic_tensions.append(raw_tid)
-        if agnostic_tensions:
+                raw_did = dilemma_nodes[dilemma_id].get("raw_id", dilemma_id)
+                agnostic_dilemmas.append(raw_did)
+        if agnostic_dilemmas:
             assessments.append(
-                ThreadAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_tensions)
+                PathAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_dilemmas)
             )
 
     # Pre-build outputs for each phase
     phase2_output = Phase2Output(assessments=assessments)
-    phase3_output = Phase3Output(knots=[])
+    phase3_output = Phase3Output(intersections=[])
 
     # Phase 4a: tag all beats with alternating scene types
     scene_types = ["scene", "sequel", "micro_beat"]
@@ -1566,7 +1565,7 @@ class TestPhaseIntegrationEndToEnd:
     async def test_all_phases_full_run(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
@@ -1596,7 +1595,7 @@ class TestPhaseIntegrationEndToEnd:
     async def test_single_tension_full_run(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
@@ -1615,7 +1614,7 @@ class TestPhaseIntegrationEndToEnd:
     async def test_final_graph_has_expected_nodes(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
@@ -1630,14 +1629,14 @@ class TestPhaseIntegrationEndToEnd:
         assert len(saved_graph.get_nodes_by_type("passage")) == 8
         assert len(saved_graph.get_nodes_by_type("codeword")) == 4
         assert len(saved_graph.get_nodes_by_type("beat")) == 8
-        assert len(saved_graph.get_nodes_by_type("tension")) == 2
-        assert len(saved_graph.get_nodes_by_type("thread")) == 4
+        assert len(saved_graph.get_nodes_by_type("dilemma")) == 2
+        assert len(saved_graph.get_nodes_by_type("path")) == 4
 
     @pytest.mark.asyncio
     async def test_final_graph_has_expected_edges(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
@@ -1670,7 +1669,7 @@ class TestGetThreadBeatSequence:
         """Beats are returned in dependency order."""
         from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         sequence = get_thread_beat_sequence(graph, "thread::mentor_trust_canonical")
         # opening → mentor_meet → mentor_commits_canonical
         assert sequence == [
@@ -1683,7 +1682,7 @@ class TestGetThreadBeatSequence:
         """Empty result for nonexistent thread."""
         from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         sequence = get_thread_beat_sequence(graph, "thread::nonexistent")
         assert sequence == []
 
@@ -1706,7 +1705,7 @@ class TestGetThreadBeatSequence:
         """Alternative thread has its own sequence."""
         from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         sequence = get_thread_beat_sequence(graph, "thread::mentor_trust_alt")
         assert sequence == [
             "beat::opening",
@@ -1737,7 +1736,7 @@ class TestDetectPacingIssues:
         """No issues when beats lack scene_type."""
         from questfoundry.graph.grow_algorithms import detect_pacing_issues
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         issues = detect_pacing_issues(graph)
         assert issues == []
 
@@ -1745,7 +1744,7 @@ class TestDetectPacingIssues:
         """Flags 3+ consecutive beats with same scene_type."""
         from questfoundry.graph.grow_algorithms import detect_pacing_issues
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         # Tag all canonical thread beats as "scene"
         graph.update_node("beat::opening", scene_type="scene")
         graph.update_node("beat::mentor_meet", scene_type="scene")
@@ -1761,7 +1760,7 @@ class TestDetectPacingIssues:
         """No issues when scene types alternate."""
         from questfoundry.graph.grow_algorithms import detect_pacing_issues
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         graph.update_node("beat::opening", scene_type="scene")
         graph.update_node("beat::mentor_meet", scene_type="sequel")
         graph.update_node("beat::mentor_commits_canonical", scene_type="scene")
@@ -1790,7 +1789,7 @@ class TestInsertGapBeat:
         """Creates a new beat node with correct data."""
         from questfoundry.graph.grow_algorithms import insert_gap_beat
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         beat_id = insert_gap_beat(
             graph,
             thread_id="thread::mentor_trust_canonical",
@@ -1812,7 +1811,7 @@ class TestInsertGapBeat:
         """New beat gets requires edges for ordering."""
         from questfoundry.graph.grow_algorithms import insert_gap_beat
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         beat_id = insert_gap_beat(
             graph,
             thread_id="thread::mentor_trust_canonical",
@@ -1838,7 +1837,7 @@ class TestInsertGapBeat:
         """New beat gets belongs_to edge for thread."""
         from questfoundry.graph.grow_algorithms import insert_gap_beat
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         beat_id = insert_gap_beat(
             graph,
             thread_id="thread::mentor_trust_canonical",
@@ -1857,7 +1856,7 @@ class TestInsertGapBeat:
         """Handles insertion at start of thread."""
         from questfoundry.graph.grow_algorithms import insert_gap_beat
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         beat_id = insert_gap_beat(
             graph,
             thread_id="thread::mentor_trust_canonical",

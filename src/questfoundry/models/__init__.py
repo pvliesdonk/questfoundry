@@ -12,18 +12,14 @@ Terminology (v5):
 - path (was: thread): Routes exploring specific answers to dilemmas
 - answer (was: alternative): Possible resolutions to dilemmas
 - intersection (was: knot): Beats serving multiple paths
-
-Old names are kept as aliases for backward compatibility.
 """
 
 from questfoundry.models.brainstorm import (
-    Alternative,  # Alias for Answer
     Answer,
     BrainstormOutput,
     Dilemma,
     Entity,
     EntityType,
-    Tension,  # Alias for Dilemma
 )
 from questfoundry.models.dream import (
     ContentNotes,
@@ -40,7 +36,6 @@ from questfoundry.models.grow import (
     GrowPhaseResult,
     GrowResult,
     IntersectionProposal,
-    KnotProposal,  # Alias for IntersectionProposal
     OverlayProposal,
     Passage,
     PathAgnosticAssessment,
@@ -51,7 +46,6 @@ from questfoundry.models.grow import (
     Phase8cOutput,
     Phase9Output,
     SceneTypeTag,
-    ThreadAgnosticAssessment,  # Alias for PathAgnosticAssessment
 )
 from questfoundry.models.seed import (
     Consequence,
@@ -65,15 +59,9 @@ from questfoundry.models.seed import (
     Path,
     PathTier,
     SeedOutput,
-    TensionDecision,  # Alias for DilemmaDecision
-    TensionEffect,  # Alias for DilemmaEffect
-    TensionImpact,  # Alias for DilemmaImpact
-    Thread,  # Alias for Path
-    ThreadTier,  # Alias for PathTier
 )
 
 __all__ = [
-    "Alternative",  # Alias for Answer
     "Answer",
     "Arc",
     "BrainstormOutput",
@@ -98,7 +86,6 @@ __all__ = [
     "GrowResult",
     "InitialBeat",
     "IntersectionProposal",
-    "KnotProposal",  # Alias for IntersectionProposal
     "OverlayProposal",
     "Passage",
     "Path",
@@ -113,11 +100,4 @@ __all__ = [
     "SceneTypeTag",
     "Scope",
     "SeedOutput",
-    "Tension",  # Alias for Dilemma
-    "TensionDecision",  # Alias for DilemmaDecision
-    "TensionEffect",  # Alias for DilemmaEffect
-    "TensionImpact",  # Alias for DilemmaImpact
-    "Thread",  # Alias for Path
-    "ThreadAgnosticAssessment",  # Alias for PathAgnosticAssessment
-    "ThreadTier",  # Alias for PathTier
 ]

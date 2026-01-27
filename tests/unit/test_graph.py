@@ -198,9 +198,9 @@ class TestNodeOperations:
         assert "char_001" in entities
         assert "char_002" in entities
 
-        tensions = graph.get_nodes_by_type("tension")
-        assert len(tensions) == 1
-        assert "tension_001" in tensions
+        dilemmas = graph.get_nodes_by_type("dilemma")
+        assert len(dilemmas) == 1
+        assert "dilemma_001" in dilemmas
 
         visions = graph.get_nodes_by_type("vision")
         assert len(visions) == 1

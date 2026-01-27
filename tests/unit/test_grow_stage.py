@@ -244,9 +244,9 @@ class TestPhase2ThreadAgnostic:
     async def test_phase_2_with_valid_assessments(self) -> None:
         """Phase 2 with mocked LLM returns valid assessments and updates beats."""
         from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         # Mock model returns assessments for shared beats
@@ -308,9 +308,9 @@ class TestPhase2ThreadAgnostic:
     async def test_phase_2_filters_invalid_beat_ids(self) -> None:
         """Phase 2 filters out assessments with invalid beat IDs."""
         from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         # Mock returns one valid and one invalid assessment
@@ -540,9 +540,9 @@ class TestPhase3Knots:
     async def test_phase_3_with_valid_proposals(self) -> None:
         """Phase 3 with mocked LLM returns valid knot proposals."""
         from questfoundry.models.grow import KnotProposal, Phase3Output
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
+        graph = make_intersection_candidate_graph()
         stage = GrowStage()
 
         # Mock model returns a knot grouping the two location-overlapping beats
@@ -594,9 +594,9 @@ class TestPhase3Knots:
     async def test_phase_3_skips_incompatible_intersections(self) -> None:
         """Phase 3 skips intersections that fail compatibility check."""
         from questfoundry.models.grow import KnotProposal, Phase3Output
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
+        graph = make_intersection_candidate_graph()
         stage = GrowStage()
 
         # Propose an intersection with beats from the SAME dilemma (invalid)
@@ -625,9 +625,9 @@ class TestPhase3Knots:
     async def test_phase_3_filters_invalid_beat_ids(self) -> None:
         """Phase 3 skips proposals with nonexistent beat IDs."""
         from questfoundry.models.grow import KnotProposal, Phase3Output
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
+        graph = make_intersection_candidate_graph()
         stage = GrowStage()
 
         phase3_output = Phase3Output(
@@ -654,9 +654,9 @@ class TestPhase3Knots:
     async def test_phase_3_skips_requires_conflict(self) -> None:
         """Phase 3 skips knots where beats have requires dependency."""
         from questfoundry.models.grow import KnotProposal, Phase3Output
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
+        graph = make_intersection_candidate_graph()
         stage = GrowStage()
 
         # opening requires mentor_meet — these have a requires dependency
@@ -691,9 +691,9 @@ class TestPhase4aSceneTypes:
     async def test_phase_4a_tags_beats(self) -> None:
         """Phase 4a tags beats with scene type classifications."""
         from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         phase4a_output = Phase4aOutput(
@@ -726,9 +726,9 @@ class TestPhase4aSceneTypes:
     async def test_phase_4a_skips_invalid_beat_ids(self) -> None:
         """Phase 4a skips tags with non-existent beat IDs."""
         from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         phase4a_output = Phase4aOutput(
@@ -768,9 +768,9 @@ class TestValidateAndInsertGaps:
     def test_unprefixed_thread_id_gets_warning_and_prefix(self) -> None:
         """Helper auto-prefixes thread_id and logs warning."""
         from questfoundry.models.grow import GapProposal
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         gaps = [
@@ -782,12 +782,10 @@ class TestValidateAndInsertGaps:
                 scene_type="sequel",
             ),
         ]
-        thread_nodes = graph.get_nodes_by_type("thread")
+        path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_canonical"}
 
-        inserted = stage._validate_and_insert_gaps(
-            graph, gaps, thread_nodes, beat_ids, "test_phase"
-        )
+        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
 
         assert inserted == 1
         # Verify the beat was inserted
@@ -798,9 +796,9 @@ class TestValidateAndInsertGaps:
     def test_invalid_thread_id_skipped(self) -> None:
         """Helper skips gaps with thread_ids not in valid set."""
         from questfoundry.models.grow import GapProposal
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         gaps = [
@@ -812,20 +810,18 @@ class TestValidateAndInsertGaps:
                 scene_type="sequel",
             ),
         ]
-        thread_nodes = graph.get_nodes_by_type("thread")
+        path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet"}
 
-        inserted = stage._validate_and_insert_gaps(
-            graph, gaps, thread_nodes, beat_ids, "test_phase"
-        )
+        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
         assert inserted == 0
 
     def test_invalid_beat_order_skipped(self) -> None:
         """Helper skips gaps where after_beat comes after before_beat."""
         from questfoundry.models.grow import GapProposal
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         gaps = [
@@ -837,20 +833,18 @@ class TestValidateAndInsertGaps:
                 scene_type="sequel",
             ),
         ]
-        thread_nodes = graph.get_nodes_by_type("thread")
+        path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_canonical"}
 
-        inserted = stage._validate_and_insert_gaps(
-            graph, gaps, thread_nodes, beat_ids, "test_phase"
-        )
+        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
         assert inserted == 0
 
     def test_invalid_after_beat_skipped(self) -> None:
         """Helper skips gaps with after_beat not in valid IDs."""
         from questfoundry.models.grow import GapProposal
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         gaps = [
@@ -862,20 +856,18 @@ class TestValidateAndInsertGaps:
                 scene_type="sequel",
             ),
         ]
-        thread_nodes = graph.get_nodes_by_type("thread")
+        path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet"}
 
-        inserted = stage._validate_and_insert_gaps(
-            graph, gaps, thread_nodes, beat_ids, "test_phase"
-        )
+        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
         assert inserted == 0
 
     def test_invalid_before_beat_skipped(self) -> None:
         """Helper skips gaps with before_beat not in valid IDs."""
         from questfoundry.models.grow import GapProposal
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         gaps = [
@@ -887,20 +879,18 @@ class TestValidateAndInsertGaps:
                 scene_type="sequel",
             ),
         ]
-        thread_nodes = graph.get_nodes_by_type("thread")
+        path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet"}
 
-        inserted = stage._validate_and_insert_gaps(
-            graph, gaps, thread_nodes, beat_ids, "test_phase"
-        )
+        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
         assert inserted == 0
 
     def test_beat_in_valid_ids_but_not_in_sequence_skipped(self) -> None:
         """Helper skips gaps where beat is valid but not in the thread's sequence."""
         from questfoundry.models.grow import GapProposal
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         # mentor_commits_alt is a valid beat but belongs to thread::mentor_trust_alt,
@@ -914,20 +904,18 @@ class TestValidateAndInsertGaps:
                 scene_type="sequel",
             ),
         ]
-        thread_nodes = graph.get_nodes_by_type("thread")
+        path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_alt"}
 
-        inserted = stage._validate_and_insert_gaps(
-            graph, gaps, thread_nodes, beat_ids, "test_phase"
-        )
+        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
         assert inserted == 0
 
     def test_gap_with_only_after_beat_inserted(self) -> None:
         """Helper inserts gap when only after_beat is set (no ordering check)."""
         from questfoundry.models.grow import GapProposal
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         gaps = [
@@ -939,12 +927,10 @@ class TestValidateAndInsertGaps:
                 scene_type="sequel",
             ),
         ]
-        thread_nodes = graph.get_nodes_by_type("thread")
+        path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_canonical"}
 
-        inserted = stage._validate_and_insert_gaps(
-            graph, gaps, thread_nodes, beat_ids, "test_phase"
-        )
+        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
         assert inserted == 1
         # Verify gap beat was created
         beat_nodes = graph.get_nodes_by_type("beat")
@@ -957,9 +943,9 @@ class TestPhase4bNarrativeGaps:
     async def test_phase_4b_inserts_gap_beats(self) -> None:
         """Phase 4b inserts gap beats from LLM proposals."""
         from questfoundry.models.grow import GapProposal, Phase4bOutput
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         phase4b_output = Phase4bOutput(
@@ -994,9 +980,9 @@ class TestPhase4bNarrativeGaps:
     async def test_phase_4b_skips_invalid_thread(self) -> None:
         """Phase 4b skips gap proposals with invalid thread IDs."""
         from questfoundry.models.grow import GapProposal, Phase4bOutput
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
 
         phase4b_output = Phase4bOutput(
@@ -2117,9 +2103,9 @@ class TestPhase8cErrorHandling:
         """Phase 8c returns failed GrowPhaseResult when LLM call fails."""
         from unittest.mock import patch
 
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         # Add codeword and consequence nodes so we pass the early guard
         graph.create_node(
             "consequence::trust_gain",

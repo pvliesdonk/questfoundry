@@ -5,9 +5,9 @@ Phase orchestration lives in pipeline/stages/grow.py.
 
 Algorithm summary:
 - validate_beat_dag: Kahn's algorithm for cycle detection in requires edges
-- validate_commits_beats: Verify each explored tension has commits beat per thread
+- validate_commits_beats: Verify each explored dilemma has commits beat per path
 - topological_sort_beats: Stable topological sort with alphabetical tie-breaking
-- enumerate_arcs: Cartesian product of threads across tensions
+- enumerate_arcs: Cartesian product of paths across dilemmas
 - compute_divergence_points: Find where arcs diverge from the spine
 """
 
@@ -27,8 +27,8 @@ if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
 # Maximum number of arcs before triggering COMBINATORIAL error.
-# With 2 tensions x 2 threads each = 4 arcs. With 5 tensions x 2 threads = 32 arcs.
-# With 6 tensions x 2 threads = 64 arcs. Beyond 64 arcs, processing becomes very
+# With 2 dilemmas x 2 paths each = 4 arcs. With 5 dilemmas x 2 paths = 32 arcs.
+# With 6 dilemmas x 2 paths = 64 arcs. Beyond 64 arcs, processing becomes very
 # expensive and the story structure may be difficult to navigate.
 _MAX_ARC_COUNT = 64
 
@@ -36,12 +36,8 @@ _MAX_ARC_COUNT = 64
 def build_dilemma_paths(graph: Graph) -> dict[str, list[str]]:
     """Build dilemma → paths mapping from path node dilemma_id properties.
 
-    Uses the dilemma_id property (stored as tension_id in graph) on path nodes
-    instead of explores edges, since explores edges point to answers (not dilemmas)
-    in real SEED output.
-
-    Note: Graph stores paths as "thread" nodes and dilemmas as "tension" nodes
-    for backward compatibility.
+    Uses the dilemma_id property on path nodes instead of explores edges,
+    since explores edges point to answers (not dilemmas) in real SEED output.
 
     Args:
         graph: Graph containing dilemma and path nodes.
@@ -49,21 +45,16 @@ def build_dilemma_paths(graph: Graph) -> dict[str, list[str]]:
     Returns:
         Dict mapping dilemma node ID → list of path node IDs.
     """
-    # Graph uses "tension" for dilemmas and "thread" for paths
-    dilemma_nodes = graph.get_nodes_by_type("tension")
-    path_nodes = graph.get_nodes_by_type("thread")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    path_nodes = graph.get_nodes_by_type("path")
     dilemma_paths: dict[str, list[str]] = defaultdict(list)
     for path_id, path_data in path_nodes.items():
-        dilemma_id = path_data.get("tension_id")
+        dilemma_id = path_data.get("dilemma_id")
         if dilemma_id:
-            prefixed = normalize_scoped_id(dilemma_id, "tension")
+            prefixed = normalize_scoped_id(dilemma_id, "dilemma")
             if prefixed in dilemma_nodes:
                 dilemma_paths[prefixed].append(path_id)
     return dilemma_paths
-
-
-# Backward compatibility alias - will be removed in a future version
-build_tension_threads = build_dilemma_paths
 
 
 @dataclass
@@ -146,48 +137,48 @@ def validate_beat_dag(graph: Graph) -> list[GrowValidationError]:
 
 
 def validate_commits_beats(graph: Graph) -> list[GrowValidationError]:
-    """Validate that each explored tension has a commits beat per thread.
+    """Validate that each explored dilemma has a commits beat per path.
 
-    For each tension that has threads exploring it, every thread must have
-    at least one beat with a tension_impact of effect="commits" for that tension.
+    For each dilemma that has paths exploring it, every path must have
+    at least one beat with a dilemma_impact of effect="commits" for that dilemma.
 
     Args:
-        graph: Graph containing tension, thread, and beat nodes.
+        graph: Graph containing dilemma, path, and beat nodes.
 
     Returns:
-        List of validation errors for threads missing commits beats.
+        List of validation errors for paths missing commits beats.
     """
     errors: list[GrowValidationError] = []
 
-    # Get all tensions that have exploring threads
-    tension_nodes = graph.get_nodes_by_type("tension")
-    thread_nodes = graph.get_nodes_by_type("thread")
+    # Get all dilemmas that have exploring paths
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    path_nodes = graph.get_nodes_by_type("path")
 
-    # Build tension → threads mapping from thread node tension_id properties
-    tension_threads = build_tension_threads(graph)
+    # Build dilemma → paths mapping from path node dilemma_id properties
+    dilemma_paths = build_dilemma_paths(graph)
 
-    # Build thread → beats mapping via belongs_to edges
-    thread_beats: dict[str, list[str]] = defaultdict(list)
+    # Build path → beats mapping via belongs_to edges
+    path_beats: dict[str, list[str]] = defaultdict(list)
     belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
     for edge in belongs_to_edges:
         beat_id = edge["from"]
-        thread_id = edge["to"]
-        thread_beats[thread_id].append(beat_id)
+        path_id = edge["to"]
+        path_beats[path_id].append(beat_id)
 
-    # For each tension's threads, check for commits beats
+    # For each dilemma's paths, check for commits beats
     beat_nodes = graph.get_nodes_by_type("beat")
-    for tension_id, threads in sorted(tension_threads.items()):
-        tension_raw = tension_nodes[tension_id].get("raw_id", tension_id)
-        for thread_id in sorted(threads):
-            thread_raw = thread_nodes[thread_id].get("raw_id", thread_id)
-            beats_in_thread = thread_beats.get(thread_id, [])
+    for dilemma_id, paths in sorted(dilemma_paths.items()):
+        dilemma_raw = dilemma_nodes[dilemma_id].get("raw_id", dilemma_id)
+        for path_id in sorted(paths):
+            path_raw = path_nodes[path_id].get("raw_id", path_id)
+            beats_in_path = path_beats.get(path_id, [])
 
             has_commits = False
-            for beat_id in beats_in_thread:
+            for beat_id in beats_in_path:
                 beat_data = beat_nodes.get(beat_id, {})
-                impacts = beat_data.get("tension_impacts", [])
+                impacts = beat_data.get("dilemma_impacts", [])
                 for impact in impacts:
-                    if impact.get("tension_id") == tension_id and impact.get("effect") == "commits":
+                    if impact.get("dilemma_id") == dilemma_id and impact.get("effect") == "commits":
                         has_commits = True
                         break
                 if has_commits:
@@ -196,9 +187,9 @@ def validate_commits_beats(graph: Graph) -> list[GrowValidationError]:
             if not has_commits:
                 errors.append(
                     GrowValidationError(
-                        field_path=f"thread.{thread_raw}.commits",
+                        field_path=f"path.{path_raw}.commits",
                         issue=(
-                            f"Thread '{thread_raw}' has no commits beat for tension '{tension_raw}'"
+                            f"Path '{path_raw}' has no commits beat for dilemma '{dilemma_raw}'"
                         ),
                         category=GrowErrorCategory.STRUCTURAL,
                     )
@@ -274,64 +265,64 @@ def topological_sort_beats(graph: Graph, beat_ids: list[str]) -> list[str]:
 
 
 def enumerate_arcs(graph: Graph) -> list[Arc]:
-    """Enumerate all arcs from the Cartesian product of threads across tensions.
+    """Enumerate all arcs from the Cartesian product of paths across dilemmas.
 
-    For each tension, collects its threads. Takes the Cartesian product across
-    all tensions to produce arc combinations. Each arc gets the beats that
-    belong to ANY of its constituent threads, topologically sorted.
+    For each dilemma, collects its paths. Takes the Cartesian product across
+    all dilemmas to produce arc combinations. Each arc gets the beats that
+    belong to ANY of its constituent paths, topologically sorted.
 
-    The spine arc contains all canonical threads. Branch arcs contain at least
-    one non-canonical thread.
+    The spine arc contains all canonical paths. Branch arcs contain at least
+    one non-canonical path.
 
     Args:
-        graph: Graph containing tension, thread, and beat nodes.
+        graph: Graph containing dilemma, path, and beat nodes.
 
     Returns:
         List of Arc models, spine first, then branches sorted by ID.
 
     Raises:
-        None - returns empty list if no tensions/threads exist.
+        None - returns empty list if no dilemmas/paths exist.
     """
-    tension_nodes = graph.get_nodes_by_type("tension")
-    thread_nodes = graph.get_nodes_by_type("thread")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    path_nodes = graph.get_nodes_by_type("path")
 
-    if not tension_nodes or not thread_nodes:
+    if not dilemma_nodes or not path_nodes:
         return []
 
-    # Build tension → threads mapping from thread node tension_id properties
-    tension_threads = build_tension_threads(graph)
+    # Build dilemma → paths mapping from path node dilemma_id properties
+    dilemma_paths_map = build_dilemma_paths(graph)
 
-    # Sort threads within each tension for determinism
-    for threads in tension_threads.values():
-        threads.sort()
+    # Sort paths within each dilemma for determinism
+    for paths in dilemma_paths_map.values():
+        paths.sort()
 
-    # Get thread lists per tension (sorted by tension ID for determinism)
-    sorted_tensions = sorted(tension_threads.keys())
-    thread_lists = [tension_threads[tid] for tid in sorted_tensions]
+    # Get path lists per dilemma (sorted by dilemma ID for determinism)
+    sorted_dilemmas = sorted(dilemma_paths_map.keys())
+    path_lists = [dilemma_paths_map[did] for did in sorted_dilemmas]
 
-    if not thread_lists or any(not tl for tl in thread_lists):
+    if not path_lists or any(not pl for pl in path_lists):
         return []
 
-    # Build thread → beat set mapping via belongs_to
-    thread_beat_sets: dict[str, set[str]] = defaultdict(set)
+    # Build path → beat set mapping via belongs_to
+    path_beat_sets: dict[str, set[str]] = defaultdict(set)
     belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
     for edge in belongs_to_edges:
         beat_id = edge["from"]
-        thread_id = edge["to"]
-        thread_beat_sets[thread_id].add(beat_id)
+        path_id = edge["to"]
+        path_beat_sets[path_id].add(beat_id)
 
-    # Cartesian product of threads
+    # Cartesian product of paths
     arcs: list[Arc] = []
-    for combo in product(*thread_lists):
-        thread_combo = list(combo)
+    for combo in product(*path_lists):
+        path_combo = list(combo)
         # Get raw_ids for arc naming (sorted alphabetically)
-        thread_raw_ids = sorted(thread_nodes[tid].get("raw_id", tid) for tid in thread_combo)
-        arc_id = "+".join(thread_raw_ids)
+        path_raw_ids = sorted(path_nodes[pid].get("raw_id", pid) for pid in path_combo)
+        arc_id = "+".join(path_raw_ids)
 
-        # Collect beats: beats that belong to ANY thread in the combo
+        # Collect beats: beats that belong to ANY path in the combo
         beat_set: set[str] = set()
-        for tid in thread_combo:
-            beat_set.update(thread_beat_sets.get(tid, set()))
+        for pid in path_combo:
+            beat_set.update(path_beat_sets.get(pid, set()))
 
         # Topological sort of the beats
         try:
@@ -340,13 +331,13 @@ def enumerate_arcs(graph: Graph) -> list[Arc]:
             sequence = sorted(beat_set)  # Fallback for cycles (Phase 1 should catch)
 
         # Determine if spine (all canonical)
-        is_spine = all(thread_nodes[tid].get("is_canonical", False) for tid in thread_combo)
+        is_spine = all(path_nodes[pid].get("is_canonical", False) for pid in path_combo)
 
         arcs.append(
             Arc(
                 arc_id=arc_id,
                 arc_type="spine" if is_spine else "branch",
-                paths=thread_raw_ids,  # paths is the new field name (was threads)
+                paths=path_raw_ids,
                 sequence=sequence,
             )
         )
@@ -356,7 +347,7 @@ def enumerate_arcs(graph: Graph) -> list[Arc]:
         # This will be caught by the phase and raised as GrowMutationError
         raise ValueError(
             f"Arc count ({len(arcs)}) exceeds limit of {_MAX_ARC_COUNT}. "
-            f"Reduce the number of tensions or threads."
+            f"Reduce the number of dilemmas or paths."
         )
 
     # Sort: spine first, then branches by ID
@@ -583,10 +574,6 @@ class IntersectionCandidate:
     shared_value: str
 
 
-# Backward compatibility alias
-KnotCandidate = IntersectionCandidate
-
-
 def build_intersection_candidates(graph: Graph) -> list[IntersectionCandidate]:
     """Find beats that share signals and could form intersections.
 
@@ -603,56 +590,52 @@ def build_intersection_candidates(graph: Graph) -> list[IntersectionCandidate]:
     if not beat_nodes:
         return []
 
-    # Build beat → tension mapping via belongs_to → explores
-    beat_tensions = _build_beat_tensions(graph, beat_nodes)
+    # Build beat → dilemma mapping via belongs_to → path → dilemma
+    beat_dilemmas = _build_beat_dilemmas(graph, beat_nodes)
 
     # Group by location overlap (highest priority)
-    location_groups = _group_by_location(beat_nodes, beat_tensions)
+    location_groups = _group_by_location(beat_nodes, beat_dilemmas)
 
     # Group by shared entity
-    entity_groups = _group_by_entity(graph, beat_nodes, beat_tensions)
+    entity_groups = _group_by_entity(graph, beat_nodes, beat_dilemmas)
 
     return location_groups + entity_groups
 
 
-# Backward compatibility alias
-build_knot_candidates = build_intersection_candidates
-
-
-def _build_beat_tensions(graph: Graph, beat_nodes: dict[str, Any]) -> dict[str, set[str]]:
-    """Map each beat to its tension IDs (via thread → tension edges).
+def _build_beat_dilemmas(graph: Graph, beat_nodes: dict[str, Any]) -> dict[str, set[str]]:
+    """Map each beat to its dilemma IDs (via path → dilemma edges).
 
     Returns:
-        Dict mapping beat_id → set of tension raw_ids.
+        Dict mapping beat_id → set of dilemma raw_ids.
     """
-    # thread → tension mapping (from thread node tension_id properties)
-    thread_tension: dict[str, str] = {}
-    thread_nodes = graph.get_nodes_by_type("thread")
-    tension_nodes = graph.get_nodes_by_type("tension")
-    for thread_id, thread_data in thread_nodes.items():
-        tension_id = thread_data.get("tension_id")
-        if tension_id:
-            prefixed = normalize_scoped_id(tension_id, "tension")
-            if prefixed in tension_nodes:
-                tension_raw = tension_nodes[prefixed].get("raw_id", prefixed)
-                thread_tension[thread_id] = tension_raw
+    # path → dilemma mapping (from path node dilemma_id properties)
+    path_dilemma: dict[str, str] = {}
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    for path_id, path_data in path_nodes.items():
+        dilemma_id = path_data.get("dilemma_id")
+        if dilemma_id:
+            prefixed = normalize_scoped_id(dilemma_id, "dilemma")
+            if prefixed in dilemma_nodes:
+                dilemma_raw = dilemma_nodes[prefixed].get("raw_id", prefixed)
+                path_dilemma[path_id] = dilemma_raw
 
-    # beat → tensions via belongs_to
-    beat_tensions: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
+    # beat → dilemmas via belongs_to
+    beat_dilemmas: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
     belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
     for edge in belongs_to_edges:
         beat_id = edge["from"]
-        thread_id = edge["to"]
-        if beat_id in beat_nodes and thread_id in thread_tension:
-            beat_tensions[beat_id].add(thread_tension[thread_id])
+        path_id = edge["to"]
+        if beat_id in beat_nodes and path_id in path_dilemma:
+            beat_dilemmas[beat_id].add(path_dilemma[path_id])
 
-    return beat_tensions
+    return beat_dilemmas
 
 
 def _group_by_location(
     beat_nodes: dict[str, Any],
-    beat_tensions: dict[str, set[str]],
-) -> list[KnotCandidate]:
+    beat_dilemmas: dict[str, set[str]],
+) -> list[IntersectionCandidate]:
     """Group beats by location overlap (primary location or alternatives).
 
     Two beats have location overlap if:
@@ -670,16 +653,16 @@ def _group_by_location(
         for alt in alternatives:
             location_beats[alt].append(beat_id)
 
-    candidates: list[KnotCandidate] = []
+    candidates: list[IntersectionCandidate] = []
     for location, beats in sorted(location_beats.items()):
         if len(beats) < 2:
             continue
-        # Filter to beats from different tensions
-        multi_tension = _filter_different_tensions(beats, beat_tensions)
-        if len(multi_tension) >= 2:
+        # Filter to beats from different dilemmas
+        multi_dilemma = _filter_different_dilemmas(beats, beat_dilemmas)
+        if len(multi_dilemma) >= 2:
             candidates.append(
-                KnotCandidate(
-                    beat_ids=sorted(multi_tension),
+                IntersectionCandidate(
+                    beat_ids=sorted(multi_dilemma),
                     signal_type="location",
                     shared_value=location,
                 )
@@ -691,8 +674,8 @@ def _group_by_location(
 def _group_by_entity(
     graph: Graph,
     beat_nodes: dict[str, Any],
-    beat_tensions: dict[str, set[str]],
-) -> list[KnotCandidate]:
+    beat_dilemmas: dict[str, set[str]],
+) -> list[IntersectionCandidate]:
     """Group beats by shared entity references."""
     # Build entity → beats mapping from features edges
     entity_beats: dict[str, list[str]] = defaultdict(list)
@@ -712,21 +695,21 @@ def _group_by_entity(
             prefixed = entity_ref if entity_ref.startswith("entity::") else f"entity::{entity_ref}"
             entity_beats[prefixed].append(beat_id)
 
-    candidates: list[KnotCandidate] = []
+    candidates: list[IntersectionCandidate] = []
     seen_pairs: set[tuple[str, ...]] = set()
 
     for entity_id, beats in sorted(entity_beats.items()):
         unique_beats = sorted(set(beats))
         if len(unique_beats) < 2:
             continue
-        multi_tension = _filter_different_tensions(unique_beats, beat_tensions)
-        if len(multi_tension) >= 2:
-            key = tuple(multi_tension)
+        multi_dilemma = _filter_different_dilemmas(unique_beats, beat_dilemmas)
+        if len(multi_dilemma) >= 2:
+            key = tuple(multi_dilemma)
             if key not in seen_pairs:
                 seen_pairs.add(key)
                 candidates.append(
-                    KnotCandidate(
-                        beat_ids=multi_tension,
+                    IntersectionCandidate(
+                        beat_ids=multi_dilemma,
                         signal_type="entity",
                         shared_value=entity_id,
                     )
@@ -735,19 +718,19 @@ def _group_by_entity(
     return candidates
 
 
-def _filter_different_tensions(
+def _filter_different_dilemmas(
     beat_ids: list[str],
-    beat_tensions: dict[str, set[str]],
+    beat_dilemmas: dict[str, set[str]],
 ) -> list[str]:
-    """Filter to beats that span at least 2 different tensions.
+    """Filter to beats that span at least 2 different dilemmas.
 
-    Returns all beats if the group spans multiple tensions,
+    Returns all beats if the group spans multiple dilemmas,
     empty list otherwise.
     """
-    all_tensions: set[str] = set()
+    all_dilemmas: set[str] = set()
     for bid in beat_ids:
-        all_tensions.update(beat_tensions.get(bid, set()))
-    if len(all_tensions) < 2:
+        all_dilemmas.update(beat_dilemmas.get(bid, set()))
+    if len(all_dilemmas) < 2:
         return []
     return sorted(beat_ids)
 
@@ -800,8 +783,8 @@ def check_intersection_compatibility(
         return errors
 
     # Check beats are from different dilemmas
-    beat_dilemmas = _build_beat_tensions(graph, beat_nodes)
-    dilemma_sets = [beat_dilemmas.get(bid, set()) for bid in beat_ids]
+    beat_dilemma_map = _build_beat_dilemmas(graph, beat_nodes)
+    dilemma_sets = [beat_dilemma_map.get(bid, set()) for bid in beat_ids]
 
     # Intersections must span at least 2 different dilemmas
     all_dilemmas = set.union(*dilemma_sets) if dilemma_sets else set()
@@ -837,10 +820,6 @@ def check_intersection_compatibility(
             )
 
     return errors
-
-
-# Backward compatibility alias
-check_knot_compatibility = check_intersection_compatibility
 
 
 def resolve_intersection_location(graph: Graph, beat_ids: list[str]) -> str | None:
@@ -898,10 +877,6 @@ def resolve_intersection_location(graph: Graph, beat_ids: list[str]) -> str | No
     return None
 
 
-# Backward compatibility alias
-resolve_knot_location = resolve_intersection_location
-
-
 def apply_intersection_mark(
     graph: Graph,
     beat_ids: list[str],
@@ -950,10 +925,6 @@ def apply_intersection_mark(
         graph.add_edge("belongs_to", from_id, to_id)
 
 
-# Backward compatibility alias
-apply_knot_mark = apply_intersection_mark
-
-
 # ---------------------------------------------------------------------------
 # Phase 4: Gap detection algorithms
 # ---------------------------------------------------------------------------
@@ -963,39 +934,39 @@ apply_knot_mark = apply_intersection_mark
 class PacingIssue:
     """A sequence of 3+ consecutive beats with the same scene_type."""
 
-    thread_id: str
+    path_id: str
     beat_ids: list[str]
     scene_type: str
 
 
-def get_thread_beat_sequence(graph: Graph, thread_id: str) -> list[str]:
-    """Get ordered beat sequence for a thread using topological sort on requires edges.
+def get_path_beat_sequence(graph: Graph, path_id: str) -> list[str]:
+    """Get ordered beat sequence for a path using topological sort on requires edges.
 
     Delegates to topological_sort_beats() for the sorting logic.
 
     Args:
         graph: Graph with beat nodes and requires edges.
-        thread_id: Prefixed thread ID (e.g., "thread::mentor_trust_canonical").
+        path_id: Prefixed path ID (e.g., "path::mentor_trust_canonical").
 
     Returns:
-        Ordered list of beat IDs in the thread.
+        Ordered list of beat IDs in the path.
 
     Raises:
-        ValueError: If a cycle is detected among the thread's beats.
+        ValueError: If a cycle is detected among the path's beats.
     """
-    belongs_to_edges = graph.get_edges(from_id=None, to_id=thread_id, edge_type="belongs_to")
-    thread_beats = [e["from"] for e in belongs_to_edges]
+    belongs_to_edges = graph.get_edges(from_id=None, to_id=path_id, edge_type="belongs_to")
+    path_beats = [e["from"] for e in belongs_to_edges]
 
-    if not thread_beats:
+    if not path_beats:
         return []
 
-    return topological_sort_beats(graph, thread_beats)
+    return topological_sort_beats(graph, path_beats)
 
 
 def detect_pacing_issues(graph: Graph) -> list[PacingIssue]:
     """Detect pacing issues: 3+ consecutive beats with the same scene_type.
 
-    Checks each thread's beat sequence for runs of 3 or more beats
+    Checks each path's beat sequence for runs of 3 or more beats
     all tagged with the same scene_type (scene, sequel, or micro_beat).
 
     Args:
@@ -1005,10 +976,10 @@ def detect_pacing_issues(graph: Graph) -> list[PacingIssue]:
         List of PacingIssue objects describing problematic sequences.
     """
     issues: list[PacingIssue] = []
-    thread_nodes = graph.get_nodes_by_type("thread")
+    path_nodes = graph.get_nodes_by_type("path")
 
-    for tid in sorted(thread_nodes.keys()):
-        sequence = get_thread_beat_sequence(graph, tid)
+    for pid in sorted(path_nodes.keys()):
+        sequence = get_path_beat_sequence(graph, pid)
         if len(sequence) < 3:
             continue
 
@@ -1036,7 +1007,7 @@ def detect_pacing_issues(graph: Graph) -> list[PacingIssue]:
             if run_length >= 3:
                 issues.append(
                     PacingIssue(
-                        thread_id=tid,
+                        path_id=pid,
                         beat_ids=[bt[0] for bt in beat_types[run_start:run_end]],
                         scene_type=current_type,
                     )
@@ -1049,7 +1020,7 @@ def detect_pacing_issues(graph: Graph) -> list[PacingIssue]:
 
 def insert_gap_beat(
     graph: Graph,
-    thread_id: str,
+    path_id: str,
     after_beat: str | None,
     before_beat: str | None,
     summary: str,
@@ -1058,11 +1029,11 @@ def insert_gap_beat(
     """Insert a new gap beat into the graph between existing beats.
 
     Creates a new beat node and adjusts requires edges to maintain ordering.
-    The new beat is assigned to the specified thread.
+    The new beat is assigned to the specified path.
 
     Args:
         graph: Graph to mutate.
-        thread_id: Thread this beat belongs to (prefixed ID).
+        path_id: Path this beat belongs to (prefixed ID).
         after_beat: Beat that should come before the new beat (or None for start).
         before_beat: Beat that should come after the new beat (or None for end).
         summary: Summary text for the new beat.
@@ -1091,13 +1062,13 @@ def insert_gap_beat(
             "raw_id": raw_id,
             "summary": summary,
             "scene_type": scene_type,
-            "threads": [thread_id.removeprefix("thread::")],
+            "paths": [path_id.removeprefix("path::")],
             "is_gap_beat": True,
         },
     )
 
     # Add belongs_to edge
-    graph.add_edge("belongs_to", beat_id, thread_id)
+    graph.add_edge("belongs_to", beat_id, path_id)
 
     # Adjust requires edges for ordering.
     # Existing transitive requires (before_beat → after_beat) is kept as redundant

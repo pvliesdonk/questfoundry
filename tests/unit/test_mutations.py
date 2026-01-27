@@ -1809,9 +1809,9 @@ class TestMutationIntegration:
         # Check node counts by type
         assert len(graph.get_nodes_by_type("vision")) == 1
         assert len(graph.get_nodes_by_type("entity")) == 2
-        assert len(graph.get_nodes_by_type("tension")) == 1
-        assert len(graph.get_nodes_by_type("alternative")) == 2
-        assert len(graph.get_nodes_by_type("thread")) == 1
+        assert len(graph.get_nodes_by_type("dilemma")) == 1
+        assert len(graph.get_nodes_by_type("answer")) == 2
+        assert len(graph.get_nodes_by_type("path")) == 1
         assert len(graph.get_nodes_by_type("beat")) == 1
 
 
