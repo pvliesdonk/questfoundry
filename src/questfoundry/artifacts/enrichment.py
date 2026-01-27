@@ -21,19 +21,19 @@ log = get_logger(__name__)
 
 
 def enrich_seed_artifact(graph: Graph, artifact: dict[str, Any]) -> dict[str, Any]:
-    """Enrich SEED artifact with BRAINSTORM entity and tension details.
+    """Enrich SEED artifact with BRAINSTORM entity and dilemma details.
 
-    Merges entity details (entity_category, concept, notes) and tension details
+    Merges entity details (entity_category, concept, notes) and dilemma details
     (question, why_it_matters, central_entity_ids) from graph nodes into SEED
     decisions. This provides full context in the YAML artifact without requiring
     the LLM to repeat information.
 
     Args:
-        graph: Graph containing BRAINSTORM entity and tension nodes.
-        artifact: SEED artifact dict with entity and tension decisions.
+        graph: Graph containing BRAINSTORM entity and dilemma nodes.
+        artifact: SEED artifact dict with entity and dilemma decisions.
 
     Returns:
-        Enriched artifact dict with full entity and tension details.
+        Enriched artifact dict with full entity and dilemma details.
 
     Example:
         Input artifact:
@@ -53,8 +53,9 @@ def enrich_seed_artifact(graph: Graph, artifact: dict[str, Any]) -> dict[str, An
     # Enrich entities
     enriched["entities"] = _enrich_entities(graph, artifact.get("entities", []))
 
-    # Enrich tensions
-    enriched["tensions"] = _enrich_tensions(graph, artifact.get("tensions", []))
+    # Enrich dilemmas (artifact may use "dilemmas" or legacy "tensions")
+    dilemma_decisions = artifact.get("dilemmas", artifact.get("tensions", []))
+    enriched["dilemmas"] = _enrich_dilemmas(graph, dilemma_decisions)
 
     return enriched
 
@@ -105,24 +106,27 @@ def _enrich_entities(graph: Graph, entity_decisions: list[dict[str, Any]]) -> li
     return enriched_entities
 
 
-def _enrich_tensions(graph: Graph, tension_decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Enrich tension decisions with BRAINSTORM details."""
-    # Build lookup: raw_id -> node data for tensions
-    tension_nodes = graph.get_nodes_by_type("tension")
-    tension_data: dict[str, dict[str, Any]] = {
-        node["raw_id"]: node for node in tension_nodes.values() if node.get("raw_id")
+def _enrich_dilemmas(graph: Graph, dilemma_decisions: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Enrich dilemma decisions with BRAINSTORM details.
+
+    Note: Graph stores dilemmas as "tension" nodes for backward compatibility.
+    """
+    # Build lookup: raw_id -> node data for dilemmas (stored as "tension" nodes)
+    dilemma_nodes = graph.get_nodes_by_type("tension")
+    dilemma_data: dict[str, dict[str, Any]] = {
+        node["raw_id"]: node for node in dilemma_nodes.values() if node.get("raw_id")
     }
 
-    enriched_tensions = []
-    for decision in tension_decisions:
-        tension_id = decision.get("tension_id", "")
-        # Strip prefix if present (e.g., "tension::host_motivation" -> "host_motivation")
-        lookup_id = tension_id.split("::")[-1]
-        node = tension_data.get(lookup_id, {}) if lookup_id else {}
+    enriched_dilemmas = []
+    for decision in dilemma_decisions:
+        dilemma_id = decision.get("dilemma_id", decision.get("tension_id", ""))
+        # Strip prefix if present (e.g., "d::host_motivation" -> "host_motivation")
+        lookup_id = dilemma_id.split("::")[-1]
+        node = dilemma_data.get(lookup_id, {}) if lookup_id else {}
 
-        # Build enriched tension in consistent field order
+        # Build enriched dilemma in consistent field order
         enriched: dict[str, Any] = {
-            "tension_id": tension_id,
+            "dilemma_id": dilemma_id,
         }
 
         # Add BRAINSTORM fields if available (simple copy for most fields)
@@ -138,13 +142,13 @@ def _enrich_tensions(graph: Graph, tension_decisions: list[dict[str, Any]]) -> l
         enriched["considered"] = decision.get("considered", decision.get("explored", []))
         enriched["implicit"] = decision.get("implicit", [])
 
-        enriched_tensions.append(enriched)
+        enriched_dilemmas.append(enriched)
 
     log.debug(
-        "tensions_enriched",
+        "dilemmas_enriched",
         stage="seed",
-        tension_count=len(enriched_tensions),
-        enriched_count=sum(1 for t in enriched_tensions if "question" in t),
+        dilemma_count=len(enriched_dilemmas),
+        enriched_count=sum(1 for d in enriched_dilemmas if "question" in d),
     )
 
-    return enriched_tensions
+    return enriched_dilemmas
