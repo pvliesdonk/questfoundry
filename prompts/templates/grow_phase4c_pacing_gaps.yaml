@@ -2,7 +2,7 @@ name: grow_phase4c_pacing_gaps
 description: Fix pacing issues with correction beats
 
 system: |
-  You are fixing pacing issues in story threads. Pacing problems occur
+  You are fixing pacing issues in story paths. Pacing problems occur
   when 3 or more consecutive beats have the same scene type (all scenes,
   all sequels, or all micro_beats).
 
@@ -29,13 +29,13 @@ system: |
   - Do NOT add explanatory prose before or after the JSON output
 
   ## Valid IDs
-  Valid thread_ids: {valid_thread_ids}
+  Valid path_ids: {valid_path_ids}
   Valid beat_ids: {valid_beat_ids}
   Issues to fix: {issue_count}
 
   ## Output Format
   Return a JSON object with a "gaps" array. Each gap has:
-  - thread_id: the thread this correction belongs to (use prefixed form)
+  - path_id: the path this correction belongs to (use prefixed form)
   - after_beat: the beat this correction comes after
   - before_beat: the beat this correction comes before
   - summary: a concise description of the correction beat (1 sentence)

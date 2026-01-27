@@ -21,19 +21,19 @@ system: |
   - `concept`: One-line essence from the brief
   - `notes`: Optional additional context from the brief
 
-  ## Tension Structure
+  ## Dilemma Structure
 
-  Tensions represent binary dramatic questions with exactly TWO alternatives:
-  - `tension_id`: Descriptive snake_case identifier showing the binary choice
+  Dilemmas represent binary dramatic questions with exactly TWO answers:
+  - `dilemma_id`: Descriptive snake_case identifier showing the binary choice
   - `question`: The dramatic question (should end with "?")
-  - `alternatives`: Exactly 2 items, each with:
-    - `alternative_id`: Unique short identifier for THIS alternative (e.g., "guilty", "framed", "dagger", "poison")
+  - `answers`: Exactly 2 items, each with:
+    - `answer_id`: Unique short identifier for THIS answer (e.g., "guilty", "framed", "dagger", "poison")
     - `description`: Full description
-    - `is_default_path`: true for ONE alternative (the default path), false for the other
-  - `central_entity_ids`: List of entity_id values related to this tension
+    - `is_default_path`: true for ONE answer (the default path), false for the other
+  - `central_entity_ids`: List of entity_id values related to this dilemma
   - `why_it_matters`: Thematic stakes
 
-  ## Tension ID Naming (CRITICAL)
+  ## Dilemma ID Naming (CRITICAL)
 
   Use descriptive binary format that shows both options: `subject_optionA_or_optionB`
 
@@ -45,30 +45,30 @@ system: |
   - `[faction]_[stance1]_or_[stance2]` for group conflicts
 
   BAD examples (will cause downstream failures):
-  - `t1`, `t2`, `tension_a` (too short, not descriptive)
-  - `character_motivation` (ambiguous, could be confused with thread name)
+  - `d1`, `d2`, `dilemma_a` (too short, not descriptive)
+  - `character_motivation` (ambiguous, could be confused with path name)
   - `trust_issue` (too vague)
-  - `single_word` (could be mistaken for a thread ID)
+  - `single_word` (could be mistaken for a path ID)
 
   **DO NOT copy IDs from other stories** - generate IDs specific to YOUR story.
 
-  The tension_id should clearly show the binary choice being made.
+  The dilemma_id should clearly show the binary choice being made.
 
   ## Guidelines
 
   - Extract ALL characters, locations, objects, and factions from the brief as entities
-  - Extract ALL tensions/dramatic questions mentioned
+  - Extract ALL dilemmas/dramatic questions mentioned
   - Do NOT invent new details - only structure what's in the brief
   - Use snake_case for all IDs (lowercase with underscores)
-  - Each tension must have exactly ONE alternative with is_default_path=true
-  - CRITICAL: alternative_id must be UNIQUE identifiers (e.g., "guilty", "framed"), NOT entity references
+  - Each dilemma must have exactly ONE answer with is_default_path=true
+  - CRITICAL: answer_id must be UNIQUE identifiers (e.g., "guilty", "framed"), NOT entity references
 
   ## Output
 
   Return ONLY valid JSON matching BrainstormOutput schema:
   {
     "entities": [...],
-    "tensions": [...]
+    "dilemmas": [...]
   }
 
 components: []

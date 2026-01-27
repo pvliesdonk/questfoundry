@@ -30,19 +30,19 @@ system: |
   - What they are and their goals
   - Key members or relationships
 
-  ### Dramatic Tensions (aim for 4-8)
-  For each tension, describe in prose:
+  ### Dramatic Dilemmas (aim for 4-8)
+  For each dilemma, describe in prose:
   - The central question or conflict
   - The two possible answers/outcomes (one being the "default path")
   - **Central entity IDs**: List the exact entity IDs involved (e.g., "[character_id], [location_id]")
-  - Why this tension matters thematically
+  - Why this dilemma matters thematically
 
   ## Guidelines
   - Write in flowing prose, not schema fields
-  - Capture ALL entities and tensions mentioned in discussion
+  - Capture ALL entities and dilemmas mentioned in discussion
   - Preserve rich context and reasoning - this helps the serializer
-  - Be specific about which alternative is the "default path"
-  - IMPORTANT: For each tension, list the central entity IDs exactly as defined in the entities section
+  - Be specific about which answer is the "default path"
+  - IMPORTANT: For each dilemma, list the central entity IDs exactly as defined in the entities section
   - If something wasn't discussed, don't invent it
 
   ## Output Format

@@ -594,7 +594,7 @@ class GrowStage:
         context = {
             "beat_summaries": "\n".join(beat_summaries),
             "valid_beat_ids": ", ".join(valid_beat_ids),
-            "valid_tension_ids": ", ".join(valid_tension_ids),
+            "valid_dilemma_ids": ", ".join(valid_tension_ids),  # variable still uses old name
         }
 
         # Call LLM with semantic validation
@@ -967,8 +967,8 @@ class GrowStage:
                 detail="No threads to check for gaps",
             )
 
-        # Build thread sequences with summaries
-        thread_sequences: list[str] = []
+        # Build path sequences with summaries
+        path_sequences: list[str] = []
         valid_beat_ids: set[str] = set()
         for tid in sorted(thread_nodes.keys()):
             sequence = get_thread_beat_sequence(graph, tid)
@@ -982,18 +982,18 @@ class GrowStage:
                 beat_list.append(f"    {bid} [{scene_type}]: {summary}")
                 valid_beat_ids.add(bid)
             raw_tid = thread_nodes[tid].get("raw_id", tid)
-            thread_sequences.append(f"  Thread: {raw_tid} ({tid})\n" + "\n".join(beat_list))
+            path_sequences.append(f"  Path: {raw_tid} ({tid})\n" + "\n".join(beat_list))
 
-        if not thread_sequences:
+        if not path_sequences:
             return GrowPhaseResult(
                 phase="narrative_gaps",
                 status="completed",
-                detail="No threads with 2+ beats to check",
+                detail="No paths with 2+ beats to check",
             )
 
         context = {
-            "thread_sequences": "\n\n".join(thread_sequences),
-            "valid_thread_ids": ", ".join(sorted(thread_nodes.keys())),
+            "path_sequences": "\n\n".join(path_sequences),
+            "valid_path_ids": ", ".join(sorted(thread_nodes.keys())),
             "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
         }
 
@@ -1076,7 +1076,7 @@ class GrowStage:
         thread_nodes = graph.get_nodes_by_type("thread")
         context = {
             "pacing_issues": "\n\n".join(issue_descriptions),
-            "valid_thread_ids": ", ".join(sorted(thread_nodes.keys())),
+            "valid_path_ids": ", ".join(sorted(thread_nodes.keys())),
             "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
             "issue_count": str(len(issues)),
         }
