@@ -382,7 +382,7 @@ class TestGrowLlmCall:
             context={
                 "beat_summaries": "test",
                 "valid_beat_ids": "beat::a",
-                "valid_tension_ids": "t1",
+                "valid_dilemma_ids": "t1",
             },
             output_schema=Phase2Output,
         )
@@ -412,7 +412,7 @@ class TestGrowLlmCall:
                 context={
                     "beat_summaries": "test",
                     "valid_beat_ids": "beat::a",
-                    "valid_tension_ids": "t1",
+                    "valid_dilemma_ids": "t1",
                 },
                 output_schema=Phase2Output,
             )
@@ -441,7 +441,7 @@ class TestGrowLlmCall:
             context={
                 "beat_summaries": "test",
                 "valid_beat_ids": "beat::a",
-                "valid_tension_ids": "t1",
+                "valid_dilemma_ids": "t1",
             },
             output_schema=Phase2Output,
         )
@@ -480,7 +480,7 @@ class TestGrowLlmCall:
             context={
                 "beat_summaries": "test",
                 "valid_beat_ids": "beat::a",
-                "valid_tension_ids": "t1",
+                "valid_dilemma_ids": "t1",
             },
             output_schema=Phase2Output,
         )
@@ -525,7 +525,7 @@ class TestGrowLlmCall:
                 context={
                     "beat_summaries": "test",
                     "valid_beat_ids": "beat::a",
-                    "valid_tension_ids": "t1",
+                    "valid_dilemma_ids": "t1",
                 },
                 output_schema=Phase2Output,
             )
@@ -1033,12 +1033,12 @@ class TestPhase4bNarrativeGaps:
         result = await stage._phase_4b_narrative_gaps(graph, mock_model)
 
         assert result.status == "completed"
-        assert "No threads" in result.detail
+        assert "No paths" in result.detail
         assert result.llm_calls == 0
 
     @pytest.mark.asyncio
-    async def test_phase_4b_single_beat_threads_skipped(self) -> None:
-        """Phase 4b skips threads with only 1 beat (no sequence to gap-check)."""
+    async def test_phase_4b_single_beat_paths_skipped(self) -> None:
+        """Phase 4b skips paths with only 1 beat (no sequence to gap-check)."""
         from questfoundry.graph.graph import Graph
 
         graph = Graph.empty()
@@ -1052,7 +1052,7 @@ class TestPhase4bNarrativeGaps:
         result = await stage._phase_4b_narrative_gaps(graph, mock_model)
 
         assert result.status == "completed"
-        assert "No threads with 2+ beats" in result.detail
+        assert "No paths with 2+ beats" in result.detail
 
 
 class TestPhase4cPacingGaps:
@@ -1937,7 +1937,7 @@ class TestGrowLLMCallTokens:
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
                 "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
                 SimpleOutput,
             )
 
@@ -1977,7 +1977,7 @@ class TestGrowLLMCallTokens:
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
                 "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
                 SimpleOutput,
             )
 
@@ -2023,7 +2023,7 @@ class TestGrowLLMCallTokens:
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
                 "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
                 SimpleOutput,
             )
 
@@ -2065,7 +2065,7 @@ class TestGrowHybridProviders:
             await stage._grow_llm_call(
                 default_model,
                 "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
                 SimpleOutput,
             )
 
@@ -2103,7 +2103,7 @@ class TestGrowHybridProviders:
             await stage._grow_llm_call(
                 default_model,
                 "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
                 SimpleOutput,
             )
 
@@ -2252,7 +2252,7 @@ class TestGrowSemanticValidation:
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
                 "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
                 Phase4aOutput,
                 semantic_validator=validator,
             )
@@ -2315,7 +2315,7 @@ class TestGrowSemanticValidation:
             result, llm_calls, _tokens = await stage._grow_llm_call(
                 MagicMock(),
                 "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
                 Phase4aOutput,
                 semantic_validator=validator,
             )
@@ -2371,7 +2371,7 @@ class TestGrowSemanticValidation:
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
                 "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
                 Phase4aOutput,
                 max_retries=3,
                 semantic_validator=validator,
@@ -2420,7 +2420,7 @@ class TestGrowSemanticValidation:
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
                 "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_tension_ids": "[]"},
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
                 Phase4aOutput,
                 semantic_validator=validator,
             )

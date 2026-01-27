@@ -531,17 +531,15 @@ class GrowStage:
                 detail="No tensions/threads/beats to assess",
             )
 
-        # Build tension → threads mapping from thread node tension_id properties
-        from questfoundry.graph.grow_algorithms import build_tension_threads
+        # Build dilemma → paths mapping from path node dilemma_id properties
+        from questfoundry.graph.grow_algorithms import build_dilemma_paths
 
-        tension_threads = build_tension_threads(graph)
+        dilemma_paths = build_dilemma_paths(graph)
 
-        # Only assess tensions with multiple threads
-        multi_thread_tensions = {
-            tid: threads for tid, threads in tension_threads.items() if len(threads) > 1
-        }
+        # Only assess dilemmas with multiple paths
+        multi_path_dilemmas = {did: paths for did, paths in dilemma_paths.items() if len(paths) > 1}
 
-        if not multi_thread_tensions:
+        if not multi_path_dilemmas:
             return GrowPhaseResult(
                 phase="thread_agnostic",
                 status="completed",
@@ -562,7 +560,7 @@ class GrowStage:
         for beat_id, beat_threads in beat_thread_map.items():
             if beat_id not in beat_nodes:
                 continue
-            for tension_id, tension_thread_list in multi_thread_tensions.items():
+            for tension_id, tension_thread_list in multi_path_dilemmas.items():
                 # Count how many of this tension's threads the beat belongs to
                 shared = [t for t in beat_threads if t in tension_thread_list]
                 if len(shared) > 1:
@@ -578,25 +576,25 @@ class GrowStage:
         # Build context for LLM
         beat_summaries: list[str] = []
         valid_beat_ids: list[str] = []
-        valid_tension_ids: list[str] = []
+        valid_dilemma_ids: list[str] = []
 
-        for beat_id, tension_ids in sorted(candidate_beats.items()):
+        for beat_id, dilemma_ids in sorted(candidate_beats.items()):
             beat_data = beat_nodes[beat_id]
             summary = beat_data.get("summary", "No summary")
-            tensions_str = ", ".join(tension_nodes[tid].get("raw_id", tid) for tid in tension_ids)
+            dilemmas_str = ", ".join(tension_nodes[tid].get("raw_id", tid) for tid in dilemma_ids)
             beat_summaries.append(
-                f"- beat_id: {beat_id}\n  summary: {summary}\n  tensions: [{tensions_str}]"
+                f"- beat_id: {beat_id}\n  summary: {summary}\n  dilemmas: [{dilemmas_str}]"
             )
             valid_beat_ids.append(beat_id)
-            for tid in tension_ids:
+            for tid in dilemma_ids:
                 raw_tid = tension_nodes[tid].get("raw_id", tid)
-                if raw_tid not in valid_tension_ids:
-                    valid_tension_ids.append(raw_tid)
+                if raw_tid not in valid_dilemma_ids:
+                    valid_dilemma_ids.append(raw_tid)
 
         context = {
             "beat_summaries": "\n".join(beat_summaries),
             "valid_beat_ids": ", ".join(valid_beat_ids),
-            "valid_tension_ids": ", ".join(valid_tension_ids),
+            "valid_dilemma_ids": ", ".join(valid_dilemma_ids),
         }
 
         # Call LLM with semantic validation
@@ -605,7 +603,7 @@ class GrowStage:
         validator = partial(
             validate_phase2_output,
             valid_beat_ids=set(valid_beat_ids),
-            valid_tension_ids=set(valid_tension_ids),
+            valid_dilemma_ids=set(valid_dilemma_ids),
         )
         try:
             result, llm_calls, tokens = await self._grow_llm_call(
@@ -631,20 +629,20 @@ class GrowStage:
                     beat_id=assessment.beat_id,
                 )
                 continue
-            # Filter agnostic_for to valid tension raw_ids
-            invalid_tensions = [t for t in assessment.agnostic_for if t not in valid_tension_ids]
-            if invalid_tensions:
+            # Filter agnostic_for to valid dilemma raw_ids
+            invalid_dilemmas = [t for t in assessment.agnostic_for if t not in valid_dilemma_ids]
+            if invalid_dilemmas:
                 log.warning(
-                    "phase2_invalid_tension_ids",
+                    "phase2_invalid_dilemma_ids",
                     beat_id=assessment.beat_id,
-                    invalid_ids=invalid_tensions,
+                    invalid_ids=invalid_dilemmas,
                 )
-            valid_tensions = [t for t in assessment.agnostic_for if t in valid_tension_ids]
-            if valid_tensions:
+            valid_dilemmas = [t for t in assessment.agnostic_for if t in valid_dilemma_ids]
+            if valid_dilemmas:
                 valid_assessments.append(
                     ThreadAgnosticAssessment(
                         beat_id=assessment.beat_id,
-                        agnostic_for=valid_tensions,
+                        agnostic_for=valid_dilemmas,
                     )
                 )
 
@@ -966,11 +964,11 @@ class GrowStage:
             return GrowPhaseResult(
                 phase="narrative_gaps",
                 status="completed",
-                detail="No threads to check for gaps",
+                detail="No paths to check for gaps",
             )
 
-        # Build thread sequences with summaries
-        thread_sequences: list[str] = []
+        # Build path sequences with summaries
+        path_sequences: list[str] = []
         valid_beat_ids: set[str] = set()
         for tid in sorted(thread_nodes.keys()):
             sequence = get_thread_beat_sequence(graph, tid)
@@ -984,18 +982,18 @@ class GrowStage:
                 beat_list.append(f"    {bid} [{scene_type}]: {summary}")
                 valid_beat_ids.add(bid)
             raw_tid = thread_nodes[tid].get("raw_id", tid)
-            thread_sequences.append(f"  Thread: {raw_tid} ({tid})\n" + "\n".join(beat_list))
+            path_sequences.append(f"  Path: {raw_tid} ({tid})\n" + "\n".join(beat_list))
 
-        if not thread_sequences:
+        if not path_sequences:
             return GrowPhaseResult(
                 phase="narrative_gaps",
                 status="completed",
-                detail="No threads with 2+ beats to check",
+                detail="No paths with 2+ beats to check",
             )
 
         context = {
-            "thread_sequences": "\n\n".join(thread_sequences),
-            "valid_thread_ids": ", ".join(sorted(thread_nodes.keys())),
+            "path_sequences": "\n\n".join(path_sequences),
+            "valid_path_ids": ", ".join(sorted(thread_nodes.keys())),
             "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
         }
 
@@ -1078,7 +1076,7 @@ class GrowStage:
         thread_nodes = graph.get_nodes_by_type("thread")
         context = {
             "pacing_issues": "\n\n".join(issue_descriptions),
-            "valid_thread_ids": ", ".join(sorted(thread_nodes.keys())),
+            "valid_path_ids": ", ".join(sorted(thread_nodes.keys())),
             "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
             "issue_count": str(len(issues)),
         }
@@ -1208,7 +1206,7 @@ class GrowStage:
             arc = ArcModel(
                 arc_id=arc_data["raw_id"],
                 arc_type=arc_data["arc_type"],
-                threads=arc_data.get("threads", []),
+                paths=arc_data.get("threads", []),  # Graph uses "threads", model uses "paths"
                 sequence=arc_data.get("sequence", []),
             )
             arcs.append(arc)
@@ -1269,7 +1267,7 @@ class GrowStage:
             arc = ArcModel(
                 arc_id=arc_data["raw_id"],
                 arc_type=arc_data["arc_type"],
-                threads=arc_data.get("threads", []),
+                paths=arc_data.get("threads", []),  # Graph uses "threads", model uses "paths"
                 sequence=arc_data.get("sequence", []),
             )
             arcs.append(arc)

@@ -134,7 +134,7 @@ async def test_execute_calls_all_three_phases() -> None:
 
         # Verify result
         assert len(artifact["entities"]) == 1
-        assert len(artifact["threads"]) == 1
+        assert len(artifact["paths"]) == 1
         assert len(artifact["initial_beats"]) == 1
         # Stage counts: 2 discuss + 1 summarize + 6 (hardcoded for iterative serialize)
         # Note: This tests the stage's call accounting, not internal serialize behavior
@@ -252,10 +252,10 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
         mock_prompt.return_value = "Seed summarize prompt"
-        mock_counts.return_value = {"entities": 1, "tensions": 0}
+        mock_counts.return_value = {"entities": 1, "dilemmas": 0}
         mock_manifest.return_value = {
             "entity_manifest": "**Characters:**\n  - `hero`",
-            "tension_manifest": "(No tensions)",
+            "dilemma_manifest": "(No dilemmas)",
         }
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
@@ -278,9 +278,9 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
         mock_prompt.assert_called_once()
         call_kwargs = mock_prompt.call_args.kwargs
         assert call_kwargs["entity_count"] == 1
-        assert call_kwargs["tension_count"] == 0
+        assert call_kwargs["dilemma_count"] == 0
         assert "hero" in call_kwargs["entity_manifest"]
-        assert call_kwargs["tension_manifest"] == "(No tensions)"
+        assert call_kwargs["dilemma_manifest"] == "(No dilemmas)"
 
         # Verify summarize was called with seed prompt
         assert mock_summarize.call_args.kwargs["system_prompt"] == "Seed summarize prompt"
@@ -342,7 +342,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
 
         assert isinstance(artifact, dict)
         assert artifact["entities"][0]["entity_id"] == "kay"
-        assert artifact["threads"][0]["thread_id"] == "thread1"
+        assert artifact["paths"][0]["path_id"] == "thread1"
         assert artifact["initial_beats"][0]["beat_id"] == "beat1"
 
 

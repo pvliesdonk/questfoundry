@@ -8,29 +8,29 @@ system: |
   ## CRITICAL: Manifest Completeness
   Your summary MUST include explicit decisions for:
   - ALL {entity_count} entities listed below
-  - ALL {tension_count} tensions listed below
+  - ALL {dilemma_count} dilemmas listed below
 
-  This is GENERATION, not extraction. Even if an entity/tension wasn't discussed,
+  This is GENERATION, not extraction. Even if an entity/dilemma wasn't discussed,
   you must still include a decision for it (use your judgment to retain or cut).
 
   ## Summarization Priority Order
 
   1. **Completeness over elegance** - Missing an entity is worse than verbose descriptions
   2. **Exact ID matching** - Use IDs exactly as they appear in BRAINSTORM (copy-paste)
-  3. **Transformation clarity** - Show how alternatives became threads
+  3. **Transformation clarity** - Show how answers became paths
 
   ## Common Errors to Avoid
 
   - **Typos in IDs**: `dr_elara_vinoss` vs `dr_elara_voss` - these FAIL validation
   - **Invented locations**: Only BRAINSTORM locations exist
-  - **Duplicate decisions**: Each entity/tension gets ONE decision
+  - **Duplicate decisions**: Each entity/dilemma gets ONE decision
   - **Missing factions**: Check you have decisions for ALL faction entities
 
   ## Required Entity IDs ({entity_count} total)
   {entity_manifest}
 
-  ## Required Tension IDs ({tension_count} total)
-  {tension_manifest}
+  ## Required Dilemma IDs ({dilemma_count} total)
+  {dilemma_manifest}
 
   ## Brainstorm Reference
   {brainstorm_context}
@@ -43,40 +43,40 @@ system: |
   - id: the entity ID from brainstorm
   - disposition: "retained" or "cut"
 
-  ### Tension Decisions
-  For each tension from brainstorm:
-  - tension_id: the tension ID from brainstorm
-  - explored: list of alternative IDs that become threads (MUST include canonical)
-  - implicit: list of alternative IDs NOT explored (shadows for narrative depth)
+  ### Dilemma Decisions
+  For each dilemma from brainstorm:
+  - dilemma_id: the dilemma ID from brainstorm
+  - considered: list of answer IDs that become paths (MUST include canonical)
+  - implicit: list of answer IDs NOT explored (shadows for narrative depth)
 
-  Include all alternatives you explored in the discussion. The system will
+  Include all answers you explored in the discussion. The system will
   balance scope automatically if needed.
 
-  ### Threads
-  For each explored alternative:
-  - id: unique thread identifier (different from tension ID!)
+  ### Paths
+  For each explored answer:
+  - id: unique path identifier (different from dilemma ID!)
   - name: human-readable name
-  - tension_id: which tension this explores
-  - alternative_id: which alternative this explores
-  - shadows: IDs of unexplored alternatives (for FILL context)
+  - dilemma_id: which dilemma this explores
+  - answer_id: which answer this explores
+  - shadows: IDs of unexplored answers (for FILL context)
   - tier: "major" or "minor"
-  - description: what this thread is about
+  - description: what this path is about
   - consequences: list of consequence IDs
 
   ### Consequences
-  For each thread's narrative consequences:
+  For each path's narrative consequences:
   - id: unique consequence identifier
-  - thread_id: which thread this belongs to
+  - path_id: which path this belongs to
   - description: what happens narratively
   - ripples: story effects this implies
 
-  ### Initial Beats (2-4 per thread)
+  ### Initial Beats (2-4 per path)
   For each opening beat:
   - id: unique beat identifier
   - summary: what happens in this beat
-  - threads: list of thread IDs this beat serves
-  - tension_impacts: how this beat affects tensions
-    - tension_id: which tension
+  - paths: list of path IDs this beat serves
+  - dilemma_impacts: how this beat affects dilemmas
+    - dilemma_id: which dilemma
     - effect: "advances", "reveals", "commits", or "complicates"
     - note: explanation of the impact
   - entities: entity IDs present in this beat
@@ -86,7 +86,7 @@ system: |
   **Location Diversity**: Use at least 2 different locations across your beats.
 
   ### Convergence Sketch
-  - convergence_points: where threads should merge
+  - convergence_points: where paths should merge
   - residue_notes: what differences persist after convergence
 
   ## Location Constraint (CRITICAL)
@@ -115,12 +115,12 @@ system: |
   ```
   VERIFY: Your list should have exactly {entity_count} items.
 
-  ### Tension Decisions Manifest
-  List EVERY tension ID with its decision:
+  ### Dilemma Decisions Manifest
+  List EVERY dilemma ID with its decision:
   ```
-  - trust_or_betray: explored=[trust, betray], implicit=[]
-  - weather_storm_clear: explored=[storm], implicit=[clear]
+  - trust_or_betray: considered=[trust, betray], implicit=[]
+  - weather_storm_clear: considered=[storm], implicit=[clear]
   ```
-  VERIFY: Your list should have exactly {tension_count} items.
+  VERIFY: Your list should have exactly {dilemma_count} items.
 
 components: []

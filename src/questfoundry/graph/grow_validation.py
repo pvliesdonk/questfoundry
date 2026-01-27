@@ -6,7 +6,7 @@ deterministic functions operating on the graph — no LLM calls.
 
 Validation categories:
 - Structural: single start, reachability, DAG cycles, gate satisfiability
-- Narrative: tension resolution, commits timing heuristics
+- Narrative: dilemma resolution, commits timing heuristics
 """
 
 from __future__ import annotations
@@ -257,66 +257,71 @@ def check_all_endings_reachable(graph: Graph) -> ValidationCheck:
     )
 
 
-def check_tensions_resolved(graph: Graph) -> ValidationCheck:
-    """Verify each explored tension has at least one commits beat per thread.
+def check_dilemmas_resolved(graph: Graph) -> ValidationCheck:
+    """Verify each explored dilemma has at least one commits beat per path.
 
     Re-checks after gap insertion phases (4b/4c) may have altered the graph.
     """
-    tension_nodes = graph.get_nodes_by_type("tension")
-    thread_nodes = graph.get_nodes_by_type("thread")
+    # Graph stores dilemmas as "tension" nodes and paths as "thread" nodes
+    dilemma_nodes = graph.get_nodes_by_type("tension")
+    path_nodes = graph.get_nodes_by_type("thread")
     beat_nodes = graph.get_nodes_by_type("beat")
 
-    if not tension_nodes or not thread_nodes:
+    if not dilemma_nodes or not path_nodes:
         return ValidationCheck(
-            name="tensions_resolved",
+            name="dilemmas_resolved",
             severity="pass",
-            message="No tensions/threads to check",
+            message="No dilemmas/paths to check",
         )
 
-    # Build tension → threads mapping from thread node tension_id properties
-    from questfoundry.graph.grow_algorithms import build_tension_threads
+    # Build dilemma → paths mapping from path node dilemma_id properties
+    from questfoundry.graph.grow_algorithms import build_dilemma_paths
 
-    tension_threads = build_tension_threads(graph)
+    dilemma_paths = build_dilemma_paths(graph)
 
-    # Build thread → beats mapping
-    thread_beats: dict[str, list[str]] = {}
+    # Build path → beats mapping
+    path_beats: dict[str, list[str]] = {}
     belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
     for edge in belongs_to_edges:
         beat_id = edge["from"]
-        thread_id = edge["to"]
-        thread_beats.setdefault(thread_id, []).append(beat_id)
+        path_id = edge["to"]
+        path_beats.setdefault(path_id, []).append(beat_id)
 
-    # Check each tension's threads for commits beats
+    # Check each dilemma's paths for commits beats
     unresolved: list[str] = []
-    for tension_id, threads in sorted(tension_threads.items()):
-        tension_raw = tension_nodes[tension_id].get("raw_id", tension_id)
-        for thread_id in threads:
-            beats_in_thread = thread_beats.get(thread_id, [])
+    for dilemma_id, paths in sorted(dilemma_paths.items()):
+        dilemma_raw = dilemma_nodes[dilemma_id].get("raw_id", dilemma_id)
+        for path_id in paths:
+            beats_in_path = path_beats.get(path_id, [])
             has_commits = False
-            for beat_id in beats_in_thread:
+            for beat_id in beats_in_path:
                 beat_data = beat_nodes.get(beat_id, {})
                 impacts = beat_data.get("tension_impacts", [])
                 for impact in impacts:
-                    if impact.get("tension_id") == tension_id and impact.get("effect") == "commits":
+                    if impact.get("tension_id") == dilemma_id and impact.get("effect") == "commits":
                         has_commits = True
                         break
                 if has_commits:
                     break
             if not has_commits:
-                thread_raw = thread_nodes[thread_id].get("raw_id", thread_id)
-                unresolved.append(f"{thread_raw}/{tension_raw}")
+                path_raw = path_nodes[path_id].get("raw_id", path_id)
+                unresolved.append(f"{path_raw}/{dilemma_raw}")
 
     if not unresolved:
         return ValidationCheck(
-            name="tensions_resolved",
+            name="dilemmas_resolved",
             severity="pass",
-            message=f"All {len(tension_threads)} tensions resolved",
+            message=f"All {len(dilemma_paths)} dilemmas resolved",
         )
     return ValidationCheck(
-        name="tensions_resolved",
+        name="dilemmas_resolved",
         severity="fail",
-        message=f"Unresolved tensions: {', '.join(unresolved[:5])}",
+        message=f"Unresolved dilemmas: {', '.join(unresolved[:5])}",
     )
+
+
+# Backward compatibility alias - will be removed in a future version
+check_tensions_resolved = check_dilemmas_resolved
 
 
 def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
@@ -424,7 +429,7 @@ def check_passage_dag_cycles(graph: Graph) -> ValidationCheck:
 def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
     """Check narrative pacing heuristics around commits beats.
 
-    For each thread, checks:
+    For each path, checks:
     1. commits too early (<3 beats from arc start)
     2. No reveals/advances before commits (no buildup)
     3. commits too late (final 20% of arc)
@@ -432,48 +437,49 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
 
     Returns list of warning-level checks (timing issues are advisory, not blocking).
     """
-    thread_nodes = graph.get_nodes_by_type("thread")
+    # Graph stores paths as "thread" nodes and dilemmas as "tension" nodes
+    path_nodes = graph.get_nodes_by_type("thread")
     beat_nodes = graph.get_nodes_by_type("beat")
-    tension_nodes = graph.get_nodes_by_type("tension")
+    dilemma_nodes = graph.get_nodes_by_type("tension")
 
-    if not thread_nodes or not beat_nodes:
+    if not path_nodes or not beat_nodes:
         return []
 
-    # Build thread → tension node ID mapping for beat impact comparison
-    thread_tension: dict[str, str] = {}
-    for thread_id, thread_data in thread_nodes.items():
-        tid = thread_data.get("tension_id")
-        if tid:
-            prefixed = normalize_scoped_id(tid, "tension")
-            if prefixed in tension_nodes:
-                thread_tension[thread_id] = prefixed
+    # Build path → dilemma node ID mapping for beat impact comparison
+    path_dilemma: dict[str, str] = {}
+    for path_id, path_data in path_nodes.items():
+        did = path_data.get("tension_id")
+        if did:
+            prefixed = normalize_scoped_id(did, "tension")
+            if prefixed in dilemma_nodes:
+                path_dilemma[path_id] = prefixed
 
-    # Build thread → beats mapping (ordered by requires)
-    thread_beats: dict[str, list[str]] = {}
+    # Build path → beats mapping (ordered by requires)
+    path_beats: dict[str, list[str]] = {}
     belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
     for edge in belongs_to_edges:
         beat_id = edge["from"]
-        thread_id = edge["to"]
+        path_id = edge["to"]
         if beat_id in beat_nodes:
-            thread_beats.setdefault(thread_id, []).append(beat_id)
+            path_beats.setdefault(path_id, []).append(beat_id)
 
-    # Sort beats within each thread by topological order if possible.
+    # Sort beats within each path by topological order if possible.
     # Import here to avoid circular dependency (grow_algorithms imports Graph types).
     from questfoundry.graph.grow_algorithms import topological_sort_beats
 
-    for thread_id in thread_beats:
+    for path_id in path_beats:
         try:
-            thread_beats[thread_id] = topological_sort_beats(graph, thread_beats[thread_id])
+            path_beats[path_id] = topological_sort_beats(graph, path_beats[path_id])
         except ValueError:
-            thread_beats[thread_id] = sorted(thread_beats[thread_id])
+            path_beats[path_id] = sorted(path_beats[path_id])
 
     checks: list[ValidationCheck] = []
 
-    for thread_id, beat_sequence in sorted(thread_beats.items()):
-        if thread_id not in thread_tension:
+    for path_id, beat_sequence in sorted(path_beats.items()):
+        if path_id not in path_dilemma:
             continue
-        tension_node_id = thread_tension[thread_id]
-        thread_raw = thread_nodes[thread_id].get("raw_id", thread_id)
+        dilemma_node_id = path_dilemma[path_id]
+        path_raw = path_nodes[path_id].get("raw_id", path_id)
 
         # Find commits beat index and buildup beats
         commits_idx: int | None = None
@@ -483,7 +489,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
             beat_data = beat_nodes.get(beat_id, {})
             impacts = beat_data.get("tension_impacts", [])
             for impact in impacts:
-                if impact.get("tension_id") != tension_node_id:
+                if impact.get("tension_id") != dilemma_node_id:
                     continue
                 effect = impact.get("effect", "")
                 if effect == "commits":
@@ -504,7 +510,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
                 ValidationCheck(
                     name="commits_timing",
                     severity="warn",
-                    message=f"Thread '{thread_raw}': commits at beat {commits_idx + 1}/{total_beats} (too early, <{MIN_BEATS_BEFORE_COMMITS} beats)",
+                    message=f"Path '{path_raw}': commits at beat {commits_idx + 1}/{total_beats} (too early, <{MIN_BEATS_BEFORE_COMMITS} beats)",
                 )
             )
 
@@ -514,7 +520,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
                 ValidationCheck(
                     name="commits_timing",
                     severity="warn",
-                    message=f"Thread '{thread_raw}': no reveals/advances before commits",
+                    message=f"Path '{path_raw}': no reveals/advances before commits",
                 )
             )
 
@@ -525,7 +531,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
                 ValidationCheck(
                     name="commits_timing",
                     severity="warn",
-                    message=f"Thread '{thread_raw}': commits at beat {commits_idx + 1}/{total_beats} (too late, >80%)",
+                    message=f"Path '{path_raw}': commits at beat {commits_idx + 1}/{total_beats} (too late, >80%)",
                 )
             )
 
@@ -536,7 +542,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
                 ValidationCheck(
                     name="commits_timing",
                     severity="warn",
-                    message=f"Thread '{thread_raw}': {gap} beat gap between last reveals and commits",
+                    message=f"Path '{path_raw}': {gap} beat gap between last reveals and commits",
                 )
             )
 
@@ -552,7 +558,7 @@ def run_all_checks(graph: Graph) -> ValidationReport:
         check_single_start(graph),
         check_all_passages_reachable(graph),
         check_all_endings_reachable(graph),
-        check_tensions_resolved(graph),
+        check_dilemmas_resolved(graph),
         check_gate_satisfiability(graph),
         check_passage_dag_cycles(graph),
     ]

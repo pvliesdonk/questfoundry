@@ -131,7 +131,7 @@ async def test_execute_calls_all_three_phases() -> None:
 
         # Verify result
         assert len(artifact["entities"]) == 1
-        assert len(artifact["tensions"]) == 1
+        assert len(artifact["dilemmas"]) == 1
         assert llm_calls == 4  # 2 discuss + 1 summarize + 1 serialize
         assert tokens == 800  # 500 + 100 + 200
 
@@ -299,7 +299,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
 
         assert isinstance(artifact, dict)
         assert artifact["entities"][0]["entity_id"] == "kay"
-        assert artifact["tensions"][0]["tension_id"] == "trust"
+        assert artifact["dilemmas"][0]["dilemma_id"] == "trust"
 
 
 # --- Vision Context Formatting Tests ---

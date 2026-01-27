@@ -45,26 +45,26 @@ entities_prompt: |
   ## Output
   Return ONLY valid JSON with the "entities" array.
 
-# Section 2: Tension Decisions
-tensions_prompt: |
-  You are generating TENSION DECISIONS for a SEED stage.
+# Section 2: Dilemma Decisions
+dilemmas_prompt: |
+  You are generating DILEMMA DECISIONS for a SEED stage.
 
   ## Generation Requirements (CRITICAL)
-  You MUST generate a decision for EVERY tension ID in the manifest below.
+  You MUST generate a decision for EVERY dilemma ID in the manifest below.
   Missing items WILL cause validation failure. This is NOT extraction - you must
-  generate decisions for ALL tensions, even if the brief doesn't mention them explicitly.
+  generate decisions for ALL dilemmas, even if the brief doesn't mention them explicitly.
 
   ## Scoped ID Format (CRITICAL)
-  All IDs use type prefixes for disambiguation. Copy tension IDs EXACTLY as shown in
-  the manifest, including the `tension::` prefix.
+  All IDs use type prefixes for disambiguation. Copy dilemma IDs EXACTLY as shown in
+  the manifest, including the `d::` prefix.
 
   ## Schema
-  Return a JSON object with a "tensions" array. Each item is a TensionDecision:
+  Return a JSON object with a "dilemmas" array. Each item is a DilemmaDecision:
   ```json
   {
-    "tensions": [
+    "dilemmas": [
       {
-        "tension_id": "tension::host_benevolent_or_selfish",
+        "dilemma_id": "d::host_benevolent_or_selfish",
         "considered": ["protector", "manipulator"],
         "implicit": []
       }
@@ -72,131 +72,128 @@ tensions_prompt: |
   }
   ```
 
-  Note: `considered` and `implicit` contain raw alternative IDs (no prefix) since
-  they are local to each tension.
+  Note: `considered` and `implicit` contain raw answer IDs (no prefix) since
+  they are local to each dilemma.
 
   ## Rules
-  - tension_id must include the `tension::` prefix and match EXACTLY an ID from the manifest
-  - considered: Alternative IDs to explore as threads (MUST include the default path)
-  - implicit: Alternative IDs NOT explored (become shadows)
-  - Generate a decision for EVERY tension in the manifest
+  - dilemma_id must include the `d::` prefix and match EXACTLY an ID from the manifest
+  - considered: Answer IDs to explore as paths (MUST include the default path)
+  - implicit: Answer IDs NOT explored (become shadows)
+  - Generate a decision for EVERY dilemma in the manifest
 
-  ## CRITICAL INVARIANT: considered ↔ threads linkage
-  The `considered` array defines which alternatives will have threads created.
-  For EACH alternative_id in `considered`, you MUST create a thread later.
-  The thread's `alternative_id` field MUST match an entry in `considered`.
+  ## CRITICAL INVARIANT: considered ↔ paths linkage
+  The `considered` array defines which answers will have paths created.
+  For EACH answer_id in `considered`, you MUST create a path later.
+  The path's `answer_id` field MUST match an entry in `considered`.
 
-  WRONG: `considered: []` with threads that have `alternative_id` values
-  WRONG: `considered: ["opt_a"]` but thread uses `alternative_id: "opt_b"`
-  RIGHT: `considered: ["opt_a", "opt_b"]` and threads use those exact IDs
+  WRONG: `considered: []` with paths that have `answer_id` values
+  WRONG: `considered: ["opt_a"]` but path uses `answer_id: "opt_b"`
+  RIGHT: `considered: ["opt_a", "opt_b"]` and paths use those exact IDs
 
   ## What NOT to Do
-  - Do NOT skip tensions because they aren't mentioned in the brief
-  - Do NOT invent tensions not in the manifest
+  - Do NOT skip dilemmas because they aren't mentioned in the brief
+  - Do NOT invent dilemmas not in the manifest
   - Do NOT partially complete the list
-  - Do NOT leave `considered` empty if you plan to create threads for that tension
-  - Do NOT omit the `tension::` prefix from tension_id
+  - Do NOT leave `considered` empty if you plan to create paths for that dilemma
+  - Do NOT omit the `d::` prefix from dilemma_id
 
   ## Output
-  Return ONLY valid JSON with the "tensions" array.
+  Return ONLY valid JSON with the "dilemmas" array.
 
-# Section 3: Threads
-threads_prompt: |
-  You are generating THREADS for a SEED stage based on tension decisions.
+# Section 3: Paths
+paths_prompt: |
+  You are generating PATHS for a SEED stage based on dilemma decisions.
 
   ## Generation Requirements (CRITICAL)
-  For each "considered" alternative in the tension decisions, you MUST generate a thread.
-  Each thread represents one storyline path that will be developed in the story.
+  For each "considered" answer in the dilemma decisions, you MUST generate a path.
+  Each path represents one storyline that will be developed in the story.
 
   ## Scoped ID Format (CRITICAL)
   All IDs use type prefixes for disambiguation:
-  - thread_id: Use `thread::` prefix (e.g., `thread::host_motive`)
-  - tension_id: Use `tension::` prefix (e.g., `tension::host_benevolent_or_selfish`)
+  - path_id: Use hierarchical `p::` prefix (e.g., `p::host_benevolent_or_selfish__protector`)
+  - dilemma_id: Use `d::` prefix (e.g., `d::host_benevolent_or_selfish`)
+
+  Path IDs embed their parent dilemma: `p::[dilemma_name]__[answer_id]`
 
   Copy IDs EXACTLY as shown in the manifest, including the prefixes.
 
-  ## CRITICAL INVARIANT: alternative_id MUST match considered
-  Each thread's `alternative_id` MUST be one of the IDs listed in the tension's
+  ## CRITICAL INVARIANT: answer_id MUST match considered
+  Each path's `answer_id` MUST be one of the IDs listed in the dilemma's
   `considered` array. This is a hard constraint enforced by validation.
 
-  WRONG: Thread with `alternative_id: "option_b"` when tension has `considered: ["option_a"]`
-  RIGHT: Thread with `alternative_id: "option_a"` when tension has `considered: ["option_a", "option_b"]`
+  WRONG: Path with `answer_id: "option_b"` when dilemma has `considered: ["option_a"]`
+  RIGHT: Path with `answer_id: "option_a"` when dilemma has `considered: ["option_a", "option_b"]`
 
   ## Schema
-  Return a JSON object with a "threads" array. Each item is a Thread:
+  Return a JSON object with a "paths" array. Each item is a Path:
   ```json
   {
-    "threads": [
+    "paths": [
       {
-        "thread_id": "thread::host_motive",
+        "path_id": "p::host_benevolent_or_selfish__protector",
         "name": "The Host's Hidden Motive",
-        "tension_id": "tension::host_benevolent_or_selfish",
-        "alternative_id": "protector",
-        "unexplored_alternative_ids": ["manipulator"],
-        "thread_importance": "major",
-        "description": "What this thread is about",
+        "dilemma_id": "d::host_benevolent_or_selfish",
+        "answer_id": "protector",
+        "unexplored_answer_ids": ["manipulator"],
+        "path_importance": "major",
+        "description": "What this path is about",
         "consequence_ids": ["host_revealed"]
       }
     ]
   }
   ```
 
-  Note: `alternative_id`, `unexplored_alternative_ids`, and `consequence_ids` are raw
+  Note: `answer_id`, `unexplored_answer_ids`, and `consequence_ids` are raw
   IDs without prefixes since they are local identifiers.
 
-  ## Thread ID Naming (CRITICAL)
+  ## Path ID Naming (CRITICAL)
 
-  Thread IDs must be DIFFERENT from tension IDs. Use short descriptive names WITH the
-  `thread::` prefix.
+  Path IDs use hierarchical format that embeds the parent dilemma:
+  `p::[dilemma_name]__[answer_id]`
 
-  FORMAT:
-  - Tension: `tension::[subject]_[optionA]_or_[optionB]` (the binary question)
-  - Thread: `thread::[subject]_[aspect]` (short storyline name)
+  This prevents misreferences since the parent dilemma is embedded in the ID.
 
   Pattern examples (generate YOUR OWN based on your story):
-  - Tension about character loyalty → Thread: `thread::[character]_loyalty`
-  - Tension about artifact's nature → Thread: `thread::[artifact]_secret`
-  - Tension about faction's agenda → Thread: `thread::[faction]_agenda`
+  - Dilemma `d::mentor_trust_or_betray` with answer `trust` → Path: `p::mentor_trust_or_betray__trust`
+  - Dilemma `d::artifact_blessed_or_cursed` with answer `blessed` → Path: `p::artifact_blessed_or_cursed__blessed`
 
   BAD patterns (will cause validation failures):
-  - Using the SAME ID for both tension and thread
-  - Using the tension_id as the thread_id
-  - Omitting the `thread::` prefix
-
-  Thread IDs should be short names for the storyline, NOT the binary question.
+  - Using the SAME ID for both dilemma and path
+  - Missing the `__` separator
+  - Omitting the `p::` prefix
 
   **DO NOT copy example IDs** - generate IDs specific to YOUR story.
 
   ## Rules
-  - thread_importance must be exactly "major" or "minor" (lowercase)
-  - unexplored_alternative_ids: IDs of alternatives NOT explored (implicit ones)
-  - consequence_ids: References to consequences for this thread
-  - Generate a thread for EACH considered alternative from tension decisions
-  - alternative_id MUST be one of the IDs from the tension's `considered` array
-  - thread_id MUST include the `thread::` prefix
-  - tension_id MUST include the `tension::` prefix
+  - path_importance must be exactly "major" or "minor" (lowercase)
+  - unexplored_answer_ids: IDs of answers NOT explored (implicit ones)
+  - consequence_ids: References to consequences for this path
+  - Generate a path for EACH considered answer from dilemma decisions
+  - answer_id MUST be one of the IDs from the dilemma's `considered` array
+  - path_id MUST include the `p::` prefix and use hierarchical format
+  - dilemma_id MUST include the `d::` prefix
 
   ## What NOT to Do
-  - Do NOT reuse tension IDs as thread IDs
-  - Do NOT skip alternatives marked as "considered"
-  - Do NOT create threads for "implicit" alternatives (they become shadows, not threads)
-  - Do NOT use an alternative_id that isn't in the tension's `considered` list
-  - Do NOT omit the `thread::` or `tension::` prefixes
+  - Do NOT reuse dilemma IDs as path IDs
+  - Do NOT skip answers marked as "considered"
+  - Do NOT create paths for "implicit" answers (they become shadows, not paths)
+  - Do NOT use an answer_id that isn't in the dilemma's `considered` list
+  - Do NOT omit the `p::` or `d::` prefixes
 
   ## Output
-  Return ONLY valid JSON with the "threads" array.
+  Return ONLY valid JSON with the "paths" array.
 
 # Section 4: Consequences
 consequences_prompt: |
-  You are generating CONSEQUENCES for a SEED stage based on threads.
+  You are generating CONSEQUENCES for a SEED stage based on paths.
 
   ## Generation Requirements (CRITICAL)
-  Every thread MUST have at least one consequence. Consequences describe the narrative
-  outcomes that result from following a particular thread's storyline.
+  Every path MUST have at least one consequence. Consequences describe the narrative
+  outcomes that result from following a particular path's storyline.
 
   ## Scoped ID Format (CRITICAL)
-  Thread IDs use the `thread::` prefix for disambiguation.
-  Copy thread IDs EXACTLY as shown in the VALID THREAD IDs list.
+  Path IDs use the `p::` prefix for disambiguation.
+  Copy path IDs EXACTLY as shown in the VALID PATH IDs list.
 
   ## Schema
   Return a JSON object with a "consequences" array. Each item is a Consequence:
@@ -205,7 +202,7 @@ consequences_prompt: |
     "consequences": [
       {
         "consequence_id": "host_revealed",
-        "thread_id": "thread::host_motive",
+        "path_id": "p::host_benevolent_or_selfish__protector",
         "description": "What happens narratively",
         "narrative_effects": ["story effect 1", "story effect 2"]
       }
@@ -214,7 +211,7 @@ consequences_prompt: |
   ```
 
   Note: `consequence_id` is a raw ID without prefix (local identifier).
-  `thread_id` MUST include the `thread::` prefix.
+  `path_id` MUST include the `p::` prefix.
 
   ## Consequence ID Naming Convention
 
@@ -230,15 +227,15 @@ consequences_prompt: |
 
   ## Rules
   - consequence_id must be unique (raw ID, no prefix, following naming convention above)
-  - thread_id must include the `thread::` prefix and reference a thread from the VALID THREAD IDs list
+  - path_id must include the `p::` prefix and reference a path from the VALID PATH IDs list
   - narrative_effects: Array of story effects this consequence implies
-  - Generate at least one consequence for EACH thread
+  - Generate at least one consequence for EACH path
 
   ## What NOT to Do
-  - Do NOT reference thread IDs that don't exist
-  - Do NOT leave any thread without consequences
+  - Do NOT reference path IDs that don't exist
+  - Do NOT leave any path without consequences
   - Do NOT use generic consequence IDs like `consequence_1` (use descriptive names)
-  - Do NOT omit the `thread::` prefix from thread_id
+  - Do NOT omit the `p::` prefix from path_id
 
   ## Output
   Return ONLY valid JSON with the "consequences" array.
@@ -248,20 +245,20 @@ beats_prompt: |
   You are generating INITIAL BEATS for a SEED stage.
 
   ## Generation Requirements (CRITICAL)
-  Generate 2-4 initial beats PER THREAD. If there are 3 threads, expect 6-12 beats total.
+  Generate 2-4 initial beats PER PATH. If there are 3 paths, expect 6-12 beats total.
   Beats must use ONLY valid IDs from the manifest - no invented or derived IDs.
 
   ## CRITICAL: ID CONSTRAINTS (read first!)
 
   The brief contains valid ID lists. You MUST copy IDs exactly from these lists:
-  - `## VALID THREAD IDs` - use ONLY these in `threads` arrays
+  - `## VALID PATH IDs` - use ONLY these in `paths` arrays
   - `### Entity IDs` - use ONLY these in `entities` and `location` fields
 
   WRONG examples that WILL FAIL:
-  - `"clock_distortion"` - NOT a valid thread (derived from concept)
+  - `"clock_distortion"` - NOT a valid path (derived from concept)
   - `"the_garden"` - WRONG, use `"garden"` (no prefix)
-  - `"murder_intent"` - This is a tension ID, not a thread ID
-  - `"seed_of_stillness"` as tension_id - WRONG, this is an entity (no `_or_` = not a tension)
+  - `"murder_intent"` - This is a dilemma ID, not a path ID
+  - `"seed_of_stillness"` as dilemma_id - WRONG, this is an entity (no `_or_` = not a dilemma)
 
   ## Schema
   Return a JSON object with an "initial_beats" array:
@@ -271,10 +268,10 @@ beats_prompt: |
       {
         "beat_id": "unique_beat_id",
         "summary": "What happens in this beat",
-        "threads": ["thread::[your_thread_id]", "thread::[another_thread]"],
-        "tension_impacts": [
+        "paths": ["p::[your_path_id]", "p::[another_path]"],
+        "dilemma_impacts": [
           {
-            "tension_id": "tension::[your_tension_id]",
+            "dilemma_id": "d::[your_dilemma_id]",
             "effect": "advances",
             "note": "Explanation of the impact"
           }
@@ -293,41 +290,41 @@ beats_prompt: |
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
   - All ID fields must use the correct type (see FIELD → ID TYPE MAPPING below)
   - location can be null; location_alternatives can be empty array
-  - Generate 2-4 beats for EACH thread in the VALID THREAD IDs list
-  - tension_impacts MUST use tension IDs from the Tension IDs list — NOT entity names
+  - Generate 2-4 beats for EACH path in the VALID PATH IDs list
+  - dilemma_impacts MUST use dilemma IDs from the Dilemma IDs list — NOT entity names
 
-  ## TENSION IMPACT CONSTRAINT (MOST IMPORTANT RULE)
+  ## DILEMMA IMPACT CONSTRAINT (MOST IMPORTANT RULE)
 
-  Every beat belongs to a thread. Every thread has a PARENT TENSION (shown in the
-  THREAD → TENSION MAPPING in your brief). The beat's tension_impacts MUST include
-  the parent tension of the beat's thread.
+  Every beat belongs to a path. Every path has a PARENT DILEMMA (shown in the
+  PATH → DILEMMA MAPPING in your brief). The beat's dilemma_impacts MUST include
+  the parent dilemma of the beat's path.
 
-  RULE: Look up the beat's thread in THREAD → TENSION MAPPING. Use THAT tension_id.
+  RULE: Look up the beat's path in PATH → DILEMMA MAPPING. Use THAT dilemma_id.
 
   EXAMPLE (format only - use YOUR story's IDs):
-  - If thread `thread::keeper_loyalty` maps to `tension::keeper_faithful_or_corrupt`
-  - Then ALL beats in `thread::keeper_loyalty` MUST have a tension_impact with
-    `tension_id: "tension::keeper_faithful_or_corrupt"`
+  - If path `p::keeper_faithful_or_corrupt__faithful` maps to `d::keeper_faithful_or_corrupt`
+  - Then ALL beats in that path MUST have a dilemma_impact with
+    `dilemma_id: "d::keeper_faithful_or_corrupt"`
 
-  WRONG: Picking a tension because it "feels related" to the beat's content.
-  WRONG: Using the same tension for all beats regardless of thread.
-  RIGHT: Using the THREAD → TENSION MAPPING to find the correct tension.
+  WRONG: Picking a dilemma because it "feels related" to the beat's content.
+  WRONG: Using the same dilemma for all beats regardless of path.
+  RIGHT: Using the PATH → DILEMMA MAPPING to find the correct dilemma.
 
-  A beat MAY have additional tension_impacts for other tensions, but the FIRST
-  tension_impact MUST be the thread's parent tension.
+  A beat MAY have additional dilemma_impacts for other dilemmas, but the FIRST
+  dilemma_impact MUST be the path's parent dilemma.
 
   ## COMMITS BEATS REQUIREMENT (CRITICAL)
 
-  Each thread MUST have at least one beat with `effect: "commits"` — and that
-  commits beat MUST reference the thread's OWN parent tension (from the mapping).
+  Each path MUST have at least one beat with `effect: "commits"` — and that
+  commits beat MUST reference the path's OWN parent dilemma (from the mapping).
 
-  WRONG: All commits beats using the same tension_id.
-  RIGHT: Each thread's commits beat uses that thread's own parent tension.
+  WRONG: All commits beats using the same dilemma_id.
+  RIGHT: Each path's commits beat uses that path's own parent dilemma.
 
   EXAMPLE (format only):
-  - Thread `thread::keeper_loyalty` → commits beat uses `tension::keeper_faithful_or_corrupt`
-  - Thread `thread::artifact_origin` → commits beat uses `tension::artifact_natural_or_crafted`
-  - Each thread resolves ITS OWN tension, not someone else's.
+  - Path `p::keeper_faithful_or_corrupt__faithful` → commits beat uses `d::keeper_faithful_or_corrupt`
+  - Path `p::artifact_natural_or_crafted__natural` → commits beat uses `d::artifact_natural_or_crafted`
+  - Each path resolves ITS OWN dilemma, not someone else's.
 
   ## FIELD → ID TYPE MAPPING (prevents all ID confusion)
 
@@ -335,22 +332,22 @@ beats_prompt: |
 
   | Field | Prefix | Source List | Shape |
   |-------|--------|-------------|-------|
-  | `threads[]` | `thread::` | VALID THREAD IDs | short: `thing_nature` |
-  | `tension_impacts.tension_id` | `tension::` | Tension IDs | long: `subject_X_or_Y` |
+  | `paths[]` | `p::` | VALID PATH IDs | hierarchical: `dilemma__answer` |
+  | `dilemma_impacts.dilemma_id` | `d::` | Dilemma IDs | long: `subject_X_or_Y` |
   | `entities[]` | `entity::` | Entity IDs (characters, objects, factions) | varies |
   | `location` | `entity::` | Entity IDs (locations only) | varies |
 
-  Thread IDs are SHORT storyline names. Tension IDs are LONG binary questions.
+  Path IDs are hierarchical (dilemma__answer). Dilemma IDs are binary questions.
 
-  ## HOW TO TELL TENSION IDs FROM ENTITY IDs (CRITICAL)
+  ## HOW TO TELL DILEMMA IDs FROM ENTITY IDs (CRITICAL)
 
-  Tension IDs ALWAYS contain `_or_` in their name (e.g., `host_benevolent_or_selfish`).
+  Dilemma IDs ALWAYS contain `_or_` in their name (e.g., `host_benevolent_or_selfish`).
   Entity IDs NEVER contain `_or_`.
 
-  If an ID does NOT have `_or_` in it, it is an ENTITY — not a tension.
-  Do NOT use entity IDs like `seed_of_stillness` as tension_ids — `_of_` is NOT `_or_`.
+  If an ID does NOT have `_or_` in it, it is an ENTITY — not a dilemma.
+  Do NOT use entity IDs like `seed_of_stillness` as dilemma_ids — `_of_` is NOT `_or_`.
 
-  Do NOT put a thread ID in tension_impacts or a tension ID in threads.
+  Do NOT put a path ID in dilemma_impacts or a dilemma ID in paths.
   Do NOT put a location in entities or a non-location in location.
   Do NOT invent IDs - copy exactly from the manifest.
 
@@ -358,24 +355,24 @@ beats_prompt: |
 
   If you receive validation feedback about invalid IDs, DO NOT reduce your beat count.
   Fix ONLY the invalid ID references using the table above.
-  Your beat count should stay at 2-4 beats per thread.
+  Your beat count should stay at 2-4 beats per path.
 
   ## What NOT to Do
-  - Do NOT use entity IDs as tension_ids (entity IDs lack `_or_`)
-  - Do NOT derive thread IDs from tension names or concepts
+  - Do NOT use entity IDs as dilemma_ids (entity IDs lack `_or_`)
+  - Do NOT derive path IDs from dilemma names or concepts
   - Do NOT add prefixes like "the_" to entity IDs
-  - Do NOT generate fewer than 2 beats per thread
+  - Do NOT generate fewer than 2 beats per path
   - Do NOT reference IDs not in the manifest lists
 
   ## FINAL CHECK (verify before output)
   Before returning JSON, check each beat one by one:
-  1. Every `threads` item appears in VALID THREAD IDs (short names)
-  2. Every `tension_impacts.tension_id` appears in Tension IDs (long binary questions)
-  3. Every `tension_impacts.tension_id` contains `_or_` — if it doesn't, you used an entity ID by mistake
-  4. For EACH beat: look up the beat's thread in THREAD → TENSION MAPPING.
-     Does the beat's tension_impacts include that mapped tension? If NO, fix it.
-  5. For EACH thread: does at least one of its beats have `effect: "commits"`
-     with that thread's parent tension? If NO, add or fix one.
+  1. Every `paths` item appears in VALID PATH IDs (hierarchical format)
+  2. Every `dilemma_impacts.dilemma_id` appears in Dilemma IDs (long binary questions)
+  3. Every `dilemma_impacts.dilemma_id` contains `_or_` — if it doesn't, you used an entity ID by mistake
+  4. For EACH beat: look up the beat's path in PATH → DILEMMA MAPPING.
+     Does the beat's dilemma_impacts include that mapped dilemma? If NO, fix it.
+  5. For EACH path: does at least one of its beats have `effect: "commits"`
+     with that path's parent dilemma? If NO, add or fix one.
   6. Every `entities` item appears in Entity IDs (characters, objects, factions)
   7. `location` is a location-category entity from Entity IDs
   8. No invented IDs - copy-paste from the manifest, don't retype
@@ -383,61 +380,61 @@ beats_prompt: |
   ## Output
   Return ONLY valid JSON with the "initial_beats" array.
 
-# Section 5b: Per-Thread Initial Beats (used by per-thread serialization)
-# This prompt generates beats for a single thread with a fixed tension_id.
-# The thread_id, tension_id, and entity context are injected at runtime.
-per_thread_beats_prompt: |
-  You are generating INITIAL BEATS for ONE SPECIFIC THREAD.
+# Section 5b: Per-Path Initial Beats (used by per-path serialization)
+# This prompt generates beats for a single path with a fixed dilemma_id.
+# The path_id, dilemma_id, and entity context are injected at runtime.
+per_path_beats_prompt: |
+  You are generating INITIAL BEATS for ONE SPECIFIC PATH.
 
-  ## YOUR THREAD ID (MEMORIZE THIS)
+  ## YOUR PATH ID (MEMORIZE THIS)
 
-  You are generating beats for thread: `{thread_id}`
+  You are generating beats for path: `{path_id}`
 
-  The `threads` field in EVERY beat MUST contain EXACTLY: `["{thread_id}"]`
+  The `paths` field in EVERY beat MUST contain EXACTLY: `["{path_id}"]`
 
   ## COMMON MISTAKE - DO NOT MAKE THIS ERROR
 
-  Thread IDs are SHORT (e.g., `thread::ai_hostile`).
-  Tension IDs are LONG and contain `_or_` (e.g., `tension::ai_orion_benevolent_or_hostile`).
+  Path IDs are hierarchical (e.g., `p::ai_benevolent_or_hostile__hostile`).
+  Dilemma IDs are just the question (e.g., `d::ai_benevolent_or_hostile`).
 
   WRONG OUTPUT (will fail validation):
   ```json
-  "threads": ["{tension_id}"]  // WRONG! This is a TENSION ID (has _or_)
+  "paths": ["{dilemma_id}"]  // WRONG! This is a DILEMMA ID (use d:: prefix)
   ```
 
   CORRECT OUTPUT:
   ```json
-  "threads": ["{thread_id}"]  // RIGHT! This is the THREAD ID (short, no _or_)
+  "paths": ["{path_id}"]  // RIGHT! This is the PATH ID (p:: prefix with __answer)
   ```
 
-  RULE: If the ID contains `_or_`, it's a TENSION. Never put it in `threads`.
+  RULE: If the ID starts with `d::`, it's a DILEMMA. Never put it in `paths`.
 
-  ## YOUR TENSION ID (for tension_impacts only)
+  ## YOUR DILEMMA ID (for dilemma_impacts only)
 
-  Parent tension: `{tension_id}`
+  Parent dilemma: `{dilemma_id}`
 
-  This goes in `tension_impacts[].tension_id`, NOT in `threads`.
+  This goes in `dilemma_impacts[].dilemma_id`, NOT in `paths`.
 
   ## BEAT ID NAMING (CRITICAL - ensures uniqueness)
 
-  Beat IDs MUST be derived from your thread ID to ensure global uniqueness.
+  Beat IDs MUST be derived from your path name to ensure global uniqueness.
 
-  FORMAT: `{thread_name}_beat_[number]`
+  FORMAT: `{path_name}_beat_[number]`
 
-  Your thread name is `{thread_name}`. Use it as prefix with `_beat_01`, `_beat_02`, etc.
+  Your path name is `{path_name}`. Use it as prefix with `_beat_01`, `_beat_02`, etc.
 
-  EXAMPLES (for illustration only - use YOUR thread name):
-  - Thread `keeper_loyalty` → beat IDs: `keeper_loyalty_beat_01`, `keeper_loyalty_beat_02`
-  - Thread `artifact_origin` → beat IDs: `artifact_origin_beat_01`, `artifact_origin_beat_02`
+  EXAMPLES (for illustration only - use YOUR path name):
+  - Path `keeper_loyal` → beat IDs: `keeper_loyal_beat_01`, `keeper_loyal_beat_02`
+  - Path `artifact_natural` → beat IDs: `artifact_natural_beat_01`, `artifact_natural_beat_02`
 
-  WRONG: `beat_001`, `beat_01`, `initial_beat_1` (no thread prefix = collision)
-  RIGHT: `{thread_name}_beat_01` (thread prefix = globally unique)
+  WRONG: `beat_001`, `beat_01`, `initial_beat_1` (no path prefix = collision)
+  RIGHT: `{path_name}_beat_01` (path prefix = globally unique)
 
   ALL beats you generate MUST:
-  1. Have beat_id starting with `{thread_name}_beat_` (see BEAT ID NAMING above)
-  2. Have `threads: ["{thread_id}"]` (exactly this thread ID)
-  3. Have at least one tension_impact with `tension_id: "{tension_id}"`
-  4. Include at least one beat with `effect: "commits"` for `{tension_id}`
+  1. Have beat_id starting with `{path_name}_beat_` (see BEAT ID NAMING above)
+  2. Have `paths: ["{path_id}"]` (exactly this path ID)
+  3. Have at least one dilemma_impact with `dilemma_id: "{dilemma_id}"`
+  4. Include at least one beat with `effect: "commits"` for `{dilemma_id}`
 
   ## Schema
   Return a JSON object with an "initial_beats" array of 2-4 beats:
@@ -445,12 +442,12 @@ per_thread_beats_prompt: |
   {{
     "initial_beats": [
       {{
-        "beat_id": "{thread_name}_beat_01",
+        "beat_id": "{path_name}_beat_01",
         "summary": "What happens in this beat",
-        "threads": ["{thread_id}"],
-        "tension_impacts": [
+        "paths": ["{path_id}"],
+        "dilemma_impacts": [
           {{
-            "tension_id": "{tension_id}",
+            "dilemma_id": "{dilemma_id}",
             "effect": "advances",
             "note": "Explanation"
           }}
@@ -464,37 +461,37 @@ per_thread_beats_prompt: |
   ```
 
   ## Rules
-  - Generate exactly 2-4 beats for thread `{thread_id}`
-  - Beat IDs MUST start with `{thread_name}_beat_` (e.g., `{thread_name}_beat_01`)
-  - EVERY beat must include `{thread_id}` in its `threads` array
-  - EVERY beat must have at least one tension_impact for `{tension_id}`
-  - At least ONE beat must have `effect: "commits"` for `{tension_id}`
+  - Generate exactly 2-4 beats for path `{path_id}`
+  - Beat IDs MUST start with `{path_name}_beat_` (e.g., `{path_name}_beat_01`)
+  - EVERY beat must include `{path_id}` in its `paths` array
+  - EVERY beat must have at least one dilemma_impact for `{dilemma_id}`
+  - At least ONE beat must have `effect: "commits"` for `{dilemma_id}`
   - effect must be "advances", "reveals", "commits", or "complicates"
   - Use entity IDs from the Entity IDs list only
   - Use location IDs from the Entity IDs list (location category only)
 
   ## COMMITS BEAT REQUIREMENT
-  You MUST include exactly one beat with `effect: "commits"` for `{tension_id}`.
-  This beat represents the moment where this thread's tension is locked in.
+  You MUST include exactly one beat with `effect: "commits"` for `{dilemma_id}`.
+  This beat represents the moment where this path's dilemma is locked in.
 
   WRONG: Generating only "advances" and "reveals" beats.
   RIGHT: Including one beat with `effect: "commits"`.
 
   ## What NOT to Do
-  - Do NOT use generic beat IDs like `beat_001` (must include thread name prefix)
-  - Do NOT generate beats for other threads
-  - Do NOT reference other tension_ids in your first tension_impact
+  - Do NOT use generic beat IDs like `beat_001` (must include path name prefix)
+  - Do NOT generate beats for other paths
+  - Do NOT reference other dilemma_ids in your first dilemma_impact
   - Do NOT skip the commits beat
   - Do NOT use IDs not in the manifest
-  - Do NOT put the tension ID in the `threads` field (see COMMON MISTAKE above)
+  - Do NOT put the dilemma ID in the `paths` field (see COMMON MISTAKE above)
 
   ## FINAL VERIFICATION (check before outputting)
 
   For EACH beat you generate, verify:
-  1. `threads` contains `{thread_id}` (SHORT id, NO `_or_` in it)
-  2. `tension_impacts[0].tension_id` is `{tension_id}` (LONG id, HAS `_or_`)
+  1. `paths` contains `{path_id}` (p:: prefix with __answer)
+  2. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}` (d:: prefix)
 
-  If you see `_or_` in your `threads` value, YOU MADE A MISTAKE. Fix it.
+  If you see `d::` in your `paths` value, YOU MADE A MISTAKE. Fix it.
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array (2-4 beats).
@@ -508,14 +505,14 @@ convergence_prompt: |
   ```json
   {
     "convergence_sketch": {
-      "convergence_points": ["where threads should merge"],
+      "convergence_points": ["where paths should merge"],
       "residue_notes": ["differences that persist after convergence"]
     }
   }
   ```
 
   ## Rules
-  - convergence_points: Where threads should merge (e.g., "by act 2 climax")
+  - convergence_points: Where paths should merge (e.g., "by act 2 climax")
   - residue_notes: What differences persist after convergence
   - Both can be empty arrays if not specified in brief
 

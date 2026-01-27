@@ -14,11 +14,12 @@ from questfoundry.models.grow import (
     GapProposal,
     GrowPhaseResult,
     GrowResult,
-    KnotProposal,
+    IntersectionProposal,
     OverlayProposal,
     Passage,
+    PathAgnosticAssessment,
+    Phase3Output,
     SceneTypeTag,
-    ThreadAgnosticAssessment,
 )
 
 
@@ -27,7 +28,7 @@ class TestArc:
         arc = Arc(
             arc_id="mentor_trust+artifact_quest",
             arc_type="spine",
-            threads=["mentor_trust_canonical", "artifact_quest_canonical"],
+            paths=["mentor_trust_canonical", "artifact_quest_canonical"],
             sequence=["beat_1", "beat_2", "beat_3"],
         )
         assert arc.arc_id == "mentor_trust+artifact_quest"
@@ -39,7 +40,7 @@ class TestArc:
         arc = Arc(
             arc_id="mentor_trust+artifact_quest",
             arc_type="branch",
-            threads=["mentor_trust_alt", "artifact_quest_canonical"],
+            paths=["mentor_trust_alt", "artifact_quest_canonical"],
             sequence=["beat_1", "beat_4"],
             diverges_from="arc::spine",
             diverges_at="beat_2",
@@ -50,30 +51,41 @@ class TestArc:
 
     def test_empty_arc_id_rejected(self) -> None:
         with pytest.raises(ValidationError, match="arc_id"):
-            Arc(arc_id="", arc_type="spine", threads=["t1"])
+            Arc(arc_id="", arc_type="spine", paths=["t1"])
 
-    def test_empty_threads_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="threads"):
-            Arc(arc_id="test", arc_type="spine", threads=[])
+    def test_empty_paths_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="paths"):
+            Arc(arc_id="test", arc_type="spine", paths=[])
 
     def test_invalid_arc_type_rejected(self) -> None:
         with pytest.raises(ValidationError, match="arc_type"):
-            Arc(arc_id="test", arc_type="invalid", threads=["t1"])  # type: ignore[arg-type]
+            Arc(arc_id="test", arc_type="invalid", paths=["t1"])  # type: ignore[arg-type]
 
     def test_empty_sequence_allowed(self) -> None:
-        arc = Arc(arc_id="test", arc_type="spine", threads=["t1"])
+        arc = Arc(arc_id="test", arc_type="spine", paths=["t1"])
         assert arc.sequence == []
 
     def test_convergence_fields(self) -> None:
         arc = Arc(
             arc_id="test",
             arc_type="branch",
-            threads=["t1"],
+            paths=["t1"],
             converges_to="arc::spine",
             converges_at="beat_5",
         )
         assert arc.converges_to == "arc::spine"
         assert arc.converges_at == "beat_5"
+
+    def test_threads_migration(self) -> None:
+        """Verify backward compat: 'threads' field migrates to 'paths'."""
+        arc = Arc(
+            arc_id="test",
+            arc_type="spine",
+            threads=["path_a", "path_b"],  # type: ignore[call-arg]
+        )
+        assert arc.paths == ["path_a", "path_b"]
+        # Backward compat property still works
+        assert arc.threads == ["path_a", "path_b"]
 
 
 class TestPassage:
@@ -173,46 +185,59 @@ class TestEntityOverlay:
         assert overlay.details == {}
 
 
-class TestThreadAgnosticAssessment:
+class TestPathAgnosticAssessment:
     def test_valid_assessment(self) -> None:
-        ta = ThreadAgnosticAssessment(
+        ta = PathAgnosticAssessment(
             beat_id="beat_1",
-            agnostic_for=["tension_mentor_trust"],
+            agnostic_for=["dilemma_mentor_trust"],
         )
         assert ta.beat_id == "beat_1"
-        assert ta.agnostic_for == ["tension_mentor_trust"]
+        assert ta.agnostic_for == ["dilemma_mentor_trust"]
 
     def test_empty_agnostic_for_allowed(self) -> None:
-        ta = ThreadAgnosticAssessment(beat_id="b1")
+        ta = PathAgnosticAssessment(beat_id="b1")
         assert ta.agnostic_for == []
 
     def test_empty_beat_id_rejected(self) -> None:
         with pytest.raises(ValidationError, match="beat_id"):
-            ThreadAgnosticAssessment(beat_id="")
+            PathAgnosticAssessment(beat_id="")
 
 
-class TestKnotProposal:
-    def test_valid_knot(self) -> None:
-        knot = KnotProposal(
+class TestIntersectionProposal:
+    def test_valid_intersection(self) -> None:
+        intersection = IntersectionProposal(
             beat_ids=["beat_1", "beat_2", "beat_3"],
             resolved_location="beat_4",
             rationale="Shared location signal",
         )
-        assert len(knot.beat_ids) == 3
-        assert knot.resolved_location == "beat_4"
-        assert knot.rationale == "Shared location signal"
+        assert len(intersection.beat_ids) == 3
+        assert intersection.resolved_location == "beat_4"
+        assert intersection.rationale == "Shared location signal"
 
     def test_single_beat_rejected(self) -> None:
         with pytest.raises(ValidationError, match="beat_ids"):
-            KnotProposal(beat_ids=["beat_1"])
+            IntersectionProposal(beat_ids=["beat_1"], rationale="test")
 
     def test_empty_beat_ids_rejected(self) -> None:
         with pytest.raises(ValidationError, match="beat_ids"):
-            KnotProposal(beat_ids=[])
+            IntersectionProposal(beat_ids=[], rationale="test")
 
     def test_no_resolved_location_allowed(self) -> None:
-        knot = KnotProposal(beat_ids=["b1", "b2"], rationale="Entity overlap")
-        assert knot.resolved_location is None
+        intersection = IntersectionProposal(beat_ids=["b1", "b2"], rationale="Entity overlap")
+        assert intersection.resolved_location is None
+
+
+class TestPhase3Output:
+    def test_knots_migration(self) -> None:
+        """Verify backward compat: 'knots' field migrates to 'intersections'."""
+        output = Phase3Output(
+            knots=[  # type: ignore[call-arg]
+                {"beat_ids": ["b1", "b2"], "rationale": "test"},
+            ]
+        )
+        assert len(output.intersections) == 1
+        # Backward compat property still works
+        assert len(output.knots) == 1
 
 
 class TestSceneTypeTag:
@@ -236,27 +261,37 @@ class TestSceneTypeTag:
 class TestGapProposal:
     def test_valid_gap(self) -> None:
         gap = GapProposal(
-            thread_id="thread_main",
+            path_id="path_main",
             after_beat="beat_2",
             before_beat="beat_3",
             summary="Hero reflects on the battle.",
             scene_type="sequel",
         )
-        assert gap.thread_id == "thread_main"
+        assert gap.path_id == "path_main"
         assert gap.scene_type == "sequel"
 
     def test_default_scene_type_is_sequel(self) -> None:
-        gap = GapProposal(thread_id="t1", summary="A transition.")
+        gap = GapProposal(path_id="t1", summary="A transition.")
         assert gap.scene_type == "sequel"
 
     def test_no_before_after_allowed(self) -> None:
-        gap = GapProposal(thread_id="t1", summary="Opening scene.")
+        gap = GapProposal(path_id="t1", summary="Opening scene.")
         assert gap.after_beat is None
         assert gap.before_beat is None
 
     def test_empty_summary_rejected(self) -> None:
         with pytest.raises(ValidationError, match="summary"):
-            GapProposal(thread_id="t1", summary="")
+            GapProposal(path_id="t1", summary="")
+
+    def test_thread_id_migration(self) -> None:
+        """Verify backward compat: 'thread_id' field migrates to 'path_id'."""
+        gap = GapProposal(
+            thread_id="thread_main",  # type: ignore[call-arg]
+            summary="A scene.",
+        )
+        assert gap.path_id == "thread_main"
+        # Backward compat property still works
+        assert gap.thread_id == "thread_main"
 
 
 class TestOverlayProposal:
@@ -328,11 +363,11 @@ class TestGrowResult:
                 GrowPhaseResult(phase="validate", status="completed"),
                 GrowPhaseResult(phase="arcs", status="completed"),
             ],
-            spine_arc_id="arc::thread_a+thread_b",
+            spine_arc_id="arc::path_a+path_b",
         )
         assert result.arc_count == 4
         assert len(result.phases_completed) == 2
-        assert result.spine_arc_id == "arc::thread_a+thread_b"
+        assert result.spine_arc_id == "arc::path_a+path_b"
 
     def test_model_dump_roundtrip(self) -> None:
         result = GrowResult(

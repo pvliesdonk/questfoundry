@@ -10,7 +10,7 @@ from questfoundry.graph.mutations import (
     BrainstormValidationError,
     SeedErrorCategory,
     SeedValidationError,
-    _backfill_considered_from_threads,
+    _backfill_considered_from_paths,
     _format_available_with_suggestions,
     _normalize_id,
     _prefix_id,
@@ -295,7 +295,7 @@ class TestBrainstormMutations:
         }
 
         with pytest.raises(
-            MutationError, match="Tension at index 0 missing required 'tension_id' field"
+            MutationError, match="Dilemma at index 0 missing required 'tension_id' field"
         ):
             apply_brainstorm_mutations(graph, output)
 
@@ -317,7 +317,7 @@ class TestBrainstormMutations:
 
         with pytest.raises(
             MutationError,
-            match="Alternative at index 0 in tension 'tension_001' missing required 'alternative_id' field",
+            match="Answer at index 0 in dilemma 'tension_001' missing required 'alternative_id' field",
         ):
             apply_brainstorm_mutations(graph, output)
 
@@ -520,7 +520,7 @@ class TestValidateBrainstormMutations:
         errors = validate_brainstorm_mutations(output)
 
         assert len(errors) == 1
-        assert "No alternative has is_default_path=true" in errors[0].issue
+        assert "No answer has is_default_path=true" in errors[0].issue
 
     def test_multiple_default_paths_detected(self) -> None:
         """Detects when multiple alternatives have is_default_path=True."""
@@ -542,7 +542,7 @@ class TestValidateBrainstormMutations:
         errors = validate_brainstorm_mutations(output)
 
         assert len(errors) == 1
-        assert "Multiple alternatives have is_default_path=true" in errors[0].issue
+        assert "Multiple answers have is_default_path=true" in errors[0].issue
 
     def test_multiple_errors_collected(self) -> None:
         """Multiple errors across different validations are all collected."""
@@ -598,7 +598,7 @@ class TestValidateBrainstormMutations:
         errors = validate_brainstorm_mutations(output)
 
         assert len(errors) == 1
-        assert "No alternative has is_default_path=true" in errors[0].issue
+        assert "No answer has is_default_path=true" in errors[0].issue
 
     def test_empty_entity_id_detected(self) -> None:
         """Detects empty or missing entity_id values."""
@@ -695,7 +695,7 @@ class TestSeedMutations:
         }
 
         with pytest.raises(
-            MutationError, match="Thread at index 0 missing required 'thread_id' field"
+            MutationError, match="Path at index 0 missing required 'thread_id' field"
         ):
             apply_seed_mutations(graph, output)
 
@@ -1124,13 +1124,13 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        # Should find 1 missing tension decision
-        tension_errors = [e for e in errors if "Missing decision for tension" in e.issue]
-        assert len(tension_errors) == 1
-        assert "loyalty" in tension_errors[0].issue
+        # Should find 1 missing dilemma decision
+        dilemma_errors = [e for e in errors if "Missing decision for dilemma" in e.issue]
+        assert len(dilemma_errors) == 1
+        assert "loyalty" in dilemma_errors[0].issue
 
-    def test_both_entity_and_tension_missing_detected(self) -> None:
-        """Detects missing decisions for both entities and tensions."""
+    def test_both_entity_and_dilemma_missing_detected(self) -> None:
+        """Detects missing decisions for both entities and dilemmas."""
         graph = Graph.empty()
         # Add entity and tension from BRAINSTORM
         graph.create_node(
@@ -1147,14 +1147,14 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        # Should find both missing entity and missing tension
+        # Should find both missing entity and missing dilemma
         # Entity errors use category-specific messages (e.g., "Missing decision for character")
         entity_errors = [
-            e for e in errors if "Missing decision for" in e.issue and "tension" not in e.issue
+            e for e in errors if "Missing decision for" in e.issue and "dilemma" not in e.issue
         ]
-        tension_errors = [e for e in errors if "Missing decision for tension" in e.issue]
+        dilemma_errors = [e for e in errors if "Missing decision for dilemma" in e.issue]
         assert len(entity_errors) == 1
-        assert len(tension_errors) == 1
+        assert len(dilemma_errors) == 1
 
     def test_missing_faction_entity_shows_category(self) -> None:
         """Missing faction entity decision shows 'faction' in error message."""
@@ -1185,8 +1185,8 @@ class TestSeedCompletenessValidation:
         assert len(errors) == 1
         assert "Missing decision for faction 'the_family'" in errors[0].issue
 
-    def test_tension_without_thread_detected(self) -> None:
-        """Detects when a tension has no corresponding thread."""
+    def test_dilemma_without_path_detected(self) -> None:
+        """Detects when a dilemma has no corresponding path."""
         graph = Graph.empty()
         graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
         graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
@@ -1206,20 +1206,20 @@ class TestSeedCompletenessValidation:
                     "tension_id": "trust",
                     "alternative_id": "yes",
                 }
-                # Missing: no thread for loyalty
+                # Missing: no path for loyalty
             ],
             "initial_beats": [],
         }
 
         errors = validate_seed_mutations(graph, output)
 
-        thread_errors = [e for e in errors if "has no thread" in e.issue]
-        assert len(thread_errors) == 1
-        assert "loyalty" in thread_errors[0].issue
-        assert thread_errors[0].category == SeedErrorCategory.COMPLETENESS
+        path_errors = [e for e in errors if "has no path" in e.issue]
+        assert len(path_errors) == 1
+        assert "loyalty" in path_errors[0].issue
+        assert path_errors[0].category == SeedErrorCategory.COMPLETENESS
 
-    def test_all_tensions_with_threads_valid(self) -> None:
-        """All tensions having threads passes thread completeness check."""
+    def test_all_dilemmas_with_paths_valid(self) -> None:
+        """All dilemmas having paths passes path completeness check."""
         graph = Graph.empty()
         graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
         graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
@@ -1255,7 +1255,7 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        thread_errors = [e for e in errors if "has no thread" in e.issue]
+        thread_errors = [e for e in errors if "has no path" in e.issue]
         assert thread_errors == []
 
     def test_scoped_tension_id_in_thread_satisfies_completeness(self) -> None:
@@ -1281,11 +1281,11 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        thread_errors = [e for e in errors if "has no thread" in e.issue]
+        thread_errors = [e for e in errors if "has no path" in e.issue]
         assert thread_errors == []
 
-    def test_missing_threads_for_considered_alternatives(self) -> None:
-        """Each considered alternative needs its own thread - missing threads caught."""
+    def test_missing_paths_for_considered_answers(self) -> None:
+        """Each considered answer needs its own path - missing paths caught."""
         graph = Graph.empty()
         graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
         graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
@@ -1296,7 +1296,7 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "tensions": [
-                # Both alternatives considered, but only 1 thread created
+                # Both answers considered, but only 1 path created
                 {"tension_id": "trust", "considered": ["yes", "no"], "implicit": []},
             ],
             "threads": [
@@ -1306,18 +1306,18 @@ class TestSeedCompletenessValidation:
                     "tension_id": "trust",
                     "alternative_id": "yes",
                 },
-                # Missing thread for 'no' alternative!
+                # Missing path for 'no' answer!
             ],
             "initial_beats": [],
         }
 
         errors = validate_seed_mutations(graph, output)
 
-        missing_thread_errors = [e for e in errors if "considered alternatives" in e.issue]
-        assert len(missing_thread_errors) == 1
-        assert "2 considered alternatives" in missing_thread_errors[0].issue
-        assert "1 thread" in missing_thread_errors[0].issue
-        assert missing_thread_errors[0].category == SeedErrorCategory.COMPLETENESS
+        missing_path_errors = [e for e in errors if "considered answers" in e.issue]
+        assert len(missing_path_errors) == 1
+        assert "2 considered answers" in missing_path_errors[0].issue
+        assert "1 path" in missing_path_errors[0].issue
+        assert missing_path_errors[0].category == SeedErrorCategory.COMPLETENESS
 
     def test_all_considered_alternatives_have_threads(self) -> None:
         """When each considered alternative has a thread, validation passes."""
@@ -1453,7 +1453,7 @@ class TestBeatTensionAlignment:
 
         errors = validate_seed_mutations(graph, output)
 
-        alignment_errors = [e for e in errors if "does not reference its parent tension" in e.issue]
+        alignment_errors = [e for e in errors if "does not reference its parent dilemma" in e.issue]
         assert len(alignment_errors) == 1
         assert "trust_arc" in alignment_errors[0].issue
         assert "trust" in alignment_errors[0].available
@@ -1473,7 +1473,7 @@ class TestBeatTensionAlignment:
 
         errors = validate_seed_mutations(graph, output)
 
-        alignment_errors = [e for e in errors if "does not reference its parent tension" in e.issue]
+        alignment_errors = [e for e in errors if "does not reference its parent dilemma" in e.issue]
         assert len(alignment_errors) == 1
 
     def test_thread_no_commits_beat_detected(self) -> None:
@@ -2716,21 +2716,21 @@ class TestFormatSemanticErrorsAsContent:
         assert "hollow_key" in result
         assert "ancient_scroll" in result
 
-    def test_formats_thread_completeness_errors(self) -> None:
-        """Should format thread completeness errors in Missing threads section."""
+    def test_formats_path_completeness_errors(self) -> None:
+        """Should format path completeness errors in Missing paths section."""
         from questfoundry.graph.mutations import format_semantic_errors_as_content
 
         errors = [
             SeedValidationError(
-                field_path="threads",
-                issue="Tension 'loyalty' has no thread. Create at least one thread exploring this tension.",
+                field_path="paths",
+                issue="Dilemma 'loyalty' has no path. Create at least one path exploring this dilemma.",
                 available=[],
                 provided="",
                 category=SeedErrorCategory.COMPLETENESS,
             ),
             SeedValidationError(
-                field_path="threads",
-                issue="Tension 'trust' has no thread. Create at least one thread exploring this tension.",
+                field_path="paths",
+                issue="Dilemma 'trust' has no path. Create at least one path exploring this dilemma.",
                 available=[],
                 provided="",
                 category=SeedErrorCategory.COMPLETENESS,
@@ -2739,7 +2739,7 @@ class TestFormatSemanticErrorsAsContent:
 
         result = format_semantic_errors_as_content(errors)
 
-        assert "Missing threads" in result
+        assert "Missing paths" in result
         assert "loyalty" in result
         assert "trust" in result
         # Should NOT appear in decision-missing section
@@ -2853,10 +2853,10 @@ class TestTypeAwareFeedback:
         errors = validate_seed_mutations(graph, output)
 
         # Should get a type-aware error, not generic "not in BRAINSTORM"
-        tension_errors = [e for e in errors if "tension_impacts" in e.field_path]
-        assert len(tension_errors) == 1
-        assert "is an entity (faction), not a tension" in tension_errors[0].issue
-        assert "subject_X_or_Y" in tension_errors[0].issue
+        dilemma_impact_errors = [e for e in errors if "dilemma_impacts" in e.field_path]
+        assert len(dilemma_impact_errors) == 1
+        assert "is an entity (faction), not a dilemma" in dilemma_impact_errors[0].issue
+        assert "subject_X_or_Y" in dilemma_impact_errors[0].issue
 
     def test_type_aware_feedback_thread_as_tension(self) -> None:
         """Thread ID used as tension_id gives helpful message."""
@@ -2906,11 +2906,11 @@ class TestTypeAwareFeedback:
 
         errors = validate_seed_mutations(graph, output)
 
-        tension_errors = [e for e in errors if "tension_impacts" in e.field_path]
-        assert len(tension_errors) == 1
-        assert "is a thread ID, not a tension" in tension_errors[0].issue
+        dilemma_impact_errors = [e for e in errors if "dilemma_impacts" in e.field_path]
+        assert len(dilemma_impact_errors) == 1
+        assert "is a path ID, not a dilemma" in dilemma_impact_errors[0].issue
 
-    def test_type_aware_feedback_tension_as_entity(self) -> None:
+    def test_type_aware_feedback_dilemma_as_entity(self) -> None:
         """Tension ID used as entity in beat gives helpful message."""
         graph = Graph.empty()
         graph.create_node(
@@ -2942,7 +2942,7 @@ class TestTypeAwareFeedback:
 
         entity_errors = [e for e in errors if "initial_beats.0.entities" in e.field_path]
         assert len(entity_errors) == 1
-        assert "is a tension ID, not an entity" in entity_errors[0].issue
+        assert "is a dilemma ID, not an entity" in entity_errors[0].issue
 
 
 class TestCutEntityInBeats:
@@ -3102,7 +3102,7 @@ class TestCutEntityInBeats:
 
 
 class TestBackfillConsideredFromThreads:
-    """Tests for _backfill_considered_from_threads migration function."""
+    """Tests for _backfill_considered_from_paths migration function."""
 
     def test_backfills_empty_considered_from_threads(self) -> None:
         """Empty considered array is filled from thread alternative_ids."""
@@ -3124,7 +3124,7 @@ class TestBackfillConsideredFromThreads:
             ],
         }
 
-        _backfill_considered_from_threads(output)
+        _backfill_considered_from_paths(output)
 
         assert output["tensions"][0]["considered"] == ["option_a", "option_b"]
 
@@ -3143,7 +3143,7 @@ class TestBackfillConsideredFromThreads:
             ],
         }
 
-        _backfill_considered_from_threads(output)
+        _backfill_considered_from_paths(output)
 
         assert output["tensions"][0]["considered"] == ["existing_value"]
 
@@ -3162,7 +3162,7 @@ class TestBackfillConsideredFromThreads:
             ],
         }
 
-        _backfill_considered_from_threads(output)
+        _backfill_considered_from_paths(output)
 
         assert output["tensions"][0]["considered"] == ["option_a"]
 
@@ -3181,7 +3181,7 @@ class TestBackfillConsideredFromThreads:
             ],
         }
 
-        _backfill_considered_from_threads(output)
+        _backfill_considered_from_paths(output)
 
         assert output["tensions"][0]["considered"] == ["option_a"]
 
@@ -3200,7 +3200,7 @@ class TestBackfillConsideredFromThreads:
             ],
         }
 
-        _backfill_considered_from_threads(output)
+        _backfill_considered_from_paths(output)
 
         # explored is not empty, so no backfill
         assert "considered" not in output["tensions"][0]
@@ -3215,7 +3215,7 @@ class TestBackfillConsideredFromThreads:
             "threads": [],
         }
 
-        _backfill_considered_from_threads(output)
+        _backfill_considered_from_paths(output)
 
         assert output["tensions"][0]["considered"] == []
 
@@ -3230,7 +3230,7 @@ class TestBackfillConsideredFromThreads:
             ],
         }
 
-        _backfill_considered_from_threads(output)
+        _backfill_considered_from_paths(output)
 
         assert output["tensions"][0]["considered"] == []
 
@@ -3248,7 +3248,7 @@ class TestBackfillConsideredFromThreads:
             ],
         }
 
-        _backfill_considered_from_threads(output)
+        _backfill_considered_from_paths(output)
 
         assert output["tensions"][0]["considered"] == ["opt_a"]
         assert output["tensions"][1]["considered"] == ["opt_x", "opt_y"]
@@ -3315,7 +3315,7 @@ class TestValidation11cThreadAlternativeInConsidered:
 
         # Filter for 11c errors specifically
         check_11c_errors = [
-            e for e in errors if "not in tension" in e.issue and "considered" in e.issue
+            e for e in errors if "is not in dilemma" in e.issue and "considered list" in e.issue
         ]
         assert check_11c_errors == []
 
@@ -3377,12 +3377,12 @@ class TestValidation11cThreadAlternativeInConsidered:
 
         # Filter for 11c errors specifically
         check_11c_errors = [
-            e for e in errors if "not in tension" in e.issue and "considered" in e.issue
+            e for e in errors if "is not in dilemma" in e.issue and "considered list" in e.issue
         ]
         assert len(check_11c_errors) == 1
         assert "option_b" in check_11c_errors[0].issue
         assert "choice_a_or_b" in check_11c_errors[0].issue
-        assert check_11c_errors[0].field_path == "threads.1.alternative_id"
+        assert check_11c_errors[0].field_path == "paths.1.answer_id"
         assert check_11c_errors[0].category == SeedErrorCategory.SEMANTIC
 
     def test_empty_considered_detected(self) -> None:
@@ -3428,7 +3428,7 @@ class TestValidation11cThreadAlternativeInConsidered:
 
         # Filter for 11c errors
         check_11c_errors = [
-            e for e in errors if "not in tension" in e.issue and "considered" in e.issue
+            e for e in errors if "is not in dilemma" in e.issue and "considered list" in e.issue
         ]
         assert len(check_11c_errors) == 1
         assert "option_a" in check_11c_errors[0].issue
@@ -3476,7 +3476,7 @@ class TestValidation11cThreadAlternativeInConsidered:
 
         # Filter for 11c errors
         check_11c_errors = [
-            e for e in errors if "not in tension" in e.issue and "considered" in e.issue
+            e for e in errors if "is not in dilemma" in e.issue and "considered list" in e.issue
         ]
         assert check_11c_errors == []
 
