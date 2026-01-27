@@ -602,9 +602,9 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
             entity_ids.add(entity_id)
     sorted_entity_ids = sorted(entity_ids)
 
-    # Validate each dilemma (stored as "tensions" in graph for backward compat)
-    for i, dilemma in enumerate(output.get("tensions", [])):
-        dilemma_id = dilemma.get("tension_id", f"<index {i}>")
+    # Validate each dilemma (accept new "dilemmas" field or legacy "tensions")
+    for i, dilemma in enumerate(output.get("dilemmas", output.get("tensions", []))):
+        dilemma_id = dilemma.get("dilemma_id", dilemma.get("tension_id", f"<index {i}>"))
 
         # 1. Check central_entity_ids reference valid entities
         for eid in dilemma.get("central_entity_ids", []):
@@ -619,8 +619,12 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
                 )
 
         # 2. Check answer IDs are unique within this dilemma
-        answers = dilemma.get("alternatives", [])
-        answer_ids = [a.get("alternative_id") for a in answers if a.get("alternative_id")]
+        answers = dilemma.get("answers", dilemma.get("alternatives", []))
+        answer_ids = [
+            a.get("answer_id", a.get("alternative_id"))
+            for a in answers
+            if a.get("answer_id", a.get("alternative_id"))
+        ]
         answer_id_counts = Counter(answer_ids)
         for answer_id, count in answer_id_counts.items():
             if count > 1:
@@ -723,9 +727,12 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         node_data = _clean_dict(node_data)
         graph.create_node(entity_id, node_data)
 
-    # Add dilemmas with answers (stored as "tensions" with "alternatives" for backward compat)
-    for i, dilemma in enumerate(output.get("tensions", [])):
-        raw_id = _require_field(dilemma, "tension_id", f"Dilemma at index {i}")
+    # Add dilemmas with answers (accept new field names or legacy "tensions"/"alternatives")
+    for i, dilemma in enumerate(output.get("dilemmas", output.get("tensions", []))):
+        # Accept new "dilemma_id" or legacy "tension_id"
+        raw_id = dilemma.get("dilemma_id", dilemma.get("tension_id"))
+        if not raw_id:
+            raise MutationError(f"Dilemma at index {i} missing dilemma_id")
         dilemma_node_id = _prefix_id("tension", raw_id)  # Uses legacy "tension" prefix
 
         # Prefix entity references in central_entity_ids list
@@ -743,11 +750,12 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         dilemma_data = _clean_dict(dilemma_data)
         graph.create_node(dilemma_node_id, dilemma_data)
 
-        # Create answer nodes and edges (stored as "alternative" type for backward compat)
-        for j, answer in enumerate(dilemma.get("alternatives", [])):
-            answer_local_id = _require_field(
-                answer, "alternative_id", f"Answer at index {j} in dilemma '{raw_id}'"
-            )
+        # Create answer nodes and edges (accept new "answers" or legacy "alternatives")
+        for j, answer in enumerate(dilemma.get("answers", dilemma.get("alternatives", []))):
+            # Accept new "answer_id" or legacy "alternative_id"
+            answer_local_id = answer.get("answer_id", answer.get("alternative_id"))
+            if not answer_local_id:
+                raise MutationError(f"Answer at index {j} in dilemma '{raw_id}' missing answer_id")
             # Answer ID format: tension::dilemma_raw_id::alt::answer_local_id
             answer_node_id = f"{dilemma_node_id}::alt::{answer_local_id}"
             answer_data = {

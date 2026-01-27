@@ -559,7 +559,7 @@ def _preview_dream_artifact(artifact: dict[str, Any]) -> None:
 def _preview_brainstorm_artifact(artifact: dict[str, Any]) -> None:
     """Display preview of BRAINSTORM artifact."""
     entities = artifact.get("entities", [])
-    tensions = artifact.get("tensions", [])
+    dilemmas = artifact.get("dilemmas", artifact.get("tensions", []))
 
     console.print(f"  Entities: [bold]{len(entities)}[/bold]")
 
@@ -575,15 +575,15 @@ def _preview_brainstorm_artifact(artifact: dict[str, Any]) -> None:
             ids_display += f", +{len(ids) - 5} more"
         console.print(f"    {category}: {ids_display}")
 
-    console.print(f"  Tensions: [bold]{len(tensions)}[/bold]")
-    for tension in tensions:
-        console.print(f"    • {tension.get('question', '?')}")
+    console.print(f"  Dilemmas: [bold]{len(dilemmas)}[/bold]")
+    for dilemma in dilemmas:
+        console.print(f"    • {dilemma.get('question', '?')}")
 
 
 def _preview_seed_artifact(artifact: dict[str, Any]) -> None:
     """Display preview of SEED artifact."""
     entities = artifact.get("entities", [])
-    threads = artifact.get("threads", [])
+    paths = artifact.get("paths", artifact.get("threads", []))
     beats = artifact.get("initial_beats", [])
 
     # Count retained vs cut entities
@@ -592,15 +592,15 @@ def _preview_seed_artifact(artifact: dict[str, Any]) -> None:
 
     console.print(f"  Entities: [bold]{retained}[/bold] retained, [dim]{cut}[/dim] cut")
 
-    console.print(f"  Threads: [bold]{len(threads)}[/bold]")
-    for thread in threads[:3]:
-        importance = thread.get("thread_importance", "?")
+    console.print(f"  Paths: [bold]{len(paths)}[/bold]")
+    for path in paths[:3]:
+        importance = path.get("path_importance", path.get("thread_importance", "?"))
         importance_style = "bold green" if importance == "major" else "dim"
         console.print(
-            f"    • [{importance_style}]{importance}[/{importance_style}] {thread.get('name', '?')}"
+            f"    • [{importance_style}]{importance}[/{importance_style}] {path.get('name', '?')}"
         )
-    if len(threads) > 3:
-        console.print(f"    ... and {len(threads) - 3} more")
+    if len(paths) > 3:
+        console.print(f"    ... and {len(paths) - 3} more")
 
     console.print(f"  Initial beats: [bold]{len(beats)}[/bold]")
 
