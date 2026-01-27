@@ -230,6 +230,24 @@ PR#2 branch: ... → A → B → C → D  (A,B from PR#1, C,D unique to PR#2)
    ```
 3. **Merge sequentially with manual rebase** - more work, but maintains squash history
 
+**CRITICAL: Never use --delete-branch when merging stacked PRs**
+
+When merging a PR that is the base for other PRs in a stack, **do not use `--delete-branch`**. Deleting the base branch causes GitHub to automatically close all dependent PRs, and they cannot be reopened (the base branch no longer exists).
+
+```bash
+# WRONG - closes all dependent PRs:
+gh pr merge 339 --squash --delete-branch
+
+# CORRECT - keeps base branch for dependent PRs:
+gh pr merge 339 --squash
+# Then manually delete AFTER all dependent PRs are retargeted to main
+```
+
+After merging each PR in a stack:
+1. Retarget the next PR to `main`: `gh pr edit <next-pr> --base main`
+2. Rebase the branch: `git rebase origin/main && git push --force-with-lease`
+3. Only delete the old base branch after dependent PRs are retargeted
+
 ### Pull Request Requirements
 
 PRs must meet ALL of these criteria before merging:
