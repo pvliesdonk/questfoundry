@@ -14,15 +14,15 @@ from questfoundry.graph.grow_validators import (
 from questfoundry.graph.mutations import GrowValidationError
 from questfoundry.models.grow import (
     ChoiceLabel,
-    KnotProposal,
+    IntersectionProposal,
     OverlayProposal,
+    PathAgnosticAssessment,
     Phase2Output,
     Phase3Output,
     Phase4aOutput,
     Phase8cOutput,
     Phase9Output,
     SceneTypeTag,
-    ThreadAgnosticAssessment,
 )
 
 
@@ -30,8 +30,8 @@ class TestValidatePhase2Output:
     def test_valid_output_no_errors(self) -> None:
         result = Phase2Output(
             assessments=[
-                ThreadAgnosticAssessment(beat_id="beat::b1", agnostic_for=["t1"]),
-                ThreadAgnosticAssessment(beat_id="beat::b2", agnostic_for=["t1", "t2"]),
+                PathAgnosticAssessment(beat_id="beat::b1", agnostic_for=["t1"]),
+                PathAgnosticAssessment(beat_id="beat::b2", agnostic_for=["t1", "t2"]),
             ]
         )
         errors = validate_phase2_output(
@@ -44,7 +44,7 @@ class TestValidatePhase2Output:
     def test_invalid_beat_id(self) -> None:
         result = Phase2Output(
             assessments=[
-                ThreadAgnosticAssessment(beat_id="beat::phantom", agnostic_for=[]),
+                PathAgnosticAssessment(beat_id="beat::phantom", agnostic_for=[]),
             ]
         )
         errors = validate_phase2_output(
@@ -60,7 +60,7 @@ class TestValidatePhase2Output:
     def test_invalid_tension_id(self) -> None:
         result = Phase2Output(
             assessments=[
-                ThreadAgnosticAssessment(beat_id="beat::b1", agnostic_for=["t_bad"]),
+                PathAgnosticAssessment(beat_id="beat::b1", agnostic_for=["t_bad"]),
             ]
         )
         errors = validate_phase2_output(
@@ -75,7 +75,7 @@ class TestValidatePhase2Output:
     def test_multiple_errors(self) -> None:
         result = Phase2Output(
             assessments=[
-                ThreadAgnosticAssessment(beat_id="beat::bad", agnostic_for=["t_bad1", "t_bad2"]),
+                PathAgnosticAssessment(beat_id="beat::bad", agnostic_for=["t_bad1", "t_bad2"]),
             ]
         )
         errors = validate_phase2_output(
@@ -99,8 +99,8 @@ class TestValidatePhase2Output:
 class TestValidatePhase3Output:
     def test_valid_output_no_errors(self) -> None:
         result = Phase3Output(
-            knots=[
-                KnotProposal(beat_ids=["beat::b1", "beat::b2"], rationale="test"),
+            intersections=[
+                IntersectionProposal(beat_ids=["beat::b1", "beat::b2"], rationale="test"),
             ]
         )
         errors = validate_phase3_output(
@@ -111,8 +111,8 @@ class TestValidatePhase3Output:
 
     def test_invalid_beat_id(self) -> None:
         result = Phase3Output(
-            knots=[
-                KnotProposal(beat_ids=["beat::b1", "beat::phantom"], rationale="test"),
+            intersections=[
+                IntersectionProposal(beat_ids=["beat::b1", "beat::phantom"], rationale="test"),
             ]
         )
         errors = validate_phase3_output(
@@ -122,11 +122,11 @@ class TestValidatePhase3Output:
         assert len(errors) == 1
         assert "phantom" in errors[0].issue
 
-    def test_beat_reused_across_knots(self) -> None:
+    def test_beat_reused_across_intersections(self) -> None:
         result = Phase3Output(
-            knots=[
-                KnotProposal(beat_ids=["beat::b1", "beat::b2"], rationale="knot1"),
-                KnotProposal(beat_ids=["beat::b2", "beat::b3"], rationale="knot2"),
+            intersections=[
+                IntersectionProposal(beat_ids=["beat::b1", "beat::b2"], rationale="intersection1"),
+                IntersectionProposal(beat_ids=["beat::b2", "beat::b3"], rationale="intersection2"),
             ]
         )
         errors = validate_phase3_output(
@@ -140,9 +140,9 @@ class TestValidatePhase3Output:
 
     def test_both_invalid_and_reused(self) -> None:
         result = Phase3Output(
-            knots=[
-                KnotProposal(beat_ids=["beat::b1", "beat::bad"], rationale="knot1"),
-                KnotProposal(beat_ids=["beat::b1", "beat::b2"], rationale="knot2"),
+            intersections=[
+                IntersectionProposal(beat_ids=["beat::b1", "beat::bad"], rationale="intersection1"),
+                IntersectionProposal(beat_ids=["beat::b1", "beat::b2"], rationale="intersection2"),
             ]
         )
         errors = validate_phase3_output(
@@ -242,38 +242,38 @@ class TestValidatePhase9Output:
     def test_valid_output_no_errors(self) -> None:
         result = Phase9Output(
             labels=[
-                ChoiceLabel(from_passage="p::a", to_passage="p::b", label="go left"),
+                ChoiceLabel(from_passage="passage::a", to_passage="passage::b", label="go left"),
             ]
         )
         errors = validate_phase9_output(
             result,
-            valid_passage_ids={"p::a", "p::b"},
+            valid_passage_ids={"passage::a", "passage::b"},
         )
         assert errors == []
 
     def test_invalid_from_passage(self) -> None:
         result = Phase9Output(
             labels=[
-                ChoiceLabel(from_passage="p::bad", to_passage="p::b", label="go"),
+                ChoiceLabel(from_passage="passage::bad", to_passage="passage::b", label="go"),
             ]
         )
         errors = validate_phase9_output(
             result,
-            valid_passage_ids={"p::a", "p::b"},
+            valid_passage_ids={"passage::a", "passage::b"},
         )
         assert len(errors) == 1
         assert errors[0].field_path == "labels.0.from_passage"
-        assert "p::bad" in errors[0].issue
+        assert "passage::bad" in errors[0].issue
 
     def test_invalid_to_passage(self) -> None:
         result = Phase9Output(
             labels=[
-                ChoiceLabel(from_passage="p::a", to_passage="p::bad", label="go"),
+                ChoiceLabel(from_passage="passage::a", to_passage="passage::bad", label="go"),
             ]
         )
         errors = validate_phase9_output(
             result,
-            valid_passage_ids={"p::a", "p::b"},
+            valid_passage_ids={"passage::a", "passage::b"},
         )
         assert len(errors) == 1
         assert errors[0].field_path == "labels.0.to_passage"
@@ -281,29 +281,29 @@ class TestValidatePhase9Output:
     def test_both_invalid(self) -> None:
         result = Phase9Output(
             labels=[
-                ChoiceLabel(from_passage="p::bad1", to_passage="p::bad2", label="go"),
+                ChoiceLabel(from_passage="passage::bad1", to_passage="passage::bad2", label="go"),
             ]
         )
         errors = validate_phase9_output(
             result,
-            valid_passage_ids={"p::a", "p::b"},
+            valid_passage_ids={"passage::a", "passage::b"},
         )
         assert len(errors) == 2
 
     def test_available_ids_in_error(self) -> None:
         result = Phase9Output(
             labels=[
-                ChoiceLabel(from_passage="p::bad", to_passage="p::a", label="go"),
+                ChoiceLabel(from_passage="passage::bad", to_passage="passage::a", label="go"),
             ]
         )
         errors = validate_phase9_output(
             result,
-            valid_passage_ids={"p::a", "p::b", "p::c"},
+            valid_passage_ids={"passage::a", "passage::b", "passage::c"},
         )
         assert len(errors) == 1
-        assert "p::a" in errors[0].available
-        assert "p::b" in errors[0].available
-        assert "p::c" in errors[0].available
+        assert "passage::a" in errors[0].available
+        assert "passage::b" in errors[0].available
+        assert "passage::c" in errors[0].available
 
 
 class TestFormatSemanticErrors:
@@ -352,14 +352,16 @@ class TestCountEntries:
     def test_counts_assessments(self) -> None:
         result = Phase2Output(
             assessments=[
-                ThreadAgnosticAssessment(beat_id="b1", agnostic_for=[]),
-                ThreadAgnosticAssessment(beat_id="b2", agnostic_for=[]),
+                PathAgnosticAssessment(beat_id="b1", agnostic_for=[]),
+                PathAgnosticAssessment(beat_id="b2", agnostic_for=[]),
             ]
         )
         assert count_entries(result) == 2
 
-    def test_counts_knots(self) -> None:
-        result = Phase3Output(knots=[KnotProposal(beat_ids=["b1", "b2"], rationale="test")])
+    def test_counts_intersections(self) -> None:
+        result = Phase3Output(
+            intersections=[IntersectionProposal(beat_ids=["b1", "b2"], rationale="test")]
+        )
         assert count_entries(result) == 1
 
     def test_counts_tags(self) -> None:

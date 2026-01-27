@@ -149,11 +149,11 @@ class Path(BaseModel):
     from the same dilemma are automatically exclusive (choosing one means
     not choosing the other).
 
-    Path IDs use hierarchical format: p::dilemma_id__answer_id
+    Path IDs use hierarchical format: path::dilemma_id__answer_id
     This embeds the parent dilemma in the ID, making the relationship explicit.
 
     Attributes:
-        path_id: Unique identifier (format: p::dilemma_id__answer_id).
+        path_id: Unique identifier (format: path::dilemma_id__answer_id).
         name: Human-readable name.
         dilemma_id: The dilemma this path explores (derivable from path_id).
         answer_id: The specific answer this path explores.
@@ -164,7 +164,7 @@ class Path(BaseModel):
     """
 
     path_id: str = Field(
-        min_length=1, description="Unique identifier (format: p::dilemma_id__answer_id)"
+        min_length=1, description="Unique identifier (format: path::dilemma_id__answer_id)"
     )
     name: str = Field(min_length=1, description="Human-readable name")
     dilemma_id: str = Field(

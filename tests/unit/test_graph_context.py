@@ -7,8 +7,6 @@ from questfoundry.graph.context import (
     SCOPE_DILEMMA,
     SCOPE_ENTITY,
     SCOPE_PATH,
-    SCOPE_TENSION,  # Backward compat alias
-    SCOPE_THREAD,  # Backward compat alias
     check_structural_completeness,
     format_hierarchical_path_id,
     format_path_ids_context,
@@ -1083,34 +1081,27 @@ class TestScopeConstants:
         """SCOPE_PATH has expected value."""
         assert SCOPE_PATH == "path"
 
-    def test_scope_tension_is_alias_for_dilemma(self) -> None:
-        """SCOPE_TENSION is backward compat alias for SCOPE_DILEMMA."""
-        assert SCOPE_TENSION == SCOPE_DILEMMA
-
-    def test_scope_thread_is_alias_for_path(self) -> None:
-        """SCOPE_THREAD is backward compat alias for SCOPE_PATH."""
-        assert SCOPE_THREAD == SCOPE_PATH
-
 
 class TestParseHierarchicalPathId:
     """Tests for parse_hierarchical_path_id function."""
 
-    def test_parses_path_with_p_prefix(self) -> None:
-        """Path ID with p:: prefix is correctly parsed."""
-        dilemma_id, answer_id = parse_hierarchical_path_id("p::mentor_trust__benevolent")
-        assert dilemma_id == "d::mentor_trust"
-        assert answer_id == "benevolent"
+    def test_rejects_wrong_scope_prefix(self) -> None:
+        """Rejects non-path scope prefixes (e.g., legacy shorthand)."""
+        import pytest
+
+        with pytest.raises(ValueError, match="wrong scope prefix"):
+            parse_hierarchical_path_id("dilemma::mentor_trust__benevolent")
 
     def test_parses_path_with_path_prefix(self) -> None:
         """Path ID with path:: prefix is correctly parsed."""
         dilemma_id, answer_id = parse_hierarchical_path_id("path::mentor_trust__selfish")
-        assert dilemma_id == "d::mentor_trust"
+        assert dilemma_id == "dilemma::mentor_trust"
         assert answer_id == "selfish"
 
     def test_parses_unscoped_path_id(self) -> None:
         """Unscoped path ID is correctly parsed."""
         dilemma_id, answer_id = parse_hierarchical_path_id("mentor_trust__benevolent")
-        assert dilemma_id == "d::mentor_trust"
+        assert dilemma_id == "dilemma::mentor_trust"
         assert answer_id == "benevolent"
 
     def test_raises_for_non_hierarchical_id(self) -> None:
@@ -1118,18 +1109,18 @@ class TestParseHierarchicalPathId:
         import pytest
 
         with pytest.raises(ValueError, match="not hierarchical"):
-            parse_hierarchical_path_id("p::mentor_trust")
+            parse_hierarchical_path_id("path::mentor_trust")
 
     def test_handles_multiple_underscores_in_dilemma(self) -> None:
         """Multiple underscores in dilemma part are preserved."""
-        dilemma_id, answer_id = parse_hierarchical_path_id("p::my_complex_dilemma__answer")
-        assert dilemma_id == "d::my_complex_dilemma"
+        dilemma_id, answer_id = parse_hierarchical_path_id("path::my_complex_dilemma__answer")
+        assert dilemma_id == "dilemma::my_complex_dilemma"
         assert answer_id == "answer"
 
     def test_handles_multiple_double_underscores(self) -> None:
         """Uses rightmost __ as separator."""
-        dilemma_id, answer_id = parse_hierarchical_path_id("p::a__b__c")
-        assert dilemma_id == "d::a__b"
+        dilemma_id, answer_id = parse_hierarchical_path_id("path::a__b__c")
+        assert dilemma_id == "dilemma::a__b"
         assert answer_id == "c"
 
 
@@ -1137,18 +1128,18 @@ class TestFormatHierarchicalPathId:
     """Tests for format_hierarchical_path_id function."""
 
     def test_formats_with_scoped_dilemma_id(self) -> None:
-        """Formats correctly with d:: prefix on dilemma."""
-        result = format_hierarchical_path_id("d::mentor_trust", "benevolent")
-        assert result == "p::mentor_trust__benevolent"
+        """Formats correctly with dilemma:: prefix on dilemma."""
+        result = format_hierarchical_path_id("dilemma::mentor_trust", "benevolent")
+        assert result == "path::mentor_trust__benevolent"
 
     def test_formats_with_unscoped_dilemma_id(self) -> None:
         """Formats correctly without prefix on dilemma."""
         result = format_hierarchical_path_id("mentor_trust", "selfish")
-        assert result == "p::mentor_trust__selfish"
+        assert result == "path::mentor_trust__selfish"
 
     def test_roundtrip_parse_and_format(self) -> None:
         """Parsing and formatting roundtrip preserves values."""
-        original = "p::my_dilemma__my_answer"
+        original = "path::my_dilemma__my_answer"
         dilemma_id, answer_id = parse_hierarchical_path_id(original)
         reformatted = format_hierarchical_path_id(dilemma_id, answer_id)
         assert reformatted == original

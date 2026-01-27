@@ -179,7 +179,7 @@ def normalize_scoped_id(raw_id: str, scope: str) -> str:
 
     Args:
         raw_id: ID that may or may not already have the scope prefix.
-        scope: The scope type (e.g., 'd', 'p', 'entity').
+        scope: The scope type (e.g., 'dilemma', 'path', 'entity').
 
     Returns:
         ID with scope prefix guaranteed (e.g., 'dilemma::mentor_trust').
@@ -213,7 +213,11 @@ def parse_hierarchical_path_id(path_id: str) -> tuple[str, str]:
         >>> parse_hierarchical_path_id("path::mentor_trust__selfish")
         ('dilemma::mentor_trust', 'selfish')
     """
-    raw = strip_scope_prefix(path_id)  # "mentor_trust__benevolent"
+    scope, raw = parse_scoped_id(path_id)
+    if scope not in ("", SCOPE_PATH):
+        raise ValueError(
+            f"Path ID '{path_id}' has wrong scope prefix (expected '{SCOPE_PATH}::')"
+        )
     if "__" not in raw:
         raise ValueError(f"Path ID '{path_id}' is not hierarchical (missing '__' separator)")
     dilemma_raw, answer_id = raw.rsplit("__", 1)
@@ -261,8 +265,13 @@ def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
     if not paths:
         return ""
 
-    # Sort for deterministic output across runs
-    path_ids = sorted(pid for p in paths if (pid := p.get("path_id")))
+    # Sort for deterministic output across runs.
+    # Seed output should use raw IDs (e.g., "mentor_trust__protector"); tolerate scoped "path::..."
+    # without accidentally normalizing other legacy shorthand scopes.
+    def _raw_path_id(pid: str) -> str:
+        return pid.split("::", 1)[1] if pid.startswith(f"{SCOPE_PATH}::") else pid
+
+    path_ids = sorted(_raw_path_id(pid) for p in paths if (pid := p.get("path_id")))
 
     if not path_ids:
         return ""
@@ -281,11 +290,13 @@ def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
     path_dilemma_pairs = []
     for p in sorted(paths, key=lambda x: x.get("path_id", "")):
         pid = p.get("path_id")
+        pid_raw = _raw_path_id(pid) if pid else None
         dilemma_id = p.get("dilemma_id", "")
         if pid and dilemma_id:
             # Strip scope prefix if present for clean display
             raw_dilemma = dilemma_id.split("::", 1)[-1] if "::" in dilemma_id else dilemma_id
-            path_dilemma_pairs.append((pid, raw_dilemma))
+            if pid_raw:
+                path_dilemma_pairs.append((pid_raw, raw_dilemma))
 
     if path_dilemma_pairs:
         lines.append("## PATH → DILEMMA MAPPING (use in dilemma_impacts)")

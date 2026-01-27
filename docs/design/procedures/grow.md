@@ -47,9 +47,9 @@ Dilemma introduced → Evidence builds → Truth locks in → Consequences play 
 ```yaml
 beat:
   dilemma_impacts:
-    - dilemma_id: d::mentor_trust
+    - dilemma_id: dilemma::mentor_trust
       effect: commits
-      path_id: p::mentor_trust__protector  # which path this locks in
+      path_id: path::mentor_trust__protector  # which path this locks in
 ```
 
 A commits beat must specify which path it locks in.
@@ -73,8 +73,8 @@ Path-agnostic beats are shared across arcs, reducing duplication.
 **Convergence:** Arcs can merge only after all divergent dilemmas have committed. Otherwise merged content would need to accommodate contradictory truths.
 
 ```
-Arc A: p::mentor_trust__protector + p::artifact_nature__saves
-Arc B: p::mentor_trust__manipulator + p::artifact_nature__saves
+Arc A: path::mentor_trust__protector + path::artifact_nature__saves
+Arc B: path::mentor_trust__manipulator + path::artifact_nature__saves
                     ↓
       Can converge after mentor commits
       (both share artifact_saves path)
@@ -95,7 +95,7 @@ With n explored dilemmas (one path per dilemma explored as answer), there are 2^
 
 ```yaml
 dilemma:
-  id: d::mentor_trust
+  id: dilemma::mentor_trust
   answers:
     - id: protector
       canonical: true      # always explored, used for spine
@@ -621,31 +621,31 @@ Estimated working set: ~120 beats maximum for quality on 8B models.
 ## Worked Example
 
 **Setup:**
-- 2 dilemmas: d::mentor_trust, d::artifact_nature
+- 2 dilemmas: dilemma::mentor_trust, dilemma::artifact_nature
 - Each dilemma: 2 answers (1 canonical, 1 alternate)
 - 4 possible arcs
 
 **SEED provides:**
 ```
-Dilemma: d::mentor_trust
-  Path: p::mentor_trust__protector (canonical)
+Dilemma: dilemma::mentor_trust
+  Path: path::mentor_trust__protector (canonical)
     Beats: meet_mentor, mentor_advice, mentor_reveal_good
-  Path: p::mentor_trust__manipulator (alternate)
+  Path: path::mentor_trust__manipulator (alternate)
     Beats: meet_mentor*, mentor_advice*, mentor_reveal_evil
   (* = path-agnostic)
 
-Dilemma: d::artifact_nature
-  Path: p::artifact_nature__saves (canonical)
+Dilemma: dilemma::artifact_nature
+  Path: path::artifact_nature__saves (canonical)
     Beats: find_artifact, study_artifact, use_artifact_good
-  Path: p::artifact_nature__corrupts (alternate)
+  Path: path::artifact_nature__corrupts (alternate)
     Beats: find_artifact*, study_artifact*, use_artifact_bad
 ```
 
 **Phase 2 output:**
-- meet_mentor: path-agnostic for d::mentor_trust
-- mentor_advice: path-agnostic for d::mentor_trust
-- find_artifact: path-agnostic for d::artifact_nature
-- study_artifact: path-agnostic for d::artifact_nature
+- meet_mentor: path-agnostic for dilemma::mentor_trust
+- mentor_advice: path-agnostic for dilemma::mentor_trust
+- find_artifact: path-agnostic for dilemma::artifact_nature
+- study_artifact: path-agnostic for dilemma::artifact_nature
 
 **Phase 3 (intersections):**
 - LLM clusters: [[mentor_advice, study_artifact]] — same location, same entities
@@ -654,16 +654,16 @@ Dilemma: d::artifact_nature
 
 **Phase 5 (arcs):**
 ```
-Arc 1 (spine): p::mentor_trust__protector + p::artifact_nature__saves
+Arc 1 (spine): path::mentor_trust__protector + path::artifact_nature__saves
   Sequence: meet_mentor → advice_and_study → mentor_reveal_good → use_artifact_good
 
-Arc 2: p::mentor_trust__protector + p::artifact_nature__corrupts
+Arc 2: path::mentor_trust__protector + path::artifact_nature__corrupts
   Sequence: meet_mentor → advice_and_study → mentor_reveal_good → use_artifact_bad
 
-Arc 3: p::mentor_trust__manipulator + p::artifact_nature__saves
+Arc 3: path::mentor_trust__manipulator + path::artifact_nature__saves
   Sequence: meet_mentor → advice_and_study → mentor_reveal_evil → use_artifact_good
 
-Arc 4: p::mentor_trust__manipulator + p::artifact_nature__corrupts
+Arc 4: path::mentor_trust__manipulator + path::artifact_nature__corrupts
   Sequence: meet_mentor → advice_and_study → mentor_reveal_evil → use_artifact_bad
 ```
 

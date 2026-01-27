@@ -10,7 +10,7 @@ import pytest
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_algorithms import (
     bfs_reachable,
-    build_tension_threads,
+    build_dilemma_paths,
     compute_divergence_points,
     enumerate_arcs,
     find_convergence_points,
@@ -30,51 +30,51 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# build_tension_threads
+# build_dilemma_paths
 # ---------------------------------------------------------------------------
 
 
-class TestBuildTensionThreads:
-    def test_prefixed_tension_id(self) -> None:
-        """Handles prefixed tension_id on thread nodes."""
+class TestBuildDilemmaPaths:
+    def test_prefixed_dilemma_id(self) -> None:
+        """Handles prefixed dilemma_id on path nodes."""
         graph = make_single_dilemma_graph()
-        result = build_tension_threads(graph)
-        assert "tension::mentor_trust" in result
-        assert len(result["tension::mentor_trust"]) == 2
+        result = build_dilemma_paths(graph)
+        assert "dilemma::mentor_trust" in result
+        assert len(result["dilemma::mentor_trust"]) == 2
 
-    def test_unprefixed_tension_id(self) -> None:
-        """Handles unprefixed tension_id by adding prefix."""
+    def test_unprefixed_dilemma_id(self) -> None:
+        """Handles unprefixed dilemma_id by adding prefix."""
         graph = Graph.empty()
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
         )
-        result = build_tension_threads(graph)
-        assert "tension::t1" in result
-        assert "thread::th1" in result["tension::t1"]
+        result = build_dilemma_paths(graph)
+        assert "dilemma::t1" in result
+        assert "path::th1" in result["dilemma::t1"]
 
-    def test_missing_tension_node_excluded(self) -> None:
-        """Threads referencing nonexistent tensions are excluded."""
+    def test_missing_dilemma_node_excluded(self) -> None:
+        """Paths referencing nonexistent dilemmas are excluded."""
         graph = Graph.empty()
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "tension::missing"},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "dilemma::missing"},
         )
-        result = build_tension_threads(graph)
+        result = build_dilemma_paths(graph)
         assert result == {}
 
     def test_empty_graph(self) -> None:
         graph = Graph.empty()
-        result = build_tension_threads(graph)
+        result = build_dilemma_paths(graph)
         assert result == {}
 
-    def test_two_tension_graph(self) -> None:
+    def test_two_dilemma_graph(self) -> None:
         graph = make_two_dilemma_graph()
-        result = build_tension_threads(graph)
+        result = build_dilemma_paths(graph)
         assert len(result) == 2
-        assert len(result["tension::mentor_trust"]) == 2
-        assert len(result["tension::artifact_quest"]) == 2
+        assert len(result["dilemma::mentor_trust"]) == 2
+        assert len(result["dilemma::artifact_quest"]) == 2
 
 
 # ---------------------------------------------------------------------------

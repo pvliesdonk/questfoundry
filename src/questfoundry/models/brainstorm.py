@@ -90,7 +90,7 @@ class Dilemma(BaseModel):
     multiple binary dilemmas instead of a single multi-way choice.
 
     Attributes:
-        dilemma_id: Short identifier with d:: prefix (e.g., "d::mentor_trust").
+        dilemma_id: Scoped identifier with dilemma:: prefix (e.g., "dilemma::mentor_trust").
         question: The dramatic question (must end with "?").
         answers: Exactly two possible answers.
         central_entity_ids: Entity IDs central to this dilemma.
@@ -99,7 +99,10 @@ class Dilemma(BaseModel):
 
     dilemma_id: str = Field(
         min_length=1,
-        description="Unique identifier for this dilemma (e.g., 'd::mentor_trust', 'd::murder_weapon')",
+        description=(
+            "Unique identifier for this dilemma (e.g., 'dilemma::mentor_trust', "
+            "'dilemma::murder_weapon')"
+        ),
     )
     question: str = Field(min_length=1, description="Dramatic question (should end with ?)")
     answers: list[Answer] = Field(

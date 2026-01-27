@@ -209,7 +209,7 @@ LLM reviews discussion and proposes dilemmas:
 
 ```yaml
 dilemmas:
-  - id: d::mentor_trust
+  - id: dilemma::mentor_trust
     question: "Can the mentor be trusted?"
     answers:
       - id: mentor_protector
@@ -221,7 +221,7 @@ dilemmas:
     involves: [mentor, kay]
     why_it_matters: "Trust determines whether Kay has an ally or is alone against the conspiracy"
 
-  - id: d::archive_nature
+  - id: dilemma::archive_nature
     question: "Is the archive's knowledge salvation or corruption?"
     answers:
       - id: archive_salvation
@@ -235,7 +235,7 @@ dilemmas:
 ```
 
 **For each dilemma:**
-- `id`: Short identifier with `d::` prefix
+- `id`: Scoped identifier with `dilemma::` prefix
 - `question`: The dramatic question (ends with ?)
 - `answers`: Exactly two (canonical + non-canonical)
 - `involves`: Which entities are central to this dilemma
@@ -279,7 +279,7 @@ brainstorm:
     # ... all entities
 
   dilemmas:
-    - id: d::mentor_trust
+    - id: dilemma::mentor_trust
       question: "Can the mentor be trusted?"
       answers:
         - id: mentor_protector
@@ -413,12 +413,12 @@ Human reviews: Approves all, notes "Predecessor might merge with another charact
 ### Phase 3: Dilemma Formation
 
 LLM proposes:
-- d::mentor_trust: "Can the mentor be trusted?"
-- d::archive_nature: "Is the knowledge salvation or corruption?"
-- d::predecessor_fate: "What happened to Kay's predecessor?"
-- d::conspiracy_goals: "Is the conspiracy protecting or hoarding?"
+- dilemma::mentor_trust: "Can the mentor be trusted?"
+- dilemma::archive_nature: "Is the knowledge salvation or corruption?"
+- dilemma::predecessor_fate: "What happened to Kay's predecessor?"
+- dilemma::conspiracy_goals: "Is the conspiracy protecting or hoarding?"
 
-Human reviews: Approves first three, marks d::conspiracy_goals as "may cut in SEED—overlaps with d::mentor_trust"
+Human reviews: Approves first three, marks dilemma::conspiracy_goals as "may cut in SEED—overlaps with dilemma::mentor_trust"
 
 ### Phase 4: Serialization
 

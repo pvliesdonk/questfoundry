@@ -60,7 +60,7 @@ Consequences declare *what changes* in the story world. GROW later implements th
 ```yaml
 consequence:
   id: mentor_ally
-  path_id: p::mentor_trust__protector
+  path_id: path::mentor_trust__protector
   description: "Mentor becomes protective ally"
   ripples:
     - "Shields Kay in confrontation"
@@ -152,7 +152,7 @@ LLM proposes exploration map per dilemma:
 
 ```yaml
 dilemma_exploration:
-  - dilemma_id: d::mentor_trust
+  - dilemma_id: dilemma::mentor_trust
     considered:
       - answer_id: mentor_protector    # canonical, always considered
         rationale: "Spine path - mentor as ally"
@@ -191,9 +191,9 @@ For each explored answer, LLM generates:
 
 ```yaml
 path:
-  id: p::mentor_trust__protector          # hierarchical ID
+  id: path::mentor_trust__protector          # hierarchical ID
   name: "The Mentor's Protection"
-  dilemma_id: d::mentor_trust             # derivable from path_id
+  dilemma_id: dilemma::mentor_trust          # derivable from path_id
   answer_id: mentor_protector
   shadows: [mentor_manipulator]
   tier: major
@@ -203,7 +203,7 @@ path:
 
 consequences:
   - id: mentor_ally
-    path_id: p::mentor_trust__protector
+    path_id: path::mentor_trust__protector
     description: "Mentor becomes protective ally"
     ripples:
       - "Mentor shields Kay during confrontation with antagonist"
@@ -217,9 +217,9 @@ LLM also generates 2-4 initial beats per path:
 initial_beats:
   - id: mentor_warning
     summary: "Mentor delivers cryptic warning about the investigation"
-    paths: [p::mentor_trust__protector]
+    paths: [path::mentor_trust__protector]
     dilemma_impacts:
-      - dilemma_id: d::mentor_trust
+      - dilemma_id: dilemma::mentor_trust
         effect: advances
         note: "Warning could be protective or manipulative"
     entities: [mentor, kay]
@@ -313,10 +313,10 @@ LLM analyzes paths and proposes convergence strategy:
 convergence_sketch:
   convergence_points:
     - "Major paths should converge by act 2 climax"
-    - "d::mentor_trust resolution before final confrontation"
+    - "dilemma::mentor_trust resolution before final confrontation"
 
   residue_notes:
-    - "After d::mentor_trust convergence: mentor demeanor differs based on path"
+    - "After dilemma::mentor_trust convergence: mentor demeanor differs based on path"
     - "Kay's dialogue options vary based on mentor relationship"
 ```
 
@@ -597,7 +597,7 @@ Human approves, cutting 7 generic entities. 11 entities remain.
 
 ### Phase 2: Answer Selection
 
-LLM proposes for `d::mentor_trust` dilemma:
+LLM proposes for `dilemma::mentor_trust` dilemma:
 ```
 mentor_protector (canonical): Always explore - spine path
 mentor_manipulator (non-canonical):
@@ -608,7 +608,7 @@ mentor_manipulator (non-canonical):
 
 Human approves exploring both answers.
 
-For `d::archive_nature` dilemma:
+For `dilemma::archive_nature` dilemma:
 ```
 archive_benign (canonical): Always explore
 archive_dangerous (non-canonical):
@@ -621,12 +621,12 @@ Human accepts shadow recommendation.
 
 ### Phase 3: Path Construction
 
-LLM generates `p::mentor_trust__protector`:
+LLM generates `path::mentor_trust__protector`:
 ```yaml
 path:
-  id: p::mentor_trust__protector
+  id: path::mentor_trust__protector
   name: "The Mentor's Protection"
-  dilemma_id: d::mentor_trust
+  dilemma_id: dilemma::mentor_trust
   answer_id: mentor_protector
   shadows: [mentor_manipulator]
   tier: major
@@ -637,7 +637,7 @@ path:
 
 consequences:
   - id: mentor_ally
-    path_id: p::mentor_trust__protector
+    path_id: path::mentor_trust__protector
     description: "Mentor becomes trusted ally"
     ripples:
       - "Mentor shields Kay during antagonist confrontation"
@@ -675,7 +675,7 @@ Human approves.
 LLM produces:
 ```yaml
 viability_analysis:
-  arc_count: 2                    # only d::mentor_trust has both explored
+  arc_count: 2                    # only dilemma::mentor_trust has both explored
   content_estimate:
     shared_beats: 35
     unique_beats: 20

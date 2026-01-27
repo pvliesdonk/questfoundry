@@ -56,7 +56,7 @@ dilemmas_prompt: |
 
   ## Scoped ID Format (CRITICAL)
   All IDs use type prefixes for disambiguation. Copy dilemma IDs EXACTLY as shown in
-  the manifest, including the `d::` prefix.
+  the manifest, including the `dilemma::` prefix.
 
   ## Schema
   Return a JSON object with a "dilemmas" array. Each item is a DilemmaDecision:
@@ -64,7 +64,7 @@ dilemmas_prompt: |
   {
     "dilemmas": [
       {
-        "dilemma_id": "d::host_benevolent_or_selfish",
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
         "considered": ["protector", "manipulator"],
         "implicit": []
       }
@@ -76,7 +76,7 @@ dilemmas_prompt: |
   they are local to each dilemma.
 
   ## Rules
-  - dilemma_id must include the `d::` prefix and match EXACTLY an ID from the manifest
+  - dilemma_id must include the `dilemma::` prefix and match EXACTLY an ID from the manifest
   - considered: Answer IDs to explore as paths (MUST include the default path)
   - implicit: Answer IDs NOT explored (become shadows)
   - Generate a decision for EVERY dilemma in the manifest
@@ -95,7 +95,7 @@ dilemmas_prompt: |
   - Do NOT invent dilemmas not in the manifest
   - Do NOT partially complete the list
   - Do NOT leave `considered` empty if you plan to create paths for that dilemma
-  - Do NOT omit the `d::` prefix from dilemma_id
+  - Do NOT omit the `dilemma::` prefix from dilemma_id
 
   ## Output
   Return ONLY valid JSON with the "dilemmas" array.
@@ -110,10 +110,10 @@ paths_prompt: |
 
   ## Scoped ID Format (CRITICAL)
   All IDs use type prefixes for disambiguation:
-  - path_id: Use hierarchical `p::` prefix (e.g., `p::host_benevolent_or_selfish__protector`)
-  - dilemma_id: Use `d::` prefix (e.g., `d::host_benevolent_or_selfish`)
+  - path_id: Use hierarchical `path::` prefix (e.g., `path::host_benevolent_or_selfish__protector`)
+  - dilemma_id: Use `dilemma::` prefix (e.g., `dilemma::host_benevolent_or_selfish`)
 
-  Path IDs embed their parent dilemma: `p::[dilemma_name]__[answer_id]`
+  Path IDs embed their parent dilemma: `path::[dilemma_name]__[answer_id]`
 
   Copy IDs EXACTLY as shown in the manifest, including the prefixes.
 
@@ -130,9 +130,9 @@ paths_prompt: |
   {
     "paths": [
       {
-        "path_id": "p::host_benevolent_or_selfish__protector",
+        "path_id": "path::host_benevolent_or_selfish__protector",
         "name": "The Host's Hidden Motive",
-        "dilemma_id": "d::host_benevolent_or_selfish",
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
         "answer_id": "protector",
         "unexplored_answer_ids": ["manipulator"],
         "path_importance": "major",
@@ -149,18 +149,18 @@ paths_prompt: |
   ## Path ID Naming (CRITICAL)
 
   Path IDs use hierarchical format that embeds the parent dilemma:
-  `p::[dilemma_name]__[answer_id]`
+  `path::[dilemma_name]__[answer_id]`
 
   This prevents misreferences since the parent dilemma is embedded in the ID.
 
   Pattern examples (generate YOUR OWN based on your story):
-  - Dilemma `d::mentor_trust_or_betray` with answer `trust` → Path: `p::mentor_trust_or_betray__trust`
-  - Dilemma `d::artifact_blessed_or_cursed` with answer `blessed` → Path: `p::artifact_blessed_or_cursed__blessed`
+  - Dilemma `dilemma::mentor_trust_or_betray` with answer `trust` → Path: `path::mentor_trust_or_betray__trust`
+  - Dilemma `dilemma::artifact_blessed_or_cursed` with answer `blessed` → Path: `path::artifact_blessed_or_cursed__blessed`
 
   BAD patterns (will cause validation failures):
   - Using the SAME ID for both dilemma and path
   - Missing the `__` separator
-  - Omitting the `p::` prefix
+  - Omitting the `path::` prefix
 
   **DO NOT copy example IDs** - generate IDs specific to YOUR story.
 
@@ -170,15 +170,15 @@ paths_prompt: |
   - consequence_ids: References to consequences for this path
   - Generate a path for EACH considered answer from dilemma decisions
   - answer_id MUST be one of the IDs from the dilemma's `considered` array
-  - path_id MUST include the `p::` prefix and use hierarchical format
-  - dilemma_id MUST include the `d::` prefix
+  - path_id MUST include the `path::` prefix and use hierarchical format
+  - dilemma_id MUST include the `dilemma::` prefix
 
   ## What NOT to Do
   - Do NOT reuse dilemma IDs as path IDs
   - Do NOT skip answers marked as "considered"
   - Do NOT create paths for "implicit" answers (they become shadows, not paths)
   - Do NOT use an answer_id that isn't in the dilemma's `considered` list
-  - Do NOT omit the `p::` or `d::` prefixes
+  - Do NOT omit the `path::` or `dilemma::` prefixes
 
   ## Output
   Return ONLY valid JSON with the "paths" array.
@@ -192,7 +192,7 @@ consequences_prompt: |
   outcomes that result from following a particular path's storyline.
 
   ## Scoped ID Format (CRITICAL)
-  Path IDs use the `p::` prefix for disambiguation.
+  Path IDs use the `path::` prefix for disambiguation.
   Copy path IDs EXACTLY as shown in the VALID PATH IDs list.
 
   ## Schema
@@ -202,7 +202,7 @@ consequences_prompt: |
     "consequences": [
       {
         "consequence_id": "host_revealed",
-        "path_id": "p::host_benevolent_or_selfish__protector",
+        "path_id": "path::host_benevolent_or_selfish__protector",
         "description": "What happens narratively",
         "narrative_effects": ["story effect 1", "story effect 2"]
       }
@@ -211,7 +211,7 @@ consequences_prompt: |
   ```
 
   Note: `consequence_id` is a raw ID without prefix (local identifier).
-  `path_id` MUST include the `p::` prefix.
+  `path_id` MUST include the `path::` prefix.
 
   ## Consequence ID Naming Convention
 
@@ -227,7 +227,7 @@ consequences_prompt: |
 
   ## Rules
   - consequence_id must be unique (raw ID, no prefix, following naming convention above)
-  - path_id must include the `p::` prefix and reference a path from the VALID PATH IDs list
+  - path_id must include the `path::` prefix and reference a path from the VALID PATH IDs list
   - narrative_effects: Array of story effects this consequence implies
   - Generate at least one consequence for EACH path
 
@@ -235,7 +235,7 @@ consequences_prompt: |
   - Do NOT reference path IDs that don't exist
   - Do NOT leave any path without consequences
   - Do NOT use generic consequence IDs like `consequence_1` (use descriptive names)
-  - Do NOT omit the `p::` prefix from path_id
+  - Do NOT omit the `path::` prefix from path_id
 
   ## Output
   Return ONLY valid JSON with the "consequences" array.
@@ -268,10 +268,10 @@ beats_prompt: |
       {
         "beat_id": "unique_beat_id",
         "summary": "What happens in this beat",
-        "paths": ["p::[your_path_id]", "p::[another_path]"],
+        "paths": ["path::[your_path_id]", "path::[another_path]"],
         "dilemma_impacts": [
           {
-            "dilemma_id": "d::[your_dilemma_id]",
+            "dilemma_id": "dilemma::[your_dilemma_id]",
             "effect": "advances",
             "note": "Explanation of the impact"
           }
@@ -302,9 +302,9 @@ beats_prompt: |
   RULE: Look up the beat's path in PATH → DILEMMA MAPPING. Use THAT dilemma_id.
 
   EXAMPLE (format only - use YOUR story's IDs):
-  - If path `p::keeper_faithful_or_corrupt__faithful` maps to `d::keeper_faithful_or_corrupt`
+  - If path `path::keeper_faithful_or_corrupt__faithful` maps to `dilemma::keeper_faithful_or_corrupt`
   - Then ALL beats in that path MUST have a dilemma_impact with
-    `dilemma_id: "d::keeper_faithful_or_corrupt"`
+    `dilemma_id: "dilemma::keeper_faithful_or_corrupt"`
 
   WRONG: Picking a dilemma because it "feels related" to the beat's content.
   WRONG: Using the same dilemma for all beats regardless of path.
@@ -322,8 +322,8 @@ beats_prompt: |
   RIGHT: Each path's commits beat uses that path's own parent dilemma.
 
   EXAMPLE (format only):
-  - Path `p::keeper_faithful_or_corrupt__faithful` → commits beat uses `d::keeper_faithful_or_corrupt`
-  - Path `p::artifact_natural_or_crafted__natural` → commits beat uses `d::artifact_natural_or_crafted`
+  - Path `path::keeper_faithful_or_corrupt__faithful` → commits beat uses `dilemma::keeper_faithful_or_corrupt`
+  - Path `path::artifact_natural_or_crafted__natural` → commits beat uses `dilemma::artifact_natural_or_crafted`
   - Each path resolves ITS OWN dilemma, not someone else's.
 
   ## FIELD → ID TYPE MAPPING (prevents all ID confusion)
@@ -332,8 +332,8 @@ beats_prompt: |
 
   | Field | Prefix | Source List | Shape |
   |-------|--------|-------------|-------|
-  | `paths[]` | `p::` | VALID PATH IDs | hierarchical: `dilemma__answer` |
-  | `dilemma_impacts.dilemma_id` | `d::` | Dilemma IDs | long: `subject_X_or_Y` |
+  | `paths[]` | `path::` | VALID PATH IDs | hierarchical: `dilemma__answer` |
+  | `dilemma_impacts.dilemma_id` | `dilemma::` | Dilemma IDs | long: `subject_X_or_Y` |
   | `entities[]` | `entity::` | Entity IDs (characters, objects, factions) | varies |
   | `location` | `entity::` | Entity IDs (locations only) | varies |
 
@@ -394,20 +394,20 @@ per_path_beats_prompt: |
 
   ## COMMON MISTAKE - DO NOT MAKE THIS ERROR
 
-  Path IDs are hierarchical (e.g., `p::ai_benevolent_or_hostile__hostile`).
-  Dilemma IDs are just the question (e.g., `d::ai_benevolent_or_hostile`).
+  Path IDs are hierarchical (e.g., `path::ai_benevolent_or_hostile__hostile`).
+  Dilemma IDs are just the question (e.g., `dilemma::ai_benevolent_or_hostile`).
 
   WRONG OUTPUT (will fail validation):
   ```json
-  "paths": ["{dilemma_id}"]  // WRONG! This is a DILEMMA ID (use d:: prefix)
+  "paths": ["{dilemma_id}"]  // WRONG! This is a DILEMMA ID
   ```
 
   CORRECT OUTPUT:
   ```json
-  "paths": ["{path_id}"]  // RIGHT! This is the PATH ID (p:: prefix with __answer)
+  "paths": ["{path_id}"]  // RIGHT! This is the PATH ID
   ```
 
-  RULE: If the ID starts with `d::`, it's a DILEMMA. Never put it in `paths`.
+  RULE: Dilemma IDs go in `dilemma_impacts[].dilemma_id`, never in `paths`.
 
   ## YOUR DILEMMA ID (for dilemma_impacts only)
 
@@ -488,10 +488,10 @@ per_path_beats_prompt: |
   ## FINAL VERIFICATION (check before outputting)
 
   For EACH beat you generate, verify:
-  1. `paths` contains `{path_id}` (p:: prefix with __answer)
-  2. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}` (d:: prefix)
+  1. `paths` contains `{path_id}`
+  2. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
 
-  If you see `d::` in your `paths` value, YOU MADE A MISTAKE. Fix it.
+  If you see a dilemma ID in your `paths` value, YOU MADE A MISTAKE. Fix it.
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array (2-4 beats).
