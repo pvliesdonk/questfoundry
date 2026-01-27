@@ -126,7 +126,7 @@ class TestValidateBeatDag:
         errors = validate_beat_dag(graph)
         assert errors == []
 
-    def test_two_tension_graph_valid(self) -> None:
+    def test_two_dilemma_graph_valid(self) -> None:
         graph = make_two_dilemma_graph()
         errors = validate_beat_dag(graph)
         assert errors == []
@@ -143,7 +143,7 @@ class TestValidateCommitsBeats:
         errors = validate_commits_beats(graph)
         assert errors == []
 
-    def test_two_tension_complete(self) -> None:
+    def test_two_dilemma_complete(self) -> None:
         graph = make_two_dilemma_graph()
         errors = validate_commits_beats(graph)
         assert errors == []
@@ -283,7 +283,7 @@ class TestTopologicalSortBeats:
 
 
 class TestEnumerateArcs:
-    def test_single_tension_two_threads(self) -> None:
+    def test_single_dilemma_two_threads(self) -> None:
         graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
 
@@ -299,13 +299,13 @@ class TestEnumerateArcs:
         arcs = enumerate_arcs(graph)
         assert arcs[0].arc_type == "spine"
 
-    def test_two_tensions_four_arcs(self) -> None:
+    def test_two_dilemmas_four_arcs(self) -> None:
         graph = make_two_dilemma_graph()
         arcs = enumerate_arcs(graph)
         # 2 paths x 2 paths = 4 arcs
         assert len(arcs) == 4
 
-    def test_two_tensions_one_spine(self) -> None:
+    def test_two_dilemmas_one_spine(self) -> None:
         graph = make_two_dilemma_graph()
         arcs = enumerate_arcs(graph)
         spine_arcs = [a for a in arcs if a.arc_type == "spine"]
@@ -987,7 +987,7 @@ class TestPhase8aIntegration:
         assert len(passage_from_edges) == len(passage_nodes)
 
     @pytest.mark.asyncio
-    async def test_passages_from_two_tension_graph(self) -> None:
+    async def test_passages_from_two_dilemma_graph(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
@@ -1073,7 +1073,7 @@ class TestPhase8bIntegration:
             assert cw_id.endswith("_committed")
 
     @pytest.mark.asyncio
-    async def test_two_tension_codewords(self) -> None:
+    async def test_two_dilemma_codewords(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
@@ -1286,7 +1286,7 @@ class TestBuildKnotCandidates:
         assert "beat::mentor_meet" in market_candidate.beat_ids
         assert "beat::artifact_discover" in market_candidate.beat_ids
 
-    def test_single_tension_no_candidates(self) -> None:
+    def test_single_dilemma_no_candidates(self) -> None:
         """No candidates when all beats belong to same dilemma."""
         from questfoundry.graph.grow_algorithms import build_intersection_candidates
 
@@ -1307,7 +1307,7 @@ class TestBuildKnotCandidates:
 
 
 class TestCheckKnotCompatibility:
-    def test_compatible_cross_tension_beats(self) -> None:
+    def test_compatible_cross_dilemma_beats(self) -> None:
         """Beats from different dilemmas with no requires are compatible."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
@@ -1318,7 +1318,7 @@ class TestCheckKnotCompatibility:
         )
         assert errors == []
 
-    def test_incompatible_same_tension(self) -> None:
+    def test_incompatible_same_dilemma(self) -> None:
         """Beats from same dilemma are incompatible."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
 
@@ -1602,7 +1602,7 @@ class TestPhaseIntegrationEndToEnd:
         assert result_dict["choice_count"] > 0
 
     @pytest.mark.asyncio
-    async def test_single_tension_full_run(self, tmp_path: Path) -> None:
+    async def test_single_dilemma_full_run(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()

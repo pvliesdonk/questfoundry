@@ -42,10 +42,6 @@ class ScoredDilemma:
     noncanonical_path_id: str | None
 
 
-# Backward compatibility alias
-ScoredTension = ScoredDilemma
-
-
 def _get_paths_for_dilemma(
     seed_output: SeedOutput, dilemma_id: str
 ) -> tuple[Path | None, Path | None]:

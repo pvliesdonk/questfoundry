@@ -570,7 +570,7 @@ def _preview_dream_artifact(artifact: dict[str, Any]) -> None:
 def _preview_brainstorm_artifact(artifact: dict[str, Any]) -> None:
     """Display preview of BRAINSTORM artifact."""
     entities = artifact.get("entities", [])
-    dilemmas = artifact.get("dilemmas", artifact.get("tensions", []))
+    dilemmas = artifact.get("dilemmas", [])
 
     console.print(f"  Entities: [bold]{len(entities)}[/bold]")
 
@@ -594,7 +594,7 @@ def _preview_brainstorm_artifact(artifact: dict[str, Any]) -> None:
 def _preview_seed_artifact(artifact: dict[str, Any]) -> None:
     """Display preview of SEED artifact."""
     entities = artifact.get("entities", [])
-    paths = artifact.get("paths", artifact.get("threads", []))
+    paths = artifact.get("paths", [])
     beats = artifact.get("initial_beats", [])
 
     # Count retained vs cut entities
@@ -605,7 +605,7 @@ def _preview_seed_artifact(artifact: dict[str, Any]) -> None:
 
     console.print(f"  Paths: [bold]{len(paths)}[/bold]")
     for path in paths[:3]:
-        importance = path.get("path_importance", path.get("thread_importance", "?"))
+        importance = path.get("path_importance", "?")
         importance_style = "bold green" if importance == "major" else "dim"
         console.print(
             f"    • [{importance_style}]{importance}[/{importance_style}] {path.get('name', '?')}"

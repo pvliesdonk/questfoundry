@@ -292,7 +292,7 @@ class BrainstormStage:
 
         # Log summary statistics
         entity_count = len(artifact_data.get("entities", []))
-        dilemma_count = len(artifact_data.get("dilemmas", artifact_data.get("tensions", [])))
+        dilemma_count = len(artifact_data.get("dilemmas", []))
         if on_phase_progress is not None:
             on_phase_progress("serialize entities", "completed", f"{entity_count} entities")
             on_phase_progress("serialize dilemmas", "completed", f"{dilemma_count} dilemmas")

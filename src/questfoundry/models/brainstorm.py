@@ -121,19 +121,11 @@ class Dilemma(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def migrate_tension_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old field names for backward compatibility.
-
-        This handles migrating the following fields:
-        - 'tension_id' -> 'dilemma_id'
-        - 'alternatives' -> 'answers'
-        """
-        if isinstance(data, dict):
+    def migrate_alternatives_field(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Migrate old 'alternatives' field to 'answers'."""
+        if isinstance(data, dict) and "alternatives" in data and "answers" not in data:
             data = dict(data)
-            if "tension_id" in data and "dilemma_id" not in data:
-                data["dilemma_id"] = data.pop("tension_id")
-            if "alternatives" in data and "answers" not in data:
-                data["answers"] = data.pop("alternatives")
+            data["answers"] = data.pop("alternatives")
         return data
 
     @model_validator(mode="after")
@@ -144,12 +136,6 @@ class Dilemma(BaseModel):
             msg = f"Dilemma '{self.dilemma_id}' must have exactly one default path answer, found {default_count}"
             raise ValueError(msg)
         return self
-
-    # Backward compatibility properties
-    @property
-    def tension_id(self) -> str:
-        """Deprecated: Use 'dilemma_id' instead."""
-        return self.dilemma_id
 
     @property
     def alternatives(self) -> list[Answer]:
@@ -179,18 +165,3 @@ class BrainstormOutput(BaseModel):
         default_factory=list,
         description="Generated dramatic dilemmas",
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_tensions_field(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old 'tensions' field to 'dilemmas'."""
-        if isinstance(data, dict) and "tensions" in data and "dilemmas" not in data:
-            data = dict(data)
-            data["dilemmas"] = data.pop("tensions")
-        return data
-
-    # Backward compatibility property
-    @property
-    def tensions(self) -> list[Dilemma]:
-        """Deprecated: Use 'dilemmas' instead."""
-        return self.dilemmas

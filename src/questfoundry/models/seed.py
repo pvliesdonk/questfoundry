@@ -82,26 +82,12 @@ class DilemmaDecision(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def migrate_old_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Handle old graphs with legacy field names.
-
-        Provides backward compatibility by migrating:
-        - 'tension_id' -> 'dilemma_id'
-        - 'explored' -> 'considered'
-        """
-        if isinstance(data, dict):
+    def migrate_explored_field(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Migrate old 'explored' field to 'considered'."""
+        if isinstance(data, dict) and "explored" in data and "considered" not in data:
             data = dict(data)  # Avoid mutating input
-            if "tension_id" in data and "dilemma_id" not in data:
-                data["dilemma_id"] = data.pop("tension_id")
-            if "explored" in data and "considered" not in data:
-                data["considered"] = data.pop("explored")
+            data["considered"] = data.pop("explored")
         return data
-
-    # Backward compatibility property
-    @property
-    def tension_id(self) -> str:
-        """Deprecated: Use 'dilemma_id' instead."""
-        return self.dilemma_id
 
 
 class Consequence(BaseModel):
@@ -125,21 +111,6 @@ class Consequence(BaseModel):
         default_factory=list,
         description="Story effects this consequence implies (cascading impacts)",
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_thread_id(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old 'thread_id' field to 'path_id'."""
-        if isinstance(data, dict) and "thread_id" in data and "path_id" not in data:
-            data = dict(data)
-            data["path_id"] = data.pop("thread_id")
-        return data
-
-    # Backward compatibility property
-    @property
-    def thread_id(self) -> str:
-        """Deprecated: Use 'path_id' instead."""
-        return self.path_id
 
 
 class Path(BaseModel):
@@ -184,53 +155,6 @@ class Path(BaseModel):
         description="Consequence IDs for this path (references consequence_id)",
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_old_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old field names for backward compatibility.
-
-        This handles migrating the following fields:
-        - 'thread_id' -> 'path_id'
-        - 'tension_id' -> 'dilemma_id'
-        - 'alternative_id' -> 'answer_id'
-        - 'unexplored_alternative_ids' -> 'unexplored_answer_ids'
-        - 'thread_importance' -> 'path_importance'
-        """
-        if isinstance(data, dict):
-            data = dict(data)
-            if "thread_id" in data and "path_id" not in data:
-                data["path_id"] = data.pop("thread_id")
-            if "tension_id" in data and "dilemma_id" not in data:
-                data["dilemma_id"] = data.pop("tension_id")
-            if "alternative_id" in data and "answer_id" not in data:
-                data["answer_id"] = data.pop("alternative_id")
-            if "unexplored_alternative_ids" in data and "unexplored_answer_ids" not in data:
-                data["unexplored_answer_ids"] = data.pop("unexplored_alternative_ids")
-            if "thread_importance" in data and "path_importance" not in data:
-                data["path_importance"] = data.pop("thread_importance")
-        return data
-
-    # Backward compatibility properties
-    @property
-    def thread_id(self) -> str:
-        """Deprecated: Use 'path_id' instead."""
-        return self.path_id
-
-    @property
-    def tension_id(self) -> str:
-        """Deprecated: Use 'dilemma_id' instead."""
-        return self.dilemma_id
-
-    @property
-    def alternative_id(self) -> str:
-        """Deprecated: Use 'answer_id' instead."""
-        return self.answer_id
-
-    @property
-    def thread_importance(self) -> PathTier:
-        """Deprecated: Use 'path_importance' instead."""
-        return self.path_importance
-
 
 class DilemmaImpact(BaseModel):
     """How a beat affects a dilemma.
@@ -247,21 +171,6 @@ class DilemmaImpact(BaseModel):
     dilemma_id: str = Field(min_length=1, description="Dilemma being impacted")
     effect: DilemmaEffect = Field(description="How the beat affects the dilemma")
     note: str = Field(min_length=1, description="Explanation of the impact")
-
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_tension_id(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old 'tension_id' field to 'dilemma_id'."""
-        if isinstance(data, dict) and "tension_id" in data and "dilemma_id" not in data:
-            data = dict(data)
-            data["dilemma_id"] = data.pop("tension_id")
-        return data
-
-    # Backward compatibility property
-    @property
-    def tension_id(self) -> str:
-        """Deprecated: Use 'dilemma_id' instead."""
-        return self.dilemma_id
 
 
 class InitialBeat(BaseModel):
@@ -302,34 +211,6 @@ class InitialBeat(BaseModel):
         default_factory=list,
         description="Other valid locations for intersection flexibility",
     )
-
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_old_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old field names for backward compatibility.
-
-        This handles migrating the following fields:
-        - 'threads' -> 'paths'
-        - 'tension_impacts' -> 'dilemma_impacts'
-        """
-        if isinstance(data, dict):
-            data = dict(data)
-            if "threads" in data and "paths" not in data:
-                data["paths"] = data.pop("threads")
-            if "tension_impacts" in data and "dilemma_impacts" not in data:
-                data["dilemma_impacts"] = data.pop("tension_impacts")
-        return data
-
-    # Backward compatibility properties
-    @property
-    def threads(self) -> list[str]:
-        """Deprecated: Use 'paths' instead."""
-        return self.paths
-
-    @property
-    def tension_impacts(self) -> list[DilemmaImpact]:
-        """Deprecated: Use 'dilemma_impacts' instead."""
-        return self.dilemma_impacts
 
 
 class ConvergenceSketch(BaseModel):
@@ -393,34 +274,6 @@ class SeedOutput(BaseModel):
         description="Guidance for GROW about path convergence",
     )
 
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_old_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old field names for backward compatibility.
-
-        This handles migrating the following fields:
-        - 'tensions' -> 'dilemmas'
-        - 'threads' -> 'paths'
-        """
-        if isinstance(data, dict):
-            data = dict(data)
-            if "tensions" in data and "dilemmas" not in data:
-                data["dilemmas"] = data.pop("tensions")
-            if "threads" in data and "paths" not in data:
-                data["paths"] = data.pop("threads")
-        return data
-
-    # Backward compatibility properties
-    @property
-    def tensions(self) -> list[DilemmaDecision]:
-        """Deprecated: Use 'dilemmas' instead."""
-        return self.dilemmas
-
-    @property
-    def threads(self) -> list[Path]:
-        """Deprecated: Use 'paths' instead."""
-        return self.paths
-
 
 # Section wrapper models for iterative serialization
 # These allow serializing SEED output in chunks to avoid output truncation
@@ -444,10 +297,6 @@ class DilemmasSection(BaseModel):
     )
 
 
-# Backward compatibility alias
-TensionsSection = DilemmasSection
-
-
 class PathsSection(BaseModel):
     """Wrapper for serializing paths separately."""
 
@@ -455,10 +304,6 @@ class PathsSection(BaseModel):
         default_factory=list,
         description="Created plot paths",
     )
-
-
-# Backward compatibility alias
-ThreadsSection = PathsSection
 
 
 class ConsequencesSection(BaseModel):
@@ -493,10 +338,6 @@ class PathBeatsSection(BaseModel):
         max_length=4,
         description="2-4 initial beats for this specific path",
     )
-
-
-# Backward compatibility alias
-ThreadBeatsSection = PathBeatsSection
 
 
 class ConvergenceSection(BaseModel):
