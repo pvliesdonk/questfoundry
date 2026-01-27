@@ -1,15 +1,19 @@
 """Pydantic models for BRAINSTORM stage output.
 
 BRAINSTORM is the expansive exploration phase that generates raw creative
-material: entities (characters, locations, objects, factions) and tensions
-(binary dramatic questions with two alternatives each).
+material: entities (characters, locations, objects, factions) and dilemmas
+(binary dramatic questions with two answers each).
 
 See docs/design/00-spec.md and docs/design/procedures/brainstorm.md for details.
+
+Terminology (v5):
+- dilemma (was: tension): Binary dramatic questions
+- answer (was: alternative): Possible resolutions to dilemmas
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
 
@@ -40,92 +44,153 @@ class Entity(BaseModel):
     notes: str | None = Field(default=None, description="Freeform notes from discussion")
 
 
-class Alternative(BaseModel):
-    """One possible answer to a tension's binary question.
+class Answer(BaseModel):
+    """One possible answer to a dilemma's binary question.
 
-    Each tension has exactly two alternatives. One is marked as the default
+    Each dilemma has exactly two answers. One is marked as the default
     path (spine), and one is the alternate (becomes a branch only if
     explicitly explored in SEED).
 
     Attributes:
-        alternative_id: Unique identifier for this alternative (e.g., "guilty", "framed").
+        answer_id: Unique identifier for this answer (e.g., "guilty", "framed").
         description: Full description of this answer/path.
         is_default_path: True if this is the default story path (spine).
     """
 
-    alternative_id: str = Field(
+    answer_id: str = Field(
         min_length=1,
-        description="Unique identifier for this alternative path (e.g., 'guilty', 'framed', 'betrayed')",
+        description="Unique identifier for this answer (e.g., 'guilty', 'framed', 'betrayed')",
     )
     description: str = Field(min_length=1, description="Full description of this path")
     is_default_path: bool = Field(
-        description="True if this is the default story path (spine). Exactly one per tension."
+        description="True if this is the default story path (spine). Exactly one per dilemma."
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_alternative_id(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Migrate old 'alternative_id' field to 'answer_id'."""
+        if isinstance(data, dict) and "alternative_id" in data and "answer_id" not in data:
+            data = dict(data)
+            data["answer_id"] = data.pop("alternative_id")
+        return data
 
-class Tension(BaseModel):
-    """A binary dramatic question with two alternative answers.
+    # Backward compatibility property
+    @property
+    def alternative_id(self) -> str:
+        """Deprecated: Use 'answer_id' instead."""
+        return self.answer_id
 
-    Tensions represent meaningful story choices. The binary constraint
+
+# Backward compatibility alias
+Alternative = Answer
+
+
+class Dilemma(BaseModel):
+    """A binary dramatic question with two possible answers.
+
+    Dilemmas represent meaningful story choices. The binary constraint
     keeps contrasts crisp and meaningful. For nuanced concepts, use
-    multiple binary tensions instead of a single multi-way choice.
+    multiple binary dilemmas instead of a single multi-way choice.
 
     Attributes:
-        tension_id: Short identifier (e.g., "mentor_trust").
+        dilemma_id: Short identifier with d:: prefix (e.g., "d::mentor_trust").
         question: The dramatic question (must end with "?").
-        alternatives: Exactly two possible answers.
-        central_entity_ids: Entity IDs central to this tension.
+        answers: Exactly two possible answers.
+        central_entity_ids: Entity IDs central to this dilemma.
         why_it_matters: Thematic stakes and consequences.
     """
 
-    tension_id: str = Field(
+    dilemma_id: str = Field(
         min_length=1,
-        description="Unique identifier for this tension (e.g., 'mentor_trust', 'murder_weapon')",
+        description="Unique identifier for this dilemma (e.g., 'd::mentor_trust', 'd::murder_weapon')",
     )
     question: str = Field(min_length=1, description="Dramatic question (should end with ?)")
-    alternatives: list[Alternative] = Field(
+    answers: list[Answer] = Field(
         min_length=2,
         max_length=2,
-        description="Exactly two alternative answers",
+        description="Exactly two possible answers",
     )
     central_entity_ids: list[str] = Field(
         default_factory=list,
-        description="Entity IDs central to this tension (references entity_id values)",
+        description="Entity IDs central to this dilemma (references entity_id values)",
     )
     why_it_matters: str = Field(
         min_length=1,
         description="Thematic stakes and narrative consequences",
     )
 
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_tension_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Migrate old field names to new names."""
+        if isinstance(data, dict):
+            data = dict(data)
+            if "tension_id" in data and "dilemma_id" not in data:
+                data["dilemma_id"] = data.pop("tension_id")
+            if "alternatives" in data and "answers" not in data:
+                data["answers"] = data.pop("alternatives")
+        return data
+
     @model_validator(mode="after")
-    def validate_exactly_one_default_path(self) -> Tension:
-        """Ensure exactly one alternative is marked as the default path."""
-        default_count = sum(1 for alt in self.alternatives if alt.is_default_path)
+    def validate_exactly_one_default_path(self) -> Dilemma:
+        """Ensure exactly one answer is marked as the default path."""
+        default_count = sum(1 for ans in self.answers if ans.is_default_path)
         if default_count != 1:
-            msg = f"Tension '{self.tension_id}' must have exactly one default path alternative, found {default_count}"
+            msg = f"Dilemma '{self.dilemma_id}' must have exactly one default path answer, found {default_count}"
             raise ValueError(msg)
         return self
+
+    # Backward compatibility properties
+    @property
+    def tension_id(self) -> str:
+        """Deprecated: Use 'dilemma_id' instead."""
+        return self.dilemma_id
+
+    @property
+    def alternatives(self) -> list[Answer]:
+        """Deprecated: Use 'answers' instead."""
+        return self.answers
+
+
+# Backward compatibility alias
+Tension = Dilemma
 
 
 class BrainstormOutput(BaseModel):
     """Complete output of the BRAINSTORM stage.
 
     This structured output is produced by the LLM after the Discuss phase.
-    It contains all generated entities and tensions that will be triaged
+    It contains all generated entities and dilemmas that will be triaged
     by SEED into committed story structure.
 
-    Good BRAINSTORM produces 15-25 entities and 4-8 tensions.
+    Good BRAINSTORM produces 15-25 entities and 4-8 dilemmas.
 
     Attributes:
         entities: All generated story entities.
-        tensions: All generated dramatic tensions.
+        dilemmas: All generated dramatic dilemmas.
     """
 
     entities: list[Entity] = Field(
         default_factory=list,
         description="Generated story entities",
     )
-    tensions: list[Tension] = Field(
+    dilemmas: list[Dilemma] = Field(
         default_factory=list,
-        description="Generated dramatic tensions",
+        description="Generated dramatic dilemmas",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_tensions_field(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Migrate old 'tensions' field to 'dilemmas'."""
+        if isinstance(data, dict) and "tensions" in data and "dilemmas" not in data:
+            data = dict(data)
+            data["dilemmas"] = data.pop("tensions")
+        return data
+
+    # Backward compatibility property
+    @property
+    def tensions(self) -> list[Dilemma]:
+        """Deprecated: Use 'dilemmas' instead."""
+        return self.dilemmas
