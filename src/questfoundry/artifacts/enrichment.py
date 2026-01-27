@@ -53,9 +53,8 @@ def enrich_seed_artifact(graph: Graph, artifact: dict[str, Any]) -> dict[str, An
     # Enrich entities
     enriched["entities"] = _enrich_entities(graph, artifact.get("entities", []))
 
-    # Enrich dilemmas (artifact may use "dilemmas" or legacy "tensions")
-    dilemma_decisions = artifact.get("dilemmas", artifact.get("tensions", []))
-    enriched["dilemmas"] = _enrich_dilemmas(graph, dilemma_decisions)
+    # Enrich dilemmas
+    enriched["dilemmas"] = _enrich_dilemmas(graph, artifact.get("dilemmas", []))
 
     return enriched
 
@@ -116,7 +115,7 @@ def _enrich_dilemmas(graph: Graph, dilemma_decisions: list[dict[str, Any]]) -> l
 
     enriched_dilemmas = []
     for decision in dilemma_decisions:
-        dilemma_id = decision.get("dilemma_id") or decision.get("tension_id", "")
+        dilemma_id = decision.get("dilemma_id", "")
         # Strip prefix if present (e.g., "dilemma::host_motivation" -> "host_motivation")
         lookup_id = dilemma_id.split("::")[-1]
         node = dilemma_data.get(lookup_id, {}) if lookup_id else {}

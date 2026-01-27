@@ -49,7 +49,7 @@ def graph_with_entities() -> Graph:
 
 
 @pytest.fixture
-def graph_with_tensions() -> Graph:
+def graph_with_dilemmas() -> Graph:
     """Graph with BRAINSTORM dilemma data."""
     graph = Graph()
     # Add dilemma as BRAINSTORM would
@@ -217,19 +217,19 @@ class TestEnrichSeedArtifact:
 class TestEnrichDilemmas:
     """Tests for dilemma enrichment."""
 
-    def test_enriches_dilemma_with_full_details(self, graph_with_tensions: Graph) -> None:
+    def test_enriches_dilemma_with_full_details(self, graph_with_dilemmas: Graph) -> None:
         """Enrichment adds question, why_it_matters, central_entity_ids from graph."""
         artifact = {
-            "tensions": [  # Input uses legacy "tensions" key
+            "dilemmas": [  # Input uses legacy "dilemmas" key
                 {
-                    "tension_id": "host_motivation",
+                    "dilemma_id": "host_motivation",
                     "considered": ["benevolent"],
                     "implicit": ["self_serving"],
                 },
             ],
         }
 
-        result = enrich_seed_artifact(graph_with_tensions, artifact)
+        result = enrich_seed_artifact(graph_with_dilemmas, artifact)
 
         dilemma = result["dilemmas"][0]
         assert dilemma["dilemma_id"] == "host_motivation"
@@ -240,15 +240,15 @@ class TestEnrichDilemmas:
         assert dilemma["considered"] == ["benevolent"]
         assert dilemma["implicit"] == ["self_serving"]
 
-    def test_handles_unknown_dilemma(self, graph_with_tensions: Graph) -> None:
+    def test_handles_unknown_dilemma(self, graph_with_dilemmas: Graph) -> None:
         """Enrichment handles dilemmas not in graph gracefully."""
         artifact = {
-            "tensions": [
-                {"tension_id": "unknown_dilemma", "considered": ["option_a"], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "unknown_dilemma", "considered": ["option_a"], "implicit": []},
             ],
         }
 
-        result = enrich_seed_artifact(graph_with_tensions, artifact)
+        result = enrich_seed_artifact(graph_with_dilemmas, artifact)
 
         dilemma = result["dilemmas"][0]
         assert dilemma["dilemma_id"] == "unknown_dilemma"
@@ -256,19 +256,19 @@ class TestEnrichDilemmas:
         assert "why_it_matters" not in dilemma
         assert dilemma["considered"] == ["option_a"]
 
-    def test_handles_prefixed_dilemma_ids(self, graph_with_tensions: Graph) -> None:
+    def test_handles_prefixed_dilemma_ids(self, graph_with_dilemmas: Graph) -> None:
         """Enrichment strips prefix from dilemma_id for graph lookup."""
         artifact = {
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "dilemma::host_motivation",
+                    "dilemma_id": "dilemma::host_motivation",
                     "considered": ["benevolent"],
                     "implicit": [],
                 },
             ],
         }
 
-        result = enrich_seed_artifact(graph_with_tensions, artifact)
+        result = enrich_seed_artifact(graph_with_dilemmas, artifact)
 
         dilemma = result["dilemmas"][0]
         # Original prefixed ID preserved in output
@@ -278,25 +278,25 @@ class TestEnrichDilemmas:
         assert dilemma["why_it_matters"] == "Determines whether protagonist can trust their guide"
         assert dilemma["considered"] == ["benevolent"]
 
-    def test_enriches_multiple_dilemmas(self, graph_with_tensions: Graph) -> None:
+    def test_enriches_multiple_dilemmas(self, graph_with_dilemmas: Graph) -> None:
         """Enrichment works for multiple dilemmas."""
         artifact = {
-            "tensions": [
-                {"tension_id": "host_motivation", "considered": ["benevolent"], "implicit": []},
-                {"tension_id": "killer_identity", "considered": ["suspect_a"], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "host_motivation", "considered": ["benevolent"], "implicit": []},
+                {"dilemma_id": "killer_identity", "considered": ["suspect_a"], "implicit": []},
             ],
         }
 
-        result = enrich_seed_artifact(graph_with_tensions, artifact)
+        result = enrich_seed_artifact(graph_with_dilemmas, artifact)
 
         assert len(result["dilemmas"]) == 2
         assert result["dilemmas"][0]["question"] == "Is the host benevolent or self-serving?"
         assert result["dilemmas"][1]["question"] == "Who committed the murder?"
 
-    def test_empty_dilemmas_list(self, graph_with_tensions: Graph) -> None:
+    def test_empty_dilemmas_list(self, graph_with_dilemmas: Graph) -> None:
         """Enrichment handles empty dilemmas list."""
-        artifact = {"tensions": []}  # Input uses legacy key
+        artifact = {"dilemmas": []}  # Input uses legacy key
 
-        result = enrich_seed_artifact(graph_with_tensions, artifact)
+        result = enrich_seed_artifact(graph_with_dilemmas, artifact)
 
         assert result["dilemmas"] == []

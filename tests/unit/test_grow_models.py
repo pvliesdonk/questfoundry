@@ -228,16 +228,14 @@ class TestIntersectionProposal:
 
 
 class TestPhase3Output:
-    def test_knots_migration(self) -> None:
-        """Verify backward compat: 'knots' field migrates to 'intersections'."""
+    def test_knots_field_is_ignored(self) -> None:
+        """Legacy 'knots' field is ignored (no backward-compat migration)."""
         output = Phase3Output(
             knots=[  # type: ignore[call-arg]
                 {"beat_ids": ["b1", "b2"], "rationale": "test"},
             ]
         )
-        assert len(output.intersections) == 1
-        # Backward compat property still works
-        assert len(output.knots) == 1
+        assert output.intersections == []
 
 
 class TestSceneTypeTag:
@@ -283,15 +281,13 @@ class TestGapProposal:
         with pytest.raises(ValidationError, match="summary"):
             GapProposal(path_id="t1", summary="")
 
-    def test_thread_id_migration(self) -> None:
-        """Verify backward compat: 'thread_id' field migrates to 'path_id'."""
-        gap = GapProposal(
-            thread_id="thread_main",  # type: ignore[call-arg]
-            summary="A scene.",
-        )
-        assert gap.path_id == "thread_main"
-        # Backward compat property still works
-        assert gap.thread_id == "thread_main"
+    def test_thread_id_rejected(self) -> None:
+        """Legacy 'thread_id' field is rejected (no backward-compat migration)."""
+        with pytest.raises(ValidationError, match="path_id"):
+            GapProposal(  # type: ignore[call-arg]
+                thread_id="thread_main",
+                summary="A scene.",
+            )
 
 
 class TestOverlayProposal:

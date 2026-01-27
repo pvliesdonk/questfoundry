@@ -291,15 +291,15 @@ class TestEdgeOperations:
     def test_add_edge(self) -> None:
         """Can add edges between existing nodes."""
         graph = Graph.empty()
-        graph.create_node("tension_001", {"type": "dilemma"})
+        graph.create_node("dilemma_001", {"type": "dilemma"})
         graph.create_node("alt_001", {"type": "alternative"})
 
-        graph.add_edge("has_answer", "tension_001", "alt_001")
+        graph.add_edge("has_answer", "dilemma_001", "alt_001")
 
         edges = graph.get_edges()
         assert len(edges) == 1
         assert edges[0]["type"] == "has_answer"
-        assert edges[0]["from"] == "tension_001"
+        assert edges[0]["from"] == "dilemma_001"
         assert edges[0]["to"] == "alt_001"
 
     def test_add_edge_with_props(self) -> None:

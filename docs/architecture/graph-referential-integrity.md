@@ -415,7 +415,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
             for raw_id in sorted(by_category[category]):
                 lines.append(f"  - `{raw_id}`")
 
-    # Tensions with alternatives
+    # Dilemmas with alternatives
     lines.append("")
     lines.append("### Dilemma IDs with their Answer IDs")
     lines.append("Format: dilemma_id → [answer_ids]")

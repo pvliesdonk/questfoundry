@@ -251,7 +251,7 @@ class TestDilemmasResolved:
         assert result.severity == "fail"
         assert "th1/t1" in result.message
 
-    def test_dilemmas_resolved_with_prefixed_tension_id(self) -> None:
+    def test_dilemmas_resolved_with_prefixed_dilemma_id(self) -> None:
         """Works when path nodes use prefixed dilemma_id (real SEED output)."""
         from tests.fixtures.grow_fixtures import make_two_dilemma_graph
 

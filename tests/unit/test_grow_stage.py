@@ -660,7 +660,7 @@ class TestPhase3Knots:
         stage = GrowStage()
 
         # opening requires mentor_meet — these have a requires dependency
-        # But they're also from different tensions in this graph.
+        # But they're also from different dilemmas in this graph.
         # Add a cross-dilemma requires to test: artifact_discover requires mentor_meet
         graph.add_edge("requires", "beat::artifact_discover", "beat::mentor_meet")
 
@@ -765,8 +765,8 @@ class TestPhase4aSceneTypes:
 
 
 class TestValidateAndInsertGaps:
-    def test_unprefixed_thread_id_gets_warning_and_prefix(self) -> None:
-        """Helper auto-prefixes thread_id and logs warning."""
+    def test_unprefixed_path_id_gets_warning_and_prefix(self) -> None:
+        """Helper auto-prefixes path_id and logs warning."""
         from questfoundry.models.grow import GapProposal
         from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
@@ -775,7 +775,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="mentor_trust_canonical",  # Missing "path::" prefix
+                path_id="mentor_trust_canonical",  # Missing "path::" prefix
                 after_beat="beat::opening",
                 before_beat="beat::mentor_meet",
                 summary="Auto-prefixed gap",
@@ -793,8 +793,8 @@ class TestValidateAndInsertGaps:
         gap_beats = [bid for bid in beat_nodes if "gap" in bid]
         assert len(gap_beats) == 1
 
-    def test_invalid_thread_id_skipped(self) -> None:
-        """Helper skips gaps with thread_ids not in valid set."""
+    def test_invalid_path_id_skipped(self) -> None:
+        """Helper skips gaps with path_ids not in valid set."""
         from questfoundry.models.grow import GapProposal
         from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
@@ -803,7 +803,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="path::nonexistent",
+                path_id="path::nonexistent",
                 after_beat="beat::opening",
                 before_beat="beat::mentor_meet",
                 summary="Invalid path",
@@ -826,7 +826,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="path::mentor_trust_canonical",
+                path_id="path::mentor_trust_canonical",
                 after_beat="beat::mentor_commits_canonical",  # Comes AFTER mentor_meet
                 before_beat="beat::mentor_meet",  # Comes BEFORE commits
                 summary="Wrong order gap",
@@ -849,7 +849,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="path::mentor_trust_canonical",
+                path_id="path::mentor_trust_canonical",
                 after_beat="beat::phantom",
                 before_beat="beat::mentor_meet",
                 summary="Phantom after_beat",
@@ -872,7 +872,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="path::mentor_trust_canonical",
+                path_id="path::mentor_trust_canonical",
                 after_beat="beat::opening",
                 before_beat="beat::phantom_before",
                 summary="Phantom before_beat",
@@ -897,7 +897,7 @@ class TestValidateAndInsertGaps:
         # not path::mentor_trust_canonical's sequence
         gaps = [
             GapProposal(
-                thread_id="path::mentor_trust_canonical",
+                path_id="path::mentor_trust_canonical",
                 after_beat="beat::opening",
                 before_beat="beat::mentor_commits_alt",
                 summary="Beat not in this path sequence",
@@ -920,7 +920,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="path::mentor_trust_canonical",
+                path_id="path::mentor_trust_canonical",
                 after_beat="beat::opening",
                 before_beat=None,
                 summary="Gap after opening only",
@@ -951,7 +951,7 @@ class TestPhase4bNarrativeGaps:
         phase4b_output = Phase4bOutput(
             gaps=[
                 GapProposal(
-                    thread_id="path::mentor_trust_canonical",
+                    path_id="path::mentor_trust_canonical",
                     after_beat="beat::mentor_meet",
                     before_beat="beat::mentor_commits_canonical",
                     summary="Hero reflects on mentor's words",
@@ -977,7 +977,7 @@ class TestPhase4bNarrativeGaps:
         assert len(gap_beats) == 1
 
     @pytest.mark.asyncio
-    async def test_phase_4b_skips_invalid_thread(self) -> None:
+    async def test_phase_4b_skips_invalid_path(self) -> None:
         """Phase 4b skips gap proposals with invalid path IDs."""
         from questfoundry.models.grow import GapProposal, Phase4bOutput
         from tests.fixtures.grow_fixtures import make_single_dilemma_graph
@@ -988,7 +988,7 @@ class TestPhase4bNarrativeGaps:
         phase4b_output = Phase4bOutput(
             gaps=[
                 GapProposal(
-                    thread_id="path::nonexistent",
+                    path_id="path::nonexistent",
                     after_beat="beat::opening",
                     before_beat="beat::mentor_meet",
                     summary="Invalid path gap",
@@ -1008,7 +1008,7 @@ class TestPhase4bNarrativeGaps:
         assert "0" in result.detail
 
     @pytest.mark.asyncio
-    async def test_phase_4b_no_threads(self) -> None:
+    async def test_phase_4b_no_paths(self) -> None:
         """Phase 4b returns completed when no paths exist."""
         from questfoundry.graph.graph import Graph
 
@@ -1072,7 +1072,7 @@ class TestPhase4cPacingGaps:
         phase4c_output = Phase4bOutput(
             gaps=[
                 GapProposal(
-                    thread_id="path::main",
+                    path_id="path::main",
                     after_beat="beat::b1",
                     before_beat="beat::b2",
                     summary="Moment of reflection after first action",

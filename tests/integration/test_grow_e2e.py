@@ -134,7 +134,7 @@ class TestGrowFullPipeline:
             )
 
     def test_arc_enumeration(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify 4 arcs are enumerated from 2 tensions x 2 paths."""
+        """Verify 4 arcs are enumerated from 2 dilemmas x 2 paths."""
         result_dict = pipeline_result["result_dict"]
         assert result_dict["arc_count"] == 4
         assert result_dict["spine_arc_id"] is not None

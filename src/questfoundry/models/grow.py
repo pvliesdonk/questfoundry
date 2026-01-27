@@ -18,9 +18,9 @@ Terminology (v5):
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field
 
 # ---------------------------------------------------------------------------
 # Graph node types
@@ -43,21 +43,6 @@ class Arc(BaseModel):
     diverges_at: str | None = None
     converges_to: str | None = None
     converges_at: str | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_threads(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old 'threads' field to 'paths'."""
-        if isinstance(data, dict) and "threads" in data and "paths" not in data:
-            data = dict(data)
-            data["paths"] = data.pop("threads")
-        return data
-
-    # Backward compatibility property
-    @property
-    def threads(self) -> list[str]:
-        """Deprecated: Use 'paths' instead."""
-        return self.paths
 
 
 class Passage(BaseModel):
@@ -134,21 +119,6 @@ class Phase3Output(BaseModel):
 
     intersections: list[IntersectionProposal] = Field(default_factory=list)
 
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_knots(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old 'knots' field to 'intersections'."""
-        if isinstance(data, dict) and "knots" in data and "intersections" not in data:
-            data = dict(data)
-            data["intersections"] = data.pop("knots")
-        return data
-
-    # Backward compatibility property
-    @property
-    def knots(self) -> list[IntersectionProposal]:
-        """Deprecated: Use 'intersections' instead."""
-        return self.intersections
-
 
 class SceneTypeTag(BaseModel):
     """Phase 4a: Tags beats with scene type classification."""
@@ -171,21 +141,6 @@ class GapProposal(BaseModel):
     before_beat: str | None = None
     summary: str = Field(min_length=1)
     scene_type: Literal["scene", "sequel", "micro_beat"] = "sequel"
-
-    @model_validator(mode="before")
-    @classmethod
-    def migrate_thread_id(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old 'thread_id' field to 'path_id'."""
-        if isinstance(data, dict) and "thread_id" in data and "path_id" not in data:
-            data = dict(data)
-            data["path_id"] = data.pop("thread_id")
-        return data
-
-    # Backward compatibility property
-    @property
-    def thread_id(self) -> str:
-        """Deprecated: Use 'path_id' instead."""
-        return self.path_id
 
 
 class Phase4bOutput(BaseModel):

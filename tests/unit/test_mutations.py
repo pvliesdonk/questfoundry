@@ -286,7 +286,7 @@ class TestBrainstormMutations:
         ):
             apply_brainstorm_mutations(graph, output)
 
-    def test_tension_missing_id_raises(self) -> None:
+    def test_dilemma_missing_id_raises(self) -> None:
         """Raises MutationError when dilemma missing dilemma_id."""
         graph = Graph.empty()
         output = {
@@ -304,7 +304,7 @@ class TestBrainstormMutations:
             "entities": [],
             "dilemmas": [
                 {
-                    "dilemma_id": "tension_001",
+                    "dilemma_id": "dilemma_001",
                     "question": "Test?",
                     "answers": [
                         {"description": "Option A", "is_default_path": True}
@@ -315,7 +315,7 @@ class TestBrainstormMutations:
 
         with pytest.raises(
             MutationError,
-            match="Answer at index 0 in dilemma 'tension_001' missing answer_id",
+            match="Answer at index 0 in dilemma 'dilemma_001' missing answer_id",
         ):
             apply_brainstorm_mutations(graph, output)
 
@@ -355,7 +355,7 @@ class TestBrainstormMutations:
         assert archive is not None
         assert archive["entity_type"] == "location"
 
-    def test_creates_tension_with_alternatives(self) -> None:
+    def test_creates_dilemma_with_alternatives(self) -> None:
         """Creates dilemma nodes with linked answers."""
         graph = Graph.empty()
         output = {
@@ -393,7 +393,7 @@ class TestBrainstormMutations:
         # central_entity_ids list is prefixed in storage
         assert dilemma["central_entity_ids"] == ["entity::kay", "entity::mentor"]
 
-        # Alternative IDs: dilemma::tension_id::alt::alt_id
+        # Alternative IDs: dilemma::dilemma_id::alt::alt_id
         protector = graph.get_node("dilemma::mentor_trust::alt::protector")
         assert protector is not None
         assert protector["type"] == "answer"
@@ -566,7 +566,7 @@ class TestValidateBrainstormMutations:
         # Should find: 2 phantom entity errors + 1 no default error
         assert len(errors) == 3
 
-    def test_empty_tensions_valid(self) -> None:
+    def test_empty_dilemmas_valid(self) -> None:
         """Empty dilemmas list is valid."""
         output = {
             "entities": [
@@ -1101,7 +1101,7 @@ class TestSeedCompletenessValidation:
         assert any("character" in e.issue for e in entity_errors)
         assert any("location" in e.issue for e in entity_errors)
 
-    def test_missing_tension_decision_detected(self) -> None:
+    def test_missing_dilemma_decision_detected(self) -> None:
         """Detects when dilemma from BRAINSTORM has no decision in SEED."""
         graph = Graph.empty()
         # Add dilemmas from BRAINSTORM
@@ -1252,7 +1252,7 @@ class TestSeedCompletenessValidation:
         thread_errors = [e for e in errors if "has no path" in e.issue]
         assert thread_errors == []
 
-    def test_scoped_tension_id_in_thread_satisfies_completeness(self) -> None:
+    def test_scoped_dilemma_id_in_thread_satisfies_completeness(self) -> None:
         """Scoped dilemma_id (dilemma::trust) in path satisfies completeness."""
         graph = Graph.empty()
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
@@ -1392,7 +1392,7 @@ class TestSeedCompletenessValidation:
         assert "nonexistent" in invalid_errors[0].provided
 
 
-class TestBeatTensionAlignment:
+class TestBeatDilemmaAlignment:
     """Test SEED validation checks 12 and 13: beat-path-dilemma alignment."""
 
     def _make_graph(self) -> Graph:
@@ -1429,7 +1429,7 @@ class TestBeatTensionAlignment:
             "initial_beats": [],
         }
 
-    def test_beat_wrong_tension_detected(self) -> None:
+    def test_beat_wrong_dilemma_detected(self) -> None:
         """Beat referencing wrong dilemma triggers semantic error."""
         graph = self._make_graph()
         output = self._base_output()
@@ -1492,7 +1492,7 @@ class TestBeatTensionAlignment:
         assert "trust_arc" in commits_errors[0].issue
         assert commits_errors[0].category == SeedErrorCategory.COMPLETENESS
 
-    def test_beat_with_additional_tensions_allowed(self) -> None:
+    def test_beat_with_additional_dilemmas_allowed(self) -> None:
         """Beat can reference additional dilemmas beyond its own path's dilemma."""
         graph = self._make_graph()
         output = self._base_output()
@@ -1629,7 +1629,7 @@ class TestSeedDuplicateValidation:
         assert "hero" in dup_errors[0].issue
         assert "2 times" in dup_errors[0].issue
 
-    def test_duplicate_tension_id_detected(self) -> None:
+    def test_duplicate_dilemma_id_detected(self) -> None:
         """Detects when the same dilemma_id appears multiple times in output."""
         graph = Graph.empty()
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
@@ -1839,7 +1839,7 @@ class TestCategorizeError:
         error = SeedValidationError(
             field_path="paths.0.dilemma_id",
             issue="Dilemma 'phantom' not in BRAINSTORM",
-            available=["real_tension"],
+            available=["real_dilemma"],
             provided="phantom",
         )
         assert categorize_error(error) == SeedErrorCategory.SEMANTIC
@@ -2008,7 +2008,7 @@ class TestNormalizeId:
         assert normalized == "hero"
         assert error is None
 
-    def test_tension_scope_accepted(self) -> None:
+    def test_dilemma_scope_accepted(self) -> None:
         """Dilemma scope is handled correctly."""
         normalized, error = _normalize_id("dilemma::mentor_trust", "dilemma")
         assert normalized == "mentor_trust"
@@ -2070,7 +2070,7 @@ class TestScopedIdValidation:
 
         assert errors == []
 
-    def test_scoped_tension_id_accepted(self) -> None:
+    def test_scoped_dilemma_id_accepted(self) -> None:
         """Scoped dilemma IDs (dilemma::trust) are accepted in dilemma decisions."""
         graph = Graph.empty()
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
@@ -2161,7 +2161,7 @@ class TestScopedIdValidation:
         assert "entity::" in scope_errors[0].issue
         assert "dilemma::" in scope_errors[0].issue
 
-    def test_wrong_scope_detected_for_tension(self) -> None:
+    def test_wrong_scope_detected_for_dilemma(self) -> None:
         """Wrong scope (entity:: instead of dilemma::) is detected."""
         graph = Graph.empty()
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
@@ -2324,7 +2324,7 @@ class TestScopedIdValidation:
         # No errors expected
         assert errors == []
 
-    def test_scoped_tension_in_dilemma_impacts(self) -> None:
+    def test_scoped_dilemma_in_dilemma_impacts(self) -> None:
         """Scoped dilemma IDs work in beat.dilemma_impacts."""
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
@@ -2773,7 +2773,7 @@ class TestFormatSemanticErrorsAsContent:
             SeedValidationError(
                 field_path="paths.0.dilemma_id",
                 issue="Dilemma 'unknown' not in BRAINSTORM",
-                available=["main_tension"],
+                available=["main_dilemma"],
                 provided="unknown",
             ),
         ]
@@ -2811,7 +2811,7 @@ class TestTypeAwareFeedback:
     the generic "not in BRAINSTORM" message.
     """
 
-    def test_type_aware_feedback_entity_as_tension(self) -> None:
+    def test_type_aware_feedback_entity_as_dilemma(self) -> None:
         """Entity faction name used as dilemma_id gives helpful message."""
         graph = Graph.empty()
         # isolation_protocol is a faction entity in brainstorm
@@ -2852,7 +2852,7 @@ class TestTypeAwareFeedback:
         assert "is an entity (faction), not a dilemma" in dilemma_impact_errors[0].issue
         assert "subject_X_or_Y" in dilemma_impact_errors[0].issue
 
-    def test_type_aware_feedback_thread_as_tension(self) -> None:
+    def test_type_aware_feedback_thread_as_dilemma(self) -> None:
         """Path ID used as dilemma_id gives helpful message."""
         graph = Graph.empty()
         graph.create_node(
@@ -3141,7 +3141,7 @@ class TestBackfillConsideredFromThreads:
 
         assert output["dilemmas"][0]["considered"] == ["existing_value"]
 
-    def test_handles_scoped_tension_ids(self) -> None:
+    def test_handles_scoped_dilemma_ids(self) -> None:
         """Handles dilemma IDs with scope prefix (dilemma::id)."""
         output = {
             "dilemmas": [
@@ -3228,17 +3228,17 @@ class TestBackfillConsideredFromThreads:
 
         assert output["dilemmas"][0]["considered"] == []
 
-    def test_multiple_tensions_independently_backfilled(self) -> None:
+    def test_multiple_dilemmas_independently_backfilled(self) -> None:
         """Each dilemma is backfilled from its own paths."""
         output = {
             "dilemmas": [
-                {"dilemma_id": "tension_one", "considered": []},
-                {"dilemma_id": "tension_two", "considered": []},
+                {"dilemma_id": "dilemma_one", "considered": []},
+                {"dilemma_id": "dilemma_two", "considered": []},
             ],
             "paths": [
-                {"path_id": "t1", "dilemma_id": "tension_one", "answer_id": "opt_a"},
-                {"path_id": "t2", "dilemma_id": "tension_two", "answer_id": "opt_x"},
-                {"path_id": "t3", "dilemma_id": "tension_two", "answer_id": "opt_y"},
+                {"path_id": "t1", "dilemma_id": "dilemma_one", "answer_id": "opt_a"},
+                {"path_id": "t2", "dilemma_id": "dilemma_two", "answer_id": "opt_x"},
+                {"path_id": "t3", "dilemma_id": "dilemma_two", "answer_id": "opt_y"},
             ],
         }
 
@@ -3427,7 +3427,7 @@ class TestValidation11cThreadAlternativeInConsidered:
         assert len(check_11c_errors) == 1
         assert "option_a" in check_11c_errors[0].issue
 
-    def test_scoped_tension_ids_matched_correctly(self) -> None:
+    def test_scoped_dilemma_ids_matched_correctly(self) -> None:
         """Scoped dilemma IDs are normalized for matching."""
         graph = Graph.empty()
         graph.create_node(
@@ -3555,6 +3555,6 @@ class TestBackfillIntegrationWithApplySeedMutations:
         apply_seed_mutations(graph, output)
 
         # Verify the dilemma node was updated with backfilled considered
-        tension_node = graph.get_node("dilemma::choice_a_or_b")
-        assert tension_node is not None
-        assert sorted(tension_node.get("considered", [])) == ["option_a", "option_b"]
+        dilemma_node = graph.get_node("dilemma::choice_a_or_b")
+        assert dilemma_node is not None
+        assert sorted(dilemma_node.get("considered", [])) == ["option_a", "option_b"]

@@ -981,7 +981,7 @@ SHIP reads from the graph, ignoring working nodes.
 | Ending passages | Passages with no outgoing Choice edges |
 
 **Ignored by SHIP:**
-- Tensions, paths, beats, arcs
+- Dilemmas, paths, beats, arcs
 - `from_beat`, `summary` on passages
 - `requires` edges between beats
 - All working edges
