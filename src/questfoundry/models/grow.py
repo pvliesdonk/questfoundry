@@ -5,18 +5,22 @@ LLM sub-phase output schemas for future LLM phases, and the
 stage result container.
 
 Node types created by GROW:
-- Arc: A path through the story (spine or branch)
+- Arc: A route through the story (spine or branch)
 - Passage: A rendered scene corresponding to a beat
 - Codeword: A state flag tracking consequence commitment
 
 See docs/design/00-spec.md for ontology details.
+
+Terminology (v5):
+- path (was: thread): Routes exploring specific answers to dilemmas
+- intersection (was: knot): Beats serving multiple paths
 """
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ---------------------------------------------------------------------------
 # Graph node types
@@ -24,21 +28,36 @@ from pydantic import BaseModel, Field
 
 
 class Arc(BaseModel):
-    """A path through the story graph.
+    """A route through the story graph.
 
-    Arcs are enumerated from thread combinations across tensions.
-    The spine arc contains all canonical (default-path) threads.
+    Arcs are enumerated from path combinations across dilemmas.
+    The spine arc contains all canonical (default-path) paths.
     Branch arcs diverge from the spine at specific beats.
     """
 
     arc_id: str = Field(min_length=1)
     arc_type: Literal["spine", "branch"]
-    threads: list[str] = Field(min_length=1)
+    paths: list[str] = Field(min_length=1)
     sequence: list[str] = Field(default_factory=list)
     diverges_from: str | None = None
     diverges_at: str | None = None
     converges_to: str | None = None
     converges_at: str | None = None
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_threads(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Migrate old 'threads' field to 'paths'."""
+        if isinstance(data, dict) and "threads" in data and "paths" not in data:
+            data = dict(data)
+            data["paths"] = data.pop("threads")
+        return data
+
+    # Backward compatibility property
+    @property
+    def threads(self) -> list[str]:
+        """Deprecated: Use 'paths' instead."""
+        return self.paths
 
 
 class Passage(BaseModel):
@@ -89,31 +108,54 @@ class EntityOverlay(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class ThreadAgnosticAssessment(BaseModel):
-    """Phase 2: Marks beats that are thread-agnostic for specific tensions."""
+class PathAgnosticAssessment(BaseModel):
+    """Phase 2: Marks beats that are path-agnostic for specific dilemmas."""
 
     beat_id: str = Field(min_length=1)
     agnostic_for: list[str] = Field(default_factory=list)
 
 
+# Backward compatibility alias
+ThreadAgnosticAssessment = PathAgnosticAssessment
+
+
 class Phase2Output(BaseModel):
-    """Wrapper for Phase 2 structured output (thread-agnostic assessment)."""
+    """Wrapper for Phase 2 structured output (path-agnostic assessment)."""
 
-    assessments: list[ThreadAgnosticAssessment] = Field(default_factory=list)
+    assessments: list[PathAgnosticAssessment] = Field(default_factory=list)
 
 
-class KnotProposal(BaseModel):
-    """Phase 3: Proposes beats that form structural knots."""
+class IntersectionProposal(BaseModel):
+    """Phase 3: Proposes beats that form structural intersections."""
 
     beat_ids: list[str] = Field(min_length=2)
     resolved_location: str | None = None
     rationale: str = Field(min_length=1)
 
 
-class Phase3Output(BaseModel):
-    """Wrapper for Phase 3 structured output (knot proposals)."""
+# Backward compatibility alias
+KnotProposal = IntersectionProposal
 
-    knots: list[KnotProposal] = Field(default_factory=list)
+
+class Phase3Output(BaseModel):
+    """Wrapper for Phase 3 structured output (intersection proposals)."""
+
+    intersections: list[IntersectionProposal] = Field(default_factory=list)
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_knots(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Migrate old 'knots' field to 'intersections'."""
+        if isinstance(data, dict) and "knots" in data and "intersections" not in data:
+            data = dict(data)
+            data["intersections"] = data.pop("knots")
+        return data
+
+    # Backward compatibility property
+    @property
+    def knots(self) -> list[IntersectionProposal]:
+        """Deprecated: Use 'intersections' instead."""
+        return self.intersections
 
 
 class SceneTypeTag(BaseModel):
@@ -132,11 +174,26 @@ class Phase4aOutput(BaseModel):
 class GapProposal(BaseModel):
     """Phase 4b/4c: Proposes new beats to fill structural gaps."""
 
-    thread_id: str = Field(min_length=1)
+    path_id: str = Field(min_length=1)
     after_beat: str | None = None
     before_beat: str | None = None
     summary: str = Field(min_length=1)
     scene_type: Literal["scene", "sequel", "micro_beat"] = "sequel"
+
+    @model_validator(mode="before")
+    @classmethod
+    def migrate_thread_id(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Migrate old 'thread_id' field to 'path_id'."""
+        if isinstance(data, dict) and "thread_id" in data and "path_id" not in data:
+            data = dict(data)
+            data["path_id"] = data.pop("thread_id")
+        return data
+
+    # Backward compatibility property
+    @property
+    def thread_id(self) -> str:
+        """Deprecated: Use 'path_id' instead."""
+        return self.path_id
 
 
 class Phase4bOutput(BaseModel):

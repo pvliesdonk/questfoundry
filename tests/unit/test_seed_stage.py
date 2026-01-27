@@ -134,7 +134,7 @@ async def test_execute_calls_all_three_phases() -> None:
 
         # Verify result
         assert len(artifact["entities"]) == 1
-        assert len(artifact["threads"]) == 1
+        assert len(artifact["paths"]) == 1
         assert len(artifact["initial_beats"]) == 1
         # Stage counts: 2 discuss + 1 summarize + 6 (hardcoded for iterative serialize)
         # Note: This tests the stage's call accounting, not internal serialize behavior
@@ -342,7 +342,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
 
         assert isinstance(artifact, dict)
         assert artifact["entities"][0]["entity_id"] == "kay"
-        assert artifact["threads"][0]["thread_id"] == "thread1"
+        assert artifact["paths"][0]["path_id"] == "thread1"
         assert artifact["initial_beats"][0]["beat_id"] == "beat1"
 
 

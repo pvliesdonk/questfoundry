@@ -52,9 +52,9 @@ class TestArc:
         with pytest.raises(ValidationError, match="arc_id"):
             Arc(arc_id="", arc_type="spine", threads=["t1"])
 
-    def test_empty_threads_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="threads"):
-            Arc(arc_id="test", arc_type="spine", threads=[])
+    def test_empty_paths_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="paths"):
+            Arc(arc_id="test", arc_type="spine", paths=[])
 
     def test_invalid_arc_type_rejected(self) -> None:
         with pytest.raises(ValidationError, match="arc_type"):
