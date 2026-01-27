@@ -49,6 +49,7 @@ if TYPE_CHECKING:
         LLMCallbackFn,
         UserInputFn,
     )
+    from questfoundry.pipeline.stages.base import PhaseProgressFn
 
 
 class SeedStageError(Exception):
@@ -233,6 +234,7 @@ class SeedStage:
         on_assistant_message: AssistantMessageFn | None = None,
         on_llm_start: LLMCallbackFn | None = None,
         on_llm_end: LLMCallbackFn | None = None,
+        on_phase_progress: PhaseProgressFn | None = None,
         project_path: Path | None = None,
         callbacks: list[BaseCallbackHandler] | None = None,
         summarize_model: BaseChatModel | None = None,
@@ -322,6 +324,9 @@ class SeedStage:
             stage_name="seed",
             callbacks=callbacks,
         )
+        if on_phase_progress is not None:
+            turns = sum(1 for m in messages if isinstance(m, AIMessage))
+            on_phase_progress("discuss", "completed", f"{turns} turns")
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
@@ -355,6 +360,12 @@ class SeedStage:
                 stage_name="seed",
                 callbacks=callbacks,
             )
+            if on_phase_progress is not None:
+                on_phase_progress(
+                    "summarize",
+                    "completed",
+                    f"attempt {outer_attempt + 1}/{max_outer_retries + 1}",
+                )
             total_llm_calls += 1
             total_tokens += summarize_tokens
 
@@ -369,6 +380,7 @@ class SeedStage:
                 provider_name=serialize_provider_name or provider_name,
                 callbacks=callbacks,
                 graph=graph,  # Enables semantic validation
+                on_phase_progress=on_phase_progress,
             )
             # Iterative serialization makes one call per section plus potential retries
             # (actual count depends on serialize_seed_as_function implementation)
@@ -388,6 +400,12 @@ class SeedStage:
                     attempt=outer_attempt + 1,
                     error_count=len(result.semantic_errors),
                 )
+                if on_phase_progress is not None:
+                    on_phase_progress(
+                        "Outer loop retry triggered",
+                        "retry",
+                        f"{len(result.semantic_errors)} validation errors",
+                    )
                 log.debug("seed_outer_retry_feedback", feedback=feedback)
                 messages.append(HumanMessage(content=feedback))
             else:

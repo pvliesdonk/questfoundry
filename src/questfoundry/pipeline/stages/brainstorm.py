@@ -14,6 +14,8 @@ from __future__ import annotations
 from pathlib import Path  # noqa: TC003 - used at runtime for Graph.load()
 from typing import TYPE_CHECKING, Any
 
+from langchain_core.messages import AIMessage
+
 from questfoundry.agents import (
     get_brainstorm_discuss_prompt,
     get_brainstorm_serialize_prompt,
@@ -46,6 +48,7 @@ if TYPE_CHECKING:
         LLMCallbackFn,
         UserInputFn,
     )
+    from questfoundry.pipeline.stages.base import PhaseProgressFn
 
 
 class BrainstormStageError(Exception):
@@ -159,6 +162,7 @@ class BrainstormStage:
         on_assistant_message: AssistantMessageFn | None = None,
         on_llm_start: LLMCallbackFn | None = None,
         on_llm_end: LLMCallbackFn | None = None,
+        on_phase_progress: PhaseProgressFn | None = None,
         project_path: Path | None = None,
         callbacks: list[BaseCallbackHandler] | None = None,
         summarize_model: BaseChatModel | None = None,
@@ -246,6 +250,9 @@ class BrainstormStage:
             stage_name="brainstorm",
             callbacks=callbacks,
         )
+        if on_phase_progress is not None:
+            turns = sum(1 for m in messages if isinstance(m, AIMessage))
+            on_phase_progress("discuss", "completed", f"{turns} turns")
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
@@ -259,6 +266,8 @@ class BrainstormStage:
             stage_name="brainstorm",
             callbacks=callbacks,
         )
+        if on_phase_progress is not None:
+            on_phase_progress("summarize", "completed", None)
         total_llm_calls += 1
         total_tokens += summarize_tokens
 
@@ -284,6 +293,9 @@ class BrainstormStage:
         # Log summary statistics
         entity_count = len(artifact_data.get("entities", []))
         dilemma_count = len(artifact_data.get("dilemmas", artifact_data.get("tensions", [])))
+        if on_phase_progress is not None:
+            on_phase_progress("serialize entities", "completed", f"{entity_count} entities")
+            on_phase_progress("serialize dilemmas", "completed", f"{dilemma_count} dilemmas")
 
         log.info(
             "brainstorm_stage_completed",

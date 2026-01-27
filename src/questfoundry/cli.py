@@ -18,7 +18,6 @@ from prompt_toolkit.patch_stdout import patch_stdout
 from rich.console import Console
 from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
 from questfoundry.observability import close_file_logging, configure_logging, get_logger
@@ -420,16 +419,34 @@ def _run_stage_command(
     if resume_from:
         context["resume_from"] = resume_from
 
-    # Add phase progress callback for GROW stage (shows phase-by-phase progress)
-    if stage_name == "grow":
+    # Add phase progress callback (used by GROW, and optionally by other stages)
+    def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
+        """Display phase progress for stages that emit phase progress events."""
+        detail_str = f" ({detail})" if detail else ""
 
-        def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
-            """Display phase progress for GROW stage."""
+        if stage_name == "grow":
             status_icon = "[green]✓[/green]" if status == "completed" else "[yellow]○[/yellow]"
-            detail_str = f" ({detail})" if detail else ""
             console.print(f"  {status_icon} {phase}{detail_str}")
+            return
 
-        context["on_phase_progress"] = _on_phase_progress
+        # DREAM / BRAINSTORM / SEED
+        if status == "completed":
+            status_icon = "[green]✓[/green]"
+            console.print(f"{stage_name.upper()}: {phase} {status_icon}{detail_str}")
+            return
+
+        if status == "retry":
+            # Special-case to match the style requested in #298
+            if phase.lower().startswith("outer loop retry"):
+                console.print(f"[yellow][{phase}: {detail}][/yellow]")
+            else:
+                console.print(f"[yellow]{stage_name.upper()}: {phase} ↻{detail_str}[/yellow]")
+            return
+
+        # Fallback for unknown statuses
+        console.print(f"{stage_name.upper()}: {phase}{detail_str}")
+
+    context["on_phase_progress"] = _on_phase_progress
 
     if use_interactive:
         log.debug("interactive_mode", mode="enabled")
@@ -473,25 +490,19 @@ def _run_stage_command(
                 )
             )
         else:
-            # Other stages use progress spinner
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console,
-                transient=True,
-            ) as progress:
-                progress.add_task(f"Running {stage_name.upper()} stage...", total=None)
-                result = asyncio.run(
-                    _run_stage_async(
-                        stage_name,
-                        project_path,
-                        context,
-                        provider,
-                        provider_discuss,
-                        provider_summarize,
-                        provider_serialize,
-                    )
+            # Other stages show phase-level progress via on_phase_progress
+            console.print(f"[dim]Running {stage_name.upper()} stage...[/dim]")
+            result = asyncio.run(
+                _run_stage_async(
+                    stage_name,
+                    project_path,
+                    context,
+                    provider,
+                    provider_discuss,
+                    provider_summarize,
+                    provider_serialize,
                 )
+            )
 
     if result.status == "failed":
         log.error("stage_failed", stage=stage_name, errors=result.errors)
