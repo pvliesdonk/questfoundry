@@ -14,25 +14,25 @@ The pruning process:
 from __future__ import annotations
 
 from questfoundry.graph.context import strip_scope_prefix
-from questfoundry.graph.dilemma_scoring import select_tensions_for_full_exploration
+from questfoundry.graph.dilemma_scoring import select_dilemmas_for_full_exploration
 from questfoundry.models.seed import (
     Consequence,
+    DilemmaDecision,
     InitialBeat,
+    Path,
     SeedOutput,
-    TensionDecision,
-    Thread,
 )
 from questfoundry.observability.logging import get_logger
 
 log = get_logger(__name__)
 
 
-def _get_canonical_answer(dilemma: TensionDecision) -> str | None:
+def _get_canonical_answer(dilemma: DilemmaDecision) -> str | None:
     """Get the canonical (first) answer for a dilemma."""
     return dilemma.considered[0] if dilemma.considered else None
 
 
-def _get_noncanonical_answers(dilemma: TensionDecision) -> list[str]:
+def _get_noncanonical_answers(dilemma: DilemmaDecision) -> list[str]:
     """Get non-canonical answers (all considered except first)."""
     if len(dilemma.considered) <= 1:
         return []
@@ -60,8 +60,8 @@ def prune_to_arc_limit(
 
     max_fully_explored = int(math.log2(max_arcs)) if max_arcs > 1 else 0
 
-    # Select tensions to keep fully explored
-    selected, demoted = select_tensions_for_full_exploration(
+    # Select dilemmas to keep fully explored
+    selected, demoted = select_dilemmas_for_full_exploration(
         seed_output,
         max_fully_explored=max_fully_explored,
     )
@@ -111,7 +111,7 @@ def _prune_demoted_dilemmas(
 
     # Build lookup of which paths to drop (using raw IDs for comparison)
     paths_to_drop: set[str] = set()
-    dilemma_lookup: dict[str, TensionDecision] = {
+    dilemma_lookup: dict[str, DilemmaDecision] = {
         strip_scope_prefix(d.dilemma_id): d for d in seed_output.dilemmas
     }
 
@@ -145,7 +145,7 @@ def _prune_demoted_dilemmas(
     # Development state is derived from path existence
 
     # 1. Filter paths (compare raw IDs)
-    pruned_paths: list[Thread] = [
+    pruned_paths: list[Path] = [
         p for p in seed_output.paths if strip_scope_prefix(p.path_id) not in paths_to_drop
     ]
 

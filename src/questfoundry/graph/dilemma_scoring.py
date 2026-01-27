@@ -23,126 +23,128 @@ if TYPE_CHECKING:
     from questfoundry.models.seed import (
         Consequence,
         InitialBeat,
+        Path,
         SeedOutput,
-        Thread,
     )
 
 log = get_logger(__name__)
 
 
 @dataclass
-class ScoredTension:
-    """A tension with computed selection score."""
+class ScoredDilemma:
+    """A dilemma with computed selection score."""
 
-    tension_id: str
+    dilemma_id: str
     score: float
     rationale: list[str]
-    is_fully_explored: bool  # Has 2+ alternatives in explored
-    canonical_thread_id: str | None
-    noncanonical_thread_id: str | None
+    is_fully_explored: bool  # Has 2+ answers in explored
+    canonical_path_id: str | None
+    noncanonical_path_id: str | None
 
 
-def _get_threads_for_tension(
-    seed_output: SeedOutput, tension_id: str
-) -> tuple[Thread | None, Thread | None]:
-    """Get canonical and non-canonical threads for a tension.
+# Backward compatibility alias
+ScoredTension = ScoredDilemma
 
-    Returns (canonical_thread, noncanonical_thread).
+
+def _get_paths_for_dilemma(
+    seed_output: SeedOutput, dilemma_id: str
+) -> tuple[Path | None, Path | None]:
+    """Get canonical and non-canonical paths for a dilemma.
+
+    Returns (canonical_path, noncanonical_path).
     """
-    # Find tension decision to get canonical alternative
-    tension_decision = next(
-        (t for t in seed_output.tensions if t.tension_id == tension_id),
+    # Find dilemma decision to get canonical answer
+    dilemma_decision = next(
+        (d for d in seed_output.dilemmas if d.dilemma_id == dilemma_id),
         None,
     )
-    if not tension_decision:
+    if not dilemma_decision:
         return None, None
 
-    # Find threads for this tension
-    threads = [t for t in seed_output.threads if t.tension_id == tension_id]
+    # Find paths for this dilemma
+    paths = [p for p in seed_output.paths if p.dilemma_id == dilemma_id]
 
-    if not threads:
+    if not paths:
         return None, None
 
-    # Assume first considered alternative is canonical (typical pattern)
-    canonical_alt = tension_decision.considered[0] if tension_decision.considered else None
+    # Assume first considered answer is canonical (typical pattern)
+    canonical_ans = dilemma_decision.considered[0] if dilemma_decision.considered else None
 
-    canonical_thread = None
-    noncanonical_thread = None
+    canonical_path = None
+    noncanonical_path = None
 
-    for thread in threads:
-        if thread.alternative_id == canonical_alt:
-            canonical_thread = thread
+    for path in paths:
+        if path.answer_id == canonical_ans:
+            canonical_path = path
         else:
-            noncanonical_thread = thread
+            noncanonical_path = path
 
-    return canonical_thread, noncanonical_thread
-
-
-def _get_beats_for_thread(seed_output: SeedOutput, thread_id: str) -> list[InitialBeat]:
-    """Get all beats that serve a given thread."""
-    return [b for b in seed_output.initial_beats if thread_id in b.threads]
+    return canonical_path, noncanonical_path
 
 
-def _get_consequences_for_thread(seed_output: SeedOutput, thread_id: str) -> list[Consequence]:
-    """Get all consequences for a given thread."""
-    return [c for c in seed_output.consequences if c.thread_id == thread_id]
+def _get_beats_for_path(seed_output: SeedOutput, path_id: str) -> list[InitialBeat]:
+    """Get all beats that serve a given path."""
+    return [b for b in seed_output.initial_beats if path_id in b.paths]
 
 
-def score_tension(seed_output: SeedOutput, tension_id: str) -> ScoredTension:
-    """Score a tension's value for full exploration.
+def _get_consequences_for_path(seed_output: SeedOutput, path_id: str) -> list[Consequence]:
+    """Get all consequences for a given path."""
+    return [c for c in seed_output.consequences if c.path_id == path_id]
 
-    Higher scores indicate tensions more worth exploring both alternatives.
+
+def score_dilemma(seed_output: SeedOutput, dilemma_id: str) -> ScoredDilemma:
+    """Score a dilemma's value for full exploration.
+
+    Higher scores indicate dilemmas more worth exploring both answers.
     The score is based purely on the quality of generated content, not on
     any self-reported interest from the LLM.
 
     Args:
         seed_output: The full SEED output to analyze.
-        tension_id: The tension to score.
+        dilemma_id: The dilemma to score.
 
     Returns:
-        ScoredTension with computed score and rationale.
+        ScoredDilemma with computed score and rationale.
     """
     rationale: list[str] = []
     score = 0.0
 
-    # Find tension decision
-    tension_decision = next(
-        (t for t in seed_output.tensions if t.tension_id == tension_id),
+    # Find dilemma decision
+    dilemma_decision = next(
+        (d for d in seed_output.dilemmas if d.dilemma_id == dilemma_id),
         None,
     )
 
-    if not tension_decision:
-        return ScoredTension(
-            tension_id=tension_id,
+    if not dilemma_decision:
+        return ScoredDilemma(
+            dilemma_id=dilemma_id,
             score=0.0,
-            rationale=["Tension not found in output"],
+            rationale=["Dilemma not found in output"],
             is_fully_explored=False,
-            canonical_thread_id=None,
-            noncanonical_thread_id=None,
+            canonical_path_id=None,
+            noncanonical_path_id=None,
         )
 
-    canonical_thread, noncanonical_thread = _get_threads_for_tension(seed_output, tension_id)
+    canonical_path, noncanonical_path = _get_paths_for_dilemma(seed_output, dilemma_id)
 
-    # is_fully_explored is derived from actual thread existence, not from considered field
-    # A tension is fully explored when BOTH canonical and non-canonical threads exist
-    is_fully_explored = canonical_thread is not None and noncanonical_thread is not None
+    # is_fully_explored is derived from actual path existence, not from considered field
+    # A dilemma is fully explored when BOTH canonical and non-canonical paths exist
+    is_fully_explored = canonical_path is not None and noncanonical_path is not None
 
-    if not noncanonical_thread:
-        # No non-canonical thread - nothing to score
-        return ScoredTension(
-            tension_id=tension_id,
+    if not noncanonical_path:
+        # No non-canonical path - nothing to score
+        return ScoredDilemma(
+            dilemma_id=dilemma_id,
             score=0.0,
-            rationale=["Only canonical alternative explored"],
+            rationale=["Only canonical answer explored"],
             is_fully_explored=False,
-            canonical_thread_id=canonical_thread.thread_id if canonical_thread else None,
-            noncanonical_thread_id=None,
+            canonical_path_id=canonical_path.path_id if canonical_path else None,
+            noncanonical_path_id=None,
         )
 
-    # Get beats and consequences for non-canonical thread
-    noncanonical_beats = _get_beats_for_thread(seed_output, noncanonical_thread.thread_id)
-    noncanonical_consequences = _get_consequences_for_thread(
-        seed_output, noncanonical_thread.thread_id
-    )
+    # Get beats and consequences for non-canonical path
+    noncanonical_beats = _get_beats_for_path(seed_output, noncanonical_path.path_id)
+    noncanonical_consequences = _get_consequences_for_path(seed_output, noncanonical_path.path_id)
 
     # 1. Beat richness (0-3 points)
     # More beats = more developed storyline
@@ -181,18 +183,18 @@ def score_tension(seed_output: SeedOutput, tension_id: str) -> ScoredTension:
     score += location_score
     rationale.append(f"Location variety: {location_count} locations (+{location_score:.1f})")
 
-    # 5. Thread tier (0-1 point)
-    # Major threads are more important to the story
-    if noncanonical_thread.thread_importance == "major":
+    # 5. Path tier (0-1 point)
+    # Major paths are more important to the story
+    if noncanonical_path.path_importance == "major":
         score += 1.0
-        rationale.append("Thread tier: major (+1.0)")
+        rationale.append("Path tier: major (+1.0)")
     else:
-        rationale.append("Thread tier: minor (+0.0)")
+        rationale.append("Path tier: minor (+0.0)")
 
     # 6. Content distinctiveness (0-1 point)
     # Compare entities between canonical and non-canonical beats
-    if canonical_thread:
-        canonical_beats = _get_beats_for_thread(seed_output, canonical_thread.thread_id)
+    if canonical_path:
+        canonical_beats = _get_beats_for_path(seed_output, canonical_path.path_id)
         canonical_entities: set[str] = set()
         for beat in canonical_beats:
             canonical_entities.update(beat.entities)
@@ -207,85 +209,89 @@ def score_tension(seed_output: SeedOutput, tension_id: str) -> ScoredTension:
                 f"Content distinctiveness: {jaccard_distance:.2f} Jaccard distance (+{jaccard_distance:.2f})"
             )
 
-    return ScoredTension(
-        tension_id=tension_id,
+    return ScoredDilemma(
+        dilemma_id=dilemma_id,
         score=score,
         rationale=rationale,
         is_fully_explored=is_fully_explored,
-        canonical_thread_id=canonical_thread.thread_id if canonical_thread else None,
-        noncanonical_thread_id=noncanonical_thread.thread_id,
+        canonical_path_id=canonical_path.path_id if canonical_path else None,
+        noncanonical_path_id=noncanonical_path.path_id,
     )
 
 
-def rank_tensions_for_exploration(
+def rank_dilemmas_for_exploration(
     seed_output: SeedOutput,
-) -> list[ScoredTension]:
-    """Rank all tensions by their exploration value.
+) -> list[ScoredDilemma]:
+    """Rank all dilemmas by their exploration value.
 
-    Returns tensions sorted by score (highest first). Only tensions with
-    non-canonical threads are scored; others get score 0.
+    Returns dilemmas sorted by score (highest first). Only dilemmas with
+    non-canonical paths are scored; others get score 0.
 
     Args:
         seed_output: The full SEED output to analyze.
 
     Returns:
-        List of ScoredTension objects sorted by score descending.
+        List of ScoredDilemma objects sorted by score descending.
     """
-    scored_tensions: list[ScoredTension] = []
+    scored_dilemmas: list[ScoredDilemma] = []
 
-    for tension_decision in seed_output.tensions:
-        scored = score_tension(seed_output, tension_decision.tension_id)
-        scored_tensions.append(scored)
+    for dilemma_decision in seed_output.dilemmas:
+        scored = score_dilemma(seed_output, dilemma_decision.dilemma_id)
+        scored_dilemmas.append(scored)
 
     # Sort by score descending
-    scored_tensions.sort(key=lambda x: x.score, reverse=True)
+    scored_dilemmas.sort(key=lambda x: x.score, reverse=True)
 
     log.debug(
-        "tensions_ranked",
-        total=len(scored_tensions),
-        fully_explored=sum(1 for t in scored_tensions if t.is_fully_explored),
-        top_3=[(t.tension_id, t.score) for t in scored_tensions[:3]],
+        "dilemmas_ranked",
+        total=len(scored_dilemmas),
+        fully_explored=sum(1 for d in scored_dilemmas if d.is_fully_explored),
+        top_3=[(d.dilemma_id, d.score) for d in scored_dilemmas[:3]],
     )
 
-    return scored_tensions
+    return scored_dilemmas
 
 
-def select_tensions_for_full_exploration(
+# Backward compatibility alias
+rank_tensions_for_exploration = rank_dilemmas_for_exploration
+
+
+def select_dilemmas_for_full_exploration(
     seed_output: SeedOutput,
     max_fully_explored: int = 4,
 ) -> tuple[list[str], list[str]]:
-    """Select which tensions should have both alternatives explored.
+    """Select which dilemmas should have both answers explored.
 
-    Uses programmatic scoring to select the best tensions for full exploration,
+    Uses programmatic scoring to select the best dilemmas for full exploration,
     respecting arc count limits.
 
     Args:
         seed_output: The full SEED output to analyze.
-        max_fully_explored: Maximum tensions to fully explore (default 4 = 16 arcs).
+        max_fully_explored: Maximum dilemmas to fully explore (default 4 = 16 arcs).
 
     Returns:
-        Tuple of (selected_tension_ids, demoted_tension_ids).
-        - selected: Tensions that should keep both alternatives
-        - demoted: Tensions that should have non-canonical moved to implicit
+        Tuple of (selected_dilemma_ids, demoted_dilemma_ids).
+        - selected: Dilemmas that should keep both answers
+        - demoted: Dilemmas that should have non-canonical moved to implicit
     """
-    ranked = rank_tensions_for_exploration(seed_output)
+    ranked = rank_dilemmas_for_exploration(seed_output)
 
-    # Filter to only tensions that have non-canonical threads (fully explored)
-    fully_explored = [t for t in ranked if t.is_fully_explored]
+    # Filter to only dilemmas that have non-canonical paths (fully explored)
+    fully_explored = [d for d in ranked if d.is_fully_explored]
 
     if len(fully_explored) <= max_fully_explored:
         # Under the limit - keep all
-        selected = [t.tension_id for t in fully_explored]
+        selected = [d.dilemma_id for d in fully_explored]
         demoted: list[str] = []
     else:
         # Over the limit - select top N
-        selected = [t.tension_id for t in fully_explored[:max_fully_explored]]
-        demoted = [t.tension_id for t in fully_explored[max_fully_explored:]]
+        selected = [d.dilemma_id for d in fully_explored[:max_fully_explored]]
+        demoted = [d.dilemma_id for d in fully_explored[max_fully_explored:]]
 
     # Log the selection
     if demoted:
         log.info(
-            "tensions_demoted_for_arc_limit",
+            "dilemmas_demoted_for_arc_limit",
             selected_count=len(selected),
             demoted_count=len(demoted),
             selected=selected,
@@ -294,10 +300,14 @@ def select_tensions_for_full_exploration(
         )
     else:
         log.debug(
-            "tensions_within_limit",
+            "dilemmas_within_limit",
             fully_explored_count=len(fully_explored),
             max_allowed=max_fully_explored,
             arc_count=2 ** len(fully_explored) if fully_explored else 1,
         )
 
     return selected, demoted
+
+
+# Backward compatibility alias
+select_tensions_for_full_exploration = select_dilemmas_for_full_exploration
