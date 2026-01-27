@@ -1,6 +1,6 @@
 """Context formatting for GROW stage LLM phases.
 
-Provides functions to format graph data (beats, threads, tensions) as
+Provides functions to format graph data (beats, paths, dilemmas) as
 context strings for GROW's LLM-powered phases.
 """
 
@@ -22,8 +22,8 @@ def format_grow_valid_ids(graph: Graph) -> dict[str, str]:
         graph: Graph containing nodes from SEED stage.
 
     Returns:
-        Dict with keys 'valid_beat_ids', 'valid_thread_ids',
-        'valid_tension_ids', 'valid_entity_ids'. Each value is a
+        Dict with keys 'valid_beat_ids', 'valid_path_ids',
+        'valid_dilemma_ids', 'valid_entity_ids'. Each value is a
         comma-separated string of scoped IDs, or empty string if none.
     """
 
@@ -33,8 +33,9 @@ def format_grow_valid_ids(graph: Graph) -> dict[str, str]:
 
     return {
         "valid_beat_ids": _get_sorted_ids("beat"),
-        "valid_thread_ids": _get_sorted_ids("thread"),
-        "valid_tension_ids": _get_sorted_ids("tension"),
+        # Graph still stores paths as "thread" and dilemmas as "tension"
+        "valid_path_ids": _get_sorted_ids("thread"),
+        "valid_dilemma_ids": _get_sorted_ids("tension"),
         "valid_entity_ids": _get_sorted_ids("entity"),
         "valid_passage_ids": _get_sorted_ids("passage"),
         "valid_choice_ids": _get_sorted_ids("choice"),
