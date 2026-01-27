@@ -64,7 +64,7 @@ class TestPrefixId:
             pytest.param(
                 "dilemma", "host_motivation", "dilemma::host_motivation", id="raw_id-dilemma"
             ),
-            pytest.param("path", "main_thread", "path::main_thread", id="raw_id-path"),
+            pytest.param("path", "main_path", "path::main_path", id="raw_id-path"),
             pytest.param(
                 "entity",
                 "entity::the_detective",
@@ -152,31 +152,31 @@ class TestApplyMutations:
                 {"dilemma_id": "t1", "considered": ["a", "b"], "implicit": []},
             ],
             "paths": [
-                {"path_id": "thread_0", "dilemma_id": "t0", "answer_id": "a"},
-                {"path_id": "thread_1", "dilemma_id": "t0", "answer_id": "b"},
-                {"path_id": "thread_2", "dilemma_id": "t1", "answer_id": "a"},
-                {"path_id": "thread_3", "dilemma_id": "t1", "answer_id": "b"},
+                {"path_id": "path_0", "dilemma_id": "t0", "answer_id": "a"},
+                {"path_id": "path_1", "dilemma_id": "t0", "answer_id": "b"},
+                {"path_id": "path_2", "dilemma_id": "t1", "answer_id": "a"},
+                {"path_id": "path_3", "dilemma_id": "t1", "answer_id": "b"},
             ],
             "initial_beats": [
                 # Minimal beats with commits for each path
                 {
                     "beat_id": "b0",
-                    "paths": ["thread_0"],
+                    "paths": ["path_0"],
                     "dilemma_impacts": [{"dilemma_id": "t0", "effect": "commits"}],
                 },
                 {
                     "beat_id": "b1",
-                    "paths": ["thread_1"],
+                    "paths": ["path_1"],
                     "dilemma_impacts": [{"dilemma_id": "t0", "effect": "commits"}],
                 },
                 {
                     "beat_id": "b2",
-                    "paths": ["thread_2"],
+                    "paths": ["path_2"],
                     "dilemma_impacts": [{"dilemma_id": "t1", "effect": "commits"}],
                 },
                 {
                     "beat_id": "b3",
-                    "paths": ["thread_3"],
+                    "paths": ["path_3"],
                     "dilemma_impacts": [{"dilemma_id": "t1", "effect": "commits"}],
                 },
             ],
@@ -683,7 +683,7 @@ class TestSeedMutations:
         ):
             apply_seed_mutations(graph, output)
 
-    def test_thread_missing_id_raises(self) -> None:
+    def test_path_missing_id_raises(self) -> None:
         """Raises MutationError when path missing path_id."""
         graph = Graph.empty()
         output = {
@@ -740,7 +740,7 @@ class TestSeedMutations:
         assert graph.get_node("entity::mentor")["disposition"] == "retained"
         assert graph.get_node("entity::extra")["disposition"] == "cut"
 
-    def test_creates_threads(self) -> None:
+    def test_creates_paths(self) -> None:
         """Creates path nodes from seed output."""
         graph = Graph.empty()
         # Pre-populate dilemma and answer from brainstorm (with raw_id for validation)
@@ -764,7 +764,7 @@ class TestSeedMutations:
             ],
             "paths": [
                 {
-                    "path_id": "thread_mentor_trust",
+                    "path_id": "path_mentor_trust",
                     "name": "Mentor Trust Arc",
                     "dilemma_id": "mentor_trust",  # Raw dilemma ID from LLM
                     "answer_id": "protector",  # Local alt ID, not full path
@@ -776,7 +776,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "resolution",
                     "summary": "Mentor's true nature revealed",
-                    "paths": ["thread_mentor_trust"],
+                    "paths": ["path_mentor_trust"],
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -787,18 +787,18 @@ class TestSeedMutations:
         apply_seed_mutations(graph, output)
 
         # Path ID is prefixed with "path::"
-        path = graph.get_node("path::thread_mentor_trust")
+        path = graph.get_node("path::path_mentor_trust")
         assert path is not None
         assert path["type"] == "path"
-        assert path["raw_id"] == "thread_mentor_trust"
+        assert path["raw_id"] == "path_mentor_trust"
         assert path["name"] == "Mentor Trust Arc"
 
         # Check explores edge - links to full prefixed answer ID
-        edges = graph.get_edges(from_id="path::thread_mentor_trust", edge_type="explores")
+        edges = graph.get_edges(from_id="path::path_mentor_trust", edge_type="explores")
         assert len(edges) == 1
         assert edges[0]["to"] == "dilemma::mentor_trust::alt::protector"
 
-    def test_thread_is_canonical_from_alternative(self) -> None:
+    def test_path_is_canonical_from_alternative(self) -> None:
         """Path's is_canonical is set from answer's is_default_path."""
         graph = Graph.empty()
         # Create dilemma with two answers - one canonical, one not
@@ -881,14 +881,14 @@ class TestSeedMutations:
         apply_seed_mutations(graph, output)
 
         # Path from canonical answer should have is_canonical=True
-        protects_thread = graph.get_node("path::mentor_protects")
-        assert protects_thread is not None
-        assert protects_thread.get("is_canonical") is True
+        protects_path = graph.get_node("path::mentor_protects")
+        assert protects_path is not None
+        assert protects_path.get("is_canonical") is True
 
         # Path from non-canonical answer should have is_canonical=False
-        manipulates_thread = graph.get_node("path::mentor_manipulates")
-        assert manipulates_thread is not None
-        assert manipulates_thread.get("is_canonical") is False
+        manipulates_path = graph.get_node("path::mentor_manipulates")
+        assert manipulates_path is not None
+        assert manipulates_path.get("is_canonical") is False
 
     def test_creates_beats(self) -> None:
         """Creates beat nodes from seed output."""
@@ -932,7 +932,7 @@ class TestSeedMutations:
             # Path must be in SEED output for beat path references to validate
             "paths": [
                 {
-                    "path_id": "thread_mentor_trust",
+                    "path_id": "path_mentor_trust",
                     "name": "Mentor Trust Arc",
                     "dilemma_id": "mentor_trust",
                     "answer_id": "protector",
@@ -943,7 +943,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "opening_001",
                     "summary": "Kay meets the mentor for the first time",
-                    "paths": ["thread_mentor_trust"],  # Raw path IDs from LLM
+                    "paths": ["path_mentor_trust"],  # Raw path IDs from LLM
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Trust begins"}
                     ],
@@ -953,7 +953,7 @@ class TestSeedMutations:
                 {
                     "beat_id": "resolution_001",
                     "summary": "Mentor's loyalty confirmed",
-                    "paths": ["thread_mentor_trust"],
+                    "paths": ["path_mentor_trust"],
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -978,7 +978,7 @@ class TestSeedMutations:
         # Check belongs_to edge - links to prefixed path ID
         edges = graph.get_edges(from_id="beat::opening_001", edge_type="belongs_to")
         assert len(edges) == 1
-        assert edges[0]["to"] == "path::thread_mentor_trust"
+        assert edges[0]["to"] == "path::path_mentor_trust"
 
     def test_validates_missing_entities(self) -> None:
         """Raises SeedMutationError when referencing non-existent entities."""
@@ -1249,10 +1249,10 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        thread_errors = [e for e in errors if "has no path" in e.issue]
-        assert thread_errors == []
+        path_errors = [e for e in errors if "has no path" in e.issue]
+        assert path_errors == []
 
-    def test_scoped_dilemma_id_in_thread_satisfies_completeness(self) -> None:
+    def test_scoped_dilemma_id_in_path_satisfies_completeness(self) -> None:
         """Scoped dilemma_id (dilemma::trust) in path satisfies completeness."""
         graph = Graph.empty()
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
@@ -1275,8 +1275,8 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        thread_errors = [e for e in errors if "has no path" in e.issue]
-        assert thread_errors == []
+        path_errors = [e for e in errors if "has no path" in e.issue]
+        assert path_errors == []
 
     def test_missing_paths_for_considered_answers(self) -> None:
         """Each considered answer needs its own path - missing paths caught."""
@@ -1313,7 +1313,7 @@ class TestSeedCompletenessValidation:
         assert "1 path" in missing_path_errors[0].issue
         assert missing_path_errors[0].category == SeedErrorCategory.COMPLETENESS
 
-    def test_all_considered_alternatives_have_threads(self) -> None:
+    def test_all_considered_alternatives_have_paths(self) -> None:
         """When each considered answer has a path, validation passes."""
         graph = Graph.empty()
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
@@ -1346,8 +1346,8 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        missing_thread_errors = [e for e in errors if "considered answers" in e.issue]
-        assert missing_thread_errors == []
+        missing_path_errors = [e for e in errors if "considered answers" in e.issue]
+        assert missing_path_errors == []
 
     # NOTE: Arc count validation tests removed - now handled by runtime pruning
     # (over-generate-and-select pattern in seed_pruning.py)
@@ -1470,7 +1470,7 @@ class TestBeatDilemmaAlignment:
         alignment_errors = [e for e in errors if "does not reference its parent dilemma" in e.issue]
         assert len(alignment_errors) == 1
 
-    def test_thread_no_commits_beat_detected(self) -> None:
+    def test_path_no_commits_beat_detected(self) -> None:
         """Path without commits beat triggers completeness error."""
         graph = self._make_graph()
         output = self._base_output()
@@ -1529,7 +1529,7 @@ class TestBeatDilemmaAlignment:
 
         assert errors == []
 
-    def test_multiple_threads_all_need_commits(self) -> None:
+    def test_multiple_paths_all_need_commits(self) -> None:
         """Each path independently needs a commits beat."""
         graph = self._make_graph()
         output = self._base_output()
@@ -1566,7 +1566,7 @@ class TestBeatDilemmaAlignment:
         assert len(commits_errors) == 1
         assert "loyalty_arc" in commits_errors[0].issue
 
-    def test_all_threads_with_commits_passes(self) -> None:
+    def test_all_paths_with_commits_passes(self) -> None:
         """All paths having commits beats produces no errors."""
         graph = self._make_graph()
         output = self._base_output()
@@ -1763,7 +1763,7 @@ class TestMutationIntegration:
             ],
             "paths": [
                 {
-                    "path_id": "thread_mentor",
+                    "path_id": "path_mentor",
                     "name": "Mentor Arc",
                     "dilemma_id": "mentor_trust",  # Raw dilemma ID
                     "answer_id": "protector",  # Local alt ID
@@ -1774,7 +1774,7 @@ class TestMutationIntegration:
                 {
                     "beat_id": "opening",
                     "summary": "Kay meets the mentor",
-                    "paths": ["thread_mentor"],  # Raw path IDs
+                    "paths": ["path_mentor"],  # Raw path IDs
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
                     ],
@@ -1791,7 +1791,7 @@ class TestMutationIntegration:
         assert graph.has_node("entity::mentor")
         assert graph.has_node("dilemma::mentor_trust")
         assert graph.has_node("dilemma::mentor_trust::alt::protector")
-        assert graph.has_node("path::thread_mentor")
+        assert graph.has_node("path::path_mentor")
         assert graph.has_node("beat::opening")
 
         # Check entity dispositions
@@ -1849,7 +1849,7 @@ class TestCategorizeError:
         error = SeedValidationError(
             field_path="initial_beats.0.paths",
             issue="Path 'ghost' not defined in SEED paths",
-            available=["real_thread"],
+            available=["real_path"],
             provided="ghost",
         )
         assert categorize_error(error) == SeedErrorCategory.SEMANTIC
@@ -2014,7 +2014,7 @@ class TestNormalizeId:
         assert normalized == "mentor_trust"
         assert error is None
 
-    def test_thread_scope_accepted(self) -> None:
+    def test_path_scope_accepted(self) -> None:
         """Path scope is handled correctly."""
         normalized, error = _normalize_id("path::mentor_arc", "path")
         assert normalized == "mentor_arc"
@@ -2029,7 +2029,7 @@ class TestNormalizeId:
         assert "entity::" in error
         assert "dilemma::" in error
 
-    def test_entity_scope_rejected_when_thread_expected(self) -> None:
+    def test_entity_scope_rejected_when_path_expected(self) -> None:
         """Entity scope rejected when path is expected."""
         normalized, error = _normalize_id("entity::mentor_arc", "path")
         assert normalized == "entity::mentor_arc"
@@ -2104,7 +2104,7 @@ class TestScopedIdValidation:
 
         assert errors == []
 
-    def test_scoped_thread_id_accepted_in_beats(self) -> None:
+    def test_scoped_path_id_accepted_in_beats(self) -> None:
         """Scoped path IDs (path::mentor) are accepted in beat path references."""
         graph = Graph.empty()
         # Set up BRAINSTORM data
@@ -2181,7 +2181,7 @@ class TestScopedIdValidation:
         assert "dilemma::" in scope_errors[0].issue
         assert "entity::" in scope_errors[0].issue
 
-    def test_wrong_scope_detected_for_thread_in_beat(self) -> None:
+    def test_wrong_scope_detected_for_path_in_beat(self) -> None:
         """Wrong scope (entity:: instead of path::) in beat path references."""
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
@@ -2365,7 +2365,7 @@ class TestScopedIdValidation:
 
         assert errors == []
 
-    def test_scoped_thread_in_consequences(self) -> None:
+    def test_scoped_path_in_consequences(self) -> None:
         """Scoped path IDs work in consequence.path_id."""
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
@@ -2407,12 +2407,12 @@ class TestScopedIdValidation:
 
         assert errors == []
 
-    def test_scoped_thread_definitions_and_consequences(self) -> None:
+    def test_scoped_path_definitions_and_consequences(self) -> None:
         """Path definitions using scoped IDs work with scoped consequence references.
 
         Regression test for issue #230: When LLM outputs path definitions with
         scoped IDs (path::foo) and consequences reference them with scoped IDs,
-        validation should pass since seed_thread_ids is normalized.
+        validation should pass since seed_path_ids is normalized.
         """
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
@@ -2852,7 +2852,7 @@ class TestTypeAwareFeedback:
         assert "is an entity (faction), not a dilemma" in dilemma_impact_errors[0].issue
         assert "subject_X_or_Y" in dilemma_impact_errors[0].issue
 
-    def test_type_aware_feedback_thread_as_dilemma(self) -> None:
+    def test_type_aware_feedback_path_as_dilemma(self) -> None:
         """Path ID used as dilemma_id gives helpful message."""
         graph = Graph.empty()
         graph.create_node(
@@ -3095,10 +3095,10 @@ class TestCutEntityInBeats:
         assert "initial_beats.0.location_alternatives" in cut_errors[0].field_path
 
 
-class TestBackfillConsideredFromThreads:
+class TestBackfillConsideredFromPaths:
     """Tests for _backfill_considered_from_paths migration function."""
 
-    def test_backfills_empty_considered_from_threads(self) -> None:
+    def test_backfills_empty_considered_from_paths(self) -> None:
         """Empty considered array is filled from path alternative_ids."""
         output = {
             "dilemmas": [
@@ -3106,12 +3106,12 @@ class TestBackfillConsideredFromThreads:
             ],
             "paths": [
                 {
-                    "path_id": "thread1",
+                    "path_id": "path1",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_a",
                 },
                 {
-                    "path_id": "thread2",
+                    "path_id": "path2",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_b",
                 },
@@ -3130,7 +3130,7 @@ class TestBackfillConsideredFromThreads:
             ],
             "paths": [
                 {
-                    "path_id": "thread1",
+                    "path_id": "path1",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_a",
                 },
@@ -3149,7 +3149,7 @@ class TestBackfillConsideredFromThreads:
             ],
             "paths": [
                 {
-                    "path_id": "thread1",
+                    "path_id": "path1",
                     "dilemma_id": "dilemma::choice_a_or_b",
                     "answer_id": "option_a",
                 },
@@ -3168,7 +3168,7 @@ class TestBackfillConsideredFromThreads:
             ],
             "paths": [
                 {
-                    "path_id": "thread1",
+                    "path_id": "path1",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_a",
                 },
@@ -3187,7 +3187,7 @@ class TestBackfillConsideredFromThreads:
             ],
             "paths": [
                 {
-                    "path_id": "thread1",
+                    "path_id": "path1",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_a",
                 },
@@ -3200,7 +3200,7 @@ class TestBackfillConsideredFromThreads:
         assert "considered" not in output["dilemmas"][0]
         assert output["dilemmas"][0]["explored"] == ["existing"]
 
-    def test_no_threads_no_backfill(self) -> None:
+    def test_no_paths_no_backfill(self) -> None:
         """Empty paths list does not modify dilemmas."""
         output = {
             "dilemmas": [
@@ -3213,14 +3213,14 @@ class TestBackfillConsideredFromThreads:
 
         assert output["dilemmas"][0]["considered"] == []
 
-    def test_thread_without_alternative_id_ignored(self) -> None:
-        """Threads without answer_id are skipped."""
+    def test_path_without_alternative_id_ignored(self) -> None:
+        """Paths without answer_id are skipped."""
         output = {
             "dilemmas": [
                 {"dilemma_id": "choice_a_or_b", "considered": []},
             ],
             "paths": [
-                {"path_id": "thread1", "dilemma_id": "choice_a_or_b"},  # no answer_id
+                {"path_id": "path1", "dilemma_id": "choice_a_or_b"},  # no answer_id
             ],
         }
 
@@ -3248,10 +3248,10 @@ class TestBackfillConsideredFromThreads:
         assert output["dilemmas"][1]["considered"] == ["opt_x", "opt_y"]
 
 
-class TestValidation11cThreadAlternativeInConsidered:
+class TestValidation11cPathAlternativeInConsidered:
     """Tests for validation check 11c: path.answer_id IN dilemma.considered."""
 
-    def test_thread_alternative_in_considered_passes(self) -> None:
+    def test_path_alternative_in_considered_passes(self) -> None:
         """Path with answer_id matching considered passes validation."""
         graph = Graph.empty()
         graph.create_node(
@@ -3273,13 +3273,13 @@ class TestValidation11cThreadAlternativeInConsidered:
             ],
             "paths": [
                 {
-                    "path_id": "thread1",
+                    "path_id": "path1",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_a",
                     "name": "Path One",
                 },
                 {
-                    "path_id": "thread2",
+                    "path_id": "path2",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_b",
                     "name": "Path Two",
@@ -3289,7 +3289,7 @@ class TestValidation11cThreadAlternativeInConsidered:
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "paths": ["thread1"],
+                    "paths": ["path1"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -3297,7 +3297,7 @@ class TestValidation11cThreadAlternativeInConsidered:
                 {
                     "beat_id": "b2",
                     "summary": "Test",
-                    "paths": ["thread2"],
+                    "paths": ["path2"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -3313,7 +3313,7 @@ class TestValidation11cThreadAlternativeInConsidered:
         ]
         assert check_11c_errors == []
 
-    def test_thread_alternative_not_in_considered_detected(self) -> None:
+    def test_path_alternative_not_in_considered_detected(self) -> None:
         """Path with answer_id NOT in considered fails validation."""
         graph = Graph.empty()
         graph.create_node(
@@ -3335,13 +3335,13 @@ class TestValidation11cThreadAlternativeInConsidered:
             ],
             "paths": [
                 {
-                    "path_id": "thread1",
+                    "path_id": "path1",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_a",
                     "name": "Path One",
                 },
                 {
-                    "path_id": "thread2",
+                    "path_id": "path2",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_b",  # not in considered!
                     "name": "Path Two",
@@ -3351,7 +3351,7 @@ class TestValidation11cThreadAlternativeInConsidered:
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "paths": ["thread1"],
+                    "paths": ["path1"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -3359,7 +3359,7 @@ class TestValidation11cThreadAlternativeInConsidered:
                 {
                     "beat_id": "b2",
                     "summary": "Test",
-                    "paths": ["thread2"],
+                    "paths": ["path2"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -3400,7 +3400,7 @@ class TestValidation11cThreadAlternativeInConsidered:
             ],
             "paths": [
                 {
-                    "path_id": "thread1",
+                    "path_id": "path1",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_a",
                     "name": "Path One",
@@ -3410,7 +3410,7 @@ class TestValidation11cThreadAlternativeInConsidered:
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "paths": ["thread1"],
+                    "paths": ["path1"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -3448,7 +3448,7 @@ class TestValidation11cThreadAlternativeInConsidered:
             ],
             "paths": [
                 {
-                    "path_id": "thread1",
+                    "path_id": "path1",
                     "dilemma_id": "choice_a_or_b",  # unscoped
                     "answer_id": "option_a",
                     "name": "Path One",
@@ -3458,7 +3458,7 @@ class TestValidation11cThreadAlternativeInConsidered:
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "paths": ["thread1"],
+                    "paths": ["path1"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -3518,13 +3518,13 @@ class TestBackfillIntegrationWithApplySeedMutations:
             ],
             "paths": [
                 {
-                    "path_id": "thread1",
+                    "path_id": "path1",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_a",
                     "name": "Path One",
                 },
                 {
-                    "path_id": "thread2",
+                    "path_id": "path2",
                     "dilemma_id": "choice_a_or_b",
                     "answer_id": "option_b",
                     "name": "Path Two",
@@ -3535,7 +3535,7 @@ class TestBackfillIntegrationWithApplySeedMutations:
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "paths": ["thread1"],
+                    "paths": ["path1"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
@@ -3543,7 +3543,7 @@ class TestBackfillIntegrationWithApplySeedMutations:
                 {
                     "beat_id": "b2",
                     "summary": "Test",
-                    "paths": ["thread2"],
+                    "paths": ["path2"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],

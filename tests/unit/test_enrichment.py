@@ -168,7 +168,7 @@ class TestEnrichSeedArtifact:
         """Enrichment preserves non-entity fields in artifact."""
         artifact = {
             "entities": [{"entity_id": "the_detective", "disposition": "retained"}],
-            "paths": [{"thread_id": "main_thread", "tier": "major"}],
+            "paths": [{"path_id": "main_path", "tier": "major"}],
             "beats": [{"beat_id": "opening", "summary": "Introduction"}],
         }
 

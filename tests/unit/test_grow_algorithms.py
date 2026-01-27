@@ -163,7 +163,7 @@ class TestValidateCommitsBeats:
         errors = validate_commits_beats(graph)
         assert errors == []
 
-    def test_thread_with_no_beats(self) -> None:
+    def test_path_with_no_beats(self) -> None:
         graph = Graph.empty()
         graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
@@ -283,7 +283,7 @@ class TestTopologicalSortBeats:
 
 
 class TestEnumerateArcs:
-    def test_single_dilemma_two_threads(self) -> None:
+    def test_single_dilemma_two_paths(self) -> None:
         graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
 
@@ -358,7 +358,7 @@ class TestEnumerateArcs:
         with pytest.raises(ValueError, match="exceeds limit"):
             enumerate_arcs(graph)
 
-    def test_arc_threads_are_raw_ids(self) -> None:
+    def test_arc_paths_are_raw_ids(self) -> None:
         graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
         for arc in arcs:
@@ -382,7 +382,7 @@ class TestEnumerateArcs:
         graph.add_edge("has_answer", "dilemma::t1", "dilemma::t1::alt::yes")
         graph.add_edge("has_answer", "dilemma::t1", "dilemma::t1::alt::no")
 
-        # Threads with dilemma_id property (prefixed), explores pointing to alternatives
+        # Paths with dilemma_id property (prefixed), explores pointing to alternatives
         graph.create_node(
             "path::t1_canon",
             {
@@ -1428,7 +1428,7 @@ class TestApplyKnotMark:
         assert artifact["intersection_group"] == ["beat::mentor_meet"]
         assert artifact["location"] == "market"
 
-    def test_adds_cross_thread_belongs_to_edges(self) -> None:
+    def test_adds_cross_path_belongs_to_edges(self) -> None:
         """Intersection marking adds belongs_to edges for cross-path assignment."""
         from questfoundry.graph.grow_algorithms import apply_intersection_mark
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
@@ -1444,11 +1444,11 @@ class TestApplyKnotMark:
         mentor_edges = graph.get_edges(
             from_id="beat::mentor_meet", to_id=None, edge_type="belongs_to"
         )
-        mentor_threads = {e["to"] for e in mentor_edges}
+        mentor_paths = {e["to"] for e in mentor_edges}
         # Originally: mentor_trust_canonical, mentor_trust_alt
         # Now also: artifact_quest_canonical, artifact_quest_alt
-        assert "path::artifact_quest_canonical" in mentor_threads
-        assert "path::artifact_quest_alt" in mentor_threads
+        assert "path::artifact_quest_canonical" in mentor_paths
+        assert "path::artifact_quest_alt" in mentor_paths
 
     def test_no_location_leaves_location_unchanged(self) -> None:
         """When resolved_location is None, location field is not added."""
@@ -1674,7 +1674,7 @@ class TestPhaseIntegrationEndToEnd:
 # ---------------------------------------------------------------------------
 
 
-class TestGetThreadBeatSequence:
+class TestGetPathBeatSequence:
     def test_returns_ordered_sequence(self) -> None:
         """Beats are returned in dependency order."""
         from questfoundry.graph.grow_algorithms import get_path_beat_sequence
@@ -1688,7 +1688,7 @@ class TestGetThreadBeatSequence:
             "beat::mentor_commits_canonical",
         ]
 
-    def test_empty_thread(self) -> None:
+    def test_empty_path(self) -> None:
         """Empty result for nonexistent path."""
         from questfoundry.graph.grow_algorithms import get_path_beat_sequence
 
@@ -1711,7 +1711,7 @@ class TestGetThreadBeatSequence:
         assert set(sequence) == {"beat::a", "beat::b"}
         assert len(sequence) == 2
 
-    def test_alt_thread_sequence(self) -> None:
+    def test_alt_path_sequence(self) -> None:
         """Alternative path has its own sequence."""
         from questfoundry.graph.grow_algorithms import get_path_beat_sequence
 
@@ -1779,8 +1779,8 @@ class TestDetectPacingIssues:
         # No run of 3+, so no issues
         assert issues == []
 
-    def test_short_thread_skipped(self) -> None:
-        """Threads with fewer than 3 beats are skipped."""
+    def test_short_path_skipped(self) -> None:
+        """Paths with fewer than 3 beats are skipped."""
         from questfoundry.graph.grow_algorithms import detect_pacing_issues
 
         graph = Graph.empty()
