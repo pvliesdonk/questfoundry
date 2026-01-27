@@ -1325,7 +1325,7 @@ class TestCheckKnotCompatibility:
             graph, ["beat::mentor_commits_canonical", "beat::mentor_commits_alt"]
         )
         assert len(errors) > 0
-        assert any("at least 2 different tensions" in e.issue for e in errors)
+        assert any("at least 2 different dilemmas" in e.issue for e in errors)
 
     def test_incompatible_requires_conflict(self) -> None:
         """Beats with requires edge are incompatible."""
@@ -1398,7 +1398,7 @@ class TestResolveKnotLocation:
 
 
 class TestApplyKnotMark:
-    def test_marks_beats_with_knot_group(self) -> None:
+    def test_marks_beats_with_intersection_group(self) -> None:
         """Applying knot mark updates beat nodes."""
         from questfoundry.graph.grow_algorithms import apply_knot_mark
         from tests.fixtures.grow_fixtures import make_knot_candidate_graph
@@ -1411,11 +1411,11 @@ class TestApplyKnotMark:
         )
 
         mentor = graph.get_node("beat::mentor_meet")
-        assert mentor["knot_group"] == ["beat::artifact_discover"]
+        assert mentor["intersection_group"] == ["beat::artifact_discover"]
         assert mentor["location"] == "market"
 
         artifact = graph.get_node("beat::artifact_discover")
-        assert artifact["knot_group"] == ["beat::mentor_meet"]
+        assert artifact["intersection_group"] == ["beat::mentor_meet"]
         assert artifact["location"] == "market"
 
     def test_adds_cross_thread_belongs_to_edges(self) -> None:
@@ -1452,7 +1452,7 @@ class TestApplyKnotMark:
         )
 
         mentor = graph.get_node("beat::mentor_meet")
-        assert mentor["knot_group"] == ["beat::artifact_discover"]
+        assert mentor["intersection_group"] == ["beat::artifact_discover"]
         assert "location" not in mentor
 
 

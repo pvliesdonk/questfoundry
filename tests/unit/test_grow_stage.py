@@ -133,8 +133,8 @@ class TestGrowStagePhaseOrder:
         names = [name for _, name in stage._phase_order()]
         assert names == [
             "validate_dag",
-            "thread_agnostic",
-            "knots",
+            "path_agnostic",
+            "intersections",
             "scene_types",
             "narrative_gaps",
             "pacing_gaps",
@@ -268,7 +268,7 @@ class TestPhase2ThreadAgnostic:
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await stage._phase_2_thread_agnostic(graph, mock_model)
+        result = await stage._phase_2_path_agnostic(graph, mock_model)
 
         assert result.status == "completed"
         assert result.llm_calls == 1
@@ -276,17 +276,17 @@ class TestPhase2ThreadAgnostic:
 
         # Verify beat nodes updated
         beat_opening = graph.get_node("beat::opening")
-        assert beat_opening["thread_agnostic_for"] == ["mentor_trust"]
+        assert beat_opening["path_agnostic_for"] == ["mentor_trust"]
         beat_meet = graph.get_node("beat::mentor_meet")
-        assert beat_meet["thread_agnostic_for"] == ["mentor_trust"]
+        assert beat_meet["path_agnostic_for"] == ["mentor_trust"]
 
     @pytest.mark.asyncio
-    async def test_phase_2_skips_no_multi_thread_tensions(self) -> None:
-        """Phase 2 skips when no tensions have multiple threads."""
+    async def test_phase_2_skips_no_multi_path_dilemmas(self) -> None:
+        """Phase 2 skips when no dilemmas have multiple paths."""
         from questfoundry.graph.graph import Graph
 
         graph = Graph.empty()
-        # Single tension with single thread
+        # Single dilemma with single path
         graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
         graph.create_node(
             "thread::th1",
@@ -298,10 +298,10 @@ class TestPhase2ThreadAgnostic:
 
         stage = GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_2_thread_agnostic(graph, mock_model)
+        result = await stage._phase_2_path_agnostic(graph, mock_model)
 
         assert result.status == "completed"
-        assert "No multi-thread tensions" in result.detail
+        assert "No multi-path dilemmas" in result.detail
         assert result.llm_calls == 0
 
     @pytest.mark.asyncio
@@ -332,7 +332,7 @@ class TestPhase2ThreadAgnostic:
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await stage._phase_2_thread_agnostic(graph, mock_model)
+        result = await stage._phase_2_path_agnostic(graph, mock_model)
 
         assert result.status == "completed"
         # Only 1 valid assessment applied
@@ -346,7 +346,7 @@ class TestPhase2ThreadAgnostic:
         graph = Graph.empty()
         stage = GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_2_thread_agnostic(graph, mock_model)
+        result = await stage._phase_2_path_agnostic(graph, mock_model)
 
         assert result.status == "completed"
         assert result.llm_calls == 0
@@ -561,7 +561,7 @@ class TestPhase3Knots:
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await stage._phase_3_knots(graph, mock_model)
+        result = await stage._phase_3_intersections(graph, mock_model)
 
         assert result.status == "completed"
         assert result.llm_calls == 1
@@ -569,37 +569,37 @@ class TestPhase3Knots:
 
         # Verify knot was applied
         mentor_beat = graph.get_node("beat::mentor_meet")
-        assert mentor_beat["knot_group"] == ["beat::artifact_discover"]
+        assert mentor_beat["intersection_group"] == ["beat::artifact_discover"]
         assert mentor_beat["location"] == "market"
 
         artifact_beat = graph.get_node("beat::artifact_discover")
-        assert artifact_beat["knot_group"] == ["beat::mentor_meet"]
+        assert artifact_beat["intersection_group"] == ["beat::mentor_meet"]
         assert artifact_beat["location"] == "market"
 
     @pytest.mark.asyncio
     async def test_phase_3_skips_no_candidates(self) -> None:
-        """Phase 3 skips when no knot candidates found."""
+        """Phase 3 skips when no intersection candidates found."""
         from questfoundry.graph.graph import Graph
 
         graph = Graph.empty()
         stage = GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_3_knots(graph, mock_model)
+        result = await stage._phase_3_intersections(graph, mock_model)
 
         assert result.status == "completed"
-        assert "No knot candidates" in result.detail
+        assert "No intersection candidates" in result.detail
         assert result.llm_calls == 0
 
     @pytest.mark.asyncio
-    async def test_phase_3_skips_incompatible_knots(self) -> None:
-        """Phase 3 skips knots that fail compatibility check."""
+    async def test_phase_3_skips_incompatible_intersections(self) -> None:
+        """Phase 3 skips intersections that fail compatibility check."""
         from questfoundry.models.grow import KnotProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_knot_candidate_graph
 
         graph = make_knot_candidate_graph()
         stage = GrowStage()
 
-        # Propose a knot with beats from the SAME tension (invalid)
+        # Propose an intersection with beats from the SAME dilemma (invalid)
         phase3_output = Phase3Output(
             knots=[
                 KnotProposal(
@@ -615,7 +615,7 @@ class TestPhase3Knots:
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await stage._phase_3_knots(graph, mock_model)
+        result = await stage._phase_3_intersections(graph, mock_model)
 
         assert result.status == "completed"
         assert "0 applied" in result.detail
@@ -645,7 +645,7 @@ class TestPhase3Knots:
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await stage._phase_3_knots(graph, mock_model)
+        result = await stage._phase_3_intersections(graph, mock_model)
 
         assert result.status == "completed"
         assert "0 applied" in result.detail
@@ -679,7 +679,7 @@ class TestPhase3Knots:
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
-        result = await stage._phase_3_knots(graph, mock_model)
+        result = await stage._phase_3_intersections(graph, mock_model)
 
         assert result.status == "completed"
         assert "0 applied" in result.detail
@@ -2439,9 +2439,9 @@ class TestGrowCheckpoints:
         graph = Graph.empty()
         graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1", "summary": "test"})
 
-        stage._save_checkpoint(graph, tmp_project, "thread_agnostic")
+        stage._save_checkpoint(graph, tmp_project, "path_agnostic")
 
-        checkpoint_path = tmp_project / "snapshots" / "grow-pre-thread_agnostic.json"
+        checkpoint_path = tmp_project / "snapshots" / "grow-pre-path_agnostic.json"
         assert checkpoint_path.exists()
 
     def test_load_checkpoint_restores_graph(self, tmp_project: Path) -> None:

@@ -1,10 +1,10 @@
 """SEED stage implementation.
 
 The SEED stage triages brainstorm material into committed story structure.
-It curates entities, decides which alternatives to explore as threads,
+It curates entities, decides which dilemma answers to explore as paths,
 creates consequences, and defines initial beats.
 
-CRITICAL: THREAD FREEZE - No new threads can be created after SEED.
+CRITICAL: PATH FREEZE - No new paths can be created after SEED.
 
 Uses the LangChain-native 3-phase pattern:
 Discuss → Summarize → Serialize.
@@ -85,16 +85,16 @@ def _format_alternative(alt: dict[str, Any]) -> str:
     return f"  - {display_id}: {alt.get('description', '')}{default_marker}"
 
 
-def _format_tension(tension_id: str, tension_data: dict[str, Any], graph: Graph) -> str:
-    """Format a single tension for display.
+def _format_dilemma(dilemma_id: str, dilemma_data: dict[str, Any], graph: Graph) -> str:
+    """Format a single dilemma for display.
 
     Uses raw_id for display (what the LLM should reference).
     """
     # Use raw_id for display
-    display_id = tension_data.get("raw_id", tension_id)
-    question = tension_data.get("question", "")
-    central_entities = tension_data.get("central_entity_ids", [])
-    why_it_matters = tension_data.get("why_it_matters", "")
+    display_id = dilemma_data.get("raw_id", dilemma_id)
+    question = dilemma_data.get("question", "")
+    central_entities = dilemma_data.get("central_entity_ids", [])
+    why_it_matters = dilemma_data.get("why_it_matters", "")
 
     # Format central entities list - extract raw IDs from prefixed references
     entities_display = []
@@ -111,10 +111,10 @@ def _format_tension(tension_id: str, tension_data: dict[str, Any], graph: Graph)
     result = f"- **{display_id}**: {question}\n"
     result += f"  Central entities: {', '.join(entities_display) if entities_display else 'none specified'}\n"
     result += f"  Stakes: {why_it_matters}\n"
-    result += "  Alternatives:\n"
+    result += "  Answers:\n"
 
-    # Get alternatives from graph edges
-    alt_edges = graph.get_edges(from_id=tension_id, edge_type="has_alternative")
+    # Get answers from graph edges (stored as "alternatives" for backward compat)
+    alt_edges = graph.get_edges(from_id=dilemma_id, edge_type="has_alternative")
     for edge in alt_edges:
         if (alt_id := edge.get("to")) and (alt_node := graph.get_node(alt_id)):
             result += _format_alternative(alt_node) + "\n"
@@ -129,16 +129,17 @@ def _format_brainstorm_context(graph: Graph) -> str:
         graph: Graph containing brainstorm output.
 
     Returns:
-        Formatted string describing entities and tensions from brainstorm.
+        Formatted string describing entities and dilemmas from brainstorm.
     """
     parts = []
 
-    # Collect entities and tensions using proper Graph API
+    # Collect entities and dilemmas using proper Graph API
+    # Note: Graph stores dilemmas as "tension" nodes for backward compatibility
     entity_nodes = graph.get_nodes_by_type("entity")
-    tension_nodes = graph.get_nodes_by_type("tension")
+    dilemma_nodes = graph.get_nodes_by_type("tension")
 
     entities = list(entity_nodes.items())
-    tensions = list(tension_nodes.items())
+    dilemmas = list(dilemma_nodes.items())
 
     # Format entities section
     if entities:
@@ -147,11 +148,11 @@ def _format_brainstorm_context(graph: Graph) -> str:
             parts.append(_format_entity(entity_id, entity_data))
         parts.append("")
 
-    # Format tensions section
-    if tensions:
-        parts.append("## Tensions from BRAINSTORM")
-        for tension_id, tension_data in tensions:
-            parts.append(_format_tension(tension_id, tension_data, graph))
+    # Format dilemmas section
+    if dilemmas:
+        parts.append("## Dilemmas from BRAINSTORM")
+        for dilemma_id, dilemma_data in dilemmas:
+            parts.append(_format_dilemma(dilemma_id, dilemma_data, graph))
 
     return "\n".join(parts) if parts else "No brainstorm data available."
 
@@ -159,14 +160,14 @@ def _format_brainstorm_context(graph: Graph) -> str:
 class SeedStage:
     """SEED stage - triage brainstorm into committed structure.
 
-    This stage takes the entities and tensions from BRAINSTORM and transforms
-    them into committed story structure: curated entities, threads with
+    This stage takes the entities and dilemmas from BRAINSTORM and transforms
+    them into committed story structure: curated entities, paths with
     consequences, and initial beats.
 
-    CRITICAL: After SEED, no new threads can be created (THREAD FREEZE).
+    CRITICAL: After SEED, no new paths can be created (PATH FREEZE).
 
     Uses the LangChain-native 3-phase pattern:
-    - Discuss: Triage entities and tensions, plan threads and beats
+    - Discuss: Triage entities and dilemmas, plan paths and beats
     - Summarize: Condense discussion into structured summary
     - Serialize: Convert to SeedOutput artifact
 
@@ -202,16 +203,17 @@ class SeedStage:
         graph = Graph.load(project_path)
 
         # Check for entities (indicates brainstorm completed)
+        # Note: Graph stores dilemmas as "tension" nodes for backward compatibility
         entity_nodes = graph.get_nodes_by_type("entity")
-        tension_nodes = graph.get_nodes_by_type("tension")
+        dilemma_nodes = graph.get_nodes_by_type("tension")
 
         has_entities = bool(entity_nodes)
-        has_tensions = bool(tension_nodes)
+        has_dilemmas = bool(dilemma_nodes)
 
-        if not has_entities and not has_tensions:
+        if not has_entities and not has_dilemmas:
             raise SeedStageError(
                 "SEED requires BRAINSTORM stage to complete first. "
-                "No entities or tensions found in graph. Run 'qf brainstorm' first."
+                "No entities or dilemmas found in graph. Run 'qf brainstorm' first."
             )
 
         return _format_brainstorm_context(graph)
@@ -402,8 +404,8 @@ class SeedStage:
             raise SeedStageError("SEED serialization failed: artifact is None after all retries")
 
         # Phase 4: Prune to arc limit (over-generate-and-select pattern)
-        # LLM may have explored more tensions than the arc limit allows.
-        # Instead of retrying, we programmatically select the best tensions.
+        # LLM may have explored more dilemmas than the arc limit allows.
+        # Instead of retrying, we programmatically select the best dilemmas.
         original_arc_count = compute_arc_count(result.artifact)
         pruned_artifact = prune_to_arc_limit(result.artifact, max_arcs=16)
         final_arc_count = compute_arc_count(pruned_artifact)
@@ -413,8 +415,8 @@ class SeedStage:
                 "seed_pruned_for_arc_limit",
                 original_arcs=original_arc_count,
                 final_arcs=final_arc_count,
-                original_threads=len(result.artifact.threads),
-                final_threads=len(pruned_artifact.threads),
+                original_paths=len(result.artifact.paths),
+                final_paths=len(pruned_artifact.paths),
             )
 
         # Convert to dict for return
@@ -422,22 +424,22 @@ class SeedStage:
 
         # Log summary statistics
         entity_count = len(artifact_data.get("entities", []))
-        thread_count = len(artifact_data.get("threads", []))
+        path_count = len(artifact_data.get("paths", []))
         beat_count = len(artifact_data.get("initial_beats", []))
 
         # Warn if arc count is too low (linear story instead of IF)
         # This indicates the LLM didn't generate enough branching content
         if final_arc_count < 4:
-            tensions_fully_explored = sum(
-                1 for t in artifact_data.get("tensions", []) if len(t.get("considered", [])) >= 2
+            dilemmas_fully_explored = sum(
+                1 for d in artifact_data.get("dilemmas", []) if len(d.get("considered", [])) >= 2
             )
             log.warning(
                 "seed_low_arc_count",
                 arc_count=final_arc_count,
-                tensions_fully_explored=tensions_fully_explored,
+                dilemmas_fully_explored=dilemmas_fully_explored,
                 message=(
                     f"Only {final_arc_count} arc(s) - this is {'a linear story' if final_arc_count == 1 else 'minimal branching'}. "
-                    f"For real IF, explore BOTH alternatives for at least 2 tensions (4+ arcs)."
+                    f"For real IF, explore BOTH answers for at least 2 dilemmas (4+ arcs)."
                 ),
             )
 
@@ -446,7 +448,7 @@ class SeedStage:
             llm_calls=total_llm_calls,
             tokens=total_tokens,
             entities=entity_count,
-            threads=thread_count,
+            paths=path_count,
             beats=beat_count,
             arcs=final_arc_count,
         )

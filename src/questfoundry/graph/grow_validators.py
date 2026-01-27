@@ -71,12 +71,12 @@ def validate_phase3_output(
     """
     errors: list[GrowValidationError] = []
     seen_beats: set[str] = set()
-    for i, intersection in enumerate(result.knots):
+    for i, intersection in enumerate(result.intersections):
         for beat_id in intersection.beat_ids:
             if beat_id not in valid_beat_ids:
                 errors.append(
                     GrowValidationError(
-                        field_path=f"knots.{i}.beat_ids",
+                        field_path=f"intersections.{i}.beat_ids",
                         issue=f"Beat ID not found: {beat_id}",
                         provided=beat_id,
                         available=sorted(valid_beat_ids)[:10],
@@ -85,7 +85,7 @@ def validate_phase3_output(
             if beat_id in seen_beats:
                 errors.append(
                     GrowValidationError(
-                        field_path=f"knots.{i}.beat_ids",
+                        field_path=f"intersections.{i}.beat_ids",
                         issue=f"Beat reused across intersections: {beat_id}",
                         provided=beat_id,
                     )
@@ -206,11 +206,11 @@ def format_semantic_errors(errors: list[GrowValidationError]) -> str:
 def count_entries(result: object) -> int:
     """Count the number of entries in a phase output for threshold calculation.
 
-    Note: Relies on known attribute names (assessments, knots, tags, gaps,
+    Note: Relies on known attribute names (assessments, intersections, tags, gaps,
     overlays, labels). If adding a new phase output type, ensure its entries
     attribute is listed here, otherwise the fallback of 1 is used.
     """
-    for attr in ("assessments", "knots", "tags", "gaps", "overlays", "labels"):
+    for attr in ("assessments", "intersections", "tags", "gaps", "overlays", "labels"):
         entries = getattr(result, attr, None)
         if entries is not None:
             return len(entries)
