@@ -171,7 +171,7 @@ For a typical story targeting 15-25 entities, aim for a balanced mix:
 | Type | Range | Purpose |
 |------|-------|---------|
 | Characters | 6-10 | Protagonist, antagonist, allies, suspects, supporting cast |
-| Locations | 4-6 | Scene settings; enables knot formation and scene variety |
+| Locations | 4-6 | Scene settings; enables intersection formation and scene variety |
 | Objects | 4-6 | Puzzles, MacGuffins, clues, symbolic items |
 | Factions | 1-3 | Organizations, groups, collectives |
 
