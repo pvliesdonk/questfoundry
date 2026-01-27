@@ -287,20 +287,18 @@ class TestBrainstormMutations:
             apply_brainstorm_mutations(graph, output)
 
     def test_tension_missing_id_raises(self) -> None:
-        """Raises MutationError when tension missing tension_id."""
+        """Raises MutationError when dilemma missing dilemma_id."""
         graph = Graph.empty()
         output = {
             "entities": [],
-            "tensions": [{"question": "Test?", "alternatives": []}],  # Missing tension_id
+            "tensions": [{"question": "Test?", "alternatives": []}],  # Missing dilemma_id
         }
 
-        with pytest.raises(
-            MutationError, match="Dilemma at index 0 missing required 'tension_id' field"
-        ):
+        with pytest.raises(MutationError, match="Dilemma at index 0 missing dilemma_id"):
             apply_brainstorm_mutations(graph, output)
 
     def test_alternative_missing_id_raises(self) -> None:
-        """Raises MutationError when alternative missing alternative_id."""
+        """Raises MutationError when answer missing answer_id."""
         graph = Graph.empty()
         output = {
             "entities": [],
@@ -310,14 +308,14 @@ class TestBrainstormMutations:
                     "question": "Test?",
                     "alternatives": [
                         {"description": "Option A", "is_default_path": True}
-                    ],  # Missing alternative_id
+                    ],  # Missing answer_id
                 }
             ],
         }
 
         with pytest.raises(
             MutationError,
-            match="Answer at index 0 in dilemma 'tension_001' missing required 'alternative_id' field",
+            match="Answer at index 0 in dilemma 'tension_001' missing answer_id",
         ):
             apply_brainstorm_mutations(graph, output)
 
