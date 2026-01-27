@@ -27,13 +27,13 @@ if TYPE_CHECKING:
 def validate_phase2_output(
     result: Phase2Output,
     valid_beat_ids: set[str],
-    valid_tension_ids: set[str],
+    valid_dilemma_ids: set[str],
 ) -> list[GrowValidationError]:
-    """Validate Phase 2 thread-agnostic assessments.
+    """Validate Phase 2 path-agnostic assessments.
 
     Checks:
     - beat_id exists in graph
-    - agnostic_for tension IDs exist
+    - agnostic_for dilemma IDs exist
     """
     errors: list[GrowValidationError] = []
     for i, assessment in enumerate(result.assessments):
@@ -46,14 +46,14 @@ def validate_phase2_output(
                     available=sorted(valid_beat_ids)[:10],
                 )
             )
-        for tension_id in assessment.agnostic_for:
-            if tension_id not in valid_tension_ids:
+        for dilemma_id in assessment.agnostic_for:
+            if dilemma_id not in valid_dilemma_ids:
                 errors.append(
                     GrowValidationError(
                         field_path=f"assessments.{i}.agnostic_for",
-                        issue=f"Tension ID not found: {tension_id}",
-                        provided=tension_id,
-                        available=sorted(valid_tension_ids)[:10],
+                        issue=f"Dilemma ID not found: {dilemma_id}",
+                        provided=dilemma_id,
+                        available=sorted(valid_dilemma_ids)[:10],
                     )
                 )
     return errors
@@ -63,16 +63,16 @@ def validate_phase3_output(
     result: Phase3Output,
     valid_beat_ids: set[str],
 ) -> list[GrowValidationError]:
-    """Validate Phase 3 knot proposals.
+    """Validate Phase 3 intersection proposals.
 
     Checks:
     - beat_ids exist in graph
-    - No beat reused across multiple knots
+    - No beat reused across multiple intersections
     """
     errors: list[GrowValidationError] = []
     seen_beats: set[str] = set()
-    for i, knot in enumerate(result.knots):
-        for beat_id in knot.beat_ids:
+    for i, intersection in enumerate(result.knots):
+        for beat_id in intersection.beat_ids:
             if beat_id not in valid_beat_ids:
                 errors.append(
                     GrowValidationError(
@@ -86,7 +86,7 @@ def validate_phase3_output(
                 errors.append(
                     GrowValidationError(
                         field_path=f"knots.{i}.beat_ids",
-                        issue=f"Beat reused across knots: {beat_id}",
+                        issue=f"Beat reused across intersections: {beat_id}",
                         provided=beat_id,
                     )
                 )

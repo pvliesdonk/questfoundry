@@ -605,7 +605,7 @@ class GrowStage:
         validator = partial(
             validate_phase2_output,
             valid_beat_ids=set(valid_beat_ids),
-            valid_tension_ids=set(valid_tension_ids),
+            valid_dilemma_ids=set(valid_tension_ids),  # valid_tension_ids var contains dilemma IDs
         )
         try:
             result, llm_calls, tokens = await self._grow_llm_call(

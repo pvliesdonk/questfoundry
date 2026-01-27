@@ -33,28 +33,37 @@ if TYPE_CHECKING:
 _MAX_ARC_COUNT = 64
 
 
-def build_tension_threads(graph: Graph) -> dict[str, list[str]]:
-    """Build tension → threads mapping from thread node tension_id properties.
+def build_dilemma_paths(graph: Graph) -> dict[str, list[str]]:
+    """Build dilemma → paths mapping from path node dilemma_id properties.
 
-    Uses the tension_id property on thread nodes instead of explores edges,
-    since explores edges point to alternatives (not tensions) in real SEED output.
+    Uses the dilemma_id property (stored as tension_id in graph) on path nodes
+    instead of explores edges, since explores edges point to answers (not dilemmas)
+    in real SEED output.
+
+    Note: Graph stores paths as "thread" nodes and dilemmas as "tension" nodes
+    for backward compatibility.
 
     Args:
-        graph: Graph containing tension and thread nodes.
+        graph: Graph containing dilemma and path nodes.
 
     Returns:
-        Dict mapping tension node ID → list of thread node IDs.
+        Dict mapping dilemma node ID → list of path node IDs.
     """
-    tension_nodes = graph.get_nodes_by_type("tension")
-    thread_nodes = graph.get_nodes_by_type("thread")
-    tension_threads: dict[str, list[str]] = defaultdict(list)
-    for thread_id, thread_data in thread_nodes.items():
-        tension_id = thread_data.get("tension_id")
-        if tension_id:
-            prefixed = normalize_scoped_id(tension_id, "tension")
-            if prefixed in tension_nodes:
-                tension_threads[prefixed].append(thread_id)
-    return tension_threads
+    # Graph uses "tension" for dilemmas and "thread" for paths
+    dilemma_nodes = graph.get_nodes_by_type("tension")
+    path_nodes = graph.get_nodes_by_type("thread")
+    dilemma_paths: dict[str, list[str]] = defaultdict(list)
+    for path_id, path_data in path_nodes.items():
+        dilemma_id = path_data.get("tension_id")
+        if dilemma_id:
+            prefixed = normalize_scoped_id(dilemma_id, "tension")
+            if prefixed in dilemma_nodes:
+                dilemma_paths[prefixed].append(path_id)
+    return dilemma_paths
+
+
+# Backward compatibility alias - will be removed in a future version
+build_tension_threads = build_dilemma_paths
 
 
 @dataclass
