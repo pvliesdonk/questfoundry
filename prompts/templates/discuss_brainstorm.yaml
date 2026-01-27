@@ -92,7 +92,7 @@ research_tools_section: |
 
   ## Structured Options (Interactive Mode)
   You can use `present_options` to offer structured choices for clear decisions:
-  - Use for entity types, tension directions, or scope decisions
+  - Use for entity types, dilemma directions, or scope decisions
   - The user can select by number or type a custom response
   - Mark your recommended option when you have a preference
   - Don't overuse - brainstorming benefits from open exploration

@@ -62,7 +62,7 @@
       "raw_id": "lord_pembroke",
       "entity_type": "character",
       "concept": "Enigmatic and wealthy host with a mysterious past.",
-      "notes": "Charming and aloof; central tension about his true intentions.",
+      "notes": "Charming and aloof; central dilemma about his true intentions.",
       "disposition": "proposed"
     },
     "entity::lady_pembroke": {
@@ -110,7 +110,7 @@
       "raw_id": "victor_hawthorne",
       "entity_type": "character",
       "concept": "Business associate with interest in art collecting and ruthless tactics.",
-      "notes": "Adds tension to social dynamics.",
+      "notes": "Adds dilemma to social dynamics.",
       "disposition": "proposed"
     },
     "entity::margaret_thorne": {
@@ -223,8 +223,8 @@
       "concept": "Heirloom found stopped at the exact time of the murder.",
       "disposition": "proposed"
     },
-    "tension::pembroke_charm": {
-      "type": "tension",
+    "dilemma::pembroke_charm": {
+      "type": "dilemma",
       "raw_id": "pembroke_charm",
       "question": "Is Lord Pembroke's charm genuine or a facade for darker intentions?",
       "central_entity_ids": [
@@ -233,20 +233,20 @@
       ],
       "why_it_matters": "Explores human duality and deceptive appearances."
     },
-    "tension::pembroke_charm::alt::genuine_charm": {
-      "type": "alternative",
+    "dilemma::pembroke_charm::alt::genuine_charm": {
+      "type": "answer",
       "raw_id": "genuine_charm",
       "description": "His charm is genuine, masking a tragic past.",
       "is_default_path": true
     },
-    "tension::pembroke_charm::alt::facade_for_darkness": {
-      "type": "alternative",
+    "dilemma::pembroke_charm::alt::facade_for_darkness": {
+      "type": "answer",
       "raw_id": "facade_for_darkness",
       "description": "His charm is a facade for darker intentions.",
       "is_default_path": false
     },
-    "tension::butler_loyalty": {
-      "type": "tension",
+    "dilemma::butler_loyalty": {
+      "type": "dilemma",
       "raw_id": "butler_loyalty",
       "question": "Is the butler, Mr. Quinton, loyal or complicit in the crime?",
       "central_entity_ids": [
@@ -255,20 +255,20 @@
       ],
       "why_it_matters": "Challenges stereotypes of a 'guilty servant.'"
     },
-    "tension::butler_loyalty::alt::loyal_butler": {
-      "type": "alternative",
+    "dilemma::butler_loyalty::alt::loyal_butler": {
+      "type": "answer",
       "raw_id": "loyal_butler",
       "description": "Mr. Quinton is loyal, though his silence conceals family secrets.",
       "is_default_path": true
     },
-    "tension::butler_loyalty::alt::complicit_butler": {
-      "type": "alternative",
+    "dilemma::butler_loyalty::alt::complicit_butler": {
+      "type": "answer",
       "raw_id": "complicit_butler",
       "description": "Mr. Quinton is complicit in the crime.",
       "is_default_path": false
     },
-    "tension::necklace_curse": {
-      "type": "tension",
+    "dilemma::necklace_curse": {
+      "type": "dilemma",
       "raw_id": "necklace_curse",
       "question": "Does the heirloom necklace hold a genuine curse, or is it merely superstition?",
       "central_entity_ids": [
@@ -277,20 +277,20 @@
       ],
       "why_it_matters": "Delves into belief versus reality."
     },
-    "tension::necklace_curse::alt::superstition": {
-      "type": "alternative",
+    "dilemma::necklace_curse::alt::superstition": {
+      "type": "answer",
       "raw_id": "superstition",
       "description": "The necklace's curse is mere superstition, influencing actions.",
       "is_default_path": true
     },
-    "tension::necklace_curse::alt::genuine_curse": {
-      "type": "alternative",
+    "dilemma::necklace_curse::alt::genuine_curse": {
+      "type": "answer",
       "raw_id": "genuine_curse",
       "description": "The necklace holds a genuine curse.",
       "is_default_path": false
     },
-    "tension::chase_integrity": {
-      "type": "tension",
+    "dilemma::chase_integrity": {
+      "type": "dilemma",
       "raw_id": "chase_integrity",
       "question": "Can Detective Chase solve the mystery without compromising her moral code?",
       "central_entity_ids": [
@@ -299,20 +299,20 @@
       ],
       "why_it_matters": "Addresses justice and the personal cost of truth-seeking."
     },
-    "tension::chase_integrity::alt::maintain_integrity": {
-      "type": "alternative",
+    "dilemma::chase_integrity::alt::maintain_integrity": {
+      "type": "answer",
       "raw_id": "maintain_integrity",
       "description": "Detective Chase maintains her integrity, complicating the investigation.",
       "is_default_path": true
     },
-    "tension::chase_integrity::alt::compromise_integrity": {
-      "type": "alternative",
+    "dilemma::chase_integrity::alt::compromise_integrity": {
+      "type": "answer",
       "raw_id": "compromise_integrity",
       "description": "Detective Chase compromises her moral code to solve the mystery.",
       "is_default_path": false
     },
-    "tension::ridgeway_ally": {
-      "type": "tension",
+    "dilemma::ridgeway_ally": {
+      "type": "dilemma",
       "raw_id": "ridgeway_ally",
       "question": "Is Miss Clara Ridgeway an ally or a rival to Detective Chase?",
       "central_entity_ids": [
@@ -321,20 +321,20 @@
       ],
       "why_it_matters": "Explores collaboration versus competition."
     },
-    "tension::ridgeway_ally::alt::ally_ridgeway": {
-      "type": "alternative",
+    "dilemma::ridgeway_ally::alt::ally_ridgeway": {
+      "type": "answer",
       "raw_id": "ally_ridgeway",
       "description": "Miss Ridgeway is an ally, aiding with insights.",
       "is_default_path": true
     },
-    "tension::ridgeway_ally::alt::rival_ridgeway": {
-      "type": "alternative",
+    "dilemma::ridgeway_ally::alt::rival_ridgeway": {
+      "type": "answer",
       "raw_id": "rival_ridgeway",
       "description": "Miss Ridgeway is a rival, complicating the investigation.",
       "is_default_path": false
     },
-    "tension::murder_location": {
-      "type": "tension",
+    "dilemma::murder_location": {
+      "type": "dilemma",
       "raw_id": "murder_location",
       "question": "Did the murder take place in the manor, or was it staged elsewhere?",
       "central_entity_ids": [
@@ -343,20 +343,20 @@
       ],
       "why_it_matters": "Challenges perceptions of the crime scene's significance."
     },
-    "tension::murder_location::alt::manor_murder": {
-      "type": "alternative",
+    "dilemma::murder_location::alt::manor_murder": {
+      "type": "answer",
       "raw_id": "manor_murder",
       "description": "The murder occurred in the manor.",
       "is_default_path": true
     },
-    "tension::murder_location::alt::staged_elsewhere": {
-      "type": "alternative",
+    "dilemma::murder_location::alt::staged_elsewhere": {
+      "type": "answer",
       "raw_id": "staged_elsewhere",
       "description": "The murder was staged elsewhere.",
       "is_default_path": false
     },
-    "tension::chapel_ruins_nature": {
-      "type": "tension",
+    "dilemma::chapel_ruins_nature": {
+      "type": "dilemma",
       "raw_id": "chapel_ruins_nature",
       "question": "Is the chapel ruins a place of refuge or a dangerous trap?",
       "central_entity_ids": [
@@ -365,20 +365,20 @@
       ],
       "why_it_matters": "Highlights hidden truths and dual nature of seemingly abandoned places."
     },
-    "tension::chapel_ruins_nature::alt::refuge": {
-      "type": "alternative",
+    "dilemma::chapel_ruins_nature::alt::refuge": {
+      "type": "answer",
       "raw_id": "refuge",
       "description": "The chapel ruins are a refuge, holding clues to the family's past.",
       "is_default_path": true
     },
-    "tension::chapel_ruins_nature::alt::dangerous_trap": {
-      "type": "alternative",
+    "dilemma::chapel_ruins_nature::alt::dangerous_trap": {
+      "type": "answer",
       "raw_id": "dangerous_trap",
       "description": "The chapel ruins are a dangerous trap.",
       "is_default_path": false
     },
-    "tension::portrait_clue": {
-      "type": "tension",
+    "dilemma::portrait_clue": {
+      "type": "dilemma",
       "raw_id": "portrait_clue",
       "question": "Does the family portrait hold a clue, or is it a mere distraction?",
       "central_entity_ids": [
@@ -387,14 +387,14 @@
       ],
       "why_it_matters": "Emphasizes observation and potential of overlooked details to uncover truth."
     },
-    "tension::portrait_clue::alt::holds_clue": {
-      "type": "alternative",
+    "dilemma::portrait_clue::alt::holds_clue": {
+      "type": "answer",
       "raw_id": "holds_clue",
       "description": "The portrait holds a clue, revealing a hidden message.",
       "is_default_path": true
     },
-    "tension::portrait_clue::alt::mere_distraction": {
-      "type": "alternative",
+    "dilemma::portrait_clue::alt::mere_distraction": {
+      "type": "answer",
       "raw_id": "mere_distraction",
       "description": "The portrait is a mere distraction.",
       "is_default_path": false
@@ -402,84 +402,84 @@
   },
   "edges": [
     {
-      "type": "has_alternative",
-      "from": "tension::pembroke_charm",
-      "to": "tension::pembroke_charm::alt::genuine_charm"
+      "type": "has_answer",
+      "from": "dilemma::pembroke_charm",
+      "to": "dilemma::pembroke_charm::alt::genuine_charm"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::pembroke_charm",
-      "to": "tension::pembroke_charm::alt::facade_for_darkness"
+      "type": "has_answer",
+      "from": "dilemma::pembroke_charm",
+      "to": "dilemma::pembroke_charm::alt::facade_for_darkness"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::butler_loyalty",
-      "to": "tension::butler_loyalty::alt::loyal_butler"
+      "type": "has_answer",
+      "from": "dilemma::butler_loyalty",
+      "to": "dilemma::butler_loyalty::alt::loyal_butler"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::butler_loyalty",
-      "to": "tension::butler_loyalty::alt::complicit_butler"
+      "type": "has_answer",
+      "from": "dilemma::butler_loyalty",
+      "to": "dilemma::butler_loyalty::alt::complicit_butler"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::necklace_curse",
-      "to": "tension::necklace_curse::alt::superstition"
+      "type": "has_answer",
+      "from": "dilemma::necklace_curse",
+      "to": "dilemma::necklace_curse::alt::superstition"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::necklace_curse",
-      "to": "tension::necklace_curse::alt::genuine_curse"
+      "type": "has_answer",
+      "from": "dilemma::necklace_curse",
+      "to": "dilemma::necklace_curse::alt::genuine_curse"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::chase_integrity",
-      "to": "tension::chase_integrity::alt::maintain_integrity"
+      "type": "has_answer",
+      "from": "dilemma::chase_integrity",
+      "to": "dilemma::chase_integrity::alt::maintain_integrity"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::chase_integrity",
-      "to": "tension::chase_integrity::alt::compromise_integrity"
+      "type": "has_answer",
+      "from": "dilemma::chase_integrity",
+      "to": "dilemma::chase_integrity::alt::compromise_integrity"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::ridgeway_ally",
-      "to": "tension::ridgeway_ally::alt::ally_ridgeway"
+      "type": "has_answer",
+      "from": "dilemma::ridgeway_ally",
+      "to": "dilemma::ridgeway_ally::alt::ally_ridgeway"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::ridgeway_ally",
-      "to": "tension::ridgeway_ally::alt::rival_ridgeway"
+      "type": "has_answer",
+      "from": "dilemma::ridgeway_ally",
+      "to": "dilemma::ridgeway_ally::alt::rival_ridgeway"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::murder_location",
-      "to": "tension::murder_location::alt::manor_murder"
+      "type": "has_answer",
+      "from": "dilemma::murder_location",
+      "to": "dilemma::murder_location::alt::manor_murder"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::murder_location",
-      "to": "tension::murder_location::alt::staged_elsewhere"
+      "type": "has_answer",
+      "from": "dilemma::murder_location",
+      "to": "dilemma::murder_location::alt::staged_elsewhere"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::chapel_ruins_nature",
-      "to": "tension::chapel_ruins_nature::alt::refuge"
+      "type": "has_answer",
+      "from": "dilemma::chapel_ruins_nature",
+      "to": "dilemma::chapel_ruins_nature::alt::refuge"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::chapel_ruins_nature",
-      "to": "tension::chapel_ruins_nature::alt::dangerous_trap"
+      "type": "has_answer",
+      "from": "dilemma::chapel_ruins_nature",
+      "to": "dilemma::chapel_ruins_nature::alt::dangerous_trap"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::portrait_clue",
-      "to": "tension::portrait_clue::alt::holds_clue"
+      "type": "has_answer",
+      "from": "dilemma::portrait_clue",
+      "to": "dilemma::portrait_clue::alt::holds_clue"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::portrait_clue",
-      "to": "tension::portrait_clue::alt::mere_distraction"
+      "type": "has_answer",
+      "from": "dilemma::portrait_clue",
+      "to": "dilemma::portrait_clue::alt::mere_distraction"
     }
   ]
 }

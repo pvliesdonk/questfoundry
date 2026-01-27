@@ -338,8 +338,8 @@ class TestFormatSemanticErrors:
     def test_no_available_ids(self) -> None:
         errors = [
             GrowValidationError(
-                field_path="knots.0.beat_ids",
-                issue="Beat reused across knots: beat::b1",
+                field_path="intersections.0.beat_ids",
+                issue="Beat reused across intersections: beat::b1",
                 provided="beat::b1",
             ),
         ]

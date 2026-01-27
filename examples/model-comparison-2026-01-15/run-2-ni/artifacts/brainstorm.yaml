@@ -66,7 +66,7 @@ entities:
     concept: Local police assisting in the investigation.
     notes: The police force highlights themes of authority and justice.
 tensions:
-  - tension_id: blackwood_motivation
+  - dilemma_id: blackwood_motivation
     question: Is Lord Blackwood's acquisition of the Jade Serpent motivated by
       greed or a genuine interest in history?
     alternatives:
@@ -80,8 +80,8 @@ tensions:
     central_entity_ids:
       - the_host
       - the_artifact
-    why_it_matters: This tension explores themes of deception and truth.
-  - tension_id: grimshaw_trust
+    why_it_matters: This dilemma explores themes of deception and truth.
+  - dilemma_id: grimshaw_trust
     question: Can Inspector Sharp trust Mr. Grimshaw to tell the truth about the
       events of the night?
     alternatives:
@@ -96,7 +96,7 @@ tensions:
       - the_butler
     why_it_matters: Trust is a central theme, highlighting moral complexities of
       justice and secrecy.
-  - tension_id: vivienne_motivation
+  - dilemma_id: vivienne_motivation
     question: Is Lady Vivienne genuinely mourning, or is she using the situation
       to her advantage?
     alternatives:
@@ -111,7 +111,7 @@ tensions:
       - the_host
     why_it_matters: Ambition and manipulation within high society are
       scrutinized.
-  - tension_id: letter_outcome
+  - dilemma_id: letter_outcome
     question: Will the anonymous letter lead to the discovery of the murderer or
       further mislead the investigation?
     alternatives:
@@ -124,9 +124,9 @@ tensions:
     central_entity_ids:
       - the_letter
       - the_detective
-    why_it_matters: This tension delves into the complexity of uncovering hidden
+    why_it_matters: This dilemma delves into the complexity of uncovering hidden
       motives.
-  - tension_id: langford_interest
+  - dilemma_id: langford_interest
     question: Is Dr. Henry Langford's interest in the Jade Serpent academic or
       driven by personal gain?
     alternatives:

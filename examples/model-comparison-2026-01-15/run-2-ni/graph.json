@@ -35,7 +35,7 @@
         "Class and Society"
       ],
       "audience": "young adult to adult",
-      "style_notes": "Narrative Style: Third-person or first-person. Dialogue: Witty and sharp, era-appropriate. Pacing: Balanced between clue gathering and moments of tension.",
+      "style_notes": "Narrative Style: Third-person or first-person. Dialogue: Witty and sharp, era-appropriate. Pacing: Balanced between clue gathering and moments of dilemma.",
       "scope": {
         "branching_depth": "Moderate to high",
         "estimated_passages": 11,
@@ -171,15 +171,15 @@
       "notes": "The police force highlights themes of authority and justice.",
       "disposition": "cut"
     },
-    "tension::blackwood_motivation": {
-      "type": "tension",
+    "dilemma::blackwood_motivation": {
+      "type": "dilemma",
       "raw_id": "blackwood_motivation",
       "question": "Is Lord Blackwood's acquisition of the Jade Serpent motivated by greed or a genuine interest in history?",
       "central_entity_ids": [
         "entity::the_host",
         "entity::the_artifact"
       ],
-      "why_it_matters": "This tension explores themes of deception and truth.",
+      "why_it_matters": "This dilemma explores themes of deception and truth.",
       "explored": [
         "genuine_interest"
       ],
@@ -187,20 +187,20 @@
         "motivated_by_greed"
       ]
     },
-    "tension::blackwood_motivation::alt::genuine_interest": {
-      "type": "alternative",
+    "dilemma::blackwood_motivation::alt::genuine_interest": {
+      "type": "answer",
       "raw_id": "genuine_interest",
       "description": "Lord Blackwood's interest in the Jade Serpent is genuine and tied to history.",
       "is_default_path": true
     },
-    "tension::blackwood_motivation::alt::motivated_by_greed": {
-      "type": "alternative",
+    "dilemma::blackwood_motivation::alt::motivated_by_greed": {
+      "type": "answer",
       "raw_id": "motivated_by_greed",
       "description": "Lord Blackwood's acquisition is driven by greed.",
       "is_default_path": false
     },
-    "tension::grimshaw_trust": {
-      "type": "tension",
+    "dilemma::grimshaw_trust": {
+      "type": "dilemma",
       "raw_id": "grimshaw_trust",
       "question": "Can Inspector Sharp trust Mr. Grimshaw to tell the truth about the events of the night?",
       "central_entity_ids": [
@@ -215,20 +215,20 @@
         "grimshaw_deceptive"
       ]
     },
-    "tension::grimshaw_trust::alt::grimshaw_truthful": {
-      "type": "alternative",
+    "dilemma::grimshaw_trust::alt::grimshaw_truthful": {
+      "type": "answer",
       "raw_id": "grimshaw_truthful",
       "description": "Mr. Grimshaw is truthful about the events of the night.",
       "is_default_path": true
     },
-    "tension::grimshaw_trust::alt::grimshaw_deceptive": {
-      "type": "alternative",
+    "dilemma::grimshaw_trust::alt::grimshaw_deceptive": {
+      "type": "answer",
       "raw_id": "grimshaw_deceptive",
       "description": "Mr. Grimshaw is deceptive about the events of the night.",
       "is_default_path": false
     },
-    "tension::vivienne_motivation": {
-      "type": "tension",
+    "dilemma::vivienne_motivation": {
+      "type": "dilemma",
       "raw_id": "vivienne_motivation",
       "question": "Is Lady Vivienne genuinely mourning, or is she using the situation to her advantage?",
       "central_entity_ids": [
@@ -243,27 +243,27 @@
         "genuinely_mourning"
       ]
     },
-    "tension::vivienne_motivation::alt::using_advantage": {
-      "type": "alternative",
+    "dilemma::vivienne_motivation::alt::using_advantage": {
+      "type": "answer",
       "raw_id": "using_advantage",
       "description": "Lady Vivienne is using the situation to her advantage.",
       "is_default_path": true
     },
-    "tension::vivienne_motivation::alt::genuinely_mourning": {
-      "type": "alternative",
+    "dilemma::vivienne_motivation::alt::genuinely_mourning": {
+      "type": "answer",
       "raw_id": "genuinely_mourning",
       "description": "Lady Vivienne is genuinely mourning.",
       "is_default_path": false
     },
-    "tension::letter_outcome": {
-      "type": "tension",
+    "dilemma::letter_outcome": {
+      "type": "dilemma",
       "raw_id": "letter_outcome",
       "question": "Will the anonymous letter lead to the discovery of the murderer or further mislead the investigation?",
       "central_entity_ids": [
         "entity::the_letter",
         "entity::the_detective"
       ],
-      "why_it_matters": "This tension delves into the complexity of uncovering hidden motives.",
+      "why_it_matters": "This dilemma delves into the complexity of uncovering hidden motives.",
       "explored": [
         "mislead_investigation"
       ],
@@ -271,20 +271,20 @@
         "discover_murderer"
       ]
     },
-    "tension::letter_outcome::alt::mislead_investigation": {
-      "type": "alternative",
+    "dilemma::letter_outcome::alt::mislead_investigation": {
+      "type": "answer",
       "raw_id": "mislead_investigation",
       "description": "The letter further misleads the investigation.",
       "is_default_path": true
     },
-    "tension::letter_outcome::alt::discover_murderer": {
-      "type": "alternative",
+    "dilemma::letter_outcome::alt::discover_murderer": {
+      "type": "answer",
       "raw_id": "discover_murderer",
       "description": "The letter leads to the discovery of the murderer.",
       "is_default_path": false
     },
-    "tension::langford_interest": {
-      "type": "tension",
+    "dilemma::langford_interest": {
+      "type": "dilemma",
       "raw_id": "langford_interest",
       "question": "Is Dr. Henry Langford's interest in the Jade Serpent academic or driven by personal gain?",
       "central_entity_ids": [
@@ -299,26 +299,26 @@
         "academic_interest"
       ]
     },
-    "tension::langford_interest::alt::personal_gain": {
-      "type": "alternative",
+    "dilemma::langford_interest::alt::personal_gain": {
+      "type": "answer",
       "raw_id": "personal_gain",
       "description": "Dr. Langford's interest is driven by personal gain.",
       "is_default_path": true
     },
-    "tension::langford_interest::alt::academic_interest": {
-      "type": "alternative",
+    "dilemma::langford_interest::alt::academic_interest": {
+      "type": "answer",
       "raw_id": "academic_interest",
       "description": "Dr. Langford's interest is purely academic.",
       "is_default_path": false
     },
-    "thread::genuine_collector": {
-      "type": "thread",
+    "path::genuine_collector": {
+      "type": "path",
       "raw_id": "genuine_collector",
       "name": "The Genuine Collector",
-      "tension_id": "tension::blackwood_motivation",
+      "dilemma_id": "dilemma::blackwood_motivation",
       "alternative_id": "genuine_interest",
       "unexplored_alternative_ids": [
-        "tension::blackwood_motivation::alt::motivated_by_greed"
+        "dilemma::blackwood_motivation::alt::motivated_by_greed"
       ],
       "thread_importance": "major",
       "description": "Explores Lord Blackwood's true interest in the Jade Serpent and its historical significance.",
@@ -326,14 +326,14 @@
         "genuine_collector_consequence"
       ]
     },
-    "thread::trustworthy_butler": {
-      "type": "thread",
+    "path::trustworthy_butler": {
+      "type": "path",
       "raw_id": "trustworthy_butler",
       "name": "The Trustworthy Butler",
-      "tension_id": "tension::grimshaw_trust",
+      "dilemma_id": "dilemma::grimshaw_trust",
       "alternative_id": "grimshaw_truthful",
       "unexplored_alternative_ids": [
-        "tension::grimshaw_trust::alt::grimshaw_deceptive"
+        "dilemma::grimshaw_trust::alt::grimshaw_deceptive"
       ],
       "thread_importance": "major",
       "description": "Focuses on Mr. Grimshaw's actions and loyalty during the night of the incident.",
@@ -341,14 +341,14 @@
         "trustworthy_butler_consequence"
       ]
     },
-    "thread::ambitious_heiress": {
-      "type": "thread",
+    "path::ambitious_heiress": {
+      "type": "path",
       "raw_id": "ambitious_heiress",
       "name": "The Ambitious Heiress",
-      "tension_id": "tension::vivienne_motivation",
+      "dilemma_id": "dilemma::vivienne_motivation",
       "alternative_id": "using_advantage",
       "unexplored_alternative_ids": [
-        "tension::vivienne_motivation::alt::genuinely_mourning"
+        "dilemma::vivienne_motivation::alt::genuinely_mourning"
       ],
       "thread_importance": "minor",
       "description": "Follows Lady Vivienne's maneuvers to gain advantage from her father's situation.",
@@ -359,7 +359,7 @@
     "consequence::genuine_collector_consequence": {
       "type": "consequence",
       "raw_id": "genuine_collector_consequence",
-      "thread_id": "thread::genuine_collector",
+      "thread_id": "path::genuine_collector",
       "description": "Reveals deeper truths about Blackwood's past and intentions.",
       "narrative_effects": [
         "Influences characters' perceptions of Lord Blackwood."
@@ -368,8 +368,8 @@
     "consequence::trustworthy_butler_consequence": {
       "type": "consequence",
       "raw_id": "trustworthy_butler_consequence",
-      "thread_id": "thread::trustworthy_butler",
-      "description": "Builds tension around loyalty and personal sacrifice.",
+      "thread_id": "path::trustworthy_butler",
+      "description": "Builds dilemma around loyalty and personal sacrifice.",
       "narrative_effects": [
         "Affects trust dynamics among characters."
       ]
@@ -377,7 +377,7 @@
     "consequence::ambitious_heiress_consequence": {
       "type": "consequence",
       "raw_id": "ambitious_heiress_consequence",
-      "thread_id": "thread::ambitious_heiress",
+      "thread_id": "path::ambitious_heiress",
       "description": "Adds layers of family dynamics and ambition.",
       "narrative_effects": [
         "Alters interactions and alliances within the Blackwood family."
@@ -387,9 +387,9 @@
       "type": "beat",
       "raw_id": "gc_beat_1",
       "summary": "Lord Blackwood discusses his acquisition with Dr. Langford in the mansion's library.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::blackwood_motivation",
+          "dilemma_id": "dilemma::blackwood_motivation",
           "effect": "advances",
           "note": "Provides insight into Blackwood's genuine interest."
         }
@@ -408,9 +408,9 @@
       "type": "beat",
       "raw_id": "gc_beat_2",
       "summary": "Inspector Sharp arrives and questions Blackwood about the artifact's history in the Ornamental Garden.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::blackwood_motivation",
+          "dilemma_id": "dilemma::blackwood_motivation",
           "effect": "reveals",
           "note": "Unveils Blackwood's motivations to the detective."
         }
@@ -429,9 +429,9 @@
       "type": "beat",
       "raw_id": "tb_beat_1",
       "summary": "Mr. Grimshaw recounts the events of the night to Inspector Sharp in the mansion's study.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::grimshaw_trust",
+          "dilemma_id": "dilemma::grimshaw_trust",
           "effect": "advances",
           "note": "Establishes Grimshaw's truthful narrative."
         }
@@ -449,9 +449,9 @@
       "type": "beat",
       "raw_id": "tb_beat_2",
       "summary": "A hidden passage in the mansion is discovered, leading to new insights.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::grimshaw_trust",
+          "dilemma_id": "dilemma::grimshaw_trust",
           "effect": "complicates",
           "note": "Introduces complexity in Grimshaw's account."
         }
@@ -469,9 +469,9 @@
       "type": "beat",
       "raw_id": "ah_beat_1",
       "summary": "Lady Vivienne is seen meeting with Miss Clara Finch in the Ornamental Garden, discussing family matters.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::vivienne_motivation",
+          "dilemma_id": "dilemma::vivienne_motivation",
           "effect": "reveals",
           "note": "Highlights Vivienne's strategic position."
         }
@@ -489,9 +489,9 @@
       "type": "beat",
       "raw_id": "ah_beat_2",
       "summary": "Vivienne confronts her father in the mansion, hinting at her true intentions.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::vivienne_motivation",
+          "dilemma_id": "dilemma::vivienne_motivation",
           "effect": "commits",
           "note": "Confirms Vivienne's manipulative tactics."
         }
@@ -508,7 +508,7 @@
     "convergence_sketch": {
       "type": "convergence_sketch",
       "convergence_points": [
-        "The threads converge at a climactic gathering in the mansion's grand hall, where revelations about the Jade Serpent's true significance and the butler's loyalty come to light."
+        "The paths converge at a climactic gathering in the mansion's grand hall, where revelations about the Jade Serpent's true significance and the butler's loyalty come to light."
       ],
       "residue_notes": [
         "Post-convergence, relationships and motivations are re-examined, leading to redemption for some characters and consequences for others driven by ambition and betrayal."
@@ -517,114 +517,114 @@
   },
   "edges": [
     {
-      "type": "has_alternative",
-      "from": "tension::blackwood_motivation",
-      "to": "tension::blackwood_motivation::alt::genuine_interest"
+      "type": "has_answer",
+      "from": "dilemma::blackwood_motivation",
+      "to": "dilemma::blackwood_motivation::alt::genuine_interest"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::blackwood_motivation",
-      "to": "tension::blackwood_motivation::alt::motivated_by_greed"
+      "type": "has_answer",
+      "from": "dilemma::blackwood_motivation",
+      "to": "dilemma::blackwood_motivation::alt::motivated_by_greed"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::grimshaw_trust",
-      "to": "tension::grimshaw_trust::alt::grimshaw_truthful"
+      "type": "has_answer",
+      "from": "dilemma::grimshaw_trust",
+      "to": "dilemma::grimshaw_trust::alt::grimshaw_truthful"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::grimshaw_trust",
-      "to": "tension::grimshaw_trust::alt::grimshaw_deceptive"
+      "type": "has_answer",
+      "from": "dilemma::grimshaw_trust",
+      "to": "dilemma::grimshaw_trust::alt::grimshaw_deceptive"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::vivienne_motivation",
-      "to": "tension::vivienne_motivation::alt::using_advantage"
+      "type": "has_answer",
+      "from": "dilemma::vivienne_motivation",
+      "to": "dilemma::vivienne_motivation::alt::using_advantage"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::vivienne_motivation",
-      "to": "tension::vivienne_motivation::alt::genuinely_mourning"
+      "type": "has_answer",
+      "from": "dilemma::vivienne_motivation",
+      "to": "dilemma::vivienne_motivation::alt::genuinely_mourning"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::letter_outcome",
-      "to": "tension::letter_outcome::alt::mislead_investigation"
+      "type": "has_answer",
+      "from": "dilemma::letter_outcome",
+      "to": "dilemma::letter_outcome::alt::mislead_investigation"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::letter_outcome",
-      "to": "tension::letter_outcome::alt::discover_murderer"
+      "type": "has_answer",
+      "from": "dilemma::letter_outcome",
+      "to": "dilemma::letter_outcome::alt::discover_murderer"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::langford_interest",
-      "to": "tension::langford_interest::alt::personal_gain"
+      "type": "has_answer",
+      "from": "dilemma::langford_interest",
+      "to": "dilemma::langford_interest::alt::personal_gain"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::langford_interest",
-      "to": "tension::langford_interest::alt::academic_interest"
-    },
-    {
-      "type": "explores",
-      "from": "thread::genuine_collector",
-      "to": "tension::blackwood_motivation::alt::genuine_interest"
+      "type": "has_answer",
+      "from": "dilemma::langford_interest",
+      "to": "dilemma::langford_interest::alt::academic_interest"
     },
     {
       "type": "explores",
-      "from": "thread::trustworthy_butler",
-      "to": "tension::grimshaw_trust::alt::grimshaw_truthful"
+      "from": "path::genuine_collector",
+      "to": "dilemma::blackwood_motivation::alt::genuine_interest"
     },
     {
       "type": "explores",
-      "from": "thread::ambitious_heiress",
-      "to": "tension::vivienne_motivation::alt::using_advantage"
+      "from": "path::trustworthy_butler",
+      "to": "dilemma::grimshaw_trust::alt::grimshaw_truthful"
+    },
+    {
+      "type": "explores",
+      "from": "path::ambitious_heiress",
+      "to": "dilemma::vivienne_motivation::alt::using_advantage"
     },
     {
       "type": "has_consequence",
-      "from": "thread::genuine_collector",
+      "from": "path::genuine_collector",
       "to": "consequence::genuine_collector_consequence"
     },
     {
       "type": "has_consequence",
-      "from": "thread::trustworthy_butler",
+      "from": "path::trustworthy_butler",
       "to": "consequence::trustworthy_butler_consequence"
     },
     {
       "type": "has_consequence",
-      "from": "thread::ambitious_heiress",
+      "from": "path::ambitious_heiress",
       "to": "consequence::ambitious_heiress_consequence"
     },
     {
       "type": "belongs_to",
       "from": "beat::gc_beat_1",
-      "to": "thread::genuine_collector"
+      "to": "path::genuine_collector"
     },
     {
       "type": "belongs_to",
       "from": "beat::gc_beat_2",
-      "to": "thread::genuine_collector"
+      "to": "path::genuine_collector"
     },
     {
       "type": "belongs_to",
       "from": "beat::tb_beat_1",
-      "to": "thread::trustworthy_butler"
+      "to": "path::trustworthy_butler"
     },
     {
       "type": "belongs_to",
       "from": "beat::tb_beat_2",
-      "to": "thread::trustworthy_butler"
+      "to": "path::trustworthy_butler"
     },
     {
       "type": "belongs_to",
       "from": "beat::ah_beat_1",
-      "to": "thread::ambitious_heiress"
+      "to": "path::ambitious_heiress"
     },
     {
       "type": "belongs_to",
       "from": "beat::ah_beat_2",
-      "to": "thread::ambitious_heiress"
+      "to": "path::ambitious_heiress"
     }
   ]
 }

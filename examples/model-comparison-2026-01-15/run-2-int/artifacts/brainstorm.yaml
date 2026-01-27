@@ -6,7 +6,7 @@ entities:
   - entity_id: lord_pembroke
     entity_category: character
     concept: Enigmatic and wealthy host with a mysterious past.
-    notes: Charming and aloof; central tension about his true intentions.
+    notes: Charming and aloof; central dilemma about his true intentions.
   - entity_id: lady_pembroke
     entity_category: character
     concept: Graceful wife of Lord Pembroke, fiercely protective of her family.
@@ -32,7 +32,7 @@ entities:
     entity_category: character
     concept: Business associate with interest in art collecting and ruthless
       tactics.
-    notes: Adds tension to social dynamics.
+    notes: Adds dilemma to social dynamics.
   - entity_id: margaret_thorne
     entity_category: character
     concept: Distant relative known for uncovering secrets and enjoying gossip.
@@ -91,7 +91,7 @@ entities:
     concept: Heirloom found stopped at the exact time of the murder.
     notes:
 tensions:
-  - tension_id: pembroke_charm
+  - dilemma_id: pembroke_charm
     question: Is Lord Pembroke's charm genuine or a facade for darker
       intentions?
     alternatives:
@@ -105,7 +105,7 @@ tensions:
       - lord_pembroke
       - detective_chase
     why_it_matters: Explores human duality and deceptive appearances.
-  - tension_id: butler_loyalty
+  - dilemma_id: butler_loyalty
     question: Is the butler, Mr. Quinton, loyal or complicit in the crime?
     alternatives:
       - alternative_id: loyal_butler
@@ -119,7 +119,7 @@ tensions:
       - butler_quinton
       - detective_chase
     why_it_matters: Challenges stereotypes of a 'guilty servant.'
-  - tension_id: necklace_curse
+  - dilemma_id: necklace_curse
     question: Does the heirloom necklace hold a genuine curse, or is it merely
       superstition?
     alternatives:
@@ -134,7 +134,7 @@ tensions:
       - heirloom_necklace
       - lady_pembroke
     why_it_matters: Delves into belief versus reality.
-  - tension_id: chase_integrity
+  - dilemma_id: chase_integrity
     question: Can Detective Chase solve the mystery without compromising her
       moral code?
     alternatives:
@@ -150,7 +150,7 @@ tensions:
       - detective_chase
       - inspector_harding
     why_it_matters: Addresses justice and the personal cost of truth-seeking.
-  - tension_id: ridgeway_ally
+  - dilemma_id: ridgeway_ally
     question: Is Miss Clara Ridgeway an ally or a rival to Detective Chase?
     alternatives:
       - alternative_id: ally_ridgeway
@@ -163,7 +163,7 @@ tensions:
       - miss_ridgeway
       - detective_chase
     why_it_matters: Explores collaboration versus competition.
-  - tension_id: murder_location
+  - dilemma_id: murder_location
     question: Did the murder take place in the manor, or was it staged
       elsewhere?
     alternatives:
@@ -177,7 +177,7 @@ tensions:
       - pembroke_manor
       - detective_chase
     why_it_matters: Challenges perceptions of the crime scene's significance.
-  - tension_id: chapel_ruins_nature
+  - dilemma_id: chapel_ruins_nature
     question: Is the chapel ruins a place of refuge or a dangerous trap?
     alternatives:
       - alternative_id: refuge
@@ -192,7 +192,7 @@ tensions:
       - edward_pembroke
     why_it_matters: Highlights hidden truths and dual nature of seemingly
       abandoned places.
-  - tension_id: portrait_clue
+  - dilemma_id: portrait_clue
     question: Does the family portrait hold a clue, or is it a mere distraction?
     alternatives:
       - alternative_id: holds_clue

@@ -73,7 +73,7 @@ The graph is stored as a single JSON file (`graph.json`) in the project root.
       "grants": ["visited_office"]
     },
     {
-      "type": "has_alternative",
+      "type": "has_answer",
       "from": "mentor_trust",
       "to": "mentor_protector"
     }
@@ -305,12 +305,12 @@ def apply_mutations(graph: Graph, stage: str, output: dict) -> None:
     elif stage == "brainstorm":
         for entity in output["entities"]:
             graph.add_node(entity["id"], {"type": "entity", **entity})
-        for tension in output["tensions"]:
-            graph.add_node(tension["id"], {"type": "tension", **tension})
-            for alt in tension["alternatives"]:
-                alt_id = f"{tension['id']}_{alt['id']}"
+        for dilemma in output["tensions"]:
+            graph.add_node(dilemma["id"], {"type": "dilemma", **dilemma})
+            for alt in dilemma["alternatives"]:
+                alt_id = f"{dilemma['id']}_{alt['id']}"
                 graph.add_node(alt_id, {"type": "alternative", **alt})
-                graph.add_edge("has_alternative", tension["id"], alt_id)
+                graph.add_edge("has_answer", dilemma["id"], alt_id)
 
     elif stage == "seed":
         # Update entity dispositions
@@ -319,15 +319,15 @@ def apply_mutations(graph: Graph, stage: str, output: dict) -> None:
                 "disposition": entity_decision["disposition"]
             })
 
-        # Create threads from explored tensions
-        for thread in output["threads"]:
-            graph.add_node(thread["id"], {"type": "thread", **thread})
-            graph.add_edge("explores", thread["id"], thread["alternative_id"])
+        # Create paths from explored tensions
+        for path in output["paths"]:
+            graph.add_node(path["id"], {"type": "path", **path})
+            graph.add_edge("explores", path["id"], path["alternative_id"])
 
         # Create initial beats
         for beat in output["beats"]:
             graph.add_node(beat["id"], {"type": "beat", **beat})
-            for thread_id in beat.get("threads", []):
+            for thread_id in beat.get("paths", []):
                 graph.add_edge("belongs_to", beat["id"], thread_id)
 ```
 

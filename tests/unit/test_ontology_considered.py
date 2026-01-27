@@ -2,9 +2,9 @@
 
 This module tests:
 1. Backward compatibility: old 'explored' field migrates to 'considered'
-2. Development state derivation from thread existence
-3. Arc count derivation from threads (not from considered field)
-4. Tension immutability during pruning
+2. Development state derivation from path existence
+3. Arc count derivation from paths (not from considered field)
+4. Dilemma immutability during pruning
 5. Scoped ID standardization in pruning (issue #219, PR #220)
 """
 

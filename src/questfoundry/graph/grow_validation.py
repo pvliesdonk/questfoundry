@@ -295,9 +295,9 @@ def check_dilemmas_resolved(graph: Graph) -> ValidationCheck:
             has_commits = False
             for beat_id in beats_in_path:
                 beat_data = beat_nodes.get(beat_id, {})
-                impacts = beat_data.get("tension_impacts", [])
+                impacts = beat_data.get("dilemma_impacts", [])
                 for impact in impacts:
-                    if impact.get("tension_id") == dilemma_id and impact.get("effect") == "commits":
+                    if impact.get("dilemma_id") == dilemma_id and impact.get("effect") == "commits":
                         has_commits = True
                         break
                 if has_commits:
@@ -485,9 +485,9 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
 
         for idx, beat_id in enumerate(beat_sequence):
             beat_data = beat_nodes.get(beat_id, {})
-            impacts = beat_data.get("tension_impacts", [])
+            impacts = beat_data.get("dilemma_impacts", [])
             for impact in impacts:
-                if impact.get("tension_id") != dilemma_node_id:
+                if impact.get("dilemma_id") != dilemma_node_id:
                     continue
                 effect = impact.get("effect", "")
                 if effect == "commits":

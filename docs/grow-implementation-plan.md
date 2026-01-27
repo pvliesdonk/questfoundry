@@ -2,7 +2,7 @@
 
 ## Overview
 
-GROW transforms SEED output (threads with initial beats) into a complete, validated story graph with passages, choices, codewords, and entity overlays. It has 11 phases, 9 human gates, a mix of deterministic and LLM-assisted operations, and is strictly linear in dependency.
+GROW transforms SEED output (paths with initial beats) into a complete, validated story graph with passages, choices, codewords, and entity overlays. It has 11 phases, 9 human gates, a mix of deterministic and LLM-assisted operations, and is strictly linear in dependency.
 
 **Total estimate:** ~4,500 lines code + tests across 12 PRs
 
@@ -22,7 +22,7 @@ Each phase reads the current graph state and adds/modifies nodes/edges. Each pha
 
 ### 4. Hand-Written Pydantic Models
 
-New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase output models (ThreadAgnosticAssessment, KnotProposal, etc.) are hand-written Pydantic models in `models/grow.py`, following the same pattern as BRAINSTORM and SEED (not the schema-first generation used by DREAM).
+New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase output models (PathAgnosticAssessment, IntersectionProposal, etc.) are hand-written Pydantic models in `models/grow.py`, following the same pattern as BRAINSTORM and SEED (not the schema-first generation used by DREAM).
 
 ---
 
@@ -35,7 +35,7 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 **Dependencies:** None
 
 **Key files:**
-- `src/questfoundry/models/grow.py` — Node types (Arc, Passage, Codeword, Choice, EntityOverlay, GrowResult) and sub-phase output models (ThreadAgnosticAssessment, KnotProposal, SceneTypeTag, GapProposal, OverlayProposal, ChoiceLabel)
+- `src/questfoundry/models/grow.py` — Node types (Arc, Passage, Codeword, Choice, EntityOverlay, GrowResult) and sub-phase output models (PathAgnosticAssessment, IntersectionProposal, SceneTypeTag, GapProposal, OverlayProposal, ChoiceLabel)
 - `src/questfoundry/models/__init__.py` — Exports
 - `tests/unit/test_grow_models.py`
 
@@ -108,11 +108,11 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 **Lines:** ~500-600
 
 **Acceptance:**
-- Phase 1: Imports beats/threads/tensions from graph; validates DAG; validates commits beats exist
-- Phase 5: Enumerates thread combinations; topological sort; spine arc identification
+- Phase 1: Imports beats/paths/tensions from graph; validates DAG; validates commits beats exist
+- Phase 5: Enumerates path combinations; topological sort; spine arc identification
 - Phase 6: Computes divergence points between arc pairs
-- Tests cover 2-tension and 3-tension scenarios
-- Edge cases: empty beats, single thread, cycles detected
+- Tests cover 2-dilemma and 3-dilemma scenarios
+- Edge cases: empty beats, single path, cycles detected
 
 **Open questions:**
 - `requires` edges not created by SEED currently. Phase 1 infers order from initial_beats array position.
@@ -141,9 +141,9 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 
 ---
 
-### PR 6: LLM Phase 2 — Thread-Agnostic Assessment (Feature)
+### PR 6: LLM Phase 2 — Path-agnostic Assessment (Feature)
 
-**Scope:** LLM assessment of beat thread-agnosticism
+**Scope:** LLM assessment of beat path-agnosticism
 
 **Dependencies:** PR 4
 
@@ -156,8 +156,8 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 **Lines:** ~300-350
 
 **Acceptance:**
-- LLM receives beat summaries grouped by tension
-- Returns thread-agnostic beat IDs per tension
+- LLM receives beat summaries grouped by dilemma
+- Returns path-agnostic beat IDs per dilemma
 - Validation: all IDs exist in graph
 - Inner retry loop (max 3) for Pydantic failures
 - Phase gate with assessment results
@@ -165,16 +165,16 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 
 ---
 
-### PR 7: LLM Phase 3 — Knot Detection (Feature)
+### PR 7: LLM Phase 3 — Intersection Detection (Feature)
 
-**Scope:** Beat clustering into knots with compatibility checks
+**Scope:** Beat clustering into intersections with compatibility checks
 
 **Dependencies:** PR 6
 
 **Key files:**
 - `src/questfoundry/pipeline/stages/grow.py` — Phase 3
 - `prompts/templates/grow_phase3_knots.yaml`
-- `src/questfoundry/graph/grow_algorithms.py` — Knot compatibility checker
+- `src/questfoundry/graph/grow_algorithms.py` — Intersection compatibility checker
 - `tests/unit/stages/test_grow_phase3.py`
 
 **Lines:** ~350-400
@@ -182,7 +182,7 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 **Acceptance:**
 - LLM clusters beats by location/entity overlap
 - Compatibility check: different tensions, no requires conflicts, location resolvable
-- Approved: beats get multi-thread assignment, locations resolved
+- Approved: beats get multi-path assignment, locations resolved
 - Merge operation creates new beat replacing both
 - Rejected: beats stay separate
 
@@ -203,11 +203,11 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 
 **Acceptance:**
 - 4a: Each beat gets `scene_type` (scene/sequel/micro_beat)
-- 4b: LLM traces threads, proposes gap beats
+- 4b: LLM traces paths, proposes gap beats
 - 4c: LLM flags pacing issues, proposes correction beats
-- Gap beats added to graph with proper thread/tension assignments
+- Gap beats added to graph with proper path/dilemma assignments
 - Three phase gates (one per sub-phase)
-- Completion: each thread connected, all beats tagged
+- Completion: each path connected, all beats tagged
 
 **Note:** If >500 lines, split 4b/4c into separate PR.
 
@@ -276,7 +276,7 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 - Single start passage
 - All passages reachable from start
 - All endings reachable
-- Each tension has commits resolved
+- Each dilemma has commits resolved
 - Gate satisfiability (required codewords obtainable)
 - No cycles in requires graph
 - Commits timing warnings
@@ -302,7 +302,7 @@ New node types (Arc, Passage, Codeword, Choice, EntityOverlay) and sub-phase out
 - `format_valid_ids_context(graph, "grow")` returns correct ID lists
 - Context handles >100 beats without exceeding 32k tokens
 - E2E test runs all 11 phases on fixture graph
-- 2-tension, 4-arc fixture passes all phases
+- 2-dilemma, 4-arc fixture passes all phases
 
 ---
 

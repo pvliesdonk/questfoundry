@@ -23,7 +23,7 @@ def make_single_dilemma_graph() -> Graph:
 
     Structure:
         dilemma: mentor_trust
-        paths: mentor_trust_canonical (canonical), mentor_trust_alt (alternative)
+        paths: mentor_trust_canonical (canonical), mentor_trust_alt (answer)
         beats: opening, mentor_meet, mentor_commits_canonical, mentor_commits_alt
 
     Beat ordering (requires edges):
@@ -202,14 +202,14 @@ def make_two_dilemma_graph() -> Graph:
         artifact_quest_canonical, artifact_quest_alt
 
     Beats per path (with shared opening/closing beats):
-        opening (all threads)
-        mentor_meet (mentor threads)
-        artifact_discover (artifact threads)
+        opening (all paths)
+        mentor_meet (mentor paths)
+        artifact_discover (artifact paths)
         mentor_commits_canonical (mentor_trust_canonical)
         mentor_commits_alt (mentor_trust_alt)
         artifact_commits_canonical (artifact_quest_canonical)
         artifact_commits_alt (artifact_quest_alt)
-        finale (all threads)
+        finale (all paths)
 
     Beat ordering:
         opening → mentor_meet → mentor_commits_*
@@ -270,38 +270,38 @@ def make_two_dilemma_graph() -> Graph:
     )
 
     # Answers
-    for tension_id, alt_id in [
+    for dilemma_id, alt_id in [
         ("mentor_trust", "trust_yes"),
         ("mentor_trust", "trust_no"),
         ("artifact_quest", "use_good"),
         ("artifact_quest", "use_selfish"),
     ]:
-        alt_node_id = f"dilemma::{tension_id}::alt::{alt_id}"
+        alt_node_id = f"dilemma::{dilemma_id}::alt::{alt_id}"
         graph.create_node(
             alt_node_id,
-            {"type": "answer", "raw_id": alt_id, "dilemma_id": tension_id},
+            {"type": "answer", "raw_id": alt_id, "dilemma_id": dilemma_id},
         )
-        graph.add_edge("has_answer", f"dilemma::{tension_id}", alt_node_id)
+        graph.add_edge("has_answer", f"dilemma::{dilemma_id}", alt_node_id)
 
     # Paths
-    for thread_id, tension_id, alt_id, is_canon in [
+    for path_id, dilemma_id, alt_id, is_canon in [
         ("mentor_trust_canonical", "mentor_trust", "trust_yes", True),
         ("mentor_trust_alt", "mentor_trust", "trust_no", False),
         ("artifact_quest_canonical", "artifact_quest", "use_good", True),
         ("artifact_quest_alt", "artifact_quest", "use_selfish", False),
     ]:
         graph.create_node(
-            f"path::{thread_id}",
+            f"path::{path_id}",
             {
                 "type": "path",
-                "raw_id": thread_id,
-                "dilemma_id": f"dilemma::{tension_id}",
+                "raw_id": path_id,
+                "dilemma_id": f"dilemma::{dilemma_id}",
                 "answer_id": alt_id,
                 "path_importance": "major",
                 "is_canonical": is_canon,
             },
         )
-        graph.add_edge("explores", f"path::{thread_id}", f"dilemma::{tension_id}::alt::{alt_id}")
+        graph.add_edge("explores", f"path::{path_id}", f"dilemma::{dilemma_id}::alt::{alt_id}")
 
     # Beats
     all_paths = [
@@ -344,19 +344,19 @@ def make_two_dilemma_graph() -> Graph:
         ("finale", "The conclusion.", all_paths, []),
     ]
 
-    for beat_id, summary, threads, impacts in beats:
+    for beat_id, summary, paths, impacts in beats:
         graph.create_node(
             f"beat::{beat_id}",
             {
                 "type": "beat",
                 "raw_id": beat_id,
                 "summary": summary,
-                "paths": threads,
+                "paths": paths,
                 "dilemma_impacts": impacts,
             },
         )
-        for thread_id in threads:
-            graph.add_edge("belongs_to", f"beat::{beat_id}", f"path::{thread_id}")
+        for path_id in paths:
+            graph.add_edge("belongs_to", f"beat::{beat_id}", f"path::{path_id}")
 
     # Beat ordering (requires edges)
     # opening → mentor_meet, artifact_discover
@@ -375,7 +375,7 @@ def make_two_dilemma_graph() -> Graph:
     graph.add_edge("requires", "beat::finale", "beat::artifact_commits_alt")
 
     # Consequences
-    for cons_id, thread_id, desc in [
+    for cons_id, path_id, desc in [
         ("mentor_trusted", "mentor_trust_canonical", "Mentor becomes ally."),
         ("mentor_distrusted", "mentor_trust_alt", "Mentor becomes adversary."),
         ("artifact_saved", "artifact_quest_canonical", "World is saved."),
@@ -386,11 +386,11 @@ def make_two_dilemma_graph() -> Graph:
             {
                 "type": "consequence",
                 "raw_id": cons_id,
-                "path_id": thread_id,
+                "path_id": path_id,
                 "description": desc,
             },
         )
-        graph.add_edge("has_consequence", f"path::{thread_id}", f"consequence::{cons_id}")
+        graph.add_edge("has_consequence", f"path::{path_id}", f"consequence::{cons_id}")
 
     graph.set_last_stage("seed")
     return graph
@@ -462,18 +462,18 @@ def make_e2e_fixture_graph() -> Graph:
     )
 
     # Answers
-    for tension_id, alt_id in [
+    for dilemma_id, alt_id in [
         ("mentor_trust", "trust_yes"),
         ("mentor_trust", "trust_no"),
         ("artifact_quest", "use_good"),
         ("artifact_quest", "use_selfish"),
     ]:
-        alt_node_id = f"dilemma::{tension_id}::alt::{alt_id}"
+        alt_node_id = f"dilemma::{dilemma_id}::alt::{alt_id}"
         graph.create_node(
             alt_node_id,
-            {"type": "answer", "raw_id": alt_id, "dilemma_id": tension_id},
+            {"type": "answer", "raw_id": alt_id, "dilemma_id": dilemma_id},
         )
-        graph.add_edge("has_answer", f"dilemma::{tension_id}", alt_node_id)
+        graph.add_edge("has_answer", f"dilemma::{dilemma_id}", alt_node_id)
 
     # Paths
     path_defs = [
@@ -486,23 +486,23 @@ def make_e2e_fixture_graph() -> Graph:
     mentor_path_ids = [t[0] for t in path_defs if "mentor" in t[0]]
     artifact_path_ids = [t[0] for t in path_defs if "artifact" in t[0]]
 
-    for thread_id, tension_id, alt_id, is_canon in path_defs:
+    for path_id, dilemma_id, alt_id, is_canon in path_defs:
         graph.create_node(
-            f"path::{thread_id}",
+            f"path::{path_id}",
             {
                 "type": "path",
-                "raw_id": thread_id,
-                "dilemma_id": f"dilemma::{tension_id}",
+                "raw_id": path_id,
+                "dilemma_id": f"dilemma::{dilemma_id}",
                 "answer_id": alt_id,
                 "path_importance": "major",
                 "is_canonical": is_canon,
             },
         )
-        graph.add_edge("explores", f"path::{thread_id}", f"dilemma::{tension_id}::alt::{alt_id}")
+        graph.add_edge("explores", f"path::{path_id}", f"dilemma::{dilemma_id}::alt::{alt_id}")
 
     # Beats with lifecycle effects
     beat_defs: list[tuple[str, str, list[str], list[dict[str, str]]]] = [
-        # (beat_id, summary, thread_ids, tension_impacts)
+        # (beat_id, summary, thread_ids, dilemma_impacts)
         ("opening", "The hero leaves the village on a quest.", all_path_ids, []),
         (
             "mt_encounter",
@@ -555,23 +555,23 @@ def make_e2e_fixture_graph() -> Graph:
         ("climax", "The consequences of all choices converge.", all_path_ids, []),
     ]
 
-    for beat_id, summary, threads, impacts in beat_defs:
+    for beat_id, summary, paths, impacts in beat_defs:
         graph.create_node(
             f"beat::{beat_id}",
             {
                 "type": "beat",
                 "raw_id": beat_id,
                 "summary": summary,
-                "paths": threads,
+                "paths": paths,
                 "dilemma_impacts": impacts,
             },
         )
-        for thread_id in threads:
-            graph.add_edge("belongs_to", f"beat::{beat_id}", f"path::{thread_id}")
+        for path_id in paths:
+            graph.add_edge("belongs_to", f"beat::{beat_id}", f"path::{path_id}")
 
     # Beat ordering (requires edges)
     ordering = [
-        # opening → tension-specific beats
+        # opening → dilemma-specific beats
         ("mt_encounter", "opening"),
         ("aq_discovery", "opening"),
         # reveals → advances
@@ -592,7 +592,7 @@ def make_e2e_fixture_graph() -> Graph:
         graph.add_edge("requires", f"beat::{from_beat}", f"beat::{to_beat}")
 
     # Consequences
-    for cons_id, thread_id, desc in [
+    for cons_id, path_id, desc in [
         ("mentor_trusted", "mentor_trust_canonical", "The mentor becomes a loyal ally."),
         ("mentor_distrusted", "mentor_trust_alt", "The mentor becomes a bitter enemy."),
         ("artifact_saved", "artifact_quest_canonical", "The village is healed."),
@@ -603,11 +603,11 @@ def make_e2e_fixture_graph() -> Graph:
             {
                 "type": "consequence",
                 "raw_id": cons_id,
-                "path_id": thread_id,
+                "path_id": path_id,
                 "description": desc,
             },
         )
-        graph.add_edge("has_consequence", f"path::{thread_id}", f"consequence::{cons_id}")
+        graph.add_edge("has_consequence", f"path::{path_id}", f"consequence::{cons_id}")
 
     graph.set_last_stage("seed")
     return graph
@@ -621,9 +621,9 @@ def make_intersection_candidate_graph() -> Graph:
         dilemma: artifact_quest (2 paths)
 
     Key beats for intersection testing:
-        beat::mentor_meet: location="market", mentor_trust threads
+        beat::mentor_meet: location="market", mentor_trust paths
         beat::artifact_discover: location="docks", location_alternatives=["market"],
-                                 artifact_quest threads
+                                 artifact_quest paths
 
     These beats share "market" as a location signal and are from different
     dilemmas, making them valid intersection candidates.
@@ -633,7 +633,7 @@ def make_intersection_candidate_graph() -> Graph:
     """
     graph = make_two_dilemma_graph()
 
-    # Add location data to some beats for knot detection
+    # Add location data to some beats for intersection detection
     graph.update_node("beat::mentor_meet", location="market")
     graph.update_node(
         "beat::artifact_discover",

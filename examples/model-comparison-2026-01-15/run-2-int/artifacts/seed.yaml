@@ -7,7 +7,7 @@ entities:
   - entity_id: lord_pembroke
     entity_type: character
     concept: Enigmatic and wealthy host with a mysterious past.
-    notes: Charming and aloof; central tension about his true intentions.
+    notes: Charming and aloof; central dilemma about his true intentions.
     disposition: retained
   - entity_id: lady_pembroke
     entity_type: character
@@ -39,7 +39,7 @@ entities:
     entity_type: character
     concept: Business associate with interest in art collecting and ruthless
       tactics.
-    notes: Adds tension to social dynamics.
+    notes: Adds dilemma to social dynamics.
     disposition: cut
   - entity_id: margaret_thorne
     entity_type: character
@@ -111,50 +111,50 @@ entities:
     concept: Heirloom found stopped at the exact time of the murder.
     disposition: cut
 tensions:
-  - tension_id: butler_loyalty
+  - dilemma_id: butler_loyalty
     explored:
       - loyal_butler
     implicit:
       - complicit_butler
-  - tension_id: chapel_ruins_nature
+  - dilemma_id: chapel_ruins_nature
     explored:
       - refuge
     implicit:
       - dangerous_trap
-  - tension_id: chase_integrity
+  - dilemma_id: chase_integrity
     explored:
       - maintain_integrity
     implicit:
       - compromise_integrity
-  - tension_id: murder_location
+  - dilemma_id: murder_location
     explored:
       - manor_murder
     implicit:
       - staged_elsewhere
-  - tension_id: necklace_curse
+  - dilemma_id: necklace_curse
     explored:
       - superstition
     implicit:
       - genuine_curse
-  - tension_id: pembroke_charm
+  - dilemma_id: pembroke_charm
     explored:
       - genuine_charm
     implicit:
       - facade_for_darkness
-  - tension_id: portrait_clue
+  - dilemma_id: portrait_clue
     explored:
       - holds_clue
     implicit:
       - mere_distraction
-  - tension_id: ridgeway_ally
+  - dilemma_id: ridgeway_ally
     explored:
       - ally_ridgeway
     implicit:
       - rival_ridgeway
-threads:
+paths:
   - thread_id: investigation_manor
     name: The Investigation at Pembroke Manor
-    tension_id: murder_location
+    dilemma_id: murder_location
     alternative_id: manor_murder
     unexplored_alternative_ids:
       - staged_elsewhere
@@ -165,7 +165,7 @@ threads:
       - investigation_manor_consequence
   - thread_id: secrets_chapel_ruins
     name: The Secrets of the Chapel Ruins
-    tension_id: chapel_ruins_nature
+    dilemma_id: chapel_ruins_nature
     alternative_id: refuge
     unexplored_alternative_ids:
       - dangerous_trap
@@ -176,12 +176,12 @@ threads:
       - secrets_chapel_ruins_consequence
   - thread_id: mystery_necklace
     name: The Mystery of the Heirloom Necklace
-    tension_id: necklace_curse
+    dilemma_id: necklace_curse
     alternative_id: superstition
     unexplored_alternative_ids:
       - genuine_curse
     thread_importance: minor
-    description: The missing necklace and its rumored curse create tension among
+    description: The missing necklace and its rumored curse create dilemma among
       characters.
     consequence_ids:
       - mystery_necklace_consequence
@@ -207,13 +207,13 @@ consequences:
 initial_beats:
   - beat_id: arrival_at_manor
     summary: Detective Chase arrives and meets the Pembroke family.
-    threads:
+    paths:
       - investigation_manor
-    tension_impacts:
-      - tension_id: pembroke_charm
+    dilemma_impacts:
+      - dilemma_id: pembroke_charm
         effect: advances
         note: Introduces Lord Pembroke's character.
-      - tension_id: chase_integrity
+      - dilemma_id: chase_integrity
         effect: advances
         note: Sets Chase's moral framework.
     entities:
@@ -226,13 +226,13 @@ initial_beats:
       - conservatory
   - beat_id: discovery_of_letter
     summary: Chase and Miss Ridgeway find the mysterious letter in the library.
-    threads:
+    paths:
       - investigation_manor
-    tension_impacts:
-      - tension_id: portrait_clue
+    dilemma_impacts:
+      - dilemma_id: portrait_clue
         effect: reveals
         note: Uncovers details about the family portrait.
-      - tension_id: ridgeway_ally
+      - dilemma_id: ridgeway_ally
         effect: reveals
         note: Develops Ridgeway's role as an ally.
     entities:
@@ -244,13 +244,13 @@ initial_beats:
       - secret_passage
   - beat_id: edward_exploration
     summary: Edward discovers a hidden entrance in the chapel ruins.
-    threads:
+    paths:
       - secrets_chapel_ruins
-    tension_impacts:
-      - tension_id: chapel_ruins_nature
+    dilemma_impacts:
+      - dilemma_id: chapel_ruins_nature
         effect: reveals
         note: Shows the chapel as a refuge.
-      - tension_id: necklace_curse
+      - dilemma_id: necklace_curse
         effect: advances
         note: Links to the necklace's history.
     entities:
@@ -261,13 +261,13 @@ initial_beats:
   - beat_id: hidden_passage
     summary: Edward shares his findings with Chase, leading them to a secret
       passage.
-    threads:
+    paths:
       - secrets_chapel_ruins
-    tension_impacts:
-      - tension_id: butler_loyalty
+    dilemma_impacts:
+      - dilemma_id: butler_loyalty
         effect: advances
         note: Raises questions about Quinton's knowledge.
-      - tension_id: chapel_ruins_nature
+      - dilemma_id: chapel_ruins_nature
         effect: advances
         note: Further exploration of the chapel's role.
     entities:
@@ -278,13 +278,13 @@ initial_beats:
       - chapel_ruins
   - beat_id: necklace_discussion
     summary: Lady Pembroke expresses concern about the missing necklace.
-    threads:
+    paths:
       - mystery_necklace
-    tension_impacts:
-      - tension_id: necklace_curse
+    dilemma_impacts:
+      - dilemma_id: necklace_curse
         effect: advances
         note: Introduces the superstition.
-      - tension_id: pembroke_charm
+      - dilemma_id: pembroke_charm
         effect: advances
         note: Adds depth to Lady Pembroke's worries.
     entities:
@@ -296,13 +296,13 @@ initial_beats:
   - beat_id: dagger_role
     summary: Butler Quinton reveals the missing antique dagger, adding to the
       mystery.
-    threads:
+    paths:
       - mystery_necklace
-    tension_impacts:
-      - tension_id: butler_loyalty
+    dilemma_impacts:
+      - dilemma_id: butler_loyalty
         effect: complicates
         note: Raises suspicions about Quinton.
-      - tension_id: murder_location
+      - dilemma_id: murder_location
         effect: complicates
         note: Suggests alternate murder methods.
     entities:
@@ -314,7 +314,7 @@ initial_beats:
 convergence_sketch:
   convergence_points:
     - The investigations converge at the chapel ruins where key secrets are
-      revealed, combining insights from each thread.
+      revealed, combining insights from each path.
   residue_notes:
     - Persistent differences include character relationships and ongoing
       suspicions influenced by the necklace's superstition.

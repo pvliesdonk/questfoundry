@@ -119,7 +119,7 @@ Research on LLM story generation identified five phases:
 
 1. **Exposition** — Establish world and character
 2. **Rising Action** — Introduce conflict and stakes
-3. **Climax** — Peak tension and confrontation
+3. **Climax** — Peak dilemma and confrontation
 4. **Falling Action** — Consequences unfold
 5. **Resolution** — New equilibrium
 

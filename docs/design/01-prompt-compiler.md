@@ -124,7 +124,7 @@ variants:
       - Plant clues early that pay off later
       - Red herrings should be fair (not random)
       - The solution must be deducible from available information
-      - Tension builds through revelation, not just action
+      - Dilemma builds through revelation, not just action
 
   - condition:
       context.dream.genre: fantasy

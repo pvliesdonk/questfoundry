@@ -112,7 +112,7 @@
 {"timestamp": "2026-01-15T19:14:44.516940+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_start", "run_id": "019bc314-e2a4-7f50-89ea-c18506e22751", "model": "unknown", "message_count": 10}
 {"timestamp": "2026-01-15T19:14:45.586380+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_end", "run_id": "019bc314-e2a4-7f50-89ea-c18506e22751", "tokens": 0, "has_tool_calls": true}
 {"timestamp": "2026-01-15T19:14:45.587783+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "tool_start", "tool": "search_corpus", "run_id": "019bc314-e6d3-7eb2-b5e8-c064eb68686c"}
-{"timestamp": "2026-01-15T19:14:45.588269+00:00", "level": "DEBUG", "logger": "ifcraftcorpus.search", "message": "Corpus.search query='atmosphere and tension in 1940s English country house setting' cluster=emotional-design limit=5 mode=hybrid"}
+{"timestamp": "2026-01-15T19:14:45.588269+00:00", "level": "DEBUG", "logger": "ifcraftcorpus.search", "message": "Corpus.search query='atmosphere and dilemma in 1940s English country house setting' cluster=emotional-design limit=5 mode=hybrid"}
 {"timestamp": "2026-01-15T19:14:45.612995+00:00", "level": "DEBUG", "logger": "ifcraftcorpus.search", "message": "Corpus.search returning 5 results (mode=hybrid)"}
 {"timestamp": "2026-01-15T19:14:45.613208+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "tool_end", "run_id": "019bc314-e6d3-7eb2-b5e8-c064eb68686c", "output_length": 2556}
 {"timestamp": "2026-01-15T19:14:45.630213+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_start", "run_id": "019bc314-e6fc-7150-8813-a6db25aade24", "model": "unknown", "message_count": 12}
@@ -178,7 +178,7 @@
 {"timestamp": "2026-01-15T19:16:52.570522+00:00", "level": "INFO", "logger": "ifcraftcorpus.providers", "message": "Using Ollama embeddings (nomic-embed-text, cpu_only=True)"}
 {"timestamp": "2026-01-15T19:16:52.570586+00:00", "level": "DEBUG", "logger": "ifcraftcorpus.search", "message": "Corpus init corpus_dir=None index_path=None embeddings_path=/home/peter/.cache/questfoundry/corpus-embeddings use_bundled=True"}
 {"timestamp": "2026-01-15T19:16:52.570613+00:00", "level": "DEBUG", "logger": "ifcraftcorpus.search", "message": "Attempting to load embeddings from /home/peter/.cache/questfoundry/corpus-embeddings"}
-{"timestamp": "2026-01-15T19:16:52.576541+00:00", "level": "DEBUG", "logger": "ifcraftcorpus.search", "message": "Corpus.search query='atmosphere and tension in gothic mystery settings' cluster=emotional-design limit=5 mode=hybrid"}
+{"timestamp": "2026-01-15T19:16:52.576541+00:00", "level": "DEBUG", "logger": "ifcraftcorpus.search", "message": "Corpus.search query='atmosphere and dilemma in gothic mystery settings' cluster=emotional-design limit=5 mode=hybrid"}
 {"timestamp": "2026-01-15T19:16:52.576617+00:00", "level": "DEBUG", "logger": "ifcraftcorpus.search", "message": "Using bundled corpus directory: /mnt/code/questfoundry/.venv/share/ifcraftcorpus/corpus"}
 {"timestamp": "2026-01-15T19:16:52.576646+00:00", "level": "DEBUG", "logger": "ifcraftcorpus.search", "message": "Building in-memory corpus index from /mnt/code/questfoundry/.venv/share/ifcraftcorpus/corpus"}
 {"timestamp": "2026-01-15T19:16:52.654913+00:00", "level": "DEBUG", "logger": "ifcraftcorpus.search", "message": "Corpus.search returning 5 results (mode=hybrid)"}
@@ -214,13 +214,13 @@
 {"timestamp": "2026-01-15T19:18:57.406663+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_end", "run_id": "019bc318-a800-7b80-8d8c-621342c3ea03", "tokens": 0, "has_tool_calls": false}
 {"timestamp": "2026-01-15T19:18:57.413009+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_completed", "attempt": 1, "tokens": 0}
 {"timestamp": "2026-01-15T19:18:57.413451+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_completed", "section": "tensions", "items": 8, "tokens": 0}
-{"timestamp": "2026-01-15T19:18:57.413500+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_started", "section": "threads"}
+{"timestamp": "2026-01-15T19:18:57.413500+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_started", "section": "paths"}
 {"timestamp": "2026-01-15T19:18:57.413947+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_started", "schema": "ThreadsSection", "max_retries": 3}
 {"timestamp": "2026-01-15T19:18:57.414682+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_attempt", "attempt": 1, "max_retries": 3}
 {"timestamp": "2026-01-15T19:18:57.416329+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_start", "run_id": "019bc318-be87-7672-a3bc-c21956d7733f", "model": "unknown", "message_count": 2}
 {"timestamp": "2026-01-15T19:19:04.165066+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_end", "run_id": "019bc318-be87-7672-a3bc-c21956d7733f", "tokens": 0, "has_tool_calls": false}
 {"timestamp": "2026-01-15T19:19:04.166526+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_completed", "attempt": 1, "tokens": 0}
-{"timestamp": "2026-01-15T19:19:04.167089+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_completed", "section": "threads", "items": 4, "tokens": 0}
+{"timestamp": "2026-01-15T19:19:04.167089+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_completed", "section": "paths", "items": 4, "tokens": 0}
 {"timestamp": "2026-01-15T19:19:04.167128+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_started", "section": "consequences"}
 {"timestamp": "2026-01-15T19:19:04.167535+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_started", "schema": "ConsequencesSection", "max_retries": 3}
 {"timestamp": "2026-01-15T19:19:04.168087+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_attempt", "attempt": 1, "max_retries": 3}
@@ -250,8 +250,8 @@
 {"timestamp": "2026-01-15T19:20:03.219942+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_start", "run_id": "019bc319-bf93-7331-a4d5-44d4b3c6f4be", "model": "unknown", "message_count": 2}
 {"timestamp": "2026-01-15T19:20:17.516078+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_end", "run_id": "019bc319-bf93-7331-a4d5-44d4b3c6f4be", "tokens": 0, "has_tool_calls": false}
 {"timestamp": "2026-01-15T19:20:17.517293+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_completed", "attempt": 1, "tokens": 0}
-{"timestamp": "2026-01-15T19:20:17.517978+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_seed_iteratively_completed", "entities": 24, "tensions": 8, "threads": 4, "consequences": 8, "beats": 16, "tokens": 0}
-{"timestamp": "2026-01-15T19:20:17.518796+00:00", "level": "INFO", "logger": "questfoundry.pipeline.stages.seed", "message": "seed_stage_completed", "llm_calls": 13, "tokens": 49695, "entities": 24, "threads": 4, "beats": 16}
+{"timestamp": "2026-01-15T19:20:17.517978+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_seed_iteratively_completed", "entities": 24, "tensions": 8, "paths": 4, "consequences": 8, "beats": 16, "tokens": 0}
+{"timestamp": "2026-01-15T19:20:17.518796+00:00", "level": "INFO", "logger": "questfoundry.pipeline.stages.seed", "message": "seed_stage_completed", "llm_calls": 13, "tokens": 49695, "entities": 24, "paths": 4, "beats": 16}
 {"timestamp": "2026-01-15T19:20:17.519323+00:00", "level": "DEBUG", "logger": "questfoundry.artifacts.validator", "message": "artifact_validation_passed", "stage": "seed"}
 {"timestamp": "2026-01-15T19:20:17.519543+00:00", "level": "DEBUG", "logger": "questfoundry.artifacts.enrichment", "message": "artifact_enriched", "stage": "seed", "entity_count": 24, "enriched_count": 24}
 {"timestamp": "2026-01-15T19:20:17.544488+00:00", "level": "DEBUG", "logger": "questfoundry.artifacts.writer", "message": "artifact_written", "stage": "seed", "path": "projects/run-1-ni/artifacts/seed.yaml"}

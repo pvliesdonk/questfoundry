@@ -126,13 +126,13 @@
 {"timestamp": "2026-01-15T20:03:11.780207+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_end", "run_id": "019bc340-4817-7d91-9476-f3788db010f7", "tokens": 0, "has_tool_calls": false}
 {"timestamp": "2026-01-15T20:03:11.782300+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_completed", "attempt": 1, "tokens": 0}
 {"timestamp": "2026-01-15T20:03:11.783397+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_completed", "section": "tensions", "items": 6, "tokens": 0}
-{"timestamp": "2026-01-15T20:03:11.783469+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_started", "section": "threads"}
+{"timestamp": "2026-01-15T20:03:11.783469+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_started", "section": "paths"}
 {"timestamp": "2026-01-15T20:03:11.784289+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_started", "schema": "ThreadsSection", "max_retries": 3}
 {"timestamp": "2026-01-15T20:03:11.785578+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_attempt", "attempt": 1, "max_retries": 3}
 {"timestamp": "2026-01-15T20:03:11.788029+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_start", "run_id": "019bc341-3f2b-73b3-ab74-bfbfa956b579", "model": "unknown", "message_count": 2}
 {"timestamp": "2026-01-15T20:03:49.091910+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_end", "run_id": "019bc341-3f2b-73b3-ab74-bfbfa956b579", "tokens": 0, "has_tool_calls": false}
 {"timestamp": "2026-01-15T20:03:49.095007+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_completed", "attempt": 1, "tokens": 0}
-{"timestamp": "2026-01-15T20:03:49.095968+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_completed", "section": "threads", "items": 3, "tokens": 0}
+{"timestamp": "2026-01-15T20:03:49.095968+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_completed", "section": "paths", "items": 3, "tokens": 0}
 {"timestamp": "2026-01-15T20:03:49.096051+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_started", "section": "consequences"}
 {"timestamp": "2026-01-15T20:03:49.096709+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_started", "schema": "ConsequencesSection", "max_retries": 3}
 {"timestamp": "2026-01-15T20:03:49.097353+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_attempt", "attempt": 1, "max_retries": 3}
@@ -154,8 +154,8 @@
 {"timestamp": "2026-01-15T20:07:39.143321+00:00", "level": "DEBUG", "logger": "questfoundry.observability.langchain_callbacks", "message": "llm_call_end", "run_id": "019bc345-00bc-7bc1-ac8a-4c4a4ffd4953", "tokens": 0, "has_tool_calls": false}
 {"timestamp": "2026-01-15T20:07:39.146095+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_completed", "attempt": 1, "tokens": 0}
 {"timestamp": "2026-01-15T20:07:39.147243+00:00", "level": "DEBUG", "logger": "questfoundry.agents.serialize", "message": "serialize_section_completed", "section": "convergence", "items": 1, "tokens": 0}
-{"timestamp": "2026-01-15T20:07:39.147930+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_seed_iteratively_completed", "entities": 34, "tensions": 6, "threads": 3, "consequences": 3, "beats": 12, "tokens": 0}
-{"timestamp": "2026-01-15T20:07:39.148976+00:00", "level": "INFO", "logger": "questfoundry.pipeline.stages.seed", "message": "seed_stage_completed", "llm_calls": 8, "tokens": 14545, "entities": 34, "threads": 3, "beats": 12}
+{"timestamp": "2026-01-15T20:07:39.147930+00:00", "level": "INFO", "logger": "questfoundry.agents.serialize", "message": "serialize_seed_iteratively_completed", "entities": 34, "tensions": 6, "paths": 3, "consequences": 3, "beats": 12, "tokens": 0}
+{"timestamp": "2026-01-15T20:07:39.148976+00:00", "level": "INFO", "logger": "questfoundry.pipeline.stages.seed", "message": "seed_stage_completed", "llm_calls": 8, "tokens": 14545, "entities": 34, "paths": 3, "beats": 12}
 {"timestamp": "2026-01-15T20:07:39.149632+00:00", "level": "DEBUG", "logger": "questfoundry.artifacts.validator", "message": "artifact_validation_passed", "stage": "seed"}
 {"timestamp": "2026-01-15T20:07:39.150035+00:00", "level": "DEBUG", "logger": "questfoundry.artifacts.enrichment", "message": "artifact_enriched", "stage": "seed", "entity_count": 34, "enriched_count": 34}
 {"timestamp": "2026-01-15T20:07:39.176150+00:00", "level": "DEBUG", "logger": "questfoundry.artifacts.writer", "message": "artifact_written", "stage": "seed", "path": "projects/run-3-ni/artifacts/seed.yaml"}

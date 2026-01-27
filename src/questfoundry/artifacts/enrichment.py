@@ -116,7 +116,7 @@ def _enrich_dilemmas(graph: Graph, dilemma_decisions: list[dict[str, Any]]) -> l
 
     enriched_dilemmas = []
     for decision in dilemma_decisions:
-        dilemma_id = decision.get("dilemma_id", "")
+        dilemma_id = decision.get("dilemma_id") or decision.get("tension_id", "")
         # Strip prefix if present (e.g., "dilemma::host_motivation" -> "host_motivation")
         lookup_id = dilemma_id.split("::")[-1]
         node = dilemma_data.get(lookup_id, {}) if lookup_id else {}

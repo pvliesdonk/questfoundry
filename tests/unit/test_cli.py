@@ -988,7 +988,7 @@ def test_seed_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> Non
     # Create mock artifact
     import yaml
 
-    artifact = {"type": "seed", "version": 1, "entities": [], "threads": [], "initial_beats": []}
+    artifact = {"type": "seed", "version": 1, "entities": [], "paths": [], "initial_beats": []}
     with (project_path / "artifacts" / "seed.yaml").open("w") as f:
         yaml.safe_dump(artifact, f)
 

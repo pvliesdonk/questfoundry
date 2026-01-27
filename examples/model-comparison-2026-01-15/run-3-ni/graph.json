@@ -309,8 +309,8 @@
       "notes": "Motives may intersect with murder",
       "disposition": "cut"
     },
-    "tension::t1": {
-      "type": "tension",
+    "dilemma::t1": {
+      "type": "dilemma",
       "raw_id": "t1",
       "question": "Is the red locket a token of justice or a relic of vengeance?",
       "central_entity_ids": [],
@@ -322,20 +322,20 @@
         "vengeance"
       ]
     },
-    "tension::t1::alt::justice": {
-      "type": "alternative",
+    "dilemma::t1::alt::justice": {
+      "type": "answer",
       "raw_id": "justice",
       "description": "The locket contains a confession that absolves the heir.",
       "is_default_path": true
     },
-    "tension::t1::alt::vengeance": {
-      "type": "alternative",
+    "dilemma::t1::alt::vengeance": {
+      "type": "answer",
       "raw_id": "vengeance",
       "description": "The locket holds a curse that fuels Lady Eleanor's desire for revenge.",
       "is_default_path": false
     },
-    "tension::t2": {
-      "type": "tension",
+    "dilemma::t2": {
+      "type": "dilemma",
       "raw_id": "t2",
       "question": "Can the velvet rope be a tool of class enforcement or a cover for clandestine activity?",
       "central_entity_ids": [],
@@ -348,20 +348,20 @@
         "clandestine_activity"
       ]
     },
-    "tension::t2::alt::class_enforcement": {
-      "type": "alternative",
+    "dilemma::t2::alt::class_enforcement": {
+      "type": "answer",
       "raw_id": "class_enforcement",
       "description": "The rope marks a restricted wing, enforcing class boundaries.",
       "is_default_path": true
     },
-    "tension::t2::alt::clandestine_activity": {
-      "type": "alternative",
+    "dilemma::t2::alt::clandestine_activity": {
+      "type": "answer",
       "raw_id": "clandestine_activity",
       "description": "The rope marks a hidden entrance used for secret dealings.",
       "is_default_path": false
     },
-    "tension::t3": {
-      "type": "tension",
+    "dilemma::t3": {
+      "type": "dilemma",
       "raw_id": "t3",
       "question": "Is the antique mirror a window to truth or a trickster\u2019s trap?",
       "central_entity_ids": [],
@@ -374,20 +374,20 @@
         "trickster_trap"
       ]
     },
-    "tension::t3::alt::window_to_truth": {
-      "type": "alternative",
+    "dilemma::t3::alt::window_to_truth": {
+      "type": "answer",
       "raw_id": "window_to_truth",
       "description": "The mirror reveals the murderer\u2019s reflection.",
       "is_default_path": true
     },
-    "tension::t3::alt::trickster_trap": {
-      "type": "alternative",
+    "dilemma::t3::alt::trickster_trap": {
+      "type": "answer",
       "raw_id": "trickster_trap",
       "description": "The mirror distorts reality, leading the detective astray.",
       "is_default_path": false
     },
-    "tension::t4": {
-      "type": "tension",
+    "dilemma::t4": {
+      "type": "dilemma",
       "raw_id": "t4",
       "question": "Will the grandfather clock\u2019s final tick reveal the murderer or trap the family in time?",
       "central_entity_ids": [],
@@ -400,20 +400,20 @@
         "trap_family"
       ]
     },
-    "tension::t4::alt::reveal_murderer": {
-      "type": "alternative",
+    "dilemma::t4::alt::reveal_murderer": {
+      "type": "answer",
       "raw_id": "reveal_murderer",
       "description": "The clock\u2019s chime triggers a hidden mechanism that displays a confession.",
       "is_default_path": true
     },
-    "tension::t4::alt::trap_family": {
-      "type": "alternative",
+    "dilemma::t4::alt::trap_family": {
+      "type": "answer",
       "raw_id": "trap_family",
       "description": "The clock\u2019s final tick locks the family in a temporal loop, preventing justice.",
       "is_default_path": false
     },
-    "tension::t5": {
-      "type": "tension",
+    "dilemma::t5": {
+      "type": "dilemma",
       "raw_id": "t5",
       "question": "Does the secret passage lead to redemption or to a deeper crime?",
       "central_entity_ids": [],
@@ -425,20 +425,20 @@
         "deeper_crime"
       ]
     },
-    "tension::t5::alt::redemption": {
-      "type": "alternative",
+    "dilemma::t5::alt::redemption": {
+      "type": "answer",
       "raw_id": "redemption",
       "description": "The passage leads to evidence that clears the family.",
       "is_default_path": true
     },
-    "tension::t5::alt::deeper_crime": {
-      "type": "alternative",
+    "dilemma::t5::alt::deeper_crime": {
+      "type": "answer",
       "raw_id": "deeper_crime",
       "description": "The passage leads to the hidden safe containing evidence of a prior murder.",
       "is_default_path": false
     },
-    "tension::t6": {
-      "type": "tension",
+    "dilemma::t6": {
+      "type": "dilemma",
       "raw_id": "t6",
       "question": "Is the hidden safe a vault of truth or a trap for the inquisitive?",
       "central_entity_ids": [],
@@ -450,26 +450,26 @@
         "trap"
       ]
     },
-    "tension::t6::alt::vault_of_truth": {
-      "type": "alternative",
+    "dilemma::t6::alt::vault_of_truth": {
+      "type": "answer",
       "raw_id": "vault_of_truth",
       "description": "The safe contains the original murder evidence.",
       "is_default_path": true
     },
-    "tension::t6::alt::trap_inquisitive": {
-      "type": "alternative",
+    "dilemma::t6::alt::trap_inquisitive": {
+      "type": "answer",
       "raw_id": "trap_inquisitive",
       "description": "The safe is a booby\u2011trap that destroys any evidence.",
       "is_default_path": false
     },
-    "thread::thread_a": {
-      "type": "thread",
+    "path::thread_a": {
+      "type": "path",
       "raw_id": "thread_a",
       "name": "Locket of Law",
-      "tension_id": "tension::t1",
+      "dilemma_id": "dilemma::t1",
       "alternative_id": "justice",
       "unexplored_alternative_ids": [
-        "tension::t1::alt::vengeance"
+        "dilemma::t1::alt::vengeance"
       ],
       "thread_importance": "major",
       "description": "Inspector follows the red locket trail, balancing Lady Eleanor\u2019s vengeance with the family\u2019s desire for justice.",
@@ -477,14 +477,14 @@
         "consequence_a1"
       ]
     },
-    "thread::thread_b": {
-      "type": "thread",
+    "path::thread_b": {
+      "type": "path",
       "raw_id": "thread_b",
       "name": "Passage to Past",
-      "tension_id": "tension::t5",
+      "dilemma_id": "dilemma::t5",
       "alternative_id": "redemption",
       "unexplored_alternative_ids": [
-        "tension::t5::alt::deeper_crime"
+        "dilemma::t5::alt::deeper_crime"
       ],
       "thread_importance": "major",
       "description": "Investigation of the secret passage uncovers evidence that could either clear the family or expose a prior murder.",
@@ -492,14 +492,14 @@
         "consequence_b1"
       ]
     },
-    "thread::thread_c": {
-      "type": "thread",
+    "path::thread_c": {
+      "type": "path",
       "raw_id": "thread_c",
       "name": "Safe\u2011Skeptic",
-      "tension_id": "tension::t6",
+      "dilemma_id": "dilemma::t6",
       "alternative_id": "vault_of_truth",
       "unexplored_alternative_ids": [
-        "tension::t6::alt::trap"
+        "dilemma::t6::alt::trap"
       ],
       "thread_importance": "minor",
       "description": "The hidden safe either yields truth or triggers a booby\u2011trap that destroys evidence.",
@@ -510,46 +510,46 @@
     "consequence::consequence_a1": {
       "type": "consequence",
       "raw_id": "consequence_a1",
-      "thread_id": "thread::thread_a",
+      "thread_id": "path::thread_a",
       "description": "The locket contains a confession from the late lord, proving his innocence and exposing Lady Eleanor\u2019s motive for vengeance.",
       "narrative_effects": [
         "Justice is established by the confession",
         "Lady Eleanor\u2019s vengeance motive is exposed",
         "Lady Eleanor shifts toward remorse",
-        "Tension justice\u2011vs\u2011vengeance resolved"
+        "Dilemma justice\u2011vs\u2011vengeance resolved"
       ]
     },
     "consequence::consequence_b1": {
       "type": "consequence",
       "raw_id": "consequence_b1",
-      "thread_id": "thread::thread_b",
+      "thread_id": "path::thread_b",
       "description": "The passage leads to a sealed room with documents revealing a decades\u2011old murder committed by the Hawthorne patriarch.",
       "narrative_effects": [
         "New antagonist introduced",
         "Family legacy crisis deepened",
         "Stakes expanded",
-        "Redemption\u2011vs\u2011deeper\u2011crime tension introduced"
+        "Redemption\u2011vs\u2011deeper\u2011crime dilemma introduced"
       ]
     },
     "consequence::consequence_c1": {
       "type": "consequence",
       "raw_id": "consequence_c1",
-      "thread_id": "thread::thread_c",
+      "thread_id": "path::thread_c",
       "description": "The safe\u2019s mechanism is a booby\u2011trap that destroys all evidence inside, forcing the inspector to rely on other clues.",
       "narrative_effects": [
         "Evidence destroyed by booby\u2011trap",
         "Inspector must rely on other clues",
-        "Tension vault_of_truth\u2011vs\u2011trap heightened",
+        "Dilemma vault_of_truth\u2011vs\u2011trap heightened",
         "Mystery remains unresolved"
       ]
     },
     "beat::beat_a1": {
       "type": "beat",
       "raw_id": "beat_a1",
-      "summary": "Inspector Hawthorne arrives at the manor for the annual Hawthorne banquet, noting the tension in the air.",
-      "tension_impacts": [
+      "summary": "Inspector Hawthorne arrives at the manor for the annual Hawthorne banquet, noting the dilemma in the air.",
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t1",
+          "dilemma_id": "dilemma::t1",
           "effect": "advances",
           "note": "sets up the locket mystery"
         }
@@ -568,9 +568,9 @@
       "type": "beat",
       "raw_id": "beat_a2",
       "summary": "During the banquet, a poisoned chalice is discovered, and the red locket is found near the victim\u2019s hand.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t1",
+          "dilemma_id": "dilemma::t1",
           "effect": "advances",
           "note": "introduces locket as key clue"
         }
@@ -593,9 +593,9 @@
       "type": "beat",
       "raw_id": "beat_a3",
       "summary": "Alfred Finch shows Inspector a hidden compartment in the study where the locket was kept, hinting at a deeper secret.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t1",
+          "dilemma_id": "dilemma::t1",
           "effect": "reveals",
           "note": "Alfred\u2019s knowledge deepens mystery"
         }
@@ -615,9 +615,9 @@
       "type": "beat",
       "raw_id": "beat_a4",
       "summary": "Lady Eleanor confronts Inspector, claiming the locket proves her father\u2019s innocence and demanding justice.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t1",
+          "dilemma_id": "dilemma::t1",
           "effect": "commits",
           "note": "Lady\u2019s vengeance stakes are set"
         }
@@ -636,9 +636,9 @@
       "type": "beat",
       "raw_id": "beat_b1",
       "summary": "In the library, Inspector finds a torn map leading to a secret passage beneath the manor.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t5",
+          "dilemma_id": "dilemma::t5",
           "effect": "advances",
           "note": "opens passage clue"
         }
@@ -656,9 +656,9 @@
       "type": "beat",
       "raw_id": "beat_b2",
       "summary": "The passage is discovered; it leads to a narrow corridor with soot\u2011stained walls and a locked stone pillar.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t5",
+          "dilemma_id": "dilemma::t5",
           "effect": "reveals",
           "note": "identifies safe location"
         }
@@ -676,9 +676,9 @@
       "type": "beat",
       "raw_id": "beat_b3",
       "summary": "Inside the pillar, Inspector finds the hidden safe, which contains documents proving a prior Hawthorne murder.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t5",
+          "dilemma_id": "dilemma::t5",
           "effect": "commits",
           "note": "unveils deeper crime"
         }
@@ -696,9 +696,9 @@
       "type": "beat",
       "raw_id": "beat_b4",
       "summary": "Returning to the manor, Inspector shows the documents to Lord Percival, who is shaken by the revelation.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t5",
+          "dilemma_id": "dilemma::t5",
           "effect": "complicates",
           "note": "family legacy threatened"
         }
@@ -717,9 +717,9 @@
       "type": "beat",
       "raw_id": "beat_c1",
       "summary": "Inspector opens the hidden safe; a hidden mechanism triggers a loud alarm, hinting at a booby\u2011trap.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t6",
+          "dilemma_id": "dilemma::t6",
           "effect": "reveals",
           "note": "possible trap"
         }
@@ -737,9 +737,9 @@
       "type": "beat",
       "raw_id": "beat_c2",
       "summary": "The alarm causes the safe to collapse, scattering evidence; Inspector must salvage what he can.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t6",
+          "dilemma_id": "dilemma::t6",
           "effect": "complicates",
           "note": "evidence destroyed"
         }
@@ -757,9 +757,9 @@
       "type": "beat",
       "raw_id": "beat_c3",
       "summary": "Inspector finds a hidden compartment in the safe that still contains a single torn page of a confession.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t6",
+          "dilemma_id": "dilemma::t6",
           "effect": "advances",
           "note": "partial truth recovered"
         }
@@ -777,9 +777,9 @@
       "type": "beat",
       "raw_id": "beat_c4",
       "summary": "With the torn page, Inspector prepares to confront the family, knowing the evidence may be incomplete.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::t6",
+          "dilemma_id": "dilemma::t6",
           "effect": "commits",
           "note": "decision to act"
         }
@@ -800,160 +800,160 @@
       ],
       "residue_notes": [
         "If evidence destroyed, the locket\u2019s truth becomes the sole decisive element.",
-        "The justice\u2011vs\u2011vengeance tension resolves via the locket confession; the redemption\u2011vs\u2011deeper\u2011crime tension resolves via the safe documents, but the minor thread may leave lingering doubt if evidence was partially destroyed."
+        "The justice\u2011vs\u2011vengeance dilemma resolves via the locket confession; the redemption\u2011vs\u2011deeper\u2011crime dilemma resolves via the safe documents, but the minor path may leave lingering doubt if evidence was partially destroyed."
       ]
     }
   },
   "edges": [
     {
-      "type": "has_alternative",
-      "from": "tension::t1",
-      "to": "tension::t1::alt::justice"
+      "type": "has_answer",
+      "from": "dilemma::t1",
+      "to": "dilemma::t1::alt::justice"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t1",
-      "to": "tension::t1::alt::vengeance"
+      "type": "has_answer",
+      "from": "dilemma::t1",
+      "to": "dilemma::t1::alt::vengeance"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t2",
-      "to": "tension::t2::alt::class_enforcement"
+      "type": "has_answer",
+      "from": "dilemma::t2",
+      "to": "dilemma::t2::alt::class_enforcement"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t2",
-      "to": "tension::t2::alt::clandestine_activity"
+      "type": "has_answer",
+      "from": "dilemma::t2",
+      "to": "dilemma::t2::alt::clandestine_activity"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t3",
-      "to": "tension::t3::alt::window_to_truth"
+      "type": "has_answer",
+      "from": "dilemma::t3",
+      "to": "dilemma::t3::alt::window_to_truth"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t3",
-      "to": "tension::t3::alt::trickster_trap"
+      "type": "has_answer",
+      "from": "dilemma::t3",
+      "to": "dilemma::t3::alt::trickster_trap"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t4",
-      "to": "tension::t4::alt::reveal_murderer"
+      "type": "has_answer",
+      "from": "dilemma::t4",
+      "to": "dilemma::t4::alt::reveal_murderer"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t4",
-      "to": "tension::t4::alt::trap_family"
+      "type": "has_answer",
+      "from": "dilemma::t4",
+      "to": "dilemma::t4::alt::trap_family"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t5",
-      "to": "tension::t5::alt::redemption"
+      "type": "has_answer",
+      "from": "dilemma::t5",
+      "to": "dilemma::t5::alt::redemption"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t5",
-      "to": "tension::t5::alt::deeper_crime"
+      "type": "has_answer",
+      "from": "dilemma::t5",
+      "to": "dilemma::t5::alt::deeper_crime"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t6",
-      "to": "tension::t6::alt::vault_of_truth"
+      "type": "has_answer",
+      "from": "dilemma::t6",
+      "to": "dilemma::t6::alt::vault_of_truth"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t6",
-      "to": "tension::t6::alt::trap_inquisitive"
-    },
-    {
-      "type": "explores",
-      "from": "thread::thread_a",
-      "to": "tension::t1::alt::justice"
+      "type": "has_answer",
+      "from": "dilemma::t6",
+      "to": "dilemma::t6::alt::trap_inquisitive"
     },
     {
       "type": "explores",
-      "from": "thread::thread_b",
-      "to": "tension::t5::alt::redemption"
+      "from": "path::thread_a",
+      "to": "dilemma::t1::alt::justice"
     },
     {
       "type": "explores",
-      "from": "thread::thread_c",
-      "to": "tension::t6::alt::vault_of_truth"
+      "from": "path::thread_b",
+      "to": "dilemma::t5::alt::redemption"
+    },
+    {
+      "type": "explores",
+      "from": "path::thread_c",
+      "to": "dilemma::t6::alt::vault_of_truth"
     },
     {
       "type": "has_consequence",
-      "from": "thread::thread_a",
+      "from": "path::thread_a",
       "to": "consequence::consequence_a1"
     },
     {
       "type": "has_consequence",
-      "from": "thread::thread_b",
+      "from": "path::thread_b",
       "to": "consequence::consequence_b1"
     },
     {
       "type": "has_consequence",
-      "from": "thread::thread_c",
+      "from": "path::thread_c",
       "to": "consequence::consequence_c1"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_a1",
-      "to": "thread::thread_a"
+      "to": "path::thread_a"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_a2",
-      "to": "thread::thread_a"
+      "to": "path::thread_a"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_a3",
-      "to": "thread::thread_a"
+      "to": "path::thread_a"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_a4",
-      "to": "thread::thread_a"
+      "to": "path::thread_a"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_b1",
-      "to": "thread::thread_b"
+      "to": "path::thread_b"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_b2",
-      "to": "thread::thread_b"
+      "to": "path::thread_b"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_b3",
-      "to": "thread::thread_b"
+      "to": "path::thread_b"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_b4",
-      "to": "thread::thread_b"
+      "to": "path::thread_b"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_c1",
-      "to": "thread::thread_c"
+      "to": "path::thread_c"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_c2",
-      "to": "thread::thread_c"
+      "to": "path::thread_c"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_c3",
-      "to": "thread::thread_c"
+      "to": "path::thread_c"
     },
     {
       "type": "belongs_to",
       "from": "beat::beat_c4",
-      "to": "thread::thread_c"
+      "to": "path::thread_c"
     }
   ]
 }

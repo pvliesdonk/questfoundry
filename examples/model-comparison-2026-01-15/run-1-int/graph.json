@@ -40,7 +40,7 @@
         "social dynamics"
       ],
       "audience": "adults (18+), fans of classic detective fiction, puzzle-solving, and narrative deduction",
-      "style_notes": "narrative voice: calm, observant, authoritative (e.g., like Miss Marple or Hercule Poirot); prose: clear, concise, descriptive; sensory details (e.g., scent of tea, sound of a clock); subtle hints; fair-play clues; gradual clue reveals; tension built through suspense, not shock"
+      "style_notes": "narrative voice: calm, observant, authoritative (e.g., like Miss Marple or Hercule Poirot); prose: clear, concise, descriptive; sensory details (e.g., scent of tea, sound of a clock); subtle hints; fair-play clues; gradual clue reveals; dilemma built through suspense, not shock"
     },
     "entity::lady_evelyn_hartwell": {
       "type": "entity",
@@ -79,7 +79,7 @@
       "raw_id": "library",
       "entity_type": "location",
       "concept": "A room containing records that may reveal the truth about Lady Eleanor.",
-      "notes": "Linked to the hidden chamber and the portrait truth tension.",
+      "notes": "Linked to the hidden chamber and the portrait truth dilemma.",
       "disposition": "retained"
     },
     "entity::garden": {
@@ -127,7 +127,7 @@
       "raw_id": "portrait",
       "entity_type": "object",
       "concept": "A painting that may reveal the truth about Lady Eleanor\u2019s fate.",
-      "notes": "Linked to Tension 15 \u2014 the truth of the portrait.",
+      "notes": "Linked to Dilemma 15 \u2014 the truth of the portrait.",
       "disposition": "retained"
     },
     "entity::river_memory": {
@@ -138,8 +138,8 @@
       "notes": "The woman in the mirror may have been in the garden that night.",
       "disposition": "retained"
     },
-    "tension::mirror_distortion": {
-      "type": "tension",
+    "dilemma::mirror_distortion": {
+      "type": "dilemma",
       "raw_id": "mirror_distortion",
       "question": "Does the mirror\u2019s distortion reflect reality or reveal hidden truths?",
       "central_entity_ids": [
@@ -155,20 +155,20 @@
         "reflected_reality"
       ]
     },
-    "tension::mirror_distortion::alt::reflected_reality": {
-      "type": "alternative",
+    "dilemma::mirror_distortion::alt::reflected_reality": {
+      "type": "answer",
       "raw_id": "reflected_reality",
       "description": "The mirror shows only what is real \u2014 the reflection is accurate, and the woman in the mirror is a hallucination or a trick of light.",
       "is_default_path": false
     },
-    "tension::mirror_distortion::alt::hidden_truth": {
-      "type": "alternative",
+    "dilemma::mirror_distortion::alt::hidden_truth": {
+      "type": "answer",
       "raw_id": "hidden_truth",
       "description": "The mirror reveals hidden truths \u2014 the woman in the mirror is real, and she has been present in the house all along, possibly as a ghost or a memory made flesh.",
       "is_default_path": true
     },
-    "tension::clock_anomaly": {
-      "type": "tension",
+    "dilemma::clock_anomaly": {
+      "type": "dilemma",
       "raw_id": "clock_anomaly",
       "question": "Is the clock in the study broken, or is it showing a distorted time?",
       "central_entity_ids": [
@@ -182,27 +182,27 @@
         "clock_broken"
       ]
     },
-    "tension::clock_anomaly::alt::clock_broken": {
-      "type": "alternative",
+    "dilemma::clock_anomaly::alt::clock_broken": {
+      "type": "answer",
       "raw_id": "clock_broken",
       "description": "The clock is malfunctioning \u2014 it\u2019s a mechanical failure, and the backward tick is a coincidence.",
       "is_default_path": true
     },
-    "tension::clock_anomaly::alt::time_distorted": {
-      "type": "alternative",
+    "dilemma::clock_anomaly::alt::time_distorted": {
+      "type": "answer",
       "raw_id": "time_distorted",
       "description": "Time is not linear here \u2014 the clock is showing a real temporal anomaly, suggesting the house warps time.",
       "is_default_path": false
     },
-    "tension::hidden_chamber": {
-      "type": "tension",
+    "dilemma::hidden_chamber": {
+      "type": "dilemma",
       "raw_id": "hidden_chamber",
       "question": "Does the library contain a hidden chamber with records of Lady Eleanor?",
       "central_entity_ids": [
         "entity::library",
         "entity::hidden_chamber"
       ],
-      "why_it_matters": "This tension directly challenges the assumption of Lady Eleanor\u2019s death, opening a path to a revelation about her fate.",
+      "why_it_matters": "This dilemma directly challenges the assumption of Lady Eleanor\u2019s death, opening a path to a revelation about her fate.",
       "explored": [
         "chamber_exists"
       ],
@@ -210,20 +210,20 @@
         "chamber_fabricated"
       ]
     },
-    "tension::hidden_chamber::alt::chamber_exists": {
-      "type": "alternative",
+    "dilemma::hidden_chamber::alt::chamber_exists": {
+      "type": "answer",
       "raw_id": "chamber_exists",
       "description": "The hidden chamber is real and contains documents that prove Lady Eleanor was never truly dead.",
       "is_default_path": true
     },
-    "tension::hidden_chamber::alt::chamber_fabricated": {
-      "type": "alternative",
+    "dilemma::hidden_chamber::alt::chamber_fabricated": {
+      "type": "answer",
       "raw_id": "chamber_fabricated",
       "description": "The chamber is a myth \u2014 the records are forged or a result of the mirror\u2019s distortion.",
       "is_default_path": false
     },
-    "tension::portrait_truth": {
-      "type": "tension",
+    "dilemma::portrait_truth": {
+      "type": "dilemma",
       "raw_id": "portrait_truth",
       "question": "Does the portrait reveal the truth about Lady Eleanor\u2019s death?",
       "central_entity_ids": [
@@ -237,20 +237,20 @@
         "portrait_falsity"
       ]
     },
-    "tension::portrait_truth::alt::portrait_truth": {
-      "type": "alternative",
+    "dilemma::portrait_truth::alt::portrait_truth": {
+      "type": "answer",
       "raw_id": "portrait_truth",
       "description": "The portrait shows a different scene \u2014 Lady Eleanor alive, with the woman in the mirror, suggesting she was alive and hiding.",
       "is_default_path": true
     },
-    "tension::portrait_truth::alt::portrait_falsity": {
-      "type": "alternative",
+    "dilemma::portrait_truth::alt::portrait_falsity": {
+      "type": "answer",
       "raw_id": "portrait_falsity",
       "description": "The portrait is a forgery \u2014 it shows a staged image, and Lady Eleanor died as recorded.",
       "is_default_path": false
     },
-    "tension::garden_path": {
-      "type": "tension",
+    "dilemma::garden_path": {
+      "type": "dilemma",
       "raw_id": "garden_path",
       "question": "Was the woman in the mirror actually in the garden that night?",
       "central_entity_ids": [
@@ -265,20 +265,20 @@
         "woman_not_in_garden"
       ]
     },
-    "tension::garden_path::alt::woman_in_garden": {
-      "type": "alternative",
+    "dilemma::garden_p::alt::woman_in_garden": {
+      "type": "answer",
       "raw_id": "woman_in_garden",
       "description": "The woman was present in the garden that night \u2014 the path is real, and she walked there.",
       "is_default_path": true
     },
-    "tension::garden_path::alt::woman_not_in_garden": {
-      "type": "alternative",
+    "dilemma::garden_p::alt::woman_not_in_garden": {
+      "type": "answer",
       "raw_id": "woman_not_in_garden",
       "description": "The woman was not in the garden \u2014 the mirror\u2019s distortion is a psychological phenomenon.",
       "is_default_path": false
     },
-    "tension::river_memory": {
-      "type": "tension",
+    "dilemma::river_memory": {
+      "type": "dilemma",
       "raw_id": "river_memory",
       "question": "Does the river path hold a memory of the night Lady Eleanor died?",
       "central_entity_ids": [
@@ -292,26 +292,26 @@
         "no_memory_in_river"
       ]
     },
-    "tension::river_memory::alt::memory_in_river": {
-      "type": "alternative",
+    "dilemma::river_memory::alt::memory_in_river": {
+      "type": "answer",
       "raw_id": "memory_in_river",
       "description": "The river path is a portal to memory \u2014 it shows the night of the accident as it truly happened.",
       "is_default_path": true
     },
-    "tension::river_memory::alt::no_memory_in_river": {
-      "type": "alternative",
+    "dilemma::river_memory::alt::no_memory_in_river": {
+      "type": "answer",
       "raw_id": "no_memory_in_river",
       "description": "The river is just water \u2014 no memory is stored there, and the scene is a fabrication.",
       "is_default_path": false
     },
-    "thread::thread_mirror_distortion": {
-      "type": "thread",
+    "path::thread_mirror_distortion": {
+      "type": "path",
       "raw_id": "thread_mirror_distortion",
       "name": "The Reflection That Wasn\u2019t There",
-      "tension_id": "tension::mirror_distortion",
+      "dilemma_id": "dilemma::mirror_distortion",
       "alternative_id": "hidden_truth",
       "unexplored_alternative_ids": [
-        "tension::mirror_distortion::alt::reflected_reality"
+        "dilemma::mirror_distortion::alt::reflected_reality"
       ],
       "thread_importance": "major",
       "description": "The woman in the mirror is real \u2014 a preserved memory of Lady Eleanor. The mirror distorts to show her because she is real and present.",
@@ -319,14 +319,14 @@
         "consequence_mirror_distortion_1"
       ]
     },
-    "thread::thread_clock_anomaly": {
-      "type": "thread",
+    "path::thread_clock_anomaly": {
+      "type": "path",
       "raw_id": "thread_clock_anomaly",
       "name": "Time That Ticks Backward",
-      "tension_id": "tension::clock_anomaly",
+      "dilemma_id": "dilemma::clock_anomaly",
       "alternative_id": "time_distorted",
       "unexplored_alternative_ids": [
-        "tension::clock_anomaly::alt::clock_broken"
+        "dilemma::clock_anomaly::alt::clock_broken"
       ],
       "thread_importance": "major",
       "description": "The clock shows a real temporal anomaly \u2014 time loops. This creates a shared instability in the house.",
@@ -334,14 +334,14 @@
         "consequence_clock_anomaly_1"
       ]
     },
-    "thread::thread_hidden_chamber": {
-      "type": "thread",
+    "path::thread_hidden_chamber": {
+      "type": "path",
       "raw_id": "thread_hidden_chamber",
       "name": "The Chamber Beneath the Library",
-      "tension_id": "tension::hidden_chamber",
+      "dilemma_id": "dilemma::hidden_chamber",
       "alternative_id": "chamber_exists",
       "unexplored_alternative_ids": [
-        "tension::hidden_chamber::alt::chamber_fabricated"
+        "dilemma::hidden_chamber::alt::chamber_fabricated"
       ],
       "thread_importance": "major",
       "description": "The hidden chamber exists and contains documents proving Lady Eleanor faked her death.",
@@ -349,14 +349,14 @@
         "consequence_hidden_chamber_1"
       ]
     },
-    "thread::thread_portrait_truth": {
-      "type": "thread",
+    "path::thread_portrait_truth": {
+      "type": "path",
       "raw_id": "thread_portrait_truth",
       "name": "The Portrait That Wasn\u2019t Painted",
-      "tension_id": "tension::portrait_truth",
+      "dilemma_id": "dilemma::portrait_truth",
       "alternative_id": "portrait_truth",
       "unexplored_alternative_ids": [
-        "tension::portrait_truth::alt::portrait_falsity"
+        "dilemma::portrait_truth::alt::portrait_falsity"
       ],
       "thread_importance": "major",
       "description": "The portrait shows Lady Eleanor alive, standing beside the woman in the mirror \u2014 they are one person.",
@@ -364,14 +364,14 @@
         "consequence_portrait_truth_1"
       ]
     },
-    "thread::thread_garden_path": {
-      "type": "thread",
+    "path::thread_garden_path": {
+      "type": "path",
       "raw_id": "thread_garden_path",
       "name": "The Path That Wasn\u2019t There",
-      "tension_id": "tension::garden_path",
+      "dilemma_id": "dilemma::garden_path",
       "alternative_id": "woman_in_garden",
       "unexplored_alternative_ids": [
-        "tension::garden_path::alt::woman_not_in_garden"
+        "dilemma::garden_p::alt::woman_not_in_garden"
       ],
       "thread_importance": "minor",
       "description": "The woman in the mirror was in the garden that night \u2014 she walked the path.",
@@ -379,14 +379,14 @@
         "consequence_garden_path_1"
       ]
     },
-    "thread::thread_river_memory": {
-      "type": "thread",
+    "path::thread_river_memory": {
+      "type": "path",
       "raw_id": "thread_river_memory",
       "name": "The River That Remembers",
-      "tension_id": "tension::river_memory",
+      "dilemma_id": "dilemma::river_memory",
       "alternative_id": "memory_in_river",
       "unexplored_alternative_ids": [
-        "tension::river_memory::alt::no_memory_in_river"
+        "dilemma::river_memory::alt::no_memory_in_river"
       ],
       "thread_importance": "minor",
       "description": "The river path is a portal to memory \u2014 standing on it shows the true night of the accident.",
@@ -397,7 +397,7 @@
     "consequence::consequence_mirror_distortion_1": {
       "type": "consequence",
       "raw_id": "consequence_mirror_distortion_1",
-      "thread_id": "thread::thread_mirror_distortion",
+      "thread_id": "path::thread_mirror_distortion",
       "description": "The mirror is not a trick of light \u2014 it reveals hidden truths.",
       "narrative_effects": [
         "The protagonist begins to see the house as a living memory space.",
@@ -407,7 +407,7 @@
     "consequence::consequence_clock_anomaly_1": {
       "type": "consequence",
       "raw_id": "consequence_clock_anomaly_1",
-      "thread_id": "thread::thread_clock_anomaly",
+      "thread_id": "path::thread_clock_anomaly",
       "description": "Time flows backward in loops.",
       "narrative_effects": [
         "The protagonist experiences d\u00e9j\u00e0 vu and time loops.",
@@ -417,7 +417,7 @@
     "consequence::consequence_hidden_chamber_1": {
       "type": "consequence",
       "raw_id": "consequence_hidden_chamber_1",
-      "thread_id": "thread::thread_hidden_chamber",
+      "thread_id": "path::thread_hidden_chamber",
       "description": "The chamber exists and contains evidence of Eleanor\u2019s survival.",
       "narrative_effects": [
         "The truth is accessible; the narrative shifts from mystery to revelation.",
@@ -427,7 +427,7 @@
     "consequence::consequence_portrait_truth_1": {
       "type": "consequence",
       "raw_id": "consequence_portrait_truth_1",
-      "thread_id": "thread::thread_portrait_truth",
+      "thread_id": "path::thread_portrait_truth",
       "description": "The portrait shows Eleanor alive with the mirror woman.",
       "narrative_effects": [
         "The truth is visual and emotional.",
@@ -437,7 +437,7 @@
     "consequence::consequence_garden_path_1": {
       "type": "consequence",
       "raw_id": "consequence_garden_path_1",
-      "thread_id": "thread::thread_garden_path",
+      "thread_id": "path::thread_garden_path",
       "description": "A footprint in the garden matches the gray dress.",
       "narrative_effects": [
         "Physical evidence confirms the woman was present.",
@@ -447,7 +447,7 @@
     "consequence::consequence_river_memory_1": {
       "type": "consequence",
       "raw_id": "consequence_river_memory_1",
-      "thread_id": "thread::thread_river_memory",
+      "thread_id": "path::thread_river_memory",
       "description": "The river shows the accident as it truly happened \u2014 the woman was not in the car.",
       "narrative_effects": [
         "The accident was staged; the truth is revealed through memory.",
@@ -458,11 +458,11 @@
       "type": "beat",
       "raw_id": "1",
       "summary": "The protagonist enters Hartwell House for tea. In the foyer, the large ornerate mirror shows a woman in a gray dress. The caretaker says, \"Some things don\u2019t show up in mirrors. Not because they\u2019re hidden. Because they\u2019re already real.\"",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::mirror_distortion",
+          "dilemma_id": "dilemma::mirror_distortion",
           "effect": "advances",
-          "note": "The mirror distorts to show a real presence, establishing the core tension of hidden truth."
+          "note": "The mirror distorts to show a real presence, establishing the core dilemma of hidden truth."
         }
       ],
       "entities": [
@@ -480,9 +480,9 @@
       "type": "beat",
       "raw_id": "2",
       "summary": "The protagonist hesitates to look away from the mirror. The reflection flickers \u2014 the woman in the gray dress turns slightly. The mirror distorts when the protagonist blinks.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::mirror_distortion",
+          "dilemma_id": "dilemma::mirror_distortion",
           "effect": "complicates",
           "note": "The distortion becomes unstable, suggesting the presence is not just visual but reactive, deepening the mystery."
         }
@@ -501,9 +501,9 @@
       "type": "beat",
       "raw_id": "3",
       "summary": "The protagonist asks the caretaker if the woman is a ghost. The caretaker replies, \"Ghosts don\u2019t walk through mirrors. They walk through time.\"",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::mirror_distortion",
+          "dilemma_id": "dilemma::mirror_distortion",
           "effect": "reveals",
           "note": "The caretaker introduces a thematic framework \u2014 the woman is not a ghost, but a real person moving through time."
         }
@@ -522,9 +522,9 @@
       "type": "beat",
       "raw_id": "4",
       "summary": "The protagonist enters the study. The clock ticks backward for one second \u2014 from 3 to 2, then back to 3.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::clock_anomaly",
+          "dilemma_id": "dilemma::clock_anomaly",
           "effect": "advances",
           "note": "The clock exhibits a temporal anomaly, introducing the idea of time loops in the house."
         }
@@ -543,9 +543,9 @@
       "type": "beat",
       "raw_id": "5",
       "summary": "The protagonist watches the clock. It ticks backward again \u2014 this time, the hands move slowly, like a loop.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::clock_anomaly",
+          "dilemma_id": "dilemma::clock_anomaly",
           "effect": "complicates",
           "note": "The anomaly becomes more complex, suggesting a repeating cycle rather than a single event."
         }
@@ -563,9 +563,9 @@
       "type": "beat",
       "raw_id": "6",
       "summary": "The protagonist hears a whisper: \"You were there.\" The clock stops.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::clock_anomaly",
+          "dilemma_id": "dilemma::clock_anomaly",
           "effect": "commits",
           "note": "The whisper confirms a personal connection, and the clock's stop suggests a moment of temporal freeze \u2014 a key narrative commitment."
         }
@@ -584,9 +584,9 @@
       "type": "beat",
       "raw_id": "7",
       "summary": "The protagonist finds a loose floorboard in the library. Pushing it, a hidden chamber opens.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::hidden_chamber",
+          "dilemma_id": "dilemma::hidden_chamber",
           "effect": "advances",
           "note": "The chamber is discovered, initiating the investigation into the hidden truth of Eleanor\u2019s survival."
         }
@@ -605,9 +605,9 @@
       "type": "beat",
       "raw_id": "8",
       "summary": "Inside, the chamber contains a leather-bound journal. Pages show Lady Eleanor writing about a secret society and a planned escape.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::hidden_chamber",
+          "dilemma_id": "dilemma::hidden_chamber",
           "effect": "reveals",
           "note": "The journal provides concrete evidence of Eleanor\u2019s survival and her intent to escape the house."
         }
@@ -626,9 +626,9 @@
       "type": "beat",
       "raw_id": "9",
       "summary": "The journal ends with a note: \"I faked my death. I am still here. I am in the mirror.\"",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::hidden_chamber",
+          "dilemma_id": "dilemma::hidden_chamber",
           "effect": "commits",
           "note": "The final entry confirms Eleanor\u2019s survival and her connection to the mirror, solidifying the truth of her presence."
         }
@@ -647,9 +647,9 @@
       "type": "beat",
       "raw_id": "10",
       "summary": "The protagonist examines the portrait in the library. It shows Lady Eleanor in a gray dress, standing beside a woman with the same face.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::portrait_truth",
+          "dilemma_id": "dilemma::portrait_truth",
           "effect": "advances",
           "note": "The portrait reveals a duality \u2014 two women with identical faces, suggesting a shared identity."
         }
@@ -668,9 +668,9 @@
       "type": "beat",
       "raw_id": "11",
       "summary": "The protagonist realizes the two women are identical \u2014 one is Lady Eleanor, the other is the woman in the mirror.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::portrait_truth",
+          "dilemma_id": "dilemma::portrait_truth",
           "effect": "reveals",
           "note": "The identity is confirmed \u2014 the mirror woman is Lady Eleanor, alive and present."
         }
@@ -689,9 +689,9 @@
       "type": "beat",
       "raw_id": "12",
       "summary": "The portrait is signed: \"By Lady Eleanor, 1923.\" The date is wrong \u2014 it should be 1924.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::portrait_truth",
+          "dilemma_id": "dilemma::portrait_truth",
           "effect": "complicates",
           "note": "The date error introduces a temporal inconsistency, suggesting the portrait may have been created after the event \u2014 adding narrative ambiguity."
         }
@@ -709,9 +709,9 @@
       "type": "beat",
       "raw_id": "13",
       "summary": "The protagonist walks the rose garden. A path leads to the river. The soil is damp, and there\u2019s a footprint in the mud.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::garden_path",
+          "dilemma_id": "dilemma::garden_path",
           "effect": "advances",
           "note": "A physical trace is found \u2014 the footprint suggests the woman was present in the garden that night."
         }
@@ -730,9 +730,9 @@
       "type": "beat",
       "raw_id": "14",
       "summary": "The protagonist traces the footprint. It matches the shape of the gray dress.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::garden_path",
+          "dilemma_id": "dilemma::garden_path",
           "effect": "complicates",
           "note": "The footprint is confirmed to match the dress, strengthening the physical evidence of the woman\u2019s presence."
         }
@@ -751,9 +751,9 @@
       "type": "beat",
       "raw_id": "15",
       "summary": "The protagonist stands on the river path. The water is still. A reflection shows a woman in a gray dress walking toward a car.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::river_memory",
+          "dilemma_id": "dilemma::river_memory",
           "effect": "advances",
           "note": "The river reflection shows the woman in motion, indicating she was present during the accident."
         }
@@ -772,9 +772,9 @@
       "type": "beat",
       "raw_id": "16",
       "summary": "The reflection shows the night of the accident \u2014 the car crashes, but the woman is not in it.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::river_memory",
+          "dilemma_id": "dilemma::river_memory",
           "effect": "reveals",
           "note": "The accident was staged \u2014 the woman was not in the car, confirming she survived and was present at the scene."
         }
@@ -806,204 +806,204 @@
   },
   "edges": [
     {
-      "type": "has_alternative",
-      "from": "tension::mirror_distortion",
-      "to": "tension::mirror_distortion::alt::reflected_reality"
+      "type": "has_answer",
+      "from": "dilemma::mirror_distortion",
+      "to": "dilemma::mirror_distortion::alt::reflected_reality"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::mirror_distortion",
-      "to": "tension::mirror_distortion::alt::hidden_truth"
+      "type": "has_answer",
+      "from": "dilemma::mirror_distortion",
+      "to": "dilemma::mirror_distortion::alt::hidden_truth"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::clock_anomaly",
-      "to": "tension::clock_anomaly::alt::clock_broken"
+      "type": "has_answer",
+      "from": "dilemma::clock_anomaly",
+      "to": "dilemma::clock_anomaly::alt::clock_broken"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::clock_anomaly",
-      "to": "tension::clock_anomaly::alt::time_distorted"
+      "type": "has_answer",
+      "from": "dilemma::clock_anomaly",
+      "to": "dilemma::clock_anomaly::alt::time_distorted"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::hidden_chamber",
-      "to": "tension::hidden_chamber::alt::chamber_exists"
+      "type": "has_answer",
+      "from": "dilemma::hidden_chamber",
+      "to": "dilemma::hidden_chamber::alt::chamber_exists"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::hidden_chamber",
-      "to": "tension::hidden_chamber::alt::chamber_fabricated"
+      "type": "has_answer",
+      "from": "dilemma::hidden_chamber",
+      "to": "dilemma::hidden_chamber::alt::chamber_fabricated"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::portrait_truth",
-      "to": "tension::portrait_truth::alt::portrait_truth"
+      "type": "has_answer",
+      "from": "dilemma::portrait_truth",
+      "to": "dilemma::portrait_truth::alt::portrait_truth"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::portrait_truth",
-      "to": "tension::portrait_truth::alt::portrait_falsity"
+      "type": "has_answer",
+      "from": "dilemma::portrait_truth",
+      "to": "dilemma::portrait_truth::alt::portrait_falsity"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::garden_path",
-      "to": "tension::garden_path::alt::woman_in_garden"
+      "type": "has_answer",
+      "from": "dilemma::garden_path",
+      "to": "dilemma::garden_p::alt::woman_in_garden"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::garden_path",
-      "to": "tension::garden_path::alt::woman_not_in_garden"
+      "type": "has_answer",
+      "from": "dilemma::garden_path",
+      "to": "dilemma::garden_p::alt::woman_not_in_garden"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::river_memory",
-      "to": "tension::river_memory::alt::memory_in_river"
+      "type": "has_answer",
+      "from": "dilemma::river_memory",
+      "to": "dilemma::river_memory::alt::memory_in_river"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::river_memory",
-      "to": "tension::river_memory::alt::no_memory_in_river"
-    },
-    {
-      "type": "explores",
-      "from": "thread::thread_mirror_distortion",
-      "to": "tension::mirror_distortion::alt::hidden_truth"
+      "type": "has_answer",
+      "from": "dilemma::river_memory",
+      "to": "dilemma::river_memory::alt::no_memory_in_river"
     },
     {
       "type": "explores",
-      "from": "thread::thread_clock_anomaly",
-      "to": "tension::clock_anomaly::alt::time_distorted"
+      "from": "path::thread_mirror_distortion",
+      "to": "dilemma::mirror_distortion::alt::hidden_truth"
     },
     {
       "type": "explores",
-      "from": "thread::thread_hidden_chamber",
-      "to": "tension::hidden_chamber::alt::chamber_exists"
+      "from": "path::thread_clock_anomaly",
+      "to": "dilemma::clock_anomaly::alt::time_distorted"
     },
     {
       "type": "explores",
-      "from": "thread::thread_portrait_truth",
-      "to": "tension::portrait_truth::alt::portrait_truth"
+      "from": "path::thread_hidden_chamber",
+      "to": "dilemma::hidden_chamber::alt::chamber_exists"
     },
     {
       "type": "explores",
-      "from": "thread::thread_garden_path",
-      "to": "tension::garden_path::alt::woman_in_garden"
+      "from": "path::thread_portrait_truth",
+      "to": "dilemma::portrait_truth::alt::portrait_truth"
     },
     {
       "type": "explores",
-      "from": "thread::thread_river_memory",
-      "to": "tension::river_memory::alt::memory_in_river"
+      "from": "path::thread_garden_path",
+      "to": "dilemma::garden_p::alt::woman_in_garden"
+    },
+    {
+      "type": "explores",
+      "from": "path::thread_river_memory",
+      "to": "dilemma::river_memory::alt::memory_in_river"
     },
     {
       "type": "has_consequence",
-      "from": "thread::thread_mirror_distortion",
+      "from": "path::thread_mirror_distortion",
       "to": "consequence::consequence_mirror_distortion_1"
     },
     {
       "type": "has_consequence",
-      "from": "thread::thread_clock_anomaly",
+      "from": "path::thread_clock_anomaly",
       "to": "consequence::consequence_clock_anomaly_1"
     },
     {
       "type": "has_consequence",
-      "from": "thread::thread_hidden_chamber",
+      "from": "path::thread_hidden_chamber",
       "to": "consequence::consequence_hidden_chamber_1"
     },
     {
       "type": "has_consequence",
-      "from": "thread::thread_portrait_truth",
+      "from": "path::thread_portrait_truth",
       "to": "consequence::consequence_portrait_truth_1"
     },
     {
       "type": "has_consequence",
-      "from": "thread::thread_garden_path",
+      "from": "path::thread_garden_path",
       "to": "consequence::consequence_garden_path_1"
     },
     {
       "type": "has_consequence",
-      "from": "thread::thread_river_memory",
+      "from": "path::thread_river_memory",
       "to": "consequence::consequence_river_memory_1"
     },
     {
       "type": "belongs_to",
       "from": "beat::1",
-      "to": "thread::thread_mirror_distortion"
+      "to": "path::thread_mirror_distortion"
     },
     {
       "type": "belongs_to",
       "from": "beat::2",
-      "to": "thread::thread_mirror_distortion"
+      "to": "path::thread_mirror_distortion"
     },
     {
       "type": "belongs_to",
       "from": "beat::3",
-      "to": "thread::thread_mirror_distortion"
+      "to": "path::thread_mirror_distortion"
     },
     {
       "type": "belongs_to",
       "from": "beat::4",
-      "to": "thread::thread_clock_anomaly"
+      "to": "path::thread_clock_anomaly"
     },
     {
       "type": "belongs_to",
       "from": "beat::5",
-      "to": "thread::thread_clock_anomaly"
+      "to": "path::thread_clock_anomaly"
     },
     {
       "type": "belongs_to",
       "from": "beat::6",
-      "to": "thread::thread_clock_anomaly"
+      "to": "path::thread_clock_anomaly"
     },
     {
       "type": "belongs_to",
       "from": "beat::7",
-      "to": "thread::thread_hidden_chamber"
+      "to": "path::thread_hidden_chamber"
     },
     {
       "type": "belongs_to",
       "from": "beat::8",
-      "to": "thread::thread_hidden_chamber"
+      "to": "path::thread_hidden_chamber"
     },
     {
       "type": "belongs_to",
       "from": "beat::9",
-      "to": "thread::thread_hidden_chamber"
+      "to": "path::thread_hidden_chamber"
     },
     {
       "type": "belongs_to",
       "from": "beat::10",
-      "to": "thread::thread_portrait_truth"
+      "to": "path::thread_portrait_truth"
     },
     {
       "type": "belongs_to",
       "from": "beat::11",
-      "to": "thread::thread_portrait_truth"
+      "to": "path::thread_portrait_truth"
     },
     {
       "type": "belongs_to",
       "from": "beat::12",
-      "to": "thread::thread_portrait_truth"
+      "to": "path::thread_portrait_truth"
     },
     {
       "type": "belongs_to",
       "from": "beat::13",
-      "to": "thread::thread_garden_path"
+      "to": "path::thread_garden_path"
     },
     {
       "type": "belongs_to",
       "from": "beat::14",
-      "to": "thread::thread_garden_path"
+      "to": "path::thread_garden_path"
     },
     {
       "type": "belongs_to",
       "from": "beat::15",
-      "to": "thread::thread_river_memory"
+      "to": "path::thread_river_memory"
     },
     {
       "type": "belongs_to",
       "from": "beat::16",
-      "to": "thread::thread_river_memory"
+      "to": "path::thread_river_memory"
     }
   ]
 }

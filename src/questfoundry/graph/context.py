@@ -215,9 +215,7 @@ def parse_hierarchical_path_id(path_id: str) -> tuple[str, str]:
     """
     scope, raw = parse_scoped_id(path_id)
     if scope not in ("", SCOPE_PATH):
-        raise ValueError(
-            f"Path ID '{path_id}' has wrong scope prefix (expected '{SCOPE_PATH}::')"
-        )
+        raise ValueError(f"Path ID '{path_id}' has wrong scope prefix (expected '{SCOPE_PATH}::')")
     if "__" not in raw:
         raise ValueError(f"Path ID '{path_id}' is not hierarchical (missing '__' separator)")
     dilemma_raw, answer_id = raw.rsplit("__", 1)

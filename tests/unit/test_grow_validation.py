@@ -519,7 +519,7 @@ class TestCommitsTiming:
         assert warnings[0].severity == "warn"
 
     def test_commits_timing_no_issues(self) -> None:
-        """Well-paced thread produces no warnings."""
+        """Well-paced path produces no warnings."""
         graph = Graph.empty()
         graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
@@ -558,7 +558,7 @@ class TestRunAllChecks:
     def test_run_all_checks_aggregates(self) -> None:
         """run_all_checks produces a report with mixed pass/warn/fail."""
         graph = _make_linear_passage_graph()
-        # Add tension data so timing checks can run
+        # Add dilemma data so timing checks can run
         graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
             "path::th1",
@@ -677,7 +677,7 @@ class TestPhase10Integration:
     async def test_phase_10_warnings_pass(self) -> None:
         """Phase 10 passes with warnings when timing issues exist."""
         graph = _make_linear_passage_graph()
-        # Add tension with commits too early
+        # Add dilemma with commits too early
         graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
             "path::th1",

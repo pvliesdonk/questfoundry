@@ -26,7 +26,7 @@ entities:
     entity_category: location
     concept: A room containing records that may reveal the truth about Lady
       Eleanor.
-    notes: Linked to the hidden chamber and the portrait truth tension.
+    notes: Linked to the hidden chamber and the portrait truth dilemma.
   - entity_id: garden
     entity_category: location
     concept: The rose garden, shadowed and silent, where the path may hold
@@ -57,14 +57,14 @@ entities:
   - entity_id: portrait
     entity_category: object
     concept: A painting that may reveal the truth about Lady Eleanor’s fate.
-    notes: Linked to Tension 15 — the truth of the portrait.
+    notes: Linked to Dilemma 15 — the truth of the portrait.
   - entity_id: river_memory
     entity_category: location
     concept: A river path in the garden, possibly tied to a memory or event from
       the past.
     notes: The woman in the mirror may have been in the garden that night.
 tensions:
-  - tension_id: mirror_distortion
+  - dilemma_id: mirror_distortion
     question: Does the mirror’s distortion reflect reality or reveal hidden
       truths?
     alternatives:
@@ -85,7 +85,7 @@ tensions:
     why_it_matters: The mirror is the central symbol of the story — it questions
       what is seen versus what is real, forming the emotional and narrative core
       of the mystery.
-  - tension_id: clock_anomaly
+  - dilemma_id: clock_anomaly
     question: Is the clock in the study broken, or is it showing a distorted
       time?
     alternatives:
@@ -101,7 +101,7 @@ tensions:
       - clock_in_study
     why_it_matters: The clock anomaly supports the idea that time is unstable,
       reinforcing the theme of reality and perception.
-  - tension_id: hidden_chamber
+  - dilemma_id: hidden_chamber
     question: Does the library contain a hidden chamber with records of Lady
       Eleanor?
     alternatives:
@@ -116,9 +116,9 @@ tensions:
     central_entity_ids:
       - library
       - hidden_chamber
-    why_it_matters: This tension directly challenges the assumption of Lady
+    why_it_matters: This dilemma directly challenges the assumption of Lady
       Eleanor’s death, opening a path to a revelation about her fate.
-  - tension_id: portrait_truth
+  - dilemma_id: portrait_truth
     question: Does the portrait reveal the truth about Lady Eleanor’s death?
     alternatives:
       - alternative_id: portrait_truth
@@ -133,7 +133,7 @@ tensions:
       - portrait
     why_it_matters: The portrait is a key piece of evidence — if it shows a
       hidden truth, it undermines the official narrative.
-  - tension_id: garden_path
+  - dilemma_id: garden_path
     question: Was the woman in the mirror actually in the garden that night?
     alternatives:
       - alternative_id: woman_in_garden
@@ -149,7 +149,7 @@ tensions:
       - river_memory
     why_it_matters: Connects the mirror to a physical location and time —
       suggesting the woman is a real figure in the past.
-  - tension_id: river_memory
+  - dilemma_id: river_memory
     question: Does the river path hold a memory of the night Lady Eleanor died?
     alternatives:
       - alternative_id: memory_in_river

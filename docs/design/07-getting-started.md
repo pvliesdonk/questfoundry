@@ -115,8 +115,8 @@ qf review seed        # Required gate
 
 **Deliverables**:
 - [ ] Phase 1: Beat graph import (deterministic)
-- [ ] Phase 2: Thread-agnostic assessment (LLM + human gate)
-- [ ] Phase 3: Knot detection (LLM + human gate)
+- [ ] Phase 2: Path-agnostic assessment (LLM + human gate)
+- [ ] Phase 3: Intersection detection (LLM + human gate)
 - [ ] Phase 4a-c: Gap detection and scene-type tagging (LLM + human gates)
 - [ ] Phase 5: Arc enumeration (deterministic + spine selection)
 - [ ] Phase 6: Divergence point identification (deterministic)
@@ -139,7 +139,7 @@ src/questfoundry/
 │           ├── __init__.py
 │           ├── beat_import.py      # Phase 1
 │           ├── thread_agnostic.py  # Phase 2
-│           ├── knots.py            # Phase 3
+│           ├── intersections.py            # Phase 3
 │           ├── gaps.py             # Phase 4a-c
 │           ├── arcs.py             # Phase 5-6
 │           ├── convergence.py      # Phase 7
@@ -163,10 +163,10 @@ src/questfoundry/
 
 **Test**:
 ```bash
-qf grow --phase 2       # Thread-agnostic assessment
+qf grow --phase 2       # Path-agnostic assessment
 qf review grow.agnostic # Human gate
-qf grow --phase 3       # Knot detection
-qf review grow.knots    # Human gate
+qf grow --phase 3       # Intersection detection
+qf review grow.intersections    # Human gate
 qf grow                 # Complete remaining phases
 qf validate --pre-gate  # Check topology
 ```

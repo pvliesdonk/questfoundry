@@ -81,35 +81,35 @@ entities:
     notes: The police force highlights themes of authority and justice.
     disposition: cut
 tensions:
-  - tension_id: blackwood_motivation
+  - dilemma_id: blackwood_motivation
     explored:
       - genuine_interest
     implicit:
       - motivated_by_greed
-  - tension_id: grimshaw_trust
+  - dilemma_id: grimshaw_trust
     explored:
       - grimshaw_truthful
     implicit:
       - grimshaw_deceptive
-  - tension_id: vivienne_motivation
+  - dilemma_id: vivienne_motivation
     explored:
       - using_advantage
     implicit:
       - genuinely_mourning
-  - tension_id: letter_outcome
+  - dilemma_id: letter_outcome
     explored:
       - mislead_investigation
     implicit:
       - discover_murderer
-  - tension_id: langford_interest
+  - dilemma_id: langford_interest
     explored:
       - personal_gain
     implicit:
       - academic_interest
-threads:
+paths:
   - thread_id: genuine_collector
     name: The Genuine Collector
-    tension_id: blackwood_motivation
+    dilemma_id: blackwood_motivation
     alternative_id: genuine_interest
     unexplored_alternative_ids:
       - motivated_by_greed
@@ -120,7 +120,7 @@ threads:
       - genuine_collector_consequence
   - thread_id: trustworthy_butler
     name: The Trustworthy Butler
-    tension_id: grimshaw_trust
+    dilemma_id: grimshaw_trust
     alternative_id: grimshaw_truthful
     unexplored_alternative_ids:
       - grimshaw_deceptive
@@ -131,7 +131,7 @@ threads:
       - trustworthy_butler_consequence
   - thread_id: ambitious_heiress
     name: The Ambitious Heiress
-    tension_id: vivienne_motivation
+    dilemma_id: vivienne_motivation
     alternative_id: using_advantage
     unexplored_alternative_ids:
       - genuinely_mourning
@@ -148,7 +148,7 @@ consequences:
       - Influences characters' perceptions of Lord Blackwood.
   - consequence_id: trustworthy_butler_consequence
     thread_id: trustworthy_butler
-    description: Builds tension around loyalty and personal sacrifice.
+    description: Builds dilemma around loyalty and personal sacrifice.
     narrative_effects:
       - Affects trust dynamics among characters.
   - consequence_id: ambitious_heiress_consequence
@@ -160,10 +160,10 @@ initial_beats:
   - beat_id: gc_beat_1
     summary: Lord Blackwood discusses his acquisition with Dr. Langford in the
       mansion's library.
-    threads:
+    paths:
       - genuine_collector
-    tension_impacts:
-      - tension_id: blackwood_motivation
+    dilemma_impacts:
+      - dilemma_id: blackwood_motivation
         effect: advances
         note: Provides insight into Blackwood's genuine interest.
     entities:
@@ -176,10 +176,10 @@ initial_beats:
   - beat_id: gc_beat_2
     summary: Inspector Sharp arrives and questions Blackwood about the
       artifact's history in the Ornamental Garden.
-    threads:
+    paths:
       - genuine_collector
-    tension_impacts:
-      - tension_id: blackwood_motivation
+    dilemma_impacts:
+      - dilemma_id: blackwood_motivation
         effect: reveals
         note: Unveils Blackwood's motivations to the detective.
     entities:
@@ -192,10 +192,10 @@ initial_beats:
   - beat_id: tb_beat_1
     summary: Mr. Grimshaw recounts the events of the night to Inspector Sharp in
       the mansion's study.
-    threads:
+    paths:
       - trustworthy_butler
-    tension_impacts:
-      - tension_id: grimshaw_trust
+    dilemma_impacts:
+      - dilemma_id: grimshaw_trust
         effect: advances
         note: Establishes Grimshaw's truthful narrative.
     entities:
@@ -207,10 +207,10 @@ initial_beats:
   - beat_id: tb_beat_2
     summary: A hidden passage in the mansion is discovered, leading to new
       insights.
-    threads:
+    paths:
       - trustworthy_butler
-    tension_impacts:
-      - tension_id: grimshaw_trust
+    dilemma_impacts:
+      - dilemma_id: grimshaw_trust
         effect: complicates
         note: Introduces complexity in Grimshaw's account.
     entities:
@@ -222,10 +222,10 @@ initial_beats:
   - beat_id: ah_beat_1
     summary: Lady Vivienne is seen meeting with Miss Clara Finch in the
       Ornamental Garden, discussing family matters.
-    threads:
+    paths:
       - ambitious_heiress
-    tension_impacts:
-      - tension_id: vivienne_motivation
+    dilemma_impacts:
+      - dilemma_id: vivienne_motivation
         effect: reveals
         note: Highlights Vivienne's strategic position.
     entities:
@@ -237,10 +237,10 @@ initial_beats:
   - beat_id: ah_beat_2
     summary: Vivienne confronts her father in the mansion, hinting at her true
       intentions.
-    threads:
+    paths:
       - ambitious_heiress
-    tension_impacts:
-      - tension_id: vivienne_motivation
+    dilemma_impacts:
+      - dilemma_id: vivienne_motivation
         effect: commits
         note: Confirms Vivienne's manipulative tactics.
     entities:
@@ -251,7 +251,7 @@ initial_beats:
       - the_garden
 convergence_sketch:
   convergence_points:
-    - The threads converge at a climactic gathering in the mansion's grand hall,
+    - The paths converge at a climactic gathering in the mansion's grand hall,
       where revelations about the Jade Serpent's true significance and the
       butler's loyalty come to light.
   residue_notes:

@@ -112,7 +112,7 @@ async def test_execute_calls_all_three_phases() -> None:
                         },
                     ],
                     "central_entity_ids": ["hero"],
-                    "why_it_matters": "Core story tension",
+                    "why_it_matters": "Core story dilemma",
                 }
             ],
         )
@@ -374,7 +374,7 @@ def test_brainstorm_output_model_validates() -> None:
                     },
                 ],
                 "central_entity_ids": ["hero"],
-                "why_it_matters": "Central narrative tension",
+                "why_it_matters": "Central narrative dilemma",
             }
         ],
     )
@@ -386,13 +386,13 @@ def test_brainstorm_output_model_validates() -> None:
 
 
 def test_tension_requires_two_alternatives() -> None:
-    """Tension model requires exactly two alternatives."""
+    """Dilemma model requires exactly two alternatives."""
     from pydantic import ValidationError
 
-    from questfoundry.models.brainstorm import Tension
+    from questfoundry.models.brainstorm import Dilemma
 
     with pytest.raises(ValidationError, match="List should have at least 2 items"):
-        Tension(
+        Dilemma(
             tension_id="test",
             question="Test?",
             alternatives=[
@@ -404,13 +404,13 @@ def test_tension_requires_two_alternatives() -> None:
 
 
 def test_tension_requires_one_canonical() -> None:
-    """Tension model requires exactly one default path alternative."""
+    """Dilemma model requires exactly one default path alternative."""
     from pydantic import ValidationError
 
-    from questfoundry.models.brainstorm import Tension
+    from questfoundry.models.brainstorm import Dilemma
 
     with pytest.raises(ValidationError, match=r"one.*default path"):
-        Tension(
+        Dilemma(
             tension_id="test",
             question="Test?",
             alternatives=[

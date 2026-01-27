@@ -170,43 +170,43 @@ entities:
     notes: Motives may intersect with murder
     disposition: cut
 tensions:
-  - tension_id: t1
+  - dilemma_id: t1
     explored:
       - justice
     implicit:
       - vengeance
-  - tension_id: t2
+  - dilemma_id: t2
     explored:
       - ''
     implicit:
       - class_enforcement
       - clandestine_activity
-  - tension_id: t3
+  - dilemma_id: t3
     explored:
       - ''
     implicit:
       - window_to_truth
       - trickster_trap
-  - tension_id: t4
+  - dilemma_id: t4
     explored:
       - ''
     implicit:
       - reveal_murderer
       - trap_family
-  - tension_id: t5
+  - dilemma_id: t5
     explored:
       - redemption
     implicit:
       - deeper_crime
-  - tension_id: t6
+  - dilemma_id: t6
     explored:
       - vault_of_truth
     implicit:
       - trap
-threads:
+paths:
   - thread_id: thread_a
     name: Locket of Law
-    tension_id: t1
+    dilemma_id: t1
     alternative_id: justice
     unexplored_alternative_ids:
       - vengeance
@@ -217,7 +217,7 @@ threads:
       - consequence_a1
   - thread_id: thread_b
     name: Passage to Past
-    tension_id: t5
+    dilemma_id: t5
     alternative_id: redemption
     unexplored_alternative_ids:
       - deeper_crime
@@ -228,7 +228,7 @@ threads:
       - consequence_b1
   - thread_id: thread_c
     name: Safe‑Skeptic
-    tension_id: t6
+    dilemma_id: t6
     alternative_id: vault_of_truth
     unexplored_alternative_ids:
       - trap
@@ -246,7 +246,7 @@ consequences:
       - Justice is established by the confession
       - Lady Eleanor’s vengeance motive is exposed
       - Lady Eleanor shifts toward remorse
-      - Tension justice‑vs‑vengeance resolved
+      - Dilemma justice‑vs‑vengeance resolved
   - consequence_id: consequence_b1
     thread_id: thread_b
     description: The passage leads to a sealed room with documents revealing a
@@ -255,7 +255,7 @@ consequences:
       - New antagonist introduced
       - Family legacy crisis deepened
       - Stakes expanded
-      - Redemption‑vs‑deeper‑crime tension introduced
+      - Redemption‑vs‑deeper‑crime dilemma introduced
   - consequence_id: consequence_c1
     thread_id: thread_c
     description: The safe’s mechanism is a booby‑trap that destroys all evidence
@@ -263,16 +263,16 @@ consequences:
     narrative_effects:
       - Evidence destroyed by booby‑trap
       - Inspector must rely on other clues
-      - Tension vault_of_truth‑vs‑trap heightened
+      - Dilemma vault_of_truth‑vs‑trap heightened
       - Mystery remains unresolved
 initial_beats:
   - beat_id: beat_a1
     summary: Inspector Hawthorne arrives at the manor for the annual Hawthorne
-      banquet, noting the tension in the air.
-    threads:
+      banquet, noting the dilemma in the air.
+    paths:
       - thread_a
-    tension_impacts:
-      - tension_id: t1
+    dilemma_impacts:
+      - dilemma_id: t1
         effect: advances
         note: sets up the locket mystery
     entities:
@@ -285,10 +285,10 @@ initial_beats:
   - beat_id: beat_a2
     summary: During the banquet, a poisoned chalice is discovered, and the red
       locket is found near the victim’s hand.
-    threads:
+    paths:
       - thread_a
-    tension_impacts:
-      - tension_id: t1
+    dilemma_impacts:
+      - dilemma_id: t1
         effect: advances
         note: introduces locket as key clue
     entities:
@@ -305,10 +305,10 @@ initial_beats:
   - beat_id: beat_a3
     summary: Alfred Finch shows Inspector a hidden compartment in the study
       where the locket was kept, hinting at a deeper secret.
-    threads:
+    paths:
       - thread_a
-    tension_impacts:
-      - tension_id: t1
+    dilemma_impacts:
+      - dilemma_id: t1
         effect: reveals
         note: Alfred’s knowledge deepens mystery
     entities:
@@ -322,10 +322,10 @@ initial_beats:
   - beat_id: beat_a4
     summary: Lady Eleanor confronts Inspector, claiming the locket proves her
       father’s innocence and demanding justice.
-    threads:
+    paths:
       - thread_a
-    tension_impacts:
-      - tension_id: t1
+    dilemma_impacts:
+      - dilemma_id: t1
         effect: commits
         note: Lady’s vengeance stakes are set
     entities:
@@ -338,10 +338,10 @@ initial_beats:
   - beat_id: beat_b1
     summary: In the library, Inspector finds a torn map leading to a secret
       passage beneath the manor.
-    threads:
+    paths:
       - thread_b
-    tension_impacts:
-      - tension_id: t5
+    dilemma_impacts:
+      - dilemma_id: t5
         effect: advances
         note: opens passage clue
     entities:
@@ -353,10 +353,10 @@ initial_beats:
   - beat_id: beat_b2
     summary: The passage is discovered; it leads to a narrow corridor with
       soot‑stained walls and a locked stone pillar.
-    threads:
+    paths:
       - thread_b
-    tension_impacts:
-      - tension_id: t5
+    dilemma_impacts:
+      - dilemma_id: t5
         effect: reveals
         note: identifies safe location
     entities:
@@ -368,10 +368,10 @@ initial_beats:
   - beat_id: beat_b3
     summary: Inside the pillar, Inspector finds the hidden safe, which contains
       documents proving a prior Hawthorne murder.
-    threads:
+    paths:
       - thread_b
-    tension_impacts:
-      - tension_id: t5
+    dilemma_impacts:
+      - dilemma_id: t5
         effect: commits
         note: unveils deeper crime
     entities:
@@ -383,10 +383,10 @@ initial_beats:
   - beat_id: beat_b4
     summary: Returning to the manor, Inspector shows the documents to Lord
       Percival, who is shaken by the revelation.
-    threads:
+    paths:
       - thread_b
-    tension_impacts:
-      - tension_id: t5
+    dilemma_impacts:
+      - dilemma_id: t5
         effect: complicates
         note: family legacy threatened
     entities:
@@ -399,10 +399,10 @@ initial_beats:
   - beat_id: beat_c1
     summary: Inspector opens the hidden safe; a hidden mechanism triggers a loud
       alarm, hinting at a booby‑trap.
-    threads:
+    paths:
       - thread_c
-    tension_impacts:
-      - tension_id: t6
+    dilemma_impacts:
+      - dilemma_id: t6
         effect: reveals
         note: possible trap
     entities:
@@ -414,10 +414,10 @@ initial_beats:
   - beat_id: beat_c2
     summary: The alarm causes the safe to collapse, scattering evidence;
       Inspector must salvage what he can.
-    threads:
+    paths:
       - thread_c
-    tension_impacts:
-      - tension_id: t6
+    dilemma_impacts:
+      - dilemma_id: t6
         effect: complicates
         note: evidence destroyed
     entities:
@@ -429,10 +429,10 @@ initial_beats:
   - beat_id: beat_c3
     summary: Inspector finds a hidden compartment in the safe that still
       contains a single torn page of a confession.
-    threads:
+    paths:
       - thread_c
-    tension_impacts:
-      - tension_id: t6
+    dilemma_impacts:
+      - dilemma_id: t6
         effect: advances
         note: partial truth recovered
     entities:
@@ -444,10 +444,10 @@ initial_beats:
   - beat_id: beat_c4
     summary: With the torn page, Inspector prepares to confront the family,
       knowing the evidence may be incomplete.
-    threads:
+    paths:
       - thread_c
-    tension_impacts:
-      - tension_id: t6
+    dilemma_impacts:
+      - dilemma_id: t6
         effect: commits
         note: decision to act
     entities:
@@ -462,7 +462,7 @@ convergence_sketch:
   residue_notes:
     - If evidence destroyed, the locket’s truth becomes the sole decisive
       element.
-    - The justice‑vs‑vengeance tension resolves via the locket confession; the
-      redemption‑vs‑deeper‑crime tension resolves via the safe documents, but
-      the minor thread may leave lingering doubt if evidence was partially
+    - The justice‑vs‑vengeance dilemma resolves via the locket confession; the
+      redemption‑vs‑deeper‑crime dilemma resolves via the safe documents, but
+      the minor path may leave lingering doubt if evidence was partially
       destroyed.

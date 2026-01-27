@@ -243,7 +243,7 @@ class TestPhase2ThreadAgnostic:
     @pytest.mark.asyncio
     async def test_phase_2_with_valid_assessments(self) -> None:
         """Phase 2 with mocked LLM returns valid assessments and updates beats."""
-        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
         from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
         graph = make_single_dilemma_graph()
@@ -252,11 +252,11 @@ class TestPhase2ThreadAgnostic:
         # Mock model returns assessments for shared beats
         phase2_output = Phase2Output(
             assessments=[
-                ThreadAgnosticAssessment(
+                PathAgnosticAssessment(
                     beat_id="beat::opening",
                     agnostic_for=["mentor_trust"],
                 ),
-                ThreadAgnosticAssessment(
+                PathAgnosticAssessment(
                     beat_id="beat::mentor_meet",
                     agnostic_for=["mentor_trust"],
                 ),
@@ -287,14 +287,14 @@ class TestPhase2ThreadAgnostic:
 
         graph = Graph.empty()
         # Single dilemma with single path
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "is_canonical": True},
         )
-        graph.add_edge("explores", "thread::th1", "tension::t1")
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
         graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1", "summary": "test"})
-        graph.add_edge("belongs_to", "beat::b1", "thread::th1")
+        graph.add_edge("belongs_to", "beat::b1", "path::th1")
 
         stage = GrowStage()
         mock_model = MagicMock()
@@ -307,7 +307,7 @@ class TestPhase2ThreadAgnostic:
     @pytest.mark.asyncio
     async def test_phase_2_filters_invalid_beat_ids(self) -> None:
         """Phase 2 filters out assessments with invalid beat IDs."""
-        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
         from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
         graph = make_single_dilemma_graph()
@@ -316,11 +316,11 @@ class TestPhase2ThreadAgnostic:
         # Mock returns one valid and one invalid assessment
         phase2_output = Phase2Output(
             assessments=[
-                ThreadAgnosticAssessment(
+                PathAgnosticAssessment(
                     beat_id="beat::opening",
                     agnostic_for=["mentor_trust"],
                 ),
-                ThreadAgnosticAssessment(
+                PathAgnosticAssessment(
                     beat_id="beat::nonexistent",
                     agnostic_for=["mentor_trust"],
                 ),
@@ -357,13 +357,13 @@ class TestGrowLlmCall:
     async def test_retry_on_validation_failure(self) -> None:
         """_grow_llm_call retries on validation failure."""
 
-        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
 
         stage = GrowStage()
 
         # First call returns invalid data (assessments must be a list, not a string)
         valid_output = Phase2Output(
-            assessments=[ThreadAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+            assessments=[PathAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
         )
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(
@@ -420,14 +420,14 @@ class TestGrowLlmCall:
     @pytest.mark.asyncio
     async def test_callbacks_passed_to_ainvoke(self) -> None:
         """_grow_llm_call passes callbacks via RunnableConfig to ainvoke."""
-        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
 
         stage = GrowStage()
         mock_callback = MagicMock()
         stage._callbacks = [mock_callback]
 
         valid_output = Phase2Output(
-            assessments=[ThreadAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+            assessments=[PathAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
         )
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(return_value=valid_output)
@@ -460,13 +460,13 @@ class TestGrowLlmCall:
     @pytest.mark.asyncio
     async def test_no_callbacks_still_works(self) -> None:
         """_grow_llm_call works when no callbacks are set."""
-        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
 
         stage = GrowStage()
         # _callbacks is None by default
 
         valid_output = Phase2Output(
-            assessments=[ThreadAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+            assessments=[PathAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
         )
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(return_value=valid_output)
@@ -502,13 +502,13 @@ class TestGrowLlmCall:
         """_grow_llm_call forwards provider_name to with_structured_output."""
         from unittest.mock import patch
 
-        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
 
         stage = GrowStage()
         stage._provider_name = provider_name
 
         valid_output = Phase2Output(
-            assessments=[ThreadAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+            assessments=[PathAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
         )
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(return_value=valid_output)
@@ -538,17 +538,17 @@ class TestGrowLlmCall:
 class TestPhase3Knots:
     @pytest.mark.asyncio
     async def test_phase_3_with_valid_proposals(self) -> None:
-        """Phase 3 with mocked LLM returns valid knot proposals."""
-        from questfoundry.models.grow import KnotProposal, Phase3Output
+        """Phase 3 with mocked LLM returns valid intersection proposals."""
+        from questfoundry.models.grow import IntersectionProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
         graph = make_intersection_candidate_graph()
         stage = GrowStage()
 
-        # Mock model returns a knot grouping the two location-overlapping beats
+        # Mock model returns a intersection grouping the two location-overlapping beats
         phase3_output = Phase3Output(
-            knots=[
-                KnotProposal(
+            intersections=[
+                IntersectionProposal(
                     beat_ids=["beat::mentor_meet", "beat::artifact_discover"],
                     resolved_location="market",
                     rationale="Both beats share the market location",
@@ -567,7 +567,7 @@ class TestPhase3Knots:
         assert result.llm_calls == 1
         assert "1 applied" in result.detail
 
-        # Verify knot was applied
+        # Verify intersection was applied
         mentor_beat = graph.get_node("beat::mentor_meet")
         assert mentor_beat["intersection_group"] == ["beat::artifact_discover"]
         assert mentor_beat["location"] == "market"
@@ -593,7 +593,7 @@ class TestPhase3Knots:
     @pytest.mark.asyncio
     async def test_phase_3_skips_incompatible_intersections(self) -> None:
         """Phase 3 skips intersections that fail compatibility check."""
-        from questfoundry.models.grow import KnotProposal, Phase3Output
+        from questfoundry.models.grow import IntersectionProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
         graph = make_intersection_candidate_graph()
@@ -601,11 +601,11 @@ class TestPhase3Knots:
 
         # Propose an intersection with beats from the SAME dilemma (invalid)
         phase3_output = Phase3Output(
-            knots=[
-                KnotProposal(
+            intersections=[
+                IntersectionProposal(
                     beat_ids=["beat::mentor_commits_canonical", "beat::mentor_commits_alt"],
                     resolved_location="market",
-                    rationale="Same tension beats",
+                    rationale="Same dilemma beats",
                 ),
             ]
         )
@@ -624,15 +624,15 @@ class TestPhase3Knots:
     @pytest.mark.asyncio
     async def test_phase_3_filters_invalid_beat_ids(self) -> None:
         """Phase 3 skips proposals with nonexistent beat IDs."""
-        from questfoundry.models.grow import KnotProposal, Phase3Output
+        from questfoundry.models.grow import IntersectionProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
         graph = make_intersection_candidate_graph()
         stage = GrowStage()
 
         phase3_output = Phase3Output(
-            knots=[
-                KnotProposal(
+            intersections=[
+                IntersectionProposal(
                     beat_ids=["beat::nonexistent_a", "beat::nonexistent_b"],
                     resolved_location="market",
                     rationale="Nonexistent beats",
@@ -652,8 +652,8 @@ class TestPhase3Knots:
 
     @pytest.mark.asyncio
     async def test_phase_3_skips_requires_conflict(self) -> None:
-        """Phase 3 skips knots where beats have requires dependency."""
-        from questfoundry.models.grow import KnotProposal, Phase3Output
+        """Phase 3 skips intersections where beats have requires dependency."""
+        from questfoundry.models.grow import IntersectionProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
         graph = make_intersection_candidate_graph()
@@ -661,12 +661,12 @@ class TestPhase3Knots:
 
         # opening requires mentor_meet — these have a requires dependency
         # But they're also from different tensions in this graph.
-        # Add a cross-tension requires to test: artifact_discover requires mentor_meet
+        # Add a cross-dilemma requires to test: artifact_discover requires mentor_meet
         graph.add_edge("requires", "beat::artifact_discover", "beat::mentor_meet")
 
         phase3_output = Phase3Output(
-            knots=[
-                KnotProposal(
+            intersections=[
+                IntersectionProposal(
                     beat_ids=["beat::mentor_meet", "beat::artifact_discover"],
                     resolved_location="market",
                     rationale="Requires dependency between these beats",
@@ -775,7 +775,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="mentor_trust_canonical",  # Missing "thread::" prefix
+                thread_id="mentor_trust_canonical",  # Missing "path::" prefix
                 after_beat="beat::opening",
                 before_beat="beat::mentor_meet",
                 summary="Auto-prefixed gap",
@@ -803,10 +803,10 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="thread::nonexistent",
+                thread_id="path::nonexistent",
                 after_beat="beat::opening",
                 before_beat="beat::mentor_meet",
-                summary="Invalid thread",
+                summary="Invalid path",
                 scene_type="sequel",
             ),
         ]
@@ -826,7 +826,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="thread::mentor_trust_canonical",
+                thread_id="path::mentor_trust_canonical",
                 after_beat="beat::mentor_commits_canonical",  # Comes AFTER mentor_meet
                 before_beat="beat::mentor_meet",  # Comes BEFORE commits
                 summary="Wrong order gap",
@@ -849,7 +849,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="thread::mentor_trust_canonical",
+                thread_id="path::mentor_trust_canonical",
                 after_beat="beat::phantom",
                 before_beat="beat::mentor_meet",
                 summary="Phantom after_beat",
@@ -872,7 +872,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="thread::mentor_trust_canonical",
+                thread_id="path::mentor_trust_canonical",
                 after_beat="beat::opening",
                 before_beat="beat::phantom_before",
                 summary="Phantom before_beat",
@@ -886,21 +886,21 @@ class TestValidateAndInsertGaps:
         assert inserted == 0
 
     def test_beat_in_valid_ids_but_not_in_sequence_skipped(self) -> None:
-        """Helper skips gaps where beat is valid but not in the thread's sequence."""
+        """Helper skips gaps where beat is valid but not in the path's sequence."""
         from questfoundry.models.grow import GapProposal
         from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
         graph = make_single_dilemma_graph()
         stage = GrowStage()
 
-        # mentor_commits_alt is a valid beat but belongs to thread::mentor_trust_alt,
-        # not thread::mentor_trust_canonical's sequence
+        # mentor_commits_alt is a valid beat but belongs to path::mentor_trust_alt,
+        # not path::mentor_trust_canonical's sequence
         gaps = [
             GapProposal(
-                thread_id="thread::mentor_trust_canonical",
+                thread_id="path::mentor_trust_canonical",
                 after_beat="beat::opening",
                 before_beat="beat::mentor_commits_alt",
-                summary="Beat not in this thread sequence",
+                summary="Beat not in this path sequence",
                 scene_type="sequel",
             ),
         ]
@@ -920,7 +920,7 @@ class TestValidateAndInsertGaps:
 
         gaps = [
             GapProposal(
-                thread_id="thread::mentor_trust_canonical",
+                thread_id="path::mentor_trust_canonical",
                 after_beat="beat::opening",
                 before_beat=None,
                 summary="Gap after opening only",
@@ -951,7 +951,7 @@ class TestPhase4bNarrativeGaps:
         phase4b_output = Phase4bOutput(
             gaps=[
                 GapProposal(
-                    thread_id="thread::mentor_trust_canonical",
+                    thread_id="path::mentor_trust_canonical",
                     after_beat="beat::mentor_meet",
                     before_beat="beat::mentor_commits_canonical",
                     summary="Hero reflects on mentor's words",
@@ -978,7 +978,7 @@ class TestPhase4bNarrativeGaps:
 
     @pytest.mark.asyncio
     async def test_phase_4b_skips_invalid_thread(self) -> None:
-        """Phase 4b skips gap proposals with invalid thread IDs."""
+        """Phase 4b skips gap proposals with invalid path IDs."""
         from questfoundry.models.grow import GapProposal, Phase4bOutput
         from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
@@ -988,10 +988,10 @@ class TestPhase4bNarrativeGaps:
         phase4b_output = Phase4bOutput(
             gaps=[
                 GapProposal(
-                    thread_id="thread::nonexistent",
+                    thread_id="path::nonexistent",
                     after_beat="beat::opening",
                     before_beat="beat::mentor_meet",
-                    summary="Invalid thread gap",
+                    summary="Invalid path gap",
                     scene_type="sequel",
                 ),
             ]
@@ -1009,7 +1009,7 @@ class TestPhase4bNarrativeGaps:
 
     @pytest.mark.asyncio
     async def test_phase_4b_no_threads(self) -> None:
-        """Phase 4b returns completed when no threads exist."""
+        """Phase 4b returns completed when no paths exist."""
         from questfoundry.graph.graph import Graph
 
         graph = Graph.empty()
@@ -1028,9 +1028,9 @@ class TestPhase4bNarrativeGaps:
         from questfoundry.graph.graph import Graph
 
         graph = Graph.empty()
-        graph.create_node("thread::short", {"type": "thread", "raw_id": "short"})
+        graph.create_node("path::short", {"type": "path", "raw_id": "short"})
         graph.create_node("beat::only", {"type": "beat", "summary": "Lone beat"})
-        graph.add_edge("belongs_to", "beat::only", "thread::short")
+        graph.add_edge("belongs_to", "beat::only", "path::short")
 
         stage = GrowStage()
         mock_model = MagicMock()
@@ -1049,7 +1049,7 @@ class TestPhase4cPacingGaps:
         from questfoundry.models.grow import GapProposal, Phase4bOutput
 
         graph = Graph.empty()
-        graph.create_node("thread::main", {"type": "thread", "raw_id": "main"})
+        graph.create_node("path::main", {"type": "path", "raw_id": "main"})
 
         # Create 3 consecutive scene beats (triggers pacing issue)
         graph.create_node(
@@ -1061,9 +1061,9 @@ class TestPhase4cPacingGaps:
         graph.create_node(
             "beat::b3", {"type": "beat", "summary": "Action 3", "scene_type": "scene"}
         )
-        graph.add_edge("belongs_to", "beat::b1", "thread::main")
-        graph.add_edge("belongs_to", "beat::b2", "thread::main")
-        graph.add_edge("belongs_to", "beat::b3", "thread::main")
+        graph.add_edge("belongs_to", "beat::b1", "path::main")
+        graph.add_edge("belongs_to", "beat::b2", "path::main")
+        graph.add_edge("belongs_to", "beat::b3", "path::main")
         graph.add_edge("requires", "beat::b2", "beat::b1")
         graph.add_edge("requires", "beat::b3", "beat::b2")
 
@@ -1072,7 +1072,7 @@ class TestPhase4cPacingGaps:
         phase4c_output = Phase4bOutput(
             gaps=[
                 GapProposal(
-                    thread_id="thread::main",
+                    thread_id="path::main",
                     after_beat="beat::b1",
                     before_beat="beat::b2",
                     summary="Moment of reflection after first action",
@@ -1098,7 +1098,7 @@ class TestPhase4cPacingGaps:
         from questfoundry.graph.graph import Graph
 
         graph = Graph.empty()
-        graph.create_node("thread::main", {"type": "thread", "raw_id": "main"})
+        graph.create_node("path::main", {"type": "path", "raw_id": "main"})
         # Mix of scene types — no pacing issue
         graph.create_node("beat::b1", {"type": "beat", "summary": "Action", "scene_type": "scene"})
         graph.create_node(
@@ -1107,9 +1107,9 @@ class TestPhase4cPacingGaps:
         graph.create_node(
             "beat::b3", {"type": "beat", "summary": "Transition", "scene_type": "micro_beat"}
         )
-        graph.add_edge("belongs_to", "beat::b1", "thread::main")
-        graph.add_edge("belongs_to", "beat::b2", "thread::main")
-        graph.add_edge("belongs_to", "beat::b3", "thread::main")
+        graph.add_edge("belongs_to", "beat::b1", "path::main")
+        graph.add_edge("belongs_to", "beat::b2", "path::main")
+        graph.add_edge("belongs_to", "beat::b3", "path::main")
         graph.add_edge("requires", "beat::b2", "beat::b1")
         graph.add_edge("requires", "beat::b3", "beat::b2")
 
@@ -1462,7 +1462,7 @@ class TestPhase9Choices:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1"],
+                "paths": ["t1"],
                 "sequence": ["beat::a", "beat::b", "beat::c"],
             },
         )
@@ -1518,7 +1518,7 @@ class TestPhase9Choices:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1_canon"],
+                "paths": ["t1_canon"],
                 "sequence": ["beat::a", "beat::b"],
             },
         )
@@ -1528,7 +1528,7 @@ class TestPhase9Choices:
                 "type": "arc",
                 "raw_id": "branch",
                 "arc_type": "branch",
-                "threads": ["t1_alt"],
+                "paths": ["t1_alt"],
                 "sequence": ["beat::a", "beat::c"],
             },
         )
@@ -1632,7 +1632,7 @@ class TestPhase9Choices:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1"],
+                "paths": ["t1"],
                 "sequence": ["beat::a", "beat::b"],
             },
         )
@@ -1642,7 +1642,7 @@ class TestPhase9Choices:
                 "type": "arc",
                 "raw_id": "branch",
                 "arc_type": "branch",
-                "threads": ["t2"],
+                "paths": ["t2"],
                 "sequence": ["beat::a", "beat::c"],
             },
         )
@@ -1695,7 +1695,7 @@ class TestPhase9Choices:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1"],
+                "paths": ["t1"],
                 "sequence": ["beat::a", "beat::b"],
             },
         )
@@ -1757,7 +1757,7 @@ class TestPhase9Choices:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1_canon"],
+                "paths": ["t1_canon"],
                 "sequence": ["beat::path1_start", "beat::path1_end"],
             },
         )
@@ -1769,7 +1769,7 @@ class TestPhase9Choices:
                 "type": "arc",
                 "raw_id": "branch",
                 "arc_type": "branch",
-                "threads": ["t1_alt"],
+                "paths": ["t1_alt"],
                 "sequence": ["beat::path2_start", "beat::path2_end"],
             },
         )
@@ -2438,8 +2438,8 @@ class TestGrowCheckpoints:
         graph = Graph.empty()
         graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1", "summary": "test"})
 
-        stage._save_checkpoint(graph, tmp_project, "knots")
-        loaded = stage._load_checkpoint(tmp_project, "knots")
+        stage._save_checkpoint(graph, tmp_project, "intersections")
+        loaded = stage._load_checkpoint(tmp_project, "intersections")
 
         assert "beat::b1" in loaded.get_nodes_by_type("beat")
 

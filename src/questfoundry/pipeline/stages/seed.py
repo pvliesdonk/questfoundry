@@ -113,11 +113,14 @@ def _format_dilemma(dilemma_id: str, dilemma_data: dict[str, Any], graph: Graph)
     result += f"  Stakes: {why_it_matters}\n"
     result += "  Answers:\n"
 
-    # Get answers from graph edges (stored as "alternatives" for backward compat)
-    alt_edges = graph.get_edges(from_id=dilemma_id, edge_type="has_alternative")
-    for edge in alt_edges:
-        if (alt_id := edge.get("to")) and (alt_node := graph.get_node(alt_id)):
-            result += _format_alternative(alt_node) + "\n"
+    # Prefer canonical has_answer edges; fall back to legacy has_alternative for older graphs.
+    answer_edges = graph.get_edges(from_id=dilemma_id, edge_type="has_answer")
+    if not answer_edges:
+        answer_edges = graph.get_edges(from_id=dilemma_id, edge_type="has_alternative")
+
+    for edge in answer_edges:
+        if (answer_id := edge.get("to")) and (answer_node := graph.get_node(answer_id)):
+            result += _format_alternative(answer_node) + "\n"
 
     return result
 

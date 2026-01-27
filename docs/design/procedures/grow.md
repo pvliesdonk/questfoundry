@@ -719,7 +719,7 @@ The complete beat graph is unwieldy for humans to navigate. The LLM's job is to 
 - Surface all decision points before asking
 - Rank options where meaningful (canonical-ness, narrative flow)
 - Propose default choices (human can accept without deep analysis)
-- Explain trade-offs briefly ("merging these saves 2 beats but reduces tension buildup")
+- Explain trade-offs briefly ("merging these saves 2 beats but reduces dilemma buildup")
 
 **Human should not need to:**
 - Manually scan the graph for opportunities
@@ -762,6 +762,6 @@ GROW is 11 phases (Phases 4 and 8 have sub-phases):
 ---
 
 **Terminology Note:** This document uses the v5 terminology:
-- **dilemma** (not tension): Binary dramatic questions
-- **path** (not thread): Routes exploring specific answers to dilemmas
-- **intersection** (not knot): Beats serving multiple paths
+- **dilemma** (not dilemma): Binary dramatic questions
+- **path** (not path): Routes exploring specific answers to dilemmas
+- **intersection** (not intersection): Beats serving multiple paths

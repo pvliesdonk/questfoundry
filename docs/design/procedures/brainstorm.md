@@ -389,7 +389,7 @@ dream:
 
 **Human:** "I like that. What draws them in?"
 
-**LLM:** "Perhaps a mentor figure—someone who seems trustworthy but might have their own agenda. The classic 'is this person protecting me or using me?' tension."
+**LLM:** "Perhaps a mentor figure—someone who seems trustworthy but might have their own agenda. The classic 'is this person protecting me or using me?' dilemma."
 
 **Human:** "Yes. And the archive itself should feel alive, dangerous. Layered."
 

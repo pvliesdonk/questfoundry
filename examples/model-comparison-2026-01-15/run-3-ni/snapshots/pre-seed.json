@@ -305,116 +305,116 @@
       "notes": "Motives may intersect with murder",
       "disposition": "proposed"
     },
-    "tension::t1": {
-      "type": "tension",
+    "dilemma::t1": {
+      "type": "dilemma",
       "raw_id": "t1",
       "question": "Is the red locket a token of justice or a relic of vengeance?",
       "central_entity_ids": [],
       "why_it_matters": "Determines whether the story ends with legal retribution or personal revenge, framing the moral arc."
     },
-    "tension::t1::alt::justice": {
-      "type": "alternative",
+    "dilemma::t1::alt::justice": {
+      "type": "answer",
       "raw_id": "justice",
       "description": "The locket contains a confession that absolves the heir.",
       "is_default_path": true
     },
-    "tension::t1::alt::vengeance": {
-      "type": "alternative",
+    "dilemma::t1::alt::vengeance": {
+      "type": "answer",
       "raw_id": "vengeance",
       "description": "The locket holds a curse that fuels Lady Eleanor's desire for revenge.",
       "is_default_path": false
     },
-    "tension::t2": {
-      "type": "tension",
+    "dilemma::t2": {
+      "type": "dilemma",
       "raw_id": "t2",
       "question": "Can the velvet rope be a tool of class enforcement or a cover for clandestine activity?",
       "central_entity_ids": [],
       "why_it_matters": "Shifts the narrative from rigid social order to a hidden underworld, affecting how secrets are kept."
     },
-    "tension::t2::alt::class_enforcement": {
-      "type": "alternative",
+    "dilemma::t2::alt::class_enforcement": {
+      "type": "answer",
       "raw_id": "class_enforcement",
       "description": "The rope marks a restricted wing, enforcing class boundaries.",
       "is_default_path": true
     },
-    "tension::t2::alt::clandestine_activity": {
-      "type": "alternative",
+    "dilemma::t2::alt::clandestine_activity": {
+      "type": "answer",
       "raw_id": "clandestine_activity",
       "description": "The rope marks a hidden entrance used for secret dealings.",
       "is_default_path": false
     },
-    "tension::t3": {
-      "type": "tension",
+    "dilemma::t3": {
+      "type": "dilemma",
       "raw_id": "t3",
       "question": "Is the antique mirror a window to truth or a trickster\u2019s trap?",
       "central_entity_ids": [],
       "why_it_matters": "Dictates whether the detective relies on visual evidence or must dig deeper, altering investigative pacing."
     },
-    "tension::t3::alt::window_to_truth": {
-      "type": "alternative",
+    "dilemma::t3::alt::window_to_truth": {
+      "type": "answer",
       "raw_id": "window_to_truth",
       "description": "The mirror reveals the murderer\u2019s reflection.",
       "is_default_path": true
     },
-    "tension::t3::alt::trickster_trap": {
-      "type": "alternative",
+    "dilemma::t3::alt::trickster_trap": {
+      "type": "answer",
       "raw_id": "trickster_trap",
       "description": "The mirror distorts reality, leading the detective astray.",
       "is_default_path": false
     },
-    "tension::t4": {
-      "type": "tension",
+    "dilemma::t4": {
+      "type": "dilemma",
       "raw_id": "t4",
       "question": "Will the grandfather clock\u2019s final tick reveal the murderer or trap the family in time?",
       "central_entity_ids": [],
       "why_it_matters": "Timing is a motif; the clock\u2019s outcome decides whether the family faces justice or is frozen in denial."
     },
-    "tension::t4::alt::reveal_murderer": {
-      "type": "alternative",
+    "dilemma::t4::alt::reveal_murderer": {
+      "type": "answer",
       "raw_id": "reveal_murderer",
       "description": "The clock\u2019s chime triggers a hidden mechanism that displays a confession.",
       "is_default_path": true
     },
-    "tension::t4::alt::trap_family": {
-      "type": "alternative",
+    "dilemma::t4::alt::trap_family": {
+      "type": "answer",
       "raw_id": "trap_family",
       "description": "The clock\u2019s final tick locks the family in a temporal loop, preventing justice.",
       "is_default_path": false
     },
-    "tension::t5": {
-      "type": "tension",
+    "dilemma::t5": {
+      "type": "dilemma",
       "raw_id": "t5",
       "question": "Does the secret passage lead to redemption or to a deeper crime?",
       "central_entity_ids": [],
       "why_it_matters": "Expands the mystery\u2019s scope, turning a single murder into a legacy of crimes, heightening stakes."
     },
-    "tension::t5::alt::redemption": {
-      "type": "alternative",
+    "dilemma::t5::alt::redemption": {
+      "type": "answer",
       "raw_id": "redemption",
       "description": "The passage leads to evidence that clears the family.",
       "is_default_path": true
     },
-    "tension::t5::alt::deeper_crime": {
-      "type": "alternative",
+    "dilemma::t5::alt::deeper_crime": {
+      "type": "answer",
       "raw_id": "deeper_crime",
       "description": "The passage leads to the hidden safe containing evidence of a prior murder.",
       "is_default_path": false
     },
-    "tension::t6": {
-      "type": "tension",
+    "dilemma::t6": {
+      "type": "dilemma",
       "raw_id": "t6",
       "question": "Is the hidden safe a vault of truth or a trap for the inquisitive?",
       "central_entity_ids": [],
       "why_it_matters": "The safe\u2019s contents either close the case or open a new conspiracy, directly impacting the narrative\u2019s resolution."
     },
-    "tension::t6::alt::vault_of_truth": {
-      "type": "alternative",
+    "dilemma::t6::alt::vault_of_truth": {
+      "type": "answer",
       "raw_id": "vault_of_truth",
       "description": "The safe contains the original murder evidence.",
       "is_default_path": true
     },
-    "tension::t6::alt::trap_inquisitive": {
-      "type": "alternative",
+    "dilemma::t6::alt::trap_inquisitive": {
+      "type": "answer",
       "raw_id": "trap_inquisitive",
       "description": "The safe is a booby\u2011trap that destroys any evidence.",
       "is_default_path": false
@@ -422,64 +422,64 @@
   },
   "edges": [
     {
-      "type": "has_alternative",
-      "from": "tension::t1",
-      "to": "tension::t1::alt::justice"
+      "type": "has_answer",
+      "from": "dilemma::t1",
+      "to": "dilemma::t1::alt::justice"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t1",
-      "to": "tension::t1::alt::vengeance"
+      "type": "has_answer",
+      "from": "dilemma::t1",
+      "to": "dilemma::t1::alt::vengeance"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t2",
-      "to": "tension::t2::alt::class_enforcement"
+      "type": "has_answer",
+      "from": "dilemma::t2",
+      "to": "dilemma::t2::alt::class_enforcement"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t2",
-      "to": "tension::t2::alt::clandestine_activity"
+      "type": "has_answer",
+      "from": "dilemma::t2",
+      "to": "dilemma::t2::alt::clandestine_activity"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t3",
-      "to": "tension::t3::alt::window_to_truth"
+      "type": "has_answer",
+      "from": "dilemma::t3",
+      "to": "dilemma::t3::alt::window_to_truth"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t3",
-      "to": "tension::t3::alt::trickster_trap"
+      "type": "has_answer",
+      "from": "dilemma::t3",
+      "to": "dilemma::t3::alt::trickster_trap"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t4",
-      "to": "tension::t4::alt::reveal_murderer"
+      "type": "has_answer",
+      "from": "dilemma::t4",
+      "to": "dilemma::t4::alt::reveal_murderer"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t4",
-      "to": "tension::t4::alt::trap_family"
+      "type": "has_answer",
+      "from": "dilemma::t4",
+      "to": "dilemma::t4::alt::trap_family"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t5",
-      "to": "tension::t5::alt::redemption"
+      "type": "has_answer",
+      "from": "dilemma::t5",
+      "to": "dilemma::t5::alt::redemption"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t5",
-      "to": "tension::t5::alt::deeper_crime"
+      "type": "has_answer",
+      "from": "dilemma::t5",
+      "to": "dilemma::t5::alt::deeper_crime"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t6",
-      "to": "tension::t6::alt::vault_of_truth"
+      "type": "has_answer",
+      "from": "dilemma::t6",
+      "to": "dilemma::t6::alt::vault_of_truth"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::t6",
-      "to": "tension::t6::alt::trap_inquisitive"
+      "type": "has_answer",
+      "from": "dilemma::t6",
+      "to": "dilemma::t6::alt::trap_inquisitive"
     }
   ]
 }

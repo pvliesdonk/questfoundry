@@ -136,7 +136,7 @@ entities:
     concept: Underground cabal rumored to manipulate class boundaries
     notes: Motives may intersect with murder
 tensions:
-  - tension_id: t1
+  - dilemma_id: t1
     question: Is the red locket a token of justice or a relic of vengeance?
     alternatives:
       - alternative_id: justice
@@ -149,7 +149,7 @@ tensions:
     central_entity_ids: []
     why_it_matters: Determines whether the story ends with legal retribution or
       personal revenge, framing the moral arc.
-  - tension_id: t2
+  - dilemma_id: t2
     question: Can the velvet rope be a tool of class enforcement or a cover for
       clandestine activity?
     alternatives:
@@ -163,7 +163,7 @@ tensions:
     central_entity_ids: []
     why_it_matters: Shifts the narrative from rigid social order to a hidden
       underworld, affecting how secrets are kept.
-  - tension_id: t3
+  - dilemma_id: t3
     question: Is the antique mirror a window to truth or a trickster’s trap?
     alternatives:
       - alternative_id: window_to_truth
@@ -175,7 +175,7 @@ tensions:
     central_entity_ids: []
     why_it_matters: Dictates whether the detective relies on visual evidence or
       must dig deeper, altering investigative pacing.
-  - tension_id: t4
+  - dilemma_id: t4
     question: Will the grandfather clock’s final tick reveal the murderer or
       trap the family in time?
     alternatives:
@@ -190,7 +190,7 @@ tensions:
     central_entity_ids: []
     why_it_matters: Timing is a motif; the clock’s outcome decides whether the
       family faces justice or is frozen in denial.
-  - tension_id: t5
+  - dilemma_id: t5
     question: Does the secret passage lead to redemption or to a deeper crime?
     alternatives:
       - alternative_id: redemption
@@ -203,7 +203,7 @@ tensions:
     central_entity_ids: []
     why_it_matters: Expands the mystery’s scope, turning a single murder into a
       legacy of crimes, heightening stakes.
-  - tension_id: t6
+  - dilemma_id: t6
     question: Is the hidden safe a vault of truth or a trap for the inquisitive?
     alternatives:
       - alternative_id: vault_of_truth

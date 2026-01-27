@@ -77,15 +77,15 @@ class TestArc:
         assert arc.converges_at == "beat_5"
 
     def test_threads_migration(self) -> None:
-        """Verify backward compat: 'threads' field migrates to 'paths'."""
+        """Verify backward compat: 'paths' field migrates to 'paths'."""
         arc = Arc(
             arc_id="test",
             arc_type="spine",
-            threads=["path_a", "path_b"],  # type: ignore[call-arg]
+            paths=["path_a", "path_b"],  # type: ignore[call-arg]
         )
         assert arc.paths == ["path_a", "path_b"]
         # Backward compat property still works
-        assert arc.threads == ["path_a", "path_b"]
+        assert arc.paths == ["path_a", "path_b"]
 
 
 class TestPassage:

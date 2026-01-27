@@ -77,30 +77,30 @@ class TestFormatValidIdsContext:
         """SEED context lists dilemmas with their answers."""
         graph = Graph.empty()
         graph.create_node(
-            "tension::trust",
+            "dilemma::trust",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "trust",
             },
         )
         graph.create_node(
-            "tension::trust::alt::yes",
+            "dilemma::trust::alt::yes",
             {
-                "type": "alternative",
+                "type": "answer",
                 "raw_id": "yes",
                 "is_default_path": True,
             },
         )
         graph.create_node(
-            "tension::trust::alt::no",
+            "dilemma::trust::alt::no",
             {
-                "type": "alternative",
+                "type": "answer",
                 "raw_id": "no",
                 "is_default_path": False,
             },
         )
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::no")
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::no")
 
         result = format_valid_ids_context(graph, "seed")
 
@@ -220,23 +220,23 @@ class TestFormatValidIdsContext:
             },
         )
 
-        # Add dilemma with answers (graph still uses "tension" type)
+        # Add dilemma with answers (graph still uses "dilemma" type)
         graph.create_node(
-            "tension::quest",
+            "dilemma::quest",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "quest",
             },
         )
         graph.create_node(
-            "tension::quest::alt::accept",
+            "dilemma::quest::alt::accept",
             {
-                "type": "alternative",
+                "type": "answer",
                 "raw_id": "accept",
                 "is_default_path": True,
             },
         )
-        graph.add_edge("has_alternative", "tension::quest", "tension::quest::alt::accept")
+        graph.add_edge("has_answer", "dilemma::quest", "dilemma::quest::alt::accept")
 
         result = format_valid_ids_context(graph, "seed")
 
@@ -403,16 +403,16 @@ class TestGetExpectedCounts:
         """Only dilemmas with raw_id are counted."""
         graph = Graph.empty()
         graph.create_node(
-            "tension::trust",
+            "dilemma::trust",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "trust",
             },
         )
         graph.create_node(
-            "tension::invalid",
+            "dilemma::invalid",
             {
-                "type": "tension",
+                "type": "dilemma",
                 # Missing raw_id
             },
         )
@@ -446,9 +446,9 @@ class TestManifestCounts:
         graph = Graph.empty()
         for i in range(2):
             graph.create_node(
-                f"tension::t{i}",
+                f"dilemma::t{i}",
                 {
-                    "type": "tension",
+                    "type": "dilemma",
                     "raw_id": f"dilemma_{i}",
                 },
             )
@@ -487,8 +487,8 @@ class TestManifestCounts:
             {"type": "entity", "raw_id": "hero", "entity_type": "character"},
         )
         graph.create_node(
-            "tension::trust",
-            {"type": "tension", "raw_id": "trust"},
+            "dilemma::trust",
+            {"type": "dilemma", "raw_id": "trust"},
         )
 
         result = format_valid_ids_context(graph, "seed")
@@ -539,16 +539,16 @@ class TestFormatSummarizeManifest:
         """Dilemmas are formatted as simple bullet list."""
         graph = Graph.empty()
         graph.create_node(
-            "tension::trust",
+            "dilemma::trust",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "trust",
             },
         )
         graph.create_node(
-            "tension::loyalty",
+            "dilemma::loyalty",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "loyalty",
             },
         )
@@ -587,16 +587,16 @@ class TestFormatSummarizeManifest:
         """Dilemmas without raw_id are excluded."""
         graph = Graph.empty()
         graph.create_node(
-            "tension::valid",
+            "dilemma::valid",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "valid",
             },
         )
         graph.create_node(
-            "tension::invalid",
+            "dilemma::invalid",
             {
-                "type": "tension",
+                "type": "dilemma",
                 # Missing raw_id
             },
         )
@@ -628,12 +628,12 @@ class TestFormatSummarizeManifest:
         """Dilemmas are sorted by node ID for deterministic output."""
         graph = Graph.empty()
         graph.create_node(
-            "tension::zebra",
-            {"type": "tension", "raw_id": "zebra"},
+            "dilemma::zebra",
+            {"type": "dilemma", "raw_id": "zebra"},
         )
         graph.create_node(
-            "tension::alpha",
-            {"type": "tension", "raw_id": "alpha"},
+            "dilemma::alpha",
+            {"type": "dilemma", "raw_id": "alpha"},
         )
 
         result = format_summarize_manifest(graph)
@@ -960,15 +960,15 @@ class TestParseScopedId:
         assert raw_id == "hero"
 
     def test_parses_tension_scoped_id(self) -> None:
-        """Tension scoped ID is correctly parsed."""
-        scope, raw_id = parse_scoped_id("tension::trust_betrayal")
-        assert scope == "tension"
+        """Dilemma scoped ID is correctly parsed."""
+        scope, raw_id = parse_scoped_id("dilemma::trust_betrayal")
+        assert scope == "dilemma"
         assert raw_id == "trust_betrayal"
 
     def test_parses_thread_scoped_id(self) -> None:
         """Thread scoped ID is correctly parsed."""
-        scope, raw_id = parse_scoped_id("thread::host_motive")
-        assert scope == "thread"
+        scope, raw_id = parse_scoped_id("path::host_motive")
+        assert scope == "path"
         assert raw_id == "host_motive"
 
     def test_returns_empty_scope_for_unscoped_id(self) -> None:
@@ -1011,13 +1011,13 @@ class TestStripScopePrefix:
         assert result == "hero"
 
     def test_strips_tension_prefix(self) -> None:
-        """Tension prefix is stripped correctly."""
-        result = strip_scope_prefix("tension::trust_betrayal")
+        """Dilemma prefix is stripped correctly."""
+        result = strip_scope_prefix("dilemma::trust_betrayal")
         assert result == "trust_betrayal"
 
     def test_strips_thread_prefix(self) -> None:
         """Thread prefix is stripped correctly."""
-        result = strip_scope_prefix("thread::host_motive")
+        result = strip_scope_prefix("path::host_motive")
         assert result == "host_motive"
 
     def test_returns_unscoped_id_unchanged(self) -> None:
@@ -1045,14 +1045,14 @@ class TestFormatScopedId:
         assert result == "entity::hero"
 
     def test_formats_tension_scoped_id(self) -> None:
-        """Tension ID is correctly formatted with scope."""
-        result = format_scoped_id("tension", "trust_betrayal")
-        assert result == "tension::trust_betrayal"
+        """Dilemma ID is correctly formatted with scope."""
+        result = format_scoped_id("dilemma", "trust_betrayal")
+        assert result == "dilemma::trust_betrayal"
 
     def test_formats_thread_scoped_id(self) -> None:
         """Thread ID is correctly formatted with scope."""
-        result = format_scoped_id("thread", "host_motive")
-        assert result == "thread::host_motive"
+        result = format_scoped_id("path", "host_motive")
+        assert result == "path::host_motive"
 
     def test_roundtrip_scoped_id(self) -> None:
         """Formatted scoped ID can be parsed back correctly."""

@@ -379,7 +379,7 @@ class Graph:
         """Add an edge between two nodes. Validates endpoints exist by default.
 
         Args:
-            edge_type: Type of edge (e.g., "choice", "has_alternative").
+            edge_type: Type of edge (e.g., "choice", "has_answer").
             from_id: Source node ID.
             to_id: Target node ID.
             validate: If True (default), validates both endpoints exist.

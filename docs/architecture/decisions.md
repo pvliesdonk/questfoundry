@@ -388,7 +388,7 @@ Multiple earlier PRs (#188-#201) attempted to fix symptoms (phantom IDs, missing
 Implement **manifest-first architecture** with three gates:
 
 1. **Gate 1 (Summarize):** Manifest-aware
-   - Prompt includes explicit list of ALL entity/tension IDs
+   - Prompt includes explicit list of ALL entity/dilemma IDs
    - Summarize must include decisions for each ID
    - Tool call preservation ensures research context is visible
 

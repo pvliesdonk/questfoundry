@@ -12,7 +12,7 @@ entities:
     concept: A stoic, silent figure who manages all operations of the house.
     notes: Wears a dark suit, carries a silver cane. Observes everything with
       quiet intensity. Silence is a form of power; actions are precise and
-      mechanical. Tension over whether they are loyal or a silent observer with
+      mechanical. Dilemma over whether they are loyal or a silent observer with
       hidden purpose.
     disposition: retained
   - entity_id: the_viscount
@@ -164,50 +164,50 @@ entities:
       institutional control—knowledge is power and is tightly guarded.
     disposition: cut
 tensions:
-  - tension_id: can_butler_be_trusted
+  - dilemma_id: can_butler_be_trusted
     explored:
       - trusted
     implicit:
       - untrusted
-  - tension_id: did_caretaker_witness_incident
+  - dilemma_id: did_caretaker_witness_incident
     explored:
       - did_not_witness
     implicit:
       - witnessed
-  - tension_id: did_young_mistress_notice_false_alibi
+  - dilemma_id: did_young_mistress_notice_false_alibi
     explored:
       - did_not_notice
     implicit:
       - noticed
-  - tension_id: garden_sanctuary_or_trap
+  - dilemma_id: garden_sanctuary_or_trap
     explored:
       - sanctuary
     implicit:
       - trap
-  - tension_id: golden_key_real_clue_or_red_herring
+  - dilemma_id: golden_key_real_clue_or_red_herring
     explored:
       - real_clue
     implicit:
       - red_herring
-  - tension_id: host_benevolent_or_self_serving
+  - dilemma_id: host_benevolent_or_self_serving
     explored:
       - benevolent
     implicit:
       - self_serving
-  - tension_id: library_knowledge_salvation_or_corruption
+  - dilemma_id: library_knowledge_salvation_or_corruption
     explored:
       - salvation
     implicit:
       - corruption
-  - tension_id: tea_ritual_tradition_or_trap
+  - dilemma_id: tea_ritual_tradition_or_trap
     explored:
       - tradition
     implicit:
       - trap
-threads:
+paths:
   - thread_id: host_motive
     name: The Host’s Benevolence
-    tension_id: host_benevolent_or_self_serving
+    dilemma_id: host_benevolent_or_self_serving
     alternative_id: self_serving
     unexplored_alternative_ids: []
     thread_importance: major
@@ -217,7 +217,7 @@ threads:
       - consequence_host_self_serving
   - thread_id: library_knowledge
     name: The Diary’s Truth
-    tension_id: library_knowledge_salvation_or_corruption
+    dilemma_id: library_knowledge_salvation_or_corruption
     alternative_id: corruption
     unexplored_alternative_ids: []
     thread_importance: major
@@ -227,7 +227,7 @@ threads:
       - consequence_diary_corruption
   - thread_id: garden_nature
     name: The Garden’s Sanctuary
-    tension_id: garden_sanctuary_or_trap
+    dilemma_id: garden_sanctuary_or_trap
     alternative_id: sanctuary
     unexplored_alternative_ids: []
     thread_importance: major
@@ -236,7 +236,7 @@ threads:
       - consequence_garden_sanctuary
   - thread_id: butler_loyalty
     name: The Butler’s Silence
-    tension_id: can_butler_be_trusted
+    dilemma_id: can_butler_be_trusted
     alternative_id: untrusted
     unexplored_alternative_ids: []
     thread_importance: major
@@ -253,7 +253,7 @@ consequences:
     narrative_effects:
       - Establishes the host as morally ambiguous
       - Shifts the story from a social puzzle to a power struggle
-      - Creates tension between appearance and reality
+      - Creates dilemma between appearance and reality
   - consequence_id: library_knowledge_salvation_to_corruption
     thread_id: library_knowledge
     description: The diary reveals a hidden truth about a past fire, which
@@ -303,7 +303,7 @@ consequences:
     narrative_effects:
       - Implies the butler is aware of the host's deception
       - Creates a sense of silent surveillance
-      - Builds tension around the butler's role in the estate
+      - Builds dilemma around the butler's role in the estate
   - consequence_id: garden_curtain_swings_in_wind
     thread_id: garden_nature
     description: The young mistress sees the curtain in the garden swing in the
@@ -316,10 +316,10 @@ initial_beats:
   - beat_id: '1.1'
     summary: The host invites a new guest to tea. The tea ritual is altered—tea
       is poured from a different height.
-    threads:
+    paths:
       - host_motive
-    tension_impacts:
-      - tension_id: host_benevolent_or_self_serving
+    dilemma_impacts:
+      - dilemma_id: host_benevolent_or_self_serving
         effect: advances
         note: Shows the ritual is not fixed, indicating the host has control
           over tradition, suggesting self-serving motives.
@@ -333,14 +333,14 @@ initial_beats:
   - beat_id: '1.2'
     summary: The young mistress notices the chipped cup is missing from the tea
       set.
-    threads:
+    paths:
       - host_motive
-    tension_impacts:
-      - tension_id: can_butler_be_trusted
+    dilemma_impacts:
+      - dilemma_id: can_butler_be_trusted
         effect: advances
         note: Reveals an inconsistency in the tea ritual, setting up a false
           alibi and suggesting the butler may have altered the scene.
-      - tension_id: did_young_mistress_notice_false_alibi
+      - dilemma_id: did_young_mistress_notice_false_alibi
         effect: reveals
         note: The young mistress observes the anomaly, confirming her sharp
           observational skills and establishing her role as a key narrator.
@@ -352,11 +352,11 @@ initial_beats:
       - the_garden
   - beat_id: '1.3'
     summary: The butler silently repositions the tea set after the guest leaves.
-    threads:
+    paths:
       - host_motive
       - butler_loyalty
-    tension_impacts:
-      - tension_id: can_butler_be_trusted
+    dilemma_impacts:
+      - dilemma_id: can_butler_be_trusted
         effect: complicates
         note: The butler's action suggests awareness of the ritual's
           manipulation, raising doubt about their loyalty and intentions.
@@ -369,10 +369,10 @@ initial_beats:
   - beat_id: '1.4'
     summary: 'The host comments: ‘Tradition is not about rules—it’s about what we
       choose to preserve.’'
-    threads:
+    paths:
       - host_motive
-    tension_impacts:
-      - tension_id: host_benevolent_or_self_serving
+    dilemma_impacts:
+      - dilemma_id: host_benevolent_or_self_serving
         effect: commits
         note: The host’s words reveal a self-serving motive—preserving control
           over the estate, not tradition or benevolence.
@@ -383,10 +383,10 @@ initial_beats:
       - the_garden
   - beat_id: '2.1'
     summary: 'The young mistress finds a note in the library: ‘Do not open the diary.’'
-    threads:
+    paths:
       - library_knowledge
-    tension_impacts:
-      - tension_id: library_knowledge_salvation_or_corruption
+    dilemma_impacts:
+      - dilemma_id: library_knowledge_salvation_or_corruption
         effect: advances
         note: Introduces the diary as a forbidden object, setting up the
           possibility of dangerous truths being hidden.
@@ -400,10 +400,10 @@ initial_beats:
   - beat_id: '2.2'
     summary: The mirror in the library shows a distorted version of the
       room—like a memory.
-    threads:
+    paths:
       - library_knowledge
-    tension_impacts:
-      - tension_id: library_knowledge_salvation_or_corruption
+    dilemma_impacts:
+      - dilemma_id: library_knowledge_salvation_or_corruption
         effect: reveals
         note: Suggests the diary contains fragmented truths, implying the
           knowledge is corrupted or distorted.
@@ -414,15 +414,15 @@ initial_beats:
       - the_garden
   - beat_id: '2.3'
     summary: The caretaker recalls seeing a man in the west wing at night.
-    threads:
+    paths:
       - library_knowledge
       - garden_nature
-    tension_impacts:
-      - tension_id: did_caretaker_witness_incident
+    dilemma_impacts:
+      - dilemma_id: did_caretaker_witness_incident
         effect: complicates
         note: Introduces a timeline gap and suggests the incident occurred,
           raising questions about what happened in the west wing.
-      - tension_id: garden_sanctuary_or_trap
+      - dilemma_id: garden_sanctuary_or_trap
         effect: complicates
         note: The west wing is linked to the garden, suggesting danger may be
           present there.
@@ -435,10 +435,10 @@ initial_beats:
   - beat_id: '2.4'
     summary: 'The diary reveals the incident: a fire that killed a guest. The host
       was present.'
-    threads:
+    paths:
       - library_knowledge
-    tension_impacts:
-      - tension_id: library_knowledge_salvation_or_corruption
+    dilemma_impacts:
+      - dilemma_id: library_knowledge_salvation_or_corruption
         effect: commits
         note: The diary contains a dangerous truth—corruption—showing the host
           covered up a fatal incident.
@@ -451,10 +451,10 @@ initial_beats:
   - beat_id: '3.1'
     summary: The young mistress sees the curtain in the garden swing in the
       wind.
-    threads:
+    paths:
       - garden_nature
-    tension_impacts:
-      - tension_id: garden_sanctuary_or_trap
+    dilemma_impacts:
+      - dilemma_id: garden_sanctuary_or_trap
         effect: advances
         note: Introduces the garden as a place of active movement, suggesting
           hidden actions or life within it.
@@ -467,10 +467,10 @@ initial_beats:
       - the_kitchen
   - beat_id: '3.2'
     summary: The lady of the garden prunes a rose that has no bloom.
-    threads:
+    paths:
       - garden_nature
-    tension_impacts:
-      - tension_id: garden_sanctuary_or_trap
+    dilemma_impacts:
+      - dilemma_id: garden_sanctuary_or_trap
         effect: reveals
         note: Suggests the garden is alive and aware, implying it may be a
           living space of memory or danger.
@@ -482,10 +482,10 @@ initial_beats:
       - the_library
   - beat_id: '3.3'
     summary: 'The caretaker says: ‘I saw a shadow in the garden at night—like a man.’'
-    threads:
+    paths:
       - garden_nature
-    tension_impacts:
-      - tension_id: garden_sanctuary_or_trap
+    dilemma_impacts:
+      - dilemma_id: garden_sanctuary_or_trap
         effect: complicates
         note: Introduces a physical threat in the garden, suggesting it may be a
           trap hiding danger.
@@ -498,16 +498,16 @@ initial_beats:
   - beat_id: '3.4'
     summary: Pulling the curtain reveals a hidden compartment with a silver
       candlestick.
-    threads:
+    paths:
       - garden_nature
       - library_knowledge
-    tension_impacts:
-      - tension_id: garden_sanctuary_or_trap
+    dilemma_impacts:
+      - dilemma_id: garden_sanctuary_or_trap
         effect: commits
         note: The garden is revealed as a sanctuary—its hidden compartment
           contains a physical link to the past, confirming its role as a place
           of preservation.
-      - tension_id: library_knowledge_salvation_or_corruption
+      - dilemma_id: library_knowledge_salvation_or_corruption
         effect: complicates
         note: The silver candlestick is a physical artifact tied to the past,
           suggesting the knowledge is preserved, not corrupted.
@@ -519,10 +519,10 @@ initial_beats:
       - the_west_wing
   - beat_id: '4.1'
     summary: The butler serves tea with perfect timing—every second is correct.
-    threads:
+    paths:
       - butler_loyalty
-    tension_impacts:
-      - tension_id: can_butler_be_trusted
+    dilemma_impacts:
+      - dilemma_id: can_butler_be_trusted
         effect: advances
         note: Demonstrates the butler’s precision and control, suggesting deep
           understanding of the ritual and possibly its manipulation.
@@ -534,10 +534,10 @@ initial_beats:
       - the_garden
   - beat_id: '4.2'
     summary: The young mistress notices the butler never speaks to the guests.
-    threads:
+    paths:
       - butler_loyalty
-    tension_impacts:
-      - tension_id: can_butler_be_trusted
+    dilemma_impacts:
+      - dilemma_id: can_butler_be_trusted
         effect: advances
         note: Highlights the butler’s silence as a form of power, raising
           suspicion about their true intentions.
@@ -550,10 +550,10 @@ initial_beats:
   - beat_id: '4.3'
     summary: The butler removes a tea cup from the set and places it in a
       drawer.
-    threads:
+    paths:
       - butler_loyalty
-    tension_impacts:
-      - tension_id: can_butler_be_trusted
+    dilemma_impacts:
+      - dilemma_id: can_butler_be_trusted
         effect: complicates
         note: Suggests the butler is hiding evidence, challenging the idea of
           their loyalty and creating suspense.
@@ -565,10 +565,10 @@ initial_beats:
       - the_west_wing
   - beat_id: '4.4'
     summary: 'The host says: ‘He is not a servant. He is a guardian.’'
-    threads:
+    paths:
       - butler_loyalty
-    tension_impacts:
-      - tension_id: can_butler_be_trusted
+    dilemma_impacts:
+      - dilemma_id: can_butler_be_trusted
         effect: commits
         note: The host defends the butler, implying loyalty and a protective
           role, but the action is ambiguous—leaving room for doubt.

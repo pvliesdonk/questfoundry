@@ -29,7 +29,7 @@
         "slightly eerie",
         "1940s English country house",
         "tea parties",
-        "subtle tension",
+        "subtle dilemma",
         "social intrigue"
       ],
       "themes": [
@@ -58,7 +58,7 @@
       "raw_id": "the_butler",
       "entity_type": "character",
       "concept": "A stoic, silent figure who manages all operations of the house.",
-      "notes": "Wears a dark suit, carries a silver cane. Observes everything with quiet intensity. Silence is a form of power; actions are precise and mechanical. Tension over whether they are loyal or a silent observer with hidden purpose.",
+      "notes": "Wears a dark suit, carries a silver cane. Observes everything with quiet intensity. Silence is a form of power; actions are precise and mechanical. Dilemma over whether they are loyal or a silent observer with hidden purpose.",
       "disposition": "retained"
     },
     "entity::the_viscount": {
@@ -237,8 +237,8 @@
       "notes": "Enforce strict rules about access and silence. Create sense of institutional control\u2014knowledge is power and is tightly guarded.",
       "disposition": "cut"
     },
-    "tension::host_benevolent_or_self_serving": {
-      "type": "tension",
+    "dilemma::host_benevolent_or_self_serving": {
+      "type": "dilemma",
       "raw_id": "host_benevolent_or_self_serving",
       "question": "Is the host benevolent or self-serving?",
       "central_entity_ids": [
@@ -252,20 +252,20 @@
         "self_serving"
       ]
     },
-    "tension::host_benevolent_or_self_serving::alt::benevolent": {
-      "type": "alternative",
+    "dilemma::host_benevolent_or_self_serving::alt::benevolent": {
+      "type": "answer",
       "raw_id": "benevolent",
       "description": "The host is benevolent. Their actions are consistent with social grace and tradition.",
       "is_default_path": true
     },
-    "tension::host_benevolent_or_self_serving::alt::self_serving": {
-      "type": "alternative",
+    "dilemma::host_benevolent_or_self_serving::alt::self_serving": {
+      "type": "answer",
       "raw_id": "self_serving",
       "description": "The host is self-serving. Their actions\u2014such as altering tea rituals and selecting guests\u2014mask a deeper motive of power or control.",
       "is_default_path": false
     },
-    "tension::library_knowledge_salvation_or_corruption": {
-      "type": "tension",
+    "dilemma::library_knowledge_salvation_or_corruption": {
+      "type": "dilemma",
       "raw_id": "library_knowledge_salvation_or_corruption",
       "question": "Is the library\u2019s knowledge salvation or corruption?",
       "central_entity_ids": [
@@ -280,20 +280,20 @@
         "corruption"
       ]
     },
-    "tension::library_knowledge_salvation_or_corruption::alt::salvation": {
-      "type": "alternative",
+    "dilemma::library_knowledge_salvation_or_corruption::alt::salvation": {
+      "type": "answer",
       "raw_id": "salvation",
       "description": "The knowledge is salvation. The diary reveals a truth that resolves the mystery without violence.",
       "is_default_path": true
     },
-    "tension::library_knowledge_salvation_or_corruption::alt::corruption": {
-      "type": "alternative",
+    "dilemma::library_knowledge_salvation_or_corruption::alt::corruption": {
+      "type": "answer",
       "raw_id": "corruption",
       "description": "The knowledge is corruption. It may have been used to manipulate the guests, unraveling the estate\u2019s foundation.",
       "is_default_path": false
     },
-    "tension::garden_sanctuary_or_trap": {
-      "type": "tension",
+    "dilemma::garden_sanctuary_or_trap": {
+      "type": "dilemma",
       "raw_id": "garden_sanctuary_or_trap",
       "question": "Is the garden a sanctuary or a trap?",
       "central_entity_ids": [
@@ -309,20 +309,20 @@
         "trap"
       ]
     },
-    "tension::garden_sanctuary_or_trap::alt::sanctuary": {
-      "type": "alternative",
+    "dilemma::garden_sanctuary_or_trap::alt::sanctuary": {
+      "type": "answer",
       "raw_id": "sanctuary",
       "description": "The garden is a sanctuary. It offers refuge and truth, with the curtain revealing a safe space where the truth is shared.",
       "is_default_path": true
     },
-    "tension::garden_sanctuary_or_trap::alt::trap": {
-      "type": "alternative",
+    "dilemma::garden_sanctuary_or_trap::alt::trap": {
+      "type": "answer",
       "raw_id": "trap",
       "description": "The garden is a trap. It may conceal danger or deception, and the hidden path could be a site of violence or manipulation.",
       "is_default_path": false
     },
-    "tension::can_butler_be_trusted": {
-      "type": "tension",
+    "dilemma::can_butler_be_trusted": {
+      "type": "dilemma",
       "raw_id": "can_butler_be_trusted",
       "question": "Can the butler be trusted?",
       "central_entity_ids": [
@@ -336,20 +336,20 @@
         "untrusted"
       ]
     },
-    "tension::can_butler_be_trusted::alt::trusted": {
-      "type": "alternative",
+    "dilemma::can_butler_be_trusted::alt::trusted": {
+      "type": "answer",
       "raw_id": "trusted",
       "description": "The butler is trusted. Their actions align with the established rules of the estate.",
       "is_default_path": true
     },
-    "tension::can_butler_be_trusted::alt::untrusted": {
-      "type": "alternative",
+    "dilemma::can_butler_be_trusted::alt::untrusted": {
+      "type": "answer",
       "raw_id": "untrusted",
       "description": "The butler is not trusted. Their silence and precision suggest they are hiding something and may be the true culprit.",
       "is_default_path": false
     },
-    "tension::did_young_mistress_notice_false_alibi": {
-      "type": "tension",
+    "dilemma::did_young_mistress_notice_false_alibi": {
+      "type": "dilemma",
       "raw_id": "did_young_mistress_notice_false_alibi",
       "question": "Did the young mistress notice the false alibi?",
       "central_entity_ids": [
@@ -363,20 +363,20 @@
         "noticed"
       ]
     },
-    "tension::did_young_mistress_notice_false_alibi::alt::noticed": {
-      "type": "alternative",
+    "dilemma::did_young_mistress_notice_false_alibi::alt::noticed": {
+      "type": "answer",
       "raw_id": "noticed",
       "description": "The young mistress noticed the false alibi. Her insight becomes the pivotal clue.",
       "is_default_path": true
     },
-    "tension::did_young_mistress_notice_false_alibi::alt::did_not_notice": {
-      "type": "alternative",
+    "dilemma::did_young_mistress_notice_false_alibi::alt::did_not_notice": {
+      "type": "answer",
       "raw_id": "did_not_notice",
       "description": "The young mistress did not notice the false alibi. The solution remains hidden.",
       "is_default_path": false
     },
-    "tension::golden_key_real_clue_or_red_herring": {
-      "type": "tension",
+    "dilemma::golden_key_real_clue_or_red_herring": {
+      "type": "dilemma",
       "raw_id": "golden_key_real_clue_or_red_herring",
       "question": "Is the golden key the real clue or a red herring?",
       "central_entity_ids": [
@@ -390,20 +390,20 @@
         "red_herring"
       ]
     },
-    "tension::golden_key_real_clue_or_red_herring::alt::real_clue": {
-      "type": "alternative",
+    "dilemma::golden_key_real_clue_or_red_herring::alt::real_clue": {
+      "type": "answer",
       "raw_id": "real_clue",
       "description": "The golden key is the real clue. It leads to the family diary and unlocks the solution.",
       "is_default_path": true
     },
-    "tension::golden_key_real_clue_or_red_herring::alt::red_herring": {
-      "type": "alternative",
+    "dilemma::golden_key_real_clue_or_red_herring::alt::red_herring": {
+      "type": "answer",
       "raw_id": "red_herring",
       "description": "The golden key is a red herring. It distracts the player from the true clue.",
       "is_default_path": false
     },
-    "tension::tea_ritual_tradition_or_trap": {
-      "type": "tension",
+    "dilemma::tea_ritual_tradition_or_trap": {
+      "type": "dilemma",
       "raw_id": "tea_ritual_tradition_or_trap",
       "question": "Is the tea ritual a tradition or a trap?",
       "central_entity_ids": [
@@ -418,20 +418,20 @@
         "trap"
       ]
     },
-    "tension::tea_ritual_tradition_or_trap::alt::tradition": {
-      "type": "alternative",
+    "dilemma::tea_ritual_tradition_or_trap::alt::tradition": {
+      "type": "answer",
       "raw_id": "tradition",
       "description": "The tea ritual is a tradition. It reflects the estate\u2019s values and history and appears harmless.",
       "is_default_path": true
     },
-    "tension::tea_ritual_tradition_or_trap::alt::trap": {
-      "type": "alternative",
+    "dilemma::tea_ritual_tradition_or_trap::alt::trap": {
+      "type": "answer",
       "raw_id": "trap",
       "description": "The tea ritual is a trap. It may be designed to mislead or control guests, undermining the illusion of normalcy.",
       "is_default_path": false
     },
-    "tension::did_caretaker_witness_incident": {
-      "type": "tension",
+    "dilemma::did_caretaker_witness_incident": {
+      "type": "dilemma",
       "raw_id": "did_caretaker_witness_incident",
       "question": "Did the caretaker witness the night of the incident?",
       "central_entity_ids": [
@@ -445,23 +445,23 @@
         "witnessed"
       ]
     },
-    "tension::did_caretaker_witness_incident::alt::did_not_witness": {
-      "type": "alternative",
+    "dilemma::did_caretaker_witness_incident::alt::did_not_witness": {
+      "type": "answer",
       "raw_id": "did_not_witness",
       "description": "The caretaker did not witness the incident. Their account is unreliable and the truth remains obscured.",
       "is_default_path": true
     },
-    "tension::did_caretaker_witness_incident::alt::witnessed": {
-      "type": "alternative",
+    "dilemma::did_caretaker_witness_incident::alt::witnessed": {
+      "type": "answer",
       "raw_id": "witnessed",
       "description": "The caretaker did witness the incident. They may hold a vital piece of evidence.",
       "is_default_path": false
     },
-    "thread::host_motive": {
-      "type": "thread",
+    "path::host_motive": {
+      "type": "path",
       "raw_id": "host_motive",
       "name": "The Host\u2019s Benevolence",
-      "tension_id": "tension::host_benevolent_or_self_serving",
+      "dilemma_id": "dilemma::host_benevolent_or_self_serving",
       "alternative_id": "self_serving",
       "unexplored_alternative_ids": [],
       "thread_importance": "major",
@@ -470,11 +470,11 @@
         "consequence_host_self_serving"
       ]
     },
-    "thread::library_knowledge": {
-      "type": "thread",
+    "path::library_knowledge": {
+      "type": "path",
       "raw_id": "library_knowledge",
       "name": "The Diary\u2019s Truth",
-      "tension_id": "tension::library_knowledge_salvation_or_corruption",
+      "dilemma_id": "dilemma::library_knowledge_salvation_or_corruption",
       "alternative_id": "corruption",
       "unexplored_alternative_ids": [],
       "thread_importance": "major",
@@ -483,11 +483,11 @@
         "consequence_diary_corruption"
       ]
     },
-    "thread::garden_nature": {
-      "type": "thread",
+    "path::garden_nature": {
+      "type": "path",
       "raw_id": "garden_nature",
       "name": "The Garden\u2019s Sanctuary",
-      "tension_id": "tension::garden_sanctuary_or_trap",
+      "dilemma_id": "dilemma::garden_sanctuary_or_trap",
       "alternative_id": "sanctuary",
       "unexplored_alternative_ids": [],
       "thread_importance": "major",
@@ -496,11 +496,11 @@
         "consequence_garden_sanctuary"
       ]
     },
-    "thread::butler_loyalty": {
-      "type": "thread",
+    "path::butler_loyalty": {
+      "type": "path",
       "raw_id": "butler_loyalty",
       "name": "The Butler\u2019s Silence",
-      "tension_id": "tension::can_butler_be_trusted",
+      "dilemma_id": "dilemma::can_butler_be_trusted",
       "alternative_id": "untrusted",
       "unexplored_alternative_ids": [],
       "thread_importance": "major",
@@ -512,18 +512,18 @@
     "consequence::host_motive_benevolent_to_self_serving": {
       "type": "consequence",
       "raw_id": "host_motive_benevolent_to_self_serving",
-      "thread_id": "thread::host_motive",
+      "thread_id": "path::host_motive",
       "description": "If the host is self-serving, the tea ritual is manipulated to maintain control over guests, revealing the host's true motive is power, not tradition.",
       "narrative_effects": [
         "Establishes the host as morally ambiguous",
         "Shifts the story from a social puzzle to a power struggle",
-        "Creates tension between appearance and reality"
+        "Creates dilemma between appearance and reality"
       ]
     },
     "consequence::library_knowledge_salvation_to_corruption": {
       "type": "consequence",
       "raw_id": "library_knowledge_salvation_to_corruption",
-      "thread_id": "thread::library_knowledge",
+      "thread_id": "path::library_knowledge",
       "description": "The diary reveals a hidden truth about a past fire, which corrupts the estate's history and causes moral collapse among the guests.",
       "narrative_effects": [
         "Introduces a dangerous truth that undermines trust",
@@ -534,7 +534,7 @@
     "consequence::garden_sanctuary_to_trap": {
       "type": "consequence",
       "raw_id": "garden_sanctuary_to_trap",
-      "thread_id": "thread::garden_nature",
+      "thread_id": "path::garden_nature",
       "description": "The garden is not a safe space but a trap that hides the true incident, with the curtain revealing a hidden compartment containing evidence of violence.",
       "narrative_effects": [
         "Transforms the garden from a symbol of peace to a site of danger",
@@ -545,7 +545,7 @@
     "consequence::butler_loyalty_trusted_to_untrusted": {
       "type": "consequence",
       "raw_id": "butler_loyalty_trusted_to_untrusted",
-      "thread_id": "thread::butler_loyalty",
+      "thread_id": "path::butler_loyalty",
       "description": "The butler's silence is not loyalty but a cover for guilt, and the removal of the chipped cup suggests they are hiding evidence of the incident.",
       "narrative_effects": [
         "Raises suspense about the butler's role in the incident",
@@ -556,7 +556,7 @@
     "consequence::tea_ritual_altered_by_host": {
       "type": "consequence",
       "raw_id": "tea_ritual_altered_by_host",
-      "thread_id": "thread::host_motive",
+      "thread_id": "path::host_motive",
       "description": "The tea ritual is changed in height and timing, signaling the host's manipulation of tradition to assert control.",
       "narrative_effects": [
         "Shows the host's active interference in social rituals",
@@ -567,7 +567,7 @@
     "consequence::young_mistress_discovered_chipped_cup_missing": {
       "type": "consequence",
       "raw_id": "young_mistress_discovered_chipped_cup_missing",
-      "thread_id": "thread::host_motive",
+      "thread_id": "path::host_motive",
       "description": "The young mistress notices the chipped cup is missing from the tea set, indicating a deliberate alteration of the ritual.",
       "narrative_effects": [
         "Introduces a key inconsistency in the tea ritual",
@@ -578,18 +578,18 @@
     "consequence::butler_repositions_tea_set_after_guest": {
       "type": "consequence",
       "raw_id": "butler_repositions_tea_set_after_guest",
-      "thread_id": "thread::butler_loyalty",
+      "thread_id": "path::butler_loyalty",
       "description": "The butler silently repositions the tea set after the guest leaves, suggesting awareness of the ritual's manipulation.",
       "narrative_effects": [
         "Implies the butler is aware of the host's deception",
         "Creates a sense of silent surveillance",
-        "Builds tension around the butler's role in the estate"
+        "Builds dilemma around the butler's role in the estate"
       ]
     },
     "consequence::garden_curtain_swings_in_wind": {
       "type": "consequence",
       "raw_id": "garden_curtain_swings_in_wind",
-      "thread_id": "thread::garden_nature",
+      "thread_id": "path::garden_nature",
       "description": "The young mistress sees the curtain in the garden swing in the wind, indicating hidden movement within the garden space.",
       "narrative_effects": [
         "Introduces the garden as a place of active, unseen action",
@@ -601,9 +601,9 @@
       "type": "beat",
       "raw_id": "1.1",
       "summary": "The host invites a new guest to tea. The tea ritual is altered\u2014tea is poured from a different height.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::host_benevolent_or_self_serving",
+          "dilemma_id": "dilemma::host_benevolent_or_self_serving",
           "effect": "advances",
           "note": "Shows the ritual is not fixed, indicating the host has control over tradition, suggesting self-serving motives."
         }
@@ -622,14 +622,14 @@
       "type": "beat",
       "raw_id": "1.2",
       "summary": "The young mistress notices the chipped cup is missing from the tea set.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::can_butler_be_trusted",
+          "dilemma_id": "dilemma::can_butler_be_trusted",
           "effect": "advances",
           "note": "Reveals an inconsistency in the tea ritual, setting up a false alibi and suggesting the butler may have altered the scene."
         },
         {
-          "tension_id": "tension::did_young_mistress_notice_false_alibi",
+          "dilemma_id": "dilemma::did_young_mistress_notice_false_alibi",
           "effect": "reveals",
           "note": "The young mistress observes the anomaly, confirming her sharp observational skills and establishing her role as a key narrator."
         }
@@ -647,9 +647,9 @@
       "type": "beat",
       "raw_id": "1.3",
       "summary": "The butler silently repositions the tea set after the guest leaves.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::can_butler_be_trusted",
+          "dilemma_id": "dilemma::can_butler_be_trusted",
           "effect": "complicates",
           "note": "The butler's action suggests awareness of the ritual's manipulation, raising doubt about their loyalty and intentions."
         }
@@ -667,9 +667,9 @@
       "type": "beat",
       "raw_id": "1.4",
       "summary": "The host comments: \u2018Tradition is not about rules\u2014it\u2019s about what we choose to preserve.\u2019",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::host_benevolent_or_self_serving",
+          "dilemma_id": "dilemma::host_benevolent_or_self_serving",
           "effect": "commits",
           "note": "The host\u2019s words reveal a self-serving motive\u2014preserving control over the estate, not tradition or benevolence."
         }
@@ -686,9 +686,9 @@
       "type": "beat",
       "raw_id": "2.1",
       "summary": "The young mistress finds a note in the library: \u2018Do not open the diary.\u2019",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::library_knowledge_salvation_or_corruption",
+          "dilemma_id": "dilemma::library_knowledge_salvation_or_corruption",
           "effect": "advances",
           "note": "Introduces the diary as a forbidden object, setting up the possibility of dangerous truths being hidden."
         }
@@ -707,9 +707,9 @@
       "type": "beat",
       "raw_id": "2.2",
       "summary": "The mirror in the library shows a distorted version of the room\u2014like a memory.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::library_knowledge_salvation_or_corruption",
+          "dilemma_id": "dilemma::library_knowledge_salvation_or_corruption",
           "effect": "reveals",
           "note": "Suggests the diary contains fragmented truths, implying the knowledge is corrupted or distorted."
         }
@@ -726,14 +726,14 @@
       "type": "beat",
       "raw_id": "2.3",
       "summary": "The caretaker recalls seeing a man in the west wing at night.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::did_caretaker_witness_incident",
+          "dilemma_id": "dilemma::did_caretaker_witness_incident",
           "effect": "complicates",
           "note": "Introduces a timeline gap and suggests the incident occurred, raising questions about what happened in the west wing."
         },
         {
-          "tension_id": "tension::garden_sanctuary_or_trap",
+          "dilemma_id": "dilemma::garden_sanctuary_or_trap",
           "effect": "complicates",
           "note": "The west wing is linked to the garden, suggesting danger may be present there."
         }
@@ -751,9 +751,9 @@
       "type": "beat",
       "raw_id": "2.4",
       "summary": "The diary reveals the incident: a fire that killed a guest. The host was present.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::library_knowledge_salvation_or_corruption",
+          "dilemma_id": "dilemma::library_knowledge_salvation_or_corruption",
           "effect": "commits",
           "note": "The diary contains a dangerous truth\u2014corruption\u2014showing the host covered up a fatal incident."
         }
@@ -771,9 +771,9 @@
       "type": "beat",
       "raw_id": "3.1",
       "summary": "The young mistress sees the curtain in the garden swing in the wind.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::garden_sanctuary_or_trap",
+          "dilemma_id": "dilemma::garden_sanctuary_or_trap",
           "effect": "advances",
           "note": "Introduces the garden as a place of active movement, suggesting hidden actions or life within it."
         }
@@ -792,9 +792,9 @@
       "type": "beat",
       "raw_id": "3.2",
       "summary": "The lady of the garden prunes a rose that has no bloom.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::garden_sanctuary_or_trap",
+          "dilemma_id": "dilemma::garden_sanctuary_or_trap",
           "effect": "reveals",
           "note": "Suggests the garden is alive and aware, implying it may be a living space of memory or danger."
         }
@@ -812,9 +812,9 @@
       "type": "beat",
       "raw_id": "3.3",
       "summary": "The caretaker says: \u2018I saw a shadow in the garden at night\u2014like a man.\u2019",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::garden_sanctuary_or_trap",
+          "dilemma_id": "dilemma::garden_sanctuary_or_trap",
           "effect": "complicates",
           "note": "Introduces a physical threat in the garden, suggesting it may be a trap hiding danger."
         }
@@ -832,14 +832,14 @@
       "type": "beat",
       "raw_id": "3.4",
       "summary": "Pulling the curtain reveals a hidden compartment with a silver candlestick.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::garden_sanctuary_or_trap",
+          "dilemma_id": "dilemma::garden_sanctuary_or_trap",
           "effect": "commits",
           "note": "The garden is revealed as a sanctuary\u2014its hidden compartment contains a physical link to the past, confirming its role as a place of preservation."
         },
         {
-          "tension_id": "tension::library_knowledge_salvation_or_corruption",
+          "dilemma_id": "dilemma::library_knowledge_salvation_or_corruption",
           "effect": "complicates",
           "note": "The silver candlestick is a physical artifact tied to the past, suggesting the knowledge is preserved, not corrupted."
         }
@@ -857,9 +857,9 @@
       "type": "beat",
       "raw_id": "4.1",
       "summary": "The butler serves tea with perfect timing\u2014every second is correct.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::can_butler_be_trusted",
+          "dilemma_id": "dilemma::can_butler_be_trusted",
           "effect": "advances",
           "note": "Demonstrates the butler\u2019s precision and control, suggesting deep understanding of the ritual and possibly its manipulation."
         }
@@ -877,9 +877,9 @@
       "type": "beat",
       "raw_id": "4.2",
       "summary": "The young mistress notices the butler never speaks to the guests.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::can_butler_be_trusted",
+          "dilemma_id": "dilemma::can_butler_be_trusted",
           "effect": "advances",
           "note": "Highlights the butler\u2019s silence as a form of power, raising suspicion about their true intentions."
         }
@@ -897,9 +897,9 @@
       "type": "beat",
       "raw_id": "4.3",
       "summary": "The butler removes a tea cup from the set and places it in a drawer.",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::can_butler_be_trusted",
+          "dilemma_id": "dilemma::can_butler_be_trusted",
           "effect": "complicates",
           "note": "Suggests the butler is hiding evidence, challenging the idea of their loyalty and creating suspense."
         }
@@ -917,9 +917,9 @@
       "type": "beat",
       "raw_id": "4.4",
       "summary": "The host says: \u2018He is not a servant. He is a guardian.\u2019",
-      "tension_impacts": [
+      "dilemma_impacts": [
         {
-          "tension_id": "tension::can_butler_be_trusted",
+          "dilemma_id": "dilemma::can_butler_be_trusted",
           "effect": "commits",
           "note": "The host defends the butler, implying loyalty and a protective role, but the action is ambiguous\u2014leaving room for doubt."
         }
@@ -950,239 +950,239 @@
   },
   "edges": [
     {
-      "type": "has_alternative",
-      "from": "tension::host_benevolent_or_self_serving",
-      "to": "tension::host_benevolent_or_self_serving::alt::benevolent"
+      "type": "has_answer",
+      "from": "dilemma::host_benevolent_or_self_serving",
+      "to": "dilemma::host_benevolent_or_self_serving::alt::benevolent"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::host_benevolent_or_self_serving",
-      "to": "tension::host_benevolent_or_self_serving::alt::self_serving"
+      "type": "has_answer",
+      "from": "dilemma::host_benevolent_or_self_serving",
+      "to": "dilemma::host_benevolent_or_self_serving::alt::self_serving"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::library_knowledge_salvation_or_corruption",
-      "to": "tension::library_knowledge_salvation_or_corruption::alt::salvation"
+      "type": "has_answer",
+      "from": "dilemma::library_knowledge_salvation_or_corruption",
+      "to": "dilemma::library_knowledge_salvation_or_corruption::alt::salvation"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::library_knowledge_salvation_or_corruption",
-      "to": "tension::library_knowledge_salvation_or_corruption::alt::corruption"
+      "type": "has_answer",
+      "from": "dilemma::library_knowledge_salvation_or_corruption",
+      "to": "dilemma::library_knowledge_salvation_or_corruption::alt::corruption"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::garden_sanctuary_or_trap",
-      "to": "tension::garden_sanctuary_or_trap::alt::sanctuary"
+      "type": "has_answer",
+      "from": "dilemma::garden_sanctuary_or_trap",
+      "to": "dilemma::garden_sanctuary_or_trap::alt::sanctuary"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::garden_sanctuary_or_trap",
-      "to": "tension::garden_sanctuary_or_trap::alt::trap"
+      "type": "has_answer",
+      "from": "dilemma::garden_sanctuary_or_trap",
+      "to": "dilemma::garden_sanctuary_or_trap::alt::trap"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::can_butler_be_trusted",
-      "to": "tension::can_butler_be_trusted::alt::trusted"
+      "type": "has_answer",
+      "from": "dilemma::can_butler_be_trusted",
+      "to": "dilemma::can_butler_be_trusted::alt::trusted"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::can_butler_be_trusted",
-      "to": "tension::can_butler_be_trusted::alt::untrusted"
+      "type": "has_answer",
+      "from": "dilemma::can_butler_be_trusted",
+      "to": "dilemma::can_butler_be_trusted::alt::untrusted"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::did_young_mistress_notice_false_alibi",
-      "to": "tension::did_young_mistress_notice_false_alibi::alt::noticed"
+      "type": "has_answer",
+      "from": "dilemma::did_young_mistress_notice_false_alibi",
+      "to": "dilemma::did_young_mistress_notice_false_alibi::alt::noticed"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::did_young_mistress_notice_false_alibi",
-      "to": "tension::did_young_mistress_notice_false_alibi::alt::did_not_notice"
+      "type": "has_answer",
+      "from": "dilemma::did_young_mistress_notice_false_alibi",
+      "to": "dilemma::did_young_mistress_notice_false_alibi::alt::did_not_notice"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::golden_key_real_clue_or_red_herring",
-      "to": "tension::golden_key_real_clue_or_red_herring::alt::real_clue"
+      "type": "has_answer",
+      "from": "dilemma::golden_key_real_clue_or_red_herring",
+      "to": "dilemma::golden_key_real_clue_or_red_herring::alt::real_clue"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::golden_key_real_clue_or_red_herring",
-      "to": "tension::golden_key_real_clue_or_red_herring::alt::red_herring"
+      "type": "has_answer",
+      "from": "dilemma::golden_key_real_clue_or_red_herring",
+      "to": "dilemma::golden_key_real_clue_or_red_herring::alt::red_herring"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::tea_ritual_tradition_or_trap",
-      "to": "tension::tea_ritual_tradition_or_trap::alt::tradition"
+      "type": "has_answer",
+      "from": "dilemma::tea_ritual_tradition_or_trap",
+      "to": "dilemma::tea_ritual_tradition_or_trap::alt::tradition"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::tea_ritual_tradition_or_trap",
-      "to": "tension::tea_ritual_tradition_or_trap::alt::trap"
+      "type": "has_answer",
+      "from": "dilemma::tea_ritual_tradition_or_trap",
+      "to": "dilemma::tea_ritual_tradition_or_trap::alt::trap"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::did_caretaker_witness_incident",
-      "to": "tension::did_caretaker_witness_incident::alt::did_not_witness"
+      "type": "has_answer",
+      "from": "dilemma::did_caretaker_witness_incident",
+      "to": "dilemma::did_caretaker_witness_incident::alt::did_not_witness"
     },
     {
-      "type": "has_alternative",
-      "from": "tension::did_caretaker_witness_incident",
-      "to": "tension::did_caretaker_witness_incident::alt::witnessed"
-    },
-    {
-      "type": "explores",
-      "from": "thread::host_motive",
-      "to": "tension::host_benevolent_or_self_serving::alt::self_serving"
+      "type": "has_answer",
+      "from": "dilemma::did_caretaker_witness_incident",
+      "to": "dilemma::did_caretaker_witness_incident::alt::witnessed"
     },
     {
       "type": "explores",
-      "from": "thread::library_knowledge",
-      "to": "tension::library_knowledge_salvation_or_corruption::alt::corruption"
+      "from": "path::host_motive",
+      "to": "dilemma::host_benevolent_or_self_serving::alt::self_serving"
     },
     {
       "type": "explores",
-      "from": "thread::garden_nature",
-      "to": "tension::garden_sanctuary_or_trap::alt::sanctuary"
+      "from": "path::library_knowledge",
+      "to": "dilemma::library_knowledge_salvation_or_corruption::alt::corruption"
     },
     {
       "type": "explores",
-      "from": "thread::butler_loyalty",
-      "to": "tension::can_butler_be_trusted::alt::untrusted"
+      "from": "path::garden_nature",
+      "to": "dilemma::garden_sanctuary_or_trap::alt::sanctuary"
+    },
+    {
+      "type": "explores",
+      "from": "path::butler_loyalty",
+      "to": "dilemma::can_butler_be_trusted::alt::untrusted"
     },
     {
       "type": "has_consequence",
-      "from": "thread::host_motive",
+      "from": "path::host_motive",
       "to": "consequence::host_motive_benevolent_to_self_serving"
     },
     {
       "type": "has_consequence",
-      "from": "thread::library_knowledge",
+      "from": "path::library_knowledge",
       "to": "consequence::library_knowledge_salvation_to_corruption"
     },
     {
       "type": "has_consequence",
-      "from": "thread::garden_nature",
+      "from": "path::garden_nature",
       "to": "consequence::garden_sanctuary_to_trap"
     },
     {
       "type": "has_consequence",
-      "from": "thread::butler_loyalty",
+      "from": "path::butler_loyalty",
       "to": "consequence::butler_loyalty_trusted_to_untrusted"
     },
     {
       "type": "has_consequence",
-      "from": "thread::host_motive",
+      "from": "path::host_motive",
       "to": "consequence::tea_ritual_altered_by_host"
     },
     {
       "type": "has_consequence",
-      "from": "thread::host_motive",
+      "from": "path::host_motive",
       "to": "consequence::young_mistress_discovered_chipped_cup_missing"
     },
     {
       "type": "has_consequence",
-      "from": "thread::butler_loyalty",
+      "from": "path::butler_loyalty",
       "to": "consequence::butler_repositions_tea_set_after_guest"
     },
     {
       "type": "has_consequence",
-      "from": "thread::garden_nature",
+      "from": "path::garden_nature",
       "to": "consequence::garden_curtain_swings_in_wind"
     },
     {
       "type": "belongs_to",
       "from": "beat::1.1",
-      "to": "thread::host_motive"
+      "to": "path::host_motive"
     },
     {
       "type": "belongs_to",
       "from": "beat::1.2",
-      "to": "thread::host_motive"
+      "to": "path::host_motive"
     },
     {
       "type": "belongs_to",
       "from": "beat::1.3",
-      "to": "thread::host_motive"
+      "to": "path::host_motive"
     },
     {
       "type": "belongs_to",
       "from": "beat::1.3",
-      "to": "thread::butler_loyalty"
+      "to": "path::butler_loyalty"
     },
     {
       "type": "belongs_to",
       "from": "beat::1.4",
-      "to": "thread::host_motive"
+      "to": "path::host_motive"
     },
     {
       "type": "belongs_to",
       "from": "beat::2.1",
-      "to": "thread::library_knowledge"
+      "to": "path::library_knowledge"
     },
     {
       "type": "belongs_to",
       "from": "beat::2.2",
-      "to": "thread::library_knowledge"
+      "to": "path::library_knowledge"
     },
     {
       "type": "belongs_to",
       "from": "beat::2.3",
-      "to": "thread::library_knowledge"
+      "to": "path::library_knowledge"
     },
     {
       "type": "belongs_to",
       "from": "beat::2.3",
-      "to": "thread::garden_nature"
+      "to": "path::garden_nature"
     },
     {
       "type": "belongs_to",
       "from": "beat::2.4",
-      "to": "thread::library_knowledge"
+      "to": "path::library_knowledge"
     },
     {
       "type": "belongs_to",
       "from": "beat::3.1",
-      "to": "thread::garden_nature"
+      "to": "path::garden_nature"
     },
     {
       "type": "belongs_to",
       "from": "beat::3.2",
-      "to": "thread::garden_nature"
+      "to": "path::garden_nature"
     },
     {
       "type": "belongs_to",
       "from": "beat::3.3",
-      "to": "thread::garden_nature"
+      "to": "path::garden_nature"
     },
     {
       "type": "belongs_to",
       "from": "beat::3.4",
-      "to": "thread::garden_nature"
+      "to": "path::garden_nature"
     },
     {
       "type": "belongs_to",
       "from": "beat::3.4",
-      "to": "thread::library_knowledge"
+      "to": "path::library_knowledge"
     },
     {
       "type": "belongs_to",
       "from": "beat::4.1",
-      "to": "thread::butler_loyalty"
+      "to": "path::butler_loyalty"
     },
     {
       "type": "belongs_to",
       "from": "beat::4.2",
-      "to": "thread::butler_loyalty"
+      "to": "path::butler_loyalty"
     },
     {
       "type": "belongs_to",
       "from": "beat::4.3",
-      "to": "thread::butler_loyalty"
+      "to": "path::butler_loyalty"
     },
     {
       "type": "belongs_to",
       "from": "beat::4.4",
-      "to": "thread::butler_loyalty"
+      "to": "path::butler_loyalty"
     }
   ]
 }

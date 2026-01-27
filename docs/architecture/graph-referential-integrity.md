@@ -126,7 +126,7 @@ class Graph:
         """Get validated node reference. Raises if doesn't exist.
 
         Usage:
-            thread_ref = graph.ref("thread", "trust_thread")
+            thread_ref = graph.ref("path", "trust_thread")
             graph.add_edge("belongs_to", beat_ref, thread_ref)
         """
         node_id = f"{node_type}::{raw_id}"
@@ -317,19 +317,19 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "notes": entity.get("notes"),
         })
 
-    for tension in output.get("tensions", []):
-        raw_id = tension["tension_id"]
-        tension_node_id = f"tension::{raw_id}"
+    for dilemma in output.get("tensions", []):
+        raw_id = dilemma["tension_id"]
+        tension_node_id = f"dilemma::{raw_id}"
 
         graph.create_node(tension_node_id, {
-            "type": "tension",
+            "type": "dilemma",
             "raw_id": raw_id,
-            "question": tension["question"],
+            "question": dilemma["question"],
             # ...
         })
 
-        for alt in tension.get("alternatives", []):
-            alt_id = f"tension::{raw_id}::alt::{alt['alternative_id']}"
+        for alt in dilemma.get("alternatives", []):
+            alt_id = f"dilemma::{raw_id}::alt::{alt['alternative_id']}"
             graph.create_node(alt_id, {
                 "type": "alternative",
                 "raw_id": alt["alternative_id"],
@@ -337,7 +337,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             })
 
             # Edge endpoints validated automatically
-            graph.add_edge("has_alternative", tension_node_id, alt_id)
+            graph.add_edge("has_answer", tension_node_id, alt_id)
 ```
 
 ### 3.3 SEED Mutations
@@ -354,20 +354,20 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         # This will raise NodeNotFoundError if phantom ID
         graph.update_node(node_id, disposition=decision["disposition"])
 
-    # Create new threads
-    for thread in output.get("threads", []):
-        thread_id = f"thread::{thread['thread_id']}"
+    # Create new paths
+    for path in output.get("paths", []):
+        thread_id = f"path::{path['thread_id']}"
 
         graph.create_node(thread_id, {
-            "type": "thread",
-            "raw_id": thread["thread_id"],
-            "tension_id": thread["tension_id"],
-            "alternative_id": thread["alternative_id"],
+            "type": "path",
+            "raw_id": path["thread_id"],
+            "tension_id": path["tension_id"],
+            "alternative_id": path["alternative_id"],
             # ...
         })
 
         # Edge endpoint validation happens automatically in add_edge()
-        alt_ref = f"tension::{thread['tension_id']}::alt::{thread['alternative_id']}"
+        alt_ref = f"dilemma::{path['tension_id']}::alt::{path['alternative_id']}"
         graph.add_edge("explores", thread_id, alt_ref)  # Validates alt exists
 ```
 
@@ -584,7 +584,7 @@ Implemented Phase 1 and Phase 2:
 Updated mutation handlers to use new API:
 - DREAM: `set_node()` → `upsert_node()` (allows re-running stage)
 - BRAINSTORM: `add_node()` → `create_node()` (entities, tensions, alternatives)
-- SEED: `add_node()` → `create_node()` (threads, consequences, beats)
+- SEED: `add_node()` → `create_node()` (paths, consequences, beats)
 - SEED: `set_node()` → `upsert_node()` (convergence_sketch)
 
 ### Design Decisions Made During Implementation

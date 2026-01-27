@@ -511,7 +511,7 @@ arc:
 ## Edge Types
 
 > **Naming Convention:** Persistent edges use PascalCase (Choice, Appears) as they appear
-> in exports. Working edges use snake_case (belongs_to, has_alternative) as they're internal only.
+> in exports. Working edges use snake_case (belongs_to, has_answer) as they're internal only.
 
 ### Persistent Edges (survive to export)
 
@@ -981,7 +981,7 @@ SHIP reads from the graph, ignoring working nodes.
 | Ending passages | Passages with no outgoing Choice edges |
 
 **Ignored by SHIP:**
-- Tensions, threads, beats, arcs
+- Tensions, paths, beats, arcs
 - `from_beat`, `summary` on passages
 - `requires` edges between beats
 - All working edges
@@ -1051,7 +1051,7 @@ Do not allow "keep generating until good." Quality comes from good prompts and h
 
 ### ❌ Backflow
 
-Do not allow later stages to modify nodes they don't own. Each node type has a creating stage (see Stage Operations table). If GROW reveals a problem with SEED's threads, the human must manually revert to pre-GROW snapshot and revise SEED.
+Do not allow later stages to modify nodes they don't own. Each node type has a creating stage (see Stage Operations table). If GROW reveals a problem with SEED's paths, the human must manually revert to pre-GROW snapshot and revise SEED.
 
 ### ❌ Hidden Prompts
 
@@ -1139,7 +1139,7 @@ Because GROW operates on beats (summaries) rather than passages (prose), the dat
 |-----------|-------------|
 | ID & metadata | ~10 |
 | Summary (2-3 sentences) | ~40-60 |
-| Tags (threads, tensions, entities) | ~20-30 |
+| Tags (paths, tensions, entities) | ~20-30 |
 | Logic (requires, grants) | ~10-20 |
 | YAML overhead | ~10 |
 | **Total per beat** | **~100-130** |
@@ -1164,7 +1164,7 @@ Because GROW operates on beats (summaries) rather than passages (prose), the dat
 
 Even pessimistic estimates use <15% of modern context windows (128k-200k). **No RAG or aggressive chunking needed for GROW.**
 
-The entire relevant subgraph (all unplaced beats for involved threads) can be passed in every API call. This validates the "per arc" generation approach—the model can hold full arc state in working memory.
+The entire relevant subgraph (all unplaced beats for involved paths) can be passed in every API call. This validates the "per arc" generation approach—the model can hold full arc state in working memory.
 
 ### FILL Context (Different Concern)
 

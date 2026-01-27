@@ -11,7 +11,7 @@ entities:
     concept: A stoic, silent figure who manages all operations of the house.
     notes: Wears a dark suit, carries a silver cane. Observes everything with
       quiet intensity. Silence is a form of power; actions are precise and
-      mechanical. Tension over whether they are loyal or a silent observer with
+      mechanical. Dilemma over whether they are loyal or a silent observer with
       hidden purpose.
   - entity_id: the_viscount
     entity_category: character
@@ -140,7 +140,7 @@ entities:
     notes: Enforce strict rules about access and silence. Create sense of
       institutional control—knowledge is power and is tightly guarded.
 tensions:
-  - tension_id: host_benevolent_or_self_serving
+  - dilemma_id: host_benevolent_or_self_serving
     question: Is the host benevolent or self-serving?
     alternatives:
       - alternative_id: benevolent
@@ -156,7 +156,7 @@ tensions:
       - the_host
     why_it_matters: Defines the moral center of the story. If benevolent, the
       mystery is a social puzzle; if self-serving, it becomes a power play.
-  - tension_id: library_knowledge_salvation_or_corruption
+  - dilemma_id: library_knowledge_salvation_or_corruption
     question: Is the library’s knowledge salvation or corruption?
     alternatives:
       - alternative_id: salvation
@@ -172,7 +172,7 @@ tensions:
       - the_family_diary
     why_it_matters: Explores the cost of knowledge. Access to truth may offer
       clarity or lead to moral collapse.
-  - tension_id: garden_sanctuary_or_trap
+  - dilemma_id: garden_sanctuary_or_trap
     question: Is the garden a sanctuary or a trap?
     alternatives:
       - alternative_id: sanctuary
@@ -189,7 +189,7 @@ tensions:
       - the_curtain_in_the_garden
     why_it_matters: Establishes emotional and physical stakes. The garden is
       both a setting and a place of revelation.
-  - tension_id: can_butler_be_trusted
+  - dilemma_id: can_butler_be_trusted
     question: Can the butler be trusted?
     alternatives:
       - alternative_id: trusted
@@ -204,7 +204,7 @@ tensions:
       - the_butler
     why_it_matters: Challenges reader assumptions about loyalty. The butler is
       the only one who sees everything.
-  - tension_id: did_young_mistress_notice_false_alibi
+  - dilemma_id: did_young_mistress_notice_false_alibi
     question: Did the young mistress notice the false alibi?
     alternatives:
       - alternative_id: noticed
@@ -219,7 +219,7 @@ tensions:
       - the_young_mistress
     why_it_matters: Centers on perception and intelligence. The young mistress
       is the only character with sharp observational skills.
-  - tension_id: golden_key_real_clue_or_red_herring
+  - dilemma_id: golden_key_real_clue_or_red_herring
     question: Is the golden key the real clue or a red herring?
     alternatives:
       - alternative_id: real_clue
@@ -234,7 +234,7 @@ tensions:
       - the_golden_key
     why_it_matters: Tests the player’s ability to discern significance. The key
       is presented as central but may be misleading.
-  - tension_id: tea_ritual_tradition_or_trap
+  - dilemma_id: tea_ritual_tradition_or_trap
     question: Is the tea ritual a tradition or a trap?
     alternatives:
       - alternative_id: tradition
@@ -250,7 +250,7 @@ tensions:
       - the_kitchen
     why_it_matters: Explores the illusion of normalcy. The ritual appears
       harmless but may conceal deeper manipulation.
-  - tension_id: did_caretaker_witness_incident
+  - dilemma_id: did_caretaker_witness_incident
     question: Did the caretaker witness the night of the incident?
     alternatives:
       - alternative_id: did_not_witness
