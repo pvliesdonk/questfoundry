@@ -8,14 +8,18 @@ See docs/architecture/graph-storage.md for architecture details.
 """
 
 from questfoundry.graph.context import (
+    SCOPE_DILEMMA,
     SCOPE_ENTITY,
-    SCOPE_TENSION,
-    SCOPE_THREAD,
+    SCOPE_PATH,
+    SCOPE_TENSION,  # Backward compat alias for SCOPE_DILEMMA
+    SCOPE_THREAD,  # Backward compat alias for SCOPE_PATH
     check_structural_completeness,
+    format_hierarchical_path_id,
     format_scoped_id,
     format_summarize_manifest,
     format_valid_ids_context,
     normalize_scoped_id,
+    parse_hierarchical_path_id,
     parse_scoped_id,
 )
 from questfoundry.graph.errors import (
@@ -54,7 +58,9 @@ from questfoundry.graph.snapshots import (
 )
 
 __all__ = [
+    "SCOPE_DILEMMA",
     "SCOPE_ENTITY",
+    "SCOPE_PATH",
     "SCOPE_TENSION",
     "SCOPE_THREAD",
     "BrainstormMutationError",
@@ -80,12 +86,14 @@ __all__ = [
     "categorize_error",
     "categorize_errors",
     "check_structural_completeness",
+    "format_hierarchical_path_id",
     "format_scoped_id",
     "format_summarize_manifest",
     "format_valid_ids_context",
     "has_mutation_handler",
     "list_snapshots",
     "normalize_scoped_id",
+    "parse_hierarchical_path_id",
     "parse_scoped_id",
     "rollback_to_snapshot",
     "save_snapshot",

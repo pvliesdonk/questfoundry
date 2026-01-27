@@ -19,8 +19,12 @@ _ENTITY_CATEGORIES = ["character", "location", "object", "faction"]
 
 # Scope prefixes for typed IDs (disambiguates ID types for LLM)
 SCOPE_ENTITY = "entity"
-SCOPE_TENSION = "tension"
-SCOPE_THREAD = "thread"
+SCOPE_DILEMMA = "dilemma"
+SCOPE_PATH = "path"
+
+# Backward compatibility aliases
+SCOPE_TENSION = SCOPE_DILEMMA
+SCOPE_THREAD = SCOPE_PATH
 
 # Development state names (computed, not stored)
 STATE_COMMITTED = "committed"
@@ -28,86 +32,94 @@ STATE_DEFERRED = "deferred"
 STATE_LATENT = "latent"
 
 
-def count_threads_per_tension(seed_output: SeedOutput) -> dict[str, int]:
-    """Count how many threads exist for each tension.
+def count_paths_per_dilemma(seed_output: SeedOutput) -> dict[str, int]:
+    """Count how many paths exist for each dilemma.
 
-    This is the authoritative source for thread existence - used to derive
+    This is the authoritative source for path existence - used to derive
     development state (committed vs deferred) and compute arc counts.
 
     Args:
-        seed_output: The SEED output containing threads.
+        seed_output: The SEED output containing paths.
 
     Returns:
-        Dict mapping tension_id (raw, unscoped) to count of threads.
+        Dict mapping dilemma_id (raw, unscoped) to count of paths.
     """
     counts: dict[str, int] = {}
-    for thread in seed_output.threads:
-        tid = thread.tension_id
-        # Handle scoped IDs (tension::foo -> foo)
-        if "::" in tid:
-            tid = tid.split("::", 1)[1]
-        counts[tid] = counts.get(tid, 0) + 1
+    for path in seed_output.paths:
+        did = path.dilemma_id
+        # Handle scoped IDs (dilemma::foo -> foo)
+        if "::" in did:
+            did = did.split("::", 1)[1]
+        counts[did] = counts.get(did, 0) + 1
     return counts
 
 
-def get_tension_development_states(
+# Backward compatibility alias
+count_threads_per_tension = count_paths_per_dilemma
+
+
+def get_dilemma_development_states(
     seed_output: SeedOutput,
 ) -> dict[str, dict[str, str]]:
-    """Compute development states for all alternatives in a SEED output.
+    """Compute development states for all answers in a SEED output.
 
     Development states are derived from comparing the `considered` field
-    (LLM intent) against actual thread existence:
-    - **committed**: Alternative in `considered` AND has a thread
-    - **deferred**: Alternative in `considered` but NO thread (pruned)
-    - **latent**: Alternative not in `considered` (never intended for exploration)
+    (LLM intent) against actual path existence:
+    - **committed**: Answer in `considered` AND has a path
+    - **deferred**: Answer in `considered` but NO path (pruned)
+    - **latent**: Answer not in `considered` (never intended for exploration)
 
     Args:
-        seed_output: The SEED output containing tension decisions and threads.
+        seed_output: The SEED output containing dilemma decisions and paths.
 
     Returns:
-        Dict mapping tension_id to dict mapping alternative_id to state.
+        Dict mapping dilemma_id to dict mapping answer_id to state.
         Example: {"mentor_trust": {"protector": "committed", "manipulator": "deferred"}}
     """
-    # Build lookup of which alternatives have threads
-    # thread.alternative_id is the raw local ID (not prefixed)
-    alt_has_thread: dict[str, set[str]] = {}
-    for thread in seed_output.threads:
-        tid = thread.tension_id
+    # Build lookup of which answers have paths
+    # path.answer_id is the raw local ID (not prefixed)
+    answer_has_path: dict[str, set[str]] = {}
+    for path in seed_output.paths:
+        did = path.dilemma_id
         # Handle scoped IDs
-        if "::" in tid:
-            tid = tid.split("::", 1)[1]
-        if tid not in alt_has_thread:
-            alt_has_thread[tid] = set()
-        alt_has_thread[tid].add(thread.alternative_id)
+        if "::" in did:
+            did = did.split("::", 1)[1]
+        if did not in answer_has_path:
+            answer_has_path[did] = set()
+        answer_has_path[did].add(path.answer_id)
 
-    # Compute states for each tension's alternatives
+    # Compute states for each dilemma's answers
     states: dict[str, dict[str, str]] = {}
-    for tension in seed_output.tensions:
-        tid = tension.tension_id
+    for dilemma in seed_output.dilemmas:
+        did = dilemma.dilemma_id
         # Handle scoped IDs
-        if "::" in tid:
-            tid = tid.split("::", 1)[1]
+        if "::" in did:
+            did = did.split("::", 1)[1]
 
-        tension_states: dict[str, str] = {}
-        considered_set = set(tension.considered)
-        implicit_set = set(tension.implicit)
-        thread_alts = alt_has_thread.get(tid, set())
+        dilemma_states: dict[str, str] = {}
+        considered_set = set(dilemma.considered)
+        implicit_set = set(dilemma.implicit)
+        path_answers = answer_has_path.get(did, set())
 
-        # Process all known alternatives (from considered + implicit)
-        all_alts = considered_set | implicit_set
-        for alt_id in all_alts:
-            if alt_id in considered_set:
-                if alt_id in thread_alts:
-                    tension_states[alt_id] = STATE_COMMITTED
+        # Process all known answers (from considered + implicit)
+        all_answers = considered_set | implicit_set
+        for ans_id in all_answers:
+            if ans_id in considered_set:
+                if ans_id in path_answers:
+                    dilemma_states[ans_id] = STATE_COMMITTED
                 else:
-                    tension_states[alt_id] = STATE_DEFERRED
+                    dilemma_states[ans_id] = STATE_DEFERRED
             else:
                 # In implicit, never considered
-                tension_states[alt_id] = STATE_LATENT
+                dilemma_states[ans_id] = STATE_LATENT
 
-        states[tid] = tension_states
+        states[did] = dilemma_states
 
     return states
+
+
+# Backward compatibility alias
+get_tension_development_states = get_dilemma_development_states
 
 
 def parse_scoped_id(scoped_id: str) -> tuple[str, str]:
@@ -178,89 +190,149 @@ def normalize_scoped_id(raw_id: str, scope: str) -> str:
 
     Args:
         raw_id: ID that may or may not already have the scope prefix.
-        scope: The scope type (e.g., 'tension', 'thread').
+        scope: The scope type (e.g., 'dilemma', 'path').
 
     Returns:
-        ID with scope prefix guaranteed (e.g., 'tension::mentor_trust').
+        ID with scope prefix guaranteed (e.g., 'dilemma::mentor_trust').
     """
     prefix = f"{scope}::"
     return raw_id if raw_id.startswith(prefix) else f"{prefix}{raw_id}"
 
 
-def format_thread_ids_context(threads: list[dict[str, Any]]) -> str:
-    """Format thread IDs for beat serialization with inline constraints.
+def parse_hierarchical_path_id(path_id: str) -> tuple[str, str]:
+    """Extract dilemma_id and answer_id from a hierarchical path ID.
 
-    Includes thread→tension mapping so the model knows which tension_id
-    to use in tension_impacts for each beat's thread.
+    Hierarchical path IDs embed the parent dilemma in the ID itself:
+    `p::dilemma_id__answer_id` or `path::dilemma_id__answer_id`
+
+    This format makes the path→dilemma relationship explicit and prevents
+    LLM misreferences.
+
+    Args:
+        path_id: A path ID string (e.g., 'p::mentor_trust__benevolent'
+            or 'path::mentor_trust__benevolent').
+
+    Returns:
+        Tuple of (dilemma_id, answer_id) where dilemma_id includes
+        the 'd::' prefix.
+
+    Raises:
+        ValueError: If path_id doesn't contain '__' separator.
+
+    Examples:
+        >>> parse_hierarchical_path_id("p::mentor_trust__benevolent")
+        ('d::mentor_trust', 'benevolent')
+        >>> parse_hierarchical_path_id("path::mentor_trust__selfish")
+        ('d::mentor_trust', 'selfish')
+    """
+    raw = strip_scope_prefix(path_id)  # "mentor_trust__benevolent"
+    if "__" not in raw:
+        raise ValueError(f"Path ID '{path_id}' is not hierarchical (missing '__' separator)")
+    dilemma_raw, answer_id = raw.rsplit("__", 1)
+    return f"d::{dilemma_raw}", answer_id
+
+
+def format_hierarchical_path_id(dilemma_id: str, answer_id: str) -> str:
+    """Create a hierarchical path ID from dilemma and answer components.
+
+    Creates path IDs in the format `p::dilemma_id__answer_id` which
+    embeds the parent dilemma relationship in the ID itself.
+
+    Args:
+        dilemma_id: The parent dilemma ID (with or without 'd::' prefix).
+        answer_id: The answer ID this path explores.
+
+    Returns:
+        Hierarchical path ID string (e.g., 'p::mentor_trust__benevolent').
+
+    Examples:
+        >>> format_hierarchical_path_id("d::mentor_trust", "benevolent")
+        'p::mentor_trust__benevolent'
+        >>> format_hierarchical_path_id("mentor_trust", "selfish")
+        'p::mentor_trust__selfish'
+    """
+    dilemma_raw = strip_scope_prefix(dilemma_id)  # "mentor_trust"
+    return f"p::{dilemma_raw}__{answer_id}"
+
+
+def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
+    """Format path IDs for beat serialization with inline constraints.
+
+    Includes path→dilemma mapping so the model knows which dilemma_id
+    to use in dilemma_impacts for each beat's path.
 
     Small models don't "look back" at referenced sections, so we
     embed constraints at the point of use.
 
     Args:
-        threads: List of thread dicts from serialized ThreadsSection.
+        paths: List of path dicts from serialized PathsSection.
 
     Returns:
-        Formatted context string with thread IDs, or empty string if none.
+        Formatted context string with path IDs, or empty string if none.
     """
-    if not threads:
+    if not paths:
         return ""
 
     # Sort for deterministic output across runs
-    thread_ids = sorted(tid for t in threads if (tid := t.get("thread_id")))
+    path_ids = sorted(pid for p in paths if (pid := p.get("path_id")))
 
-    if not thread_ids:
+    if not path_ids:
         return ""
 
-    # Pipe-delimited for easy scanning, with thread:: scope prefix
-    id_list = " | ".join(f"`{format_scoped_id(SCOPE_THREAD, tid)}`" for tid in thread_ids)
+    # Pipe-delimited for easy scanning, with path:: scope prefix
+    id_list = " | ".join(f"`{format_scoped_id(SCOPE_PATH, pid)}`" for pid in path_ids)
 
     lines = [
-        "## VALID THREAD IDs (copy exactly, no modifications)",
+        "## VALID PATH IDs (copy exactly, no modifications)",
         "",
         f"Allowed: {id_list}",
         "",
     ]
 
-    # Build thread→tension mapping for tension_impacts guidance
-    thread_tension_pairs = []
-    for t in sorted(threads, key=lambda x: x.get("thread_id", "")):
-        tid = t.get("thread_id")
-        tension_id = t.get("tension_id", "")
-        if tid and tension_id:
+    # Build path→dilemma mapping for dilemma_impacts guidance
+    path_dilemma_pairs = []
+    for p in sorted(paths, key=lambda x: x.get("path_id", "")):
+        pid = p.get("path_id")
+        dilemma_id = p.get("dilemma_id", "")
+        if pid and dilemma_id:
             # Strip scope prefix if present for clean display
-            raw_tension = tension_id.split("::", 1)[-1] if "::" in tension_id else tension_id
-            thread_tension_pairs.append((tid, raw_tension))
+            raw_dilemma = dilemma_id.split("::", 1)[-1] if "::" in dilemma_id else dilemma_id
+            path_dilemma_pairs.append((pid, raw_dilemma))
 
-    if thread_tension_pairs:
-        lines.append("## THREAD → TENSION MAPPING (use in tension_impacts)")
-        lines.append("Each beat's tension_impacts should use its thread's parent tension:")
+    if path_dilemma_pairs:
+        lines.append("## PATH → DILEMMA MAPPING (use in dilemma_impacts)")
+        lines.append("Each beat's dilemma_impacts should use its path's parent dilemma:")
         lines.append("")
-        for tid, tension in thread_tension_pairs:
+        for pid, dilemma in path_dilemma_pairs:
             lines.append(
-                f"  - `{format_scoped_id(SCOPE_THREAD, tid)}` → "
-                f"`{format_scoped_id(SCOPE_TENSION, tension)}`"
+                f"  - `{format_scoped_id(SCOPE_PATH, pid)}` → "
+                f"`{format_scoped_id(SCOPE_DILEMMA, dilemma)}`"
             )
         lines.append("")
 
     lines.extend(
         [
             "Rules:",
-            "- Use ONLY IDs from the list above in the `threads` array",
-            "- Include the `thread::` prefix in your output",
-            "- For tension_impacts, use the tension from the mapping above",
-            "- Do NOT derive IDs from tension concepts",
-            "- Do NOT use entity IDs as tension_ids",
-            "- If a concept has no matching thread, omit it - do NOT invent an ID",
+            "- Use ONLY IDs from the list above in the `paths` array",
+            "- Include the `path::` prefix in your output",
+            "- For dilemma_impacts, use the dilemma from the mapping above",
+            "- Do NOT derive IDs from dilemma concepts",
+            "- Do NOT use entity IDs as dilemma_ids",
+            "- If a concept has no matching path, omit it - do NOT invent an ID",
             "",
             "WRONG (will fail validation):",
-            "- `clock_distortion` - NOT a valid thread ID (derived from concept)",
-            "- `host_motive` - WRONG: missing scope prefix, use `thread::host_motive`",
-            "- `tension::seed_of_stillness` - WRONG: entity ID used as tension",
+            "- `clock_distortion` - NOT a valid path ID (derived from concept)",
+            "- `host_motive` - WRONG: missing scope prefix, use `path::host_motive`",
+            "- `dilemma::seed_of_stillness` - WRONG: entity ID used as dilemma",
             "",
         ]
     )
 
     return "\n".join(lines)
+
+
+# Backward compatibility alias
+format_thread_ids_context = format_path_ids_context
 
 
 def format_valid_ids_context(graph: Graph, stage: str) -> str:
@@ -300,8 +372,8 @@ def _format_grow_valid_ids(graph: Graph) -> str:
 
     for label, key in [
         ("Beat IDs", "valid_beat_ids"),
-        ("Thread IDs", "valid_thread_ids"),
-        ("Tension IDs", "valid_tension_ids"),
+        ("Path IDs", "valid_path_ids"),
+        ("Dilemma IDs", "valid_dilemma_ids"),
         ("Entity IDs", "valid_entity_ids"),
         ("Passage IDs", "valid_passage_ids"),
         ("Choice IDs", "valid_choice_ids"),
@@ -318,7 +390,7 @@ def _format_grow_valid_ids(graph: Graph) -> str:
 def _format_seed_valid_ids(graph: Graph) -> str:
     """Format BRAINSTORM IDs for SEED serialization.
 
-    Groups entities by category and lists tensions with their alternatives,
+    Groups entities by category and lists dilemmas with their answers,
     making it clear which IDs are valid for the SEED stage to reference.
     Includes counts to enable completeness validation.
 
@@ -331,7 +403,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
     # Get expected counts from canonical source (DRY principle)
     counts = get_expected_counts(graph)
     total_entity_count = counts["entities"]
-    tension_count = counts["tensions"]
+    dilemma_count = counts["dilemmas"]
 
     lines = [
         "## VALID IDS MANIFEST - GENERATE FOR ALL",
@@ -363,58 +435,60 @@ def _format_seed_valid_ids(graph: Graph) -> str:
                     lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
                 lines.append("")
 
-    # Tensions with alternatives
-    tensions = graph.get_nodes_by_type("tension")
-    if tensions:
-        # Pre-build alt edges map to avoid O(T*E) lookups
-        alt_edges_by_tension: dict[str, list[dict[str, Any]]] = {}
+    # Dilemmas with answers (graph still stores as "tension" nodes)
+    dilemmas = graph.get_nodes_by_type("tension")
+    if dilemmas:
+        # Pre-build answer edges map to avoid O(D*E) lookups
+        answer_edges_by_dilemma: dict[str, list[dict[str, Any]]] = {}
         for edge in graph.get_edges(edge_type="has_alternative"):
             from_id = edge.get("from")
             if from_id:
-                alt_edges_by_tension.setdefault(from_id, []).append(edge)
+                answer_edges_by_dilemma.setdefault(from_id, []).append(edge)
 
-        lines.append(f"### Tension IDs (TOTAL: {tension_count} - generate decision for ALL)")
-        lines.append("Format: tension::id → [alternative_ids]")
-        lines.append("Note: Every tension_id contains `_or_` — entity IDs never do.")
+        lines.append(f"### Dilemma IDs (TOTAL: {dilemma_count} - generate decision for ALL)")
+        lines.append("Format: dilemma::id → [answer_ids]")
+        lines.append("Note: Every dilemma_id contains `_or_` — entity IDs never do.")
         lines.append("")
 
-        for tid, tdata in sorted(tensions.items()):
-            raw_id = tdata.get("raw_id")
+        for did, ddata in sorted(dilemmas.items()):
+            raw_id = ddata.get("raw_id")
             if not raw_id:
                 continue
 
-            alts = []
-            for edge in alt_edges_by_tension.get(tid, []):
-                alt_node = graph.get_node(edge.get("to", ""))
-                if alt_node:
-                    alt_id = alt_node.get("raw_id")
-                    if alt_id:
-                        default = " (default)" if alt_node.get("is_default_path") else ""
-                        alts.append(f"`{alt_id}`{default}")
+            answers = []
+            for edge in answer_edges_by_dilemma.get(did, []):
+                answer_node = graph.get_node(edge.get("to", ""))
+                if answer_node:
+                    ans_id = answer_node.get("raw_id")
+                    if ans_id:
+                        default = " (default)" if answer_node.get("is_default_path") else ""
+                        answers.append(f"`{ans_id}`{default}")
 
-            if alts:
-                # Sort alternatives for deterministic output
-                alts.sort()
-                lines.append(f"- `{format_scoped_id(SCOPE_TENSION, raw_id)}` → [{', '.join(alts)}]")
+            if answers:
+                # Sort answers for deterministic output
+                answers.sort()
+                lines.append(
+                    f"- `{format_scoped_id(SCOPE_DILEMMA, raw_id)}` → [{', '.join(answers)}]"
+                )
 
         lines.append("")
 
     # Generation requirements with counts (handle singular/plural grammar)
     entity_word = "item" if total_entity_count == 1 else "items"
-    tension_word = "item" if tension_count == 1 else "items"
+    dilemma_word = "item" if dilemma_count == 1 else "items"
 
     lines.extend(
         [
             "### Generation Requirements (CRITICAL)",
             f"- Generate EXACTLY {total_entity_count} entity decisions (one per entity above)",
-            f"- Generate EXACTLY {tension_count} tension decisions (one per tension above)",
-            "- Thread `alternative_id` must be from that tension's alternatives list",
-            "- Use scoped IDs with `entity::` or `tension::` prefix in your output",
+            f"- Generate EXACTLY {dilemma_count} dilemma decisions (one per dilemma above)",
+            "- Path `answer_id` must be from that dilemma's answers list",
+            "- Use scoped IDs with `entity::` or `dilemma::` prefix in your output",
             "",
             "### Verification",
             "Before submitting, COUNT your outputs:",
             f"- entities array should have {total_entity_count} {entity_word}",
-            f"- tensions array should have {tension_count} {tension_word}",
+            f"- dilemmas array should have {dilemma_count} {dilemma_word}",
         ]
     )
 
@@ -431,14 +505,15 @@ def get_expected_counts(graph: Graph) -> dict[str, int]:
         Dict with expected counts for each section.
     """
     entities = graph.get_nodes_by_type("entity")
-    tensions = graph.get_nodes_by_type("tension")
+    # Graph still stores dilemmas as "tension" nodes
+    dilemmas = graph.get_nodes_by_type("tension")
 
     entity_count = sum(1 for node in entities.values() if node.get("raw_id"))
-    tension_count = sum(1 for tdata in tensions.values() if tdata.get("raw_id"))
+    dilemma_count = sum(1 for ddata in dilemmas.values() if ddata.get("raw_id"))
 
     return {
         "entities": entity_count,
-        "tensions": tension_count,
+        "dilemmas": dilemma_count,
     }
 
 
@@ -540,17 +615,17 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
                 entity_lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
             entity_lines.append("")  # Blank line between categories
 
-    # Collect tension IDs
-    tensions = graph.get_nodes_by_type("tension")
-    tension_lines: list[str] = []
-    for _tid, tdata in sorted(tensions.items()):
-        raw_id = tdata.get("raw_id")
+    # Collect dilemma IDs (graph still stores as "tension" nodes)
+    dilemmas = graph.get_nodes_by_type("tension")
+    dilemma_lines: list[str] = []
+    for _did, ddata in sorted(dilemmas.items()):
+        raw_id = ddata.get("raw_id")
         if raw_id:
-            tension_lines.append(f"- `{format_scoped_id(SCOPE_TENSION, raw_id)}`")
+            dilemma_lines.append(f"- `{format_scoped_id(SCOPE_DILEMMA, raw_id)}`")
 
     return {
         "entity_manifest": "\n".join(entity_lines) if entity_lines else "(No entities)",
-        "tension_manifest": "\n".join(tension_lines) if tension_lines else "(No tensions)",
+        "dilemma_manifest": "\n".join(dilemma_lines) if dilemma_lines else "(No dilemmas)",
     }
 
 
@@ -564,7 +639,7 @@ def check_structural_completeness(
     obvious completeness issues (wrong count of decisions) without parsing IDs.
 
     Args:
-        output: SEED output dict with 'entities' and 'tensions' arrays.
+        output: SEED output dict with 'entities' and 'dilemmas' arrays.
         expected: Dict from get_expected_counts() with expected counts.
             Values must be non-negative integers.
 
@@ -583,7 +658,7 @@ def check_structural_completeness(
             raise ValueError(f"Expected count for '{field}' cannot be negative: {count}")
 
     # Check counts for each tracked field
-    for field in ("entities", "tensions"):
+    for field in ("entities", "dilemmas"):
         actual = len(output.get(field, []))
         expected_count = expected.get(field, 0)
         if actual != expected_count:

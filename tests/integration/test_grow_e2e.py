@@ -187,16 +187,16 @@ class TestGrowContextFormatting:
         ids = format_grow_valid_ids(graph)
 
         assert "valid_beat_ids" in ids
-        assert "valid_thread_ids" in ids
-        assert "valid_tension_ids" in ids
+        assert "valid_path_ids" in ids
+        assert "valid_dilemma_ids" in ids
         assert "valid_entity_ids" in ids
         assert "valid_passage_ids" in ids
         assert "valid_choice_ids" in ids
 
         # Before GROW runs, only SEED-stage IDs should be populated
         assert ids["valid_beat_ids"] != ""
-        assert ids["valid_thread_ids"] != ""
-        assert ids["valid_tension_ids"] != ""
+        assert ids["valid_path_ids"] != ""
+        assert ids["valid_dilemma_ids"] != ""
         assert ids["valid_entity_ids"] != ""
         # Passages and choices are created during GROW
         assert ids["valid_passage_ids"] == ""
@@ -211,8 +211,8 @@ class TestGrowContextFormatting:
 
         assert "VALID IDs FOR GROW PHASES" in context
         assert "Beat IDs" in context
-        assert "Thread IDs" in context
-        assert "Tension IDs" in context
+        assert "Path IDs" in context
+        assert "Dilemma IDs" in context
 
     def test_empty_graph_context(self) -> None:
         """Verify context formatting handles empty graph gracefully."""

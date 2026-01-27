@@ -4,13 +4,17 @@ from __future__ import annotations
 
 from questfoundry.graph import Graph, format_summarize_manifest, format_valid_ids_context
 from questfoundry.graph.context import (
+    SCOPE_DILEMMA,
     SCOPE_ENTITY,
-    SCOPE_TENSION,
-    SCOPE_THREAD,
+    SCOPE_PATH,
+    SCOPE_TENSION,  # Backward compat alias
+    SCOPE_THREAD,  # Backward compat alias
     check_structural_completeness,
+    format_hierarchical_path_id,
+    format_path_ids_context,
     format_scoped_id,
-    format_thread_ids_context,
     get_expected_counts,
+    parse_hierarchical_path_id,
     parse_scoped_id,
     strip_scope_prefix,
 )
@@ -71,8 +75,8 @@ class TestFormatValidIdsContext:
         assert "**Objects (1):**" in result
         assert "`entity::sword`" in result
 
-    def test_seed_includes_tensions_with_alternatives(self) -> None:
-        """SEED context lists tensions with their alternatives."""
+    def test_seed_includes_dilemmas_with_answers(self) -> None:
+        """SEED context lists dilemmas with their answers."""
         graph = Graph.empty()
         graph.create_node(
             "tension::trust",
@@ -102,9 +106,9 @@ class TestFormatValidIdsContext:
 
         result = format_valid_ids_context(graph, "seed")
 
-        assert "Tension IDs" in result
-        assert "`tension::trust`" in result
-        assert "`yes`" in result  # alternatives stay unscoped within tension arrow
+        assert "Dilemma IDs" in result
+        assert "`dilemma::trust`" in result
+        assert "`yes`" in result  # answers stay unscoped within dilemma arrow
         assert "(default)" in result
         assert "`no`" in result
 
@@ -115,8 +119,8 @@ class TestFormatValidIdsContext:
 
         assert "Generation Requirements" in result
         assert "entity" in result.lower()
-        assert "tension" in result.lower()
-        assert "alternative" in result.lower()
+        assert "dilemma" in result.lower()
+        assert "answer" in result.lower()
 
     def test_seed_sorts_entity_ids_alphabetically(self) -> None:
         """Entity IDs are sorted alphabetically within categories."""
@@ -197,7 +201,7 @@ class TestFormatValidIdsContext:
         assert "VALID IDS MANIFEST" in result
 
     def test_full_context_format(self) -> None:
-        """Test complete context format with entities and tensions."""
+        """Test complete context format with entities and dilemmas."""
         graph = Graph.empty()
 
         # Add entities
@@ -218,7 +222,7 @@ class TestFormatValidIdsContext:
             },
         )
 
-        # Add tension with alternatives
+        # Add dilemma with answers (graph still uses "tension" type)
         graph.create_node(
             "tension::quest",
             {
@@ -241,90 +245,88 @@ class TestFormatValidIdsContext:
         # Verify structure
         assert result.startswith("## VALID IDS MANIFEST")
         assert "### Entity IDs" in result
-        assert "### Tension IDs" in result
+        assert "### Dilemma IDs" in result
         assert "### Generation Requirements" in result
 
         # Verify content with scoped IDs
         assert "`entity::hero`" in result
         assert "`entity::castle`" in result
-        assert "`tension::quest`" in result
-        assert "`accept` (default)" in result  # alternatives stay unscoped
+        assert "`dilemma::quest`" in result
+        assert "`accept` (default)" in result  # answers stay unscoped
 
 
-class TestFormatThreadIdsContext:
-    """Tests for format_thread_ids_context function."""
+class TestFormatPathIdsContext:
+    """Tests for format_path_ids_context function."""
 
     def test_returns_empty_for_empty_list(self) -> None:
-        """Empty threads list returns empty string."""
-        result = format_thread_ids_context([])
+        """Empty paths list returns empty string."""
+        result = format_path_ids_context([])
         assert result == ""
 
-    def test_returns_empty_for_threads_without_thread_id(self) -> None:
-        """Threads missing thread_id field return empty string."""
-        threads = [
-            {"tension_id": "some_tension"},
-            {"name": "Some Thread"},
+    def test_returns_empty_for_paths_without_path_id(self) -> None:
+        """Paths missing path_id field return empty string."""
+        paths = [
+            {"dilemma_id": "some_dilemma"},
+            {"name": "Some Path"},
         ]
-        result = format_thread_ids_context(threads)
+        result = format_path_ids_context(paths)
         assert result == ""
 
-    def test_single_thread_format(self) -> None:
-        """Single thread produces correct format."""
-        threads = [{"thread_id": "host_motive", "tension_id": "host_benevolent_or_self_serving"}]
-        result = format_thread_ids_context(threads)
+    def test_single_path_format(self) -> None:
+        """Single path produces correct format."""
+        paths = [{"path_id": "host_motive", "dilemma_id": "host_benevolent_or_self_serving"}]
+        result = format_path_ids_context(paths)
 
-        assert "## VALID THREAD IDs" in result
-        assert "Allowed: `thread::host_motive`" in result
+        assert "## VALID PATH IDs" in result
+        assert "Allowed: `path::host_motive`" in result
         assert "Rules:" in result
         assert "WRONG" in result
 
-    def test_multiple_threads_pipe_delimited(self) -> None:
-        """Multiple threads are pipe-delimited."""
-        threads = [
-            {"thread_id": "host_motive"},
-            {"thread_id": "butler_fidelity"},
-            {"thread_id": "archive_secret"},
+    def test_multiple_paths_pipe_delimited(self) -> None:
+        """Multiple paths are pipe-delimited."""
+        paths = [
+            {"path_id": "host_motive"},
+            {"path_id": "butler_fidelity"},
+            {"path_id": "archive_secret"},
         ]
-        result = format_thread_ids_context(threads)
+        result = format_path_ids_context(paths)
 
-        # Should be sorted and pipe-delimited with thread:: prefix
-        assert (
-            "`thread::archive_secret` | `thread::butler_fidelity` | `thread::host_motive`" in result
-        )
+        # Should be sorted and pipe-delimited with path:: prefix
+        assert "`path::archive_secret` | `path::butler_fidelity` | `path::host_motive`" in result
 
-    def test_threads_sorted_alphabetically(self) -> None:
-        """Thread IDs are sorted alphabetically for deterministic output."""
-        threads = [
-            {"thread_id": "zebra_thread"},
-            {"thread_id": "alpha_thread"},
-            {"thread_id": "middle_thread"},
+    def test_paths_sorted_alphabetically(self) -> None:
+        """Path IDs are sorted alphabetically for deterministic output."""
+        paths = [
+            {"path_id": "zebra_path"},
+            {"path_id": "alpha_path"},
+            {"path_id": "middle_path"},
         ]
-        result = format_thread_ids_context(threads)
+        result = format_path_ids_context(paths)
 
         # Check order in the Allowed line
-        alpha_pos = result.find("`thread::alpha_thread`")
-        middle_pos = result.find("`thread::middle_thread`")
-        zebra_pos = result.find("`thread::zebra_thread`")
+        alpha_pos = result.find("`path::alpha_path`")
+        middle_pos = result.find("`path::middle_path`")
+        zebra_pos = result.find("`path::zebra_path`")
 
         assert alpha_pos < middle_pos < zebra_pos
 
-    def test_skips_threads_without_thread_id(self) -> None:
-        """Threads without thread_id are gracefully skipped."""
-        threads = [
-            {"thread_id": "valid_thread"},
-            {"tension_id": "missing_thread_id"},
-            {"thread_id": "another_valid"},
+    def test_skips_paths_without_path_id(self) -> None:
+        """Paths without path_id are gracefully skipped."""
+        paths = [
+            {"path_id": "valid_path"},
+            {"dilemma_id": "missing_path_id"},
+            {"path_id": "another_valid"},
         ]
-        result = format_thread_ids_context(threads)
+        result = format_path_ids_context(paths)
 
-        assert "`thread::another_valid`" in result
-        assert "`thread::valid_thread`" in result
-        assert "missing_thread_id" not in result
+        assert "`path::another_valid`" in result
+        assert "`path::valid_path`" in result
+        assert "missing_path_id" not in result
 
     def test_includes_wrong_examples(self) -> None:
         """Output includes WRONG examples for LLM guidance."""
-        threads = [{"thread_id": "host_motive"}]
-        result = format_thread_ids_context(threads)
+        paths = [{"path_id": "host_motive"}]
+        result = format_path_ids_context(paths)
 
         assert "WRONG (will fail validation):" in result
         assert "`clock_distortion`" in result
@@ -332,29 +334,29 @@ class TestFormatThreadIdsContext:
 
     def test_includes_rules(self) -> None:
         """Output includes rules for ID usage."""
-        threads = [{"thread_id": "host_motive"}]
-        result = format_thread_ids_context(threads)
+        paths = [{"path_id": "host_motive"}]
+        result = format_path_ids_context(paths)
 
         assert "Rules:" in result
         assert "ONLY IDs from the list above" in result
-        assert "Include the `thread::` prefix" in result
-        assert "Do NOT derive IDs from tension concepts" in result
+        assert "Include the `path::` prefix" in result
+        assert "Do NOT derive IDs from dilemma concepts" in result
 
-    def test_handles_empty_thread_id_string(self) -> None:
-        """Empty string thread_id is treated as missing."""
-        threads = [
-            {"thread_id": "valid_thread"},
-            {"thread_id": ""},
-            {"thread_id": "another_valid"},
+    def test_handles_empty_path_id_string(self) -> None:
+        """Empty string path_id is treated as missing."""
+        paths = [
+            {"path_id": "valid_path"},
+            {"path_id": ""},
+            {"path_id": "another_valid"},
         ]
-        result = format_thread_ids_context(threads)
+        result = format_path_ids_context(paths)
 
-        # Empty string should be skipped - only valid threads appear
-        assert "`thread::valid_thread`" in result
-        assert "`thread::another_valid`" in result
-        # Exactly 2 thread IDs in the Allowed line (empty one skipped)
+        # Empty string should be skipped - only valid paths appear
+        assert "`path::valid_path`" in result
+        assert "`path::another_valid`" in result
+        # Exactly 2 path IDs in the Allowed line (empty one skipped)
         allowed_line = next(ln for ln in result.split("\n") if ln.startswith("Allowed:"))
-        assert allowed_line.count("`thread::") == 2
+        assert allowed_line.count("`path::") == 2
 
 
 class TestGetExpectedCounts:
@@ -366,7 +368,7 @@ class TestGetExpectedCounts:
         counts = get_expected_counts(graph)
 
         assert counts["entities"] == 0
-        assert counts["tensions"] == 0
+        assert counts["dilemmas"] == 0
 
     def test_counts_entities_with_raw_id(self) -> None:
         """Only entities with raw_id are counted."""
@@ -399,8 +401,8 @@ class TestGetExpectedCounts:
         counts = get_expected_counts(graph)
         assert counts["entities"] == 2  # Only hero and castle
 
-    def test_counts_tensions_with_raw_id(self) -> None:
-        """Only tensions with raw_id are counted."""
+    def test_counts_dilemmas_with_raw_id(self) -> None:
+        """Only dilemmas with raw_id are counted."""
         graph = Graph.empty()
         graph.create_node(
             "tension::trust",
@@ -418,7 +420,7 @@ class TestGetExpectedCounts:
         )
 
         counts = get_expected_counts(graph)
-        assert counts["tensions"] == 1
+        assert counts["dilemmas"] == 1
 
 
 class TestManifestCounts:
@@ -441,21 +443,21 @@ class TestManifestCounts:
         assert "TOTAL: 3" in result
         assert "Generate EXACTLY 3 entity decisions" in result
 
-    def test_context_includes_tension_count(self) -> None:
-        """Context should include total tension count."""
+    def test_context_includes_dilemma_count(self) -> None:
+        """Context should include total dilemma count."""
         graph = Graph.empty()
         for i in range(2):
             graph.create_node(
                 f"tension::t{i}",
                 {
                     "type": "tension",
-                    "raw_id": f"tension_{i}",
+                    "raw_id": f"dilemma_{i}",
                 },
             )
 
         result = format_valid_ids_context(graph, "seed")
         assert "TOTAL: 2" in result
-        assert "Generate EXACTLY 2 tension decisions" in result
+        assert "Generate EXACTLY 2 dilemma decisions" in result
 
     def test_context_includes_category_counts(self) -> None:
         """Context should include per-category counts."""
@@ -494,19 +496,19 @@ class TestManifestCounts:
         result = format_valid_ids_context(graph, "seed")
         assert "Verification" in result
         assert "entities array should have 1 item" in result
-        assert "tensions array should have 1 item" in result
+        assert "dilemmas array should have 1 item" in result
 
 
 class TestFormatSummarizeManifest:
     """Tests for format_summarize_manifest function."""
 
     def test_returns_no_entities_for_empty_graph(self) -> None:
-        """Empty graph returns '(No entities)' and '(No tensions)'."""
+        """Empty graph returns '(No entities)' and '(No dilemmas)'."""
         graph = Graph.empty()
         result = format_summarize_manifest(graph)
 
         assert result["entity_manifest"] == "(No entities)"
-        assert result["tension_manifest"] == "(No tensions)"
+        assert result["dilemma_manifest"] == "(No dilemmas)"
 
     def test_formats_entities_by_category(self) -> None:
         """Entities are grouped by category with markdown formatting."""
@@ -535,8 +537,8 @@ class TestFormatSummarizeManifest:
         assert "**Locations:**" in result["entity_manifest"]
         assert "`entity::castle`" in result["entity_manifest"]
 
-    def test_formats_tensions_as_list(self) -> None:
-        """Tensions are formatted as simple bullet list."""
+    def test_formats_dilemmas_as_list(self) -> None:
+        """Dilemmas are formatted as simple bullet list."""
         graph = Graph.empty()
         graph.create_node(
             "tension::trust",
@@ -555,8 +557,8 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        assert "- `tension::loyalty`" in result["tension_manifest"]
-        assert "- `tension::trust`" in result["tension_manifest"]
+        assert "- `dilemma::loyalty`" in result["dilemma_manifest"]
+        assert "- `dilemma::trust`" in result["dilemma_manifest"]
 
     def test_skips_entities_without_raw_id(self) -> None:
         """Entities without raw_id are excluded."""
@@ -583,8 +585,8 @@ class TestFormatSummarizeManifest:
         assert "`entity::valid`" in result["entity_manifest"]
         assert "invalid" not in result["entity_manifest"]
 
-    def test_skips_tensions_without_raw_id(self) -> None:
-        """Tensions without raw_id are excluded."""
+    def test_skips_dilemmas_without_raw_id(self) -> None:
+        """Dilemmas without raw_id are excluded."""
         graph = Graph.empty()
         graph.create_node(
             "tension::valid",
@@ -603,8 +605,8 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        assert "`tension::valid`" in result["tension_manifest"]
-        assert "invalid" not in result["tension_manifest"]
+        assert "`dilemma::valid`" in result["dilemma_manifest"]
+        assert "invalid" not in result["dilemma_manifest"]
 
     def test_sorts_entities_alphabetically(self) -> None:
         """Entity IDs are sorted alphabetically within categories."""
@@ -624,8 +626,8 @@ class TestFormatSummarizeManifest:
         zara_pos = result["entity_manifest"].find("`entity::zara`")
         assert alice_pos < zara_pos
 
-    def test_sorts_tensions_by_node_id(self) -> None:
-        """Tensions are sorted by node ID for deterministic output."""
+    def test_sorts_dilemmas_by_node_id(self) -> None:
+        """Dilemmas are sorted by node ID for deterministic output."""
         graph = Graph.empty()
         graph.create_node(
             "tension::zebra",
@@ -638,8 +640,8 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        alpha_pos = result["tension_manifest"].find("`tension::alpha`")
-        zebra_pos = result["tension_manifest"].find("`tension::zebra`")
+        alpha_pos = result["dilemma_manifest"].find("`dilemma::alpha`")
+        zebra_pos = result["dilemma_manifest"].find("`dilemma::zebra`")
         assert alpha_pos < zebra_pos
 
     def test_handles_all_entity_categories(self) -> None:
@@ -659,12 +661,12 @@ class TestFormatSummarizeManifest:
         assert "**Factions:**" in result["entity_manifest"]
 
     def test_returns_dict_with_both_keys(self) -> None:
-        """Result always contains both entity_manifest and tension_manifest keys."""
+        """Result always contains both entity_manifest and dilemma_manifest keys."""
         graph = Graph.empty()
         result = format_summarize_manifest(graph)
 
         assert "entity_manifest" in result
-        assert "tension_manifest" in result
+        assert "dilemma_manifest" in result
         assert len(result) == 2
 
     def test_skips_entities_with_unknown_type(self) -> None:
@@ -854,9 +856,9 @@ class TestCheckStructuralCompleteness:
         """No errors when actual counts match expected."""
         output = {
             "entities": [{"entity_id": "a"}, {"entity_id": "b"}],
-            "tensions": [{"tension_id": "x"}],
+            "dilemmas": [{"dilemma_id": "x"}],
         }
-        expected = {"entities": 2, "tensions": 1}
+        expected = {"entities": 2, "dilemmas": 1}
 
         errors = check_structural_completeness(output, expected)
 
@@ -866,9 +868,9 @@ class TestCheckStructuralCompleteness:
         """Reports error when entity count is less than expected."""
         output = {
             "entities": [{"entity_id": "a"}],
-            "tensions": [],
+            "dilemmas": [],
         }
-        expected = {"entities": 3, "tensions": 0}
+        expected = {"entities": 3, "dilemmas": 0}
 
         errors = check_structural_completeness(output, expected)
 
@@ -877,18 +879,18 @@ class TestCheckStructuralCompleteness:
         assert "Expected 3" in errors[0][1]
         assert "got 1" in errors[0][1]
 
-    def test_detects_missing_tensions(self) -> None:
-        """Reports error when tension count is less than expected."""
+    def test_detects_missing_dilemmas(self) -> None:
+        """Reports error when dilemma count is less than expected."""
         output = {
             "entities": [],
-            "tensions": [{"tension_id": "x"}],
+            "dilemmas": [{"dilemma_id": "x"}],
         }
-        expected = {"entities": 0, "tensions": 2}
+        expected = {"entities": 0, "dilemmas": 2}
 
         errors = check_structural_completeness(output, expected)
 
         assert len(errors) == 1
-        assert errors[0][0] == "tensions"
+        assert errors[0][0] == "dilemmas"
         assert "Expected 2" in errors[0][1]
         assert "got 1" in errors[0][1]
 
@@ -896,9 +898,9 @@ class TestCheckStructuralCompleteness:
         """Reports error when entity count exceeds expected."""
         output = {
             "entities": [{"entity_id": "a"}, {"entity_id": "b"}, {"entity_id": "c"}],
-            "tensions": [],
+            "dilemmas": [],
         }
-        expected = {"entities": 2, "tensions": 0}
+        expected = {"entities": 2, "dilemmas": 0}
 
         errors = check_structural_completeness(output, expected)
 
@@ -908,23 +910,23 @@ class TestCheckStructuralCompleteness:
         assert "got 3" in errors[0][1]
 
     def test_detects_multiple_errors(self) -> None:
-        """Reports errors for both entities and tensions."""
+        """Reports errors for both entities and dilemmas."""
         output = {
             "entities": [],
-            "tensions": [],
+            "dilemmas": [],
         }
-        expected = {"entities": 2, "tensions": 1}
+        expected = {"entities": 2, "dilemmas": 1}
 
         errors = check_structural_completeness(output, expected)
 
         assert len(errors) == 2
         field_paths = {e[0] for e in errors}
-        assert field_paths == {"entities", "tensions"}
+        assert field_paths == {"entities", "dilemmas"}
 
     def test_handles_missing_output_keys(self) -> None:
-        """Handles output missing entities or tensions keys."""
+        """Handles output missing entities or dilemmas keys."""
         output: dict[str, list[dict[str, str]]] = {}
-        expected = {"entities": 1, "tensions": 1}
+        expected = {"entities": 1, "dilemmas": 1}
 
         errors = check_structural_completeness(output, expected)
 
@@ -932,8 +934,8 @@ class TestCheckStructuralCompleteness:
 
     def test_handles_zero_expected(self) -> None:
         """No error when both expected and actual are zero."""
-        output = {"entities": [], "tensions": []}
-        expected = {"entities": 0, "tensions": 0}
+        output = {"entities": [], "dilemmas": []}
+        expected = {"entities": 0, "dilemmas": 0}
 
         errors = check_structural_completeness(output, expected)
 
@@ -943,8 +945,8 @@ class TestCheckStructuralCompleteness:
         """Raises ValueError when expected count is negative."""
         import pytest
 
-        output = {"entities": [], "tensions": []}
-        expected = {"entities": -1, "tensions": 0}
+        output = {"entities": [], "dilemmas": []}
+        expected = {"entities": -1, "dilemmas": 0}
 
         with pytest.raises(ValueError, match="cannot be negative"):
             check_structural_completeness(output, expected)
@@ -1073,10 +1075,80 @@ class TestScopeConstants:
         """SCOPE_ENTITY has expected value."""
         assert SCOPE_ENTITY == "entity"
 
-    def test_scope_tension_value(self) -> None:
-        """SCOPE_TENSION has expected value."""
-        assert SCOPE_TENSION == "tension"
+    def test_scope_dilemma_value(self) -> None:
+        """SCOPE_DILEMMA has expected value."""
+        assert SCOPE_DILEMMA == "dilemma"
 
-    def test_scope_thread_value(self) -> None:
-        """SCOPE_THREAD has expected value."""
-        assert SCOPE_THREAD == "thread"
+    def test_scope_path_value(self) -> None:
+        """SCOPE_PATH has expected value."""
+        assert SCOPE_PATH == "path"
+
+    def test_scope_tension_is_alias_for_dilemma(self) -> None:
+        """SCOPE_TENSION is backward compat alias for SCOPE_DILEMMA."""
+        assert SCOPE_TENSION == SCOPE_DILEMMA
+
+    def test_scope_thread_is_alias_for_path(self) -> None:
+        """SCOPE_THREAD is backward compat alias for SCOPE_PATH."""
+        assert SCOPE_THREAD == SCOPE_PATH
+
+
+class TestParseHierarchicalPathId:
+    """Tests for parse_hierarchical_path_id function."""
+
+    def test_parses_path_with_p_prefix(self) -> None:
+        """Path ID with p:: prefix is correctly parsed."""
+        dilemma_id, answer_id = parse_hierarchical_path_id("p::mentor_trust__benevolent")
+        assert dilemma_id == "d::mentor_trust"
+        assert answer_id == "benevolent"
+
+    def test_parses_path_with_path_prefix(self) -> None:
+        """Path ID with path:: prefix is correctly parsed."""
+        dilemma_id, answer_id = parse_hierarchical_path_id("path::mentor_trust__selfish")
+        assert dilemma_id == "d::mentor_trust"
+        assert answer_id == "selfish"
+
+    def test_parses_unscoped_path_id(self) -> None:
+        """Unscoped path ID is correctly parsed."""
+        dilemma_id, answer_id = parse_hierarchical_path_id("mentor_trust__benevolent")
+        assert dilemma_id == "d::mentor_trust"
+        assert answer_id == "benevolent"
+
+    def test_raises_for_non_hierarchical_id(self) -> None:
+        """Raises ValueError for ID without __ separator."""
+        import pytest
+
+        with pytest.raises(ValueError, match="not hierarchical"):
+            parse_hierarchical_path_id("p::mentor_trust")
+
+    def test_handles_multiple_underscores_in_dilemma(self) -> None:
+        """Multiple underscores in dilemma part are preserved."""
+        dilemma_id, answer_id = parse_hierarchical_path_id("p::my_complex_dilemma__answer")
+        assert dilemma_id == "d::my_complex_dilemma"
+        assert answer_id == "answer"
+
+    def test_handles_multiple_double_underscores(self) -> None:
+        """Uses rightmost __ as separator."""
+        dilemma_id, answer_id = parse_hierarchical_path_id("p::a__b__c")
+        assert dilemma_id == "d::a__b"
+        assert answer_id == "c"
+
+
+class TestFormatHierarchicalPathId:
+    """Tests for format_hierarchical_path_id function."""
+
+    def test_formats_with_scoped_dilemma_id(self) -> None:
+        """Formats correctly with d:: prefix on dilemma."""
+        result = format_hierarchical_path_id("d::mentor_trust", "benevolent")
+        assert result == "p::mentor_trust__benevolent"
+
+    def test_formats_with_unscoped_dilemma_id(self) -> None:
+        """Formats correctly without prefix on dilemma."""
+        result = format_hierarchical_path_id("mentor_trust", "selfish")
+        assert result == "p::mentor_trust__selfish"
+
+    def test_roundtrip_parse_and_format(self) -> None:
+        """Parsing and formatting roundtrip preserves values."""
+        original = "p::my_dilemma__my_answer"
+        dilemma_id, answer_id = parse_hierarchical_path_id(original)
+        reformatted = format_hierarchical_path_id(dilemma_id, answer_id)
+        assert reformatted == original
