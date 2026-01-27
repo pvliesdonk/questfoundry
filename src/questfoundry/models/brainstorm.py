@@ -123,7 +123,12 @@ class Dilemma(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def migrate_tension_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old field names to new names."""
+        """Migrate old field names for backward compatibility.
+
+        This handles migrating the following fields:
+        - 'tension_id' -> 'dilemma_id'
+        - 'alternatives' -> 'answers'
+        """
         if isinstance(data, dict):
             data = dict(data)
             if "tension_id" in data and "dilemma_id" not in data:

@@ -195,7 +195,15 @@ class Path(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def migrate_old_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old field names to new names."""
+        """Migrate old field names for backward compatibility.
+
+        This handles migrating the following fields:
+        - 'thread_id' -> 'path_id'
+        - 'tension_id' -> 'dilemma_id'
+        - 'alternative_id' -> 'answer_id'
+        - 'unexplored_alternative_ids' -> 'unexplored_answer_ids'
+        - 'thread_importance' -> 'path_importance'
+        """
         if isinstance(data, dict):
             data = dict(data)
             if "thread_id" in data and "path_id" not in data:
@@ -314,7 +322,12 @@ class InitialBeat(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def migrate_old_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old field names to new names."""
+        """Migrate old field names for backward compatibility.
+
+        This handles migrating the following fields:
+        - 'threads' -> 'paths'
+        - 'tension_impacts' -> 'dilemma_impacts'
+        """
         if isinstance(data, dict):
             data = dict(data)
             if "threads" in data and "paths" not in data:
@@ -399,7 +412,12 @@ class SeedOutput(BaseModel):
     @model_validator(mode="before")
     @classmethod
     def migrate_old_fields(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old field names to new names."""
+        """Migrate old field names for backward compatibility.
+
+        This handles migrating the following fields:
+        - 'tensions' -> 'dilemmas'
+        - 'threads' -> 'paths'
+        """
         if isinstance(data, dict):
             data = dict(data)
             if "tensions" in data and "dilemmas" not in data:

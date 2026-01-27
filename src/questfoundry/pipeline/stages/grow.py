@@ -576,25 +576,25 @@ class GrowStage:
         # Build context for LLM
         beat_summaries: list[str] = []
         valid_beat_ids: list[str] = []
-        valid_tension_ids: list[str] = []
+        valid_dilemma_ids: list[str] = []
 
-        for beat_id, tension_ids in sorted(candidate_beats.items()):
+        for beat_id, dilemma_ids in sorted(candidate_beats.items()):
             beat_data = beat_nodes[beat_id]
             summary = beat_data.get("summary", "No summary")
-            tensions_str = ", ".join(tension_nodes[tid].get("raw_id", tid) for tid in tension_ids)
+            dilemmas_str = ", ".join(tension_nodes[tid].get("raw_id", tid) for tid in dilemma_ids)
             beat_summaries.append(
-                f"- beat_id: {beat_id}\n  summary: {summary}\n  tensions: [{tensions_str}]"
+                f"- beat_id: {beat_id}\n  summary: {summary}\n  dilemmas: [{dilemmas_str}]"
             )
             valid_beat_ids.append(beat_id)
-            for tid in tension_ids:
+            for tid in dilemma_ids:
                 raw_tid = tension_nodes[tid].get("raw_id", tid)
-                if raw_tid not in valid_tension_ids:
-                    valid_tension_ids.append(raw_tid)
+                if raw_tid not in valid_dilemma_ids:
+                    valid_dilemma_ids.append(raw_tid)
 
         context = {
             "beat_summaries": "\n".join(beat_summaries),
             "valid_beat_ids": ", ".join(valid_beat_ids),
-            "valid_dilemma_ids": ", ".join(valid_tension_ids),  # variable still uses old name
+            "valid_dilemma_ids": ", ".join(valid_dilemma_ids),
         }
 
         # Call LLM with semantic validation
@@ -603,7 +603,7 @@ class GrowStage:
         validator = partial(
             validate_phase2_output,
             valid_beat_ids=set(valid_beat_ids),
-            valid_dilemma_ids=set(valid_tension_ids),  # valid_tension_ids var contains dilemma IDs
+            valid_dilemma_ids=set(valid_dilemma_ids),
         )
         try:
             result, llm_calls, tokens = await self._grow_llm_call(
@@ -629,20 +629,20 @@ class GrowStage:
                     beat_id=assessment.beat_id,
                 )
                 continue
-            # Filter agnostic_for to valid tension raw_ids
-            invalid_tensions = [t for t in assessment.agnostic_for if t not in valid_tension_ids]
-            if invalid_tensions:
+            # Filter agnostic_for to valid dilemma raw_ids
+            invalid_dilemmas = [t for t in assessment.agnostic_for if t not in valid_dilemma_ids]
+            if invalid_dilemmas:
                 log.warning(
-                    "phase2_invalid_tension_ids",
+                    "phase2_invalid_dilemma_ids",
                     beat_id=assessment.beat_id,
-                    invalid_ids=invalid_tensions,
+                    invalid_ids=invalid_dilemmas,
                 )
-            valid_tensions = [t for t in assessment.agnostic_for if t in valid_tension_ids]
-            if valid_tensions:
+            valid_dilemmas = [t for t in assessment.agnostic_for if t in valid_dilemma_ids]
+            if valid_dilemmas:
                 valid_assessments.append(
                     ThreadAgnosticAssessment(
                         beat_id=assessment.beat_id,
-                        agnostic_for=valid_tensions,
+                        agnostic_for=valid_dilemmas,
                     )
                 )
 
