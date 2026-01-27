@@ -1,10 +1,10 @@
 """SEED stage implementation.
 
 The SEED stage triages brainstorm material into committed story structure.
-It curates entities, decides which alternatives to explore as threads,
+It curates entities, decides which dilemma answers to explore as paths,
 creates consequences, and defines initial beats.
 
-CRITICAL: THREAD FREEZE - No new threads can be created after SEED.
+CRITICAL: PATH FREEZE - No new paths can be created after SEED.
 
 Uses the LangChain-native 3-phase pattern:
 Discuss → Summarize → Serialize.
@@ -159,14 +159,14 @@ def _format_brainstorm_context(graph: Graph) -> str:
 class SeedStage:
     """SEED stage - triage brainstorm into committed structure.
 
-    This stage takes the entities and tensions from BRAINSTORM and transforms
-    them into committed story structure: curated entities, threads with
+    This stage takes the entities and dilemmas from BRAINSTORM and transforms
+    them into committed story structure: curated entities, paths with
     consequences, and initial beats.
 
-    CRITICAL: After SEED, no new threads can be created (THREAD FREEZE).
+    CRITICAL: After SEED, no new paths can be created (PATH FREEZE).
 
     Uses the LangChain-native 3-phase pattern:
-    - Discuss: Triage entities and tensions, plan threads and beats
+    - Discuss: Triage entities and dilemmas, plan paths and beats
     - Summarize: Condense discussion into structured summary
     - Serialize: Convert to SeedOutput artifact
 

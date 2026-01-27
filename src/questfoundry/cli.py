@@ -108,7 +108,7 @@ STAGE_PROMPTS: dict[str, tuple[str, str | None]] = {
 }
 
 # Message shown after SEED stage completes
-THREAD_FREEZE_MESSAGE = "[yellow]THREAD FREEZE:[/yellow] No new threads can be created after SEED."
+PATH_FREEZE_MESSAGE = "[yellow]PATH FREEZE:[/yellow] No new paths can be created after SEED."
 
 # Global state for logging flags (set by callback, used by commands)
 _verbose: int = 0
@@ -898,11 +898,11 @@ def seed(
 ) -> None:
     """Run SEED stage - triage brainstorm into story structure.
 
-    Takes the entities and tensions from BRAINSTORM and transforms
-    them into committed structure: curated entities, threads with
+    Takes the entities and dilemmas from BRAINSTORM and transforms
+    them into committed structure: curated entities, paths with
     consequences, and initial beats.
 
-    CRITICAL: After SEED, no new threads can be created (THREAD FREEZE).
+    CRITICAL: After SEED, no new paths can be created (PATH FREEZE).
 
     Requires BRAINSTORM stage to have completed first.
 
@@ -928,8 +928,8 @@ def seed(
         provider_serialize=provider_serialize,
     )
 
-    # SEED-specific message about thread freeze
-    console.print(THREAD_FREEZE_MESSAGE)
+    # SEED-specific message about path freeze
+    console.print(PATH_FREEZE_MESSAGE)
 
 
 @app.command()
@@ -1164,7 +1164,7 @@ def run(
 
             # SEED-specific message
             if stage_name == "seed":
-                console.print(THREAD_FREEZE_MESSAGE)
+                console.print(PATH_FREEZE_MESSAGE)
 
         except typer.Exit as e:
             if e.exit_code != 0:
