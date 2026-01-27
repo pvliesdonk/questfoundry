@@ -1,5 +1,36 @@
 # Claude Agent Instructions for QuestFoundry v5
 
+> **MANDATORY**: These instructions are RULES, not guidelines. Follow them exactly.
+> After context compaction, RE-READ this file before continuing work.
+
+---
+
+## Instruction Hierarchy (Read This First)
+
+**This section defines what you MUST do. Violations waste user time and money.**
+
+### After Context Compaction
+
+When a conversation is compacted (you see a summary of previous work):
+1. **STOP** before continuing any task
+2. **READ** this entire CLAUDE.md file
+3. **VERIFY** you understand the current task from the summary
+4. **THEN** proceed with the work
+
+Context compaction loses nuance. Re-reading these rules prevents repeating mistakes.
+
+### Rules vs Guidelines
+
+| Type | How to Treat | Examples |
+|------|--------------|----------|
+| **MUST/NEVER/ALWAYS** | Hard rules - no exceptions | "NEVER run full test suite without asking" |
+| **Should/Prefer** | Strong defaults - deviate only with reason | "Should use targeted tests" |
+| **May/Can** | Options - use judgment | "May split into multiple PRs" |
+
+Design docs in `docs/design/` are guidelines. This CLAUDE.md file is rules.
+
+---
+
 ## Project Overview
 
 QuestFoundry v5 is a **pipeline-driven interactive fiction generation system** that uses LLMs as collaborators under constraint, not autonomous agents. It generates complete, branching interactive stories through a six-stage pipeline with human review gates.
@@ -195,58 +226,77 @@ When splitting is needed, use this order (each PR should be mergeable independen
 4. **Feature/stage PR(s)** - Actual feature implementation in slices. Each PR = one coherent capability.
 5. **Cleanup PR** - Remove dead code, tighten types, refactor, docs. Keep separate.
 
-### Stacked PRs
+### Stacked Commits with git-branchless
 
-Stacked PRs are preferred when changes are dependent:
+This project uses [git-branchless](https://github.com/arxanas/git-branchless) for managing dependent changes. This avoids the complexity and fragility of traditional stacked PRs.
 
-```
-main ← proto-pr ← runner-pr ← stage1-pr ← stage2-pr
-```
+**Why git-branchless instead of stacked PRs:**
+- Stacked PRs + squash merge = guaranteed conflicts and orphaned PRs
+- Manual rebasing across a stack is error-prone and time-consuming
+- Deleting a base branch closes all dependent PRs (unrecoverable)
 
-- Open each PR against the previous branch in the stack
-- Merge order is bottom-up
-- After merging a base PR, retarget the next PR to main and rebase
-
-**WARNING: Stacked PRs and Squash Merging Don't Mix**
-
-Squash merging creates a new commit with a different hash than the original commits. When you squash-merge PR#1, subsequent PRs in the stack still contain PR#1's original commits, causing conflicts when rebasing:
-
-```
-# After squash-merging PR#1:
-main: ... → X (squashed PR#1)
-PR#2 branch: ... → A → B → C → D  (A,B from PR#1, C,D unique to PR#2)
-                    ↑
-                    These conflict with X (same content, different hash)
-```
-
-**Solutions (choose one):**
-
-1. **Use regular merge commits** (not squash) - preserves commit ancestry, avoids conflicts
-2. **Cherry-pick unique commits** - after merging PR#1, cherry-pick only PR#2's unique commits onto main:
-   ```bash
-   git checkout origin/main -b pr2-rebased
-   git cherry-pick <commit-C> <commit-D>  # Only PR#2's unique commits
-   git push --force-with-lease origin pr2-rebased:pr2-branch
-   ```
-3. **Merge sequentially with manual rebase** - more work, but maintains squash history
-
-**CRITICAL: Never use --delete-branch when merging stacked PRs**
-
-When merging a PR that is the base for other PRs in a stack, **do not use `--delete-branch`**. Deleting the base branch causes GitHub to automatically close all dependent PRs, and they cannot be reopened (the base branch no longer exists).
+#### Setup (one-time)
 
 ```bash
-# WRONG - closes all dependent PRs:
-gh pr merge 339 --squash --delete-branch
+# Install git-branchless
+cargo install --locked git-branchless
+# Or: brew install git-branchless
 
-# CORRECT - keeps base branch for dependent PRs:
-gh pr merge 339 --squash
-# Then manually delete AFTER all dependent PRs are retargeted to main
+# Initialize in this repo
+git branchless init
 ```
 
-After merging each PR in a stack:
-1. Retarget the next PR to `main`: `gh pr edit <next-pr> --base main`
-2. Rebase the branch: `git rebase origin/main && git push --force-with-lease`
-3. Only delete the old base branch after dependent PRs are retargeted
+#### Workflow
+
+```bash
+# View your commit stack
+git sl                    # Smart log - shows commit graph
+
+# Navigate the stack
+git prev                  # Move to parent commit
+git next                  # Move to child commit
+
+# Edit commits in the stack
+git amend                 # Amend current commit (auto-rebases descendants)
+git reword                # Edit commit message (auto-rebases descendants)
+
+# Sync with main
+git sync                  # Rebase entire stack onto origin/main
+
+# Submit for review (one PR per commit)
+git submit                # Push and create PRs for each commit
+```
+
+#### Key Concepts
+
+1. **Commits, not branches** - Each logical change is one commit. Branches are created automatically when needed.
+2. **Automatic rebasing** - When you amend a commit, all descendant commits are automatically rebased.
+3. **One PR per commit** - `git submit` creates a separate PR for each commit in your stack.
+
+#### When Changes Are Requested
+
+```bash
+# Navigate to the commit that needs changes
+git prev / git next       # Or: git checkout <commit-hash>
+
+# Make your changes
+git add -p
+git amend                 # Automatically rebases all descendants
+
+# Re-submit
+git submit
+```
+
+#### Merging
+
+After PR approval, merge from the bottom of the stack up:
+```bash
+# GitHub merges PR #1 (squash)
+git sync                  # Syncs your stack with the new main
+git submit                # Updates remaining PRs
+```
+
+**Reference**: [Working with Stacked PRs using git-branchless](https://olivernguyen.io/w/stacked.prs/)
 
 ### Pull Request Requirements
 
@@ -312,7 +362,12 @@ After rebasing, resolving conflicts, or completing a feature:
 2. **Read each changed file** - don't just skim, actually read the code
 3. **Check for regressions** - especially after conflict resolution, verify you didn't break something that was working
 4. **Verify types and contracts** - TypedDicts, Protocols, return types should be semantically correct
-5. **Run tests** - `uv run pytest` must pass before push
+5. **Run targeted validation** - type check and lint; run specific unit tests for changed modules:
+   ```bash
+   uv run mypy src/ && uv run ruff check src/
+   uv run pytest tests/unit/test_<changed_module>.py -x -q  # Only if relevant tests exist
+   ```
+   Do NOT run the full test suite - that's CI's job.
 
 **Common mistakes to catch:**
 - Conflict resolution taking wrong version (e.g., breaking a TypedDict by making required fields optional)
@@ -327,13 +382,28 @@ After rebasing, resolving conflicts, or completing a feature:
 If estimated diff will exceed the target size:
 
 1. **Stop** - Do not proceed with a single large PR
-2. **Plan** - Write a slicing plan listing PR#1, PR#2, PR#3… with goals and file lists
-3. **Implement PR#1 only** - Complete it fully with tests
-4. **Choose your workflow**:
-   - **Sequential** (simpler): Wait for PR#1 to merge, then start PR#2 from fresh main
-   - **Stacked PRs** (parallel): Create PR#2 based on PR#1 branch, but be prepared to rebase when PR#1 changes
+2. **Plan** - Write a slicing plan listing commit #1, #2, #3… with goals and file lists
+3. **Implement as stacked commits** - Use git-branchless to manage the stack
+4. **Submit incrementally** - `git submit` creates one PR per commit
 
-Sequential avoids cascading rebases when review feedback changes PR#1. Use stacked PRs when changes are straightforward and unlikely to need significant rework.
+```bash
+# Example workflow for a large refactor
+git checkout origin/main
+# Make first logical change
+git add -p && git commit -m "refactor(models): rename Tension to Dilemma"
+# Make second logical change
+git add -p && git commit -m "refactor(graph): update mutations for new names"
+# Make third logical change
+git add -p && git commit -m "test: update tests for terminology rename"
+
+# View your stack
+git sl
+
+# Submit all as separate PRs
+git submit
+```
+
+Each commit becomes a reviewable PR. Merge bottom-up. Git-branchless handles the rebasing.
 
 ### No Scope Creep
 
@@ -344,7 +414,7 @@ Sequential avoids cascading rebases when review feedback changes PR#1. Use stack
 ### Documentation
 
 - **Keep architecture docs up to date** in `docs/architecture/`
-- **Design docs** in `docs/design/` are guidelines, not dogma - be critical
+- **Design docs** in `docs/design/` are guidelines (can be questioned); **CLAUDE.md is rules** (must be followed)
 - **Document decisions** in issues/PRs with rationale
 - **Update README.md** when adding features
 
@@ -408,11 +478,21 @@ questfoundry/
 ## Commands
 
 ```bash
-# Development
-uv run pytest                  # Run tests
-uv run pytest --cov           # With coverage
-uv run mypy src/              # Type checking
-uv run ruff check src/        # Linting
+# Quick validation (use these, not full test suite)
+uv run mypy src/                                    # Type check - fast, no LLM
+uv run ruff check src/                              # Lint - fast, no LLM
+uv run pytest tests/unit/test_<module>.py -x -q    # Targeted unit test
+
+# Full test suite (CI only - NEVER run locally without permission)
+uv run pytest tests/unit/ -x -q                    # All unit tests (safe, no LLM)
+uv run pytest tests/integration/ -x -q             # Integration tests (USES LLM - expensive!)
+uv run pytest --cov                                # With coverage (USES LLM - expensive!)
+
+# Git-branchless
+git sl                         # View commit stack
+git amend                      # Amend + auto-rebase descendants
+git sync                       # Rebase stack on origin/main
+git submit                     # Create PRs for each commit
 
 # CLI (once implemented)
 qf dream                       # Run DREAM stage
@@ -443,6 +523,45 @@ qf status                     # Show pipeline state
 - **E2E tests** for full pipeline runs (may use real LLM)
 - Target **70% coverage** initially, increase later
 - Use pytest fixtures for common test data
+
+### Test Execution Policy (CRITICAL)
+
+**NEVER run the full test suite (`uv run pytest tests/`) without explicit user permission.**
+
+The test suite includes integration tests that make real LLM API calls. These are:
+- **Slow**: Minutes to hours depending on provider
+- **Expensive**: Each run costs real money (API tokens)
+- **Resource-intensive**: Can saturate GPU/API rate limits
+
+#### When to Run Which Tests
+
+| Situation | Command | Why |
+|-----------|---------|-----|
+| Changed a specific file | `uv run pytest tests/unit/test_<module>.py` | Test only what changed |
+| Changed models/*.py | `uv run pytest tests/unit/test_mutations.py tests/unit/test_*models*.py` | Model validation tests |
+| Changed graph/*.py | `uv run pytest tests/unit/test_graph*.py tests/unit/test_mutations.py` | Graph logic tests |
+| Changed prompts | `uv run mypy src/ && uv run ruff check` | Prompts don't have unit tests |
+| Before pushing PR | `uv run pytest tests/unit/ -x -q` | Unit tests only, stop on first failure |
+| CI is failing | Run the specific failing test locally | Don't shotgun the whole suite |
+
+#### What NEVER to Do
+
+- **NEVER** run `uv run pytest tests/` or `uv run pytest` without `-x` (stop on first failure)
+- **NEVER** run integration tests (`tests/integration/`) without user permission
+- **NEVER** run multiple test commands in parallel (saturates resources)
+- **NEVER** run full suite "just to make sure" - that's what CI is for
+
+#### Quick Validation (Default)
+
+When you need to verify changes work, use this minimal check:
+```bash
+uv run mypy src/questfoundry/  # Type check (fast, no LLM)
+uv run ruff check src/         # Lint (fast, no LLM)
+# Only if needed:
+uv run pytest tests/unit/test_<specific>.py -x -q
+```
+
+Let CI run the full suite. Your job is targeted verification.
 
 ## Configuration
 
