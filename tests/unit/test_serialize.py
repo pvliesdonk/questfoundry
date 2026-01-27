@@ -401,14 +401,14 @@ class TestGetSectionsToRetry:
         sections = _get_sections_to_retry(errors)
         assert sections == {"entities"}
 
-    def test_maps_threads_field_to_threads_section(self) -> None:
-        """Should map threads.* errors to threads section."""
+    def test_maps_paths_field_to_paths_section(self) -> None:
+        """Should map paths.* errors to paths section."""
         from questfoundry.agents.serialize import _get_sections_to_retry
         from questfoundry.graph.mutations import SeedValidationError
 
         errors = [
             SeedValidationError(
-                field_path="threads.0.tension_id",
+                field_path="paths.0.dilemma_id",
                 issue="Tension not found",
                 available=[],
                 provided="x",
@@ -416,7 +416,7 @@ class TestGetSectionsToRetry:
         ]
 
         sections = _get_sections_to_retry(errors)
-        assert sections == {"threads"}
+        assert sections == {"paths"}
 
     def test_maps_initial_beats_to_beats_section(self) -> None:
         """Should map initial_beats.* errors to beats section."""
@@ -442,7 +442,7 @@ class TestGetSectionsToRetry:
 
         errors = [
             SeedValidationError(
-                field_path="threads.0.tension_id",
+                field_path="paths.0.dilemma_id",
                 issue="Tension not found",
                 available=[],
                 provided="x",
@@ -456,7 +456,7 @@ class TestGetSectionsToRetry:
         ]
 
         sections = _get_sections_to_retry(errors)
-        assert sections == {"threads", "beats"}
+        assert sections == {"paths", "beats"}
 
 
 class TestSerializeSeedIterativelySemanticValidation:
@@ -477,8 +477,8 @@ class TestSerializeSeedIterativelySemanticValidation:
             # Set up mock returns for each section
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
-                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
+                (MagicMock(model_dump=lambda: {"paths": []}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
                 (
@@ -514,8 +514,8 @@ class TestSerializeSeedIterativelySemanticValidation:
         with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
-                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
+                (MagicMock(model_dump=lambda: {"paths": []}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
                 (
@@ -556,13 +556,13 @@ class TestSerializeSeedIterativelySemanticValidation:
             # Map call number to section
             section_map = {
                 1: "entities",
-                2: "tensions",
-                3: "threads",
+                2: "dilemmas",
+                3: "paths",
                 4: "consequences",
                 5: "initial_beats",
                 6: "convergence_sketch",
                 # Retry calls
-                7: "threads",  # Retry threads section
+                7: "paths",  # Retry paths section
             }
             call_num = call_count[0]
             section = section_map.get(call_num, "unknown")
@@ -583,10 +583,10 @@ class TestSerializeSeedIterativelySemanticValidation:
         def mock_validate_side_effect(_graph, _output):
             validation_call_count[0] += 1
             if validation_call_count[0] == 1:
-                # First validation: return errors for threads section
+                # First validation: return errors for paths section
                 return [
                     SeedValidationError(
-                        field_path="threads.0.tension_id",
+                        field_path="paths.0.dilemma_id",
                         issue="Tension not found",
                         available=["valid_tension"],
                         provided="invalid_tension",
@@ -611,7 +611,7 @@ class TestSerializeSeedIterativelySemanticValidation:
                 graph=mock_graph,
             )
 
-            # Should have called serialize 7 times (6 initial + 1 retry for threads)
+            # Should have called serialize 7 times (6 initial + 1 retry for paths)
             assert call_count[0] == 7
             # Should have validated twice
             assert validation_call_count[0] == 2
@@ -630,7 +630,7 @@ class TestSerializeSeedIterativelySemanticValidation:
         # Always return errors
         errors = [
             SeedValidationError(
-                field_path="threads.0.tension_id",
+                field_path="paths.0.dilemma_id",
                 issue="Tension not found",
                 available=["valid_tension"],
                 provided="invalid_tension",
@@ -646,8 +646,8 @@ class TestSerializeSeedIterativelySemanticValidation:
                 MagicMock(
                     model_dump=lambda: {
                         "entities": [],
-                        "tensions": [],
-                        "threads": [],
+                        "dilemmas": [],
+                        "paths": [],
                         "consequences": [],
                         "initial_beats": [],
                         "convergence_sketch": {"convergence_points": [], "residue_notes": []},
@@ -665,7 +665,7 @@ class TestSerializeSeedIterativelySemanticValidation:
                 )
 
             assert len(exc_info.value.errors) == 1
-            assert "threads.0.tension_id" in exc_info.value.errors[0].field_path
+            assert "paths.0.dilemma_id" in exc_info.value.errors[0].field_path
 
 
 class TestSerializeResult:
@@ -676,7 +676,7 @@ class TestSerializeResult:
         from questfoundry.agents.serialize import SerializeResult
         from questfoundry.models.seed import SeedOutput
 
-        artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+        artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
         result = SerializeResult(artifact=artifact, tokens_used=100, semantic_errors=[])
 
         assert result.success is True
@@ -701,7 +701,7 @@ class TestSerializeResult:
         from questfoundry.graph.mutations import SeedValidationError
         from questfoundry.models.seed import SeedOutput
 
-        artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+        artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
         errors = [
             SeedValidationError(
                 field_path="entities.0.entity_id",
@@ -735,10 +735,10 @@ class TestSerializeSeedAsFunction:
         mock_model = MagicMock()
         mock_graph = MagicMock()
 
-        # Mock thread so _serialize_beats_per_thread gets called
-        mock_thread = {
-            "thread_id": "test_thread",
-            "tension_id": "test_tension",
+        # Mock thread so _serialize_beats_per_path gets called
+        mock_path = {
+            "path_id": "test_thread",
+            "dilemma_id": "test_tension",
             "name": "Test Thread",
             "description": "A test thread",
             "alternative_id": "alt1",
@@ -750,16 +750,16 @@ class TestSerializeSeedAsFunction:
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
-                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),  # Returns (beats_list, tokens)
             ),
         ):
-            # Per-thread serialization: entities, tensions, threads, consequences, convergence
-            # (beats handled separately by _serialize_beats_per_thread)
+            # Per-thread serialization: entities, dilemmas, paths, consequences, convergence
+            # (beats handled separately by _serialize_beats_per_path)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
-                (MagicMock(model_dump=lambda: {"threads": [mock_thread]}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
+                (MagicMock(model_dump=lambda: {"paths": [mock_path]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (
                     MagicMock(
@@ -796,7 +796,7 @@ class TestSerializeSeedAsFunction:
 
         errors = [
             SeedValidationError(
-                field_path="threads.0.tension_id",
+                field_path="paths.0.dilemma_id",
                 issue="Tension not found",
                 available=["valid_tension"],
                 provided="invalid_tension",
@@ -806,15 +806,15 @@ class TestSerializeSeedAsFunction:
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
-                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),
             ),
         ):
             mock_serialize.side_effect = [
                 # Initial 5 sections (beats handled separately)
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
-                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
+                (MagicMock(model_dump=lambda: {"paths": []}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (
                     MagicMock(
@@ -824,9 +824,9 @@ class TestSerializeSeedAsFunction:
                     ),
                     10,
                 ),
-                # Semantic retry calls for threads section (max_semantic_retries=2)
-                (MagicMock(model_dump=lambda: {"threads": []}), 10),
-                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                # Semantic retry calls for paths section (max_semantic_retries=2)
+                (MagicMock(model_dump=lambda: {"paths": []}), 10),
+                (MagicMock(model_dump=lambda: {"paths": []}), 10),
             ]
 
             with patch(
@@ -842,7 +842,7 @@ class TestSerializeSeedAsFunction:
                 assert result.success is False
                 assert result.artifact is not None  # Artifact is still returned
                 assert len(result.semantic_errors) == 1
-                assert result.semantic_errors[0].field_path == "threads.0.tension_id"
+                assert result.semantic_errors[0].field_path == "paths.0.dilemma_id"
 
     @pytest.mark.asyncio
     async def test_skips_semantic_validation_when_graph_is_none(self) -> None:
@@ -854,15 +854,15 @@ class TestSerializeSeedAsFunction:
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
-                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),
             ),
         ):
             # 5 sections (beats handled separately)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
-                (MagicMock(model_dump=lambda: {"threads": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
+                (MagicMock(model_dump=lambda: {"paths": []}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (
                     MagicMock(
@@ -913,8 +913,8 @@ class TestSerializeSeedAsFunction:
             # 5 sections (beats handled separately), then retries
             section_map = {
                 1: "entities",
-                2: "tensions",
-                3: "threads",
+                2: "dilemmas",
+                3: "paths",
                 4: "consequences",
                 5: "convergence_sketch",
                 # Semantic retry calls (2 retries for entities section)
@@ -939,7 +939,7 @@ class TestSerializeSeedAsFunction:
                 side_effect=mock_serialize_side_effect,
             ),
             patch(
-                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),
             ),
             patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
@@ -983,8 +983,8 @@ class TestSerializeSeedAsFunction:
             # 5 sections (beats handled separately)
             section_map = {
                 1: "entities",
-                2: "tensions",
-                3: "threads",
+                2: "dilemmas",
+                3: "paths",
                 4: "consequences",
                 5: "convergence_sketch",
             }
@@ -1006,7 +1006,7 @@ class TestSerializeSeedAsFunction:
                 side_effect=mock_serialize_side_effect,
             ),
             patch(
-                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),
             ),
             patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
@@ -1049,8 +1049,8 @@ class TestSerializeSeedAsFunction:
             # 5 sections (beats handled separately)
             section_map = {
                 1: "entities",
-                2: "tensions",
-                3: "threads",
+                2: "dilemmas",
+                3: "paths",
                 4: "consequences",
                 5: "convergence_sketch",
                 # Retry calls for entities (calls 6, 7 after max_semantic_retries=2)
@@ -1075,7 +1075,7 @@ class TestSerializeSeedAsFunction:
                 side_effect=mock_serialize_side_effect,
             ),
             patch(
-                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),
             ),
             patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=errors),
@@ -1104,8 +1104,8 @@ class TestFormatSectionCorrections:
 
         errors = [
             SeedValidationError(
-                field_path="tensions",
-                issue="Projected arc count (64) exceeds limit of 16. You have 6 tensions.",
+                field_path="dilemmas",
+                issue="Projected arc count (64) exceeds limit of 16. You have 6 dilemmas.",
                 available=[],
                 provided="6",
                 category=SeedErrorCategory.SEMANTIC,
@@ -1125,8 +1125,8 @@ class TestFormatSectionCorrections:
 
         errors = [
             SeedValidationError(
-                field_path="tensions",
-                issue="Maximum allowed is 4 fully-explored tensions.",
+                field_path="dilemmas",
+                issue="Maximum allowed is 4 fully-explored dilemmas.",
                 available=[],
                 provided="6",
                 category=SeedErrorCategory.SEMANTIC,
@@ -1145,7 +1145,7 @@ class TestFormatSectionCorrections:
 
         errors = [
             SeedValidationError(
-                field_path="tensions",
+                field_path="dilemmas",
                 issue="Some other error without limit keywords",
                 available=[],
                 provided="x",
@@ -1173,8 +1173,8 @@ class TestBeatRetryAndContextRefresh:
         # Beat error - will be in "beats" section after grouping
         beat_errors = [
             SeedValidationError(
-                field_path="initial_beats.0.threads",
-                issue="Thread 'bad_thread' not defined in SEED threads",
+                field_path="initial_beats.0.paths",
+                issue="Thread 'bad_thread' not defined in SEED paths",
                 available=["good_thread"],
                 provided="bad_thread",
             )
@@ -1198,11 +1198,11 @@ class TestBeatRetryAndContextRefresh:
             # After retry: no errors
             return []
 
-        # Mock thread data so _serialize_beats_per_thread has threads to work with
-        mock_thread = {
-            "thread_id": "test_thread",
+        # Mock thread data so _serialize_beats_per_path has paths to work with
+        mock_path = {
+            "path_id": "test_thread",
             "name": "Test Thread",
-            "tension_id": "test_tension",
+            "dilemma_id": "test_tension",
             "alternative_id": "alt1",
             "unexplored_alternative_ids": [],
             "thread_importance": "major",
@@ -1213,7 +1213,7 @@ class TestBeatRetryAndContextRefresh:
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
-                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                "questfoundry.agents.serialize._serialize_beats_per_path",
                 new=mock_beats,
             ),
             patch(
@@ -1224,8 +1224,8 @@ class TestBeatRetryAndContextRefresh:
             # 5 sections (beats handled separately)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
-                (MagicMock(model_dump=lambda: {"threads": [mock_thread]}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
+                (MagicMock(model_dump=lambda: {"paths": [mock_path]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (
                     MagicMock(
@@ -1251,7 +1251,7 @@ class TestBeatRetryAndContextRefresh:
 
     @pytest.mark.asyncio
     async def test_thread_retry_refreshes_context(self) -> None:
-        """Should refresh brief_with_threads when threads are retried."""
+        """Should refresh brief_with_paths when paths are retried."""
         from questfoundry.agents.serialize import serialize_seed_as_function
         from questfoundry.graph.mutations import SeedValidationError
 
@@ -1261,7 +1261,7 @@ class TestBeatRetryAndContextRefresh:
         # Thread error
         thread_errors = [
             SeedValidationError(
-                field_path="threads.0.tension_id",
+                field_path="paths.0.dilemma_id",
                 issue="Tension not found",
                 available=["valid_tension"],
                 provided="invalid_tension",
@@ -1280,12 +1280,12 @@ class TestBeatRetryAndContextRefresh:
 
             section_map = {
                 1: "entities",
-                2: "tensions",
-                3: "threads",
+                2: "dilemmas",
+                3: "paths",
                 4: "consequences",
                 5: "convergence_sketch",
-                # Retry call for threads
-                6: "threads",
+                # Retry call for paths
+                6: "paths",
             }
             section = section_map.get(call_count[0], "unknown")
 
@@ -1298,16 +1298,16 @@ class TestBeatRetryAndContextRefresh:
                     ),
                     10,
                 )
-            if section == "threads":
-                # Return a thread so format_thread_ids_context has something
+            if section == "paths":
+                # Return a thread so format_path_ids_context has something
                 return (
                     MagicMock(
                         model_dump=lambda: {
-                            "threads": [
+                            "paths": [
                                 {
-                                    "thread_id": "test_thread",
+                                    "path_id": "test_thread",
                                     "name": "Test Thread",
-                                    "tension_id": "valid_tension",
+                                    "dilemma_id": "valid_tension",
                                     "alternative_id": "alt1",
                                     "unexplored_alternative_ids": [],
                                     "thread_importance": "major",
@@ -1335,7 +1335,7 @@ class TestBeatRetryAndContextRefresh:
                 side_effect=mock_serialize_side_effect,
             ),
             patch(
-                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),
             ),
             patch(
@@ -1361,7 +1361,7 @@ class TestBeatRetryAndContextRefresh:
             # The consequences call (4) should have had the original brief
             # After thread retry, any subsequent calls should have updated context
             # Note: In this test structure, the retry happens at call 6, and the
-            # brief_with_threads update occurs during thread retry processing
+            # brief_with_paths update occurs during thread retry processing
 
     @pytest.mark.asyncio
     async def test_beat_retry_failure_continues_gracefully(self) -> None:
@@ -1378,7 +1378,7 @@ class TestBeatRetryAndContextRefresh:
         # Beat error that triggers retry
         beat_errors = [
             SeedValidationError(
-                field_path="initial_beats.0.threads",
+                field_path="initial_beats.0.paths",
                 issue="Thread 'bad_thread' not defined",
                 available=["good_thread"],
                 provided="bad_thread",
@@ -1402,11 +1402,11 @@ class TestBeatRetryAndContextRefresh:
 
         mock_beats = AsyncMock(side_effect=mock_beats_side_effect)
 
-        # Mock thread data for _serialize_beats_per_thread
-        mock_thread = {
-            "thread_id": "test_thread",
+        # Mock thread data for _serialize_beats_per_path
+        mock_path = {
+            "path_id": "test_thread",
             "name": "Test Thread",
-            "tension_id": "test_tension",
+            "dilemma_id": "test_tension",
             "alternative_id": "alt1",
             "unexplored_alternative_ids": [],
             "thread_importance": "major",
@@ -1426,7 +1426,7 @@ class TestBeatRetryAndContextRefresh:
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
-                "questfoundry.agents.serialize._serialize_beats_per_thread",
+                "questfoundry.agents.serialize._serialize_beats_per_path",
                 new=mock_beats,
             ),
             patch(
@@ -1437,8 +1437,8 @@ class TestBeatRetryAndContextRefresh:
             # 5 sections (beats handled separately)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"tensions": []}), 10),
-                (MagicMock(model_dump=lambda: {"threads": [mock_thread]}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
+                (MagicMock(model_dump=lambda: {"paths": [mock_path]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (
                     MagicMock(

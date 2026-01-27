@@ -964,7 +964,7 @@ class GrowStage:
             return GrowPhaseResult(
                 phase="narrative_gaps",
                 status="completed",
-                detail="No threads to check for gaps",
+                detail="No paths to check for gaps",
             )
 
         # Build path sequences with summaries

@@ -211,9 +211,9 @@ def get_seed_discuss_prompt(
 def get_seed_summarize_prompt(
     brainstorm_context: str = "",
     entity_count: int = 0,
-    tension_count: int = 0,
+    dilemma_count: int = 0,
     entity_manifest: str = "",
-    tension_manifest: str = "",
+    dilemma_manifest: str = "",
 ) -> str:
     """Build the SEED summarize prompt with manifest awareness.
 
@@ -221,12 +221,12 @@ def get_seed_summarize_prompt(
     it must include decisions for, enforcing completeness by construction.
 
     Args:
-        brainstorm_context: YAML representation of brainstorm entities/tensions.
+        brainstorm_context: YAML representation of brainstorm entities/dilemmas.
             Required for the summarizer to know what IDs to reference.
         entity_count: Total number of entities requiring decisions.
-        tension_count: Total number of tensions requiring decisions.
+        dilemma_count: Total number of dilemmas requiring decisions.
         entity_manifest: Formatted list of entity IDs for manifest.
-        tension_manifest: Formatted list of tension IDs for manifest.
+        dilemma_manifest: Formatted list of dilemma IDs for manifest.
 
     Returns:
         System prompt string for the SEED summarize call.
@@ -239,9 +239,9 @@ def get_seed_summarize_prompt(
     return prompt.format(
         brainstorm_context=brainstorm_context,
         entity_count=entity_count,
-        tension_count=tension_count,
+        dilemma_count=dilemma_count,
         entity_manifest=entity_manifest or "(No entities)",
-        tension_manifest=tension_manifest or "(No tensions)",
+        dilemma_manifest=dilemma_manifest or "(No dilemmas)",
     )
 
 

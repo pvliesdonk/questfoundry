@@ -330,9 +330,9 @@ class SeedStage:
         summarize_prompt = get_seed_summarize_prompt(
             brainstorm_context=brainstorm_context,
             entity_count=counts["entities"],
-            tension_count=counts["dilemmas"],  # Using new key name from context.py
+            dilemma_count=counts["dilemmas"],
             entity_manifest=manifests["entity_manifest"],
-            tension_manifest=manifests["dilemma_manifest"],  # Using new key name from context.py
+            dilemma_manifest=manifests["dilemma_manifest"],
         )
 
         # Outer loop: conversation-level retry for semantic errors

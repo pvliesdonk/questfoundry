@@ -278,11 +278,9 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
         mock_prompt.assert_called_once()
         call_kwargs = mock_prompt.call_args.kwargs
         assert call_kwargs["entity_count"] == 1
-        assert call_kwargs["tension_count"] == 0  # Still uses tension_count param name (legacy)
+        assert call_kwargs["dilemma_count"] == 0
         assert "hero" in call_kwargs["entity_manifest"]
-        assert (
-            call_kwargs["tension_manifest"] == "(No dilemmas)"
-        )  # Value changed to dilemma terminology
+        assert call_kwargs["dilemma_manifest"] == "(No dilemmas)"
 
         # Verify summarize was called with seed prompt
         assert mock_summarize.call_args.kwargs["system_prompt"] == "Seed summarize prompt"
