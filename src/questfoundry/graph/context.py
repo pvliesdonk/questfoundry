@@ -176,7 +176,7 @@ def format_scoped_id(scope: str, raw_id: str) -> str:
     """Format a raw ID with its scope prefix.
 
     Args:
-        scope: The scope type (e.g., 'entity', 'tension', 'thread').
+        scope: The scope type (e.g., 'entity', 'dilemma', 'path').
         raw_id: The raw ID without scope.
 
     Returns:
