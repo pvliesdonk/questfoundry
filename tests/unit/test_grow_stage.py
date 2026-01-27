@@ -239,7 +239,7 @@ class TestCreateGrowStage:
         assert stage.gate is gate
 
 
-class TestPhase2ThreadAgnostic:
+class TestPhase2PathAgnostic:
     @pytest.mark.asyncio
     async def test_phase_2_with_valid_assessments(self) -> None:
         """Phase 2 with mocked LLM returns valid assessments and updates beats."""

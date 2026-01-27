@@ -405,13 +405,13 @@ class TestEdgeOperations:
         graph.create_node("beat_1", {"type": "beat"})
         graph.create_node("beat_2", {"type": "beat"})
         graph.create_node("beat_3", {"type": "beat"})
-        graph.create_node("thread_1", {"type": "path"})
-        graph.create_node("thread_2", {"type": "path"})
-        graph.add_edge("belongs_to", "beat_1", "thread_1")
-        graph.add_edge("belongs_to", "beat_2", "thread_1")
-        graph.add_edge("belongs_to", "beat_3", "thread_2")
+        graph.create_node("path_1", {"type": "path"})
+        graph.create_node("path_2", {"type": "path"})
+        graph.add_edge("belongs_to", "beat_1", "path_1")
+        graph.add_edge("belongs_to", "beat_2", "path_1")
+        graph.add_edge("belongs_to", "beat_3", "path_2")
 
-        edges = graph.get_edges(to_id="thread_1")
+        edges = graph.get_edges(to_id="path_1")
         assert len(edges) == 2
 
     def test_get_edges_filter_by_type(self) -> None:
@@ -421,9 +421,9 @@ class TestEdgeOperations:
         graph.create_node("t2", {"type": "dilemma"})
         graph.create_node("a1", {"type": "alternative"})
         graph.create_node("a2", {"type": "alternative"})
-        graph.create_node("thread_1", {"type": "path"})
+        graph.create_node("path_1", {"type": "path"})
         graph.add_edge("has_answer", "t1", "a1")
-        graph.add_edge("explores", "thread_1", "a1")
+        graph.add_edge("explores", "path_1", "a1")
         graph.add_edge("has_answer", "t2", "a2")
 
         edges = graph.get_edges(edge_type="has_answer")

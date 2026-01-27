@@ -109,13 +109,13 @@ class TestGrowValidationError:
         error = GrowValidationError(
             field_path="arc.paths.0",
             issue="path not found in graph",
-            available=["thread_a", "thread_b"],
-            provided="thread_x",
+            available=["path_a", "path_b"],
+            provided="path_x",
             category=GrowErrorCategory.REFERENCE,
         )
-        assert error.provided == "thread_x"
+        assert error.provided == "path_x"
         assert error.category == GrowErrorCategory.REFERENCE
-        assert "thread_a" in error.available
+        assert "path_a" in error.available
 
 
 class TestGrowMutationError:

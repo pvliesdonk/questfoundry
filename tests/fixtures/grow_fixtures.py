@@ -502,7 +502,7 @@ def make_e2e_fixture_graph() -> Graph:
 
     # Beats with lifecycle effects
     beat_defs: list[tuple[str, str, list[str], list[dict[str, str]]]] = [
-        # (beat_id, summary, thread_ids, dilemma_impacts)
+        # (beat_id, summary, path_ids, dilemma_impacts)
         ("opening", "The hero leaves the village on a quest.", all_path_ids, []),
         (
             "mt_encounter",

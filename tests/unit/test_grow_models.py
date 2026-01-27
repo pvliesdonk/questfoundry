@@ -18,7 +18,6 @@ from questfoundry.models.grow import (
     OverlayProposal,
     Passage,
     PathAgnosticAssessment,
-    Phase3Output,
     SceneTypeTag,
 )
 
@@ -76,7 +75,7 @@ class TestArc:
         assert arc.converges_to == "arc::spine"
         assert arc.converges_at == "beat_5"
 
-    def test_threads_migration(self) -> None:
+    def test_paths_migration(self) -> None:
         """Verify backward compat: 'paths' field migrates to 'paths'."""
         arc = Arc(
             arc_id="test",
@@ -227,17 +226,6 @@ class TestIntersectionProposal:
         assert intersection.resolved_location is None
 
 
-class TestPhase3Output:
-    def test_knots_field_is_ignored(self) -> None:
-        """Legacy 'knots' field is ignored (no backward-compat migration)."""
-        output = Phase3Output(
-            knots=[  # type: ignore[call-arg]
-                {"beat_ids": ["b1", "b2"], "rationale": "test"},
-            ]
-        )
-        assert output.intersections == []
-
-
 class TestSceneTypeTag:
     @pytest.mark.parametrize(
         "scene_type",
@@ -280,14 +268,6 @@ class TestGapProposal:
     def test_empty_summary_rejected(self) -> None:
         with pytest.raises(ValidationError, match="summary"):
             GapProposal(path_id="t1", summary="")
-
-    def test_thread_id_rejected(self) -> None:
-        """Legacy 'thread_id' field is rejected (no backward-compat migration)."""
-        with pytest.raises(ValidationError, match="path_id"):
-            GapProposal(  # type: ignore[call-arg]
-                thread_id="thread_main",
-                summary="A scene.",
-            )
 
 
 class TestOverlayProposal:

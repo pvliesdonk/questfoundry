@@ -113,7 +113,7 @@ class TestGetSeedSummarizePrompt:
         # These sections should be described in the prompt
         assert "Entity Decisions" in result
         assert "Dilemma Decisions" in result
-        assert "Paths" in result or "Threads" in result  # Allow both for backwards compat
+        assert "Paths" in result or "Paths" in result  # Allow both for backwards compat
         assert "Consequences" in result
         assert "Initial Beats" in result
         assert "Convergence" in result
