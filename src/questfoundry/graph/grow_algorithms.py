@@ -564,13 +564,13 @@ def bfs_reachable(graph: Graph, start_node_id: str, edge_types: list[str]) -> se
 
 
 # ---------------------------------------------------------------------------
-# Phase 3: Knot Detection
+# Phase 3: Intersection Detection
 # ---------------------------------------------------------------------------
 
 
 @dataclass
-class KnotCandidate:
-    """A group of beats that share signals and could form a knot.
+class IntersectionCandidate:
+    """A group of beats that share signals and could form an intersection.
 
     Attributes:
         beat_ids: Beat node IDs that share signals.
@@ -583,17 +583,21 @@ class KnotCandidate:
     shared_value: str
 
 
-def build_knot_candidates(graph: Graph) -> list[KnotCandidate]:
-    """Find beats that share signals and could form knots.
+# Backward compatibility alias
+KnotCandidate = IntersectionCandidate
+
+
+def build_intersection_candidates(graph: Graph) -> list[IntersectionCandidate]:
+    """Find beats that share signals and could form intersections.
 
     Groups beats by shared locations/location_alternatives and shared entities.
-    Only considers beats from different tensions (same tension = alternative).
+    Only considers beats from different dilemmas (same dilemma = alternative).
 
     Args:
-        graph: Graph with beat, thread, and tension nodes.
+        graph: Graph with beat, path, and dilemma nodes.
 
     Returns:
-        List of KnotCandidate groups, prioritizing location overlap.
+        List of IntersectionCandidate groups, prioritizing location overlap.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     if not beat_nodes:
@@ -609,6 +613,10 @@ def build_knot_candidates(graph: Graph) -> list[KnotCandidate]:
     entity_groups = _group_by_entity(graph, beat_nodes, beat_tensions)
 
     return location_groups + entity_groups
+
+
+# Backward compatibility alias
+build_knot_candidates = build_intersection_candidates
 
 
 def _build_beat_tensions(graph: Graph, beat_nodes: dict[str, Any]) -> dict[str, set[str]]:
@@ -744,21 +752,21 @@ def _filter_different_tensions(
     return sorted(beat_ids)
 
 
-def check_knot_compatibility(
+def check_intersection_compatibility(
     graph: Graph,
     beat_ids: list[str],
 ) -> list[GrowValidationError]:
-    """Check if beats can form a valid knot.
+    """Check if beats can form a valid intersection.
 
     Validates:
     - All beat IDs exist in the graph
-    - Beats are from different tensions (not same tension)
+    - Beats are from different dilemmas (not same dilemma)
     - No circular requires conflicts between the beats
     - At least 2 beats
 
     Args:
-        graph: Graph with beat and thread nodes.
-        beat_ids: Proposed knot beat IDs.
+        graph: Graph with beat and path nodes.
+        beat_ids: Proposed intersection beat IDs.
 
     Returns:
         List of validation errors. Empty if compatible.
@@ -768,8 +776,8 @@ def check_knot_compatibility(
     if len(beat_ids) < 2:
         errors.append(
             GrowValidationError(
-                field_path="knot.beat_ids",
-                issue="Knot requires at least 2 beats",
+                field_path="intersection.beat_ids",
+                issue="Intersection requires at least 2 beats",
                 category=GrowErrorCategory.STRUCTURAL,
             )
         )
@@ -782,7 +790,7 @@ def check_knot_compatibility(
         if bid not in beat_nodes:
             errors.append(
                 GrowValidationError(
-                    field_path=f"knot.beat_ids.{bid}",
+                    field_path=f"intersection.beat_ids.{bid}",
                     issue=f"Beat '{bid}' not found in graph",
                     category=GrowErrorCategory.REFERENCE,
                 )
@@ -791,26 +799,26 @@ def check_knot_compatibility(
     if errors:
         return errors
 
-    # Check beats are from different tensions
-    beat_tensions = _build_beat_tensions(graph, beat_nodes)
-    tension_sets = [beat_tensions.get(bid, set()) for bid in beat_ids]
+    # Check beats are from different dilemmas
+    beat_dilemmas = _build_beat_tensions(graph, beat_nodes)
+    dilemma_sets = [beat_dilemmas.get(bid, set()) for bid in beat_ids]
 
-    # Knots must span at least 2 different tensions
-    all_tensions = set.union(*tension_sets) if tension_sets else set()
+    # Intersections must span at least 2 different dilemmas
+    all_dilemmas = set.union(*dilemma_sets) if dilemma_sets else set()
 
-    if len(all_tensions) < 2:
+    if len(all_dilemmas) < 2:
         errors.append(
             GrowValidationError(
-                field_path="knot.tensions",
+                field_path="intersection.dilemmas",
                 issue=(
-                    f"Beats span only {len(all_tensions)} tension(s): {sorted(all_tensions)}. "
-                    f"Knots must span at least 2 different tensions."
+                    f"Beats span only {len(all_dilemmas)} dilemma(s): {sorted(all_dilemmas)}. "
+                    f"Intersections must span at least 2 different dilemmas."
                 ),
                 category=GrowErrorCategory.STRUCTURAL,
             )
         )
 
-    # Check no circular requires between the knot beats
+    # Check no circular requires between the intersection beats
     beat_set = set(beat_ids)
     requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="requires")
     for edge in requires_edges:
@@ -819,10 +827,10 @@ def check_knot_compatibility(
         if from_id in beat_set and to_id in beat_set:
             errors.append(
                 GrowValidationError(
-                    field_path="knot.requires",
+                    field_path="intersection.requires",
                     issue=(
                         f"Beat '{from_id}' requires '{to_id}' — "
-                        f"knot beats cannot have requires dependencies on each other"
+                        f"intersection beats cannot have requires dependencies on each other"
                     ),
                     category=GrowErrorCategory.STRUCTURAL,
                 )
@@ -831,8 +839,12 @@ def check_knot_compatibility(
     return errors
 
 
-def resolve_knot_location(graph: Graph, beat_ids: list[str]) -> str | None:
-    """Find a shared location for the knot beats.
+# Backward compatibility alias
+check_knot_compatibility = check_intersection_compatibility
+
+
+def resolve_intersection_location(graph: Graph, beat_ids: list[str]) -> str | None:
+    """Find a shared location for the intersection beats.
 
     Resolution priority:
     1. Shared primary location
@@ -842,7 +854,7 @@ def resolve_knot_location(graph: Graph, beat_ids: list[str]) -> str | None:
 
     Args:
         graph: Graph with beat nodes.
-        beat_ids: Beat IDs in the proposed knot.
+        beat_ids: Beat IDs in the proposed intersection.
 
     Returns:
         Resolved location string, or None if no common location.
@@ -886,52 +898,60 @@ def resolve_knot_location(graph: Graph, beat_ids: list[str]) -> str | None:
     return None
 
 
-def apply_knot_mark(
+# Backward compatibility alias
+resolve_knot_location = resolve_intersection_location
+
+
+def apply_intersection_mark(
     graph: Graph,
     beat_ids: list[str],
     resolved_location: str | None,
 ) -> None:
-    """Mark beats as belonging to a knot (multi-thread scene).
+    """Mark beats as belonging to an intersection (multi-path scene).
 
     Updates beat nodes with:
-    - knot_group: list of other beat IDs in the knot
+    - intersection_group: list of other beat IDs in the intersection
     - resolved_location: the location chosen for the combined scene
 
     Also adds additional belongs_to edges so each beat is assigned to
-    all threads from all beats in the knot.
+    all paths from all beats in the intersection.
 
     Args:
         graph: Graph to mutate.
-        beat_ids: Beat IDs to knot together.
+        beat_ids: Beat IDs to group into intersection.
         resolved_location: Resolved location, or None.
     """
     beat_set = set(beat_ids)
 
-    # Collect all thread assignments across all knot beats
-    all_thread_ids: set[str] = set()
+    # Collect all path assignments across all intersection beats
+    all_path_ids: set[str] = set()
     belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
     for edge in belongs_to_edges:
         if edge["from"] in beat_set:
-            all_thread_ids.add(edge["to"])
+            all_path_ids.add(edge["to"])
 
     # Collect new edges to add (batch to avoid stale reads)
     new_edges: list[tuple[str, str]] = []
     for bid in beat_ids:
-        current_threads = {e["to"] for e in belongs_to_edges if e["from"] == bid}
-        for thread_id in all_thread_ids - current_threads:
-            new_edges.append((bid, thread_id))
+        current_paths = {e["to"] for e in belongs_to_edges if e["from"] == bid}
+        for path_id in all_path_ids - current_paths:
+            new_edges.append((bid, path_id))
 
     # Update each beat's node data
     for bid in beat_ids:
         others = sorted(b for b in beat_ids if b != bid)
-        update_data: dict[str, Any] = {"knot_group": others}
+        update_data: dict[str, Any] = {"intersection_group": others}
         if resolved_location:
             update_data["location"] = resolved_location
         graph.update_node(bid, **update_data)
 
-    # Apply cross-thread edges
+    # Apply cross-path edges
     for from_id, to_id in new_edges:
         graph.add_edge("belongs_to", from_id, to_id)
+
+
+# Backward compatibility alias
+apply_knot_mark = apply_intersection_mark
 
 
 # ---------------------------------------------------------------------------

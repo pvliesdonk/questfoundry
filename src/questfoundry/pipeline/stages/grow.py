@@ -2,7 +2,7 @@
 
 The GROW stage builds the complete branching structure from the SEED
 graph. It runs a mix of deterministic and LLM-powered phases that
-enumerate arcs, assess thread-agnostic beats, compute
+enumerate arcs, assess path-agnostic beats, compute
 divergence/convergence points, create passages and codewords, and
 prune unreachable nodes.
 
@@ -149,8 +149,8 @@ class GrowStage:
         """
         return [
             (self._phase_1_validate_dag, "validate_dag"),
-            (self._phase_2_thread_agnostic, "thread_agnostic"),
-            (self._phase_3_knots, "knots"),
+            (self._phase_2_path_agnostic, "path_agnostic"),
+            (self._phase_3_intersections, "intersections"),
             (self._phase_4a_scene_types, "scene_types"),
             (self._phase_4b_narrative_gaps, "narrative_gaps"),
             (self._phase_4c_pacing_gaps, "pacing_gaps"),
@@ -506,29 +506,30 @@ class GrowStage:
     # LLM phases
     # -------------------------------------------------------------------------
 
-    async def _phase_2_thread_agnostic(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 2: Thread-agnostic assessment.
+    async def _phase_2_path_agnostic(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 2: Path-agnostic assessment.
 
-        Identifies beats whose prose is compatible across multiple threads
-        of the same tension. Thread-agnostic beats don't need separate
-        renderings per thread — they read the same regardless of path.
+        Identifies beats whose prose is compatible across multiple paths
+        of the same dilemma. Path-agnostic beats don't need separate
+        renderings per path — they read the same regardless of path.
 
         This is about prose compatibility, not logical compatibility.
-        A beat is thread-agnostic if its narrative content doesn't reference
-        thread-specific choices or consequences.
+        A beat is path-agnostic if its narrative content doesn't reference
+        path-specific choices or consequences.
         """
-        from questfoundry.models.grow import Phase2Output, ThreadAgnosticAssessment
+        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
 
-        # Collect tensions with multiple threads
-        tension_nodes = graph.get_nodes_by_type("tension")
-        thread_nodes = graph.get_nodes_by_type("thread")
+        # Collect dilemmas with multiple paths
+        # Note: Graph stores dilemmas as "tension" and paths as "thread" for backward compat
+        dilemma_nodes = graph.get_nodes_by_type("tension")
+        path_nodes = graph.get_nodes_by_type("thread")
         beat_nodes = graph.get_nodes_by_type("beat")
 
-        if not tension_nodes or not thread_nodes or not beat_nodes:
+        if not dilemma_nodes or not path_nodes or not beat_nodes:
             return GrowPhaseResult(
-                phase="thread_agnostic",
+                phase="path_agnostic",
                 status="completed",
-                detail="No tensions/threads/beats to assess",
+                detail="No dilemmas/paths/beats to assess",
             )
 
         # Build dilemma → paths mapping from path node dilemma_id properties
@@ -541,36 +542,36 @@ class GrowStage:
 
         if not multi_path_dilemmas:
             return GrowPhaseResult(
-                phase="thread_agnostic",
+                phase="path_agnostic",
                 status="completed",
-                detail="No multi-thread tensions to assess",
+                detail="No multi-path dilemmas to assess",
             )
 
-        # Build beat → threads mapping via belongs_to edges
-        beat_thread_map: dict[str, list[str]] = {}
+        # Build beat → paths mapping via belongs_to edges
+        beat_path_map: dict[str, list[str]] = {}
         belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
         for edge in belongs_to_edges:
             beat_id = edge["from"]
-            thread_id = edge["to"]
-            beat_thread_map.setdefault(beat_id, []).append(thread_id)
+            path_id = edge["to"]
+            beat_path_map.setdefault(beat_id, []).append(path_id)
 
-        # Find beats that belong to multiple threads of the same tension
-        # These are candidates for thread-agnostic assessment
-        candidate_beats: dict[str, list[str]] = {}  # beat_id → list of tension_ids
-        for beat_id, beat_threads in beat_thread_map.items():
+        # Find beats that belong to multiple paths of the same dilemma
+        # These are candidates for path-agnostic assessment
+        candidate_beats: dict[str, list[str]] = {}  # beat_id → list of dilemma_ids
+        for beat_id, beat_paths in beat_path_map.items():
             if beat_id not in beat_nodes:
                 continue
-            for tension_id, tension_thread_list in multi_path_dilemmas.items():
-                # Count how many of this tension's threads the beat belongs to
-                shared = [t for t in beat_threads if t in tension_thread_list]
+            for dilemma_id, dilemma_path_list in multi_path_dilemmas.items():
+                # Count how many of this dilemma's paths the beat belongs to
+                shared = [p for p in beat_paths if p in dilemma_path_list]
                 if len(shared) > 1:
-                    candidate_beats.setdefault(beat_id, []).append(tension_id)
+                    candidate_beats.setdefault(beat_id, []).append(dilemma_id)
 
         if not candidate_beats:
             return GrowPhaseResult(
-                phase="thread_agnostic",
+                phase="path_agnostic",
                 status="completed",
-                detail="No candidate beats for thread-agnostic assessment",
+                detail="No candidate beats for path-agnostic assessment",
             )
 
         # Build context for LLM
@@ -578,18 +579,20 @@ class GrowStage:
         valid_beat_ids: list[str] = []
         valid_dilemma_ids: list[str] = []
 
-        for beat_id, dilemma_ids in sorted(candidate_beats.items()):
+        for beat_id, dilemma_id_list in sorted(candidate_beats.items()):
             beat_data = beat_nodes[beat_id]
             summary = beat_data.get("summary", "No summary")
-            dilemmas_str = ", ".join(tension_nodes[tid].get("raw_id", tid) for tid in dilemma_ids)
+            dilemmas_str = ", ".join(
+                dilemma_nodes[did].get("raw_id", did) for did in dilemma_id_list
+            )
             beat_summaries.append(
                 f"- beat_id: {beat_id}\n  summary: {summary}\n  dilemmas: [{dilemmas_str}]"
             )
             valid_beat_ids.append(beat_id)
-            for tid in dilemma_ids:
-                raw_tid = tension_nodes[tid].get("raw_id", tid)
-                if raw_tid not in valid_dilemma_ids:
-                    valid_dilemma_ids.append(raw_tid)
+            for did in dilemma_id_list:
+                raw_did = dilemma_nodes[did].get("raw_id", did)
+                if raw_did not in valid_dilemma_ids:
+                    valid_dilemma_ids.append(raw_did)
 
         context = {
             "beat_summaries": "\n".join(beat_summaries),
@@ -615,13 +618,13 @@ class GrowStage:
             )
         except GrowStageError as e:
             return GrowPhaseResult(
-                phase="thread_agnostic",
+                phase="path_agnostic",
                 status="failed",
                 detail=str(e),
             )
 
         # Semantic validation: check all IDs exist
-        valid_assessments: list[ThreadAgnosticAssessment] = []
+        valid_assessments: list[PathAgnosticAssessment] = []
         for assessment in result.assessments:
             if assessment.beat_id not in beat_nodes:
                 log.warning(
@@ -630,17 +633,17 @@ class GrowStage:
                 )
                 continue
             # Filter agnostic_for to valid dilemma raw_ids
-            invalid_dilemmas = [t for t in assessment.agnostic_for if t not in valid_dilemma_ids]
+            invalid_dilemmas = [d for d in assessment.agnostic_for if d not in valid_dilemma_ids]
             if invalid_dilemmas:
                 log.warning(
                     "phase2_invalid_dilemma_ids",
                     beat_id=assessment.beat_id,
                     invalid_ids=invalid_dilemmas,
                 )
-            valid_dilemmas = [t for t in assessment.agnostic_for if t in valid_dilemma_ids]
+            valid_dilemmas = [d for d in assessment.agnostic_for if d in valid_dilemma_ids]
             if valid_dilemmas:
                 valid_assessments.append(
-                    ThreadAgnosticAssessment(
+                    PathAgnosticAssessment(
                         beat_id=assessment.beat_id,
                         agnostic_for=valid_dilemmas,
                     )
@@ -651,45 +654,45 @@ class GrowStage:
         for assessment in valid_assessments:
             graph.update_node(
                 assessment.beat_id,
-                thread_agnostic_for=assessment.agnostic_for,
+                path_agnostic_for=assessment.agnostic_for,
             )
             agnostic_count += 1
 
         return GrowPhaseResult(
-            phase="thread_agnostic",
+            phase="path_agnostic",
             status="completed",
             detail=f"Assessed {len(candidate_beats)} beats, {agnostic_count} marked agnostic",
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
 
-    async def _phase_3_knots(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 3: Knot detection.
+    async def _phase_3_intersections(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 3: Intersection detection.
 
-        Clusters beats from different threads (different tensions) into
-        scenes where multiple tensions intersect. Uses LLM to propose
-        knots, then validates with deterministic compatibility checks.
+        Clusters beats from different paths (different dilemmas) into
+        scenes where multiple dilemmas intersect. Uses LLM to propose
+        intersections, then validates with deterministic compatibility checks.
 
-        A knot is valid when:
-        - Beats are from different tensions
+        An intersection is valid when:
+        - Beats are from different dilemmas
         - No requires conflicts between the beats
         - Location is resolvable (shared location exists)
         """
         from questfoundry.graph.grow_algorithms import (
-            apply_knot_mark,
-            build_knot_candidates,
-            check_knot_compatibility,
-            resolve_knot_location,
+            apply_intersection_mark,
+            build_intersection_candidates,
+            check_intersection_compatibility,
+            resolve_intersection_location,
         )
         from questfoundry.models.grow import Phase3Output
 
         # Build candidate pool
-        candidates = build_knot_candidates(graph)
+        candidates = build_intersection_candidates(graph)
         if not candidates:
             return GrowPhaseResult(
-                phase="knots",
+                phase="intersections",
                 status="completed",
-                detail="No knot candidates found (no beats share signals across tensions)",
+                detail="No intersection candidates found (no beats share signals across dilemmas)",
             )
 
         # Build context for LLM
@@ -724,30 +727,30 @@ class GrowStage:
             "candidate_count": str(len(valid_beat_ids_list)),
         }
 
-        # Call LLM for knot proposals
+        # Call LLM for intersection proposals
         from questfoundry.graph.grow_validators import validate_phase3_output
 
         validator = partial(validate_phase3_output, valid_beat_ids=valid_beat_ids)
         try:
             result, llm_calls, tokens = await self._grow_llm_call(
                 model=model,
-                template_name="grow_phase3_knots",
+                template_name="grow_phase3_intersections",
                 context=context,
                 output_schema=Phase3Output,
                 semantic_validator=validator,
             )
         except GrowStageError as e:
             return GrowPhaseResult(
-                phase="knots",
+                phase="intersections",
                 status="failed",
                 detail=str(e),
             )
 
-        # Validate and apply knots
+        # Validate and apply intersections
         applied_count = 0
         skipped_count = 0
 
-        for proposal in result.knots:
+        for proposal in result.intersections:
             # Filter to valid beat IDs
             valid_ids = [bid for bid in proposal.beat_ids if bid in beat_nodes]
             if len(valid_ids) < 2:
@@ -760,10 +763,10 @@ class GrowStage:
                 continue
 
             # Run compatibility check
-            errors = check_knot_compatibility(graph, valid_ids)
+            errors = check_intersection_compatibility(graph, valid_ids)
             if errors:
                 log.warning(
-                    "phase3_incompatible_knot",
+                    "phase3_incompatible_intersection",
                     beat_ids=valid_ids,
                     errors=[e.issue for e in errors],
                 )
@@ -774,27 +777,27 @@ class GrowStage:
             if proposal.resolved_location:
                 location = proposal.resolved_location
             else:
-                location = resolve_knot_location(graph, valid_ids)
+                location = resolve_intersection_location(graph, valid_ids)
                 log.debug(
                     "phase3_location_resolved",
                     beat_ids=valid_ids,
                     resolved=location,
                 )
 
-            # Apply the knot
-            apply_knot_mark(graph, valid_ids, location)
+            # Apply the intersection
+            apply_intersection_mark(graph, valid_ids, location)
             applied_count += 1
             log.debug(
-                "phase3_knot_applied",
+                "phase3_intersection_applied",
                 beat_ids=valid_ids,
                 location=location,
             )
 
         return GrowPhaseResult(
-            phase="knots",
+            phase="intersections",
             status="completed",
             detail=(
-                f"Proposed {len(result.knots)} knots: "
+                f"Proposed {len(result.intersections)} intersections: "
                 f"{applied_count} applied, {skipped_count} skipped"
             ),
             llm_calls=llm_calls,
