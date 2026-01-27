@@ -531,17 +531,15 @@ class GrowStage:
                 detail="No tensions/threads/beats to assess",
             )
 
-        # Build tension → threads mapping from thread node tension_id properties
-        from questfoundry.graph.grow_algorithms import build_tension_threads
+        # Build dilemma → paths mapping from path node dilemma_id properties
+        from questfoundry.graph.grow_algorithms import build_dilemma_paths
 
-        tension_threads = build_tension_threads(graph)
+        dilemma_paths = build_dilemma_paths(graph)
 
-        # Only assess tensions with multiple threads
-        multi_thread_tensions = {
-            tid: threads for tid, threads in tension_threads.items() if len(threads) > 1
-        }
+        # Only assess dilemmas with multiple paths
+        multi_path_dilemmas = {did: paths for did, paths in dilemma_paths.items() if len(paths) > 1}
 
-        if not multi_thread_tensions:
+        if not multi_path_dilemmas:
             return GrowPhaseResult(
                 phase="thread_agnostic",
                 status="completed",
@@ -562,7 +560,7 @@ class GrowStage:
         for beat_id, beat_threads in beat_thread_map.items():
             if beat_id not in beat_nodes:
                 continue
-            for tension_id, tension_thread_list in multi_thread_tensions.items():
+            for tension_id, tension_thread_list in multi_path_dilemmas.items():
                 # Count how many of this tension's threads the beat belongs to
                 shared = [t for t in beat_threads if t in tension_thread_list]
                 if len(shared) > 1:
@@ -605,7 +603,7 @@ class GrowStage:
         validator = partial(
             validate_phase2_output,
             valid_beat_ids=set(valid_beat_ids),
-            valid_tension_ids=set(valid_tension_ids),
+            valid_dilemma_ids=set(valid_tension_ids),  # valid_tension_ids var contains dilemma IDs
         )
         try:
             result, llm_calls, tokens = await self._grow_llm_call(
@@ -1208,7 +1206,7 @@ class GrowStage:
             arc = ArcModel(
                 arc_id=arc_data["raw_id"],
                 arc_type=arc_data["arc_type"],
-                threads=arc_data.get("threads", []),
+                paths=arc_data.get("threads", []),  # Graph uses "threads", model uses "paths"
                 sequence=arc_data.get("sequence", []),
             )
             arcs.append(arc)
@@ -1269,7 +1267,7 @@ class GrowStage:
             arc = ArcModel(
                 arc_id=arc_data["raw_id"],
                 arc_type=arc_data["arc_type"],
-                threads=arc_data.get("threads", []),
+                paths=arc_data.get("threads", []),  # Graph uses "threads", model uses "paths"
                 sequence=arc_data.get("sequence", []),
             )
             arcs.append(arc)

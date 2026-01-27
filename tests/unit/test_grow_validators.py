@@ -37,7 +37,7 @@ class TestValidatePhase2Output:
         errors = validate_phase2_output(
             result,
             valid_beat_ids={"beat::b1", "beat::b2"},
-            valid_tension_ids={"t1", "t2"},
+            valid_dilemma_ids={"t1", "t2"},
         )
         assert errors == []
 
@@ -50,7 +50,7 @@ class TestValidatePhase2Output:
         errors = validate_phase2_output(
             result,
             valid_beat_ids={"beat::b1", "beat::b2"},
-            valid_tension_ids=set(),
+            valid_dilemma_ids=set(),
         )
         assert len(errors) == 1
         assert errors[0].field_path == "assessments.0.beat_id"
@@ -66,7 +66,7 @@ class TestValidatePhase2Output:
         errors = validate_phase2_output(
             result,
             valid_beat_ids={"beat::b1"},
-            valid_tension_ids={"t1", "t2"},
+            valid_dilemma_ids={"t1", "t2"},
         )
         assert len(errors) == 1
         assert errors[0].field_path == "assessments.0.agnostic_for"
@@ -81,7 +81,7 @@ class TestValidatePhase2Output:
         errors = validate_phase2_output(
             result,
             valid_beat_ids={"beat::b1"},
-            valid_tension_ids={"t1"},
+            valid_dilemma_ids={"t1"},
         )
         # 1 bad beat_id + 2 bad tension_ids = 3 errors
         assert len(errors) == 3
@@ -91,7 +91,7 @@ class TestValidatePhase2Output:
         errors = validate_phase2_output(
             result,
             valid_beat_ids={"beat::b1"},
-            valid_tension_ids={"t1"},
+            valid_dilemma_ids={"t1"},
         )
         assert errors == []
 

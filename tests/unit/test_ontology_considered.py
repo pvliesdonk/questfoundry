@@ -18,7 +18,7 @@ from questfoundry.graph.context import (
     get_tension_development_states,
 )
 from questfoundry.graph.seed_pruning import (
-    _prune_demoted_tensions,
+    _prune_demoted_dilemmas,
     compute_arc_count,
     prune_to_arc_limit,
 )
@@ -514,7 +514,7 @@ class TestScopedIdStandardization:
 
         # Demote the tension - should drop non-canonical (crafted) thread
         demoted = {"tension::artifact_origin"}
-        pruned = _prune_demoted_tensions(seed, demoted)
+        pruned = _prune_demoted_dilemmas(seed, demoted)
 
         # Non-canonical thread should be dropped
         thread_ids = [t.thread_id for t in pruned.threads]
@@ -582,7 +582,7 @@ class TestScopedIdStandardization:
         )
 
         # Demote t1 - should drop non-canonical (alt_b / th_b) thread and its consequence
-        pruned = _prune_demoted_tensions(seed, {"t1"})
+        pruned = _prune_demoted_dilemmas(seed, {"t1"})
 
         # Thread B and its consequence should be dropped
         thread_ids = [t.thread_id for t in pruned.threads]
@@ -638,7 +638,7 @@ class TestScopedIdStandardization:
         )
 
         # Demote using RAW ID (as might come from tension scoring)
-        pruned = _prune_demoted_tensions(seed, {"keeper_trust"})  # Raw!
+        pruned = _prune_demoted_dilemmas(seed, {"keeper_trust"})  # Raw!
 
         # Non-canonical thread should still be dropped
         thread_ids = [t.thread_id for t in pruned.threads]

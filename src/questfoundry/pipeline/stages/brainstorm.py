@@ -1,7 +1,7 @@
 """BRAINSTORM stage implementation.
 
 The BRAINSTORM stage generates raw creative material: entities (characters,
-locations, objects, factions) and tensions (binary dramatic questions).
+locations, objects, factions) and dilemmas (binary dramatic questions).
 
 Uses the LangChain-native 3-phase pattern:
 Discuss → Summarize → Serialize.
@@ -96,14 +96,14 @@ def _format_vision_context(vision_node: dict[str, Any]) -> str:
 
 
 class BrainstormStage:
-    """BRAINSTORM stage - generate entities and tensions.
+    """BRAINSTORM stage - generate entities and dilemmas.
 
     This stage takes the creative vision from DREAM and generates raw
     creative material: entities (characters, locations, objects, factions)
-    and tensions (binary dramatic questions with two alternatives each).
+    and dilemmas (binary dramatic questions with two answers each).
 
     Uses the LangChain-native 3-phase pattern:
-    - Discuss: Brainstorm entities and tensions with research tools
+    - Discuss: Brainstorm entities and dilemmas with research tools
     - Summarize: Condense discussion into structured summary
     - Serialize: Convert to BrainstormOutput artifact
 
@@ -283,14 +283,14 @@ class BrainstormStage:
 
         # Log summary statistics
         entity_count = len(artifact_data.get("entities", []))
-        tension_count = len(artifact_data.get("tensions", []))
+        dilemma_count = len(artifact_data.get("dilemmas", artifact_data.get("tensions", [])))
 
         log.info(
             "brainstorm_stage_completed",
             llm_calls=total_llm_calls,
             tokens=total_tokens,
             entities=entity_count,
-            tensions=tension_count,
+            dilemmas=dilemma_count,
         )
 
         return artifact_data, total_llm_calls, total_tokens

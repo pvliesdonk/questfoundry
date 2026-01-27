@@ -194,7 +194,7 @@ class TestEnrichSeedArtifact:
         result = enrich_seed_artifact(graph_with_entities, artifact)
 
         assert result["entities"] == []
-        assert result["tensions"] == []
+        assert result["dilemmas"] == []
         assert result["threads"] == []
 
     def test_field_order_consistent(self, graph_with_entities: Graph) -> None:
@@ -214,13 +214,13 @@ class TestEnrichSeedArtifact:
         assert keys == expected_order
 
 
-class TestEnrichTensions:
-    """Tests for tension enrichment."""
+class TestEnrichDilemmas:
+    """Tests for dilemma enrichment."""
 
-    def test_enriches_tension_with_full_details(self, graph_with_tensions: Graph) -> None:
+    def test_enriches_dilemma_with_full_details(self, graph_with_tensions: Graph) -> None:
         """Enrichment adds question, why_it_matters, central_entity_ids from graph."""
         artifact = {
-            "tensions": [
+            "tensions": [  # Input uses legacy "tensions" key
                 {
                     "tension_id": "host_motivation",
                     "considered": ["benevolent"],
@@ -231,33 +231,33 @@ class TestEnrichTensions:
 
         result = enrich_seed_artifact(graph_with_tensions, artifact)
 
-        tension = result["tensions"][0]
-        assert tension["tension_id"] == "host_motivation"
-        assert tension["question"] == "Is the host benevolent or self-serving?"
-        assert tension["why_it_matters"] == "Determines whether protagonist can trust their guide"
+        dilemma = result["dilemmas"][0]
+        assert dilemma["dilemma_id"] == "host_motivation"
+        assert dilemma["question"] == "Is the host benevolent or self-serving?"
+        assert dilemma["why_it_matters"] == "Determines whether protagonist can trust their guide"
         # Entity IDs should have prefix stripped
-        assert tension["central_entity_ids"] == ["the_host", "the_manor"]
-        assert tension["considered"] == ["benevolent"]
-        assert tension["implicit"] == ["self_serving"]
+        assert dilemma["central_entity_ids"] == ["the_host", "the_manor"]
+        assert dilemma["considered"] == ["benevolent"]
+        assert dilemma["implicit"] == ["self_serving"]
 
-    def test_handles_unknown_tension(self, graph_with_tensions: Graph) -> None:
-        """Enrichment handles tensions not in graph gracefully."""
+    def test_handles_unknown_dilemma(self, graph_with_tensions: Graph) -> None:
+        """Enrichment handles dilemmas not in graph gracefully."""
         artifact = {
             "tensions": [
-                {"tension_id": "unknown_tension", "considered": ["option_a"], "implicit": []},
+                {"tension_id": "unknown_dilemma", "considered": ["option_a"], "implicit": []},
             ],
         }
 
         result = enrich_seed_artifact(graph_with_tensions, artifact)
 
-        tension = result["tensions"][0]
-        assert tension["tension_id"] == "unknown_tension"
-        assert "question" not in tension
-        assert "why_it_matters" not in tension
-        assert tension["considered"] == ["option_a"]
+        dilemma = result["dilemmas"][0]
+        assert dilemma["dilemma_id"] == "unknown_dilemma"
+        assert "question" not in dilemma
+        assert "why_it_matters" not in dilemma
+        assert dilemma["considered"] == ["option_a"]
 
-    def test_handles_prefixed_tension_ids(self, graph_with_tensions: Graph) -> None:
-        """Enrichment strips prefix from tension_id for graph lookup."""
+    def test_handles_prefixed_dilemma_ids(self, graph_with_tensions: Graph) -> None:
+        """Enrichment strips prefix from dilemma_id for graph lookup."""
         artifact = {
             "tensions": [
                 {
@@ -270,16 +270,16 @@ class TestEnrichTensions:
 
         result = enrich_seed_artifact(graph_with_tensions, artifact)
 
-        tension = result["tensions"][0]
+        dilemma = result["dilemmas"][0]
         # Original prefixed ID preserved in output
-        assert tension["tension_id"] == "tension::host_motivation"
+        assert dilemma["dilemma_id"] == "tension::host_motivation"
         # But graph lookup succeeds with prefix stripped
-        assert tension["question"] == "Is the host benevolent or self-serving?"
-        assert tension["why_it_matters"] == "Determines whether protagonist can trust their guide"
-        assert tension["considered"] == ["benevolent"]
+        assert dilemma["question"] == "Is the host benevolent or self-serving?"
+        assert dilemma["why_it_matters"] == "Determines whether protagonist can trust their guide"
+        assert dilemma["considered"] == ["benevolent"]
 
-    def test_enriches_multiple_tensions(self, graph_with_tensions: Graph) -> None:
-        """Enrichment works for multiple tensions."""
+    def test_enriches_multiple_dilemmas(self, graph_with_tensions: Graph) -> None:
+        """Enrichment works for multiple dilemmas."""
         artifact = {
             "tensions": [
                 {"tension_id": "host_motivation", "considered": ["benevolent"], "implicit": []},
@@ -289,14 +289,14 @@ class TestEnrichTensions:
 
         result = enrich_seed_artifact(graph_with_tensions, artifact)
 
-        assert len(result["tensions"]) == 2
-        assert result["tensions"][0]["question"] == "Is the host benevolent or self-serving?"
-        assert result["tensions"][1]["question"] == "Who committed the murder?"
+        assert len(result["dilemmas"]) == 2
+        assert result["dilemmas"][0]["question"] == "Is the host benevolent or self-serving?"
+        assert result["dilemmas"][1]["question"] == "Who committed the murder?"
 
-    def test_empty_tensions_list(self, graph_with_tensions: Graph) -> None:
-        """Enrichment handles empty tensions list."""
-        artifact = {"tensions": []}
+    def test_empty_dilemmas_list(self, graph_with_tensions: Graph) -> None:
+        """Enrichment handles empty dilemmas list."""
+        artifact = {"tensions": []}  # Input uses legacy key
 
         result = enrich_seed_artifact(graph_with_tensions, artifact)
 
-        assert result["tensions"] == []
+        assert result["dilemmas"] == []
