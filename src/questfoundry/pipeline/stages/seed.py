@@ -113,11 +113,14 @@ def _format_dilemma(dilemma_id: str, dilemma_data: dict[str, Any], graph: Graph)
     result += f"  Stakes: {why_it_matters}\n"
     result += "  Answers:\n"
 
-    # Get answers from graph edges (stored as "alternatives" for backward compat)
-    alt_edges = graph.get_edges(from_id=dilemma_id, edge_type="has_alternative")
-    for edge in alt_edges:
-        if (alt_id := edge.get("to")) and (alt_node := graph.get_node(alt_id)):
-            result += _format_alternative(alt_node) + "\n"
+    # Prefer canonical has_answer edges; fall back to legacy has_alternative for older graphs.
+    answer_edges = graph.get_edges(from_id=dilemma_id, edge_type="has_answer")
+    if not answer_edges:
+        answer_edges = graph.get_edges(from_id=dilemma_id, edge_type="has_alternative")
+
+    for edge in answer_edges:
+        if (answer_id := edge.get("to")) and (answer_node := graph.get_node(answer_id)):
+            result += _format_alternative(answer_node) + "\n"
 
     return result
 
@@ -134,9 +137,9 @@ def _format_brainstorm_context(graph: Graph) -> str:
     parts = []
 
     # Collect entities and dilemmas using proper Graph API
-    # Note: Graph stores dilemmas as "tension" nodes for backward compatibility
+    # Get dilemma nodes from graph
     entity_nodes = graph.get_nodes_by_type("entity")
-    dilemma_nodes = graph.get_nodes_by_type("tension")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
 
     entities = list(entity_nodes.items())
     dilemmas = list(dilemma_nodes.items())
@@ -203,9 +206,9 @@ class SeedStage:
         graph = Graph.load(project_path)
 
         # Check for entities (indicates brainstorm completed)
-        # Note: Graph stores dilemmas as "tension" nodes for backward compatibility
+        # Get dilemma nodes from graph
         entity_nodes = graph.get_nodes_by_type("entity")
-        dilemma_nodes = graph.get_nodes_by_type("tension")
+        dilemma_nodes = graph.get_nodes_by_type("dilemma")
 
         has_entities = bool(entity_nodes)
         has_dilemmas = bool(dilemma_nodes)

@@ -131,7 +131,7 @@ A full scene often follows a three-part cadence:
 
 1. **Lead** — Sensory grounding. The character in motion, concrete imagery. Establishes where we are and what's happening.
 
-2. **Middle** — Goal and obstacle. What the character wants, what's in the way. Rising tension.
+2. **Middle** — Goal and obstacle. What the character wants, what's in the way. Rising dilemma.
 
 3. **Close** — Decision setup. The scene ends with stakes clarified and choices meaningful. For choice points, this paragraph sets up the options.
 
@@ -351,7 +351,7 @@ If using LLM review, context limits require sliding window:
 | Summary deviation | Prose doesn't match beat summary content |
 | Continuity break | Details contradict earlier passages |
 | Convergence awkwardness | Passage doesn't work for one of the arriving branches |
-| Flat prose | Lacks tension, sensory detail, or emotional engagement |
+| Flat prose | Lacks dilemma, sensory detail, or emotional engagement |
 
 **Output:** List of flagged passages with issue descriptions
 

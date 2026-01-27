@@ -298,7 +298,7 @@ class Graph:
         exists and returns the properly prefixed ID.
 
         Args:
-            node_type: Type prefix (e.g., "entity", "thread", "tension").
+            node_type: Type prefix (e.g., "entity", "path", "dilemma").
             raw_id: The raw ID without prefix.
 
         Returns:
@@ -309,8 +309,8 @@ class Graph:
             NodeNotFoundError: If node doesn't exist.
 
         Example:
-            >>> thread_ref = graph.ref("thread", "trust_thread")
-            >>> graph.add_edge("belongs_to", beat_ref, thread_ref)
+            >>> path_ref = graph.ref("path", "trust_path")
+            >>> graph.add_edge("belongs_to", beat_ref, path_ref)
         """
         if "::" in raw_id:
             raise ValueError(
@@ -331,7 +331,7 @@ class Graph:
         """Get all nodes of a specific type.
 
         Args:
-            node_type: Type to filter by (e.g., "entity", "tension").
+            node_type: Type to filter by (e.g., "entity", "dilemma").
 
         Returns:
             Dict of node_id -> node_data for matching nodes.
@@ -379,7 +379,7 @@ class Graph:
         """Add an edge between two nodes. Validates endpoints exist by default.
 
         Args:
-            edge_type: Type of edge (e.g., "choice", "has_alternative").
+            edge_type: Type of edge (e.g., "choice", "has_answer").
             from_id: Source node ID.
             to_id: Target node ID.
             validate: If True (default), validates both endpoints exist.

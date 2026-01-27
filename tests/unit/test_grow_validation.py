@@ -13,10 +13,10 @@ from questfoundry.graph.grow_validation import (
     check_all_endings_reachable,
     check_all_passages_reachable,
     check_commits_timing,
+    check_dilemmas_resolved,
     check_gate_satisfiability,
     check_passage_dag_cycles,
     check_single_start,
-    check_tensions_resolved,
     run_all_checks,
 )
 from questfoundry.pipeline.stages.grow import GrowStage
@@ -219,23 +219,23 @@ class TestEndingsReachable:
         assert result.severity == "pass"
 
 
-class TestTensionsResolved:
-    def test_tensions_resolved(self) -> None:
-        from tests.fixtures.grow_fixtures import make_single_tension_graph
+class TestDilemmasResolved:
+    def test_dilemmas_resolved(self) -> None:
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
-        graph = make_single_tension_graph()
-        result = check_tensions_resolved(graph)
+        graph = make_single_dilemma_graph()
+        result = check_dilemmas_resolved(graph)
         assert result.severity == "pass"
 
-    def test_tensions_unresolved(self) -> None:
-        """Thread has no commits beat."""
+    def test_dilemmas_unresolved(self) -> None:
+        """Path has no commits beat."""
         graph = Graph.empty()
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
         )
-        graph.add_edge("explores", "thread::th1", "tension::t1")
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
         # Beat without commits effect
         graph.create_node(
             "beat::b1",
@@ -243,25 +243,25 @@ class TestTensionsResolved:
                 "type": "beat",
                 "raw_id": "b1",
                 "summary": "No commits",
-                "tension_impacts": [{"tension_id": "tension::t1", "effect": "reveals"}],
+                "dilemma_impacts": [{"dilemma_id": "dilemma::t1", "effect": "reveals"}],
             },
         )
-        graph.add_edge("belongs_to", "beat::b1", "thread::th1")
-        result = check_tensions_resolved(graph)
+        graph.add_edge("belongs_to", "beat::b1", "path::th1")
+        result = check_dilemmas_resolved(graph)
         assert result.severity == "fail"
         assert "th1/t1" in result.message
 
-    def test_tensions_resolved_with_prefixed_tension_id(self) -> None:
-        """Works when thread nodes use prefixed tension_id (real SEED output)."""
-        from tests.fixtures.grow_fixtures import make_two_tension_graph
+    def test_dilemmas_resolved_with_prefixed_tension_id(self) -> None:
+        """Works when path nodes use prefixed dilemma_id (real SEED output)."""
+        from tests.fixtures.grow_fixtures import make_two_dilemma_graph
 
-        graph = make_two_tension_graph()
-        result = check_tensions_resolved(graph)
+        graph = make_two_dilemma_graph()
+        result = check_dilemmas_resolved(graph)
         assert result.severity == "pass"
 
-    def test_tensions_empty(self) -> None:
+    def test_dilemmas_empty(self) -> None:
         graph = Graph.empty()
-        result = check_tensions_resolved(graph)
+        result = check_dilemmas_resolved(graph)
         assert result.severity == "pass"
 
 
@@ -386,28 +386,28 @@ class TestCommitsTiming:
     def test_commits_timing_too_early(self) -> None:
         """Commits at beat 2 of 6 should warn (< 3 beats)."""
         graph = Graph.empty()
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
         )
-        graph.add_edge("explores", "thread::th1", "tension::t1")
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
 
         # 6 beats, commits at beat index 1 (beat 2)
         for i in range(6):
             effects: list[dict[str, str]] = []
             if i == 1:
-                effects = [{"tension_id": "tension::t1", "effect": "commits"}]
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "commits"}]
             graph.create_node(
                 f"beat::b{i}",
                 {
                     "type": "beat",
                     "raw_id": f"b{i}",
                     "summary": f"Beat {i}",
-                    "tension_impacts": effects,
+                    "dilemma_impacts": effects,
                 },
             )
-            graph.add_edge("belongs_to", f"beat::b{i}", "thread::th1")
+            graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
             if i > 0:
                 graph.add_edge("requires", f"beat::b{i}", f"beat::b{i - 1}")
 
@@ -419,29 +419,29 @@ class TestCommitsTiming:
     def test_commits_timing_too_late(self) -> None:
         """Commits at beat 9 of 10 should warn (> 80%)."""
         graph = Graph.empty()
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
         )
-        graph.add_edge("explores", "thread::th1", "tension::t1")
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
 
         for i in range(10):
             effects: list[dict[str, str]] = []
             if i == 8:
-                effects = [{"tension_id": "tension::t1", "effect": "commits"}]
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "commits"}]
             elif i == 2:
-                effects = [{"tension_id": "tension::t1", "effect": "reveals"}]
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "reveals"}]
             graph.create_node(
                 f"beat::b{i}",
                 {
                     "type": "beat",
                     "raw_id": f"b{i}",
                     "summary": f"Beat {i}",
-                    "tension_impacts": effects,
+                    "dilemma_impacts": effects,
                 },
             )
-            graph.add_edge("belongs_to", f"beat::b{i}", "thread::th1")
+            graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
             if i > 0:
                 graph.add_edge("requires", f"beat::b{i}", f"beat::b{i - 1}")
 
@@ -453,28 +453,28 @@ class TestCommitsTiming:
     def test_commits_no_buildup(self) -> None:
         """No reveals/advances before commits should warn."""
         graph = Graph.empty()
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
         )
-        graph.add_edge("explores", "thread::th1", "tension::t1")
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
 
         # 5 beats, commits at index 3, no reveals/advances
         for i in range(5):
             effects: list[dict[str, str]] = []
             if i == 3:
-                effects = [{"tension_id": "tension::t1", "effect": "commits"}]
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "commits"}]
             graph.create_node(
                 f"beat::b{i}",
                 {
                     "type": "beat",
                     "raw_id": f"b{i}",
                     "summary": f"Beat {i}",
-                    "tension_impacts": effects,
+                    "dilemma_impacts": effects,
                 },
             )
-            graph.add_edge("belongs_to", f"beat::b{i}", "thread::th1")
+            graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
             if i > 0:
                 graph.add_edge("requires", f"beat::b{i}", f"beat::b{i - 1}")
 
@@ -486,30 +486,30 @@ class TestCommitsTiming:
     def test_commits_timing_gap_before_commits(self) -> None:
         """Large gap (>5 beats) between last reveals and commits should warn."""
         graph = Graph.empty()
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
         )
-        graph.add_edge("explores", "thread::th1", "tension::t1")
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
 
         # 12 beats: reveals at 1, commits at 10 (gap = 9)
         for i in range(12):
             effects: list[dict[str, str]] = []
             if i == 1:
-                effects = [{"tension_id": "tension::t1", "effect": "reveals"}]
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "reveals"}]
             elif i == 10:
-                effects = [{"tension_id": "tension::t1", "effect": "commits"}]
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "commits"}]
             graph.create_node(
                 f"beat::b{i}",
                 {
                     "type": "beat",
                     "raw_id": f"b{i}",
                     "summary": f"Beat {i}",
-                    "tension_impacts": effects,
+                    "dilemma_impacts": effects,
                 },
             )
-            graph.add_edge("belongs_to", f"beat::b{i}", "thread::th1")
+            graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
             if i > 0:
                 graph.add_edge("requires", f"beat::b{i}", f"beat::b{i - 1}")
 
@@ -519,34 +519,34 @@ class TestCommitsTiming:
         assert warnings[0].severity == "warn"
 
     def test_commits_timing_no_issues(self) -> None:
-        """Well-paced thread produces no warnings."""
+        """Well-paced path produces no warnings."""
         graph = Graph.empty()
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
         )
-        graph.add_edge("explores", "thread::th1", "tension::t1")
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
 
         # 8 beats: reveals at 2, advances at 4, commits at 5
         for i in range(8):
             effects: list[dict[str, str]] = []
             if i == 2:
-                effects = [{"tension_id": "tension::t1", "effect": "reveals"}]
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "reveals"}]
             elif i == 4:
-                effects = [{"tension_id": "tension::t1", "effect": "advances"}]
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "advances"}]
             elif i == 5:
-                effects = [{"tension_id": "tension::t1", "effect": "commits"}]
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "commits"}]
             graph.create_node(
                 f"beat::b{i}",
                 {
                     "type": "beat",
                     "raw_id": f"b{i}",
                     "summary": f"Beat {i}",
-                    "tension_impacts": effects,
+                    "dilemma_impacts": effects,
                 },
             )
-            graph.add_edge("belongs_to", f"beat::b{i}", "thread::th1")
+            graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
             if i > 0:
                 graph.add_edge("requires", f"beat::b{i}", f"beat::b{i - 1}")
 
@@ -558,13 +558,13 @@ class TestRunAllChecks:
     def test_run_all_checks_aggregates(self) -> None:
         """run_all_checks produces a report with mixed pass/warn/fail."""
         graph = _make_linear_passage_graph()
-        # Add tension data so timing checks can run
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        # Add dilemma data so timing checks can run
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
         )
-        graph.add_edge("explores", "thread::th1", "tension::t1")
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
         # Beat with commits too early (beat 1 of 3)
         graph.create_node(
             "beat::b0",
@@ -572,20 +572,20 @@ class TestRunAllChecks:
                 "type": "beat",
                 "raw_id": "b0",
                 "summary": "Beat 0",
-                "tension_impacts": [{"tension_id": "tension::t1", "effect": "commits"}],
+                "dilemma_impacts": [{"dilemma_id": "dilemma::t1", "effect": "commits"}],
             },
         )
         graph.create_node(
             "beat::b1",
-            {"type": "beat", "raw_id": "b1", "summary": "Beat 1", "tension_impacts": []},
+            {"type": "beat", "raw_id": "b1", "summary": "Beat 1", "dilemma_impacts": []},
         )
         graph.create_node(
             "beat::b2",
-            {"type": "beat", "raw_id": "b2", "summary": "Beat 2", "tension_impacts": []},
+            {"type": "beat", "raw_id": "b2", "summary": "Beat 2", "dilemma_impacts": []},
         )
-        graph.add_edge("belongs_to", "beat::b0", "thread::th1")
-        graph.add_edge("belongs_to", "beat::b1", "thread::th1")
-        graph.add_edge("belongs_to", "beat::b2", "thread::th1")
+        graph.add_edge("belongs_to", "beat::b0", "path::th1")
+        graph.add_edge("belongs_to", "beat::b1", "path::th1")
+        graph.add_edge("belongs_to", "beat::b2", "path::th1")
         graph.add_edge("requires", "beat::b1", "beat::b0")
         graph.add_edge("requires", "beat::b2", "beat::b1")
 
@@ -677,33 +677,33 @@ class TestPhase10Integration:
     async def test_phase_10_warnings_pass(self) -> None:
         """Phase 10 passes with warnings when timing issues exist."""
         graph = _make_linear_passage_graph()
-        # Add tension with commits too early
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        # Add dilemma with commits too early
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
         )
-        graph.add_edge("explores", "thread::th1", "tension::t1")
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
         graph.create_node(
             "beat::b0",
             {
                 "type": "beat",
                 "raw_id": "b0",
                 "summary": "Beat 0",
-                "tension_impacts": [{"tension_id": "tension::t1", "effect": "commits"}],
+                "dilemma_impacts": [{"dilemma_id": "dilemma::t1", "effect": "commits"}],
             },
         )
         graph.create_node(
             "beat::b1",
-            {"type": "beat", "raw_id": "b1", "summary": "Beat 1", "tension_impacts": []},
+            {"type": "beat", "raw_id": "b1", "summary": "Beat 1", "dilemma_impacts": []},
         )
         graph.create_node(
             "beat::b2",
-            {"type": "beat", "raw_id": "b2", "summary": "Beat 2", "tension_impacts": []},
+            {"type": "beat", "raw_id": "b2", "summary": "Beat 2", "dilemma_impacts": []},
         )
-        graph.add_edge("belongs_to", "beat::b0", "thread::th1")
-        graph.add_edge("belongs_to", "beat::b1", "thread::th1")
-        graph.add_edge("belongs_to", "beat::b2", "thread::th1")
+        graph.add_edge("belongs_to", "beat::b0", "path::th1")
+        graph.add_edge("belongs_to", "beat::b1", "path::th1")
+        graph.add_edge("belongs_to", "beat::b2", "path::th1")
         graph.add_edge("requires", "beat::b1", "beat::b0")
         graph.add_edge("requires", "beat::b2", "beat::b1")
 

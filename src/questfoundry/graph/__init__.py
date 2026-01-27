@@ -11,8 +11,6 @@ from questfoundry.graph.context import (
     SCOPE_DILEMMA,
     SCOPE_ENTITY,
     SCOPE_PATH,
-    SCOPE_TENSION,  # Backward compat alias for SCOPE_DILEMMA
-    SCOPE_THREAD,  # Backward compat alias for SCOPE_PATH
     check_structural_completeness,
     format_hierarchical_path_id,
     format_scoped_id,
@@ -61,8 +59,6 @@ __all__ = [
     "SCOPE_DILEMMA",
     "SCOPE_ENTITY",
     "SCOPE_PATH",
-    "SCOPE_TENSION",
-    "SCOPE_THREAD",
     "BrainstormMutationError",
     "BrainstormValidationError",
     "EdgeEndpointError",

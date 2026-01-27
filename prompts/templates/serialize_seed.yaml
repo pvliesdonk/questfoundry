@@ -8,8 +8,8 @@ system: |
 
   All IDs use type prefixes for disambiguation. Copy IDs EXACTLY as shown in the brief:
   - Entity IDs: `entity::butler`, `entity::manor`
-  - Dilemma IDs: `d::host_benevolent_or_selfish`
-  - Path IDs: `p::host_benevolent_or_selfish__protector` (hierarchical format: dilemma__answer)
+  - Dilemma IDs: `dilemma::host_benevolent_or_selfish`
+  - Path IDs: `path::host_benevolent_or_selfish__protector` (hierarchical format: dilemma__answer)
 
   The manifest shows which IDs are valid - copy them with their prefixes.
 
@@ -31,7 +31,7 @@ system: |
   For each dilemma from brainstorm, create a DilemmaDecision:
   ```json
   {
-    "dilemma_id": "d::host_benevolent_or_selfish",
+    "dilemma_id": "dilemma::host_benevolent_or_selfish",
     "considered": ["protector", "manipulator"],
     "implicit": []
   }
@@ -45,9 +45,9 @@ system: |
   For each explored answer, create a Path:
   ```json
   {
-    "path_id": "p::host_benevolent_or_selfish__protector",
+    "path_id": "path::host_benevolent_or_selfish__protector",
     "name": "Human Readable Path Name",
-    "dilemma_id": "d::host_benevolent_or_selfish",
+    "dilemma_id": "dilemma::host_benevolent_or_selfish",
     "answer_id": "protector",
     "unexplored_answer_ids": ["manipulator"],
     "path_importance": "major",
@@ -61,7 +61,7 @@ system: |
   ```json
   {
     "consequence_id": "host_revealed",
-    "path_id": "p::host_benevolent_or_selfish__protector",
+    "path_id": "path::host_benevolent_or_selfish__protector",
     "description": "What happens narratively",
     "narrative_effects": ["story effect 1", "story effect 2"]
   }
@@ -73,10 +73,10 @@ system: |
   {
     "beat_id": "host_motive_beat_01",
     "summary": "What happens in this beat",
-    "paths": ["p::host_benevolent_or_selfish__protector"],
+    "paths": ["path::host_benevolent_or_selfish__protector"],
     "dilemma_impacts": [
       {
-        "dilemma_id": "d::host_benevolent_or_selfish",
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
         "effect": "advances",
         "note": "Explanation of the impact"
       }
@@ -111,10 +111,10 @@ system: |
   - Extract ALL information from the brief - do not invent new details
   - Use snake_case for all IDs
   - Copy IDs EXACTLY as shown in the brief, INCLUDING the type prefix
-  - Every path must reference a valid dilemma_id (with `d::` prefix) and answer_id
-  - Every consequence must reference a valid path_id (with `p::` prefix)
+  - Every path must reference a valid dilemma_id (with `dilemma::` prefix) and answer_id
+  - Every consequence must reference a valid path_id (with `path::` prefix)
   - Create 2-4 initial_beats PER PATH (not 1 per path!)
-  - Every initial_beat must reference valid path IDs (with `p::` prefix)
+  - Every initial_beat must reference valid path IDs (with `path::` prefix)
   - path_importance must be exactly "major" or "minor" (lowercase)
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
   - disposition must be exactly "retained" or "cut"

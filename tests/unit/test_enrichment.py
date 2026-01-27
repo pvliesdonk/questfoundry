@@ -50,13 +50,13 @@ def graph_with_entities() -> Graph:
 
 @pytest.fixture
 def graph_with_tensions() -> Graph:
-    """Graph with BRAINSTORM tension data."""
+    """Graph with BRAINSTORM dilemma data."""
     graph = Graph()
-    # Add tension as BRAINSTORM would
+    # Add dilemma as BRAINSTORM would
     graph.create_node(
-        "tension::host_motivation",
+        "dilemma::host_motivation",
         {
-            "type": "tension",
+            "type": "dilemma",
             "raw_id": "host_motivation",
             "question": "Is the host benevolent or self-serving?",
             "why_it_matters": "Determines whether protagonist can trust their guide",
@@ -64,9 +64,9 @@ def graph_with_tensions() -> Graph:
         },
     )
     graph.create_node(
-        "tension::killer_identity",
+        "dilemma::killer_identity",
         {
-            "type": "tension",
+            "type": "dilemma",
             "raw_id": "killer_identity",
             "question": "Who committed the murder?",
             "why_it_matters": "Core mystery that drives the plot",
@@ -168,14 +168,14 @@ class TestEnrichSeedArtifact:
         """Enrichment preserves non-entity fields in artifact."""
         artifact = {
             "entities": [{"entity_id": "the_detective", "disposition": "retained"}],
-            "threads": [{"thread_id": "main_thread", "tier": "major"}],
+            "paths": [{"thread_id": "main_thread", "tier": "major"}],
             "beats": [{"beat_id": "opening", "summary": "Introduction"}],
         }
 
         result = enrich_seed_artifact(graph_with_entities, artifact)
 
-        assert "threads" in result
-        assert result["threads"] == artifact["threads"]
+        assert "paths" in result
+        assert result["paths"] == artifact["paths"]
         assert "beats" in result
         assert result["beats"] == artifact["beats"]
 
@@ -189,13 +189,13 @@ class TestEnrichSeedArtifact:
 
     def test_missing_entities_key(self, graph_with_entities: Graph) -> None:
         """Enrichment handles missing entities key."""
-        artifact = {"threads": []}
+        artifact = {"paths": []}
 
         result = enrich_seed_artifact(graph_with_entities, artifact)
 
         assert result["entities"] == []
         assert result["dilemmas"] == []
-        assert result["threads"] == []
+        assert result["paths"] == []
 
     def test_field_order_consistent(self, graph_with_entities: Graph) -> None:
         """Enriched entities have consistent field order."""
@@ -261,7 +261,7 @@ class TestEnrichDilemmas:
         artifact = {
             "tensions": [
                 {
-                    "tension_id": "tension::host_motivation",
+                    "tension_id": "dilemma::host_motivation",
                     "considered": ["benevolent"],
                     "implicit": [],
                 },
@@ -272,7 +272,7 @@ class TestEnrichDilemmas:
 
         dilemma = result["dilemmas"][0]
         # Original prefixed ID preserved in output
-        assert dilemma["dilemma_id"] == "tension::host_motivation"
+        assert dilemma["dilemma_id"] == "dilemma::host_motivation"
         # But graph lookup succeeds with prefix stripped
         assert dilemma["question"] == "Is the host benevolent or self-serving?"
         assert dilemma["why_it_matters"] == "Determines whether protagonist can trust their guide"

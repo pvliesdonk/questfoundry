@@ -520,9 +520,8 @@ class GrowStage:
         from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
 
         # Collect dilemmas with multiple paths
-        # Note: Graph stores dilemmas as "tension" and paths as "thread" for backward compat
-        dilemma_nodes = graph.get_nodes_by_type("tension")
-        path_nodes = graph.get_nodes_by_type("thread")
+        dilemma_nodes = graph.get_nodes_by_type("dilemma")
+        path_nodes = graph.get_nodes_by_type("path")
         beat_nodes = graph.get_nodes_by_type("beat")
 
         if not dilemma_nodes or not path_nodes or not beat_nodes:
@@ -826,10 +825,10 @@ class GrowStage:
         for bid in sorted(beat_nodes.keys()):
             data = beat_nodes[bid]
             summary = data.get("summary", "")
-            threads = data.get("threads", [])
-            impacts = data.get("tension_impacts", [])
+            paths = data.get("paths", [])
+            impacts = data.get("dilemma_impacts", [])
             beat_summaries.append(
-                f'- {bid}: summary="{summary}", threads={threads}, tension_impacts={impacts}'
+                f'- {bid}: summary="{summary}", paths={paths}, dilemma_impacts={impacts}'
             )
 
         context = {
@@ -877,19 +876,19 @@ class GrowStage:
         self,
         graph: Graph,
         gaps: list[GapProposal],
-        valid_thread_ids: set[str] | dict[str, Any],
+        valid_path_ids: set[str] | dict[str, Any],
         valid_beat_ids: set[str] | dict[str, Any],
         phase_name: str,
     ) -> int:
         """Validate gap proposals and insert valid ones into the graph.
 
-        Checks thread_id prefixing, beat ID existence, and ordering
+        Checks path_id prefixing, beat ID existence, and ordering
         before inserting each gap beat.
 
         Args:
             graph: Graph to insert beats into.
             gaps: List of GapProposal instances from LLM output.
-            valid_thread_ids: Set or dict of valid thread IDs.
+            valid_path_ids: Set or dict of valid path IDs.
             valid_beat_ids: Set or dict of valid beat IDs.
             phase_name: Phase name for log event prefixing.
 
@@ -897,25 +896,23 @@ class GrowStage:
             Number of gap beats successfully inserted.
         """
         from questfoundry.graph.grow_algorithms import (
-            get_thread_beat_sequence,
+            get_path_beat_sequence,
             insert_gap_beat,
         )
 
         inserted = 0
         for gap in gaps:
-            prefixed_tid = (
-                gap.thread_id
-                if gap.thread_id.startswith("thread::")
-                else f"thread::{gap.thread_id}"
+            prefixed_pid = (
+                gap.path_id if gap.path_id.startswith("path::") else f"path::{gap.path_id}"
             )
-            if prefixed_tid != gap.thread_id:
+            if prefixed_pid != gap.path_id:
                 log.warning(
-                    f"{phase_name}_unprefixed_thread_id",
-                    thread_id=gap.thread_id,
-                    prefixed=prefixed_tid,
+                    f"{phase_name}_unprefixed_path_id",
+                    path_id=gap.path_id,
+                    prefixed=prefixed_pid,
                 )
-            if prefixed_tid not in valid_thread_ids:
-                log.warning(f"{phase_name}_invalid_thread_id", thread_id=gap.thread_id)
+            if prefixed_pid not in valid_path_ids:
+                log.warning(f"{phase_name}_invalid_path_id", path_id=gap.path_id)
                 continue
             if gap.after_beat and gap.after_beat not in valid_beat_ids:
                 log.warning(f"{phase_name}_invalid_after_beat", beat_id=gap.after_beat)
@@ -925,7 +922,7 @@ class GrowStage:
                 continue
             # Validate ordering: after_beat must come before before_beat
             if gap.after_beat and gap.before_beat:
-                sequence = get_thread_beat_sequence(graph, prefixed_tid)
+                sequence = get_path_beat_sequence(graph, prefixed_pid)
                 try:
                     after_idx = sequence.index(gap.after_beat)
                     before_idx = sequence.index(gap.before_beat)
@@ -937,12 +934,12 @@ class GrowStage:
                         )
                         continue
                 except ValueError:
-                    log.warning(f"{phase_name}_beat_not_in_sequence", thread_id=gap.thread_id)
+                    log.warning(f"{phase_name}_beat_not_in_sequence", path_id=gap.path_id)
                     continue
 
             insert_gap_beat(
                 graph,
-                thread_id=prefixed_tid,
+                path_id=prefixed_pid,
                 after_beat=gap.after_beat,
                 before_beat=gap.before_beat,
                 summary=gap.summary,
@@ -952,18 +949,18 @@ class GrowStage:
         return inserted
 
     async def _phase_4b_narrative_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 4b: Detect narrative gaps in thread beat sequences.
+        """Phase 4b: Detect narrative gaps in path beat sequences.
 
-        For each thread, traces the beat sequence and asks the LLM
-        to identify missing beats (e.g., a thread jumps from setup
+        For each path, traces the beat sequence and asks the LLM
+        to identify missing beats (e.g., a path jumps from setup
         to climax without a development beat). Inserts proposed gap
         beats into the graph.
         """
-        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
         from questfoundry.models.grow import Phase4bOutput
 
-        thread_nodes = graph.get_nodes_by_type("thread")
-        if not thread_nodes:
+        path_nodes = graph.get_nodes_by_type("path")
+        if not path_nodes:
             return GrowPhaseResult(
                 phase="narrative_gaps",
                 status="completed",
@@ -973,8 +970,8 @@ class GrowStage:
         # Build path sequences with summaries
         path_sequences: list[str] = []
         valid_beat_ids: set[str] = set()
-        for tid in sorted(thread_nodes.keys()):
-            sequence = get_thread_beat_sequence(graph, tid)
+        for pid in sorted(path_nodes.keys()):
+            sequence = get_path_beat_sequence(graph, pid)
             if len(sequence) < 2:
                 continue
             beat_list: list[str] = []
@@ -984,8 +981,8 @@ class GrowStage:
                 scene_type = node.get("scene_type", "untagged") if node else "untagged"
                 beat_list.append(f"    {bid} [{scene_type}]: {summary}")
                 valid_beat_ids.add(bid)
-            raw_tid = thread_nodes[tid].get("raw_id", tid)
-            path_sequences.append(f"  Path: {raw_tid} ({tid})\n" + "\n".join(beat_list))
+            raw_pid = path_nodes[pid].get("raw_id", pid)
+            path_sequences.append(f"  Path: {raw_pid} ({pid})\n" + "\n".join(beat_list))
 
         if not path_sequences:
             return GrowPhaseResult(
@@ -996,7 +993,7 @@ class GrowStage:
 
         context = {
             "path_sequences": "\n\n".join(path_sequences),
-            "valid_path_ids": ", ".join(sorted(thread_nodes.keys())),
+            "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
             "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
         }
 
@@ -1016,7 +1013,7 @@ class GrowStage:
 
         # Validate and insert gap beats
         inserted = self._validate_and_insert_gaps(
-            graph, result.gaps, thread_nodes, valid_beat_ids, "phase4b"
+            graph, result.gaps, path_nodes, valid_beat_ids, "phase4b"
         )
 
         return GrowPhaseResult(
@@ -1070,16 +1067,16 @@ class GrowStage:
                 node = graph.get_node(bid)
                 summary = node.get("summary", "") if node else ""
                 beat_summaries.append(f"    {bid}: {summary}")
-            raw_tid = issue.thread_id.removeprefix("thread::")
+            raw_pid = issue.path_id.removeprefix("path::")
             issue_descriptions.append(
-                f"  Thread {raw_tid}: {len(issue.beat_ids)} consecutive "
+                f"  Path {raw_pid}: {len(issue.beat_ids)} consecutive "
                 f"'{issue.scene_type}' beats:\n" + "\n".join(beat_summaries)
             )
 
-        thread_nodes = graph.get_nodes_by_type("thread")
+        path_nodes = graph.get_nodes_by_type("path")
         context = {
             "pacing_issues": "\n\n".join(issue_descriptions),
-            "valid_path_ids": ", ".join(sorted(thread_nodes.keys())),
+            "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
             "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
             "issue_count": str(len(issues)),
         }
@@ -1100,7 +1097,7 @@ class GrowStage:
 
         # Insert correction beats
         inserted = self._validate_and_insert_gaps(
-            graph, result.gaps, thread_nodes, beat_nodes, "phase4c"
+            graph, result.gaps, path_nodes, beat_nodes, "phase4c"
         )
 
         return GrowPhaseResult(
@@ -1120,7 +1117,7 @@ class GrowStage:
 
         Checks:
         1. Beat requires edges form a valid DAG (no cycles)
-        2. Each explored tension has a commits beat per thread
+        2. Each explored dilemma has a commits beat per path
         """
         from questfoundry.graph.grow_algorithms import (
             validate_beat_dag,
@@ -1140,7 +1137,7 @@ class GrowStage:
         return GrowPhaseResult(phase="validate_dag", status="completed")
 
     async def _phase_5_enumerate_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
-        """Phase 5: Enumerate arcs from thread combinations.
+        """Phase 5: Enumerate arcs from path combinations.
 
         Creates arc nodes and arc_contains edges for each beat in the arc.
         """
@@ -1171,7 +1168,7 @@ class GrowStage:
                     "type": "arc",
                     "raw_id": arc.arc_id,
                     "arc_type": arc.arc_type,
-                    "threads": arc.threads,
+                    "paths": arc.paths,
                     "sequence": arc.sequence,
                 },
             )
@@ -1209,7 +1206,7 @@ class GrowStage:
             arc = ArcModel(
                 arc_id=arc_data["raw_id"],
                 arc_type=arc_data["arc_type"],
-                paths=arc_data.get("threads", []),  # Graph uses "threads", model uses "paths"
+                paths=arc_data.get("paths", []),
                 sequence=arc_data.get("sequence", []),
             )
             arcs.append(arc)
@@ -1270,7 +1267,7 @@ class GrowStage:
             arc = ArcModel(
                 arc_id=arc_data["raw_id"],
                 arc_type=arc_data["arc_type"],
-                paths=arc_data.get("threads", []),  # Graph uses "threads", model uses "paths"
+                paths=arc_data.get("paths", []),
                 sequence=arc_data.get("sequence", []),
             )
             arcs.append(arc)
@@ -1363,31 +1360,31 @@ class GrowStage:
             )
 
         beat_nodes = graph.get_nodes_by_type("beat")
-        thread_nodes = graph.get_nodes_by_type("thread")
+        path_nodes = graph.get_nodes_by_type("path")
 
-        # Build thread → consequence mapping
-        thread_consequences: dict[str, list[str]] = {}
+        # Build path → consequence mapping
+        path_consequences: dict[str, list[str]] = {}
         has_consequence_edges = graph.get_edges(
             from_id=None, to_id=None, edge_type="has_consequence"
         )
         for edge in has_consequence_edges:
-            thread_id = edge["from"]
+            path_id = edge["from"]
             cons_id = edge["to"]
-            thread_consequences.setdefault(thread_id, []).append(cons_id)
+            path_consequences.setdefault(path_id, []).append(cons_id)
 
-        # Build thread → tension node ID mapping for commits beat lookup
-        thread_tension: dict[str, str] = {}
-        for thread_id, thread_data in thread_nodes.items():
-            tid = thread_data.get("tension_id", "")
-            thread_tension[thread_id] = normalize_scoped_id(tid, "tension")
+        # Build path → dilemma node ID mapping for commits beat lookup
+        path_dilemma: dict[str, str] = {}
+        for path_id, path_data in path_nodes.items():
+            did = path_data.get("dilemma_id", "")
+            path_dilemma[path_id] = normalize_scoped_id(did, "dilemma")
 
-        # Build beat → thread mapping via belongs_to
-        beat_threads: dict[str, list[str]] = {}
+        # Build beat → path mapping via belongs_to
+        beat_paths: dict[str, list[str]] = {}
         belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
         for edge in belongs_to_edges:
             beat_id = edge["from"]
-            thread_id = edge["to"]
-            beat_threads.setdefault(beat_id, []).append(thread_id)
+            path_id = edge["to"]
+            beat_paths.setdefault(beat_id, []).append(path_id)
 
         codeword_count = 0
         for cons_id, cons_data in sorted(consequence_nodes.items()):
@@ -1407,26 +1404,24 @@ class GrowStage:
             )
             graph.add_edge("tracks", codeword_id, cons_id)
 
-            # Find commits beats for this consequence's thread
-            cons_thread_id = cons_data.get("thread_id", "")
-            # Look up the full thread ID
-            full_thread_id = (
-                f"thread::{cons_thread_id}" if "::" not in cons_thread_id else cons_thread_id
-            )
-            thread_tension_id = thread_tension.get(full_thread_id, "")
+            # Find commits beats for this consequence's path
+            cons_path_id = cons_data.get("path_id", "")
+            # Look up the full path ID
+            full_path_id = f"path::{cons_path_id}" if "::" not in cons_path_id else cons_path_id
+            path_dilemma_id = path_dilemma.get(full_path_id, "")
 
-            # Find beats that commit this tension via this thread
+            # Find beats that commit this dilemma via this path
             for beat_id, beat_data in beat_nodes.items():
-                # Check if beat belongs to this thread
-                beat_thread_list = beat_threads.get(beat_id, [])
-                if full_thread_id not in beat_thread_list:
+                # Check if beat belongs to this path
+                beat_path_list = beat_paths.get(beat_id, [])
+                if full_path_id not in beat_path_list:
                     continue
 
-                # Check if beat commits this tension
-                impacts = beat_data.get("tension_impacts", [])
+                # Check if beat commits this dilemma
+                impacts = beat_data.get("dilemma_impacts", [])
                 for impact in impacts:
                     if (
-                        impact.get("tension_id") == thread_tension_id
+                        impact.get("dilemma_id") == path_dilemma_id
                         and impact.get("effect") == "commits"
                     ):
                         graph.add_edge("grants", beat_id, codeword_id)

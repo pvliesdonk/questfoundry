@@ -252,10 +252,6 @@ def rank_dilemmas_for_exploration(
     return scored_dilemmas
 
 
-# Backward compatibility alias
-rank_tensions_for_exploration = rank_dilemmas_for_exploration
-
-
 def select_dilemmas_for_full_exploration(
     seed_output: SeedOutput,
     max_fully_explored: int = 4,
@@ -307,7 +303,3 @@ def select_dilemmas_for_full_exploration(
         )
 
     return selected, demoted
-
-
-# Backward compatibility alias
-select_tensions_for_full_exploration = select_dilemmas_for_full_exploration

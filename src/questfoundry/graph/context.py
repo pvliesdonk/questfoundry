@@ -18,13 +18,10 @@ if TYPE_CHECKING:
 _ENTITY_CATEGORIES = ["character", "location", "object", "faction"]
 
 # Scope prefixes for typed IDs (disambiguates ID types for LLM)
+# Full word prefixes for semantic clarity (recommended by prompt engineering analysis)
 SCOPE_ENTITY = "entity"
 SCOPE_DILEMMA = "dilemma"
 SCOPE_PATH = "path"
-
-# Backward compatibility aliases
-SCOPE_TENSION = SCOPE_DILEMMA
-SCOPE_THREAD = SCOPE_PATH
 
 # Development state names (computed, not stored)
 STATE_COMMITTED = "committed"
@@ -52,10 +49,6 @@ def count_paths_per_dilemma(seed_output: SeedOutput) -> dict[str, int]:
             did = did.split("::", 1)[1]
         counts[did] = counts.get(did, 0) + 1
     return counts
-
-
-# Backward compatibility alias
-count_threads_per_tension = count_paths_per_dilemma
 
 
 def get_dilemma_development_states(
@@ -118,15 +111,11 @@ def get_dilemma_development_states(
     return states
 
 
-# Backward compatibility alias
-get_tension_development_states = get_dilemma_development_states
-
-
 def parse_scoped_id(scoped_id: str) -> tuple[str, str]:
     """Parse 'type::raw_id' into (type, raw_id).
 
     Scoped IDs use '::' as delimiter to disambiguate ID types for the LLM.
-    This prevents confusion between entity IDs, tension IDs, and thread IDs.
+    This prevents confusion between entity IDs, dilemma IDs, and path IDs.
 
     Args:
         scoped_id: An ID string, optionally scoped (e.g., 'entity::hero' or 'hero').
@@ -137,8 +126,8 @@ def parse_scoped_id(scoped_id: str) -> tuple[str, str]:
     Examples:
         >>> parse_scoped_id("entity::hero")
         ('entity', 'hero')
-        >>> parse_scoped_id("thread::host_motive")
-        ('thread', 'host_motive')
+        >>> parse_scoped_id("path::host_motive")
+        ('path', 'host_motive')
         >>> parse_scoped_id("hero")
         ('', 'hero')
     """
@@ -163,7 +152,7 @@ def strip_scope_prefix(scoped_id: str) -> str:
     Examples:
         >>> strip_scope_prefix("entity::hero")
         'hero'
-        >>> strip_scope_prefix("thread::host_motive")
+        >>> strip_scope_prefix("path::host_motive")
         'host_motive'
         >>> strip_scope_prefix("hero")
         'hero'
@@ -190,7 +179,7 @@ def normalize_scoped_id(raw_id: str, scope: str) -> str:
 
     Args:
         raw_id: ID that may or may not already have the scope prefix.
-        scope: The scope type (e.g., 'dilemma', 'path').
+        scope: The scope type (e.g., 'dilemma', 'path', 'entity').
 
     Returns:
         ID with scope prefix guaranteed (e.g., 'dilemma::mentor_trust').
@@ -203,56 +192,57 @@ def parse_hierarchical_path_id(path_id: str) -> tuple[str, str]:
     """Extract dilemma_id and answer_id from a hierarchical path ID.
 
     Hierarchical path IDs embed the parent dilemma in the ID itself:
-    `p::dilemma_id__answer_id` or `path::dilemma_id__answer_id`
+    `path::dilemma_id__answer_id`
 
     This format makes the path→dilemma relationship explicit and prevents
     LLM misreferences.
 
     Args:
-        path_id: A path ID string (e.g., 'p::mentor_trust__benevolent'
-            or 'path::mentor_trust__benevolent').
+        path_id: A path ID string (e.g., 'path::mentor_trust__benevolent').
 
     Returns:
         Tuple of (dilemma_id, answer_id) where dilemma_id includes
-        the 'd::' prefix.
+        the 'dilemma::' prefix.
 
     Raises:
         ValueError: If path_id doesn't contain '__' separator.
 
     Examples:
-        >>> parse_hierarchical_path_id("p::mentor_trust__benevolent")
-        ('d::mentor_trust', 'benevolent')
+        >>> parse_hierarchical_path_id("path::mentor_trust__benevolent")
+        ('dilemma::mentor_trust', 'benevolent')
         >>> parse_hierarchical_path_id("path::mentor_trust__selfish")
-        ('d::mentor_trust', 'selfish')
+        ('dilemma::mentor_trust', 'selfish')
     """
-    raw = strip_scope_prefix(path_id)  # "mentor_trust__benevolent"
+    scope, raw = parse_scoped_id(path_id)
+    if scope not in ("", SCOPE_PATH):
+        raise ValueError(f"Path ID '{path_id}' has wrong scope prefix (expected '{SCOPE_PATH}::')")
     if "__" not in raw:
         raise ValueError(f"Path ID '{path_id}' is not hierarchical (missing '__' separator)")
     dilemma_raw, answer_id = raw.rsplit("__", 1)
-    return f"d::{dilemma_raw}", answer_id
+    return f"{SCOPE_DILEMMA}::{dilemma_raw}", answer_id
 
 
 def format_hierarchical_path_id(dilemma_id: str, answer_id: str) -> str:
     """Create a hierarchical path ID from dilemma and answer components.
 
-    Creates path IDs in the format `p::dilemma_id__answer_id` which
+    Creates path IDs in the format `path::dilemma_id__answer_id` which
     embeds the parent dilemma relationship in the ID itself.
 
     Args:
-        dilemma_id: The parent dilemma ID (with or without 'd::' prefix).
+        dilemma_id: The parent dilemma ID (with or without 'dilemma::' prefix).
         answer_id: The answer ID this path explores.
 
     Returns:
-        Hierarchical path ID string (e.g., 'p::mentor_trust__benevolent').
+        Hierarchical path ID string (e.g., 'path::mentor_trust__benevolent').
 
     Examples:
-        >>> format_hierarchical_path_id("d::mentor_trust", "benevolent")
-        'p::mentor_trust__benevolent'
+        >>> format_hierarchical_path_id("dilemma::mentor_trust", "benevolent")
+        'path::mentor_trust__benevolent'
         >>> format_hierarchical_path_id("mentor_trust", "selfish")
-        'p::mentor_trust__selfish'
+        'path::mentor_trust__selfish'
     """
     dilemma_raw = strip_scope_prefix(dilemma_id)  # "mentor_trust"
-    return f"p::{dilemma_raw}__{answer_id}"
+    return f"{SCOPE_PATH}::{dilemma_raw}__{answer_id}"
 
 
 def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
@@ -273,8 +263,13 @@ def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
     if not paths:
         return ""
 
-    # Sort for deterministic output across runs
-    path_ids = sorted(pid for p in paths if (pid := p.get("path_id")))
+    # Sort for deterministic output across runs.
+    # Seed output should use raw IDs (e.g., "mentor_trust__protector"); tolerate scoped "path::..."
+    # without accidentally normalizing other legacy shorthand scopes.
+    def _raw_path_id(pid: str) -> str:
+        return pid.split("::", 1)[1] if pid.startswith(f"{SCOPE_PATH}::") else pid
+
+    path_ids = sorted(_raw_path_id(pid) for p in paths if (pid := p.get("path_id")))
 
     if not path_ids:
         return ""
@@ -293,11 +288,13 @@ def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
     path_dilemma_pairs = []
     for p in sorted(paths, key=lambda x: x.get("path_id", "")):
         pid = p.get("path_id")
+        pid_raw = _raw_path_id(pid) if pid else None
         dilemma_id = p.get("dilemma_id", "")
         if pid and dilemma_id:
             # Strip scope prefix if present for clean display
             raw_dilemma = dilemma_id.split("::", 1)[-1] if "::" in dilemma_id else dilemma_id
-            path_dilemma_pairs.append((pid, raw_dilemma))
+            if pid_raw:
+                path_dilemma_pairs.append((pid_raw, raw_dilemma))
 
     if path_dilemma_pairs:
         lines.append("## PATH → DILEMMA MAPPING (use in dilemma_impacts)")
@@ -329,10 +326,6 @@ def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
     )
 
     return "\n".join(lines)
-
-
-# Backward compatibility alias
-format_thread_ids_context = format_path_ids_context
 
 
 def format_valid_ids_context(graph: Graph, stage: str) -> str:
@@ -435,12 +428,12 @@ def _format_seed_valid_ids(graph: Graph) -> str:
                     lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
                 lines.append("")
 
-    # Dilemmas with answers (graph still stores as "tension" nodes)
-    dilemmas = graph.get_nodes_by_type("tension")
+    # Dilemmas with answers
+    dilemmas = graph.get_nodes_by_type("dilemma")
     if dilemmas:
         # Pre-build answer edges map to avoid O(D*E) lookups
         answer_edges_by_dilemma: dict[str, list[dict[str, Any]]] = {}
-        for edge in graph.get_edges(edge_type="has_alternative"):
+        for edge in graph.get_edges(edge_type="has_answer"):
             from_id = edge.get("from")
             if from_id:
                 answer_edges_by_dilemma.setdefault(from_id, []).append(edge)
@@ -505,8 +498,7 @@ def get_expected_counts(graph: Graph) -> dict[str, int]:
         Dict with expected counts for each section.
     """
     entities = graph.get_nodes_by_type("entity")
-    # Graph still stores dilemmas as "tension" nodes
-    dilemmas = graph.get_nodes_by_type("tension")
+    dilemmas = graph.get_nodes_by_type("dilemma")
 
     entity_count = sum(1 for node in entities.values() if node.get("raw_id"))
     dilemma_count = sum(1 for ddata in dilemmas.values() if ddata.get("raw_id"))
@@ -581,11 +573,11 @@ def format_retained_entity_ids(
 
 
 def format_summarize_manifest(graph: Graph) -> dict[str, str]:
-    """Format entity and tension manifests for SEED summarize prompt.
+    """Format entity and dilemma manifests for SEED summarize prompt.
 
-    Returns bullet lists of entity/tension IDs that the summarize phase must
+    Returns bullet lists of entity/dilemma IDs that the summarize phase must
     make decisions about (retain/cut for entities, explored/implicit for
-    tensions). Simpler than serialize manifest - just lists IDs without
+    dilemmas). Simpler than serialize manifest - just lists IDs without
     validation context.
 
     Note: Entities with unknown entity_type (not in _ENTITY_CATEGORIES) are
@@ -595,7 +587,7 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
         graph: Graph containing BRAINSTORM data.
 
     Returns:
-        Dict with 'entity_manifest' and 'tension_manifest' strings.
+        Dict with 'entity_manifest' and 'dilemma_manifest' strings.
     """
     # Collect entity IDs grouped by category
     entities = graph.get_nodes_by_type("entity")
@@ -615,8 +607,8 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
                 entity_lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
             entity_lines.append("")  # Blank line between categories
 
-    # Collect dilemma IDs (graph still stores as "tension" nodes)
-    dilemmas = graph.get_nodes_by_type("tension")
+    # Collect dilemma IDs
+    dilemmas = graph.get_nodes_by_type("dilemma")
     dilemma_lines: list[str] = []
     for _did, ddata in sorted(dilemmas.items()):
         raw_id = ddata.get("raw_id")

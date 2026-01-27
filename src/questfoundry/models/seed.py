@@ -9,9 +9,9 @@ CRITICAL: PATH FREEZE - No new paths can be created after SEED.
 See docs/design/00-spec.md for details.
 
 Terminology (v5):
-- dilemma (was: tension): Binary dramatic questions
-- path (was: thread): Routes exploring specific answers to dilemmas
-- answer (was: alternative): Possible resolutions to dilemmas
+- dilemma: Binary dramatic questions
+- path: Routes exploring specific answers to dilemmas
+- answer: Possible resolutions to dilemmas
 """
 
 from __future__ import annotations
@@ -24,10 +24,6 @@ from pydantic import BaseModel, Field, model_validator
 EntityDisposition = Literal["retained", "cut"]
 PathTier = Literal["major", "minor"]
 DilemmaEffect = Literal["advances", "reveals", "commits", "complicates"]
-
-# Backward compatibility aliases
-ThreadTier = PathTier
-TensionEffect = DilemmaEffect
 
 
 class EntityDecision(BaseModel):
@@ -108,10 +104,6 @@ class DilemmaDecision(BaseModel):
         return self.dilemma_id
 
 
-# Backward compatibility alias
-TensionDecision = DilemmaDecision
-
-
 class Consequence(BaseModel):
     """Narrative consequence of a path choice.
 
@@ -157,11 +149,11 @@ class Path(BaseModel):
     from the same dilemma are automatically exclusive (choosing one means
     not choosing the other).
 
-    Path IDs use hierarchical format: p::dilemma_id__answer_id
+    Path IDs use hierarchical format: path::dilemma_id__answer_id
     This embeds the parent dilemma in the ID, making the relationship explicit.
 
     Attributes:
-        path_id: Unique identifier (format: p::dilemma_id__answer_id).
+        path_id: Unique identifier (format: path::dilemma_id__answer_id).
         name: Human-readable name.
         dilemma_id: The dilemma this path explores (derivable from path_id).
         answer_id: The specific answer this path explores.
@@ -172,7 +164,7 @@ class Path(BaseModel):
     """
 
     path_id: str = Field(
-        min_length=1, description="Unique identifier (format: p::dilemma_id__answer_id)"
+        min_length=1, description="Unique identifier (format: path::dilemma_id__answer_id)"
     )
     name: str = Field(min_length=1, description="Human-readable name")
     dilemma_id: str = Field(
@@ -240,10 +232,6 @@ class Path(BaseModel):
         return self.path_importance
 
 
-# Backward compatibility alias
-Thread = Path
-
-
 class DilemmaImpact(BaseModel):
     """How a beat affects a dilemma.
 
@@ -274,10 +262,6 @@ class DilemmaImpact(BaseModel):
     def tension_id(self) -> str:
         """Deprecated: Use 'dilemma_id' instead."""
         return self.dilemma_id
-
-
-# Backward compatibility alias
-TensionImpact = DilemmaImpact
 
 
 class InitialBeat(BaseModel):

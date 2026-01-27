@@ -37,7 +37,7 @@ system: |
 
   ## Output Format
   Return a JSON object with a "gaps" array. Each gap has:
-  - path_id: the path this gap belongs to (use prefixed form, e.g., "p::dilemma__answer")
+  - path_id: the path this gap belongs to (use prefixed form, e.g., "path::dilemma__answer")
   - after_beat: the beat this gap comes after (or null for start of path)
   - before_beat: the beat this gap comes before (or null for end of path)
   - summary: a concise description of the gap beat (1 sentence)

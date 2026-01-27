@@ -7,8 +7,8 @@ material: entities (characters, locations, objects, factions) and dilemmas
 See docs/design/00-spec.md and docs/design/procedures/brainstorm.md for details.
 
 Terminology (v5):
-- dilemma (was: tension): Binary dramatic questions
-- answer (was: alternative): Possible resolutions to dilemmas
+- dilemma: Binary dramatic questions
+- answer: Possible resolutions to dilemmas
 """
 
 from __future__ import annotations
@@ -82,10 +82,6 @@ class Answer(BaseModel):
         return self.answer_id
 
 
-# Backward compatibility alias
-Alternative = Answer
-
-
 class Dilemma(BaseModel):
     """A binary dramatic question with two possible answers.
 
@@ -94,7 +90,7 @@ class Dilemma(BaseModel):
     multiple binary dilemmas instead of a single multi-way choice.
 
     Attributes:
-        dilemma_id: Short identifier with d:: prefix (e.g., "d::mentor_trust").
+        dilemma_id: Scoped identifier with dilemma:: prefix (e.g., "dilemma::mentor_trust").
         question: The dramatic question (must end with "?").
         answers: Exactly two possible answers.
         central_entity_ids: Entity IDs central to this dilemma.
@@ -103,7 +99,10 @@ class Dilemma(BaseModel):
 
     dilemma_id: str = Field(
         min_length=1,
-        description="Unique identifier for this dilemma (e.g., 'd::mentor_trust', 'd::murder_weapon')",
+        description=(
+            "Unique identifier for this dilemma (e.g., 'dilemma::mentor_trust', "
+            "'dilemma::murder_weapon')"
+        ),
     )
     question: str = Field(min_length=1, description="Dramatic question (should end with ?)")
     answers: list[Answer] = Field(
@@ -156,10 +155,6 @@ class Dilemma(BaseModel):
     def alternatives(self) -> list[Answer]:
         """Deprecated: Use 'answers' instead."""
         return self.answers
-
-
-# Backward compatibility alias
-Tension = Dilemma
 
 
 class BrainstormOutput(BaseModel):

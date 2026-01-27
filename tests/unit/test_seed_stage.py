@@ -75,8 +75,8 @@ async def test_execute_calls_all_three_phases() -> None:
     mock_graph.get_nodes_by_type.side_effect = lambda t: (
         {"kay": {"type": "entity", "concept": "Protagonist"}}
         if t == "entity"
-        else {"trust": {"type": "tension", "question": "?"}}
-        if t == "tension"
+        else {"trust": {"type": "dilemma", "question": "?"}}
+        if t == "dilemma"
         else {}
     )
     mock_graph.get_edges.return_value = []
@@ -99,21 +99,21 @@ async def test_execute_calls_all_three_phases() -> None:
         mock_artifact = SeedOutput(
             entities=[{"entity_id": "kay", "disposition": "retained"}],
             tensions=[{"tension_id": "trust", "explored": ["yes"], "implicit": ["no"]}],
-            threads=[
+            paths=[
                 {
                     "thread_id": "thread_trust",
                     "name": "Trust Arc",
                     "tension_id": "trust",
                     "alternative_id": "yes",
                     "thread_importance": "major",
-                    "description": "The trust thread",
+                    "description": "The trust path",
                 }
             ],
             initial_beats=[
                 {
                     "beat_id": "beat1",
                     "summary": "Opening beat",
-                    "threads": ["thread_trust"],
+                    "paths": ["thread_trust"],
                 }
             ],
         )
@@ -169,7 +169,7 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
         mock_prompt.return_value = "System prompt with brainstorm"
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+        mock_artifact = SeedOutput(entities=[], tensions=[], paths=[], initial_beats=[])
         mock_serialize.return_value = SerializeResult(
             artifact=mock_artifact, tokens_used=100, semantic_errors=[]
         )
@@ -211,7 +211,7 @@ async def test_execute_uses_iterative_serialization() -> None:
         mock_tools.return_value = []
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+        mock_artifact = SeedOutput(entities=[], tensions=[], paths=[], initial_beats=[])
         mock_serialize.return_value = SerializeResult(
             artifact=mock_artifact, tokens_used=100, semantic_errors=[]
         )
@@ -259,7 +259,7 @@ async def test_execute_uses_seed_summarize_prompt() -> None:
         }
         mock_discuss.return_value = ([], 1, 100)
         mock_summarize.return_value = ("Brief", 50)
-        mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+        mock_artifact = SeedOutput(entities=[], tensions=[], paths=[], initial_beats=[])
         mock_serialize.return_value = SerializeResult(
             artifact=mock_artifact, tokens_used=100, semantic_errors=[]
         )
@@ -312,21 +312,21 @@ async def test_execute_returns_artifact_as_dict() -> None:
         mock_artifact = SeedOutput(
             entities=[{"entity_id": "kay", "disposition": "retained"}],
             tensions=[],
-            threads=[
+            paths=[
                 {
                     "thread_id": "thread1",
                     "name": "Test",
                     "tension_id": "t1",
                     "alternative_id": "a1",
                     "thread_importance": "major",
-                    "description": "Test thread",
+                    "description": "Test path",
                 }
             ],
             initial_beats=[
                 {
                     "beat_id": "beat1",
                     "summary": "Test beat",
-                    "threads": ["thread1"],
+                    "paths": ["thread1"],
                 }
             ],
         )
@@ -364,8 +364,8 @@ def test_format_brainstorm_context_includes_entities() -> None:
     assert "Hero" in result
 
 
-def test_format_brainstorm_context_includes_tensions() -> None:
-    """_format_brainstorm_context includes tensions in output."""
+def test_format_brainstorm_context_includes_dilemmas() -> None:
+    """_format_brainstorm_context includes dilemmas in output."""
     from questfoundry.graph import Graph
     from questfoundry.pipeline.stages.seed import _format_brainstorm_context
 
@@ -373,16 +373,16 @@ def test_format_brainstorm_context_includes_tensions() -> None:
     graph.create_node(
         "trust",
         {
-            "type": "tension",
+            "type": "dilemma",
             "question": "Can trust be earned?",
             "central_entity_ids": ["kay"],
             "why_it_matters": "Core theme",
         },
     )
     graph.create_node(
-        "trust::yes", {"type": "alternative", "description": "Yes", "is_default_path": True}
+        "trust::yes", {"type": "answer", "description": "Yes", "is_default_path": True}
     )
-    graph.add_edge("has_alternative", "trust", "trust::yes")
+    graph.add_edge("has_answer", "trust", "trust::yes")
 
     result = _format_brainstorm_context(graph)
 
@@ -409,55 +409,55 @@ def test_seed_output_model_validates() -> None:
     output = SeedOutput(
         entities=[{"entity_id": "kay", "disposition": "retained"}],
         tensions=[{"tension_id": "trust", "explored": ["yes"], "implicit": []}],
-        threads=[
+        paths=[
             {
                 "thread_id": "thread_trust",
                 "name": "Trust Arc",
                 "tension_id": "trust",
                 "alternative_id": "yes",
                 "thread_importance": "major",
-                "description": "The trust thread",
+                "description": "The trust path",
             }
         ],
         initial_beats=[
             {
                 "beat_id": "beat1",
                 "summary": "Opening scene",
-                "threads": ["thread_trust"],
+                "paths": ["thread_trust"],
             }
         ],
     )
 
     assert len(output.entities) == 1
-    assert len(output.threads) == 1
+    assert len(output.paths) == 1
     assert len(output.initial_beats) == 1
     assert output.entities[0].entity_id == "kay"
-    assert output.threads[0].name == "Trust Arc"
+    assert output.paths[0].name == "Trust Arc"
 
 
-def test_thread_tier_types() -> None:
-    """Thread model accepts major and minor importance values."""
-    from questfoundry.models.seed import Thread
+def test_path_tier_types() -> None:
+    """Path model accepts major and minor importance values."""
+    from questfoundry.models.seed import Path
 
     for importance in ["major", "minor"]:
-        thread = Thread(
-            thread_id="test",
-            name="Test Thread",
-            tension_id="test_tension",
-            alternative_id="test_alt",
-            thread_importance=importance,  # type: ignore[arg-type]
+        path = Path(
+            path_id="path::test_dilemma__test_answer",
+            name="Test Path",
+            dilemma_id="test_dilemma",
+            answer_id="test_answer",
+            path_importance=importance,  # type: ignore[arg-type]
             description="Test description",
         )
-        assert thread.thread_importance == importance
+        assert path.path_importance == importance
 
 
-def test_tension_effect_types() -> None:
-    """TensionImpact model accepts all effect types."""
-    from questfoundry.models.seed import TensionImpact
+def test_dilemma_effect_types() -> None:
+    """DilemmaImpact model accepts all effect types."""
+    from questfoundry.models.seed import DilemmaImpact
 
     for effect in ["advances", "reveals", "commits", "complicates"]:
-        impact = TensionImpact(
-            tension_id="test",
+        impact = DilemmaImpact(
+            dilemma_id="test",
             effect=effect,  # type: ignore[arg-type]
             note="Test note",
         )
@@ -493,7 +493,7 @@ async def test_outer_loop_retries_on_semantic_errors() -> None:
 
     # Track call count for serialization
     serialize_call_count = [0]
-    mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+    mock_artifact = SeedOutput(entities=[], tensions=[], paths=[], initial_beats=[])
 
     def serialize_side_effect(*_args, **_kwargs):
         serialize_call_count[0] += 1
@@ -561,7 +561,7 @@ async def test_outer_loop_appends_feedback_to_messages() -> None:
         captured_messages.append(list(messages))
         return ("Brief summary", 50)
 
-    mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+    mock_artifact = SeedOutput(entities=[], tensions=[], paths=[], initial_beats=[])
     call_count = [0]
 
     def serialize_side_effect(*_args, **_kwargs):
@@ -625,7 +625,7 @@ async def test_outer_loop_respects_max_retries() -> None:
     )
     mock_graph.get_edges.return_value = []
 
-    mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+    mock_artifact = SeedOutput(entities=[], tensions=[], paths=[], initial_beats=[])
 
     # Always return errors
     def always_errors(*_args, **_kwargs):
@@ -681,7 +681,7 @@ async def test_outer_loop_success_on_first_try() -> None:
     )
     mock_graph.get_edges.return_value = []
 
-    mock_artifact = SeedOutput(entities=[], tensions=[], threads=[], initial_beats=[])
+    mock_artifact = SeedOutput(entities=[], tensions=[], paths=[], initial_beats=[])
 
     with (
         patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,

@@ -16,8 +16,10 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.prompts import get_serialize_prompt
 from questfoundry.artifacts.validator import strip_null_values
 from questfoundry.graph.context import (
+    SCOPE_DILEMMA,
+    SCOPE_PATH,
+    format_path_ids_context,
     format_retained_entity_ids,
-    format_thread_ids_context,
     format_valid_ids_context,
     normalize_scoped_id,
 )
@@ -547,8 +549,8 @@ def _build_per_path_beat_context(
     description = path_data.get("description", "")
 
     # Normalize IDs to include prefixes if missing
-    path_id = normalize_scoped_id(path_id, "path")
-    dilemma_id = normalize_scoped_id(dilemma_id, "dilemma")
+    path_id = normalize_scoped_id(path_id, SCOPE_PATH)
+    dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
 
     lines = [
         "## Path Context",
@@ -596,10 +598,10 @@ async def _serialize_path_beats(
     dilemma_id = path_data.get("dilemma_id", "")
 
     # Normalize IDs and extract path name for beat ID prefixing
-    prefixed_path_id = normalize_scoped_id(path_id, "path")
-    prefixed_dilemma_id = normalize_scoped_id(dilemma_id, "dilemma")
+    prefixed_path_id = normalize_scoped_id(path_id, SCOPE_PATH)
+    prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
     # Extract raw path name (without prefix) for beat ID prefixing
-    path_name = path_id.removeprefix("path::")
+    path_name = path_id.removeprefix(f"{SCOPE_PATH}::")
 
     # Format prompt with path-specific values
     prompt = per_path_prompt_template.format(
@@ -725,8 +727,8 @@ async def serialize_seed_iteratively(
 
     Sections are serialized in order:
     1. entities (EntityDecision list)
-    2. tensions (TensionDecision list)
-    3. threads (Thread list)
+    2. dilemmas (DilemmaDecision list)
+    3. paths (Path list)
     4. consequences (Consequence list)
     5. initial_beats (InitialBeat list)
     6. convergence_sketch (ConvergenceSketch)
@@ -761,10 +763,10 @@ async def serialize_seed_iteratively(
         BeatsSection,
         ConsequencesSection,
         ConvergenceSection,
+        DilemmasSection,
         EntitiesSection,
+        PathsSection,
         SeedOutput,
-        TensionsSection,
-        ThreadsSection,
     )
 
     log.info("serialize_seed_iteratively_started")
@@ -785,8 +787,8 @@ async def serialize_seed_iteratively(
     # section_name matches prompt dict keys, output_field matches SeedOutput field names
     sections: list[tuple[str, type[BaseModel], str]] = [
         ("entities", EntitiesSection, "entities"),
-        ("dilemmas", TensionsSection, "dilemmas"),
-        ("paths", ThreadsSection, "paths"),
+        ("dilemmas", DilemmasSection, "dilemmas"),
+        ("paths", PathsSection, "paths"),
         ("consequences", ConsequencesSection, "consequences"),
         ("beats", BeatsSection, "initial_beats"),
         ("convergence", ConvergenceSection, "convergence_sketch"),
@@ -794,7 +796,7 @@ async def serialize_seed_iteratively(
 
     collected: dict[str, Any] = {}
 
-    # Track brief with thread IDs injected (for beats section)
+    # Track brief with path IDs injected (for beats section)
     brief_with_paths = enhanced_brief
 
     for section_name, schema, output_field in sections:
@@ -829,7 +831,7 @@ async def serialize_seed_iteratively(
 
         # After paths are serialized, inject path IDs for subsequent sections
         if section_name == "paths" and collected.get("paths"):
-            path_ids_context = format_thread_ids_context(collected["paths"])
+            path_ids_context = format_path_ids_context(collected["paths"])
             if path_ids_context:
                 # Insert path IDs after the valid IDs section
                 brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
@@ -913,8 +915,8 @@ async def serialize_seed_iteratively(
     log.info(
         "serialize_seed_iteratively_completed",
         entities=len(seed_output.entities),
-        tensions=len(seed_output.tensions),
-        threads=len(seed_output.threads),
+        dilemmas=len(seed_output.dilemmas),
+        paths=len(seed_output.paths),
         consequences=len(seed_output.consequences),
         beats=len(seed_output.initial_beats),
         tokens=total_tokens,
@@ -948,7 +950,7 @@ def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
     sections = set()
     for error in errors:
         field_path = error.field_path
-        # Extract the top-level field (e.g., "threads.0.tension_id" -> "threads")
+        # Extract the top-level field (e.g., "paths.0.dilemma_id" -> "paths")
         top_level = field_path.split(".")[0] if field_path else ""
         if top_level in _FIELD_PATH_TO_SECTION:
             sections.add(_FIELD_PATH_TO_SECTION[top_level])
@@ -1097,10 +1099,10 @@ async def serialize_seed_as_function(
     from questfoundry.models.seed import (
         ConsequencesSection,
         ConvergenceSection,
+        DilemmasSection,
         EntitiesSection,
+        PathsSection,
         SeedOutput,
-        TensionsSection,
-        ThreadsSection,
     )
 
     log.info("serialize_seed_as_function_started")
@@ -1120,8 +1122,8 @@ async def serialize_seed_as_function(
     # Note: "beats" is handled specially with per-path serialization
     sections: list[tuple[str, type[BaseModel], str]] = [
         ("entities", EntitiesSection, "entities"),
-        ("dilemmas", TensionsSection, "dilemmas"),
-        ("paths", ThreadsSection, "paths"),
+        ("dilemmas", DilemmasSection, "dilemmas"),
+        ("paths", PathsSection, "paths"),
         ("consequences", ConsequencesSection, "consequences"),
         # beats handled via per-path serialization after paths
         ("convergence", ConvergenceSection, "convergence_sketch"),
@@ -1131,8 +1133,8 @@ async def serialize_seed_as_function(
     brief_with_paths = enhanced_brief
     path_ids_context = ""  # Will be populated after paths are serialized
 
-    # Extract entity IDs context for per-thread beat generation
-    # This is injected into each per-thread brief for character/location refs
+    # Extract entity IDs context for per-path beat generation
+    # This is injected into each per-path brief for character/location refs
     entity_context = ""
     if graph is not None:
         entity_context = format_valid_ids_context(graph, stage="seed")
@@ -1183,7 +1185,7 @@ async def serialize_seed_as_function(
         # 1. Inject path IDs for subsequent sections (consequences)
         # 2. Generate beats per-path in parallel
         if section_name == "paths" and collected.get("paths"):
-            path_ids_context = format_thread_ids_context(collected["paths"])
+            path_ids_context = format_path_ids_context(collected["paths"])
             if path_ids_context:
                 brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
                 log.debug("path_ids_context_injected", path_count=len(collected["paths"]))
@@ -1273,7 +1275,7 @@ async def serialize_seed_as_function(
 
                         # Refresh path context for dependent sections when paths change
                         if section_name == "paths":
-                            path_ids_context = format_thread_ids_context(collected["paths"])
+                            path_ids_context = format_path_ids_context(collected["paths"])
                             if path_ids_context:
                                 brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
                                 log.debug("path_context_refreshed_on_retry")
@@ -1331,8 +1333,8 @@ async def serialize_seed_as_function(
     log.info(
         "serialize_seed_as_function_completed",
         entities=len(seed_output.entities),
-        tensions=len(seed_output.tensions),
-        threads=len(seed_output.threads),
+        dilemmas=len(seed_output.dilemmas),
+        paths=len(seed_output.paths),
         consequences=len(seed_output.consequences),
         beats=len(seed_output.initial_beats),
         tokens=total_tokens,

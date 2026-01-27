@@ -39,7 +39,7 @@ Completeness is enforced by construction, not post-hoc parsing. The manifest (li
 ```
 
 **Gate 1 (Summarize Prompt):** Manifest-aware
-- Prompt includes explicit list of ALL entity and tension IDs
+- Prompt includes explicit list of ALL entity and dilemma IDs
 - Summarize must include decisions for each listed ID
 - Format: `entity_id: [retain|cut] - justification`
 
@@ -90,7 +90,7 @@ Different error types require different recovery strategies. Treating all errors
 class SeedErrorCategory(Enum):
     INNER = auto()       # Schema/type error in a section
     SEMANTIC = auto()    # Invalid ID reference (phantom IDs)
-    COMPLETENESS = auto() # Missing entity/tension decisions
+    COMPLETENESS = auto() # Missing entity/dilemma decisions
     FATAL = auto()       # Reserved for future use
 
 def categorize_error(error: SeedValidationError) -> SeedErrorCategory:

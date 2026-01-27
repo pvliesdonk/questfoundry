@@ -53,8 +53,8 @@ class TestAutoApprovePhaseGate:
     @pytest.mark.asyncio
     async def test_approves_skipped_phase(self) -> None:
         gate = AutoApprovePhaseGate()
-        result = GrowPhaseResult(phase="knots", status="skipped")
-        decision = await gate.on_phase_complete("grow", "knots", result)
+        result = GrowPhaseResult(phase="intersections", status="skipped")
+        decision = await gate.on_phase_complete("grow", "intersections", result)
         assert decision == "approve"
 
 
@@ -98,8 +98,8 @@ class TestGrowErrorCategory:
 
 class TestGrowValidationError:
     def test_minimal_creation(self) -> None:
-        error = GrowValidationError(field_path="arc.threads", issue="empty list")
-        assert error.field_path == "arc.threads"
+        error = GrowValidationError(field_path="arc.paths", issue="empty list")
+        assert error.field_path == "arc.paths"
         assert error.issue == "empty list"
         assert error.available == []
         assert error.provided == ""
@@ -107,8 +107,8 @@ class TestGrowValidationError:
 
     def test_full_creation(self) -> None:
         error = GrowValidationError(
-            field_path="arc.threads.0",
-            issue="thread not found in graph",
+            field_path="arc.paths.0",
+            issue="path not found in graph",
             available=["thread_a", "thread_b"],
             provided="thread_x",
             category=GrowErrorCategory.REFERENCE,
@@ -134,7 +134,7 @@ class TestGrowMutationError:
     def test_creation_with_multiple_errors(self) -> None:
         errors = [
             GrowValidationError(
-                field_path="arc.threads.0",
+                field_path="arc.paths.0",
                 issue="not found",
                 available=["t1", "t2"],
                 provided="t_invalid",
@@ -172,7 +172,7 @@ class TestGrowMutationError:
     def test_to_feedback_with_suggestions(self) -> None:
         errors = [
             GrowValidationError(
-                field_path="arc.threads.0",
+                field_path="arc.paths.0",
                 issue="not found",
                 available=["mentor_trust_canonical"],
                 provided="mentor_trust_canon",

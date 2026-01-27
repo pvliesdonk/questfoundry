@@ -54,7 +54,7 @@ questfoundry/
 |-----------|--------|-------|
 | Pipeline orchestrator | Design | Multi-stage execution, human gates |
 | BRAINSTORM stage | Design | Characters, settings, story hooks |
-| SEED stage | Design | Protagonist, setting, tension |
+| SEED stage | Design | Protagonist, setting, dilemma |
 | GROW stage | Design | Six-layer branching structure |
 | FILL stage | Planned | Scene prose generation |
 | SHIP stage | Planned | Export formats (Twee, HTML, JSON) |

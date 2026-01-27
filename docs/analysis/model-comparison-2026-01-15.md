@@ -50,10 +50,10 @@ All runs used the same user prompt (classic murder mystery theme) and non-intera
 | Metric | qwen3:4b | gpt-4o | gpt-oss-20b |
 |--------|----------|--------|-------------|
 | BRAINSTORM entities | 22 | 15 | 31 |
-| BRAINSTORM tensions | 8 | 5 | 6 |
-| SEED threads | 4 | 3 | 3 |
+| BRAINSTORM dilemmas | 8 | 5 | 6 |
+| SEED paths | 4 | 3 | 3 |
 | SEED beats total | 16 | 6 | 12 |
-| Beats per thread | 4 | **2** | 4 |
+| Beats per path | 4 | **2** | 4 |
 | Artifact size (SEED) | 23KB | 9KB | 15KB |
 
 ### Qualitative Assessment
@@ -62,7 +62,7 @@ All runs used the same user prompt (classic murder mystery theme) and non-intera
 |-----------|----------|--------|-------------|
 | DREAM specificity | ★★★★☆ | ★★☆☆☆ | ★★★★★ |
 | Entity richness | ★★★★★ | ★★★☆☆ | ★★★★☆ |
-| Tension quality | ★★★★★ | ★★★☆☆ | ★★★★☆ |
+| Dilemma quality | ★★★★★ | ★★★☆☆ | ★★★★☆ |
 | Beat count compliance | ✓ | ✗ | ✓ |
 | Location diversity | ★★★★☆ | ★★☆☆☆ | ★★★★★ |
 | Consequence specificity | ★★★★★ | ★★☆☆☆ | ★★★★☆ |
@@ -74,12 +74,12 @@ All runs used the same user prompt (classic murder mystery theme) and non-intera
 ### Run 1: qwen3:4b-instruct — Best Overall
 
 **Strengths:**
-- Followed all explicit requirements (4 beats per thread, tension progression)
+- Followed all explicit requirements (4 beats per path, dilemma progression)
 - Rich, interconnected entity concepts with strong thematic coherence
 - Tea rituals, hidden truths, and the garden as liminal space created unified atmosphere
-- Proper tension impact progression: advances → reveals → complicates → commits
+- Proper dilemma impact progression: advances → reveals → complicates → commits
 - Specific, narratively meaningful consequences
-- Coherent convergence sketch tying threads together
+- Coherent convergence sketch tying paths together
 
 **Weaknesses:**
 - All factions cut (missed opportunity for social dynamics)
@@ -90,10 +90,10 @@ All runs used the same user prompt (classic murder mystery theme) and non-intera
 # Example beat showing proper structure
 - beat_id: '2.4'
   summary: 'The diary reveals the incident: a fire that killed a guest. The host was present.'
-  threads:
+  paths:
     - library_knowledge
-  tension_impacts:
-    - tension_id: library_knowledge_salvation_or_corruption
+  dilemma_impacts:
+    - dilemma_id: library_knowledge_salvation_or_corruption
       effect: commits
       note: The diary contains a dangerous truth—corruption—showing the host covered up a fatal incident.
 ```
@@ -101,7 +101,7 @@ All runs used the same user prompt (classic murder mystery theme) and non-intera
 ### Run 2: gpt-4o — Weakest Performance
 
 **Critical Issues:**
-- Only 6 beats total (2 per thread) — below the 2-4 minimum requirement
+- Only 6 beats total (2 per path) — below the 2-4 minimum requirement
 - Thin BRAINSTORM output (15 entities vs 22-31 for other models)
 - Vague consequences ("Influences characters' perceptions")
 - Generic DREAM vision ("Classic Murder Mystery")
@@ -111,7 +111,7 @@ All runs used the same user prompt (classic murder mystery theme) and non-intera
 ```yaml
 # Consequence lacks specificity
 - consequence_id: genuine_collector_consequence
-  thread_id: genuine_collector
+  path_id: genuine_collector
   description: Reveals deeper truths about Blackwood's past and intentions.
   narrative_effects:
     - Influences characters' perceptions of Lord Blackwood.
@@ -125,13 +125,13 @@ Compare to qwen3:4b's consequence: "The diary reveals a hidden truth about a pas
 
 **Strengths:**
 - Best DREAM output with specific narrator choice and motif system
-- Proper beat count (4 per thread)
+- Proper beat count (4 per path)
 - Excellent location diversity across beats
 - Logical, dramatic beat progression
 
 **Schema Compliance Issues:**
-- `central_entity_ids: []` on all tensions (empty arrays)
-- Several tensions have `explored: ['']` (empty strings)
+- `central_entity_ids: []` on all dilemmas (empty arrays)
+- Several dilemmas have `considered: ['']` (empty strings)
 - Consequence for "vault_of_truth" describes a booby-trap (logical inconsistency)
 
 **Notable:** Despite being a MoE model with only 3.6B active parameters, it produced richer output than GPT-4o. The routing mechanism appears to activate appropriate experts for creative writing tasks.
@@ -157,9 +157,9 @@ The pipeline's constrained prompts with clear schemas allow small models to punc
 ### 3. Validation Improvements
 
 Schema validation should catch:
-- Beat count < 2 per thread
-- Empty `central_entity_ids` arrays on tensions
-- Empty strings in `explored` arrays
+- Beat count < 2 per path
+- Empty `central_entity_ids` arrays on dilemmas
+- Empty strings in `considered` arrays
 - Logical inconsistencies between alternative selection and consequence description
 
 ### 4. Cost Optimization
@@ -220,7 +220,7 @@ Additional runs were performed with interactive mode (human in the loop during d
 
 ### Quality Comparison
 
-| Model | Mode | Entities | Tensions | Threads | Beats |
+| Model | Mode | Entities | Dilemmas | Paths | Beats |
 |-------|------|----------|----------|---------|-------|
 | qwen3:4b | non-interactive | 22 | 8 | 4 | 16 |
 | qwen3:4b | interactive | 12 | 6 | 6 | 16 |
@@ -230,15 +230,15 @@ Additional runs were performed with interactive mode (human in the loop during d
 ### Key Finding: Interactive Mode Helps BRAINSTORM, Not SEED
 
 **GPT-4o with human guidance:**
-- ✓ BRAINSTORM improved significantly: 15→22 entities, 5→8 tensions
+- ✓ BRAINSTORM improved significantly: 15→22 entities, 5→8 dilemmas
 - ✓ More LLM engagement: 17→22 calls, 46K→69K tokens
-- ✗ **SEED unchanged**: Still only 6 beats (2 per thread)
+- ✗ **SEED unchanged**: Still only 6 beats (2 per path)
 - ✗ Beat count issue persists despite human interaction
 
 **qwen3:4b with human guidance:**
 - BRAINSTORM more focused: 22→12 entities (human steering reduced sprawl)
 - Beat count maintained: 16 beats in both modes
-- More threads: 4→6 threads (human encouraged more storylines)
+- More paths: 4→6 paths (human encouraged more storylines)
 - Similar LLM time despite human pauses
 
 ### Interpretation
@@ -248,7 +248,7 @@ GPT-4o's RLHF tuning for helpful chat **does** help in the discuss phases — in
 This suggests the problem is in the serialize phase specifically, not the discuss phase. GPT-4o's tendency toward concise responses is deeply embedded and persists even when:
 1. The discuss phase produced rich material
 2. A human explicitly guided the conversation
-3. The prompt clearly specifies "2-4 beats per thread"
+3. The prompt clearly specifies "2-4 beats per path"
 
 **Recommendation**: For GPT-4o, consider:
 - Even stronger "DO NOT ABBREVIATE" language in serialize prompts
@@ -327,7 +327,7 @@ The current prompts specify what TO do but not what NOT to do. Adding explicit a
 - Do NOT end with "let me know if you need..." - this is not a chat
 - Do NOT include "Good luck!" or similar pleasantries
 - Do NOT skip beat creation - beats are REQUIRED, count them before finishing
-- Do NOT stop at 2 beats per thread - aim for 3-4
+- Do NOT stop at 2 beats per path - aim for 3-4
 
 ## Output Format
 BAD: "Detective Chase is a seasoned investigator known for her sharp wit..."
@@ -350,7 +350,7 @@ tone:
   - slightly eerie
   - 1940s English country house
   - tea parties
-  - subtle tension
+  - subtle dilemma pressure
   - social intrigue
 themes:
   - deduction over action
@@ -387,15 +387,15 @@ themes:
 
 ### A.2 SEED Beat Quality Comparison
 
-**Run 1 (qwen3:4b)** — Rich tension impacts and specific consequences:
+**Run 1 (qwen3:4b)** — Rich dilemma impacts and specific consequences:
 ```yaml
 - beat_id: '2.4'
   summary: 'The diary reveals the incident: a fire that killed a guest.
     The host was present.'
-  threads:
+  paths:
     - library_knowledge
-  tension_impacts:
-    - tension_id: library_knowledge_salvation_or_corruption
+  dilemma_impacts:
+    - dilemma_id: library_knowledge_salvation_or_corruption
       effect: commits
       note: The diary contains a dangerous truth—corruption—showing
         the host covered up a fatal incident.
@@ -410,10 +410,10 @@ themes:
 - beat_id: gc_beat_1
   summary: Lord Blackwood discusses his acquisition with Dr. Langford
     in the mansion's library.
-  threads:
+  paths:
     - genuine_collector
-  tension_impacts:
-    - tension_id: blackwood_motivation
+  dilemma_impacts:
+    - dilemma_id: blackwood_motivation
       effect: advances
       note: Provides insight into Blackwood's genuine interest.
   entities:
@@ -428,10 +428,10 @@ themes:
 - beat_id: beat_a2
   summary: During the banquet, a poisoned chalice is discovered, and
     the red locket is found near the victim's hand.
-  threads:
-    - thread_a
-  tension_impacts:
-    - tension_id: t1
+  paths:
+    - path_a
+  dilemma_impacts:
+    - dilemma_id: t1
       effect: advances
       note: introduces locket as key clue
   entities:
@@ -450,7 +450,7 @@ themes:
 **Run 1 (qwen3:4b)** — Specific narrative effects:
 ```yaml
 - consequence_id: library_knowledge_salvation_to_corruption
-  thread_id: library_knowledge
+  path_id: library_knowledge
   description: The diary reveals a hidden truth about a past fire,
     which corrupts the estate's history and causes moral collapse
     among the guests.
@@ -463,7 +463,7 @@ themes:
 **Run 2 (gpt-4o)** — Vague effects:
 ```yaml
 - consequence_id: genuine_collector_consequence
-  thread_id: genuine_collector
+  path_id: genuine_collector
   description: Reveals deeper truths about Blackwood's past and intentions.
   narrative_effects:
     - Influences characters' perceptions of Lord Blackwood.

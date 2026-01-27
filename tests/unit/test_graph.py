@@ -145,32 +145,32 @@ class TestNodeOperations:
     def test_delete_referenced_node_raises(self) -> None:
         """Deleting node referenced by edge raises NodeReferencedError."""
         graph = Graph.empty()
-        graph.create_node("thread::main", {"type": "thread"})
+        graph.create_node("path::main", {"type": "path"})
         graph.create_node("beat::intro", {"type": "beat"})
-        graph.add_edge("belongs_to", "beat::intro", "thread::main")
+        graph.add_edge("belongs_to", "beat::intro", "path::main")
 
         with pytest.raises(NodeReferencedError) as exc_info:
-            graph.delete_node("thread::main")
+            graph.delete_node("path::main")
 
         error = exc_info.value
-        assert error.node_id == "thread::main"
+        assert error.node_id == "path::main"
         assert len(error.referenced_by) == 1
 
     def test_delete_node_cascade(self) -> None:
         """Can delete referenced node with cascade=True."""
         graph = Graph.empty()
-        graph.create_node("thread::main", {"type": "thread"})
+        graph.create_node("path::main", {"type": "path"})
         graph.create_node("beat::intro", {"type": "beat"})
-        graph.add_edge("belongs_to", "beat::intro", "thread::main")
+        graph.add_edge("belongs_to", "beat::intro", "path::main")
 
         # Verify edge exists
-        assert len(graph.get_edges(to_id="thread::main")) == 1
+        assert len(graph.get_edges(to_id="path::main")) == 1
 
         # Delete with cascade
-        graph.delete_node("thread::main", cascade=True)
+        graph.delete_node("path::main", cascade=True)
 
-        assert not graph.has_node("thread::main")
-        assert len(graph.get_edges(to_id="thread::main")) == 0
+        assert not graph.has_node("path::main")
+        assert len(graph.get_edges(to_id="path::main")) == 0
 
     def test_get_node_returns_none_for_missing(self) -> None:
         """get_node returns None for missing node."""
@@ -190,7 +190,7 @@ class TestNodeOperations:
         graph = Graph.empty()
         graph.create_node("char_001", {"type": "entity", "entity_type": "character"})
         graph.create_node("char_002", {"type": "entity", "entity_type": "character"})
-        graph.create_node("tension_001", {"type": "tension", "question": "?"})
+        graph.create_node("dilemma_001", {"type": "dilemma", "question": "?"})
         graph.create_node("vision", {"type": "vision", "genre": "noir"})
 
         entities = graph.get_nodes_by_type("entity")
@@ -198,9 +198,9 @@ class TestNodeOperations:
         assert "char_001" in entities
         assert "char_002" in entities
 
-        tensions = graph.get_nodes_by_type("tension")
-        assert len(tensions) == 1
-        assert "tension_001" in tensions
+        dilemmas = graph.get_nodes_by_type("dilemma")
+        assert len(dilemmas) == 1
+        assert "dilemma_001" in dilemmas
 
         visions = graph.get_nodes_by_type("vision")
         assert len(visions) == 1
@@ -262,16 +262,16 @@ class TestNodeReference:
         graph = Graph.empty()
         graph.create_node("entity::alice", {"type": "entity"})
         graph.create_node("entity::bob", {"type": "entity"})
-        graph.create_node("thread::main", {"type": "thread"})  # Different type
+        graph.create_node("path::main", {"type": "path"})  # Different type
 
         with pytest.raises(NodeNotFoundError) as exc_info:
             graph.ref("entity", "charlie")
 
         error = exc_info.value
-        # Should include entity IDs but not thread IDs
+        # Should include entity IDs but not path IDs
         assert "entity::alice" in error.available
         assert "entity::bob" in error.available
-        assert "thread::main" not in error.available
+        assert "path::main" not in error.available
 
     def test_ref_rejects_double_prefixed_id(self) -> None:
         """ref() raises ValueError if raw_id already contains prefix."""
@@ -291,14 +291,14 @@ class TestEdgeOperations:
     def test_add_edge(self) -> None:
         """Can add edges between existing nodes."""
         graph = Graph.empty()
-        graph.create_node("tension_001", {"type": "tension"})
+        graph.create_node("tension_001", {"type": "dilemma"})
         graph.create_node("alt_001", {"type": "alternative"})
 
-        graph.add_edge("has_alternative", "tension_001", "alt_001")
+        graph.add_edge("has_answer", "tension_001", "alt_001")
 
         edges = graph.get_edges()
         assert len(edges) == 1
-        assert edges[0]["type"] == "has_alternative"
+        assert edges[0]["type"] == "has_answer"
         assert edges[0]["from"] == "tension_001"
         assert edges[0]["to"] == "alt_001"
 
@@ -372,23 +372,23 @@ class TestEdgeOperations:
     def test_add_edge_provides_available_ids(self) -> None:
         """EdgeEndpointError includes available IDs of matching type."""
         graph = Graph.empty()
-        graph.create_node("thread::main", {"type": "thread"})
-        graph.create_node("thread::side", {"type": "thread"})
+        graph.create_node("path::main", {"type": "path"})
+        graph.create_node("path::side", {"type": "path"})
         graph.create_node("beat::intro", {"type": "beat"})
 
         with pytest.raises(EdgeEndpointError) as exc_info:
-            graph.add_edge("belongs_to", "beat::intro", "thread::missing")
+            graph.add_edge("belongs_to", "beat::intro", "path::missing")
 
         error = exc_info.value
-        # Should suggest thread IDs for the target
-        assert "thread::main" in error.available_to
-        assert "thread::side" in error.available_to
+        # Should suggest path IDs for the target
+        assert "path::main" in error.available_to
+        assert "path::side" in error.available_to
 
     def test_get_edges_filter_by_from(self) -> None:
         """Can filter edges by source node."""
         graph = Graph.empty()
-        graph.create_node("t1", {"type": "tension"})
-        graph.create_node("t2", {"type": "tension"})
+        graph.create_node("t1", {"type": "dilemma"})
+        graph.create_node("t2", {"type": "dilemma"})
         graph.create_node("a1", {"type": "alternative"})
         graph.create_node("a2", {"type": "alternative"})
         graph.create_node("a3", {"type": "alternative"})
@@ -405,8 +405,8 @@ class TestEdgeOperations:
         graph.create_node("beat_1", {"type": "beat"})
         graph.create_node("beat_2", {"type": "beat"})
         graph.create_node("beat_3", {"type": "beat"})
-        graph.create_node("thread_1", {"type": "thread"})
-        graph.create_node("thread_2", {"type": "thread"})
+        graph.create_node("thread_1", {"type": "path"})
+        graph.create_node("thread_2", {"type": "path"})
         graph.add_edge("belongs_to", "beat_1", "thread_1")
         graph.add_edge("belongs_to", "beat_2", "thread_1")
         graph.add_edge("belongs_to", "beat_3", "thread_2")
@@ -417,25 +417,25 @@ class TestEdgeOperations:
     def test_get_edges_filter_by_type(self) -> None:
         """Can filter edges by type."""
         graph = Graph.empty()
-        graph.create_node("t1", {"type": "tension"})
-        graph.create_node("t2", {"type": "tension"})
+        graph.create_node("t1", {"type": "dilemma"})
+        graph.create_node("t2", {"type": "dilemma"})
         graph.create_node("a1", {"type": "alternative"})
         graph.create_node("a2", {"type": "alternative"})
-        graph.create_node("thread_1", {"type": "thread"})
-        graph.add_edge("has_alternative", "t1", "a1")
+        graph.create_node("thread_1", {"type": "path"})
+        graph.add_edge("has_answer", "t1", "a1")
         graph.add_edge("explores", "thread_1", "a1")
-        graph.add_edge("has_alternative", "t2", "a2")
+        graph.add_edge("has_answer", "t2", "a2")
 
-        edges = graph.get_edges(edge_type="has_alternative")
+        edges = graph.get_edges(edge_type="has_answer")
         assert len(edges) == 2
 
     def test_get_edges_multiple_filters(self) -> None:
         """Can combine multiple filters."""
         graph = Graph.empty()
-        graph.create_node("t1", {"type": "tension"})
+        graph.create_node("t1", {"type": "dilemma"})
         graph.create_node("a1", {"type": "alternative"})
         graph.create_node("a2", {"type": "alternative"})
-        graph.create_node("th1", {"type": "thread"})
+        graph.create_node("th1", {"type": "path"})
         graph.add_edge("has_alt", "t1", "a1")
         graph.add_edge("has_alt", "t1", "a2")
         graph.add_edge("explores", "th1", "a1")
@@ -696,11 +696,11 @@ class TestGraphIntegrityErrors:
     def test_node_not_found_error_suggestions(self) -> None:
         """NodeNotFoundError suggests similar IDs for typos."""
         error = NodeNotFoundError(
-            node_id="tension::strom_aftermath",  # Typo: strom -> storm
+            node_id="dilemma::strom_aftermath",  # Typo: strom -> storm
             available=[
-                "tension::storm_aftermath",
-                "tension::family_secret",
-                "tension::power_struggle",
+                "dilemma::storm_aftermath",
+                "dilemma::family_secret",
+                "dilemma::power_struggle",
             ],
         )
 
@@ -724,18 +724,18 @@ class TestGraphIntegrityErrors:
     def test_node_referenced_error(self) -> None:
         """NodeReferencedError shows referencing edges."""
         error = NodeReferencedError(
-            node_id="thread::main",
+            node_id="path::main",
             referenced_by=[
-                {"type": "belongs_to", "from": "beat::intro", "to": "thread::main"},
-                {"type": "belongs_to", "from": "beat::climax", "to": "thread::main"},
+                {"type": "belongs_to", "from": "beat::intro", "to": "path::main"},
+                {"type": "belongs_to", "from": "beat::climax", "to": "path::main"},
             ],
         )
 
-        assert error.node_id == "thread::main"
+        assert error.node_id == "path::main"
         assert len(error.referenced_by) == 2
 
         feedback = error.to_llm_feedback()
-        assert "thread::main" in feedback
+        assert "path::main" in feedback
         assert "belongs_to" in feedback
         assert "beat::intro" in feedback
 
@@ -762,17 +762,17 @@ class TestGraphIntegrityErrors:
         error = EdgeEndpointError(
             edge_type="belongs_to",
             from_id="beat::intro",
-            to_id="thread::missing",
+            to_id="path::missing",
             missing="to",
             available_from=["beat::intro"],
-            available_to=["thread::main", "thread::side"],
+            available_to=["path::main", "path::side"],
         )
 
         assert error.missing == "to"
         feedback = error.to_llm_feedback()
 
-        assert "thread::missing" in feedback
-        assert "thread::main" in feedback
+        assert "path::missing" in feedback
+        assert "path::main" in feedback
 
     def test_edge_endpoint_error_both_missing(self) -> None:
         """EdgeEndpointError for both endpoints missing."""

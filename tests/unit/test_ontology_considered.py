@@ -2,9 +2,9 @@
 
 This module tests:
 1. Backward compatibility: old 'explored' field migrates to 'considered'
-2. Development state derivation from thread existence
-3. Arc count derivation from threads (not from considered field)
-4. Tension immutability during pruning
+2. Development state derivation from path existence
+3. Arc count derivation from paths (not from considered field)
+4. Dilemma immutability during pruning
 5. Scoped ID standardization in pruning (issue #219, PR #220)
 """
 
@@ -14,8 +14,8 @@ from questfoundry.graph.context import (
     STATE_COMMITTED,
     STATE_DEFERRED,
     STATE_LATENT,
-    count_threads_per_tension,
-    get_tension_development_states,
+    count_paths_per_dilemma,
+    get_dilemma_development_states,
 )
 from questfoundry.graph.seed_pruning import (
     _prune_demoted_dilemmas,
@@ -24,20 +24,20 @@ from questfoundry.graph.seed_pruning import (
 )
 from questfoundry.models.seed import (
     Consequence,
+    DilemmaDecision,
     InitialBeat,
+    Path,
     SeedOutput,
-    TensionDecision,
-    Thread,
 )
 
 
-class TestTensionDecisionBackwardCompat:
+class TestDilemmaDecisionBackwardCompat:
     """Test backward compatibility for old 'explored' field."""
 
     def test_new_considered_field_works(self) -> None:
         """New 'considered' field is accepted."""
-        decision = TensionDecision(
-            tension_id="test_tension",
+        decision = DilemmaDecision(
+            dilemma_id="test_dilemma",
             considered=["alt_a", "alt_b"],
             implicit=["alt_c"],
         )
@@ -48,11 +48,11 @@ class TestTensionDecisionBackwardCompat:
         """Old 'explored' field is migrated to 'considered'."""
         # Simulate old graph data with 'explored' field
         old_data = {
-            "tension_id": "test_tension",
+            "dilemma_id": "test_dilemma",
             "explored": ["alt_a", "alt_b"],
             "implicit": ["alt_c"],
         }
-        decision = TensionDecision.model_validate(old_data)
+        decision = DilemmaDecision.model_validate(old_data)
         assert decision.considered == ["alt_a", "alt_b"]
         assert decision.implicit == ["alt_c"]
 
@@ -60,207 +60,207 @@ class TestTensionDecisionBackwardCompat:
         """If both 'considered' and 'explored' present, 'considered' is used."""
         # This shouldn't happen in practice, but test the behavior
         data = {
-            "tension_id": "test_tension",
+            "dilemma_id": "test_dilemma",
             "considered": ["new_alt"],
             "explored": ["old_alt"],
             "implicit": [],
         }
-        decision = TensionDecision.model_validate(data)
+        decision = DilemmaDecision.model_validate(data)
         assert decision.considered == ["new_alt"]
 
 
-class TestCountThreadsPerTension:
-    """Test counting threads per tension."""
+class TestCountPathsPerDilemma:
+    """Test counting paths per dilemma."""
 
-    def test_counts_threads_correctly(self) -> None:
-        """Counts threads grouped by tension_id."""
+    def test_counts_paths_correctly(self) -> None:
+        """Counts paths grouped by dilemma_id."""
         seed = SeedOutput(
-            tensions=[
-                TensionDecision(tension_id="t1", considered=["a", "b"], implicit=[]),
-                TensionDecision(tension_id="t2", considered=["c"], implicit=[]),
+            dilemmas=[
+                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
+                DilemmaDecision(dilemma_id="t2", considered=["c"], implicit=[]),
             ],
-            threads=[
-                Thread(
-                    thread_id="th1",
-                    name="Thread 1",
-                    tension_id="t1",
-                    alternative_id="a",
-                    thread_importance="major",
+            paths=[
+                Path(
+                    path_id="th1",
+                    name="Path 1",
+                    dilemma_id="t1",
+                    answer_id="a",
+                    path_importance="major",
                     description="desc",
                 ),
-                Thread(
-                    thread_id="th2",
-                    name="Thread 2",
-                    tension_id="t1",
-                    alternative_id="b",
-                    thread_importance="major",
+                Path(
+                    path_id="th2",
+                    name="Path 2",
+                    dilemma_id="t1",
+                    answer_id="b",
+                    path_importance="major",
                     description="desc",
                 ),
-                Thread(
-                    thread_id="th3",
-                    name="Thread 3",
-                    tension_id="t2",
-                    alternative_id="c",
-                    thread_importance="minor",
+                Path(
+                    path_id="th3",
+                    name="Path 3",
+                    dilemma_id="t2",
+                    answer_id="c",
+                    path_importance="minor",
                     description="desc",
                 ),
             ],
         )
 
-        counts = count_threads_per_tension(seed)
+        counts = count_paths_per_dilemma(seed)
 
         assert counts == {"t1": 2, "t2": 1}
 
-    def test_handles_scoped_tension_ids(self) -> None:
-        """Handles tension_id with scope prefix."""
+    def test_handles_scoped_dilemma_ids(self) -> None:
+        """Handles dilemma_id with scope prefix."""
         seed = SeedOutput(
-            tensions=[TensionDecision(tension_id="t1", considered=["a"], implicit=[])],
-            threads=[
-                Thread(
-                    thread_id="th1",
-                    name="Thread 1",
-                    tension_id="tension::t1",  # Scoped
-                    alternative_id="a",
-                    thread_importance="major",
+            dilemmas=[DilemmaDecision(dilemma_id="t1", considered=["a"], implicit=[])],
+            paths=[
+                Path(
+                    path_id="th1",
+                    name="Path 1",
+                    dilemma_id="dilemma::t1",  # Scoped
+                    answer_id="a",
+                    path_importance="major",
                     description="desc",
                 ),
             ],
         )
 
-        counts = count_threads_per_tension(seed)
+        counts = count_paths_per_dilemma(seed)
 
         assert counts == {"t1": 1}
 
-    def test_empty_threads_returns_empty_dict(self) -> None:
-        """Returns empty dict when no threads."""
+    def test_empty_paths_returns_empty_dict(self) -> None:
+        """Returns empty dict when no paths."""
         seed = SeedOutput(
-            tensions=[TensionDecision(tension_id="t1", considered=["a"], implicit=[])],
-            threads=[],
+            dilemmas=[DilemmaDecision(dilemma_id="t1", considered=["a"], implicit=[])],
+            paths=[],
         )
 
-        counts = count_threads_per_tension(seed)
+        counts = count_paths_per_dilemma(seed)
 
         assert counts == {}
 
 
-class TestGetTensionDevelopmentStates:
-    """Test derivation of development states from thread existence."""
+class TestGetDilemmaDevelopmentStates:
+    """Test derivation of development states from path existence."""
 
-    def test_committed_state_when_thread_exists(self) -> None:
-        """Alternative in 'considered' with thread is 'committed'."""
+    def test_committed_state_when_path_exists(self) -> None:
+        """Alternative in 'considered' with path is 'committed'."""
         seed = SeedOutput(
-            tensions=[
-                TensionDecision(tension_id="t1", considered=["a", "b"], implicit=[]),
+            dilemmas=[
+                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
             ],
-            threads=[
-                Thread(
-                    thread_id="th1",
-                    name="Thread 1",
-                    tension_id="t1",
-                    alternative_id="a",
-                    thread_importance="major",
+            paths=[
+                Path(
+                    path_id="th1",
+                    name="Path 1",
+                    dilemma_id="t1",
+                    answer_id="a",
+                    path_importance="major",
                     description="desc",
                 ),
-                Thread(
-                    thread_id="th2",
-                    name="Thread 2",
-                    tension_id="t1",
-                    alternative_id="b",
-                    thread_importance="major",
+                Path(
+                    path_id="th2",
+                    name="Path 2",
+                    dilemma_id="t1",
+                    answer_id="b",
+                    path_importance="major",
                     description="desc",
                 ),
             ],
         )
 
-        states = get_tension_development_states(seed)
+        states = get_dilemma_development_states(seed)
 
         assert states["t1"]["a"] == STATE_COMMITTED
         assert states["t1"]["b"] == STATE_COMMITTED
 
-    def test_deferred_state_when_considered_but_no_thread(self) -> None:
-        """Alternative in 'considered' without thread is 'deferred'."""
+    def test_deferred_state_when_considered_but_no_path(self) -> None:
+        """Alternative in 'considered' without path is 'deferred'."""
         seed = SeedOutput(
-            tensions=[
-                TensionDecision(tension_id="t1", considered=["a", "b"], implicit=[]),
+            dilemmas=[
+                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
             ],
-            threads=[
-                Thread(
-                    thread_id="th1",
-                    name="Thread 1",
-                    tension_id="t1",
-                    alternative_id="a",  # Only 'a' has thread
-                    thread_importance="major",
+            paths=[
+                Path(
+                    path_id="th1",
+                    name="Path 1",
+                    dilemma_id="t1",
+                    answer_id="a",  # Only 'a' has path
+                    path_importance="major",
                     description="desc",
                 ),
             ],
         )
 
-        states = get_tension_development_states(seed)
+        states = get_dilemma_development_states(seed)
 
         assert states["t1"]["a"] == STATE_COMMITTED
-        assert states["t1"]["b"] == STATE_DEFERRED  # Considered but no thread
+        assert states["t1"]["b"] == STATE_DEFERRED  # Considered but no path
 
     def test_latent_state_for_implicit_alternatives(self) -> None:
         """Alternative in 'implicit' is 'latent'."""
         seed = SeedOutput(
-            tensions=[
-                TensionDecision(tension_id="t1", considered=["a"], implicit=["b"]),
+            dilemmas=[
+                DilemmaDecision(dilemma_id="t1", considered=["a"], implicit=["b"]),
             ],
-            threads=[
-                Thread(
-                    thread_id="th1",
-                    name="Thread 1",
-                    tension_id="t1",
-                    alternative_id="a",
-                    thread_importance="major",
+            paths=[
+                Path(
+                    path_id="th1",
+                    name="Path 1",
+                    dilemma_id="t1",
+                    answer_id="a",
+                    path_importance="major",
                     description="desc",
                 ),
             ],
         )
 
-        states = get_tension_development_states(seed)
+        states = get_dilemma_development_states(seed)
 
         assert states["t1"]["a"] == STATE_COMMITTED
         assert states["t1"]["b"] == STATE_LATENT  # In implicit, never considered
 
 
-class TestComputeArcCountFromThreads:
-    """Test that arc count is derived from thread existence, not considered field."""
+class TestComputeArcCountFromPaths:
+    """Test that arc count is derived from path existence, not considered field."""
 
-    def test_arc_count_from_threads_not_considered(self) -> None:
-        """Arc count is 2^n where n = tensions with 2+ threads."""
+    def test_arc_count_from_paths_not_considered(self) -> None:
+        """Arc count is 2^n where n = dilemmas with 2+ paths."""
         seed = SeedOutput(
-            tensions=[
-                # Both alts considered, but only one has thread
-                TensionDecision(tension_id="t1", considered=["a", "b"], implicit=[]),
-                # Both alts considered and have threads
-                TensionDecision(tension_id="t2", considered=["c", "d"], implicit=[]),
+            dilemmas=[
+                # Both alts considered, but only one has path
+                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
+                # Both alts considered and have paths
+                DilemmaDecision(dilemma_id="t2", considered=["c", "d"], implicit=[]),
             ],
-            threads=[
-                # t1: only one thread (despite 2 considered)
-                Thread(
-                    thread_id="th1",
-                    name="Thread 1",
-                    tension_id="t1",
-                    alternative_id="a",
-                    thread_importance="major",
+            paths=[
+                # t1: only one path (despite 2 considered)
+                Path(
+                    path_id="th1",
+                    name="Path 1",
+                    dilemma_id="t1",
+                    answer_id="a",
+                    path_importance="major",
                     description="desc",
                 ),
-                # t2: two threads
-                Thread(
-                    thread_id="th2",
-                    name="Thread 2",
-                    tension_id="t2",
-                    alternative_id="c",
-                    thread_importance="major",
+                # t2: two paths
+                Path(
+                    path_id="th2",
+                    name="Path 2",
+                    dilemma_id="t2",
+                    answer_id="c",
+                    path_importance="major",
                     description="desc",
                 ),
-                Thread(
-                    thread_id="th3",
-                    name="Thread 3",
-                    tension_id="t2",
-                    alternative_id="d",
-                    thread_importance="major",
+                Path(
+                    path_id="th3",
+                    name="Path 3",
+                    dilemma_id="t2",
+                    answer_id="d",
+                    path_importance="major",
                     description="desc",
                 ),
             ],
@@ -268,22 +268,22 @@ class TestComputeArcCountFromThreads:
 
         arc_count = compute_arc_count(seed)
 
-        # Only t2 has 2+ threads, so 2^1 = 2 arcs
+        # Only t2 has 2+ paths, so 2^1 = 2 arcs
         assert arc_count == 2
 
     def test_arc_count_one_when_no_fully_developed(self) -> None:
-        """Arc count is 1 when no tensions have 2+ threads."""
+        """Arc count is 1 when no dilemmas have 2+ paths."""
         seed = SeedOutput(
-            tensions=[
-                TensionDecision(tension_id="t1", considered=["a", "b"], implicit=[]),
+            dilemmas=[
+                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
             ],
-            threads=[
-                Thread(
-                    thread_id="th1",
-                    name="Thread 1",
-                    tension_id="t1",
-                    alternative_id="a",
-                    thread_importance="major",
+            paths=[
+                Path(
+                    path_id="th1",
+                    name="Path 1",
+                    dilemma_id="t1",
+                    answer_id="a",
+                    path_importance="major",
                     description="desc",
                 ),
             ],
@@ -293,44 +293,44 @@ class TestComputeArcCountFromThreads:
 
         assert arc_count == 1
 
-    def test_arc_count_multiple_tensions(self) -> None:
-        """Arc count is 2^n for multiple fully developed tensions."""
+    def test_arc_count_multiple_dilemmas(self) -> None:
+        """Arc count is 2^n for multiple fully developed dilemmas."""
         seed = SeedOutput(
-            tensions=[
-                TensionDecision(tension_id="t1", considered=["a", "b"], implicit=[]),
-                TensionDecision(tension_id="t2", considered=["c", "d"], implicit=[]),
+            dilemmas=[
+                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
+                DilemmaDecision(dilemma_id="t2", considered=["c", "d"], implicit=[]),
             ],
-            threads=[
-                Thread(
-                    thread_id="th1",
-                    tension_id="t1",
-                    alternative_id="a",
+            paths=[
+                Path(
+                    path_id="th1",
+                    dilemma_id="t1",
+                    answer_id="a",
                     name="T1",
-                    thread_importance="major",
+                    path_importance="major",
                     description="d",
                 ),
-                Thread(
-                    thread_id="th2",
-                    tension_id="t1",
-                    alternative_id="b",
+                Path(
+                    path_id="th2",
+                    dilemma_id="t1",
+                    answer_id="b",
                     name="T2",
-                    thread_importance="major",
+                    path_importance="major",
                     description="d",
                 ),
-                Thread(
-                    thread_id="th3",
-                    tension_id="t2",
-                    alternative_id="c",
+                Path(
+                    path_id="th3",
+                    dilemma_id="t2",
+                    answer_id="c",
                     name="T3",
-                    thread_importance="major",
+                    path_importance="major",
                     description="d",
                 ),
-                Thread(
-                    thread_id="th4",
-                    tension_id="t2",
-                    alternative_id="d",
+                Path(
+                    path_id="th4",
+                    dilemma_id="t2",
+                    answer_id="d",
                     name="T4",
-                    thread_importance="major",
+                    path_importance="major",
                     description="d",
                 ),
             ],
@@ -338,108 +338,108 @@ class TestComputeArcCountFromThreads:
 
         arc_count = compute_arc_count(seed)
 
-        # Both tensions have 2 threads: 2^2 = 4 arcs
+        # Both dilemmas have 2 paths: 2^2 = 4 arcs
         assert arc_count == 4
 
 
 class TestPruningImmutability:
-    """Test that pruning doesn't mutate tension decisions."""
+    """Test that pruning doesn't mutate dilemma decisions."""
 
-    def _make_seed_output_with_threads(
+    def _make_seed_output_with_paths(
         self,
-        tensions_count: int = 5,
-        threads_per_tension: int = 2,
+        dilemmas_count: int = 5,
+        paths_per_dilemma: int = 2,
     ) -> SeedOutput:
-        """Helper to create a SeedOutput with multiple fully developed tensions."""
-        tensions = []
-        threads = []
+        """Helper to create a SeedOutput with multiple fully developed dilemmas."""
+        dilemmas = []
+        paths = []
         beats = []
 
-        for i in range(tensions_count):
+        for i in range(dilemmas_count):
             tid = f"t{i}"
-            tensions.append(
-                TensionDecision(
-                    tension_id=tid,
+            dilemmas.append(
+                DilemmaDecision(
+                    dilemma_id=tid,
                     considered=["a", "b"],
                     implicit=[],
                 )
             )
 
-            for j in range(threads_per_tension):
+            for j in range(paths_per_dilemma):
                 alt_id = "a" if j == 0 else "b"
-                thread_id = f"th_{tid}_{alt_id}"
-                threads.append(
-                    Thread(
-                        thread_id=thread_id,
-                        name=f"Thread {tid} {alt_id}",
-                        tension_id=tid,
-                        alternative_id=alt_id,
-                        thread_importance="major",
+                path_id = f"th_{tid}_{alt_id}"
+                paths.append(
+                    Path(
+                        path_id=path_id,
+                        name=f"Path {tid} {alt_id}",
+                        dilemma_id=tid,
+                        answer_id=alt_id,
+                        path_importance="major",
                         description="desc",
                     )
                 )
 
-                # Add a commits beat for each thread
+                # Add a commits beat for each path
                 beats.append(
                     InitialBeat(
-                        beat_id=f"beat_{thread_id}",
+                        beat_id=f"beat_{path_id}",
                         summary="Summary",
-                        threads=[thread_id],
-                        tension_impacts=[
-                            {"tension_id": tid, "effect": "commits", "note": "Commits the tension"}
+                        paths=[path_id],
+                        dilemma_impacts=[
+                            {"dilemma_id": tid, "effect": "commits", "note": "Commits the dilemma"}
                         ],
                     )
                 )
 
         return SeedOutput(
-            tensions=tensions,
-            threads=threads,
+            dilemmas=dilemmas,
+            paths=paths,
             initial_beats=beats,
         )
 
     def test_pruning_does_not_mutate_considered_field(self) -> None:
-        """Pruning drops threads but doesn't change tension.considered."""
-        seed = self._make_seed_output_with_threads(tensions_count=6, threads_per_tension=2)
+        """Pruning drops paths but doesn't change dilemma.considered."""
+        seed = self._make_seed_output_with_paths(dilemmas_count=6, paths_per_dilemma=2)
 
-        # All tensions have considered=["a", "b"]
-        original_considered = {t.tension_id: list(t.considered) for t in seed.tensions}
+        # All dilemmas have considered=["a", "b"]
+        original_considered = {t.dilemma_id: list(t.considered) for t in seed.dilemmas}
 
-        # Prune to max 4 arcs (2 fully developed tensions)
+        # Prune to max 4 arcs (2 fully developed dilemmas)
         pruned = prune_to_arc_limit(seed, max_arcs=4)
 
-        # Verify tensions were not mutated
-        for tension in pruned.tensions:
-            assert tension.considered == original_considered[tension.tension_id], (
-                f"Tension {tension.tension_id} was mutated: "
-                f"expected {original_considered[tension.tension_id]}, got {tension.considered}"
+        # Verify dilemmas were not mutated
+        for dilemma in pruned.dilemmas:
+            assert dilemma.considered == original_considered[dilemma.dilemma_id], (
+                f"Dilemma {dilemma.dilemma_id} was mutated: "
+                f"expected {original_considered[dilemma.dilemma_id]}, got {dilemma.considered}"
             )
 
-    def test_pruning_reduces_thread_count(self) -> None:
-        """Pruning removes threads to stay within arc limit."""
-        seed = self._make_seed_output_with_threads(tensions_count=6, threads_per_tension=2)
+    def test_pruning_reduces_path_count(self) -> None:
+        """Pruning removes paths to stay within arc limit."""
+        seed = self._make_seed_output_with_paths(dilemmas_count=6, paths_per_dilemma=2)
 
-        # 6 tensions * 2 threads = 2^6 = 64 arcs before pruning
+        # 6 dilemmas * 2 paths = 2^6 = 64 arcs before pruning
         assert compute_arc_count(seed) == 64
 
-        # Prune to max 4 arcs (2 fully developed tensions)
+        # Prune to max 4 arcs (2 fully developed dilemmas)
         pruned = prune_to_arc_limit(seed, max_arcs=4)
 
-        # After pruning: 2 tensions with 2 threads = 2^2 = 4 arcs
+        # After pruning: 2 dilemmas with 2 paths = 2^2 = 4 arcs
         assert compute_arc_count(pruned) <= 4
 
-        # Threads were reduced
-        assert len(pruned.threads) < len(seed.threads)
+        # Paths were reduced
+        assert len(pruned.paths) < len(seed.paths)
 
-    def test_pruning_keeps_all_tensions(self) -> None:
-        """Pruning keeps all tension decisions (just drops threads)."""
-        seed = self._make_seed_output_with_threads(tensions_count=6, threads_per_tension=2)
+    def test_pruning_keeps_all_dilemmas(self) -> None:
+        """Pruning keeps all dilemma decisions (just drops paths)."""
+        seed = self._make_seed_output_with_paths(dilemmas_count=6, paths_per_dilemma=2)
 
         pruned = prune_to_arc_limit(seed, max_arcs=4)
 
-        # All tension decisions are preserved
-        assert len(pruned.tensions) == len(seed.tensions)
-        original_ids = {t.tension_id for t in seed.tensions}
-        pruned_ids = {t.tension_id for t in pruned.tensions}
+        # All dilemma decisions are preserved
+        assert len(pruned.dilemmas) == len(seed.dilemmas)
+        original_ids = {t.dilemma_id for t in seed.dilemmas}
+        pruned_ids = {t.dilemma_id for t in pruned.dilemmas}
         assert pruned_ids == original_ids
 
 
@@ -448,39 +448,39 @@ class TestScopedIdStandardization:
 
     Verifies that pruning works correctly when IDs use different formats:
     - Raw IDs: `mira_fabrication`
-    - Scoped IDs: `thread::mira_fabrication`
+    - Scoped IDs: `path::mira_fabrication`
 
-    This addresses the bug where beat.threads contained scoped IDs but
-    threads_to_drop contained raw IDs, causing comparison to fail.
+    This addresses the bug where beat.paths contained scoped IDs but
+    paths_to_drop contained raw IDs, causing comparison to fail.
     See issue #219 and PR #220 for context.
     """
 
-    def test_pruning_handles_scoped_thread_ids_in_beats(self) -> None:
-        """Pruning correctly drops threads when beats use scoped IDs."""
-        # Create seed with scoped thread IDs in beats
+    def test_pruning_handles_scoped_path_ids_in_beats(self) -> None:
+        """Pruning correctly drops paths when beats use scoped IDs."""
+        # Create seed with scoped path IDs in beats
         seed = SeedOutput(
-            tensions=[
-                TensionDecision(
-                    tension_id="tension::artifact_origin",
+            dilemmas=[
+                DilemmaDecision(
+                    dilemma_id="dilemma::artifact_origin",
                     considered=["natural", "crafted"],
                     implicit=[],
                 ),
             ],
-            threads=[
-                Thread(
-                    thread_id="thread::artifact_natural",
+            paths=[
+                Path(
+                    path_id="path::artifact_natural",
                     name="Natural Origin",
-                    tension_id="tension::artifact_origin",
-                    alternative_id="natural",  # Canonical (first in considered)
-                    thread_importance="major",
+                    dilemma_id="dilemma::artifact_origin",
+                    answer_id="natural",  # Canonical (first in considered)
+                    path_importance="major",
                     description="Artifact formed naturally",
                 ),
-                Thread(
-                    thread_id="thread::artifact_crafted",
+                Path(
+                    path_id="path::artifact_crafted",
                     name="Crafted Origin",
-                    tension_id="tension::artifact_origin",
-                    alternative_id="crafted",  # Non-canonical
-                    thread_importance="major",
+                    dilemma_id="dilemma::artifact_origin",
+                    answer_id="crafted",  # Non-canonical
+                    path_importance="major",
                     description="Artifact was crafted",
                 ),
             ],
@@ -488,22 +488,22 @@ class TestScopedIdStandardization:
                 InitialBeat(
                     beat_id="artifact_beat_01",
                     summary="Discovery of the artifact",
-                    threads=["thread::artifact_natural", "thread::artifact_crafted"],  # Scoped!
-                    tension_impacts=[
+                    paths=["path::artifact_natural", "path::artifact_crafted"],  # Scoped!
+                    dilemma_impacts=[
                         {
-                            "tension_id": "tension::artifact_origin",
+                            "dilemma_id": "dilemma::artifact_origin",
                             "effect": "commits",
-                            "note": "Commits the tension",
+                            "note": "Commits the dilemma",
                         }
                     ],
                 ),
                 InitialBeat(
                     beat_id="artifact_beat_02",
-                    summary="Beat only for crafted thread",
-                    threads=["thread::artifact_crafted"],  # Scoped!
-                    tension_impacts=[
+                    summary="Beat only for crafted path",
+                    paths=["path::artifact_crafted"],  # Scoped!
+                    dilemma_impacts=[
                         {
-                            "tension_id": "tension::artifact_origin",
+                            "dilemma_id": "dilemma::artifact_origin",
                             "effect": "reveals",
                             "note": "Reveals details",
                         }
@@ -512,112 +512,112 @@ class TestScopedIdStandardization:
             ],
         )
 
-        # Demote the tension - should drop non-canonical (crafted) thread
-        demoted = {"tension::artifact_origin"}
+        # Demote the dilemma - should drop non-canonical (crafted) path
+        demoted = {"dilemma::artifact_origin"}
         pruned = _prune_demoted_dilemmas(seed, demoted)
 
-        # Non-canonical thread should be dropped
-        thread_ids = [t.thread_id for t in pruned.threads]
-        assert "thread::artifact_natural" in thread_ids
-        assert "thread::artifact_crafted" not in thread_ids
+        # Non-canonical path should be dropped
+        path_ids = [t.path_id for t in pruned.paths]
+        assert "path::artifact_natural" in path_ids
+        assert "path::artifact_crafted" not in path_ids
 
-        # Beat 2 should be dropped (only served crafted thread)
+        # Beat 2 should be dropped (only served crafted path)
         beat_ids = [b.beat_id for b in pruned.initial_beats]
         assert "artifact_beat_01" in beat_ids  # Kept - serves natural
         assert "artifact_beat_02" not in beat_ids  # Dropped - only served crafted
 
-        # Beat 1 should have crafted thread removed from its threads list
+        # Beat 1 should have crafted path removed from its paths list
         beat_1 = next(b for b in pruned.initial_beats if b.beat_id == "artifact_beat_01")
-        assert "thread::artifact_natural" in beat_1.threads
-        assert "thread::artifact_crafted" not in beat_1.threads
+        assert "path::artifact_natural" in beat_1.paths
+        assert "path::artifact_crafted" not in beat_1.paths
 
-    def test_pruning_handles_scoped_thread_ids_in_consequences(self) -> None:
+    def test_pruning_handles_scoped_path_ids_in_consequences(self) -> None:
         """Pruning correctly drops consequences when they use scoped IDs."""
         seed = SeedOutput(
-            tensions=[
-                TensionDecision(
-                    tension_id="t1",
+            dilemmas=[
+                DilemmaDecision(
+                    dilemma_id="t1",
                     considered=["alt_a", "alt_b"],
                     implicit=[],
                 ),
             ],
-            threads=[
-                Thread(
-                    thread_id="thread::th_a",
-                    name="Thread A",
-                    tension_id="t1",
-                    alternative_id="alt_a",  # Canonical
-                    thread_importance="major",
+            paths=[
+                Path(
+                    path_id="path::th_a",
+                    name="Path A",
+                    dilemma_id="t1",
+                    answer_id="alt_a",  # Canonical
+                    path_importance="major",
                     description="desc",
                 ),
-                Thread(
-                    thread_id="thread::th_b",
-                    name="Thread B",
-                    tension_id="t1",
-                    alternative_id="alt_b",  # Non-canonical
-                    thread_importance="major",
+                Path(
+                    path_id="path::th_b",
+                    name="Path B",
+                    dilemma_id="t1",
+                    answer_id="alt_b",  # Non-canonical
+                    path_importance="major",
                     description="desc",
                 ),
             ],
             consequences=[
                 Consequence(
                     consequence_id="cons_a",
-                    thread_id="thread::th_a",  # Scoped
-                    description="Consequence for thread A",
+                    path_id="path::th_a",  # Scoped
+                    description="Consequence for path A",
                 ),
                 Consequence(
                     consequence_id="cons_b",
-                    thread_id="thread::th_b",  # Scoped
-                    description="Consequence for thread B",
+                    path_id="path::th_b",  # Scoped
+                    description="Consequence for path B",
                 ),
             ],
             initial_beats=[
                 InitialBeat(
                     beat_id="beat_1",
                     summary="Test beat",
-                    threads=["thread::th_a"],
-                    tension_impacts=[{"tension_id": "t1", "effect": "commits", "note": "n"}],
+                    paths=["path::th_a"],
+                    dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
                 ),
             ],
         )
 
-        # Demote t1 - should drop non-canonical (alt_b / th_b) thread and its consequence
+        # Demote t1 - should drop non-canonical (alt_b / th_b) path and its consequence
         pruned = _prune_demoted_dilemmas(seed, {"t1"})
 
-        # Thread B and its consequence should be dropped
-        thread_ids = [t.thread_id for t in pruned.threads]
+        # Path B and its consequence should be dropped
+        path_ids = [t.path_id for t in pruned.paths]
         consequence_ids = [c.consequence_id for c in pruned.consequences]
 
-        assert "thread::th_a" in thread_ids
-        assert "thread::th_b" not in thread_ids
+        assert "path::th_a" in path_ids
+        assert "path::th_b" not in path_ids
         assert "cons_a" in consequence_ids
         assert "cons_b" not in consequence_ids
 
     def test_pruning_handles_mixed_scoped_and_raw_ids(self) -> None:
         """Pruning works when demoted IDs are raw but model IDs are scoped."""
         seed = SeedOutput(
-            tensions=[
-                TensionDecision(
-                    tension_id="tension::keeper_trust",  # Scoped in tension
+            dilemmas=[
+                DilemmaDecision(
+                    dilemma_id="dilemma::keeper_trust",  # Scoped in dilemma
                     considered=["protector", "manipulator"],
                     implicit=[],
                 ),
             ],
-            threads=[
-                Thread(
-                    thread_id="thread::keeper_protector",
+            paths=[
+                Path(
+                    path_id="path::keeper_protector",
                     name="Keeper as Protector",
-                    tension_id="tension::keeper_trust",  # Scoped
-                    alternative_id="protector",  # Canonical
-                    thread_importance="major",
+                    dilemma_id="dilemma::keeper_trust",  # Scoped
+                    answer_id="protector",  # Canonical
+                    path_importance="major",
                     description="desc",
                 ),
-                Thread(
-                    thread_id="thread::keeper_manipulator",
+                Path(
+                    path_id="path::keeper_manipulator",
                     name="Keeper as Manipulator",
-                    tension_id="tension::keeper_trust",  # Scoped
-                    alternative_id="manipulator",  # Non-canonical
-                    thread_importance="minor",
+                    dilemma_id="dilemma::keeper_trust",  # Scoped
+                    answer_id="manipulator",  # Non-canonical
+                    path_importance="minor",
                     description="desc",
                 ),
             ],
@@ -625,10 +625,10 @@ class TestScopedIdStandardization:
                 InitialBeat(
                     beat_id="keeper_beat_1",
                     summary="Meeting the keeper",
-                    threads=["thread::keeper_protector", "thread::keeper_manipulator"],
-                    tension_impacts=[
+                    paths=["path::keeper_protector", "path::keeper_manipulator"],
+                    dilemma_impacts=[
                         {
-                            "tension_id": "tension::keeper_trust",
+                            "dilemma_id": "dilemma::keeper_trust",
                             "effect": "commits",
                             "note": "n",
                         }
@@ -637,40 +637,40 @@ class TestScopedIdStandardization:
             ],
         )
 
-        # Demote using RAW ID (as might come from tension scoring)
+        # Demote using RAW ID (as might come from dilemma scoring)
         pruned = _prune_demoted_dilemmas(seed, {"keeper_trust"})  # Raw!
 
-        # Non-canonical thread should still be dropped
-        thread_ids = [t.thread_id for t in pruned.threads]
-        assert "thread::keeper_protector" in thread_ids
-        assert "thread::keeper_manipulator" not in thread_ids
+        # Non-canonical path should still be dropped
+        path_ids = [t.path_id for t in pruned.paths]
+        assert "path::keeper_protector" in path_ids
+        assert "path::keeper_manipulator" not in path_ids
 
-    def test_compute_arc_count_handles_scoped_tension_ids(self) -> None:
-        """compute_arc_count groups threads correctly with scoped tension_ids."""
+    def test_compute_arc_count_handles_scoped_dilemma_ids(self) -> None:
+        """compute_arc_count groups paths correctly with scoped dilemma_ids."""
         seed = SeedOutput(
-            tensions=[
-                TensionDecision(tension_id="t1", considered=["a", "b"], implicit=[]),
+            dilemmas=[
+                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
             ],
-            threads=[
-                Thread(
-                    thread_id="th1",
+            paths=[
+                Path(
+                    path_id="th1",
                     name="T1",
-                    tension_id="tension::t1",  # Scoped
-                    alternative_id="a",
-                    thread_importance="major",
+                    dilemma_id="dilemma::t1",  # Scoped
+                    answer_id="a",
+                    path_importance="major",
                     description="d",
                 ),
-                Thread(
-                    thread_id="th2",
+                Path(
+                    path_id="th2",
                     name="T2",
-                    tension_id="tension::t1",  # Scoped
-                    alternative_id="b",
-                    thread_importance="major",
+                    dilemma_id="dilemma::t1",  # Scoped
+                    answer_id="b",
+                    path_importance="major",
                     description="d",
                 ),
             ],
         )
 
-        # Should correctly count 2 threads for t1 → 2^1 = 2 arcs
+        # Should correctly count 2 paths for t1 → 2^1 = 2 arcs
         arc_count = compute_arc_count(seed)
         assert arc_count == 2

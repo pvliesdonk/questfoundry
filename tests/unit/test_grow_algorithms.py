@@ -10,7 +10,7 @@ import pytest
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_algorithms import (
     bfs_reachable,
-    build_tension_threads,
+    build_dilemma_paths,
     compute_divergence_points,
     enumerate_arcs,
     find_convergence_points,
@@ -21,8 +21,8 @@ from questfoundry.graph.grow_algorithms import (
 from questfoundry.graph.mutations import GrowErrorCategory
 from questfoundry.models.grow import Arc
 from tests.fixtures.grow_fixtures import (
-    make_single_tension_graph,
-    make_two_tension_graph,
+    make_single_dilemma_graph,
+    make_two_dilemma_graph,
 )
 
 if TYPE_CHECKING:
@@ -30,51 +30,51 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
-# build_tension_threads
+# build_dilemma_paths
 # ---------------------------------------------------------------------------
 
 
-class TestBuildTensionThreads:
-    def test_prefixed_tension_id(self) -> None:
-        """Handles prefixed tension_id on thread nodes."""
-        graph = make_single_tension_graph()
-        result = build_tension_threads(graph)
-        assert "tension::mentor_trust" in result
-        assert len(result["tension::mentor_trust"]) == 2
+class TestBuildDilemmaPaths:
+    def test_prefixed_dilemma_id(self) -> None:
+        """Handles prefixed dilemma_id on path nodes."""
+        graph = make_single_dilemma_graph()
+        result = build_dilemma_paths(graph)
+        assert "dilemma::mentor_trust" in result
+        assert len(result["dilemma::mentor_trust"]) == 2
 
-    def test_unprefixed_tension_id(self) -> None:
-        """Handles unprefixed tension_id by adding prefix."""
+    def test_unprefixed_dilemma_id(self) -> None:
+        """Handles unprefixed dilemma_id by adding prefix."""
         graph = Graph.empty()
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "t1", "is_canonical": True},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
         )
-        result = build_tension_threads(graph)
-        assert "tension::t1" in result
-        assert "thread::th1" in result["tension::t1"]
+        result = build_dilemma_paths(graph)
+        assert "dilemma::t1" in result
+        assert "path::th1" in result["dilemma::t1"]
 
-    def test_missing_tension_node_excluded(self) -> None:
-        """Threads referencing nonexistent tensions are excluded."""
+    def test_missing_dilemma_node_excluded(self) -> None:
+        """Paths referencing nonexistent dilemmas are excluded."""
         graph = Graph.empty()
         graph.create_node(
-            "thread::th1",
-            {"type": "thread", "raw_id": "th1", "tension_id": "tension::missing"},
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "dilemma::missing"},
         )
-        result = build_tension_threads(graph)
+        result = build_dilemma_paths(graph)
         assert result == {}
 
     def test_empty_graph(self) -> None:
         graph = Graph.empty()
-        result = build_tension_threads(graph)
+        result = build_dilemma_paths(graph)
         assert result == {}
 
-    def test_two_tension_graph(self) -> None:
-        graph = make_two_tension_graph()
-        result = build_tension_threads(graph)
+    def test_two_dilemma_graph(self) -> None:
+        graph = make_two_dilemma_graph()
+        result = build_dilemma_paths(graph)
         assert len(result) == 2
-        assert len(result["tension::mentor_trust"]) == 2
-        assert len(result["tension::artifact_quest"]) == 2
+        assert len(result["dilemma::mentor_trust"]) == 2
+        assert len(result["dilemma::artifact_quest"]) == 2
 
 
 # ---------------------------------------------------------------------------
@@ -84,7 +84,7 @@ class TestBuildTensionThreads:
 
 class TestValidateBeatDag:
     def test_valid_dag_returns_empty(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         errors = validate_beat_dag(graph)
         assert errors == []
 
@@ -127,7 +127,7 @@ class TestValidateBeatDag:
         assert errors == []
 
     def test_two_tension_graph_valid(self) -> None:
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         errors = validate_beat_dag(graph)
         assert errors == []
 
@@ -139,19 +139,19 @@ class TestValidateBeatDag:
 
 class TestValidateCommitsBeats:
     def test_complete_graph_valid(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         errors = validate_commits_beats(graph)
         assert errors == []
 
     def test_two_tension_complete(self) -> None:
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         errors = validate_commits_beats(graph)
         assert errors == []
 
     def test_missing_commits_beat(self) -> None:
-        graph = make_single_tension_graph()
-        # Remove the tension_impacts from mentor_commits_canonical
-        graph.update_node("beat::mentor_commits_canonical", tension_impacts=[])
+        graph = make_single_dilemma_graph()
+        # Remove the dilemma_impacts from mentor_commits_canonical
+        graph.update_node("beat::mentor_commits_canonical", dilemma_impacts=[])
 
         errors = validate_commits_beats(graph)
         assert len(errors) == 1
@@ -165,18 +165,18 @@ class TestValidateCommitsBeats:
 
     def test_thread_with_no_beats(self) -> None:
         graph = Graph.empty()
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "thread::th1",
+            "path::th1",
             {
-                "type": "thread",
+                "type": "path",
                 "raw_id": "th1",
-                "tension_id": "t1",
+                "dilemma_id": "t1",
                 "is_canonical": True,
             },
         )
-        graph.add_edge("explores", "thread::th1", "tension::t1")
-        # No beats belong to this thread
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
+        # No beats belong to this path
 
         errors = validate_commits_beats(graph)
         assert len(errors) == 1
@@ -284,7 +284,7 @@ class TestTopologicalSortBeats:
 
 class TestEnumerateArcs:
     def test_single_tension_two_threads(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
 
         assert len(arcs) == 2
@@ -295,36 +295,36 @@ class TestEnumerateArcs:
         assert len(branch_arcs) == 1
 
     def test_spine_is_first(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
         assert arcs[0].arc_type == "spine"
 
     def test_two_tensions_four_arcs(self) -> None:
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         arcs = enumerate_arcs(graph)
-        # 2 threads x 2 threads = 4 arcs
+        # 2 paths x 2 paths = 4 arcs
         assert len(arcs) == 4
 
     def test_two_tensions_one_spine(self) -> None:
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         arcs = enumerate_arcs(graph)
         spine_arcs = [a for a in arcs if a.arc_type == "spine"]
         assert len(spine_arcs) == 1
-        # Spine should contain both canonical threads
+        # Spine should contain both canonical paths
         spine = spine_arcs[0]
-        assert "artifact_quest_canonical" in spine.threads
-        assert "mentor_trust_canonical" in spine.threads
+        assert "artifact_quest_canonical" in spine.paths
+        assert "mentor_trust_canonical" in spine.paths
 
     def test_arc_id_format(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
         for arc in arcs:
-            # Arc ID should be alphabetically sorted thread raw_ids joined by +
+            # Arc ID should be alphabetically sorted path raw_ids joined by +
             parts = arc.arc_id.split("+")
             assert parts == sorted(parts)
 
     def test_arc_sequences_topologically_sorted(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
         for arc in arcs:
             # opening should always be first
@@ -338,76 +338,76 @@ class TestEnumerateArcs:
 
     def test_combinatorial_limit(self) -> None:
         graph = Graph.empty()
-        # Create 7 tensions x 2 threads each = 128 arcs (exceeds 64 limit)
+        # Create 7 dilemmas x 2 paths each = 128 arcs (exceeds 64 limit)
         for i in range(7):
-            tension_id = f"tension::t{i}"
-            graph.create_node(tension_id, {"type": "tension", "raw_id": f"t{i}"})
+            dilemma_id = f"dilemma::t{i}"
+            graph.create_node(dilemma_id, {"type": "dilemma", "raw_id": f"t{i}"})
             for j in range(2):
-                thread_id = f"thread::t{i}_th{j}"
+                path_id = f"path::t{i}_th{j}"
                 graph.create_node(
-                    thread_id,
+                    path_id,
                     {
-                        "type": "thread",
+                        "type": "path",
                         "raw_id": f"t{i}_th{j}",
-                        "tension_id": f"t{i}",
+                        "dilemma_id": f"t{i}",
                         "is_canonical": j == 0,
                     },
                 )
-                graph.add_edge("explores", thread_id, tension_id)
+                graph.add_edge("explores", path_id, dilemma_id)
 
         with pytest.raises(ValueError, match="exceeds limit"):
             enumerate_arcs(graph)
 
     def test_arc_threads_are_raw_ids(self) -> None:
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         arcs = enumerate_arcs(graph)
         for arc in arcs:
-            for thread in arc.threads:
+            for path in arc.paths:
                 # Should be raw_id, not prefixed
-                assert "::" not in thread
+                assert "::" not in path
 
     def test_enumerate_arcs_with_alternative_pointing_explores(self) -> None:
-        """Enumerate arcs works when explores edges point to alternatives, not tensions."""
+        """Enumerate arcs works when explores edges point to alternatives, not dilemmas."""
         graph = Graph.empty()
-        # Create tension and alternatives
-        graph.create_node("tension::t1", {"type": "tension", "raw_id": "t1"})
+        # Create dilemma and alternatives
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
-            "tension::t1::alt::yes",
-            {"type": "alternative", "raw_id": "yes", "tension_id": "t1"},
+            "dilemma::t1::alt::yes",
+            {"type": "alternative", "raw_id": "yes", "dilemma_id": "t1"},
         )
         graph.create_node(
-            "tension::t1::alt::no",
-            {"type": "alternative", "raw_id": "no", "tension_id": "t1"},
+            "dilemma::t1::alt::no",
+            {"type": "alternative", "raw_id": "no", "dilemma_id": "t1"},
         )
-        graph.add_edge("has_alternative", "tension::t1", "tension::t1::alt::yes")
-        graph.add_edge("has_alternative", "tension::t1", "tension::t1::alt::no")
+        graph.add_edge("has_answer", "dilemma::t1", "dilemma::t1::alt::yes")
+        graph.add_edge("has_answer", "dilemma::t1", "dilemma::t1::alt::no")
 
-        # Threads with tension_id property (prefixed), explores pointing to alternatives
+        # Threads with dilemma_id property (prefixed), explores pointing to alternatives
         graph.create_node(
-            "thread::t1_canon",
+            "path::t1_canon",
             {
-                "type": "thread",
+                "type": "path",
                 "raw_id": "t1_canon",
-                "tension_id": "tension::t1",
+                "dilemma_id": "dilemma::t1",
                 "is_canonical": True,
             },
         )
         graph.create_node(
-            "thread::t1_alt",
+            "path::t1_alt",
             {
-                "type": "thread",
+                "type": "path",
                 "raw_id": "t1_alt",
-                "tension_id": "tension::t1",
+                "dilemma_id": "dilemma::t1",
                 "is_canonical": False,
             },
         )
-        graph.add_edge("explores", "thread::t1_canon", "tension::t1::alt::yes")
-        graph.add_edge("explores", "thread::t1_alt", "tension::t1::alt::no")
+        graph.add_edge("explores", "path::t1_canon", "dilemma::t1::alt::yes")
+        graph.add_edge("explores", "path::t1_alt", "dilemma::t1::alt::no")
 
         # Add beats so arcs have sequences
         graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
-        graph.add_edge("belongs_to", "beat::b1", "thread::t1_canon")
-        graph.add_edge("belongs_to", "beat::b1", "thread::t1_alt")
+        graph.add_edge("belongs_to", "beat::b1", "path::t1_canon")
+        graph.add_edge("belongs_to", "beat::b1", "path::t1_alt")
 
         arcs = enumerate_arcs(graph)
         assert len(arcs) == 2
@@ -425,13 +425,13 @@ class TestComputeDivergencePoints:
         spine = Arc(
             arc_id="canonical",
             arc_type="spine",
-            threads=["t1_canon"],
+            paths=["t1_canon"],
             sequence=["beat::a", "beat::b", "beat::c"],
         )
         branch = Arc(
             arc_id="alt",
             arc_type="branch",
-            threads=["t1_alt"],
+            paths=["t1_alt"],
             sequence=["beat::a", "beat::b", "beat::d"],
         )
 
@@ -444,13 +444,13 @@ class TestComputeDivergencePoints:
         spine = Arc(
             arc_id="canonical",
             arc_type="spine",
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a", "beat::b"],
         )
         branch = Arc(
             arc_id="alt",
             arc_type="branch",
-            threads=["t2"],
+            paths=["t2"],
             sequence=["beat::x", "beat::y"],
         )
 
@@ -461,14 +461,14 @@ class TestComputeDivergencePoints:
         spine = Arc(
             arc_id="canonical",
             arc_type="spine",
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a", "beat::b", "beat::c"],
         )
         # Branch has same sequence (all beats shared)
         branch = Arc(
             arc_id="alt",
             arc_type="branch",
-            threads=["t2"],
+            paths=["t2"],
             sequence=["beat::a", "beat::b", "beat::c"],
         )
 
@@ -480,7 +480,7 @@ class TestComputeDivergencePoints:
         branch = Arc(
             arc_id="alt",
             arc_type="branch",
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a"],
         )
         result = compute_divergence_points([branch])
@@ -490,7 +490,7 @@ class TestComputeDivergencePoints:
         spine = Arc(
             arc_id="canonical",
             arc_type="spine",
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a"],
         )
         result = compute_divergence_points([spine])
@@ -500,19 +500,19 @@ class TestComputeDivergencePoints:
         spine = Arc(
             arc_id="spine",
             arc_type="spine",
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a", "beat::b", "beat::c", "beat::d"],
         )
         branch1 = Arc(
             arc_id="branch1",
             arc_type="branch",
-            threads=["t2"],
+            paths=["t2"],
             sequence=["beat::a", "beat::b", "beat::x"],
         )
         branch2 = Arc(
             arc_id="branch2",
             arc_type="branch",
-            threads=["t3"],
+            paths=["t3"],
             sequence=["beat::a", "beat::y"],
         )
 
@@ -525,13 +525,13 @@ class TestComputeDivergencePoints:
         arc1 = Arc(
             arc_id="main",
             arc_type="branch",  # Not marked as spine
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a", "beat::b"],
         )
         arc2 = Arc(
             arc_id="alt",
             arc_type="branch",
-            threads=["t2"],
+            paths=["t2"],
             sequence=["beat::a", "beat::c"],
         )
 
@@ -550,7 +550,7 @@ class TestPhase1Integration:
     async def test_phase_1_valid_graph(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
@@ -580,7 +580,7 @@ class TestPhase5Integration:
     async def test_phase_5_creates_arc_nodes(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         result = await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -593,7 +593,7 @@ class TestPhase5Integration:
     async def test_phase_5_creates_arc_contains_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -618,7 +618,7 @@ class TestPhase6Integration:
     async def test_phase_6_computes_divergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
 
@@ -639,7 +639,7 @@ class TestPhase6Integration:
     async def test_phase_6_creates_diverges_at_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -672,13 +672,13 @@ class TestFindConvergencePoints:
         spine = Arc(
             arc_id="spine",
             arc_type="spine",
-            threads=["t1_canon"],
+            paths=["t1_canon"],
             sequence=["beat::a", "beat::b", "beat::c", "beat::finale"],
         )
         branch = Arc(
             arc_id="branch",
             arc_type="branch",
-            threads=["t1_alt"],
+            paths=["t1_alt"],
             sequence=["beat::a", "beat::b", "beat::d", "beat::finale"],
         )
 
@@ -695,13 +695,13 @@ class TestFindConvergencePoints:
         spine = Arc(
             arc_id="spine",
             arc_type="spine",
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a", "beat::b", "beat::c"],
         )
         branch = Arc(
             arc_id="branch",
             arc_type="branch",
-            threads=["t2"],
+            paths=["t2"],
             sequence=["beat::a", "beat::x", "beat::y"],
         )
 
@@ -717,13 +717,13 @@ class TestFindConvergencePoints:
         spine = Arc(
             arc_id="spine",
             arc_type="spine",
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a", "beat::b", "beat::end"],
         )
         branch = Arc(
             arc_id="branch",
             arc_type="branch",
-            threads=["t2"],
+            paths=["t2"],
             sequence=["beat::x", "beat::y", "beat::end"],
         )
 
@@ -738,7 +738,7 @@ class TestFindConvergencePoints:
         branch = Arc(
             arc_id="b1",
             arc_type="branch",
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a"],
         )
         graph = Graph.empty()
@@ -749,19 +749,19 @@ class TestFindConvergencePoints:
         spine = Arc(
             arc_id="spine",
             arc_type="spine",
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a", "beat::b", "beat::c", "beat::end"],
         )
         branch1 = Arc(
             arc_id="b1",
             arc_type="branch",
-            threads=["t2"],
+            paths=["t2"],
             sequence=["beat::a", "beat::x", "beat::end"],
         )
         branch2 = Arc(
             arc_id="b2",
             arc_type="branch",
-            threads=["t3"],
+            paths=["t3"],
             sequence=["beat::a", "beat::y", "beat::c", "beat::end"],
         )
 
@@ -776,13 +776,13 @@ class TestFindConvergencePoints:
         spine = Arc(
             arc_id="spine",
             arc_type="spine",
-            threads=["t1"],
+            paths=["t1"],
             sequence=["beat::a", "beat::b", "beat::end"],
         )
         branch = Arc(
             arc_id="branch",
             arc_type="branch",
-            threads=["t2"],
+            paths=["t2"],
             sequence=["beat::a", "beat::x", "beat::end"],
         )
 
@@ -884,7 +884,7 @@ class TestPhase7Integration:
     async def test_phase_7_finds_convergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
 
@@ -900,7 +900,7 @@ class TestPhase7Integration:
     async def test_phase_7_creates_converges_at_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -908,7 +908,7 @@ class TestPhase7Integration:
         await stage._phase_7_convergence(graph, mock_model)
 
         converges_edges = graph.get_edges(from_id=None, to_id=None, edge_type="converges_at")
-        # Two-tension graph: branches converge at finale
+        # Two-dilemma graph: branches converge at finale
         assert len(converges_edges) >= 1
 
     @pytest.mark.asyncio
@@ -926,7 +926,7 @@ class TestPhase7Integration:
     async def test_phase_7_updates_arc_nodes(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -946,7 +946,7 @@ class TestPhase8aIntegration:
     async def test_passages_match_beats(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         result = await stage._phase_8a_passages(graph, mock_model)
@@ -961,7 +961,7 @@ class TestPhase8aIntegration:
     async def test_passages_have_correct_structure(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_8a_passages(graph, mock_model)
@@ -977,7 +977,7 @@ class TestPhase8aIntegration:
     async def test_passage_from_edges_created(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_8a_passages(graph, mock_model)
@@ -990,7 +990,7 @@ class TestPhase8aIntegration:
     async def test_passages_from_two_tension_graph(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         result = await stage._phase_8a_passages(graph, mock_model)
@@ -1015,7 +1015,7 @@ class TestPhase8bIntegration:
     async def test_codewords_match_consequences(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         result = await stage._phase_8b_codewords(graph, mock_model)
@@ -1029,7 +1029,7 @@ class TestPhase8bIntegration:
     async def test_codeword_tracks_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_8b_codewords(graph, mock_model)
@@ -1042,13 +1042,13 @@ class TestPhase8bIntegration:
     async def test_grants_edges_assigned_to_commits_beats(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_8b_codewords(graph, mock_model)
 
         grants_edges = graph.get_edges(from_id=None, to_id=None, edge_type="grants")
-        # Each consequence has a thread which has a commits beat
+        # Each consequence has a path which has a commits beat
         # 2 consequences, 2 commits beats → 2 grants edges
         assert len(grants_edges) == 2
 
@@ -1061,7 +1061,7 @@ class TestPhase8bIntegration:
     async def test_codeword_id_format(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_8b_codewords(graph, mock_model)
@@ -1076,7 +1076,7 @@ class TestPhase8bIntegration:
     async def test_two_tension_codewords(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         result = await stage._phase_8b_codewords(graph, mock_model)
@@ -1103,7 +1103,7 @@ class TestPhase11Integration:
     async def test_all_passages_reachable(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
 
@@ -1119,7 +1119,7 @@ class TestPhase11Integration:
     async def test_unreachable_passages_pruned(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
 
@@ -1151,7 +1151,7 @@ class TestPhase11Integration:
     async def test_prune_preserves_reachable(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -1199,7 +1199,7 @@ class TestPhase11Integration:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1"],
+                "paths": ["t1"],
                 "sequence": ["beat::a", "beat::b"],
             },
         )
@@ -1253,26 +1253,26 @@ class TestPhase11Integration:
 
 
 # ---------------------------------------------------------------------------
-# Phase 3: Knot Algorithms
+# Phase 3: Intersection Algorithms
 # ---------------------------------------------------------------------------
 
 
 class TestBuildKnotCandidates:
     def test_no_candidates_without_locations_or_entities(self) -> None:
         """No candidates when beats lack location/entity overlap."""
-        from questfoundry.graph.grow_algorithms import build_knot_candidates
+        from questfoundry.graph.grow_algorithms import build_intersection_candidates
 
-        graph = make_two_tension_graph()  # No location data
-        candidates = build_knot_candidates(graph)
+        graph = make_two_dilemma_graph()  # No location data
+        candidates = build_intersection_candidates(graph)
         assert candidates == []
 
     def test_finds_location_overlap_candidates(self) -> None:
-        """Finds candidates when beats share locations across tensions."""
-        from questfoundry.graph.grow_algorithms import build_knot_candidates
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        """Finds candidates when beats share locations across dilemmas."""
+        from questfoundry.graph.grow_algorithms import build_intersection_candidates
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
-        candidates = build_knot_candidates(graph)
+        graph = make_intersection_candidate_graph()
+        candidates = build_intersection_candidates(graph)
 
         # Should find at least one candidate group with location signal
         location_candidates = [c for c in candidates if c.signal_type == "location"]
@@ -1287,41 +1287,43 @@ class TestBuildKnotCandidates:
         assert "beat::artifact_discover" in market_candidate.beat_ids
 
     def test_single_tension_no_candidates(self) -> None:
-        """No candidates when all beats belong to same tension."""
-        from questfoundry.graph.grow_algorithms import build_knot_candidates
+        """No candidates when all beats belong to same dilemma."""
+        from questfoundry.graph.grow_algorithms import build_intersection_candidates
 
-        graph = make_single_tension_graph()
-        # Add location to single-tension beats
+        graph = make_single_dilemma_graph()
+        # Add location to single-dilemma beats
         graph.update_node("beat::opening", location="tavern")
         graph.update_node("beat::mentor_meet", location="tavern")
-        candidates = build_knot_candidates(graph)
-        # Both beats are from the same tension, so no cross-tension candidates
+        candidates = build_intersection_candidates(graph)
+        # Both beats are from the same dilemma, so no cross-dilemma candidates
         assert candidates == []
 
     def test_empty_graph(self) -> None:
         """Empty graph returns no candidates."""
-        from questfoundry.graph.grow_algorithms import build_knot_candidates
+        from questfoundry.graph.grow_algorithms import build_intersection_candidates
 
         graph = Graph.empty()
-        assert build_knot_candidates(graph) == []
+        assert build_intersection_candidates(graph) == []
 
 
 class TestCheckKnotCompatibility:
     def test_compatible_cross_tension_beats(self) -> None:
-        """Beats from different tensions with no requires are compatible."""
-        from questfoundry.graph.grow_algorithms import check_knot_compatibility
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        """Beats from different dilemmas with no requires are compatible."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
-        errors = check_knot_compatibility(graph, ["beat::mentor_meet", "beat::artifact_discover"])
+        graph = make_intersection_candidate_graph()
+        errors = check_intersection_compatibility(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
         assert errors == []
 
     def test_incompatible_same_tension(self) -> None:
-        """Beats from same tension are incompatible."""
-        from questfoundry.graph.grow_algorithms import check_knot_compatibility
+        """Beats from same dilemma are incompatible."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
 
-        graph = make_two_tension_graph()
-        errors = check_knot_compatibility(
+        graph = make_two_dilemma_graph()
+        errors = check_intersection_compatibility(
             graph, ["beat::mentor_commits_canonical", "beat::mentor_commits_alt"]
         )
         assert len(errors) > 0
@@ -1329,29 +1331,29 @@ class TestCheckKnotCompatibility:
 
     def test_incompatible_requires_conflict(self) -> None:
         """Beats with requires edge are incompatible."""
-        from questfoundry.graph.grow_algorithms import check_knot_compatibility
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         # mentor_meet requires opening, and both are in the graph
-        errors = check_knot_compatibility(graph, ["beat::opening", "beat::mentor_meet"])
+        errors = check_intersection_compatibility(graph, ["beat::opening", "beat::mentor_meet"])
         assert len(errors) > 0
         assert any("requires" in e.issue for e in errors)
 
     def test_insufficient_beats(self) -> None:
         """Single beat is incompatible."""
-        from questfoundry.graph.grow_algorithms import check_knot_compatibility
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
 
-        graph = make_two_tension_graph()
-        errors = check_knot_compatibility(graph, ["beat::opening"])
+        graph = make_two_dilemma_graph()
+        errors = check_intersection_compatibility(graph, ["beat::opening"])
         assert len(errors) > 0
         assert any("at least 2" in e.issue for e in errors)
 
     def test_nonexistent_beat(self) -> None:
         """Nonexistent beat ID returns error."""
-        from questfoundry.graph.grow_algorithms import check_knot_compatibility
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
 
-        graph = make_two_tension_graph()
-        errors = check_knot_compatibility(graph, ["beat::nonexistent", "beat::opening"])
+        graph = make_two_dilemma_graph()
+        errors = check_intersection_compatibility(graph, ["beat::nonexistent", "beat::opening"])
         assert len(errors) > 0
         assert any("not found" in e.issue for e in errors)
 
@@ -1359,52 +1361,60 @@ class TestCheckKnotCompatibility:
 class TestResolveKnotLocation:
     def test_shared_primary_location(self) -> None:
         """Resolves to shared primary location."""
-        from questfoundry.graph.grow_algorithms import resolve_knot_location
+        from questfoundry.graph.grow_algorithms import resolve_intersection_location
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         graph.update_node("beat::mentor_meet", location="market")
         graph.update_node("beat::artifact_discover", location="market")
 
-        location = resolve_knot_location(graph, ["beat::mentor_meet", "beat::artifact_discover"])
+        location = resolve_intersection_location(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
         assert location == "market"
 
     def test_primary_in_alternatives(self) -> None:
         """Resolves when primary of one is in alternatives of another."""
-        from questfoundry.graph.grow_algorithms import resolve_knot_location
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        from questfoundry.graph.grow_algorithms import resolve_intersection_location
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
-        location = resolve_knot_location(graph, ["beat::mentor_meet", "beat::artifact_discover"])
+        graph = make_intersection_candidate_graph()
+        location = resolve_intersection_location(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
         assert location == "market"
 
     def test_no_shared_location(self) -> None:
         """Returns None when no shared location exists."""
-        from questfoundry.graph.grow_algorithms import resolve_knot_location
+        from questfoundry.graph.grow_algorithms import resolve_intersection_location
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         graph.update_node("beat::mentor_meet", location="market")
         graph.update_node("beat::artifact_discover", location="forest")
 
-        location = resolve_knot_location(graph, ["beat::mentor_meet", "beat::artifact_discover"])
+        location = resolve_intersection_location(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
         assert location is None
 
     def test_no_location_data(self) -> None:
         """Returns None when beats have no location data."""
-        from questfoundry.graph.grow_algorithms import resolve_knot_location
+        from questfoundry.graph.grow_algorithms import resolve_intersection_location
 
-        graph = make_two_tension_graph()
-        location = resolve_knot_location(graph, ["beat::mentor_meet", "beat::artifact_discover"])
+        graph = make_two_dilemma_graph()
+        location = resolve_intersection_location(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
         assert location is None
 
 
 class TestApplyKnotMark:
     def test_marks_beats_with_intersection_group(self) -> None:
-        """Applying knot mark updates beat nodes."""
-        from questfoundry.graph.grow_algorithms import apply_knot_mark
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        """Applying intersection mark updates beat nodes."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
-        apply_knot_mark(
+        graph = make_intersection_candidate_graph()
+        apply_intersection_mark(
             graph,
             ["beat::mentor_meet", "beat::artifact_discover"],
             "market",
@@ -1419,33 +1429,33 @@ class TestApplyKnotMark:
         assert artifact["location"] == "market"
 
     def test_adds_cross_thread_belongs_to_edges(self) -> None:
-        """Knot marking adds belongs_to edges for cross-thread assignment."""
-        from questfoundry.graph.grow_algorithms import apply_knot_mark
-        from tests.fixtures.grow_fixtures import make_knot_candidate_graph
+        """Intersection marking adds belongs_to edges for cross-path assignment."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
-        graph = make_knot_candidate_graph()
-        apply_knot_mark(
+        graph = make_intersection_candidate_graph()
+        apply_intersection_mark(
             graph,
             ["beat::mentor_meet", "beat::artifact_discover"],
             "market",
         )
 
-        # mentor_meet should now also belong to artifact threads
+        # mentor_meet should now also belong to artifact paths
         mentor_edges = graph.get_edges(
             from_id="beat::mentor_meet", to_id=None, edge_type="belongs_to"
         )
         mentor_threads = {e["to"] for e in mentor_edges}
         # Originally: mentor_trust_canonical, mentor_trust_alt
         # Now also: artifact_quest_canonical, artifact_quest_alt
-        assert "thread::artifact_quest_canonical" in mentor_threads
-        assert "thread::artifact_quest_alt" in mentor_threads
+        assert "path::artifact_quest_canonical" in mentor_threads
+        assert "path::artifact_quest_alt" in mentor_threads
 
     def test_no_location_leaves_location_unchanged(self) -> None:
         """When resolved_location is None, location field is not added."""
-        from questfoundry.graph.grow_algorithms import apply_knot_mark
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
 
-        graph = make_two_tension_graph()
-        apply_knot_mark(
+        graph = make_two_dilemma_graph()
+        apply_intersection_mark(
             graph,
             ["beat::mentor_meet", "beat::artifact_discover"],
             None,
@@ -1466,8 +1476,8 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
 
     Inspects the output schema passed to with_structured_output() and returns
     the appropriate mock response for each phase:
-    - Phase 2: ThreadAgnosticAssessment for shared beats
-    - Phase 3: Empty knots (no candidates in typical test graphs)
+    - Phase 2: PathAgnosticAssessment for shared beats
+    - Phase 3: Empty intersections (no candidates in typical test graphs)
     - Phase 4a: SceneTypeTag for all beats
     - Phase 4b/4c: Empty gaps (no gap proposals)
     - Phase 8c: Empty overlays (no overlay proposals)
@@ -1475,6 +1485,7 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
     from unittest.mock import AsyncMock
 
     from questfoundry.models.grow import (
+        PathAgnosticAssessment,
         Phase2Output,
         Phase3Output,
         Phase4aOutput,
@@ -1482,44 +1493,42 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         Phase8cOutput,
         Phase9Output,
         SceneTypeTag,
-        ThreadAgnosticAssessment,
     )
 
     # Build Phase 2 response based on graph structure
-    tension_nodes = graph.get_nodes_by_type("tension")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
     beat_nodes = graph.get_nodes_by_type("beat")
 
-    # Build tension -> threads mapping from thread node tension_id properties
-    from questfoundry.graph.grow_algorithms import build_tension_threads
+    # Build dilemma -> paths mapping from path node dilemma_id properties
+    from questfoundry.graph.grow_algorithms import build_dilemma_paths
 
-    tension_threads_raw = build_tension_threads(graph)
-    tension_threads: dict[str, list[str]] = dict(tension_threads_raw)
+    dilemma_paths_raw = build_dilemma_paths(graph)
 
-    # Build beat -> threads via belongs_to
-    beat_threads: dict[str, list[str]] = {}
+    # Build beat -> paths via belongs_to
+    beat_paths: dict[str, list[str]] = {}
     belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
     for edge in belongs_to_edges:
-        beat_threads.setdefault(edge["from"], []).append(edge["to"])
+        beat_paths.setdefault(edge["from"], []).append(edge["to"])
 
     # Find shared beats and mark all as agnostic for simplicity
-    assessments: list[ThreadAgnosticAssessment] = []
-    for beat_id, bt_list in beat_threads.items():
+    assessments: list[PathAgnosticAssessment] = []
+    for beat_id, bp_list in beat_paths.items():
         if beat_id not in beat_nodes:
             continue
-        agnostic_tensions: list[str] = []
-        for tension_id, t_threads in tension_threads.items():
-            shared = [t for t in bt_list if t in t_threads]
+        agnostic_dilemmas: list[str] = []
+        for dilemma_id, d_paths in dilemma_paths_raw.items():
+            shared = [p for p in bp_list if p in d_paths]
             if len(shared) > 1:
-                raw_tid = tension_nodes[tension_id].get("raw_id", tension_id)
-                agnostic_tensions.append(raw_tid)
-        if agnostic_tensions:
+                raw_did = dilemma_nodes[dilemma_id].get("raw_id", dilemma_id)
+                agnostic_dilemmas.append(raw_did)
+        if agnostic_dilemmas:
             assessments.append(
-                ThreadAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_tensions)
+                PathAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_dilemmas)
             )
 
     # Pre-build outputs for each phase
     phase2_output = Phase2Output(assessments=assessments)
-    phase3_output = Phase3Output(knots=[])
+    phase3_output = Phase3Output(intersections=[])
 
     # Phase 4a: tag all beats with alternating scene types
     scene_types = ["scene", "sequel", "micro_beat"]
@@ -1566,7 +1575,7 @@ class TestPhaseIntegrationEndToEnd:
     async def test_all_phases_full_run(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
@@ -1584,7 +1593,7 @@ class TestPhaseIntegrationEndToEnd:
         assert result_dict["spine_arc_id"] is not None
 
         # Should have passages (one per beat)
-        assert result_dict["passage_count"] == 8  # 8 beats in two-tension graph
+        assert result_dict["passage_count"] == 8  # 8 beats in two-dilemma graph
 
         # Should have codewords (one per consequence)
         assert result_dict["codeword_count"] == 4  # 4 consequences
@@ -1596,7 +1605,7 @@ class TestPhaseIntegrationEndToEnd:
     async def test_single_tension_full_run(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
@@ -1607,7 +1616,7 @@ class TestPhaseIntegrationEndToEnd:
         phases = result_dict["phases_completed"]
         assert all(p["status"] in ("completed", "skipped") for p in phases)
 
-        assert result_dict["arc_count"] == 2  # 1 tension x 2 threads = 2 arcs
+        assert result_dict["arc_count"] == 2  # 1 dilemma x 2 paths = 2 arcs
         assert result_dict["passage_count"] == 4  # 4 beats
         assert result_dict["codeword_count"] == 2  # 2 consequences
 
@@ -1615,7 +1624,7 @@ class TestPhaseIntegrationEndToEnd:
     async def test_final_graph_has_expected_nodes(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
@@ -1630,14 +1639,14 @@ class TestPhaseIntegrationEndToEnd:
         assert len(saved_graph.get_nodes_by_type("passage")) == 8
         assert len(saved_graph.get_nodes_by_type("codeword")) == 4
         assert len(saved_graph.get_nodes_by_type("beat")) == 8
-        assert len(saved_graph.get_nodes_by_type("tension")) == 2
-        assert len(saved_graph.get_nodes_by_type("thread")) == 4
+        assert len(saved_graph.get_nodes_by_type("dilemma")) == 2
+        assert len(saved_graph.get_nodes_by_type("path")) == 4
 
     @pytest.mark.asyncio
     async def test_final_graph_has_expected_edges(self, tmp_path: Path) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
-        graph = make_two_tension_graph()
+        graph = make_two_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
@@ -1668,10 +1677,10 @@ class TestPhaseIntegrationEndToEnd:
 class TestGetThreadBeatSequence:
     def test_returns_ordered_sequence(self) -> None:
         """Beats are returned in dependency order."""
-        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
 
-        graph = make_single_tension_graph()
-        sequence = get_thread_beat_sequence(graph, "thread::mentor_trust_canonical")
+        graph = make_single_dilemma_graph()
+        sequence = get_path_beat_sequence(graph, "path::mentor_trust_canonical")
         # opening → mentor_meet → mentor_commits_canonical
         assert sequence == [
             "beat::opening",
@@ -1680,34 +1689,34 @@ class TestGetThreadBeatSequence:
         ]
 
     def test_empty_thread(self) -> None:
-        """Empty result for nonexistent thread."""
-        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+        """Empty result for nonexistent path."""
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
 
-        graph = make_single_tension_graph()
-        sequence = get_thread_beat_sequence(graph, "thread::nonexistent")
+        graph = make_single_dilemma_graph()
+        sequence = get_path_beat_sequence(graph, "path::nonexistent")
         assert sequence == []
 
     def test_multiple_roots(self) -> None:
         """Handles beats with no dependencies (multiple roots)."""
-        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
 
         graph = Graph.empty()
-        graph.create_node("thread::t1", {"type": "thread", "raw_id": "t1"})
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "A"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "B"})
-        graph.add_edge("belongs_to", "beat::a", "thread::t1")
-        graph.add_edge("belongs_to", "beat::b", "thread::t1")
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
         # No requires edges — both are roots
-        sequence = get_thread_beat_sequence(graph, "thread::t1")
+        sequence = get_path_beat_sequence(graph, "path::t1")
         assert set(sequence) == {"beat::a", "beat::b"}
         assert len(sequence) == 2
 
     def test_alt_thread_sequence(self) -> None:
-        """Alternative thread has its own sequence."""
-        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+        """Alternative path has its own sequence."""
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
 
-        graph = make_single_tension_graph()
-        sequence = get_thread_beat_sequence(graph, "thread::mentor_trust_alt")
+        graph = make_single_dilemma_graph()
+        sequence = get_path_beat_sequence(graph, "path::mentor_trust_alt")
         assert sequence == [
             "beat::opening",
             "beat::mentor_meet",
@@ -1715,21 +1724,21 @@ class TestGetThreadBeatSequence:
         ]
 
     def test_cycle_raises_value_error(self) -> None:
-        """Cycle in thread beat dependencies raises ValueError."""
-        from questfoundry.graph.grow_algorithms import get_thread_beat_sequence
+        """Cycle in path beat dependencies raises ValueError."""
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
 
         graph = Graph.empty()
-        graph.create_node("thread::t1", {"type": "thread", "raw_id": "t1"})
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
         graph.create_node("beat::a", {"type": "beat", "summary": "A"})
         graph.create_node("beat::b", {"type": "beat", "summary": "B"})
-        graph.add_edge("belongs_to", "beat::a", "thread::t1")
-        graph.add_edge("belongs_to", "beat::b", "thread::t1")
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
         # Create a cycle: a requires b, b requires a
         graph.add_edge("requires", "beat::a", "beat::b")
         graph.add_edge("requires", "beat::b", "beat::a")
 
         with pytest.raises(ValueError, match="Cycle detected"):
-            get_thread_beat_sequence(graph, "thread::t1")
+            get_path_beat_sequence(graph, "path::t1")
 
 
 class TestDetectPacingIssues:
@@ -1737,7 +1746,7 @@ class TestDetectPacingIssues:
         """No issues when beats lack scene_type."""
         from questfoundry.graph.grow_algorithms import detect_pacing_issues
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         issues = detect_pacing_issues(graph)
         assert issues == []
 
@@ -1745,15 +1754,15 @@ class TestDetectPacingIssues:
         """Flags 3+ consecutive beats with same scene_type."""
         from questfoundry.graph.grow_algorithms import detect_pacing_issues
 
-        graph = make_single_tension_graph()
-        # Tag all canonical thread beats as "scene"
+        graph = make_single_dilemma_graph()
+        # Tag all canonical path beats as "scene"
         graph.update_node("beat::opening", scene_type="scene")
         graph.update_node("beat::mentor_meet", scene_type="scene")
         graph.update_node("beat::mentor_commits_canonical", scene_type="scene")
 
         issues = detect_pacing_issues(graph)
         assert len(issues) >= 1
-        issue = next(i for i in issues if i.thread_id == "thread::mentor_trust_canonical")
+        issue = next(i for i in issues if i.path_id == "path::mentor_trust_canonical")
         assert issue.scene_type == "scene"
         assert len(issue.beat_ids) == 3
 
@@ -1761,7 +1770,7 @@ class TestDetectPacingIssues:
         """No issues when scene types alternate."""
         from questfoundry.graph.grow_algorithms import detect_pacing_issues
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         graph.update_node("beat::opening", scene_type="scene")
         graph.update_node("beat::mentor_meet", scene_type="sequel")
         graph.update_node("beat::mentor_commits_canonical", scene_type="scene")
@@ -1775,11 +1784,11 @@ class TestDetectPacingIssues:
         from questfoundry.graph.grow_algorithms import detect_pacing_issues
 
         graph = Graph.empty()
-        graph.create_node("thread::short", {"type": "thread", "raw_id": "short"})
+        graph.create_node("path::short", {"type": "path", "raw_id": "short"})
         graph.create_node("beat::x", {"type": "beat", "raw_id": "x", "scene_type": "scene"})
         graph.create_node("beat::y", {"type": "beat", "raw_id": "y", "scene_type": "scene"})
-        graph.add_edge("belongs_to", "beat::x", "thread::short")
-        graph.add_edge("belongs_to", "beat::y", "thread::short")
+        graph.add_edge("belongs_to", "beat::x", "path::short")
+        graph.add_edge("belongs_to", "beat::y", "path::short")
 
         issues = detect_pacing_issues(graph)
         assert issues == []
@@ -1790,10 +1799,10 @@ class TestInsertGapBeat:
         """Creates a new beat node with correct data."""
         from questfoundry.graph.grow_algorithms import insert_gap_beat
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         beat_id = insert_gap_beat(
             graph,
-            thread_id="thread::mentor_trust_canonical",
+            path_id="path::mentor_trust_canonical",
             after_beat="beat::opening",
             before_beat="beat::mentor_meet",
             summary="Hero reflects on the journey so far.",
@@ -1812,10 +1821,10 @@ class TestInsertGapBeat:
         """New beat gets requires edges for ordering."""
         from questfoundry.graph.grow_algorithms import insert_gap_beat
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         beat_id = insert_gap_beat(
             graph,
-            thread_id="thread::mentor_trust_canonical",
+            path_id="path::mentor_trust_canonical",
             after_beat="beat::opening",
             before_beat="beat::mentor_meet",
             summary="Transition beat",
@@ -1835,32 +1844,32 @@ class TestInsertGapBeat:
         assert len(requires_to_new) == 1
 
     def test_adds_belongs_to_edge(self) -> None:
-        """New beat gets belongs_to edge for thread."""
+        """New beat gets belongs_to edge for path."""
         from questfoundry.graph.grow_algorithms import insert_gap_beat
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         beat_id = insert_gap_beat(
             graph,
-            thread_id="thread::mentor_trust_canonical",
+            path_id="path::mentor_trust_canonical",
             after_beat="beat::opening",
             before_beat=None,
-            summary="End of thread transition",
+            summary="End of path transition",
             scene_type="micro_beat",
         )
 
         belongs_to = graph.get_edges(
-            from_id=beat_id, to_id="thread::mentor_trust_canonical", edge_type="belongs_to"
+            from_id=beat_id, to_id="path::mentor_trust_canonical", edge_type="belongs_to"
         )
         assert len(belongs_to) == 1
 
     def test_no_after_beat(self) -> None:
-        """Handles insertion at start of thread."""
+        """Handles insertion at start of path."""
         from questfoundry.graph.grow_algorithms import insert_gap_beat
 
-        graph = make_single_tension_graph()
+        graph = make_single_dilemma_graph()
         beat_id = insert_gap_beat(
             graph,
-            thread_id="thread::mentor_trust_canonical",
+            path_id="path::mentor_trust_canonical",
             after_beat=None,
             before_beat="beat::opening",
             summary="Prologue beat",
@@ -1882,16 +1891,16 @@ class TestInsertGapBeat:
         from questfoundry.graph.grow_algorithms import insert_gap_beat
 
         graph = Graph.empty()
-        graph.create_node("thread::t1", {"type": "thread", "raw_id": "t1"})
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
         graph.create_node("beat::a", {"type": "beat", "summary": "A"})
         # Simulate existing gap beats (gap_1 exists, gap_2 was deleted)
         graph.create_node("beat::gap_1", {"type": "beat", "summary": "Gap 1", "is_gap_beat": True})
         graph.create_node("beat::gap_3", {"type": "beat", "summary": "Gap 3", "is_gap_beat": True})
-        graph.add_edge("belongs_to", "beat::a", "thread::t1")
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
 
         beat_id = insert_gap_beat(
             graph,
-            thread_id="thread::t1",
+            path_id="path::t1",
             after_beat="beat::a",
             before_beat=None,
             summary="New gap",
@@ -1922,7 +1931,7 @@ class TestFindPassageSuccessors:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1"],
+                "paths": ["t1"],
                 "sequence": ["beat::a", "beat::b", "beat::c"],
             },
         )
@@ -1959,7 +1968,7 @@ class TestFindPassageSuccessors:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1"],
+                "paths": ["t1"],
                 "sequence": ["beat::a", "beat::b"],
             },
         )
@@ -1969,7 +1978,7 @@ class TestFindPassageSuccessors:
                 "type": "arc",
                 "raw_id": "branch",
                 "arc_type": "branch",
-                "threads": ["t2"],
+                "paths": ["t2"],
                 "sequence": ["beat::a", "beat::c"],
             },
         )
@@ -2000,7 +2009,7 @@ class TestFindPassageSuccessors:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1"],
+                "paths": ["t1"],
                 "sequence": ["beat::a", "beat::b"],
             },
         )
@@ -2010,7 +2019,7 @@ class TestFindPassageSuccessors:
                 "type": "arc",
                 "raw_id": "branch",
                 "arc_type": "branch",
-                "threads": ["t2"],
+                "paths": ["t2"],
                 "sequence": ["beat::a", "beat::b"],
             },
         )
@@ -2041,7 +2050,7 @@ class TestFindPassageSuccessors:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1"],
+                "paths": ["t1"],
                 "sequence": ["beat::a", "beat::b"],
             },
         )
@@ -2083,7 +2092,7 @@ class TestFindPassageSuccessors:
                 "type": "arc",
                 "raw_id": "tiny",
                 "arc_type": "spine",
-                "threads": ["t1"],
+                "paths": ["t1"],
                 "sequence": ["beat::a"],
             },
         )
@@ -2115,7 +2124,7 @@ class TestFindPassageSuccessors:
                 "type": "arc",
                 "raw_id": "spine",
                 "arc_type": "spine",
-                "threads": ["t1"],
+                "paths": ["t1"],
                 "sequence": ["beat::a", "beat::mid", "beat::b"],
             },
         )

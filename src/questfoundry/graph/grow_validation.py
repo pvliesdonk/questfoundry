@@ -262,9 +262,8 @@ def check_dilemmas_resolved(graph: Graph) -> ValidationCheck:
 
     Re-checks after gap insertion phases (4b/4c) may have altered the graph.
     """
-    # Graph stores dilemmas as "tension" nodes and paths as "thread" nodes
-    dilemma_nodes = graph.get_nodes_by_type("tension")
-    path_nodes = graph.get_nodes_by_type("thread")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    path_nodes = graph.get_nodes_by_type("path")
     beat_nodes = graph.get_nodes_by_type("beat")
 
     if not dilemma_nodes or not path_nodes:
@@ -296,9 +295,9 @@ def check_dilemmas_resolved(graph: Graph) -> ValidationCheck:
             has_commits = False
             for beat_id in beats_in_path:
                 beat_data = beat_nodes.get(beat_id, {})
-                impacts = beat_data.get("tension_impacts", [])
+                impacts = beat_data.get("dilemma_impacts", [])
                 for impact in impacts:
-                    if impact.get("tension_id") == dilemma_id and impact.get("effect") == "commits":
+                    if impact.get("dilemma_id") == dilemma_id and impact.get("effect") == "commits":
                         has_commits = True
                         break
                 if has_commits:
@@ -318,10 +317,6 @@ def check_dilemmas_resolved(graph: Graph) -> ValidationCheck:
         severity="fail",
         message=f"Unresolved dilemmas: {', '.join(unresolved[:5])}",
     )
-
-
-# Backward compatibility alias - will be removed in a future version
-check_tensions_resolved = check_dilemmas_resolved
 
 
 def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
@@ -437,10 +432,9 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
 
     Returns list of warning-level checks (timing issues are advisory, not blocking).
     """
-    # Graph stores paths as "thread" nodes and dilemmas as "tension" nodes
-    path_nodes = graph.get_nodes_by_type("thread")
+    path_nodes = graph.get_nodes_by_type("path")
     beat_nodes = graph.get_nodes_by_type("beat")
-    dilemma_nodes = graph.get_nodes_by_type("tension")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
 
     if not path_nodes or not beat_nodes:
         return []
@@ -448,9 +442,9 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
     # Build path → dilemma node ID mapping for beat impact comparison
     path_dilemma: dict[str, str] = {}
     for path_id, path_data in path_nodes.items():
-        did = path_data.get("tension_id")
+        did = path_data.get("dilemma_id")
         if did:
-            prefixed = normalize_scoped_id(did, "tension")
+            prefixed = normalize_scoped_id(did, "dilemma")
             if prefixed in dilemma_nodes:
                 path_dilemma[path_id] = prefixed
 
@@ -487,9 +481,9 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
 
         for idx, beat_id in enumerate(beat_sequence):
             beat_data = beat_nodes.get(beat_id, {})
-            impacts = beat_data.get("tension_impacts", [])
+            impacts = beat_data.get("dilemma_impacts", [])
             for impact in impacts:
-                if impact.get("tension_id") != dilemma_node_id:
+                if impact.get("dilemma_id") != dilemma_node_id:
                     continue
                 effect = impact.get("effect", "")
                 if effect == "commits":

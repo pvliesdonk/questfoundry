@@ -281,7 +281,7 @@ DREAM has no prior stage to escalate to. If DREAM cannot complete:
 
 ### Phase 1: Exploration
 
-**LLM:** "An archivist with forbidden knowledge—that's rich territory. What draws you to this concept? Is it the tension between preservation and destruction? The corruption of knowledge? The isolation of knowing something others don't?"
+**LLM:** "An archivist with forbidden knowledge—that's rich territory. What draws you to this concept? Is it the dilemma between preservation and destruction? The corruption of knowledge? The isolation of knowing something others don't?"
 
 **Human:** "The corruption angle. And trust—who can you trust when you know something dangerous?"
 

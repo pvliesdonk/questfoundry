@@ -62,9 +62,9 @@ class TestPrefixId:
         [
             pytest.param("entity", "the_detective", "entity::the_detective", id="raw_id-entity"),
             pytest.param(
-                "tension", "host_motivation", "tension::host_motivation", id="raw_id-tension"
+                "dilemma", "host_motivation", "dilemma::host_motivation", id="raw_id-dilemma"
             ),
-            pytest.param("thread", "main_thread", "thread::main_thread", id="raw_id-thread"),
+            pytest.param("path", "main_thread", "path::main_thread", id="raw_id-path"),
             pytest.param(
                 "entity",
                 "entity::the_detective",
@@ -72,27 +72,27 @@ class TestPrefixId:
                 id="correctly_prefixed-entity",
             ),
             pytest.param(
-                "tension",
-                "tension::host_motivation",
-                "tension::host_motivation",
-                id="correctly_prefixed-tension",
+                "dilemma",
+                "dilemma::host_motivation",
+                "dilemma::host_motivation",
+                id="correctly_prefixed-dilemma",
             ),
             pytest.param(
                 "entity",
-                "tension::the_detective",
+                "dilemma::the_detective",
                 "entity::the_detective",
                 id="wrong_prefix-entity",
             ),
             pytest.param(
-                "tension",
+                "dilemma",
                 "entity::host_motivation",
-                "tension::host_motivation",
-                id="wrong_prefix-tension",
+                "dilemma::host_motivation",
+                id="wrong_prefix-dilemma",
             ),
             pytest.param(
-                "tension",
-                "tension::tension::host_motivation",
-                "tension::host_motivation",
+                "dilemma",
+                "dilemma::dilemma::host_motivation",
+                "dilemma::host_motivation",
                 id="double_prefix",
             ),
         ],
@@ -121,7 +121,7 @@ class TestApplyMutations:
             "entities": [
                 {"entity_id": "char_001", "entity_category": "character", "concept": "Test"}
             ],
-            "tensions": [],
+            "dilemmas": [],
         }
 
         apply_mutations(graph, "brainstorm", output)
@@ -136,48 +136,48 @@ class TestApplyMutations:
             "entity::char_001",
             {"type": "entity", "raw_id": "char_001", "disposition": "proposed"},
         )
-        # Add 2 tensions with both alternatives (required for minimum arc count)
+        # Add 2 dilemmas with both answers (required for minimum arc count)
         for i in range(2):
-            tid = f"tension::t{i}"
-            graph.create_node(tid, {"type": "tension", "raw_id": f"t{i}"})
+            tid = f"dilemma::t{i}"
+            graph.create_node(tid, {"type": "dilemma", "raw_id": f"t{i}"})
             for alt in ["a", "b"]:
                 alt_id = f"{tid}::alt::{alt}"
-                graph.create_node(alt_id, {"type": "alternative", "raw_id": alt})
-                graph.add_edge("has_alternative", tid, alt_id)
+                graph.create_node(alt_id, {"type": "answer", "raw_id": alt})
+                graph.add_edge("has_answer", tid, alt_id)
 
         output = {
             "entities": [{"entity_id": "char_001", "disposition": "retained"}],
-            "tensions": [
-                {"tension_id": "t0", "considered": ["a", "b"], "implicit": []},
-                {"tension_id": "t1", "considered": ["a", "b"], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "t0", "considered": ["a", "b"], "implicit": []},
+                {"dilemma_id": "t1", "considered": ["a", "b"], "implicit": []},
             ],
-            "threads": [
-                {"thread_id": "thread_0", "tension_id": "t0", "alternative_id": "a"},
-                {"thread_id": "thread_1", "tension_id": "t0", "alternative_id": "b"},
-                {"thread_id": "thread_2", "tension_id": "t1", "alternative_id": "a"},
-                {"thread_id": "thread_3", "tension_id": "t1", "alternative_id": "b"},
+            "paths": [
+                {"path_id": "thread_0", "dilemma_id": "t0", "answer_id": "a"},
+                {"path_id": "thread_1", "dilemma_id": "t0", "answer_id": "b"},
+                {"path_id": "thread_2", "dilemma_id": "t1", "answer_id": "a"},
+                {"path_id": "thread_3", "dilemma_id": "t1", "answer_id": "b"},
             ],
             "initial_beats": [
-                # Minimal beats with commits for each thread
+                # Minimal beats with commits for each path
                 {
                     "beat_id": "b0",
-                    "threads": ["thread_0"],
-                    "tension_impacts": [{"tension_id": "t0", "effect": "commits"}],
+                    "paths": ["thread_0"],
+                    "dilemma_impacts": [{"dilemma_id": "t0", "effect": "commits"}],
                 },
                 {
                     "beat_id": "b1",
-                    "threads": ["thread_1"],
-                    "tension_impacts": [{"tension_id": "t0", "effect": "commits"}],
+                    "paths": ["thread_1"],
+                    "dilemma_impacts": [{"dilemma_id": "t0", "effect": "commits"}],
                 },
                 {
                     "beat_id": "b2",
-                    "threads": ["thread_2"],
-                    "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+                    "paths": ["thread_2"],
+                    "dilemma_impacts": [{"dilemma_id": "t1", "effect": "commits"}],
                 },
                 {
                     "beat_id": "b3",
-                    "threads": ["thread_3"],
-                    "tension_impacts": [{"tension_id": "t1", "effect": "commits"}],
+                    "paths": ["thread_3"],
+                    "dilemma_impacts": [{"dilemma_id": "t1", "effect": "commits"}],
                 },
             ],
         }
@@ -278,7 +278,7 @@ class TestBrainstormMutations:
         graph = Graph.empty()
         output = {
             "entities": [{"entity_category": "character", "concept": "Test"}],  # Missing entity_id
-            "tensions": [],
+            "dilemmas": [],
         }
 
         with pytest.raises(
@@ -291,7 +291,7 @@ class TestBrainstormMutations:
         graph = Graph.empty()
         output = {
             "entities": [],
-            "tensions": [{"question": "Test?", "alternatives": []}],  # Missing dilemma_id
+            "dilemmas": [{"question": "Test?", "answers": []}],  # Missing dilemma_id
         }
 
         with pytest.raises(MutationError, match="Dilemma at index 0 missing dilemma_id"):
@@ -302,11 +302,11 @@ class TestBrainstormMutations:
         graph = Graph.empty()
         output = {
             "entities": [],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "tension_001",
+                    "dilemma_id": "tension_001",
                     "question": "Test?",
-                    "alternatives": [
+                    "answers": [
                         {"description": "Option A", "is_default_path": True}
                     ],  # Missing answer_id
                 }
@@ -336,7 +336,7 @@ class TestBrainstormMutations:
                     "concept": "Ancient repository",
                 },
             ],
-            "tensions": [],
+            "dilemmas": [],
         }
 
         apply_brainstorm_mutations(graph, output)
@@ -356,24 +356,24 @@ class TestBrainstormMutations:
         assert archive["entity_type"] == "location"
 
     def test_creates_tension_with_alternatives(self) -> None:
-        """Creates tension nodes with linked alternatives."""
+        """Creates dilemma nodes with linked answers."""
         graph = Graph.empty()
         output = {
             "entities": [],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "mentor_trust",
+                    "dilemma_id": "mentor_trust",
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": ["kay", "mentor"],  # Raw IDs from LLM
                     "why_it_matters": "Trust is key",
-                    "alternatives": [
+                    "answers": [
                         {
-                            "alternative_id": "protector",
+                            "answer_id": "protector",
                             "description": "Mentor protects Kay",
                             "is_default_path": True,
                         },
                         {
-                            "alternative_id": "manipulator",
+                            "answer_id": "manipulator",
                             "description": "Mentor manipulates Kay",
                             "is_default_path": False,
                         },
@@ -384,34 +384,34 @@ class TestBrainstormMutations:
 
         apply_brainstorm_mutations(graph, output)
 
-        # Tension IDs are prefixed with "tension::"
-        tension = graph.get_node("tension::mentor_trust")
-        assert tension is not None
-        assert tension["type"] == "tension"
-        assert tension["raw_id"] == "mentor_trust"
-        assert tension["question"] == "Can the mentor be trusted?"
+        # Dilemma IDs are prefixed with "dilemma::"
+        dilemma = graph.get_node("dilemma::mentor_trust")
+        assert dilemma is not None
+        assert dilemma["type"] == "dilemma"
+        assert dilemma["raw_id"] == "mentor_trust"
+        assert dilemma["question"] == "Can the mentor be trusted?"
         # central_entity_ids list is prefixed in storage
-        assert tension["central_entity_ids"] == ["entity::kay", "entity::mentor"]
+        assert dilemma["central_entity_ids"] == ["entity::kay", "entity::mentor"]
 
-        # Alternative IDs: tension::tension_id::alt::alt_id
-        protector = graph.get_node("tension::mentor_trust::alt::protector")
+        # Alternative IDs: dilemma::tension_id::alt::alt_id
+        protector = graph.get_node("dilemma::mentor_trust::alt::protector")
         assert protector is not None
-        assert protector["type"] == "alternative"
+        assert protector["type"] == "answer"
         assert protector["raw_id"] == "protector"
         assert protector["is_default_path"] is True
 
-        manipulator = graph.get_node("tension::mentor_trust::alt::manipulator")
+        manipulator = graph.get_node("dilemma::mentor_trust::alt::manipulator")
         assert manipulator is not None
         assert manipulator["is_default_path"] is False
 
         # Check edges
-        edges = graph.get_edges(from_id="tension::mentor_trust", edge_type="has_alternative")
+        edges = graph.get_edges(from_id="dilemma::mentor_trust", edge_type="has_answer")
         assert len(edges) == 2
 
     def test_handles_empty_brainstorm(self) -> None:
-        """Handles empty entities and tensions."""
+        """Handles empty entities and dilemmas."""
         graph = Graph.empty()
-        output = {"entities": [], "tensions": []}
+        output = {"entities": [], "dilemmas": []}
 
         apply_brainstorm_mutations(graph, output)
 
@@ -428,14 +428,14 @@ class TestValidateBrainstormMutations:
                 {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
                 {"entity_id": "mentor", "entity_category": "character", "concept": "Mentor"},
             ],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "trust",
+                    "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": ["kay", "mentor"],
-                    "alternatives": [
-                        {"alternative_id": "yes", "description": "Yes", "is_default_path": True},
-                        {"alternative_id": "no", "description": "No", "is_default_path": False},
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_default_path": True},
+                        {"answer_id": "no", "description": "No", "is_default_path": False},
                     ],
                 }
             ],
@@ -451,13 +451,13 @@ class TestValidateBrainstormMutations:
             "entities": [
                 {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
             ],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "trust",
+                    "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": ["kay", "phantom_entity"],  # phantom_entity doesn't exist
-                    "alternatives": [
-                        {"alternative_id": "yes", "description": "Yes", "is_default_path": True},
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_default_path": True},
                     ],
                 }
             ],
@@ -472,18 +472,18 @@ class TestValidateBrainstormMutations:
         assert "central_entity_ids" in error.field_path
 
     def test_duplicate_alternative_ids_detected(self) -> None:
-        """Detects duplicate alternative IDs within a tension."""
+        """Detects duplicate answer IDs within a dilemma."""
         output = {
             "entities": [],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "trust",
+                    "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": [],
-                    "alternatives": [
-                        {"alternative_id": "option_a", "description": "A", "is_default_path": True},
+                    "answers": [
+                        {"answer_id": "option_a", "description": "A", "is_default_path": True},
                         {
-                            "alternative_id": "option_a",
+                            "answer_id": "option_a",
                             "description": "B",
                             "is_default_path": False,
                         },
@@ -499,17 +499,17 @@ class TestValidateBrainstormMutations:
         assert len(duplicate_errors) == 1
 
     def test_no_default_path_detected(self) -> None:
-        """Detects when no alternative has is_default_path=True."""
+        """Detects when no answer has is_default_path=True."""
         output = {
             "entities": [],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "trust",
+                    "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": [],
-                    "alternatives": [
-                        {"alternative_id": "yes", "description": "Yes", "is_default_path": False},
-                        {"alternative_id": "no", "description": "No", "is_default_path": False},
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_default_path": False},
+                        {"answer_id": "no", "description": "No", "is_default_path": False},
                     ],
                 }
             ],
@@ -521,17 +521,17 @@ class TestValidateBrainstormMutations:
         assert "No answer has is_default_path=true" in errors[0].issue
 
     def test_multiple_default_paths_detected(self) -> None:
-        """Detects when multiple alternatives have is_default_path=True."""
+        """Detects when multiple answers have is_default_path=True."""
         output = {
             "entities": [],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "trust",
+                    "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": [],
-                    "alternatives": [
-                        {"alternative_id": "yes", "description": "Yes", "is_default_path": True},
-                        {"alternative_id": "no", "description": "No", "is_default_path": True},
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_default_path": True},
+                        {"answer_id": "no", "description": "No", "is_default_path": True},
                     ],
                 }
             ],
@@ -548,14 +548,14 @@ class TestValidateBrainstormMutations:
             "entities": [
                 {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
             ],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "trust",
+                    "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": ["phantom1", "phantom2"],  # Both invalid
-                    "alternatives": [
-                        {"alternative_id": "yes", "description": "Yes", "is_default_path": False},
-                        {"alternative_id": "no", "description": "No", "is_default_path": False},
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_default_path": False},
+                        {"answer_id": "no", "description": "No", "is_default_path": False},
                     ],
                 }
             ],
@@ -567,12 +567,12 @@ class TestValidateBrainstormMutations:
         assert len(errors) == 3
 
     def test_empty_tensions_valid(self) -> None:
-        """Empty tensions list is valid."""
+        """Empty dilemmas list is valid."""
         output = {
             "entities": [
                 {"entity_id": "kay", "entity_category": "character", "concept": "Archivist"},
             ],
-            "tensions": [],
+            "dilemmas": [],
         }
 
         errors = validate_brainstorm_mutations(output)
@@ -580,15 +580,15 @@ class TestValidateBrainstormMutations:
         assert errors == []
 
     def test_empty_alternatives_detected(self) -> None:
-        """Tension with no alternatives fails default path validation."""
+        """Dilemma with no answers fails default path validation."""
         output = {
             "entities": [],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "trust",
+                    "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": [],
-                    "alternatives": [],  # No alternatives at all
+                    "answers": [],  # No answers at all
                 }
             ],
         }
@@ -607,7 +607,7 @@ class TestValidateBrainstormMutations:
                 {"entity_id": None, "entity_category": "location", "concept": "None ID"},
                 {"entity_category": "object", "concept": "Missing ID"},  # No entity_id key
             ],
-            "tensions": [],
+            "dilemmas": [],
         }
 
         errors = validate_brainstorm_mutations(output)
@@ -629,7 +629,7 @@ class TestBrainstormMutationError:
         """to_feedback() includes error details for LLM retry."""
         errors = [
             BrainstormValidationError(
-                field_path="tensions.0.central_entity_ids",
+                field_path="dilemmas.0.central_entity_ids",
                 issue="Entity 'phantom' not in entities list",
                 available=["kay", "mentor"],
                 provided="phantom",
@@ -640,7 +640,7 @@ class TestBrainstormMutationError:
         feedback = error.to_feedback()
 
         assert "BRAINSTORM has invalid internal references" in feedback
-        assert "tensions.0.central_entity_ids" in feedback
+        assert "dilemmas.0.central_entity_ids" in feedback
         assert "Entity 'phantom' not in entities list" in feedback
         assert "kay" in feedback
         assert "mentor" in feedback
@@ -649,7 +649,7 @@ class TestBrainstormMutationError:
         """Only shows first 8 errors plus count of remaining."""
         errors = [
             BrainstormValidationError(
-                field_path=f"tensions.{i}.central_entity_ids",
+                field_path=f"dilemmas.{i}.central_entity_ids",
                 issue=f"Entity 'phantom{i}' not in entities list",
                 available=[],
                 provided=f"phantom{i}",
@@ -674,7 +674,7 @@ class TestSeedMutations:
         graph = Graph.empty()
         output = {
             "entities": [{"disposition": "retained"}],  # Missing entity_id
-            "threads": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -684,17 +684,15 @@ class TestSeedMutations:
             apply_seed_mutations(graph, output)
 
     def test_thread_missing_id_raises(self) -> None:
-        """Raises MutationError when thread missing thread_id."""
+        """Raises MutationError when path missing path_id."""
         graph = Graph.empty()
         output = {
             "entities": [],
-            "threads": [{"name": "Test Thread"}],  # Missing thread_id
+            "paths": [{"name": "Test Path"}],  # Missing path_id
             "initial_beats": [],
         }
 
-        with pytest.raises(
-            MutationError, match="Path at index 0 missing required 'thread_id' field"
-        ):
+        with pytest.raises(MutationError, match="Path at index 0 missing required 'path_id' field"):
             apply_seed_mutations(graph, output)
 
     def test_beat_missing_id_raises(self) -> None:
@@ -702,7 +700,7 @@ class TestSeedMutations:
         graph = Graph.empty()
         output = {
             "entities": [],
-            "threads": [],
+            "paths": [],
             "initial_beats": [{"summary": "Test Beat"}],  # Missing beat_id
         }
 
@@ -732,7 +730,7 @@ class TestSeedMutations:
                 {"entity_id": "mentor", "disposition": "retained"},
                 {"entity_id": "extra", "disposition": "cut"},
             ],
-            "threads": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -743,33 +741,33 @@ class TestSeedMutations:
         assert graph.get_node("entity::extra")["disposition"] == "cut"
 
     def test_creates_threads(self) -> None:
-        """Creates thread nodes from seed output."""
+        """Creates path nodes from seed output."""
         graph = Graph.empty()
-        # Pre-populate tension and alternative from brainstorm (with raw_id for validation)
+        # Pre-populate dilemma and answer from brainstorm (with raw_id for validation)
         graph.create_node(
-            "tension::mentor_trust",
-            {"type": "tension", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
+            "dilemma::mentor_trust",
+            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
         )
         graph.create_node(
-            "tension::mentor_trust::alt::protector",
-            {"type": "alternative", "raw_id": "protector", "description": "Mentor protects"},
+            "dilemma::mentor_trust::alt::protector",
+            {"type": "answer", "raw_id": "protector", "description": "Mentor protects"},
         )
-        # Link tension to alternative (add_edge takes edge_type, from_id, to_id)
+        # Link dilemma to answer (add_edge takes edge_type, from_id, to_id)
         graph.add_edge(
-            "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::protector"
+            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
         )
 
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "mentor_trust", "considered": ["protector"], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "mentor_trust", "considered": ["protector"], "implicit": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread_mentor_trust",
+                    "path_id": "thread_mentor_trust",
                     "name": "Mentor Trust Arc",
-                    "tension_id": "mentor_trust",  # Raw tension ID from LLM
-                    "alternative_id": "protector",  # Local alt ID, not full path
+                    "dilemma_id": "mentor_trust",  # Raw dilemma ID from LLM
+                    "answer_id": "protector",  # Local alt ID, not full path
                     "description": "Exploring mentor relationship",
                     "consequence_ids": ["consequence_trust"],
                 }
@@ -778,9 +776,9 @@ class TestSeedMutations:
                 {
                     "beat_id": "resolution",
                     "summary": "Mentor's true nature revealed",
-                    "threads": ["thread_mentor_trust"],
-                    "tension_impacts": [
-                        {"tension_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
+                    "paths": ["thread_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
                     ],
                 }
             ],
@@ -788,74 +786,74 @@ class TestSeedMutations:
 
         apply_seed_mutations(graph, output)
 
-        # Thread ID is prefixed with "thread::"
-        thread = graph.get_node("thread::thread_mentor_trust")
-        assert thread is not None
-        assert thread["type"] == "thread"
-        assert thread["raw_id"] == "thread_mentor_trust"
-        assert thread["name"] == "Mentor Trust Arc"
+        # Path ID is prefixed with "path::"
+        path = graph.get_node("path::thread_mentor_trust")
+        assert path is not None
+        assert path["type"] == "path"
+        assert path["raw_id"] == "thread_mentor_trust"
+        assert path["name"] == "Mentor Trust Arc"
 
-        # Check explores edge - links to full prefixed alternative ID
-        edges = graph.get_edges(from_id="thread::thread_mentor_trust", edge_type="explores")
+        # Check explores edge - links to full prefixed answer ID
+        edges = graph.get_edges(from_id="path::thread_mentor_trust", edge_type="explores")
         assert len(edges) == 1
-        assert edges[0]["to"] == "tension::mentor_trust::alt::protector"
+        assert edges[0]["to"] == "dilemma::mentor_trust::alt::protector"
 
     def test_thread_is_canonical_from_alternative(self) -> None:
-        """Thread's is_canonical is set from alternative's is_default_path."""
+        """Path's is_canonical is set from answer's is_default_path."""
         graph = Graph.empty()
-        # Create tension with two alternatives - one canonical, one not
+        # Create dilemma with two answers - one canonical, one not
         graph.create_node(
-            "tension::mentor_trust",
-            {"type": "tension", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
+            "dilemma::mentor_trust",
+            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
         )
         graph.create_node(
-            "tension::mentor_trust::alt::protector",
+            "dilemma::mentor_trust::alt::protector",
             {
-                "type": "alternative",
+                "type": "answer",
                 "raw_id": "protector",
                 "description": "Mentor protects",
                 "is_default_path": True,  # This is the canonical path
             },
         )
         graph.create_node(
-            "tension::mentor_trust::alt::manipulator",
+            "dilemma::mentor_trust::alt::manipulator",
             {
-                "type": "alternative",
+                "type": "answer",
                 "raw_id": "manipulator",
                 "description": "Mentor manipulates",
                 "is_default_path": False,  # Branch path
             },
         )
         graph.add_edge(
-            "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::protector"
+            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
         )
         graph.add_edge(
-            "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::manipulator"
+            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::manipulator"
         )
 
         output = {
             "entities": [],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "mentor_trust",
+                    "dilemma_id": "mentor_trust",
                     "considered": ["protector", "manipulator"],
                     "implicit": [],
                 },
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "mentor_protects",
+                    "path_id": "mentor_protects",
                     "name": "Mentor Protects Arc",
-                    "tension_id": "mentor_trust",
-                    "alternative_id": "protector",  # Canonical
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "protector",  # Canonical
                     "description": "The mentor genuinely protects",
                     "consequence_ids": [],
                 },
                 {
-                    "thread_id": "mentor_manipulates",
+                    "path_id": "mentor_manipulates",
                     "name": "Mentor Manipulates Arc",
-                    "tension_id": "mentor_trust",
-                    "alternative_id": "manipulator",  # Non-canonical
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "manipulator",  # Non-canonical
                     "description": "The mentor is manipulating",
                     "consequence_ids": [],
                 },
@@ -864,17 +862,17 @@ class TestSeedMutations:
                 {
                     "beat_id": "protects_beat_01",
                     "summary": "Mentor reveals protection",
-                    "threads": ["mentor_protects"],
-                    "tension_impacts": [
-                        {"tension_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                    "paths": ["mentor_protects"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
                     ],
                 },
                 {
                     "beat_id": "manipulates_beat_01",
                     "summary": "Mentor reveals manipulation",
-                    "threads": ["mentor_manipulates"],
-                    "tension_impacts": [
-                        {"tension_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                    "paths": ["mentor_manipulates"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
                     ],
                 },
             ],
@@ -882,13 +880,13 @@ class TestSeedMutations:
 
         apply_seed_mutations(graph, output)
 
-        # Thread from canonical alternative should have is_canonical=True
-        protects_thread = graph.get_node("thread::mentor_protects")
+        # Path from canonical answer should have is_canonical=True
+        protects_thread = graph.get_node("path::mentor_protects")
         assert protects_thread is not None
         assert protects_thread.get("is_canonical") is True
 
-        # Thread from non-canonical alternative should have is_canonical=False
-        manipulates_thread = graph.get_node("thread::mentor_manipulates")
+        # Path from non-canonical answer should have is_canonical=False
+        manipulates_thread = graph.get_node("path::mentor_manipulates")
         assert manipulates_thread is not None
         assert manipulates_thread.get("is_canonical") is False
 
@@ -906,18 +904,18 @@ class TestSeedMutations:
             "entity::archive",
             {"type": "entity", "raw_id": "archive", "concept": "Ancient repository"},
         )
-        # Pre-populate tension and alternative from brainstorm (for thread validation)
+        # Pre-populate dilemma and answer from brainstorm (for path validation)
         graph.create_node(
-            "tension::mentor_trust",
-            {"type": "tension", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
+            "dilemma::mentor_trust",
+            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Can the mentor be trusted?"},
         )
         graph.create_node(
-            "tension::mentor_trust::alt::protector",
-            {"type": "alternative", "raw_id": "protector", "description": "Mentor protects"},
+            "dilemma::mentor_trust::alt::protector",
+            {"type": "answer", "raw_id": "protector", "description": "Mentor protects"},
         )
-        # Link tension to alternative (add_edge takes edge_type, from_id, to_id)
+        # Link dilemma to answer (add_edge takes edge_type, from_id, to_id)
         graph.add_edge(
-            "has_alternative", "tension::mentor_trust", "tension::mentor_trust::alt::protector"
+            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
         )
 
         output = {
@@ -927,27 +925,27 @@ class TestSeedMutations:
                 {"entity_id": "mentor", "disposition": "retained"},
                 {"entity_id": "archive", "disposition": "retained"},
             ],
-            # Completeness: decisions for all tensions
-            "tensions": [
-                {"tension_id": "mentor_trust", "considered": ["protector"], "implicit": []},
+            # Completeness: decisions for all dilemmas
+            "dilemmas": [
+                {"dilemma_id": "mentor_trust", "considered": ["protector"], "implicit": []},
             ],
-            # Thread must be in SEED output for beat thread references to validate
-            "threads": [
+            # Path must be in SEED output for beat path references to validate
+            "paths": [
                 {
-                    "thread_id": "thread_mentor_trust",
+                    "path_id": "thread_mentor_trust",
                     "name": "Mentor Trust Arc",
-                    "tension_id": "mentor_trust",
-                    "alternative_id": "protector",
-                    "description": "The mentor trust thread",
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "protector",
+                    "description": "The mentor trust path",
                 }
             ],
             "initial_beats": [
                 {
                     "beat_id": "opening_001",
                     "summary": "Kay meets the mentor for the first time",
-                    "threads": ["thread_mentor_trust"],  # Raw thread IDs from LLM
-                    "tension_impacts": [
-                        {"tension_id": "mentor_trust", "effect": "advances", "note": "Trust begins"}
+                    "paths": ["thread_mentor_trust"],  # Raw path IDs from LLM
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Trust begins"}
                     ],
                     "entities": ["kay", "mentor"],  # Raw entity IDs from LLM
                     "location": "archive",  # Raw location ID from LLM
@@ -955,9 +953,9 @@ class TestSeedMutations:
                 {
                     "beat_id": "resolution_001",
                     "summary": "Mentor's loyalty confirmed",
-                    "threads": ["thread_mentor_trust"],
-                    "tension_impacts": [
-                        {"tension_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
+                    "paths": ["thread_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
                     ],
                     "entities": ["kay", "mentor"],
                     "location": "archive",
@@ -977,10 +975,10 @@ class TestSeedMutations:
         assert beat["entities"] == ["entity::kay", "entity::mentor"]
         assert beat["location"] == "entity::archive"
 
-        # Check belongs_to edge - links to prefixed thread ID
+        # Check belongs_to edge - links to prefixed path ID
         edges = graph.get_edges(from_id="beat::opening_001", edge_type="belongs_to")
         assert len(edges) == 1
-        assert edges[0]["to"] == "thread::thread_mentor_trust"
+        assert edges[0]["to"] == "path::thread_mentor_trust"
 
     def test_validates_missing_entities(self) -> None:
         """Raises SeedMutationError when referencing non-existent entities."""
@@ -996,7 +994,7 @@ class TestSeedMutations:
                 {"entity_id": "kay", "disposition": "retained"},  # Valid
                 {"entity_id": "missing", "disposition": "retained"},  # Doesn't exist
             ],
-            "threads": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1013,49 +1011,49 @@ class TestSeedMutations:
     def test_handles_empty_seed(self) -> None:
         """Handles empty seed output."""
         graph = Graph.empty()
-        output = {"entities": [], "threads": [], "initial_beats": []}
+        output = {"entities": [], "paths": [], "initial_beats": []}
 
         apply_seed_mutations(graph, output)
         # No errors, no changes
 
 
 class TestSeedCompletenessValidation:
-    """Test SEED completeness validation (all entities/tensions have decisions)."""
+    """Test SEED completeness validation (all entities/dilemmas have decisions)."""
 
     def test_complete_decisions_valid(self) -> None:
-        """All entities and tensions have decisions passes validation."""
+        """All entities and dilemmas have decisions passes validation."""
         graph = Graph.empty()
         # Add entities from BRAINSTORM
         graph.create_node("entity::kay", {"type": "entity", "raw_id": "kay"})
         graph.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
-        # Add tension from BRAINSTORM
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        # Add dilemma from BRAINSTORM
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [
                 {"entity_id": "kay", "disposition": "retained"},
                 {"entity_id": "mentor", "disposition": "cut"},
             ],
-            "tensions": [
-                {"tension_id": "trust", "considered": ["yes"], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "trust_arc",
+                    "path_id": "trust_arc",
                     "name": "Trust Arc",
-                    "tension_id": "trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "trust",
+                    "answer_id": "yes",
                 }
             ],
             "initial_beats": [
                 {
                     "beat_id": "resolution",
                     "summary": "Trust resolved",
-                    "threads": ["trust_arc"],
-                    "tension_impacts": [
-                        {"tension_id": "trust", "effect": "commits", "note": "Locked in"}
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
                     ],
                 }
             ],
@@ -1085,8 +1083,8 @@ class TestSeedCompletenessValidation:
                 {"entity_id": "kay", "disposition": "retained"},
                 # Missing: mentor, archive
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1094,7 +1092,7 @@ class TestSeedCompletenessValidation:
 
         # Should find 2 missing entity decisions with category-specific messages
         entity_errors = [
-            e for e in errors if "Missing decision for" in e.issue and "tension" not in e.issue
+            e for e in errors if "Missing decision for" in e.issue and "dilemma" not in e.issue
         ]
         assert len(entity_errors) == 2
         missing_ids = {e.issue.split("'")[1] for e in entity_errors}
@@ -1104,19 +1102,19 @@ class TestSeedCompletenessValidation:
         assert any("location" in e.issue for e in entity_errors)
 
     def test_missing_tension_decision_detected(self) -> None:
-        """Detects when tension from BRAINSTORM has no decision in SEED."""
+        """Detects when dilemma from BRAINSTORM has no decision in SEED."""
         graph = Graph.empty()
-        # Add tensions from BRAINSTORM
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
+        # Add dilemmas from BRAINSTORM
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::loyalty", {"type": "dilemma", "raw_id": "loyalty"})
 
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "trust", "considered": [], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "trust", "considered": [], "implicit": []},
                 # Missing: loyalty
             ],
-            "threads": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1130,16 +1128,16 @@ class TestSeedCompletenessValidation:
     def test_both_entity_and_dilemma_missing_detected(self) -> None:
         """Detects missing decisions for both entities and dilemmas."""
         graph = Graph.empty()
-        # Add entity and tension from BRAINSTORM
+        # Add entity and dilemma from BRAINSTORM
         graph.create_node(
             "entity::kay", {"type": "entity", "raw_id": "kay", "entity_type": "character"}
         )
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
 
         output = {
             "entities": [],  # Missing kay
-            "tensions": [],  # Missing trust
-            "threads": [],
+            "dilemmas": [],  # Missing trust
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1172,8 +1170,8 @@ class TestSeedCompletenessValidation:
                 {"entity_id": "the_detective", "disposition": "retained"},
                 # Missing: the_family (faction)
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1186,23 +1184,23 @@ class TestSeedCompletenessValidation:
     def test_dilemma_without_path_detected(self) -> None:
         """Detects when a dilemma has no corresponding path."""
         graph = Graph.empty()
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::loyalty", {"type": "dilemma", "raw_id": "loyalty"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "trust", "considered": ["yes"], "implicit": []},
-                {"tension_id": "loyalty", "considered": [], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},
+                {"dilemma_id": "loyalty", "considered": [], "implicit": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "trust_arc",
+                    "path_id": "trust_arc",
                     "name": "Trust Arc",
-                    "tension_id": "trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "trust",
+                    "answer_id": "yes",
                 }
                 # Missing: no path for loyalty
             ],
@@ -1219,33 +1217,31 @@ class TestSeedCompletenessValidation:
     def test_all_dilemmas_with_paths_valid(self) -> None:
         """All dilemmas having paths passes path completeness check."""
         graph = Graph.empty()
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.create_node(
-            "tension::loyalty::alt::stand", {"type": "alternative", "raw_id": "stand"}
-        )
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
-        graph.add_edge("has_alternative", "tension::loyalty", "tension::loyalty::alt::stand")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::loyalty", {"type": "dilemma", "raw_id": "loyalty"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.create_node("dilemma::loyalty::alt::stand", {"type": "answer", "raw_id": "stand"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
+        graph.add_edge("has_answer", "dilemma::loyalty", "dilemma::loyalty::alt::stand")
 
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "trust", "considered": ["yes"], "implicit": []},
-                {"tension_id": "loyalty", "considered": ["stand"], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},
+                {"dilemma_id": "loyalty", "considered": ["stand"], "implicit": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "trust_arc",
+                    "path_id": "trust_arc",
                     "name": "Trust Arc",
-                    "tension_id": "trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "trust",
+                    "answer_id": "yes",
                 },
                 {
-                    "thread_id": "loyalty_arc",
+                    "path_id": "loyalty_arc",
                     "name": "Loyalty Arc",
-                    "tension_id": "loyalty",
-                    "alternative_id": "stand",
+                    "dilemma_id": "loyalty",
+                    "answer_id": "stand",
                 },
             ],
             "initial_beats": [],
@@ -1257,21 +1253,21 @@ class TestSeedCompletenessValidation:
         assert thread_errors == []
 
     def test_scoped_tension_id_in_thread_satisfies_completeness(self) -> None:
-        """Scoped tension_id (tension::trust) in thread satisfies completeness."""
+        """Scoped dilemma_id (dilemma::trust) in path satisfies completeness."""
         graph = Graph.empty()
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [],
-            "tensions": [{"tension_id": "trust", "considered": ["yes"], "implicit": []}],
-            "threads": [
+            "dilemmas": [{"dilemma_id": "trust", "considered": ["yes"], "implicit": []}],
+            "paths": [
                 {
-                    "thread_id": "trust_arc",
+                    "path_id": "trust_arc",
                     "name": "Trust Arc",
-                    "tension_id": "tension::trust",  # Scoped
-                    "alternative_id": "yes",
+                    "dilemma_id": "dilemma::trust",  # Scoped
+                    "answer_id": "yes",
                 }
             ],
             "initial_beats": [],
@@ -1285,24 +1281,24 @@ class TestSeedCompletenessValidation:
     def test_missing_paths_for_considered_answers(self) -> None:
         """Each considered answer needs its own path - missing paths caught."""
         graph = Graph.empty()
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.create_node("tension::trust::alt::no", {"type": "alternative", "raw_id": "no"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::no")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.create_node("dilemma::trust::alt::no", {"type": "answer", "raw_id": "no"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::no")
 
         output = {
             "entities": [],
-            "tensions": [
+            "dilemmas": [
                 # Both answers considered, but only 1 path created
-                {"tension_id": "trust", "considered": ["yes", "no"], "implicit": []},
+                {"dilemma_id": "trust", "considered": ["yes", "no"], "implicit": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "trust_yes",
+                    "path_id": "trust_yes",
                     "name": "Trust Yes",
-                    "tension_id": "trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "trust",
+                    "answer_id": "yes",
                 },
                 # Missing path for 'no' answer!
             ],
@@ -1318,31 +1314,31 @@ class TestSeedCompletenessValidation:
         assert missing_path_errors[0].category == SeedErrorCategory.COMPLETENESS
 
     def test_all_considered_alternatives_have_threads(self) -> None:
-        """When each considered alternative has a thread, validation passes."""
+        """When each considered answer has a path, validation passes."""
         graph = Graph.empty()
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.create_node("tension::trust::alt::no", {"type": "alternative", "raw_id": "no"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::no")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.create_node("dilemma::trust::alt::no", {"type": "answer", "raw_id": "no"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::no")
 
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "trust", "considered": ["yes", "no"], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "trust", "considered": ["yes", "no"], "implicit": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "trust_yes",
+                    "path_id": "trust_yes",
                     "name": "Trust Yes",
-                    "tension_id": "trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "trust",
+                    "answer_id": "yes",
                 },
                 {
-                    "thread_id": "trust_no",
+                    "path_id": "trust_no",
                     "name": "Trust No",
-                    "tension_id": "trust",
-                    "alternative_id": "no",
+                    "dilemma_id": "trust",
+                    "answer_id": "no",
                 },
             ],
             "initial_beats": [],
@@ -1350,21 +1346,21 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        missing_thread_errors = [e for e in errors if "considered alternatives" in e.issue]
+        missing_thread_errors = [e for e in errors if "considered answers" in e.issue]
         assert missing_thread_errors == []
 
     # NOTE: Arc count validation tests removed - now handled by runtime pruning
     # (over-generate-and-select pattern in seed_pruning.py)
 
     def test_empty_brainstorm_valid(self) -> None:
-        """Empty BRAINSTORM data (no entities/tensions) is valid."""
+        """Empty BRAINSTORM data (no entities/dilemmas) is valid."""
         graph = Graph.empty()
-        # No entities or tensions in graph
+        # No entities or dilemmas in graph
 
         output = {
             "entities": [],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1373,7 +1369,7 @@ class TestSeedCompletenessValidation:
         assert errors == []
 
     def test_extra_decisions_invalid(self) -> None:
-        """Extra decisions for non-existent entities/tensions are caught."""
+        """Extra decisions for non-existent entities/dilemmas are caught."""
         graph = Graph.empty()
         # Only kay exists
         graph.create_node("entity::kay", {"type": "entity", "raw_id": "kay"})
@@ -1383,8 +1379,8 @@ class TestSeedCompletenessValidation:
                 {"entity_id": "kay", "disposition": "retained"},
                 {"entity_id": "nonexistent", "disposition": "retained"},  # Doesn't exist
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1397,54 +1393,54 @@ class TestSeedCompletenessValidation:
 
 
 class TestBeatTensionAlignment:
-    """Test SEED validation checks 12 and 13: beat-thread-tension alignment."""
+    """Test SEED validation checks 12 and 13: beat-path-dilemma alignment."""
 
     def _make_graph(self) -> Graph:
-        """Create graph with one tension and one alternative."""
+        """Create graph with one dilemma and one answer."""
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
-        # Second tension for cross-reference tests
-        graph.create_node("tension::loyalty", {"type": "tension", "raw_id": "loyalty"})
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
+        # Second dilemma for cross-reference tests
+        graph.create_node("dilemma::loyalty", {"type": "dilemma", "raw_id": "loyalty"})
         graph.create_node(
-            "tension::loyalty::alt::faithful", {"type": "alternative", "raw_id": "faithful"}
+            "dilemma::loyalty::alt::faithful", {"type": "answer", "raw_id": "faithful"}
         )
-        graph.add_edge("has_alternative", "tension::loyalty", "tension::loyalty::alt::faithful")
+        graph.add_edge("has_answer", "dilemma::loyalty", "dilemma::loyalty::alt::faithful")
         return graph
 
     def _base_output(self) -> dict:
-        """Output with one thread for tension::trust."""
+        """Output with one path for dilemma::trust."""
         return {
             "entities": [{"entity_id": "hero", "disposition": "retained"}],
-            "tensions": [
-                {"tension_id": "trust", "considered": ["yes"], "implicit": []},
-                {"tension_id": "loyalty", "considered": ["faithful"], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},
+                {"dilemma_id": "loyalty", "considered": ["faithful"], "implicit": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "trust_arc",
+                    "path_id": "trust_arc",
                     "name": "Trust Arc",
-                    "tension_id": "trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "trust",
+                    "answer_id": "yes",
                 }
             ],
             "initial_beats": [],
         }
 
     def test_beat_wrong_tension_detected(self) -> None:
-        """Beat referencing wrong tension triggers semantic error."""
+        """Beat referencing wrong dilemma triggers semantic error."""
         graph = self._make_graph()
         output = self._base_output()
         output["initial_beats"] = [
             {
                 "beat_id": "opening",
                 "summary": "Start",
-                "threads": ["trust_arc"],
-                "tension_impacts": [
-                    # Wrong tension - should be 'trust' for thread trust_arc
-                    {"tension_id": "loyalty", "effect": "commits", "note": "Wrong"}
+                "paths": ["trust_arc"],
+                "dilemma_impacts": [
+                    # Wrong dilemma - should be 'trust' for path trust_arc
+                    {"dilemma_id": "loyalty", "effect": "commits", "note": "Wrong"}
                 ],
             }
         ]
@@ -1456,16 +1452,16 @@ class TestBeatTensionAlignment:
         assert "trust_arc" in alignment_errors[0].issue
         assert "trust" in alignment_errors[0].available
 
-    def test_beat_no_tension_impacts_detected(self) -> None:
-        """Beat with no tension_impacts triggers error for missing parent tension."""
+    def test_beat_no_dilemma_impacts_detected(self) -> None:
+        """Beat with no dilemma_impacts triggers error for missing parent dilemma."""
         graph = self._make_graph()
         output = self._base_output()
         output["initial_beats"] = [
             {
                 "beat_id": "opening",
                 "summary": "Start",
-                "threads": ["trust_arc"],
-                # No tension_impacts at all
+                "paths": ["trust_arc"],
+                # No dilemma_impacts at all
             }
         ]
 
@@ -1475,16 +1471,16 @@ class TestBeatTensionAlignment:
         assert len(alignment_errors) == 1
 
     def test_thread_no_commits_beat_detected(self) -> None:
-        """Thread without commits beat triggers completeness error."""
+        """Path without commits beat triggers completeness error."""
         graph = self._make_graph()
         output = self._base_output()
         output["initial_beats"] = [
             {
                 "beat_id": "opening",
                 "summary": "Start",
-                "threads": ["trust_arc"],
-                "tension_impacts": [
-                    {"tension_id": "trust", "effect": "advances", "note": "Begins"}
+                "paths": ["trust_arc"],
+                "dilemma_impacts": [
+                    {"dilemma_id": "trust", "effect": "advances", "note": "Begins"}
                 ],
             }
         ]
@@ -1497,34 +1493,34 @@ class TestBeatTensionAlignment:
         assert commits_errors[0].category == SeedErrorCategory.COMPLETENESS
 
     def test_beat_with_additional_tensions_allowed(self) -> None:
-        """Beat can reference additional tensions beyond its own thread's tension."""
+        """Beat can reference additional dilemmas beyond its own path's dilemma."""
         graph = self._make_graph()
         output = self._base_output()
-        # Add thread for loyalty so check 11 (all tensions need threads) passes
-        output["threads"].append(
+        # Add path for loyalty so check 11 (all dilemmas need paths) passes
+        output["paths"].append(
             {
-                "thread_id": "loyalty_arc",
+                "path_id": "loyalty_arc",
                 "name": "Loyalty Arc",
-                "tension_id": "loyalty",
-                "alternative_id": "faithful",
+                "dilemma_id": "loyalty",
+                "answer_id": "faithful",
             }
         )
         output["initial_beats"] = [
             {
                 "beat_id": "opening",
                 "summary": "Start",
-                "threads": ["trust_arc"],
-                "tension_impacts": [
-                    {"tension_id": "trust", "effect": "commits", "note": "Primary"},
-                    {"tension_id": "loyalty", "effect": "advances", "note": "Secondary"},
+                "paths": ["trust_arc"],
+                "dilemma_impacts": [
+                    {"dilemma_id": "trust", "effect": "commits", "note": "Primary"},
+                    {"dilemma_id": "loyalty", "effect": "advances", "note": "Secondary"},
                 ],
             },
             {
                 "beat_id": "loyalty_commit",
                 "summary": "Loyalty locked",
-                "threads": ["loyalty_arc"],
-                "tension_impacts": [
-                    {"tension_id": "loyalty", "effect": "commits", "note": "Locked"}
+                "paths": ["loyalty_arc"],
+                "dilemma_impacts": [
+                    {"dilemma_id": "loyalty", "effect": "commits", "note": "Locked"}
                 ],
             },
         ]
@@ -1534,32 +1530,32 @@ class TestBeatTensionAlignment:
         assert errors == []
 
     def test_multiple_threads_all_need_commits(self) -> None:
-        """Each thread independently needs a commits beat."""
+        """Each path independently needs a commits beat."""
         graph = self._make_graph()
         output = self._base_output()
-        # Add second thread for loyalty tension
-        output["threads"].append(
+        # Add second path for loyalty dilemma
+        output["paths"].append(
             {
-                "thread_id": "loyalty_arc",
+                "path_id": "loyalty_arc",
                 "name": "Loyalty Arc",
-                "tension_id": "loyalty",
-                "alternative_id": "faithful",
+                "dilemma_id": "loyalty",
+                "answer_id": "faithful",
             }
         )
         output["initial_beats"] = [
             {
                 "beat_id": "trust_commit",
                 "summary": "Trust resolved",
-                "threads": ["trust_arc"],
-                "tension_impacts": [{"tension_id": "trust", "effect": "commits", "note": "Locked"}],
+                "paths": ["trust_arc"],
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits", "note": "Locked"}],
             },
             # loyalty_arc has no commits beat
             {
                 "beat_id": "loyalty_advance",
                 "summary": "Loyalty tested",
-                "threads": ["loyalty_arc"],
-                "tension_impacts": [
-                    {"tension_id": "loyalty", "effect": "advances", "note": "Tested"}
+                "paths": ["loyalty_arc"],
+                "dilemma_impacts": [
+                    {"dilemma_id": "loyalty", "effect": "advances", "note": "Tested"}
                 ],
             },
         ]
@@ -1571,30 +1567,30 @@ class TestBeatTensionAlignment:
         assert "loyalty_arc" in commits_errors[0].issue
 
     def test_all_threads_with_commits_passes(self) -> None:
-        """All threads having commits beats produces no errors."""
+        """All paths having commits beats produces no errors."""
         graph = self._make_graph()
         output = self._base_output()
-        output["threads"].append(
+        output["paths"].append(
             {
-                "thread_id": "loyalty_arc",
+                "path_id": "loyalty_arc",
                 "name": "Loyalty Arc",
-                "tension_id": "loyalty",
-                "alternative_id": "faithful",
+                "dilemma_id": "loyalty",
+                "answer_id": "faithful",
             }
         )
         output["initial_beats"] = [
             {
                 "beat_id": "trust_commit",
                 "summary": "Trust resolved",
-                "threads": ["trust_arc"],
-                "tension_impacts": [{"tension_id": "trust", "effect": "commits", "note": "Locked"}],
+                "paths": ["trust_arc"],
+                "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits", "note": "Locked"}],
             },
             {
                 "beat_id": "loyalty_commit",
                 "summary": "Loyalty locked",
-                "threads": ["loyalty_arc"],
-                "tension_impacts": [
-                    {"tension_id": "loyalty", "effect": "commits", "note": "Locked"}
+                "paths": ["loyalty_arc"],
+                "dilemma_impacts": [
+                    {"dilemma_id": "loyalty", "effect": "commits", "note": "Locked"}
                 ],
             },
         ]
@@ -1605,9 +1601,9 @@ class TestBeatTensionAlignment:
 
 
 class TestSeedDuplicateValidation:
-    """Test SEED validation detects duplicate entity/tension IDs.
+    """Test SEED validation detects duplicate entity/dilemma IDs.
 
-    Fixes #239: LLM may output the same entity or tension multiple times,
+    Fixes #239: LLM may output the same entity or dilemma multiple times,
     which should be caught and reported as validation errors.
     """
 
@@ -1621,8 +1617,8 @@ class TestSeedDuplicateValidation:
                 {"entity_id": "hero", "disposition": "retained"},
                 {"entity_id": "hero", "disposition": "retained"},  # Duplicate!
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1634,20 +1630,20 @@ class TestSeedDuplicateValidation:
         assert "2 times" in dup_errors[0].issue
 
     def test_duplicate_tension_id_detected(self) -> None:
-        """Detects when the same tension_id appears multiple times in output."""
+        """Detects when the same dilemma_id appears multiple times in output."""
         graph = Graph.empty()
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "trust", "considered": ["yes"], "implicit": []},
-                {"tension_id": "trust", "considered": ["yes"], "implicit": []},  # Duplicate!
-                {"tension_id": "trust", "considered": ["yes"], "implicit": []},  # Triple!
+            "dilemmas": [
+                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},
+                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},  # Duplicate!
+                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},  # Triple!
             ],
-            "threads": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1671,8 +1667,8 @@ class TestSeedDuplicateValidation:
                     "disposition": "retained",
                 },  # Same after normalization
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1693,8 +1689,8 @@ class TestSeedDuplicateValidation:
                 {"entity_id": "hero", "disposition": "retained"},
                 {"entity_id": "mentor", "disposition": "retained"},
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1731,20 +1727,20 @@ class TestMutationIntegration:
                     "concept": "Senior archivist",
                 },
             ],
-            "tensions": [
+            "dilemmas": [
                 {
-                    "tension_id": "mentor_trust",
+                    "dilemma_id": "mentor_trust",
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": ["kay", "mentor"],  # Raw IDs from LLM
                     "why_it_matters": "Trust defines ally or foe",
-                    "alternatives": [
+                    "answers": [
                         {
-                            "alternative_id": "protector",
+                            "answer_id": "protector",
                             "description": "Mentor protects",
                             "is_default_path": True,
                         },
                         {
-                            "alternative_id": "manipulator",
+                            "answer_id": "manipulator",
                             "description": "Mentor manipulates",
                             "is_default_path": False,
                         },
@@ -1761,26 +1757,26 @@ class TestMutationIntegration:
                 {"entity_id": "kay", "disposition": "retained"},
                 {"entity_id": "mentor", "disposition": "retained"},
             ],
-            # Completeness: decisions for all tensions
-            "tensions": [
-                {"tension_id": "mentor_trust", "considered": ["protector"], "implicit": []},
+            # Completeness: decisions for all dilemmas
+            "dilemmas": [
+                {"dilemma_id": "mentor_trust", "considered": ["protector"], "implicit": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread_mentor",
+                    "path_id": "thread_mentor",
                     "name": "Mentor Arc",
-                    "tension_id": "mentor_trust",  # Raw tension ID
-                    "alternative_id": "protector",  # Local alt ID
-                    "description": "The mentor relationship thread",
+                    "dilemma_id": "mentor_trust",  # Raw dilemma ID
+                    "answer_id": "protector",  # Local alt ID
+                    "description": "The mentor relationship path",
                 }
             ],
             "initial_beats": [
                 {
                     "beat_id": "opening",
                     "summary": "Kay meets the mentor",
-                    "threads": ["thread_mentor"],  # Raw thread IDs
-                    "tension_impacts": [
-                        {"tension_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
+                    "paths": ["thread_mentor"],  # Raw path IDs
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
                     ],
                 }
             ],
@@ -1793,25 +1789,25 @@ class TestMutationIntegration:
         assert graph.has_node("vision")
         assert graph.has_node("entity::kay")
         assert graph.has_node("entity::mentor")
-        assert graph.has_node("tension::mentor_trust")
-        assert graph.has_node("tension::mentor_trust::alt::protector")
-        assert graph.has_node("thread::thread_mentor")
+        assert graph.has_node("dilemma::mentor_trust")
+        assert graph.has_node("dilemma::mentor_trust::alt::protector")
+        assert graph.has_node("path::thread_mentor")
         assert graph.has_node("beat::opening")
 
         # Check entity dispositions
         assert graph.get_node("entity::kay")["disposition"] == "retained"
 
         # Check edges
-        assert len(graph.get_edges(edge_type="has_alternative")) == 2
+        assert len(graph.get_edges(edge_type="has_answer")) == 2
         assert len(graph.get_edges(edge_type="explores")) == 1
         assert len(graph.get_edges(edge_type="belongs_to")) == 1
 
         # Check node counts by type
         assert len(graph.get_nodes_by_type("vision")) == 1
         assert len(graph.get_nodes_by_type("entity")) == 2
-        assert len(graph.get_nodes_by_type("tension")) == 1
-        assert len(graph.get_nodes_by_type("alternative")) == 2
-        assert len(graph.get_nodes_by_type("thread")) == 1
+        assert len(graph.get_nodes_by_type("dilemma")) == 1
+        assert len(graph.get_nodes_by_type("answer")) == 2
+        assert len(graph.get_nodes_by_type("path")) == 1
         assert len(graph.get_nodes_by_type("beat")) == 1
 
 
@@ -1841,8 +1837,8 @@ class TestCategorizeError:
     def test_semantic_not_in_brainstorm(self) -> None:
         """'not in BRAINSTORM' errors are SEMANTIC."""
         error = SeedValidationError(
-            field_path="threads.0.tension_id",
-            issue="Tension 'phantom' not in BRAINSTORM",
+            field_path="paths.0.dilemma_id",
+            issue="Dilemma 'phantom' not in BRAINSTORM",
             available=["real_tension"],
             provided="phantom",
         )
@@ -1851,8 +1847,8 @@ class TestCategorizeError:
     def test_semantic_not_in_seed(self) -> None:
         """'not defined in SEED' errors are SEMANTIC."""
         error = SeedValidationError(
-            field_path="initial_beats.0.threads",
-            issue="Thread 'ghost' not defined in SEED threads",
+            field_path="initial_beats.0.paths",
+            issue="Path 'ghost' not defined in SEED paths",
             available=["real_thread"],
             provided="ghost",
         )
@@ -1871,7 +1867,7 @@ class TestCategorizeError:
     def test_inner_for_other_errors(self) -> None:
         """Unrecognized errors default to INNER."""
         error = SeedValidationError(
-            field_path="threads.0.name",
+            field_path="paths.0.name",
             issue="Name must not be empty",
             available=[],
             provided="",
@@ -1896,16 +1892,16 @@ class TestCategorizeErrors:
         """Groups errors by their category."""
         errors = [
             SeedValidationError(
-                field_path="threads.0.tension_id",
-                issue="Tension 'x' not in BRAINSTORM",
+                field_path="paths.0.dilemma_id",
+                issue="Dilemma 'x' not in BRAINSTORM",
             ),
             SeedValidationError(
                 field_path="entities",
                 issue="Missing decision for character 'hero'",
             ),
             SeedValidationError(
-                field_path="threads.1.tension_id",
-                issue="Tension 'y' not in BRAINSTORM",
+                field_path="paths.1.dilemma_id",
+                issue="Dilemma 'y' not in BRAINSTORM",
             ),
         ]
 
@@ -1950,8 +1946,8 @@ class TestErrorPatternConsistency:
             "entities": [
                 {"entity_id": "phantom", "disposition": "retained"},  # Not in BRAINSTORM
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -1981,8 +1977,8 @@ class TestErrorPatternConsistency:
                 {"entity_id": "hero", "disposition": "retained"},
                 # Missing: villain
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -2013,32 +2009,32 @@ class TestNormalizeId:
         assert error is None
 
     def test_tension_scope_accepted(self) -> None:
-        """Tension scope is handled correctly."""
-        normalized, error = _normalize_id("tension::mentor_trust", "tension")
+        """Dilemma scope is handled correctly."""
+        normalized, error = _normalize_id("dilemma::mentor_trust", "dilemma")
         assert normalized == "mentor_trust"
         assert error is None
 
     def test_thread_scope_accepted(self) -> None:
-        """Thread scope is handled correctly."""
-        normalized, error = _normalize_id("thread::mentor_arc", "thread")
+        """Path scope is handled correctly."""
+        normalized, error = _normalize_id("path::mentor_arc", "path")
         assert normalized == "mentor_arc"
         assert error is None
 
     def test_wrong_scope_returns_error(self) -> None:
         """Wrong scope prefix returns error message."""
-        normalized, error = _normalize_id("tension::hero", "entity")
+        normalized, error = _normalize_id("dilemma::hero", "entity")
         # Returns original ID unchanged when scope is wrong
-        assert normalized == "tension::hero"
+        assert normalized == "dilemma::hero"
         assert error is not None
         assert "entity::" in error
-        assert "tension::" in error
+        assert "dilemma::" in error
 
     def test_entity_scope_rejected_when_thread_expected(self) -> None:
-        """Entity scope rejected when thread is expected."""
-        normalized, error = _normalize_id("entity::mentor_arc", "thread")
+        """Entity scope rejected when path is expected."""
+        normalized, error = _normalize_id("entity::mentor_arc", "path")
         assert normalized == "entity::mentor_arc"
         assert error is not None
-        assert "thread::" in error
+        assert "path::" in error
         assert "entity::" in error
 
     def test_id_with_colons_in_raw_id(self) -> None:
@@ -2065,8 +2061,8 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -2075,30 +2071,30 @@ class TestScopedIdValidation:
         assert errors == []
 
     def test_scoped_tension_id_accepted(self) -> None:
-        """Scoped tension IDs (tension::trust) are accepted in tension decisions."""
+        """Scoped dilemma IDs (dilemma::trust) are accepted in dilemma decisions."""
         graph = Graph.empty()
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [],
-            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
-            "threads": [
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "paths": [
                 {
-                    "thread_id": "trust_arc",
+                    "path_id": "trust_arc",
                     "name": "Trust Arc",
-                    "tension_id": "tension::trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "dilemma::trust",
+                    "answer_id": "yes",
                 }
             ],
             "initial_beats": [
                 {
                     "beat_id": "resolution",
                     "summary": "Trust resolved",
-                    "threads": ["trust_arc"],
-                    "tension_impacts": [
-                        {"tension_id": "tension::trust", "effect": "commits", "note": "Locked in"}
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
                 }
             ],
@@ -2109,33 +2105,33 @@ class TestScopedIdValidation:
         assert errors == []
 
     def test_scoped_thread_id_accepted_in_beats(self) -> None:
-        """Scoped thread IDs (thread::mentor) are accepted in beat thread references."""
+        """Scoped path IDs (path::mentor) are accepted in beat path references."""
         graph = Graph.empty()
         # Set up BRAINSTORM data
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
-            "threads": [
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "paths": [
                 {
-                    "thread_id": "mentor",
+                    "path_id": "mentor",
                     "name": "Mentor Arc",
-                    "tension_id": "tension::trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "dilemma::trust",
+                    "answer_id": "yes",
                 }
             ],
             "initial_beats": [
                 {
                     "beat_id": "opening",
                     "summary": "The beginning",
-                    "threads": ["thread::mentor"],  # Scoped thread ID
+                    "paths": ["path::mentor"],  # Scoped path ID
                     "entities": ["entity::hero"],
-                    "tension_impacts": [
-                        {"tension_id": "tension::trust", "effect": "commits", "note": "Locked in"}
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
                 }
             ],
@@ -2146,14 +2142,14 @@ class TestScopedIdValidation:
         assert errors == []
 
     def test_wrong_scope_detected_for_entity(self) -> None:
-        """Wrong scope (tension:: instead of entity::) is detected."""
+        """Wrong scope (dilemma:: instead of entity::) is detected."""
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
 
         output = {
-            "entities": [{"entity_id": "tension::hero", "disposition": "retained"}],
-            "tensions": [],
-            "threads": [],
+            "entities": [{"entity_id": "dilemma::hero", "disposition": "retained"}],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -2163,17 +2159,17 @@ class TestScopedIdValidation:
         scope_errors = [e for e in errors if "Wrong scope prefix" in e.issue]
         assert len(scope_errors) == 1
         assert "entity::" in scope_errors[0].issue
-        assert "tension::" in scope_errors[0].issue
+        assert "dilemma::" in scope_errors[0].issue
 
     def test_wrong_scope_detected_for_tension(self) -> None:
-        """Wrong scope (entity:: instead of tension::) is detected."""
+        """Wrong scope (entity:: instead of dilemma::) is detected."""
         graph = Graph.empty()
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
 
         output = {
             "entities": [],
-            "tensions": [{"tension_id": "entity::trust", "considered": [], "implicit": []}],
-            "threads": [],
+            "dilemmas": [{"dilemma_id": "entity::trust", "considered": [], "implicit": []}],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -2182,33 +2178,33 @@ class TestScopedIdValidation:
         assert len(errors) >= 1
         scope_errors = [e for e in errors if "Wrong scope prefix" in e.issue]
         assert len(scope_errors) == 1
-        assert "tension::" in scope_errors[0].issue
+        assert "dilemma::" in scope_errors[0].issue
         assert "entity::" in scope_errors[0].issue
 
     def test_wrong_scope_detected_for_thread_in_beat(self) -> None:
-        """Wrong scope (entity:: instead of thread::) in beat thread references."""
+        """Wrong scope (entity:: instead of path::) in beat path references."""
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
-            "threads": [
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "paths": [
                 {
-                    "thread_id": "mentor",
+                    "path_id": "mentor",
                     "name": "Mentor Arc",
-                    "tension_id": "tension::trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "dilemma::trust",
+                    "answer_id": "yes",
                 }
             ],
             "initial_beats": [
                 {
                     "beat_id": "opening",
                     "summary": "The beginning",
-                    "threads": ["entity::mentor"],  # Wrong scope - should be thread::
+                    "paths": ["entity::mentor"],  # Wrong scope - should be path::
                 }
             ],
         }
@@ -2217,7 +2213,7 @@ class TestScopedIdValidation:
 
         scope_errors = [e for e in errors if "Wrong scope prefix" in e.issue]
         assert len(scope_errors) == 1
-        assert "thread::" in scope_errors[0].issue
+        assert "path::" in scope_errors[0].issue
 
     def test_mixed_scoped_and_unscoped_ids(self) -> None:
         """Both scoped and unscoped IDs work together."""
@@ -2230,8 +2226,8 @@ class TestScopedIdValidation:
                 {"entity_id": "entity::hero", "disposition": "retained"},  # Scoped
                 {"entity_id": "villain", "disposition": "cut"},  # Unscoped
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -2250,8 +2246,8 @@ class TestScopedIdValidation:
                 {"entity_id": "entity::hero", "disposition": "retained"},
                 {"entity_id": "entity::villain", "disposition": "cut"},
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -2270,10 +2266,10 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [
-                {"entity_id": "tension::hero", "disposition": "retained"}  # Wrong scope
+                {"entity_id": "dilemma::hero", "disposition": "retained"}  # Wrong scope
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [],
         }
 
@@ -2291,22 +2287,22 @@ class TestScopedIdValidation:
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
         graph.create_node("entity::mentor", {"type": "entity", "raw_id": "mentor"})
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [
                 {"entity_id": "entity::hero", "disposition": "retained"},
                 {"entity_id": "entity::mentor", "disposition": "retained"},
             ],
-            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
-            "threads": [
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "paths": [
                 {
-                    "thread_id": "mentor_arc",
+                    "path_id": "mentor_arc",
                     "name": "Mentor Arc",
-                    "tension_id": "tension::trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "dilemma::trust",
+                    "answer_id": "yes",
                 }
             ],
             "initial_beats": [
@@ -2315,9 +2311,9 @@ class TestScopedIdValidation:
                     "summary": "Meet mentor",
                     "entities": ["entity::hero", "entity::mentor"],  # Scoped IDs
                     "location": "entity::hero",  # Scoped location
-                    "threads": ["thread::mentor_arc"],
-                    "tension_impacts": [
-                        {"tension_id": "tension::trust", "effect": "commits", "note": "Locked in"}
+                    "paths": ["path::mentor_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
                 }
             ],
@@ -2328,39 +2324,39 @@ class TestScopedIdValidation:
         # No errors expected
         assert errors == []
 
-    def test_scoped_tension_in_tension_impacts(self) -> None:
-        """Scoped tension IDs work in beat.tension_impacts."""
+    def test_scoped_tension_in_dilemma_impacts(self) -> None:
+        """Scoped dilemma IDs work in beat.dilemma_impacts."""
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
-            "threads": [
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "paths": [
                 {
-                    "thread_id": "mentor_arc",
+                    "path_id": "mentor_arc",
                     "name": "Mentor Arc",
-                    "tension_id": "tension::trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "dilemma::trust",
+                    "answer_id": "yes",
                 }
             ],
             "initial_beats": [
                 {
                     "beat_id": "opening",
                     "summary": "Build trust",
-                    "threads": ["thread::mentor_arc"],
-                    "tension_impacts": [
-                        {"tension_id": "tension::trust", "effect": "advances"}  # Scoped ID
+                    "paths": ["path::mentor_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "advances"}  # Scoped ID
                     ],
                 },
                 {
                     "beat_id": "resolution",
                     "summary": "Trust locked in",
-                    "threads": ["thread::mentor_arc"],
-                    "tension_impacts": [{"tension_id": "tension::trust", "effect": "commits"}],
+                    "paths": ["path::mentor_arc"],
+                    "dilemma_impacts": [{"dilemma_id": "dilemma::trust", "effect": "commits"}],
                 },
             ],
         }
@@ -2370,28 +2366,28 @@ class TestScopedIdValidation:
         assert errors == []
 
     def test_scoped_thread_in_consequences(self) -> None:
-        """Scoped thread IDs work in consequence.thread_id."""
+        """Scoped path IDs work in consequence.path_id."""
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
-            "threads": [
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "paths": [
                 {
-                    "thread_id": "mentor_arc",
+                    "path_id": "mentor_arc",
                     "name": "Mentor Arc",
-                    "tension_id": "tension::trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "dilemma::trust",
+                    "answer_id": "yes",
                 }
             ],
             "consequences": [
                 {
                     "consequence_id": "trust_earned",
-                    "thread_id": "thread::mentor_arc",  # Scoped thread ID
+                    "path_id": "path::mentor_arc",  # Scoped path ID
                     "description": "Trust is earned",
                 }
             ],
@@ -2399,9 +2395,9 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "resolution",
                     "summary": "Trust resolved",
-                    "threads": ["mentor_arc"],
-                    "tension_impacts": [
-                        {"tension_id": "tension::trust", "effect": "commits", "note": "Locked in"}
+                    "paths": ["mentor_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
                 }
             ],
@@ -2412,33 +2408,33 @@ class TestScopedIdValidation:
         assert errors == []
 
     def test_scoped_thread_definitions_and_consequences(self) -> None:
-        """Thread definitions using scoped IDs work with scoped consequence references.
+        """Path definitions using scoped IDs work with scoped consequence references.
 
-        Regression test for issue #230: When LLM outputs thread definitions with
-        scoped IDs (thread::foo) and consequences reference them with scoped IDs,
+        Regression test for issue #230: When LLM outputs path definitions with
+        scoped IDs (path::foo) and consequences reference them with scoped IDs,
         validation should pass since seed_thread_ids is normalized.
         """
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
-        graph.create_node("tension::trust", {"type": "tension", "raw_id": "trust"})
-        graph.create_node("tension::trust::alt::yes", {"type": "alternative", "raw_id": "yes"})
-        graph.add_edge("has_alternative", "tension::trust", "tension::trust::alt::yes")
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "tensions": [{"tension_id": "tension::trust", "considered": ["yes"], "implicit": []}],
-            "threads": [
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "paths": [
                 {
-                    "thread_id": "thread::mentor_arc",  # Scoped ID in definition
+                    "path_id": "path::mentor_arc",  # Scoped ID in definition
                     "name": "Mentor Arc",
-                    "tension_id": "tension::trust",
-                    "alternative_id": "yes",
+                    "dilemma_id": "dilemma::trust",
+                    "answer_id": "yes",
                 }
             ],
             "consequences": [
                 {
                     "consequence_id": "trust_earned",
-                    "thread_id": "thread::mentor_arc",  # Scoped ID in reference
+                    "path_id": "path::mentor_arc",  # Scoped ID in reference
                     "description": "Trust is earned",
                 }
             ],
@@ -2446,9 +2442,9 @@ class TestScopedIdValidation:
                 {
                     "beat_id": "resolution",
                     "summary": "Trust resolved",
-                    "threads": ["thread::mentor_arc"],
-                    "tension_impacts": [
-                        {"tension_id": "tension::trust", "effect": "commits", "note": "Locked in"}
+                    "paths": ["path::mentor_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
                 }
             ],
@@ -2582,8 +2578,8 @@ class TestSimilarityFeedbackIntegration:
         # "the_archive" vs "the_hollow_archive" = 75% (medium confidence)
         errors = [
             SeedValidationError(
-                field_path="threads.0.tension_id",
-                issue="Tension 'the_archive' not in BRAINSTORM",
+                field_path="paths.0.dilemma_id",
+                issue="Dilemma 'the_archive' not in BRAINSTORM",
                 available=["the_hollow_archive", "archive_keeper", "echo_chamber"],
                 provided="the_archive",
             )
@@ -2616,7 +2612,7 @@ class TestSimilarityFeedbackIntegration:
         # "hollow_archive" vs "the_hollow_archive" = 87.5% similarity
         errors = [
             BrainstormValidationError(
-                field_path="tensions.0.central_entity_ids",
+                field_path="dilemmas.0.central_entity_ids",
                 issue="Entity 'hollow_archive' not in entities list",
                 available=["the_hollow_archive", "keeper_of_depths", "echo_chamber"],
                 provided="hollow_archive",
@@ -2701,8 +2697,8 @@ class TestFormatSemanticErrorsAsContent:
                 provided="",
             ),
             SeedValidationError(
-                field_path="tensions",
-                issue="Missing decision for tension 'ancient_scroll'",
+                field_path="dilemmas",
+                issue="Missing decision for dilemma 'ancient_scroll'",
                 available=[],
                 provided="",
             ),
@@ -2775,8 +2771,8 @@ class TestFormatSemanticErrorsAsContent:
             ),
             # Semantic error
             SeedValidationError(
-                field_path="threads.0.tension_id",
-                issue="Tension 'unknown' not in BRAINSTORM",
+                field_path="paths.0.dilemma_id",
+                issue="Dilemma 'unknown' not in BRAINSTORM",
                 available=["main_tension"],
                 provided="unknown",
             ),
@@ -2810,13 +2806,13 @@ class TestFormatSemanticErrorsAsContent:
 class TestTypeAwareFeedback:
     """Tests for type-aware cross-type error messages in validate_seed_mutations.
 
-    When an ID is used as the wrong type (e.g., entity used as tension_id),
+    When an ID is used as the wrong type (e.g., entity used as dilemma_id),
     the error message should indicate what type it actually is, rather than
     the generic "not in BRAINSTORM" message.
     """
 
     def test_type_aware_feedback_entity_as_tension(self) -> None:
-        """Entity faction name used as tension_id gives helpful message."""
+        """Entity faction name used as dilemma_id gives helpful message."""
         graph = Graph.empty()
         # isolation_protocol is a faction entity in brainstorm
         graph.create_node(
@@ -2824,25 +2820,25 @@ class TestTypeAwareFeedback:
             {"type": "entity", "raw_id": "isolation_protocol", "entity_type": "faction"},
         )
         graph.create_node(
-            "tension::trust_or_betray",
-            {"type": "tension", "raw_id": "trust_or_betray"},
+            "dilemma::trust_or_betray",
+            {"type": "dilemma", "raw_id": "trust_or_betray"},
         )
 
         output = {
             "entities": [
                 {"entity_id": "isolation_protocol", "disposition": "retained"},
             ],
-            "tensions": [
-                {"tension_id": "trust_or_betray", "considered": [], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "trust_or_betray", "considered": [], "implicit": []},
             ],
-            "threads": [],
+            "paths": [],
             "initial_beats": [
                 {
                     "beat_id": "opening",
                     "summary": "Test",
-                    "tension_impacts": [
-                        # Using entity name as tension_id (the seq-9 bug)
-                        {"tension_id": "isolation_protocol", "effect": "advances"}
+                    "dilemma_impacts": [
+                        # Using entity name as dilemma_id (the seq-9 bug)
+                        {"dilemma_id": "isolation_protocol", "effect": "advances"}
                     ],
                 }
             ],
@@ -2857,46 +2853,46 @@ class TestTypeAwareFeedback:
         assert "subject_X_or_Y" in dilemma_impact_errors[0].issue
 
     def test_type_aware_feedback_thread_as_tension(self) -> None:
-        """Thread ID used as tension_id gives helpful message."""
+        """Path ID used as dilemma_id gives helpful message."""
         graph = Graph.empty()
         graph.create_node(
             "entity::hero",
             {"type": "entity", "raw_id": "hero", "entity_type": "character"},
         )
         graph.create_node(
-            "tension::trust_or_betray",
-            {"type": "tension", "raw_id": "trust_or_betray"},
+            "dilemma::trust_or_betray",
+            {"type": "dilemma", "raw_id": "trust_or_betray"},
         )
         graph.create_node(
-            "tension::trust_or_betray::alt::trust",
-            {"type": "alternative", "raw_id": "trust"},
+            "dilemma::trust_or_betray::alt::trust",
+            {"type": "answer", "raw_id": "trust"},
         )
         graph.add_edge(
-            "has_alternative",
-            "tension::trust_or_betray",
-            "tension::trust_or_betray::alt::trust",
+            "has_answer",
+            "dilemma::trust_or_betray",
+            "dilemma::trust_or_betray::alt::trust",
         )
 
         output = {
             "entities": [{"entity_id": "hero", "disposition": "retained"}],
-            "tensions": [
-                {"tension_id": "trust_or_betray", "considered": ["trust"], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "trust_or_betray", "considered": ["trust"], "implicit": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "mentor_arc",
+                    "path_id": "mentor_arc",
                     "name": "Mentor Arc",
-                    "tension_id": "trust_or_betray",
-                    "alternative_id": "trust",
+                    "dilemma_id": "trust_or_betray",
+                    "answer_id": "trust",
                 }
             ],
             "initial_beats": [
                 {
                     "beat_id": "opening",
                     "summary": "Test",
-                    "tension_impacts": [
-                        # Using thread ID as tension_id
-                        {"tension_id": "mentor_arc", "effect": "advances"}
+                    "dilemma_impacts": [
+                        # Using path ID as dilemma_id
+                        {"dilemma_id": "mentor_arc", "effect": "advances"}
                     ],
                 }
             ],
@@ -2909,28 +2905,28 @@ class TestTypeAwareFeedback:
         assert "is a path ID, not a dilemma" in dilemma_impact_errors[0].issue
 
     def test_type_aware_feedback_dilemma_as_entity(self) -> None:
-        """Tension ID used as entity in beat gives helpful message."""
+        """Dilemma ID used as entity in beat gives helpful message."""
         graph = Graph.empty()
         graph.create_node(
             "entity::hero",
             {"type": "entity", "raw_id": "hero", "entity_type": "character"},
         )
         graph.create_node(
-            "tension::trust_or_betray",
-            {"type": "tension", "raw_id": "trust_or_betray"},
+            "dilemma::trust_or_betray",
+            {"type": "dilemma", "raw_id": "trust_or_betray"},
         )
 
         output = {
             "entities": [{"entity_id": "hero", "disposition": "retained"}],
-            "tensions": [
-                {"tension_id": "trust_or_betray", "considered": [], "implicit": []},
+            "dilemmas": [
+                {"dilemma_id": "trust_or_betray", "considered": [], "implicit": []},
             ],
-            "threads": [],
+            "paths": [],
             "initial_beats": [
                 {
                     "beat_id": "opening",
                     "summary": "Test",
-                    # Using tension ID as entity reference
+                    # Using dilemma ID as entity reference
                     "entities": ["trust_or_betray"],
                 }
             ],
@@ -2968,8 +2964,8 @@ class TestCutEntityInBeats:
                 {"entity_id": "hero", "disposition": "retained"},
                 {"entity_id": "chrono_lock", "disposition": "cut"},
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [
                 {
                     "beat_id": "opening",
@@ -3003,8 +2999,8 @@ class TestCutEntityInBeats:
                 {"entity_id": "hero", "disposition": "retained"},
                 {"entity_id": "watchers_guild", "disposition": "cut"},
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [
                 {
                     "beat_id": "opening",
@@ -3039,8 +3035,8 @@ class TestCutEntityInBeats:
                 {"entity_id": "hero", "disposition": "retained"},
                 {"entity_id": "tavern", "disposition": "retained"},
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [
                 {
                     "beat_id": "opening",
@@ -3078,8 +3074,8 @@ class TestCutEntityInBeats:
                 {"entity_id": "tavern", "disposition": "retained"},
                 {"entity_id": "ruins", "disposition": "cut"},
             ],
-            "tensions": [],
-            "threads": [],
+            "dilemmas": [],
+            "paths": [],
             "initial_beats": [
                 {
                     "beat_id": "opening",
@@ -3103,97 +3099,97 @@ class TestBackfillConsideredFromThreads:
     """Tests for _backfill_considered_from_paths migration function."""
 
     def test_backfills_empty_considered_from_threads(self) -> None:
-        """Empty considered array is filled from thread alternative_ids."""
+        """Empty considered array is filled from path alternative_ids."""
         output = {
-            "tensions": [
-                {"tension_id": "choice_a_or_b", "considered": []},
+            "dilemmas": [
+                {"dilemma_id": "choice_a_or_b", "considered": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread1",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_a",
+                    "path_id": "thread1",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_a",
                 },
                 {
-                    "thread_id": "thread2",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_b",
+                    "path_id": "thread2",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_b",
                 },
             ],
         }
 
         _backfill_considered_from_paths(output)
 
-        assert output["tensions"][0]["considered"] == ["option_a", "option_b"]
+        assert output["dilemmas"][0]["considered"] == ["option_a", "option_b"]
 
     def test_preserves_existing_considered(self) -> None:
         """Non-empty considered array is not modified."""
         output = {
-            "tensions": [
-                {"tension_id": "choice_a_or_b", "considered": ["existing_value"]},
+            "dilemmas": [
+                {"dilemma_id": "choice_a_or_b", "considered": ["existing_value"]},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread1",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_a",
+                    "path_id": "thread1",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_a",
                 },
             ],
         }
 
         _backfill_considered_from_paths(output)
 
-        assert output["tensions"][0]["considered"] == ["existing_value"]
+        assert output["dilemmas"][0]["considered"] == ["existing_value"]
 
     def test_handles_scoped_tension_ids(self) -> None:
-        """Handles tension IDs with scope prefix (tension::id)."""
+        """Handles dilemma IDs with scope prefix (dilemma::id)."""
         output = {
-            "tensions": [
-                {"tension_id": "tension::choice_a_or_b", "considered": []},
+            "dilemmas": [
+                {"dilemma_id": "dilemma::choice_a_or_b", "considered": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread1",
-                    "tension_id": "tension::choice_a_or_b",
-                    "alternative_id": "option_a",
+                    "path_id": "thread1",
+                    "dilemma_id": "dilemma::choice_a_or_b",
+                    "answer_id": "option_a",
                 },
             ],
         }
 
         _backfill_considered_from_paths(output)
 
-        assert output["tensions"][0]["considered"] == ["option_a"]
+        assert output["dilemmas"][0]["considered"] == ["option_a"]
 
     def test_handles_mixed_scoped_and_unscoped(self) -> None:
-        """Matches tension with scoped ID to thread with unscoped ID."""
+        """Matches dilemma with scoped ID to path with unscoped ID."""
         output = {
-            "tensions": [
-                {"tension_id": "tension::choice_a_or_b", "considered": []},
+            "dilemmas": [
+                {"dilemma_id": "dilemma::choice_a_or_b", "considered": []},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread1",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_a",
+                    "path_id": "thread1",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_a",
                 },
             ],
         }
 
         _backfill_considered_from_paths(output)
 
-        assert output["tensions"][0]["considered"] == ["option_a"]
+        assert output["dilemmas"][0]["considered"] == ["option_a"]
 
     def test_supports_old_explored_field(self) -> None:
         """Checks both 'considered' and 'explored' for existing values."""
         output = {
-            "tensions": [
-                {"tension_id": "choice_a_or_b", "explored": ["existing"]},
+            "dilemmas": [
+                {"dilemma_id": "choice_a_or_b", "explored": ["existing"]},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread1",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_a",
+                    "path_id": "thread1",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_a",
                 },
             ],
         }
@@ -3201,109 +3197,109 @@ class TestBackfillConsideredFromThreads:
         _backfill_considered_from_paths(output)
 
         # explored is not empty, so no backfill
-        assert "considered" not in output["tensions"][0]
-        assert output["tensions"][0]["explored"] == ["existing"]
+        assert "considered" not in output["dilemmas"][0]
+        assert output["dilemmas"][0]["explored"] == ["existing"]
 
     def test_no_threads_no_backfill(self) -> None:
-        """Empty threads list does not modify tensions."""
+        """Empty paths list does not modify dilemmas."""
         output = {
-            "tensions": [
-                {"tension_id": "choice_a_or_b", "considered": []},
+            "dilemmas": [
+                {"dilemma_id": "choice_a_or_b", "considered": []},
             ],
-            "threads": [],
+            "paths": [],
         }
 
         _backfill_considered_from_paths(output)
 
-        assert output["tensions"][0]["considered"] == []
+        assert output["dilemmas"][0]["considered"] == []
 
     def test_thread_without_alternative_id_ignored(self) -> None:
-        """Threads without alternative_id are skipped."""
+        """Threads without answer_id are skipped."""
         output = {
-            "tensions": [
-                {"tension_id": "choice_a_or_b", "considered": []},
+            "dilemmas": [
+                {"dilemma_id": "choice_a_or_b", "considered": []},
             ],
-            "threads": [
-                {"thread_id": "thread1", "tension_id": "choice_a_or_b"},  # no alternative_id
+            "paths": [
+                {"path_id": "thread1", "dilemma_id": "choice_a_or_b"},  # no answer_id
             ],
         }
 
         _backfill_considered_from_paths(output)
 
-        assert output["tensions"][0]["considered"] == []
+        assert output["dilemmas"][0]["considered"] == []
 
     def test_multiple_tensions_independently_backfilled(self) -> None:
-        """Each tension is backfilled from its own threads."""
+        """Each dilemma is backfilled from its own paths."""
         output = {
-            "tensions": [
-                {"tension_id": "tension_one", "considered": []},
-                {"tension_id": "tension_two", "considered": []},
+            "dilemmas": [
+                {"dilemma_id": "tension_one", "considered": []},
+                {"dilemma_id": "tension_two", "considered": []},
             ],
-            "threads": [
-                {"thread_id": "t1", "tension_id": "tension_one", "alternative_id": "opt_a"},
-                {"thread_id": "t2", "tension_id": "tension_two", "alternative_id": "opt_x"},
-                {"thread_id": "t3", "tension_id": "tension_two", "alternative_id": "opt_y"},
+            "paths": [
+                {"path_id": "t1", "dilemma_id": "tension_one", "answer_id": "opt_a"},
+                {"path_id": "t2", "dilemma_id": "tension_two", "answer_id": "opt_x"},
+                {"path_id": "t3", "dilemma_id": "tension_two", "answer_id": "opt_y"},
             ],
         }
 
         _backfill_considered_from_paths(output)
 
-        assert output["tensions"][0]["considered"] == ["opt_a"]
-        assert output["tensions"][1]["considered"] == ["opt_x", "opt_y"]
+        assert output["dilemmas"][0]["considered"] == ["opt_a"]
+        assert output["dilemmas"][1]["considered"] == ["opt_x", "opt_y"]
 
 
 class TestValidation11cThreadAlternativeInConsidered:
-    """Tests for validation check 11c: thread.alternative_id IN tension.considered."""
+    """Tests for validation check 11c: path.answer_id IN dilemma.considered."""
 
     def test_thread_alternative_in_considered_passes(self) -> None:
-        """Thread with alternative_id matching considered passes validation."""
+        """Path with answer_id matching considered passes validation."""
         graph = Graph.empty()
         graph.create_node(
-            "tension::choice_a_or_b",
+            "dilemma::choice_a_or_b",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "choice_a_or_b",
-                "alternatives": [
-                    {"alternative_id": "option_a", "is_default_path": True},
-                    {"alternative_id": "option_b", "is_default_path": False},
+                "answers": [
+                    {"answer_id": "option_a", "is_default_path": True},
+                    {"answer_id": "option_b", "is_default_path": False},
                 ],
             },
         )
 
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "choice_a_or_b", "considered": ["option_a", "option_b"]},
+            "dilemmas": [
+                {"dilemma_id": "choice_a_or_b", "considered": ["option_a", "option_b"]},
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread1",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_a",
-                    "name": "Thread One",
+                    "path_id": "thread1",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_a",
+                    "name": "Path One",
                 },
                 {
-                    "thread_id": "thread2",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_b",
-                    "name": "Thread Two",
+                    "path_id": "thread2",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_b",
+                    "name": "Path Two",
                 },
             ],
             "initial_beats": [
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "threads": ["thread1"],
-                    "tension_impacts": [
-                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    "paths": ["thread1"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
                 },
                 {
                     "beat_id": "b2",
                     "summary": "Test",
-                    "threads": ["thread2"],
-                    "tension_impacts": [
-                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    "paths": ["thread2"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
                 },
             ],
@@ -3318,54 +3314,54 @@ class TestValidation11cThreadAlternativeInConsidered:
         assert check_11c_errors == []
 
     def test_thread_alternative_not_in_considered_detected(self) -> None:
-        """Thread with alternative_id NOT in considered fails validation."""
+        """Path with answer_id NOT in considered fails validation."""
         graph = Graph.empty()
         graph.create_node(
-            "tension::choice_a_or_b",
+            "dilemma::choice_a_or_b",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "choice_a_or_b",
-                "alternatives": [
-                    {"alternative_id": "option_a", "is_default_path": True},
-                    {"alternative_id": "option_b", "is_default_path": False},
+                "answers": [
+                    {"answer_id": "option_a", "is_default_path": True},
+                    {"answer_id": "option_b", "is_default_path": False},
                 ],
             },
         )
 
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "choice_a_or_b", "considered": ["option_a"]},  # missing option_b!
+            "dilemmas": [
+                {"dilemma_id": "choice_a_or_b", "considered": ["option_a"]},  # missing option_b!
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread1",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_a",
-                    "name": "Thread One",
+                    "path_id": "thread1",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_a",
+                    "name": "Path One",
                 },
                 {
-                    "thread_id": "thread2",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_b",  # not in considered!
-                    "name": "Thread Two",
+                    "path_id": "thread2",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_b",  # not in considered!
+                    "name": "Path Two",
                 },
             ],
             "initial_beats": [
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "threads": ["thread1"],
-                    "tension_impacts": [
-                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    "paths": ["thread1"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
                 },
                 {
                     "beat_id": "b2",
                     "summary": "Test",
-                    "threads": ["thread2"],
-                    "tension_impacts": [
-                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    "paths": ["thread2"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
                 },
             ],
@@ -3384,39 +3380,39 @@ class TestValidation11cThreadAlternativeInConsidered:
         assert check_11c_errors[0].category == SeedErrorCategory.SEMANTIC
 
     def test_empty_considered_detected(self) -> None:
-        """Thread with alternative_id but empty considered fails validation."""
+        """Path with answer_id but empty considered fails validation."""
         graph = Graph.empty()
         graph.create_node(
-            "tension::choice_a_or_b",
+            "dilemma::choice_a_or_b",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "choice_a_or_b",
-                "alternatives": [
-                    {"alternative_id": "option_a", "is_default_path": True},
+                "answers": [
+                    {"answer_id": "option_a", "is_default_path": True},
                 ],
             },
         )
 
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "choice_a_or_b", "considered": []},  # empty!
+            "dilemmas": [
+                {"dilemma_id": "choice_a_or_b", "considered": []},  # empty!
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread1",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_a",
-                    "name": "Thread One",
+                    "path_id": "thread1",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_a",
+                    "name": "Path One",
                 },
             ],
             "initial_beats": [
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "threads": ["thread1"],
-                    "tension_impacts": [
-                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    "paths": ["thread1"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
                 },
             ],
@@ -3432,39 +3428,39 @@ class TestValidation11cThreadAlternativeInConsidered:
         assert "option_a" in check_11c_errors[0].issue
 
     def test_scoped_tension_ids_matched_correctly(self) -> None:
-        """Scoped tension IDs are normalized for matching."""
+        """Scoped dilemma IDs are normalized for matching."""
         graph = Graph.empty()
         graph.create_node(
-            "tension::choice_a_or_b",
+            "dilemma::choice_a_or_b",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "choice_a_or_b",
-                "alternatives": [
-                    {"alternative_id": "option_a", "is_default_path": True},
+                "answers": [
+                    {"answer_id": "option_a", "is_default_path": True},
                 ],
             },
         )
 
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "tension::choice_a_or_b", "considered": ["option_a"]},  # scoped
+            "dilemmas": [
+                {"dilemma_id": "dilemma::choice_a_or_b", "considered": ["option_a"]},  # scoped
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread1",
-                    "tension_id": "choice_a_or_b",  # unscoped
-                    "alternative_id": "option_a",
-                    "name": "Thread One",
+                    "path_id": "thread1",
+                    "dilemma_id": "choice_a_or_b",  # unscoped
+                    "answer_id": "option_a",
+                    "name": "Path One",
                 },
             ],
             "initial_beats": [
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "threads": ["thread1"],
-                    "tension_impacts": [
-                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    "paths": ["thread1"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
                 },
             ],
@@ -3485,53 +3481,53 @@ class TestBackfillIntegrationWithApplySeedMutations:
     def test_backfill_runs_before_validation(self) -> None:
         """Backfill fixes data before validation, preventing 11c errors."""
         graph = Graph.empty()
-        # Create tension node
+        # Create dilemma node
         graph.create_node(
-            "tension::choice_a_or_b",
+            "dilemma::choice_a_or_b",
             {
-                "type": "tension",
+                "type": "dilemma",
                 "raw_id": "choice_a_or_b",
             },
         )
-        # Create alternative nodes
+        # Create answer nodes
         graph.create_node(
-            "tension::choice_a_or_b::alt::option_a",
-            {"type": "alternative", "raw_id": "option_a", "is_default_path": True},
+            "dilemma::choice_a_or_b::alt::option_a",
+            {"type": "answer", "raw_id": "option_a", "is_default_path": True},
         )
         graph.create_node(
-            "tension::choice_a_or_b::alt::option_b",
-            {"type": "alternative", "raw_id": "option_b", "is_default_path": False},
+            "dilemma::choice_a_or_b::alt::option_b",
+            {"type": "answer", "raw_id": "option_b", "is_default_path": False},
         )
-        # Create has_alternative edges (required for validation)
+        # Create has_answer edges (required for validation)
         graph.add_edge(
-            "has_alternative",
-            "tension::choice_a_or_b",
-            "tension::choice_a_or_b::alt::option_a",
+            "has_answer",
+            "dilemma::choice_a_or_b",
+            "dilemma::choice_a_or_b::alt::option_a",
         )
         graph.add_edge(
-            "has_alternative",
-            "tension::choice_a_or_b",
-            "tension::choice_a_or_b::alt::option_b",
+            "has_answer",
+            "dilemma::choice_a_or_b",
+            "dilemma::choice_a_or_b::alt::option_b",
         )
 
-        # Legacy data pattern: threads exist but considered is empty
+        # Legacy data pattern: paths exist but considered is empty
         output = {
             "entities": [],
-            "tensions": [
-                {"tension_id": "choice_a_or_b", "considered": []},  # empty - should be backfilled
+            "dilemmas": [
+                {"dilemma_id": "choice_a_or_b", "considered": []},  # empty - should be backfilled
             ],
-            "threads": [
+            "paths": [
                 {
-                    "thread_id": "thread1",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_a",
-                    "name": "Thread One",
+                    "path_id": "thread1",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_a",
+                    "name": "Path One",
                 },
                 {
-                    "thread_id": "thread2",
-                    "tension_id": "choice_a_or_b",
-                    "alternative_id": "option_b",
-                    "name": "Thread Two",
+                    "path_id": "thread2",
+                    "dilemma_id": "choice_a_or_b",
+                    "answer_id": "option_b",
+                    "name": "Path Two",
                 },
             ],
             "consequences": [],
@@ -3539,17 +3535,17 @@ class TestBackfillIntegrationWithApplySeedMutations:
                 {
                     "beat_id": "b1",
                     "summary": "Test",
-                    "threads": ["thread1"],
-                    "tension_impacts": [
-                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    "paths": ["thread1"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
                 },
                 {
                     "beat_id": "b2",
                     "summary": "Test",
-                    "threads": ["thread2"],
-                    "tension_impacts": [
-                        {"tension_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    "paths": ["thread2"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
                     ],
                 },
             ],
@@ -3558,7 +3554,7 @@ class TestBackfillIntegrationWithApplySeedMutations:
         # Should NOT raise because backfill fixes the data before validation
         apply_seed_mutations(graph, output)
 
-        # Verify the tension node was updated with backfilled considered
-        tension_node = graph.get_node("tension::choice_a_or_b")
+        # Verify the dilemma node was updated with backfilled considered
+        tension_node = graph.get_node("dilemma::choice_a_or_b")
         assert tension_node is not None
         assert sorted(tension_node.get("considered", [])) == ["option_a", "option_b"]

@@ -12,8 +12,8 @@ Node types created by GROW:
 See docs/design/00-spec.md for ontology details.
 
 Terminology (v5):
-- path (was: thread): Routes exploring specific answers to dilemmas
-- intersection (was: knot): Beats serving multiple paths
+- path: Routes exploring specific answers to dilemmas
+- intersection: Beats serving multiple paths
 """
 
 from __future__ import annotations
@@ -115,10 +115,6 @@ class PathAgnosticAssessment(BaseModel):
     agnostic_for: list[str] = Field(default_factory=list)
 
 
-# Backward compatibility alias
-ThreadAgnosticAssessment = PathAgnosticAssessment
-
-
 class Phase2Output(BaseModel):
     """Wrapper for Phase 2 structured output (path-agnostic assessment)."""
 
@@ -131,10 +127,6 @@ class IntersectionProposal(BaseModel):
     beat_ids: list[str] = Field(min_length=2)
     resolved_location: str | None = None
     rationale: str = Field(min_length=1)
-
-
-# Backward compatibility alias
-KnotProposal = IntersectionProposal
 
 
 class Phase3Output(BaseModel):

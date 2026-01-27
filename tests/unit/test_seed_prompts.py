@@ -18,7 +18,7 @@ class TestGetSeedSummarizePrompt:
         assert "5 entities" in result or "ALL 5 entities" in result
 
     def test_includes_dilemma_count_placeholder(self) -> None:
-        """Prompt includes the tension count value."""
+        """Prompt includes the dilemma count value."""
         result = get_seed_summarize_prompt(
             entity_count=5,
             dilemma_count=3,
@@ -46,7 +46,7 @@ class TestGetSeedSummarizePrompt:
         assert "`castle`" in result
 
     def test_includes_dilemma_manifest(self) -> None:
-        """Prompt includes the tension manifest content."""
+        """Prompt includes the dilemma manifest content."""
         dilemma_manifest = """- `trust_or_betray`
 - `save_or_abandon`"""
 

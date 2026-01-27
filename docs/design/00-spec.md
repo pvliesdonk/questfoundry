@@ -324,7 +324,7 @@ The dramatic question that drives meaningful choice. Every interesting story cho
 
 ```yaml
 dilemma:
-  id: string                      # Format: d::dilemma_name
+  id: string                      # Format: dilemma::dilemma_name
   question: string                # "Can the mentor be trusted?"
   answers:
     - id: string
@@ -358,13 +358,13 @@ The `considered` field records what the LLM *intended* to explore. Actual path e
 For nuanced situations, use multiple dilemmas on the same concept:
 ```yaml
 dilemmas:
-  - id: d::mentor_alignment
+  - id: dilemma::mentor_alignment
     question: "Is the mentor benevolent or self-serving?"
     answers:
       - id: mentor_benevolent
       - id: mentor_selfish
 
-  - id: d::mentor_competence
+  - id: dilemma::mentor_competence
     question: "Is the mentor capable or flawed?"
     answers:
       - id: mentor_capable
@@ -384,7 +384,7 @@ answer:
   id: string
   description: string             # "Mentor is genuine protector"
   canonical: bool                 # true = used for spine arc
-  dilemma_id: string              # parent dilemma (d::dilemma_name)
+  dilemma_id: string              # parent dilemma (dilemma::dilemma_name)
 ```
 
 **Lifecycle:** Created in BRAINSTORM as part of dilemma generation. Not exported.
@@ -417,7 +417,7 @@ One explored answer from a dilemma. Paths from the same dilemma are automaticall
 
 ```yaml
 path:
-  id: string                        # Format: p::dilemma_id__answer_id (hierarchical)
+  id: string                        # Format: path::dilemma_id__answer_id (hierarchical)
   name: string
   dilemma_id: dilemma_id            # Derivable from path_id
   answer_id: answer_id              # which answer this explores
@@ -428,7 +428,7 @@ path:
 ```
 
 **Hierarchical ID format:** Path IDs encode their parent dilemma using `__` separator:
-- `p::mentor_trust__benevolent` → dilemma_id is `d::mentor_trust`, answer is `benevolent`
+- `path::mentor_trust__benevolent` → dilemma_id is `dilemma::mentor_trust`, answer is `benevolent`
 - This prevents LLM confusion between dilemma and path IDs
 - The `dilemma_id` field can be derived from the path_id
 
@@ -511,7 +511,7 @@ arc:
 ## Edge Types
 
 > **Naming Convention:** Persistent edges use PascalCase (Choice, Appears) as they appear
-> in exports. Working edges use snake_case (belongs_to, has_alternative) as they're internal only.
+> in exports. Working edges use snake_case (belongs_to, has_answer) as they're internal only.
 
 ### Persistent Edges (survive to export)
 
@@ -622,7 +622,7 @@ brainstorm:
       notes: string             # freeform, from discussion
 
   dilemmas:
-    - id: string                # Format: d::dilemma_name
+    - id: string                # Format: dilemma::dilemma_name
       question: string          # "Can the mentor be trusted?"
       answers:
         - id: string
@@ -665,12 +665,12 @@ seed:
       # full entity structure created here
 
   dilemmas:
-    - dilemma_id: string              # Format: d::dilemma_name
+    - dilemma_id: string              # Format: dilemma::dilemma_name
       explored: answer_id[]           # always includes canonical; may include non-canonical
       implicit: answer_id[]           # non-explored answers (context for FILL)
 
   paths:
-    - id: string                      # Format: p::dilemma_id__answer_id (hierarchical)
+    - id: string                      # Format: path::dilemma_id__answer_id (hierarchical)
       name: string
       dilemma_id: dilemma_id          # Derivable from path_id
       answer_id: answer_id
@@ -981,7 +981,7 @@ SHIP reads from the graph, ignoring working nodes.
 | Ending passages | Passages with no outgoing Choice edges |
 
 **Ignored by SHIP:**
-- Tensions, threads, beats, arcs
+- Tensions, paths, beats, arcs
 - `from_beat`, `summary` on passages
 - `requires` edges between beats
 - All working edges
@@ -1051,7 +1051,7 @@ Do not allow "keep generating until good." Quality comes from good prompts and h
 
 ### ❌ Backflow
 
-Do not allow later stages to modify nodes they don't own. Each node type has a creating stage (see Stage Operations table). If GROW reveals a problem with SEED's threads, the human must manually revert to pre-GROW snapshot and revise SEED.
+Do not allow later stages to modify nodes they don't own. Each node type has a creating stage (see Stage Operations table). If GROW reveals a problem with SEED's paths, the human must manually revert to pre-GROW snapshot and revise SEED.
 
 ### ❌ Hidden Prompts
 
@@ -1139,7 +1139,7 @@ Because GROW operates on beats (summaries) rather than passages (prose), the dat
 |-----------|-------------|
 | ID & metadata | ~10 |
 | Summary (2-3 sentences) | ~40-60 |
-| Tags (threads, tensions, entities) | ~20-30 |
+| Tags (paths, dilemmas, entities) | ~20-30 |
 | Logic (requires, grants) | ~10-20 |
 | YAML overhead | ~10 |
 | **Total per beat** | **~100-130** |
@@ -1164,7 +1164,7 @@ Because GROW operates on beats (summaries) rather than passages (prose), the dat
 
 Even pessimistic estimates use <15% of modern context windows (128k-200k). **No RAG or aggressive chunking needed for GROW.**
 
-The entire relevant subgraph (all unplaced beats for involved threads) can be passed in every API call. This validates the "per arc" generation approach—the model can hold full arc state in working memory.
+The entire relevant subgraph (all unplaced beats for involved paths) can be passed in every API call. This validates the "per arc" generation approach—the model can hold full arc state in working memory.
 
 ### FILL Context (Different Concern)
 
@@ -1352,22 +1352,22 @@ When users run `qf review`:
 
 ```
 Dilemma (BRAINSTORM)
-  d::mentor_trust
+  dilemma::mentor_trust
   "Can the mentor be trusted?"
   ├─ answer: mentor_protector
   └─ answer: mentor_manipulator
         ↓ SEED triage
 Path (SEED)
-  p::mentor_trust__protector          ← hierarchical ID encodes parent
-    dilemma_id: d::mentor_trust       ← derivable from path_id
+  path::mentor_trust__protector          ← hierarchical ID encodes parent
+    dilemma_id: dilemma::mentor_trust    ← derivable from path_id
     answer_id: mentor_protector
     shadows: [mentor_manipulator]     ← unexplored answer
         ↓ SEED/GROW
 Beat (SEED/GROW)
   mentor_reveals_truth
-    paths: [p::mentor_trust__protector]
+    paths: [path::mentor_trust__protector]
     dilemma_impacts:
-      - dilemma_id: d::mentor_trust
+      - dilemma_id: dilemma::mentor_trust
         effect: commits
         note: "Player learns mentor sent warning to family"
 ```

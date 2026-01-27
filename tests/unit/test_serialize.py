@@ -409,7 +409,7 @@ class TestGetSectionsToRetry:
         errors = [
             SeedValidationError(
                 field_path="paths.0.dilemma_id",
-                issue="Tension not found",
+                issue="Dilemma not found",
                 available=[],
                 provided="x",
             )
@@ -443,7 +443,7 @@ class TestGetSectionsToRetry:
         errors = [
             SeedValidationError(
                 field_path="paths.0.dilemma_id",
-                issue="Tension not found",
+                issue="Dilemma not found",
                 available=[],
                 provided="x",
             ),
@@ -587,9 +587,9 @@ class TestSerializeSeedIterativelySemanticValidation:
                 return [
                     SeedValidationError(
                         field_path="paths.0.dilemma_id",
-                        issue="Tension not found",
-                        available=["valid_tension"],
-                        provided="invalid_tension",
+                        issue="Dilemma not found",
+                        available=["valid_dilemma"],
+                        provided="invalid_dilemma",
                     )
                 ]
             # Second validation: pass
@@ -631,9 +631,9 @@ class TestSerializeSeedIterativelySemanticValidation:
         errors = [
             SeedValidationError(
                 field_path="paths.0.dilemma_id",
-                issue="Tension not found",
-                available=["valid_tension"],
-                provided="invalid_tension",
+                issue="Dilemma not found",
+                available=["valid_dilemma"],
+                provided="invalid_dilemma",
             )
         ]
 
@@ -735,15 +735,15 @@ class TestSerializeSeedAsFunction:
         mock_model = MagicMock()
         mock_graph = MagicMock()
 
-        # Mock thread so _serialize_beats_per_path gets called
+        # Mock path so _serialize_beats_per_path gets called
         mock_path = {
-            "path_id": "test_thread",
-            "dilemma_id": "test_tension",
-            "name": "Test Thread",
-            "description": "A test thread",
-            "alternative_id": "alt1",
-            "unexplored_alternative_ids": [],
-            "thread_importance": "major",
+            "path_id": "path::test_dilemma__alt1",
+            "dilemma_id": "dilemma::test_dilemma",
+            "answer_id": "alt1",
+            "name": "Test Path",
+            "description": "A test path",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
             "consequence_ids": [],
         }
 
@@ -754,7 +754,7 @@ class TestSerializeSeedAsFunction:
                 return_value=([], 20),  # Returns (beats_list, tokens)
             ),
         ):
-            # Per-thread serialization: entities, dilemmas, paths, consequences, convergence
+            # Per-path serialization: entities, dilemmas, paths, consequences, convergence
             # (beats handled separately by _serialize_beats_per_path)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
@@ -797,9 +797,9 @@ class TestSerializeSeedAsFunction:
         errors = [
             SeedValidationError(
                 field_path="paths.0.dilemma_id",
-                issue="Tension not found",
-                available=["valid_tension"],
-                provided="invalid_tension",
+                issue="Dilemma not found",
+                available=["valid_dilemma"],
+                provided="invalid_dilemma",
             )
         ]
 
@@ -1159,7 +1159,7 @@ class TestFormatSectionCorrections:
 
 
 class TestBeatRetryAndContextRefresh:
-    """Tests for beat retry and thread context refresh functionality."""
+    """Tests for beat retry and path context refresh functionality."""
 
     @pytest.mark.asyncio
     async def test_beat_errors_trigger_beat_retry(self) -> None:
@@ -1174,9 +1174,9 @@ class TestBeatRetryAndContextRefresh:
         beat_errors = [
             SeedValidationError(
                 field_path="initial_beats.0.paths",
-                issue="Thread 'bad_thread' not defined in SEED paths",
-                available=["good_thread"],
-                provided="bad_thread",
+                issue="Path 'bad_path' not defined in SEED paths",
+                available=["good_path"],
+                provided="bad_path",
             )
         ]
 
@@ -1198,14 +1198,14 @@ class TestBeatRetryAndContextRefresh:
             # After retry: no errors
             return []
 
-        # Mock thread data so _serialize_beats_per_path has paths to work with
+        # Mock path data so _serialize_beats_per_path has paths to work with
         mock_path = {
-            "path_id": "test_thread",
-            "name": "Test Thread",
-            "dilemma_id": "test_tension",
-            "alternative_id": "alt1",
-            "unexplored_alternative_ids": [],
-            "thread_importance": "major",
+            "path_id": "path::test_dilemma__alt1",
+            "name": "Test Path",
+            "dilemma_id": "dilemma::test_dilemma",
+            "answer_id": "alt1",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
             "description": "desc",
             "consequence_ids": [],
         }
@@ -1250,7 +1250,7 @@ class TestBeatRetryAndContextRefresh:
             assert result.success is True
 
     @pytest.mark.asyncio
-    async def test_thread_retry_refreshes_context(self) -> None:
+    async def test_path_retry_refreshes_context(self) -> None:
         """Should refresh brief_with_paths when paths are retried."""
         from questfoundry.agents.serialize import serialize_seed_as_function
         from questfoundry.graph.mutations import SeedValidationError
@@ -1258,13 +1258,13 @@ class TestBeatRetryAndContextRefresh:
         mock_model = MagicMock()
         mock_graph = MagicMock()
 
-        # Thread error
-        thread_errors = [
+        # Path serialization error (semantic)
+        path_errors = [
             SeedValidationError(
                 field_path="paths.0.dilemma_id",
-                issue="Tension not found",
-                available=["valid_tension"],
-                provided="invalid_tension",
+                issue="Dilemma not found",
+                available=["valid_dilemma"],
+                provided="invalid_dilemma",
             )
         ]
 
@@ -1299,18 +1299,18 @@ class TestBeatRetryAndContextRefresh:
                     10,
                 )
             if section == "paths":
-                # Return a thread so format_path_ids_context has something
+                # Return a path so format_path_ids_context has something
                 return (
                     MagicMock(
                         model_dump=lambda: {
                             "paths": [
                                 {
-                                    "path_id": "test_thread",
-                                    "name": "Test Thread",
-                                    "dilemma_id": "valid_tension",
-                                    "alternative_id": "alt1",
-                                    "unexplored_alternative_ids": [],
-                                    "thread_importance": "major",
+                                    "path_id": "path::test_dilemma__alt1",
+                                    "name": "Test Path",
+                                    "dilemma_id": "dilemma::test_dilemma",
+                                    "answer_id": "alt1",
+                                    "unexplored_answer_ids": [],
+                                    "path_importance": "major",
                                     "description": "desc",
                                     "consequence_ids": [],
                                 }
@@ -1326,7 +1326,7 @@ class TestBeatRetryAndContextRefresh:
         def mock_validate(_graph, _output):
             validation_call_count[0] += 1
             if validation_call_count[0] == 1:
-                return thread_errors
+                return path_errors
             return []
 
         with (
@@ -1350,18 +1350,18 @@ class TestBeatRetryAndContextRefresh:
                 max_semantic_retries=2,
             )
 
-            # Thread retry happened
+            # Path retry happened
             assert call_count[0] == 6
             assert result.success is True
 
-            # Verify context was refreshed with thread IDs after thread retry
-            # After the thread retry (call 6), consequences brief should contain thread context
-            # Check that at least one brief after call 3 contains thread ID reference
+            # Verify context was refreshed with path IDs after path retry
+            # After the path retry (call 6), consequences brief should contain path context
+            # Check that at least one brief after call 3 contains path ID reference
             assert len(briefs_used) >= 4
             # The consequences call (4) should have had the original brief
-            # After thread retry, any subsequent calls should have updated context
+            # After path retry, any subsequent calls should have updated context
             # Note: In this test structure, the retry happens at call 6, and the
-            # brief_with_paths update occurs during thread retry processing
+            # brief_with_paths update occurs during path retry processing
 
     @pytest.mark.asyncio
     async def test_beat_retry_failure_continues_gracefully(self) -> None:
@@ -1379,9 +1379,9 @@ class TestBeatRetryAndContextRefresh:
         beat_errors = [
             SeedValidationError(
                 field_path="initial_beats.0.paths",
-                issue="Thread 'bad_thread' not defined",
-                available=["good_thread"],
-                provided="bad_thread",
+                issue="Path 'bad_path' not defined",
+                available=["good_path"],
+                provided="bad_path",
             )
         ]
 
@@ -1402,14 +1402,14 @@ class TestBeatRetryAndContextRefresh:
 
         mock_beats = AsyncMock(side_effect=mock_beats_side_effect)
 
-        # Mock thread data for _serialize_beats_per_path
+        # Mock path data for _serialize_beats_per_path
         mock_path = {
-            "path_id": "test_thread",
-            "name": "Test Thread",
-            "dilemma_id": "test_tension",
-            "alternative_id": "alt1",
-            "unexplored_alternative_ids": [],
-            "thread_importance": "major",
+            "path_id": "path::test_dilemma__alt1",
+            "name": "Test Path",
+            "dilemma_id": "dilemma::test_dilemma",
+            "answer_id": "alt1",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
             "description": "desc",
             "consequence_ids": [],
         }

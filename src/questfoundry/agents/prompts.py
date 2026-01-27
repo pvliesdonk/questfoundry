@@ -264,7 +264,7 @@ def get_seed_serialize_prompt() -> str:
     """Build the SEED serialize prompt.
 
     This prompt includes explicit instructions for mapping the complex
-    SEED brief sections (Entity Decisions, Tension Decisions, Threads,
+    SEED brief sections (Entity Decisions, Dilemma Decisions, Paths,
     Consequences, Initial Beats, Convergence Sketch) to the SeedOutput schema.
 
     Returns:
