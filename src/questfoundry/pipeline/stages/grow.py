@@ -1208,7 +1208,7 @@ class GrowStage:
             arc = ArcModel(
                 arc_id=arc_data["raw_id"],
                 arc_type=arc_data["arc_type"],
-                threads=arc_data.get("threads", []),
+                paths=arc_data.get("threads", []),  # Graph uses "threads", model uses "paths"
                 sequence=arc_data.get("sequence", []),
             )
             arcs.append(arc)
@@ -1269,7 +1269,7 @@ class GrowStage:
             arc = ArcModel(
                 arc_id=arc_data["raw_id"],
                 arc_type=arc_data["arc_type"],
-                threads=arc_data.get("threads", []),
+                paths=arc_data.get("threads", []),  # Graph uses "threads", model uses "paths"
                 sequence=arc_data.get("sequence", []),
             )
             arcs.append(arc)

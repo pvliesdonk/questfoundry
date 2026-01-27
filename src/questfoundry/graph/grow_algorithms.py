@@ -337,7 +337,7 @@ def enumerate_arcs(graph: Graph) -> list[Arc]:
             Arc(
                 arc_id=arc_id,
                 arc_type="spine" if is_spine else "branch",
-                threads=thread_raw_ids,
+                paths=thread_raw_ids,  # paths is the new field name (was threads)
                 sequence=sequence,
             )
         )
