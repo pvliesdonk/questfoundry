@@ -8,18 +8,18 @@
 
 ## Overview
 
-GROW transforms a SEED (threads with initial beats) into a validated story graph (arcs, passages, choices).
+GROW transforms a SEED (paths with initial beats) into a validated story graph (arcs, passages, choices).
 
 **Input:**
-- Threads (with tension linkage, shadows, tiers, consequences)
-- Consequences (narrative meaning of each thread)
-- Initial beats (with thread assignments, `requires` ordering, `tension_impacts`, location flexibility)
+- Paths (with dilemma linkage, shadows, tiers, consequences)
+- Consequences (narrative meaning of each path)
+- Initial beats (with path assignments, `requires` ordering, `dilemma_impacts`, location flexibility)
 - Convergence sketch (convergence points, residue notes)
 - Entities, relationships
 
 **Output:**
-- Beats (expanded, with knots)
-- Arcs (valid paths through beat graph)
+- Beats (expanded, with intersections)
+- Arcs (valid routes through beat graph)
 - Passages (1:1 from beats)
 - Choice edges (at divergence points)
 - Validated, pruned graph
@@ -30,80 +30,80 @@ GROW transforms a SEED (threads with initial beats) into a validated story graph
 
 ### The Commits Beat
 
-A tension has a lifecycle:
+A dilemma has a lifecycle:
 
 ```
-Tension introduced → Evidence builds → Truth locks in → Consequences play out
-     (advances)        (reveals)         (commits)        (thread-specific)
+Dilemma introduced → Evidence builds → Truth locks in → Consequences play out
+     (advances)        (reveals)         (commits)        (path-specific)
 ```
 
-**Before commits:** Beats can be thread-agnostic—they work regardless of which alternative is true.
+**Before commits:** Beats can be path-agnostic—they work regardless of which answer is true.
 
-**At commits:** The narrative locks in. One alternative becomes true for this playthrough.
+**At commits:** The narrative locks in. One answer becomes true for this playthrough.
 
-**After commits:** Beats are thread-specific. They only make sense for the committed alternative.
+**After commits:** Beats are path-specific. They only make sense for the committed answer.
 
 **Schema:**
 ```yaml
 beat:
-  tension_impacts:
-    - tension_id: mentor_trust
+  dilemma_impacts:
+    - dilemma_id: d::mentor_trust
       effect: commits
-      thread_id: mentor_protector  # which thread this locks in
+      path_id: p::mentor_trust__protector  # which path this locks in
 ```
 
-A commits beat must specify which thread it locks in.
+A commits beat must specify which path it locks in.
 
-### Thread-Agnostic Beats
+### Path-Agnostic Beats
 
-Beats before any commits for a tension can be **thread-agnostic**: they work for any alternative.
+Beats before any commits for a dilemma can be **path-agnostic**: they work for any answer.
 
 Example:
 - "Kay meets the mentor" — protector or manipulator, works either way
 - "Mentor gives cryptic advice" — ambiguous until truth revealed
 
-Thread-agnostic beats are shared across arcs, reducing duplication.
+Path-agnostic beats are shared across arcs, reducing duplication.
 
-**Marking:** During SEED or early GROW, LLM assesses which beats are thread-agnostic. Human confirms.
+**Marking:** During SEED or early GROW, LLM assesses which beats are path-agnostic. Human confirms.
 
 ### Divergence and Convergence
 
 **Divergence:** Arcs split at choice points leading to different commits beats.
 
-**Convergence:** Arcs can merge only after all divergent tensions have committed. Otherwise merged content would need to accommodate contradictory truths.
+**Convergence:** Arcs can merge only after all divergent dilemmas have committed. Otherwise merged content would need to accommodate contradictory truths.
 
 ```
-Arc A: mentor_protector + artifact_saves
-Arc B: mentor_manipulator + artifact_saves
+Arc A: p::mentor_trust__protector + p::artifact_nature__saves
+Arc B: p::mentor_trust__manipulator + p::artifact_nature__saves
                     ↓
       Can converge after mentor commits
-      (both share artifact_saves thread)
+      (both share artifact_saves path)
 ```
 
 ### Combinatorial Scope
 
-With n explored tensions (one thread per tension explored as alternative), there are 2^n possible arc combinations.
+With n explored dilemmas (one path per dilemma explored as answer), there are 2^n possible arc combinations.
 
-| Explored tensions | Arc combinations |
+| Explored dilemmas | Arc combinations |
 |-------------------|------------------|
 | 2 | 4 |
 | 3 | 8 |
 | 4 | 16 |
 | 5 | 32 |
 
-**Control strategy:** Limit explored alternatives in SEED. Not every tension needs an alternate thread.
+**Control strategy:** Limit explored answers in SEED. Not every dilemma needs an alternate path.
 
 ```yaml
-tension:
-  id: mentor_trust
-  alternatives:
-    - id: mentor_protector
+dilemma:
+  id: d::mentor_trust
+  answers:
+    - id: protector
       canonical: true      # always explored, used for spine
-    - id: mentor_manipulator
-      canonical: false     # explored only if promoted to thread in SEED
+    - id: manipulator
+      canonical: false     # explored only if promoted to path in SEED
 ```
 
-If the non-canonical alternative is not promoted to a thread in SEED, that tension has no branching—only the canonical path exists.
+If the non-canonical answer is not promoted to a path in SEED, that dilemma has no branching—only the canonical route exists.
 
 ---
 
@@ -114,13 +114,13 @@ If the non-canonical alternative is not promoted to a thread in SEED, that tensi
 **Input:** SEED artifacts
 
 **Operations:**
-1. Import all beats with thread assignments
+1. Import all beats with path assignments
 2. Import `requires` edges (ordering constraints)
-3. Import consequences for each thread
+3. Import consequences for each path
 4. Import location and location_alternatives for each beat
 5. Import convergence sketch (convergence points, residue notes)
-6. Verify each beat has `tension_impacts` (at minimum, which tensions it touches)
-7. Verify each explored tension has at least one `commits` beat per thread
+6. Verify each beat has `dilemma_impacts` (at minimum, which dilemmas it touches)
+7. Verify each explored dilemma has at least one `commits` beat per path
 8. Flag validation errors
 
 **Output:** Initial beat graph with consequences and location flexibility attached
@@ -129,15 +129,15 @@ If the non-canonical alternative is not promoted to a thread in SEED, that tensi
 
 ---
 
-### Phase 2: Thread-Agnostic Assessment
+### Phase 2: Path-Agnostic Assessment
 
-**Purpose:** Identify which beats work for multiple threads within a tension.
+**Purpose:** Identify which beats work for multiple paths within a dilemma.
 
 **Input:** Beat graph
 
 **Key distinction: Logic State vs Prose State**
 
-Thread-agnostic is about **prose compatibility**, not just logic compatibility:
+Path-agnostic is about **prose compatibility**, not just logic compatibility:
 
 | State Type | Splits At | Meaning |
 |------------|-----------|---------|
@@ -149,35 +149,35 @@ A beat between `reveals` and `commits` may be **logically agnostic** (player has
 **The test:** Can the same prose work for all incoming character states?
 
 - **Compatible:** "Kay studied the Mentor's face, searching for the person she thought she knew." (Works for trust or doubt)
-- **Incompatible:** "Kay gripped the knife, knowing he was a traitor." (Only works for doubt path)
+- **Incompatible:** "Kay gripped the knife, knowing he was a traitor." (Only works for doubt route)
 
 **Operations:**
-1. For each tension with multiple threads:
-   - Collect beats assigned to those threads
+1. For each dilemma with multiple paths:
+   - Collect beats assigned to those paths
    - Collect beats marked `advances` or `reveals` (not `commits`)
 2. LLM assesses each beat for **prose compatibility**:
-   - "Given the character's internal state on each path, can this beat use the same prose?"
+   - "Given the character's internal state on each route, can this beat use the same prose?"
    - Consider: internal monologue, emotional subtext, knowledge level
-   - Output: list of thread-agnostic beat IDs per tension
+   - Output: list of path-agnostic beat IDs per dilemma
 3. Human reviews and approves
    - Pay special attention to beats after `reveals` — these often have incompatible prose states
 
-**Output:** Beats marked with `thread_agnostic_for: [tension_id, ...]`
+**Output:** Beats marked with `path_agnostic_for: [dilemma_id, ...]`
 
 **Iteration:** One pass. If human disagrees, manual edit and re-run.
 
 **Warning signs of false agnosticism:**
 - Beat follows a `reveals` that changes character knowledge
-- Beat involves character reacting emotionally to the tension
-- Beat has internal monologue about the tension's subject
+- Beat involves character reacting emotionally to the dilemma
+- Beat has internal monologue about the dilemma's subject
 
 ---
 
-### Phase 3: Knot Detection
+### Phase 3: Intersection Detection
 
-**Purpose:** Find beats from different threads (different tensions) that should be one scene.
+**Purpose:** Find beats from different paths (different dilemmas) that should be one scene.
 
-**Input:** Beat graph with thread-agnostic markings, location flexibility from SEED
+**Input:** Beat graph with path-agnostic markings, location flexibility from SEED
 
 **Operations:**
 1. Build candidate pool:
@@ -192,13 +192,13 @@ A beat between `reveals` and `commits` may be **logically agnostic** (player has
    - Output: `[[beat_a, beat_b], [beat_c], [beat_d, beat_e, beat_f]]`
 3. For each cluster with >1 beat:
    - **Compatibility check (deterministic):**
-     - Beats must be from compatible threads (different tensions)
+     - Beats must be from compatible paths (different dilemmas)
      - No `requires` conflicts (A requires B, B requires A)
      - No timing contradictions
      - Location resolution possible (shared location exists in both location sets)
-   - If compatible: propose as knot with resolved location
-4. Human reviews proposed knots:
-   - Approve: execute knot operation (mark or merge), set resolved location
+   - If compatible: propose as intersection with resolved location
+4. Human reviews proposed intersections:
+   - Approve: execute intersection operation (mark or merge), set resolved location
    - Reject: beats remain separate
    - Modify: adjust clustering or location choice
 
@@ -206,16 +206,16 @@ A beat between `reveals` and `commits` may be **logically agnostic** (player has
 - If Beat A (location: market, alternatives: [docks]) merges with Beat B (location: docks, alternatives: [market])
 - Resolved location = docks (or market—human can choose)
 
-**Knot operations:**
+**Intersection operations:**
 
 | Operation | When | Result |
 |-----------|------|--------|
-| Mark | Beats are distinct but same scene | Beat gains multiple thread assignments, location resolved |
+| Mark | Beats are distinct but same scene | Beat gains multiple path assignments, location resolved |
 | Merge | Beats are essentially the same | New beat replaces both, inherits from both, location resolved |
 
-**Output:** Beat graph with knots applied, locations resolved
+**Output:** Beat graph with intersections applied, locations resolved
 
-**Iteration:** One pass of clustering. If human wants more knots, re-run with different guidance.
+**Iteration:** One pass of clustering. If human wants more intersections, re-run with different guidance.
 
 ---
 
@@ -223,20 +223,20 @@ A beat between `reveals` and `commits` may be **logically agnostic** (player has
 
 **Purpose:** Find missing beats needed for narrative continuity AND assign scene types for pacing.
 
-**Input:** Beat graph with knots
+**Input:** Beat graph with intersections
 
 **Operations:**
 
 **4a. Scene-Type Tagging**
 1. For each beat, LLM assesses scene type based on:
    - Beat summary content (action vs reaction)
-   - Position in thread (early = setup, mid = conflict, late = resolution)
-   - Tension impacts (reveals/commits often warrant full scenes)
+   - Position in path (early = setup, mid = conflict, late = resolution)
+   - Dilemma impacts (reveals/commits often warrant full scenes)
 2. Assign: `scene_type: scene | sequel | micro_beat`
 3. Human reviews tags, may override
 
 **4b. Narrative Gap Detection**
-1. For each thread:
+1. For each path:
    - Trace beat sequence (respecting `requires`)
    - LLM assesses: "Is this sequence complete? Any narrative gaps?"
    - Output: list of proposed gaps with descriptions
@@ -265,7 +265,7 @@ A beat between `reveals` and `commits` may be **logically agnostic** (player has
 **Iteration:** One pass for each sub-phase. If validation later finds issues, human can return here.
 
 **Completion criterion (measurable):**
-- Each thread forms connected path from entry to exit
+- Each path forms connected route from entry to exit
 - No orphan beats
 - All beats have `scene_type` assigned
 
@@ -273,23 +273,23 @@ A beat between `reveals` and `commits` may be **logically agnostic** (player has
 
 ### Phase 5: Arc Enumeration
 
-**Purpose:** Enumerate all valid paths through the beat graph.
+**Purpose:** Enumerate all valid routes through the beat graph.
 
 **Input:** Complete beat graph
 
 **Operations:**
-1. Identify all thread combinations:
-   - One thread per tension (respecting exclusivity)
-   - Example: 3 tensions × 2 threads each = 8 combinations
+1. Identify all path combinations:
+   - One path per dilemma (respecting exclusivity)
+   - Example: 3 dilemmas × 2 paths each = 8 combinations
 2. For each combination:
    - Collect applicable beats:
-     - Beats assigned to these threads
-     - Thread-agnostic beats for these tensions
-     - Knots involving these threads
+     - Beats assigned to these paths
+     - Path-agnostic beats for these dilemmas
+     - Intersections involving these paths
    - Topological sort (respecting `requires`)
    - This sequence is one arc
 3. Human selects spine arc:
-   - Default: all canonical threads
+   - Default: all canonical paths
    - Or: human overrides
 
 **Arc schema:**
@@ -297,7 +297,7 @@ A beat between `reveals` and `commits` may be **logically agnostic** (player has
 arc:
   id: string
   type: spine | branch
-  threads: thread_id[]          # one per tension
+  paths: path_id[]              # one per dilemma
   sequence: beat_id[]           # topologically sorted
   diverges_from: arc_id | null  # which arc this branches from
   diverges_at: beat_id | null   # the choice point
@@ -318,13 +318,13 @@ arc:
 **Input:** Enumerated arcs
 
 **Operations:**
-1. For each pair of arcs sharing threads:
+1. For each pair of arcs sharing paths:
    - Walk sequences in parallel
    - Find last shared beat before sequences differ
    - This is the divergence point
 2. Record divergence relationships:
    - Arc B diverges from Arc A at beat X
-   - Arc B commits to thread T at beat Y
+   - Arc B commits to path P at beat Y
 
 **Output:** Arcs with divergence metadata
 
@@ -340,8 +340,8 @@ arc:
 
 **Operations:**
 1. For each pair of diverged arcs:
-   - Find their differing tensions
-   - Check if both arcs have `commits` beats for all differing tensions
+   - Find their differing dilemmas
+   - Check if both arcs have `commits` beats for all differing dilemmas
    - If yes: arcs can potentially converge after both commits
 2. Find convergence points:
    - Beats that appear in both arcs after their commits
@@ -375,10 +375,10 @@ arc:
 **8b. Codeword Creation**
 1. For each consequence:
    - Create codeword with `tracks` linking to consequence
-   - Naming: `{thread_id}_committed` or derived from consequence description
+   - Naming: `{path_id}_committed` or derived from consequence description
    - Type: `granted`
-2. For each thread's `commits` beat:
-   - Add that thread's consequence codeword to beat's `grants`
+2. For each path's `commits` beat:
+   - Add that path's consequence codeword to beat's `grants`
 3. Human reviews codeword assignments
 
 **8c. Entity Overlay Creation**
@@ -402,14 +402,14 @@ consequence:
 
 # GROW derives:
 codeword:
-  id: mentor_protector_committed
+  id: mentor_trust__protector_committed
   type: granted
   tracks: mentor_ally
 
 entity:
   id: mentor
   overlays:
-    - when: [mentor_protector_committed]
+    - when: [mentor_trust__protector_committed]
       details: { demeanor: "warm" }
 ```
 
@@ -465,21 +465,21 @@ choice:
 |-------|---------------|
 | Single start passage | Multiple starts = ambiguous entry |
 | All passages reachable from start | Orphan passages = wasted content or GROW bug |
-| All endings reachable | Blocked path = impossible gates |
-| Each tension resolved | Missing `commits` = tension never pays off |
-| Gate satisfiability | Required codewords unobtainable on some path |
+| All endings reachable | Blocked route = impossible gates |
+| Each dilemma resolved | Missing `commits` = dilemma never pays off |
+| Gate satisfiability | Required codewords unobtainable on some route |
 | No cycles in `requires` | Impossible ordering |
 
 **Commits timing check (deterministic):**
 
-For each tension, validate when the `commits` beat occurs:
+For each dilemma, validate when the `commits` beat occurs:
 
 | Condition | Severity | Message |
 |-----------|----------|---------|
-| `commits` beat is <3 beats from arc start | Warn | "Tension {T} commits too early—limited shared content before branching" |
-| No `reveals` or `advances` beats before `commits` | Warn | "Tension {T} has no buildup before commits—may feel unearned" |
-| `commits` beat is in final 20% of arc | Warn | "Tension {T} commits too late—tension may drag" |
-| >5 beats after last `reveals` before `commits` | Warn | "Tension {T} has gap between last reveal and commits—pacing issue" |
+| `commits` beat is <3 beats from arc start | Warn | "Dilemma {D} commits too early—limited shared content before branching" |
+| No `reveals` or `advances` beats before `commits` | Warn | "Dilemma {D} has no buildup before commits—may feel unearned" |
+| `commits` beat is in final 20% of arc | Warn | "Dilemma {D} commits too late—dilemma may drag" |
+| >5 beats after last `reveals` before `commits` | Warn | "Dilemma {D} has gap between last reveal and commits—pacing issue" |
 
 These are warnings, not failures. Human reviews and decides whether to:
 - Accept (pacing is intentional)
@@ -495,7 +495,7 @@ These are warnings, not failures. Human reviews and decides whether to:
 
 **On failure:** Human reviews. Options:
 - Fix locally (edit passage/choice)
-- Return to earlier phase (gap detection, knot detection)
+- Return to earlier phase (gap detection, intersection detection)
 - Abort to SEED (fundamental structure issue)
 
 ---
@@ -521,8 +521,8 @@ These are warnings, not failures. Human reviews and decides whether to:
 
 | After Phase | Human Decision |
 |-------------|----------------|
-| 2. Thread-agnostic | Approve/edit agnostic markings |
-| 3. Knots | Approve/reject/modify knot proposals |
+| 2. Path-agnostic | Approve/edit agnostic markings |
+| 3. Intersections | Approve/reject/modify intersection proposals |
 | 4a. Scene-type | Approve/edit scene-type tags |
 | 4b. Narrative gaps | Approve/reject/edit new beats |
 | 4c. Pacing gaps | Approve/reject pacing beats |
@@ -540,17 +540,17 @@ These are warnings, not failures. Human reviews and decides whether to:
 
 | Phase | Failure | Detection | Recovery |
 |-------|---------|-----------|----------|
-| 1. Import | Missing `commits` beat for a tension | Validation check | Return to SEED, add commits beat |
+| 1. Import | Missing `commits` beat for a dilemma | Validation check | Return to SEED, add commits beat |
 | 1. Import | Cycle in `requires` edges | Topological sort fails | Return to SEED, fix ordering |
-| 2. Thread-agnostic | LLM marks too many/few beats as agnostic | Human review | Manual override, re-run with guidance |
-| 3. Knots | Incompatible beats proposed as knot | Compatibility check | Automatic rejection, try other clusters |
-| 3. Knots | No knots found when expected | Human review | Accept (story is linear) or return to SEED |
-| 4. Gaps | Thread has no path from entry to exit | Connectivity check | Add bridging beats or return to SEED |
-| 5. Arcs | Combinatorial explosion (>16 arcs) | Count check | Return to SEED, reduce explored tensions |
+| 2. Path-agnostic | LLM marks too many/few beats as agnostic | Human review | Manual override, re-run with guidance |
+| 3. Intersections | Incompatible beats proposed as intersection | Compatibility check | Automatic rejection, try other clusters |
+| 3. Intersections | No intersections found when expected | Human review | Accept (story is linear) or return to SEED |
+| 4. Gaps | Path has no route from entry to exit | Connectivity check | Add bridging beats or return to SEED |
+| 5. Arcs | Combinatorial explosion (>16 arcs) | Count check | Return to SEED, reduce explored dilemmas |
 | 7. Convergence | Arcs cannot converge (never commit) | Commits check | Add commits beats or accept separate endings |
 | 9. Choices | Near-synonym labels generated | Human review | Regenerate with stronger differentiation prompt |
 | 10. Validation | Orphan passages | Reachability check | Prune or add connecting choices |
-| 10. Validation | Unreachable endings | Path check | Add paths or remove endings |
+| 10. Validation | Unreachable endings | Route check | Add routes or remove endings |
 
 ### Structural Failures (Abort to SEED)
 
@@ -558,9 +558,9 @@ These failures indicate fundamental structure issues that GROW cannot fix:
 
 | Condition | Why Abort |
 |-----------|-----------|
-| Missing entity discovered during knot detection | GROW cannot create entities |
-| New tension needed for narrative coherence | GROW cannot create tensions |
-| Thread freeze violation attempted | Architectural constraint |
+| Missing entity discovered during intersection detection | GROW cannot create entities |
+| New dilemma needed for narrative coherence | GROW cannot create dilemmas |
+| Path freeze violation attempted | Architectural constraint |
 | >3 GROW attempts without passing validation | Diminishing returns, structure needs rework |
 
 **Abort procedure:**
@@ -589,10 +589,10 @@ These failures can be fixed within GROW:
 
 | Phase | Completion Criterion | Fallback |
 |-------|---------------------|----------|
-| Thread-agnostic | All beats assessed | 1 pass |
-| Knots | No more candidates above threshold | 1 pass |
+| Path-agnostic | All beats assessed | 1 pass |
+| Intersections | No more candidates above threshold | 1 pass |
 | Scene-type (4a) | All beats tagged | 1 pass |
-| Narrative gaps (4b) | Each thread connected start→end | 1 pass + validation catch |
+| Narrative gaps (4b) | Each path connected start→end | 1 pass + validation catch |
 | Pacing gaps (4c) | No flagged pacing issues (or human accepts) | 1 pass |
 | Validation | All checks pass | N/A (human decides) |
 
@@ -612,7 +612,7 @@ Apply windowing in phases 3-4:
 
 1. **Frozen content:** Summarize completed arcs into ~500 token blocks
 2. **Active frontier:** Full detail for beats not yet connected
-3. **Focus window:** For knot detection, only pass beats from threads currently being processed
+3. **Focus window:** For intersection detection, only pass beats from paths currently being processed
 
 Estimated working set: ~120 beats maximum for quality on 8B models.
 
@@ -621,55 +621,55 @@ Estimated working set: ~120 beats maximum for quality on 8B models.
 ## Worked Example
 
 **Setup:**
-- 2 tensions: mentor_trust, artifact_nature
-- Each tension: 2 alternatives (1 canonical, 1 alternate)
+- 2 dilemmas: d::mentor_trust, d::artifact_nature
+- Each dilemma: 2 answers (1 canonical, 1 alternate)
 - 4 possible arcs
 
 **SEED provides:**
 ```
-Tension: mentor_trust
-  Thread: mentor_protector (canonical)
+Dilemma: d::mentor_trust
+  Path: p::mentor_trust__protector (canonical)
     Beats: meet_mentor, mentor_advice, mentor_reveal_good
-  Thread: mentor_manipulator (alternate)
+  Path: p::mentor_trust__manipulator (alternate)
     Beats: meet_mentor*, mentor_advice*, mentor_reveal_evil
-  (* = thread-agnostic)
+  (* = path-agnostic)
 
-Tension: artifact_nature
-  Thread: artifact_saves (canonical)
+Dilemma: d::artifact_nature
+  Path: p::artifact_nature__saves (canonical)
     Beats: find_artifact, study_artifact, use_artifact_good
-  Thread: artifact_corrupts (alternate)
+  Path: p::artifact_nature__corrupts (alternate)
     Beats: find_artifact*, study_artifact*, use_artifact_bad
 ```
 
 **Phase 2 output:**
-- meet_mentor: thread-agnostic for mentor_trust
-- mentor_advice: thread-agnostic for mentor_trust
-- find_artifact: thread-agnostic for artifact_nature
-- study_artifact: thread-agnostic for artifact_nature
+- meet_mentor: path-agnostic for d::mentor_trust
+- mentor_advice: path-agnostic for d::mentor_trust
+- find_artifact: path-agnostic for d::artifact_nature
+- study_artifact: path-agnostic for d::artifact_nature
 
-**Phase 3 (knots):**
+**Phase 3 (intersections):**
 - LLM clusters: [[mentor_advice, study_artifact]] — same location, same entities
-- Compatibility: ✓ (different tensions)
-- Knot created: advice_and_study (serves both threads)
+- Compatibility: ✓ (different dilemmas)
+- Intersection created: advice_and_study (serves both paths)
 
 **Phase 5 (arcs):**
 ```
-Arc 1 (spine): mentor_protector + artifact_saves
+Arc 1 (spine): p::mentor_trust__protector + p::artifact_nature__saves
   Sequence: meet_mentor → advice_and_study → mentor_reveal_good → use_artifact_good
 
-Arc 2: mentor_protector + artifact_corrupts
+Arc 2: p::mentor_trust__protector + p::artifact_nature__corrupts
   Sequence: meet_mentor → advice_and_study → mentor_reveal_good → use_artifact_bad
 
-Arc 3: mentor_manipulator + artifact_saves
+Arc 3: p::mentor_trust__manipulator + p::artifact_nature__saves
   Sequence: meet_mentor → advice_and_study → mentor_reveal_evil → use_artifact_good
 
-Arc 4: mentor_manipulator + artifact_corrupts
+Arc 4: p::mentor_trust__manipulator + p::artifact_nature__corrupts
   Sequence: meet_mentor → advice_and_study → mentor_reveal_evil → use_artifact_bad
 ```
 
 **Phase 6 (divergence):**
-- Arc 1 and Arc 2 diverge at advice_and_study (artifact tension)
-- Arc 1 and Arc 3 diverge at advice_and_study (mentor tension)
+- Arc 1 and Arc 2 diverge at advice_and_study (artifact dilemma)
+- Arc 1 and Arc 3 diverge at advice_and_study (mentor dilemma)
 
 **Phase 9 (choices):**
 - After advice_and_study: 4-way choice (or 2 sequential binary choices)
@@ -685,14 +685,14 @@ Arc 4: mentor_manipulator + artifact_corrupts
 
 1. ~~**Multi-way divergence:**~~ **Resolved.** Sequential binary choices that can be merged into a single multi-way layer if dramatically appropriate. Implementation should support both presentations.
 
-2. ~~**Knot limits:**~~ **Resolved.** Cap at 2-3 beats per knot. More creates unwieldy scenes and exponential complexity.
+2. ~~**Intersection limits:**~~ **Resolved.** Cap at 2-3 beats per intersection. More creates unwieldy scenes and exponential complexity.
 
 3. ~~**Partial arc development:**~~ **Deferred to v5.1.** "Thin arcs" (arcs using more shared content, fewer unique beats) would reduce authoring burden for less-important branches. Mechanics require additional design work around:
    - How to mark an arc as "thin"
    - Automatic beat sharing heuristics
    - Quality validation for thin vs full arcs
 
-   For v5, all arcs are fully developed. This may limit practical scope to 3-4 tensions.
+   For v5, all arcs are fully developed. This may limit practical scope to 3-4 dilemmas.
 
 4. ~~**Commits timing validation:**~~ **Resolved.** Added to Phase 10. Validation warns if commits happens too early (<3 beats, no buildup) or too late (final 20%, gap after last reveal). See Phase 10 for heuristics.
 
@@ -706,10 +706,10 @@ The complete beat graph is unwieldy for humans to navigate. The LLM's job is to 
 
 | Phase | LLM Prepares | Human Decides |
 |-------|--------------|---------------|
-| Thread-agnostic | "These 5 beats could be shared" | Approve/reject each |
-| Knots | "These beat pairs could merge" | Approve/reject each |
+| Path-agnostic | "These 5 beats could be shared" | Approve/reject each |
+| Intersections | "These beat pairs could merge" | Approve/reject each |
 | Scene-type | "Beat X is a full scene, Beat Y is a sequel" | Approve/override tags |
-| Narrative gaps | "Thread X needs a beat here, here's a draft" | Approve/edit/reject |
+| Narrative gaps | "Path X needs a beat here, here's a draft" | Approve/edit/reject |
 | Pacing gaps | "Three scenes in a row—propose sequel here" | Approve/reject |
 | Spine | "Here are the 4 possible arcs, ranked by canonical coverage" | Select one |
 | Convergence | "Arcs A and B could rejoin here after commits" | Approve/reject |
@@ -737,8 +737,8 @@ GROW is 11 phases (Phases 4 and 8 have sub-phases):
 | # | Phase | LLM | Human Gate |
 |---|-------|-----|------------|
 | 1 | Beat graph import | No | No |
-| 2 | Thread-agnostic assessment | Yes | Yes |
-| 3 | Knot detection | Yes (clustering) | Yes |
+| 2 | Path-agnostic assessment | Yes | Yes |
+| 3 | Intersection detection | Yes (clustering) | Yes |
 | 4a | Scene-type tagging | Yes | Yes |
 | 4b | Narrative gap detection | Yes | Yes |
 | 4c | Pacing gap detection | Yes | Yes |
@@ -758,3 +758,10 @@ GROW is 11 phases (Phases 4 and 8 have sub-phases):
 - Human gates (2, 3, 4a-c, 5, 7, 8b, 8c, 10): Quality control and authorial decisions
 
 **Core principle:** LLM prepares decisions (surfaces opportunities, ranks options, proposes defaults). Human decides (approves, rejects, modifies). Human never needs to manually scan the graph.
+
+---
+
+**Terminology Note:** This document uses the v5 terminology:
+- **dilemma** (not tension): Binary dramatic questions
+- **path** (not thread): Routes exploring specific answers to dilemmas
+- **intersection** (not knot): Beats serving multiple paths

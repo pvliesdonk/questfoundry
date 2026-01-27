@@ -63,7 +63,7 @@ FILL generates passages one at a time, in order. Not parallel.
 
 **Why spine first?**
 
-The spine arc is the canonical path—all canonical thread alternatives. It establishes:
+The spine arc is the canonical route—all canonical path answers. It establishes:
 - The baseline voice
 - The canonical version of convergence passages
 - The reference point for branch variations
@@ -95,7 +95,7 @@ At structural junctures (divergence and convergence points), the LLM needs aware
 
 When writing a convergence passage during spine generation, branches haven't been written yet. But their beat summaries exist. Include:
 - Beat summaries of all connecting branches
-- Thread context (which alternatives arrive here)
+- Path context (which answers arrive here)
 
 This lets the convergence passage be written with awareness of all arrivals, even without their prose.
 
@@ -166,7 +166,7 @@ If prose reveals that a new recurring entity is needed, FILL should flag and pau
 
 ### Poly-State Prose (Shared Beats)
 
-Shared beats (thread-agnostic) appear in multiple arcs. When writing shared beats, FILL must produce **poly-state prose**: prose that is diegetically accurate for the active state but compatible with all shadow states.
+Shared beats (path-agnostic) appear in multiple arcs. When writing shared beats, FILL must produce **poly-state prose**: prose that is diegetically accurate for the active state but compatible with all shadow states.
 
 **The challenge:**
 
@@ -268,7 +268,7 @@ Flagged beats return to GROW for splitting into separate path-specific passages.
 - Passages with summaries and scene_type
 - Arc structure (traversal order)
 - Entity states (computed from codewords)
-- Thread definitions (for shadows)
+- Path definitions (for shadows)
 
 **Traversal Order:**
 
@@ -286,10 +286,10 @@ Flagged beats return to GROW for splitting into separate path-specific passages.
 | Beat summary | Current passage's summary |
 | Scene type | `scene`, `sequel`, or `micro_beat` |
 | Entity states | Relevant entities at this point (base + applicable overlays) |
-| Shadows | Unexplored alternatives for active tensions |
+| Shadows | Unexplored answers for active dilemmas |
 | Sliding window | Last N passages of generated prose (recommended 3-5) |
 | Lookahead | See lookahead strategy in Core Concepts |
-| Thread context | For knots: which threads this beat serves |
+| Path context | For intersections: which paths this beat serves |
 
 **Per-Passage Operations:**
 
@@ -551,7 +551,7 @@ The procedure specifies *what* to include, not exact sizes. Implementation shoul
 
 ### Setup
 
-**Story:** 2 tensions, 4 arcs total
+**Story:** 2 dilemmas, 4 arcs total
 - Mentor trust: protector (canonical) vs manipulator
 - Artifact nature: saves (canonical) vs corrupts
 

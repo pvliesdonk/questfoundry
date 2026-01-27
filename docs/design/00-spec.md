@@ -51,9 +51,9 @@ DREAM → BRAINSTORM → SEED → GROW → FILL → DRESS → SHIP
 | Stage | Purpose | Mode |
 |-------|---------|------|
 | DREAM | Genre, tone, themes, constraints | Human + LLM |
-| BRAINSTORM | Entities, tensions, alternatives | LLM-heavy (discuss → summarize → serialize) |
-| SEED | Triage: curate entities, promote tensions to threads | Human-heavy |
-| GROW | Mutate graph until complete: knots, weaving, passages | Layered, human gates |
+| BRAINSTORM | Entities, dilemmas, answers | LLM-heavy (discuss → summarize → serialize) |
+| SEED | Triage: curate entities, promote dilemmas to paths | Human-heavy |
+| GROW | Mutate graph until complete: intersections, weaving, passages | Layered, human gates |
 | FILL | Generate prose for passages | LLM, sequential |
 | DRESS | Illustrations, codex | LLM, optional |
 | SHIP | Export to ink/Twee/epub | Deterministic, no LLM |
@@ -62,7 +62,7 @@ DREAM → BRAINSTORM → SEED → GROW → FILL → DRESS → SHIP
 
 1. **No persistent agent state between sessions.** Each session starts fresh.
 2. **All artifacts are files.** JSON, YAML, or Markdown. Version-controllable, diffable, human-editable.
-3. **Threads are frozen after SEED.** GROW can mutate beats, create knots, weave arcs—but cannot create new threads.
+3. **Paths are frozen after SEED.** GROW can mutate beats, create intersections, weave arcs—but cannot create new paths.
 4. **Human gates between stages.** The human reviews and can edit before proceeding.
 5. **Prompts are visible artifacts.** No hidden prompt engineering.
 
@@ -108,10 +108,10 @@ This is not a pipeline of files where each stage produces a new artifact. Rather
 | Stage | Creates | Modifies | Reads |
 |-------|---------|----------|-------|
 | DREAM | Vision metadata | — | — |
-| BRAINSTORM | Entity, Tension, Alternative | — | Vision |
-| SEED | Thread, Consequence, Beat | Entity (curate), Tension (explore) | Entity, Tension |
-| GROW | Arc, Passage, Choice, Codeword; new Beats | Beat (scene_type, knot) | Thread, Beat, Entity |
-| FILL | — | Passage (prose), Entity (details) | Passage, Entity, Thread |
+| BRAINSTORM | Entity, Dilemma, Answer | — | Vision |
+| SEED | Path, Consequence, Beat | Entity (curate), Dilemma (explore) | Entity, Dilemma |
+| GROW | Arc, Passage, Choice, Codeword; new Beats | Beat (scene_type, intersection) | Path, Beat, Entity |
+| FILL | — | Passage (prose), Entity (details) | Passage, Entity, Path |
 | DRESS | Illustration, Codex | — | Passage, Entity |
 | SHIP | — (export only) | — | Persistent nodes |
 
@@ -128,10 +128,10 @@ Runtime applies mutations
 Graph (unified storage)
 ```
 
-**Example:** SEED produces entity decisions, thread definitions, and initial beats. The runtime:
+**Example:** SEED produces entity decisions, path definitions, and initial beats. The runtime:
 1. Validates the output structure
 2. Updates existing entity nodes (marking dispositions)
-3. Creates new thread, consequence, and beat nodes
+3. Creates new path, consequence, and beat nodes
 4. Creates edges between nodes
 5. Validates graph consistency
 6. Persists to storage
@@ -318,76 +318,76 @@ codex_entry:
 
 ### Creative Nodes (created in BRAINSTORM, refined in SEED)
 
-#### Tension
+#### Dilemma
 
-The dramatic question that drives meaningful choice. Every interesting story choice implies a road not taken.
+The dramatic question that drives meaningful choice. Every interesting story choice implies a road not taken. A dilemma presents exactly two answers where both options have costs and benefits.
 
 ```yaml
-tension:
-  id: string
-  question: string              # "Can the mentor be trusted?"
-  alternatives:
+dilemma:
+  id: string                      # Format: d::dilemma_name
+  question: string                # "Can the mentor be trusted?"
+  answers:
     - id: string
-      description: string       # "Mentor is genuine protector"
-      canonical: true           # used for spine arc
+      description: string         # "Mentor is genuine protector"
+      canonical: true             # used for spine arc
     - id: string
-      description: string       # "Mentor is manipulating Kay"
-      canonical: false          # alternate arc if explored
+      description: string         # "Mentor is manipulating Kay"
+      canonical: false            # alternate arc if explored
   involves: entity_id[]
-  why_it_matters: string        # thematic stakes
+  why_it_matters: string          # thematic stakes
   # Added by SEED:
-  considered: alternative_id[]  # which alternatives LLM intended to explore
-  implicit: alternative_id[]    # alternatives not explored (for FILL shadows)
+  considered: answer_id[]         # which answers LLM intended to explore
+  implicit: answer_id[]           # answers not explored (for FILL shadows)
 ```
 
 **Lifecycle:** Created in BRAINSTORM, exploration decisions added in SEED. Not exported.
 
-**The `implicit` field** holds alternatives that are intentionally NOT explored as threads. These provide narrative context for the FILL stage—the "road not taken" that gives meaning to the chosen path. For example, if we explore "mentor is deceptive", the implicit "mentor is trustworthy" informs how the deception contrasts with what could have been.
+**The `implicit` field** holds answers that are intentionally NOT explored as paths. These provide narrative context for the FILL stage—the "road not taken" that gives meaning to the chosen path. For example, if we explore "mentor is deceptive", the implicit "mentor is trustworthy" informs how the deception contrasts with what could have been.
 
-**Derived development states** (computed from thread existence, not stored):
-- **committed**: Alternative has a thread in the graph (will become a story path)
-- **deferred**: Alternative in `considered` but no thread (LLM intended to explore but was pruned)
-- **latent**: Alternative not in `considered` (never intended for exploration, becomes shadow)
+**Derived development states** (computed from path existence, not stored):
+- **committed**: Answer has a path in the graph (will become a story path)
+- **deferred**: Answer in `considered` but no path (LLM intended to explore but was pruned)
+- **latent**: Answer not in `considered` (never intended for exploration, becomes shadow)
 
-The `considered` field records what the LLM *intended* to explore. Actual thread existence determines what was *committed*. This separation allows pruning to drop threads without modifying the tension's stored intent, keeping the field immutable after SEED.
+The `considered` field records what the LLM *intended* to explore. Actual path existence determines what was *committed*. This separation allows pruning to drop paths without modifying the dilemma's stored intent, keeping the field immutable after SEED.
 
-**Binary constraint:** Exactly two alternatives per tension. This keeps contrasts crisp.
+**Binary constraint:** Exactly two answers per dilemma. This keeps contrasts crisp.
 
-**Canonical flag:** One alternative is marked `canonical: true`. This is the "default" story—used for the spine arc. The non-canonical alternative becomes a branch if promoted to a thread in SEED.
+**Canonical flag:** One answer is marked `canonical: true`. This is the "default" story—used for the spine arc. The non-canonical answer becomes a branch if promoted to a path in SEED.
 
-For nuanced situations, use multiple tensions on the same concept:
+For nuanced situations, use multiple dilemmas on the same concept:
 ```yaml
-tensions:
-  - id: mentor_alignment
+dilemmas:
+  - id: d::mentor_alignment
     question: "Is the mentor benevolent or self-serving?"
-    alternatives:
+    answers:
       - id: mentor_benevolent
       - id: mentor_selfish
 
-  - id: mentor_competence
+  - id: d::mentor_competence
     question: "Is the mentor capable or flawed?"
-    alternatives:
+    answers:
       - id: mentor_capable
       - id: mentor_flawed
 ```
 
-This yields four combinations (benevolent+capable, benevolent+flawed, etc.) while each tension remains a clear binary contrast.
+This yields four combinations (benevolent+capable, benevolent+flawed, etc.) while each dilemma remains a clear binary contrast.
 
-**Key insight:** "Mentor is a protector" is flat. "Mentor is a protector (not the manipulator they could have been)" has tension—even if we never write the manipulator thread.
+**Key insight:** "Mentor is a protector" is flat. "Mentor is a protector (not the manipulator they could have been)" has dramatic weight—even if we never write the manipulator path.
 
-#### Alternative
+#### Answer
 
-One possible answer to a Tension's question. Extracted as separate nodes in the graph to enable thread/alternative relationships.
+One possible answer to a Dilemma's question. Extracted as separate nodes in the graph to enable path/answer relationships.
 
 ```yaml
-alternative:
+answer:
   id: string
   description: string             # "Mentor is genuine protector"
   canonical: bool                 # true = used for spine arc
-  tension_id: string              # parent tension
+  dilemma_id: string              # parent dilemma (d::dilemma_name)
 ```
 
-**Lifecycle:** Created in BRAINSTORM as part of tension generation. Not exported.
+**Lifecycle:** Created in BRAINSTORM as part of dilemma generation. Not exported.
 
 ---
 
@@ -395,58 +395,63 @@ alternative:
 
 #### Consequence
 
-Narrative meaning of a thread choice. Bridges the gap between "what this path represents" (alternative) and "how we track it" (codeword).
+Narrative meaning of a path choice. Bridges the gap between "what this path represents" (answer) and "how we track it" (codeword).
 
 ```yaml
 consequence:
   id: string
-  thread_id: thread_id              # which thread this belongs to
+  path_id: path_id                  # which path this belongs to
   description: string               # "Mentor becomes protective ally"
   ripples: string[]                 # story effects this implies
     # - "Shields Kay in confrontation"
     # - "Reveals family connection"
 ```
 
-**Lifecycle:** Created in SEED when threads are created. Not exported.
+**Lifecycle:** Created in SEED when paths are created. Not exported.
 
 GROW creates codewords to track when consequences become active, and creates entity overlays to implement consequence effects.
 
-#### Plot Thread
+#### Path
 
-One explored alternative from a tension. Threads from the same tension are automatically exclusive.
+One explored answer from a dilemma. Paths from the same dilemma are automatically exclusive.
 
 ```yaml
-thread:
-  id: string
+path:
+  id: string                        # Format: p::dilemma_id__answer_id (hierarchical)
   name: string
-  tension_id: tension_id
-  alternative_id: alternative_id    # which alternative this explores
-  shadows: alternative_id[]         # unexplored alternatives (context for FILL)
+  dilemma_id: dilemma_id            # Derivable from path_id
+  answer_id: answer_id              # which answer this explores
+  shadows: answer_id[]              # unexplored answers (context for FILL)
   tier: major | minor
   description: string
   consequences: consequence_id[]    # narrative meaning of this path
 ```
 
-**Lifecycle:** Created in SEED. Not exported. (THREAD FREEZE: no new threads after SEED)
+**Hierarchical ID format:** Path IDs encode their parent dilemma using `__` separator:
+- `p::mentor_trust__benevolent` → dilemma_id is `d::mentor_trust`, answer is `benevolent`
+- This prevents LLM confusion between dilemma and path IDs
+- The `dilemma_id` field can be derived from the path_id
+
+**Lifecycle:** Created in SEED. Not exported. (PATH FREEZE: no new paths after SEED)
 
 **Tier:**
-- **Major:** Defines the story. Must interweave with other major threads.
+- **Major:** Defines the story. Must interweave with other major paths.
 - **Minor:** Supports/enriches. Must touch the story but can be more independent.
 
-**Exclusivity is derived:** All threads sharing a `tension_id` are automatically exclusive. No manual declaration needed.
+**Exclusivity is derived:** All paths sharing a `dilemma_id` are automatically exclusive. No manual declaration needed.
 
 #### Beat
 
-Narrative unit. Belongs to one or more threads.
+Narrative unit. Belongs to one or more paths.
 
 ```yaml
 beat:
   id: string
   summary: string
   scene_type: scene | sequel | micro_beat    # pacing structure (assigned in GROW)
-  threads: thread_id[]          # usually one, multiple = knot
-  tension_impacts:
-    - tension_id: tension_id
+  paths: path_id[]              # usually one, multiple = intersection
+  dilemma_impacts:
+    - dilemma_id: dilemma_id
       effect: advances | reveals | commits | complicates
       note: string              # "Player sees mentor's private communication"
   requires: beat_id[]           # ordering constraints
@@ -454,12 +459,12 @@ beat:
   entities: entity_id[]
   relationships: relationship_id[]
   location: entity_id | null              # primary location (assigned in SEED)
-  location_alternatives: entity_id[]      # other valid locations (enables knot flexibility)
+  location_alternatives: entity_id[]      # other valid locations (enables intersection flexibility)
 ```
 
 **Lifecycle:** Initial beats created in SEED, mutated and new beats added in GROW. Not exported.
 
-**Location flexibility:** Beats can specify alternative locations where the same dramatic action could occur. If Beat A (at Market) and Beat B (at Docks) both have `location_alternatives` including each other's location, GROW can merge them by choosing a shared setting. This enables knot formation without constraining BRAINSTORM's creative freedom.
+**Location flexibility:** Beats can specify alternative locations where the same dramatic action could occur. If Beat A (at Market) and Beat B (at Docks) both have `location_alternatives` including each other's location, GROW can merge them by choosing a shared setting. This enables intersection formation without constraining BRAINSTORM's creative freedom.
 
 **Scene types:**
 
@@ -471,28 +476,28 @@ beat:
 
 Scene type is assigned during GROW (Phase 4: Gap Detection) to ensure pacing variety across arcs. GROW may propose additional beats to address pacing gaps (e.g., "three scenes in a row with no sequel").
 
-**Beat types by thread membership:**
-- **Single-thread:** Serves one thread's progression
-- **Knot:** Serves multiple threads (natural intersection point)
+**Beat types by path membership:**
+- **Single-path:** Serves one path's progression
+- **Intersection:** Serves multiple paths (natural intersection point)
 
-**Tension impact effects:**
+**Dilemma impact effects:**
 
 | Effect | Meaning |
 |--------|---------|
 | `advances` | Moves toward resolution without revealing answer |
 | `reveals` | Surfaces information bearing on the question |
-| `commits` | Point of no return—alternative is now locked in |
-| `complicates` | Introduces doubt, new dimension to tension |
+| `commits` | Point of no return—answer is now locked in |
+| `complicates` | Introduces doubt, new dimension to dilemma |
 
 #### Arc
 
-Realized weaving of compatible threads.
+Realized weaving of compatible paths.
 
 ```yaml
 arc:
   id: string
   type: spine | branch
-  threads: thread_id[]          # must be from different tensions (compatible)
+  paths: path_id[]              # must be from different dilemmas (compatible)
   sequence: beat_id[]           # ordered result of weaving
   parent: arc_id | null
   diverges_at: beat_id | null
@@ -531,14 +536,14 @@ choice:
 
 | Edge | From → To | Created In | Purpose |
 |------|-----------|------------|---------|
-| **belongs_to** | beat → thread | SEED | Beat serves this thread |
-| **involves** | tension → entity | BRAINSTORM | Tension involves these entities |
-| **has_alternative** | tension → alternative | BRAINSTORM | Tension's possible answers |
-| **explores** | thread → alternative | SEED | Thread explores this alternative |
-| **has_consequence** | thread → consequence | SEED | Thread's narrative consequences |
+| **belongs_to** | beat → path | SEED | Beat serves this path |
+| **involves** | dilemma → entity | BRAINSTORM | Dilemma involves these entities |
+| **has_answer** | dilemma → answer | BRAINSTORM | Dilemma's possible answers |
+| **explores** | path → answer | SEED | Path explores this answer |
+| **has_consequence** | path → consequence | SEED | Path's narrative consequences |
 | **requires** | beat → beat | SEED, GROW | Ordering constraint |
 | **grants** | beat → codeword | GROW | Beat completion grants codeword |
-| **weaves** | arc → thread | GROW | Arc uses this thread |
+| **weaves** | arc → path | GROW | Arc uses this path |
 | **from_beat** | passage → beat | GROW | Traceability |
 
 ---
@@ -565,9 +570,9 @@ overlays:
 
 **Why conflicts can occur:**
 
-Thread exclusivity (from shared tension) prevents some conflicts automatically—you can't have codewords from exclusive threads. But codewords from *different* tensions can coexist, and their overlays might conflict.
+Path exclusivity (from shared dilemma) prevents some conflicts automatically—you can't have codewords from exclusive paths. But codewords from *different* dilemmas can coexist, and their overlays might conflict.
 
-Example: `mentor_trusted` (from alignment tension) and `mentor_ill` (from health tension) can both be active. If both set the same key, resolution rules apply.
+Example: `mentor_trusted` (from alignment dilemma) and `mentor_ill` (from health dilemma) can both be active. If both set the same key, resolution rules apply.
 
 **Validation:** For each entity, compute all valid codeword combinations. Flag any overlay pairs that (a) can both be active AND (b) set same key to different values.
 
@@ -616,10 +621,10 @@ brainstorm:
       concept: string           # one-line essence
       notes: string             # freeform, from discussion
 
-  tensions:
-    - id: string
+  dilemmas:
+    - id: string                # Format: d::dilemma_name
       question: string          # "Can the mentor be trusted?"
-      alternatives:
+      answers:
         - id: string
           description: string
           canonical: true       # default story path
@@ -630,7 +635,7 @@ brainstorm:
       why_it_matters: string
 ```
 
-BRAINSTORM generates freely without worrying about thread collision. Location flexibility for knot formation is handled in SEED.
+BRAINSTORM generates freely without worrying about path collision. Location flexibility for intersection formation is handled in SEED.
 
 **Human Gate:** Review brainstorm output before triage.
 
@@ -638,17 +643,17 @@ BRAINSTORM generates freely without worrying about thread collision. Location fl
 
 ### Stage 3: SEED
 
-**Purpose:** Triage brainstorm into committed structure. **Thread creation gate.**
+**Purpose:** Triage brainstorm into committed structure. **Path creation gate.**
 
 **Input:** Approved brainstorm.
 
 **Operations:**
 1. Curate entities (in/out)
-2. For each tension: decide which alternatives to explore
-   - Canonical alternative always becomes a thread (spine path)
-   - Non-canonical alternative becomes a thread only if exploring that branch
-3. Explored alternatives become threads (with exclusivity inherited from shared tension)
-4. Create initial beats per thread
+2. For each dilemma: decide which answers to explore
+   - Canonical answer always becomes a path (spine path)
+   - Non-canonical answer becomes a path only if exploring that branch
+3. Explored answers become paths (with exclusivity inherited from shared dilemma)
+4. Create initial beats per path
 
 **Output:**
 ```yaml
@@ -659,47 +664,47 @@ seed:
       concept: string
       # full entity structure created here
 
-  tensions:
-    - tension_id: string
-      explored: alternative_id[]      # always includes canonical; may include non-canonical
-      implicit: alternative_id[]      # non-explored alternatives (context for FILL)
+  dilemmas:
+    - dilemma_id: string              # Format: d::dilemma_name
+      explored: answer_id[]           # always includes canonical; may include non-canonical
+      implicit: answer_id[]           # non-explored answers (context for FILL)
 
-  threads:
-    - id: string
+  paths:
+    - id: string                      # Format: p::dilemma_id__answer_id (hierarchical)
       name: string
-      tension_id: tension_id
-      alternative_id: alternative_id
-      shadows: alternative_id[]
+      dilemma_id: dilemma_id          # Derivable from path_id
+      answer_id: answer_id
+      shadows: answer_id[]
       tier: major | minor
       description: string
       consequences: consequence_id[]
 
   consequences:
     - id: string
-      thread_id: thread_id
+      path_id: path_id
       description: string             # "Mentor becomes protective ally"
       ripples: string[]               # story effects this implies
 
   initial_beats:
     - id: string
       summary: string
-      threads: thread_id[]
-      tension_impacts:
-        - tension_id: tension_id
+      paths: path_id[]
+      dilemma_impacts:
+        - dilemma_id: dilemma_id
           effect: advances | reveals | commits | complicates
           note: string
       entities: entity_id[]
       location: entity_id | null            # primary location
-      location_alternatives: entity_id[]    # other valid locations (enables knot flexibility)
+      location_alternatives: entity_id[]    # other valid locations (enables intersection flexibility)
 
   convergence_sketch:                 # informal guidance for GROW
-    convergence_points: string[]      # "threads should merge by act 2 climax"
+    convergence_points: string[]      # "paths should merge by act 2 climax"
     residue_notes: string[]           # "mentor demeanor differs after convergence"
 ```
 
-**Human Gate:** Approve seed. After this point, no new threads can be created.
+**Human Gate:** Approve seed. After this point, no new paths can be created.
 
-**Critical constraint:** THREAD FREEZE. GROW cannot create threads. All branching potential is declared here.
+**Critical constraint:** PATH FREEZE. GROW cannot create paths. All branching potential is declared here.
 
 ---
 
@@ -707,42 +712,42 @@ seed:
 
 **Purpose:** Generate the complete story topology through graph mutation.
 
-GROW operates on the graph until completion criteria are met. It can mutate beats, create knots, weave arcs, derive passages and choice edges—but cannot create new threads.
+GROW operates on the graph until completion criteria are met. It can mutate beats, create intersections, weave arcs, derive passages and choice edges—but cannot create new paths.
 
 #### Initial State (from SEED)
 
-- Threads with initial beats (single-thread, loose)
-- Exclusivity derived from shared tension_id
+- Paths with initial beats (single-path, loose)
+- Exclusivity derived from shared dilemma_id
 - Internal ordering (`requires`) declared
-- Thread tiers declared (major/minor)
+- Path tiers declared (major/minor)
 - Core entities created
-- Location flexibility annotated on beats (enables knot detection)
+- Location flexibility annotated on beats (enables intersection detection)
 
-#### Knot Operations
+#### Intersection Operations
 
-Knots are beats serving multiple threads. Three operations:
+Intersections are beats serving multiple paths. Three operations:
 
 | Operation | Description | Example |
 |-----------|-------------|---------|
-| **Mark** | Existing beat serves multiple threads | `investigate` also serves GADGETS thread |
+| **Mark** | Existing beat serves multiple paths | `investigate` also serves GADGETS path |
 | **Merge** | Combine beats into one (same scene) | `meet_doctor` + `investigate` |
 | **Create** | New beat replaces separate beats | `climax` serves MAIN + MENTOR + ROMANCE |
 
-**Shared entities signal knot opportunities.** If Doctor appears in ROMANCE and MAIN threads, consider a knot.
+**Shared entities signal intersection opportunities.** If Doctor appears in ROMANCE and MAIN paths, consider an intersection.
 
 #### Iteration Triggers
 
 - **Gap:** "No ROMANCE beat between act 1 and 3" → add beat
-- **Density:** "Three threads climax in one beat" → split or accept
-- **Orphan:** "This beat has no natural place" → find knot or cut
+- **Density:** "Three paths climax in one beat" → split or accept
+- **Orphan:** "This beat has no natural place" → find intersection or cut
 - **Conflict:** "Requires can't be satisfied" → reorder or add intermediate
 
 #### Completion Criteria
 
 | Phase | Criterion |
 |-------|-----------|
-| **Initial** | Each thread's beats form valid DAG (no cycles in `requires`) |
-| **Knots** | All threads: ≥2 knots. Major thread pairs: ≥1 shared knot |
+| **Initial** | Each path's beats form valid DAG (no cycles in `requires`) |
+| **Intersections** | All paths: ≥2 intersections. Major path pairs: ≥1 shared intersection |
 | **Weaving** | Total order exists respecting all `requires`. Sequence set per arc |
 | **Passages** | 1:1 beat → passage transform. Choice edges derived |
 | **Reachability** | All expected nodes reachable from start |
@@ -754,13 +759,13 @@ Compare arc sequences:
 | Situation | Result |
 |-----------|--------|
 | Beat X → Y in all arcs | Single diegetic choice |
-| Beat X → Y in arc A, X → Z in arc B | Multiple choices, gated by thread codewords |
+| Beat X → Y in arc A, X → Z in arc B | Multiple choices, gated by path codewords |
 
 Every choice has a diegetic label.
 
 #### GROW Output
 
-- Beats (mutated, with knots)
+- Beats (mutated, with intersections)
 - Arcs (weaved sequences)
 - Passages (1:1 from beats)
 - Choice edges (derived from arc sequences)
@@ -821,7 +826,7 @@ Rationale: Spine establishes the canonical voice. Branches are variations that w
 - Voice document
 - Beat summary (including `scene_type`)
 - Entity states at this point (computed from codewords)
-- Relevant shadows for active tensions (derived from thread definitions)
+- Relevant shadows for active dilemmas (derived from path definitions)
 - Sliding window: last N passages of generated prose (recommended: 3-5, implementation-dependent)
 - Lookahead (when applicable—see below)
 
@@ -1036,9 +1041,9 @@ Kay approached the guard.
 
 Do not build systems where multiple LLM agents propose and negotiate.
 
-### ❌ Thread Creation in GROW
+### ❌ Path Creation in GROW
 
-Do not allow GROW to create new threads. All threads are declared in SEED.
+Do not allow GROW to create new paths. All paths are declared in SEED.
 
 ### ❌ Unbounded Iteration
 
@@ -1056,9 +1061,9 @@ Do not embed prompts in code. Prompts live in `/prompts` as readable files.
 
 Do not build elaborate state machines or object graphs. State is flat YAML.
 
-### ❌ Surface Choices Without Tension
+### ❌ Surface Choices Without Dilemma
 
-Do not generate choices that are purely navigational. Every meaningful choice should connect to a tension, even if the player doesn't see the connection explicitly.
+Do not generate choices that are purely navigational. Every meaningful choice should connect to a dilemma, even if the player doesn't see the connection explicitly.
 
 ---
 
@@ -1068,13 +1073,13 @@ Do not generate choices that are purely navigational. Every meaningful choice sh
 
 GROW is the highest-risk area. The spec defines operations (Mark, Merge, Create) but the triggering heuristics need careful design.
 
-**The Knotting Problem:**
+**The Intersection Problem:**
 
-How does the system determine that beats from different threads are compatible enough to merge into a single scene (knot)?
+How does the system determine that beats from different paths are compatible enough to merge into a single scene (intersection)?
 
 - **Risk:** Pure LLM intuition will hallucinate connections.
 - **Requirement:** Rigid compatibility checks before LLM involvement.
-- **Signals for knot candidacy:**
+- **Signals for intersection candidacy:**
   - Shared entity (same character appears in both beats)
   - Shared location
   - Compatible time-deltas
@@ -1082,30 +1087,30 @@ How does the system determine that beats from different threads are compatible e
 
 **The Sequencing Clarification:**
 
-Weaving threads into a sequence is *not* an LLM problem. Given a set of beats for an arc, topological sort on `requires` constraints produces the order deterministically.
+Weaving paths into a sequence is *not* an LLM problem. Given a set of beats for an arc, topological sort on `requires` constraints produces the order deterministically.
 
 What the LLM actually decides:
-1. **Knot creation:** "These beats should be one scene" (merge/mark)
-2. **Gap detection:** "Thread X needs a beat here" (create)
+1. **Intersection creation:** "These beats should be one scene" (merge/mark)
+2. **Gap detection:** "Path X needs a beat here" (create)
 3. **Pruning:** "This beat doesn't fit" (cut)
 
 The LLM does not pick ordering—that's derived from the graph.
 
 ### Overlay Conflict Resolution
 
-Overlays from different threads can conflict when both are active.
+Overlays from different paths can conflict when both are active.
 
-**Thread exclusivity handles some conflicts:**
-Codewords from threads sharing a tension are exclusive—player can never have both. No conflict possible.
+**Path exclusivity handles some conflicts:**
+Codewords from paths sharing a dilemma are exclusive—player can never have both. No conflict possible.
 
-**Cross-tension conflicts:**
-Codewords from *different* tensions can coexist. If their overlays set the same key, conflict resolution applies:
+**Cross-dilemma conflicts:**
+Codewords from *different* dilemmas can coexist. If their overlays set the same key, conflict resolution applies:
 1. Most specific overlay wins (most matching codewords)
 2. If tie, later in list wins
 
 **Validation catches design errors:**
 At validation, compute all valid codeword combinations. Flag any overlay pairs that can both be active with conflicting values. Human can:
-- Restructure threads to make codewords exclusive
+- Restructure paths to make codewords exclusive
 - Add compound overlay for the specific combination
 - Accept list-order as tiebreaker
 
@@ -1113,10 +1118,10 @@ At validation, compute all valid codeword combinations. Flag any overlay pairs t
 
 See Stage 5: FILL for complete context specification (voice document, sliding window, lookahead strategy).
 
-**Knot awareness:** When FILL generates prose for a knot, the brief must include:
-- Which threads this beat serves (X and Y)
-- The tension impacts for each thread
-- Guidance to weave both threads' concerns into one scene
+**Intersection awareness:** When FILL generates prose for an intersection, the brief must include:
+- Which paths this beat serves (X and Y)
+- The dilemma impacts for each path
+- Guidance to weave both paths' concerns into one scene
 
 This is derived from beat metadata and passed explicitly in the FILL context.
 
@@ -1143,14 +1148,14 @@ Because GROW operates on beats (summaries) rather than passages (prose), the dat
 
 | Component | Content | Est. Tokens |
 |-----------|---------|-------------|
-| System prompt | GROW rules, knot definition, constraints | ~1,500 |
-| Thread definitions | 8-12 threads × ~60 tokens | ~500-700 |
-| Tension definitions | 4-6 tensions × ~100 tokens | ~400-600 |
+| System prompt | GROW rules, intersection definition, constraints | ~1,500 |
+| Path definitions | 8-12 paths × ~60 tokens | ~500-700 |
+| Dilemma definitions | 4-6 dilemmas × ~100 tokens | ~400-600 |
 | Entity base definitions | 15-20 entities × ~80 tokens | ~1,200-1,600 |
 | Relationship definitions | 10-15 relationships × ~50 tokens | ~500-750 |
 | Codeword definitions | All codewords | ~300-500 |
 | Arc history | Last 5 beats placed (continuity) | ~600 |
-| Candidate beats | Unplaced beats for active threads | ~2,500-8,000 |
+| Candidate beats | Unplaced beats for active paths | ~2,500-8,000 |
 | **Total** | | **~8,000-15,000** |
 
 **Worst case:** Early GROW with 60-80 unplaced beats: ~15,000-18,000 tokens.
@@ -1180,7 +1185,7 @@ For local models (Llama 3.1 8B, Qwen, Mistral) with 32k context windows:
 |-----------|--------|
 | System prompt / instructions | ~1,500 |
 | Entity/relationship definitions | ~2,350 |
-| Thread/tension definitions | ~1,300 |
+| Path/dilemma definitions | ~1,300 |
 | Output buffer (safety margin) | ~2,000 |
 | **Fixed cost** | **~7,150** |
 | **Available for beats** | **~24,850** |
@@ -1192,7 +1197,7 @@ This is equivalent to a complete 40,000-word novella or a dense 2-hour branching
 **Quality degradation risks (8B models):**
 
 - **Needle in haystack:** Model struggles to find connections between beats at opposite ends of context
-- **Instruction drift:** As context fills, model may forget constraints (e.g., Thread Freeze rule)
+- **Instruction drift:** As context fills, model may forget constraints (e.g., Path Freeze rule)
 
 **Recommendation:** Cap at ~120 beats for 8B models to preserve reasoning quality.
 
@@ -1213,10 +1218,10 @@ This allows scaling beyond 177 beats while staying within context limits.
 
 **Decision:** Arc-at-a-time, not beat-by-beat.
 
-An arc is a complete weave of compatible threads. The process:
-1. Generate spine arc (primary thread combination)
+An arc is a complete weave of compatible paths. The process:
+1. Generate spine arc (primary path combination)
 2. Validate spine arc
-3. For each exclusive thread not in spine, generate divergent arc
+3. For each exclusive path not in spine, generate divergent arc
 4. Divergent arcs share beats with spine until divergence point
 
 Beat-by-beat or sliding window risks drift. Arc-at-a-time maintains coherence.
@@ -1318,10 +1323,10 @@ When users run `qf review`:
 | Relationship | Yes | BRAINSTORM/SEED | Yes (FILL can update, not create) |
 | Illustration | Yes | DRESS | Yes |
 | Codex | Yes | DRESS | Yes |
-| Tension | No | BRAINSTORM | No |
-| Alternative | No | BRAINSTORM | No |
+| Dilemma | No | BRAINSTORM | No |
+| Answer | No | BRAINSTORM | No |
 | Consequence | No | SEED | No |
-| Plot Thread | No | SEED | No |
+| Path | No | SEED | No |
 | Beat | No | SEED/GROW | No |
 | Arc | No | GROW | No |
 
@@ -1333,8 +1338,8 @@ When users run `qf review`:
 | Appears | Yes | GROW | Yes |
 | Involves | Yes | GROW | Yes |
 | Depicts | Yes | DRESS | Yes |
-| involves (tension) | No | BRAINSTORM | No |
-| has_alternative | No | BRAINSTORM | No |
+| involves (dilemma) | No | BRAINSTORM | No |
+| has_answer | No | BRAINSTORM | No |
 | explores | No | SEED | No |
 | has_consequence | No | SEED | No |
 | belongs_to | No | SEED/GROW | No |
@@ -1343,25 +1348,26 @@ When users run `qf review`:
 | weaves | No | GROW | No |
 | from_beat | No | GROW | No |
 
-### Tension → Thread → Beat Flow
+### Dilemma → Path → Beat Flow
 
 ```
-Tension (BRAINSTORM)
+Dilemma (BRAINSTORM)
+  d::mentor_trust
   "Can the mentor be trusted?"
-  ├─ alternative: mentor_protector
-  └─ alternative: mentor_manipulator
+  ├─ answer: mentor_protector
+  └─ answer: mentor_manipulator
         ↓ SEED triage
-Thread (SEED)
-  mentor_protector_thread
-    tension_id: mentor_trust
-    alternative_id: mentor_protector
-    shadows: [mentor_manipulator]    ← unexplored alternative
+Path (SEED)
+  p::mentor_trust__protector          ← hierarchical ID encodes parent
+    dilemma_id: d::mentor_trust       ← derivable from path_id
+    answer_id: mentor_protector
+    shadows: [mentor_manipulator]     ← unexplored answer
         ↓ SEED/GROW
 Beat (SEED/GROW)
   mentor_reveals_truth
-    threads: [mentor_protector_thread]
-    tension_impacts:
-      - tension_id: mentor_trust
+    paths: [p::mentor_trust__protector]
+    dilemma_impacts:
+      - dilemma_id: d::mentor_trust
         effect: commits
         note: "Player learns mentor sent warning to family"
 ```
@@ -1370,7 +1376,7 @@ Beat (SEED/GROW)
 
 ## Open Questions
 
-1. **GROW algorithm specifics:** Compatibility checks, knot detection heuristics, and the exact flow from SEED to completed arcs need detailed specification. (Next priority.)
+1. **GROW algorithm specifics:** Compatibility checks, intersection detection heuristics, and the exact flow from SEED to completed arcs need detailed specification. (Next priority.)
 
 2. **Human gates within GROW:** How many gates? After each arc? After all arcs? TBD.
 
@@ -1382,7 +1388,7 @@ Beat (SEED/GROW)
 - **Codeword granularity:** Boolean only for v5.0 (see Design Decisions)
 - **Context budget:** Full subgraph fits in context, no RAG needed (see Context Budget Analysis)
 - **Overlay conflicts:** Most specific wins, then list order; validation flags potential conflicts (see State Pattern)
-- **Tension cardinality:** Exactly two alternatives (binary); nuance via multiple tensions
+- **Dilemma cardinality:** Exactly two answers (binary); nuance via multiple dilemmas
 - **Entity creation in GROW:** Not allowed; GROW cannot create Entity nodes
 - **Derived codewords:** Deferred to future version (forward compatible)
 
