@@ -1033,12 +1033,12 @@ class TestPhase4bNarrativeGaps:
         result = await stage._phase_4b_narrative_gaps(graph, mock_model)
 
         assert result.status == "completed"
-        assert "No threads" in result.detail
+        assert "No paths" in result.detail
         assert result.llm_calls == 0
 
     @pytest.mark.asyncio
-    async def test_phase_4b_single_beat_threads_skipped(self) -> None:
-        """Phase 4b skips threads with only 1 beat (no sequence to gap-check)."""
+    async def test_phase_4b_single_beat_paths_skipped(self) -> None:
+        """Phase 4b skips paths with only 1 beat (no sequence to gap-check)."""
         from questfoundry.graph.graph import Graph
 
         graph = Graph.empty()
