@@ -281,365 +281,80 @@ git next                  # Move to child commit
 
 # Edit commits in the stack
 git amend                 # Amend current commit (auto-rebases descendants)
-git reword                # Edit commit message (auto-rebases descendants)
+
+# Move commits
+git move -s <source> -d <destination>
 
 # Sync with main
-git sync                  # Rebase entire stack onto origin/main
-
-# Submit for review (one PR per commit)
-git submit                # Push and create PRs for each commit
+git branchless sync
 ```
 
-#### Key Concepts
+---
 
-1. **Commits, not branches** - Each logical change is one commit. Branches are created automatically when needed.
-2. **Automatic rebasing** - When you amend a commit, all descendant commits are automatically rebased.
-3. **One PR per commit** - `git submit` creates a separate PR for each commit in your stack.
+## Testing Rules
 
-#### When Changes Are Requested
+**NEVER run the full test suite without asking first.** The full suite is slow and expensive (integration tests hit real LLM providers).
+
+### Default Test Selection
+
+Use targeted tests whenever possible:
+- Single file: `uv run pytest tests/unit/test_file.py`
+- Specific test: `uv run pytest tests/unit/test_file.py::test_name`
+- Unit tests only: `uv run pytest tests/unit`
+
+### Integration Tests
+
+Integration tests require real providers and are expensive. Only run if:
+- User explicitly asks, or
+- You changed provider integration logic
+
+If you need integration tests, ASK FIRST.
+
+---
+
+## CLI Behavior Rules
+
+- For long-running commands, prefer `--help` or partial dry-runs before executing.
+- If a command is likely to be destructive or expensive, warn the user and ask first.
+- For complex outputs (logs, diffs), summarize key findings rather than dumping raw output.
+
+---
+
+## Common Workflows
+
+### When Changing Prompts
+
+1. Update prompt template under `prompts/templates/`
+2. Update prompt compiler if needed
+3. Add/adjust tests under `tests/unit/test_prompts.py`
+4. Run targeted tests only
+
+### When Changing Models
+
+1. Update model in `src/questfoundry/models/`
+2. Update graph mutations in `src/questfoundry/graph/mutations.py`
+3. Update prompt instructions if schema changes
+4. Add/adjust tests
+
+### When Changing Pipeline Stages
+
+1. Update stage implementation
+2. Update corresponding prompt templates
+3. Update unit tests
+4. Run targeted tests only
+
+---
+
+## Environment Variables
 
 ```bash
-# Navigate to the commit that needs changes
-git prev / git next       # Or: git checkout <commit-hash>
-
-# Make your changes
-git add -p
-git amend                 # Automatically rebases all descendants
-
-# Re-submit
-git submit
-```
-
-#### Merging
-
-After PR approval, merge from the bottom of the stack up:
-```bash
-# GitHub merges PR #1 (squash)
-git sync                  # Syncs your stack with the new main
-git submit                # Updates remaining PRs
-```
-
-**Reference**: [Working with Stacked PRs using git-branchless](https://olivernguyen.io/w/stacked.prs/)
-
-### Pull Request Requirements
-
-PRs must meet ALL of these criteria before merging:
-
-1. **CI must be completely green** - all checks pass, no warnings treated as errors
-2. **PR must be reviewed** - at least one approval required
-3. **Review feedback must be addressed** - all comments resolved or responded to
-4. **Branch must be up to date** - rebase on main if needed
-
-Never force-merge a PR with failing CI or unresolved reviews.
-
-### PR Description Template
-
-Every PR description MUST include:
-
-```markdown
-## Problem
-1–3 sentences describing why this change is needed.
-
-## Changes
-- Bullet list of what changed
-
-## Not Included / Future PRs
-- What is explicitly out of scope
-- Link to follow-up issues if created
-
-## Test Plan
-- Commands run and results
-- Coverage of new code
-
-## Risk / Rollback
-- Compatibility notes
-- Feature flags if applicable
-```
-
-For PRs > 300 lines, add a **Review Guide** section with suggested file/commit order.
-
-### Review Handling
-
-**Take ALL review comments seriously:**
-
-- Address every comment before requesting re-review
-- If you disagree, explain your reasoning - don't ignore
-- **Never defer work without creating an issue** - if something is out of scope, create a GitHub issue and link it
-- When a reviewer finds issues, fix them in the same PR before merging
-
-### Commit Discipline
-
-- **Conventional commits**: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
-- **Commit message format**: `type(scope): description`
-- **Small, atomic commits** - one logical change per commit
-- Never mix formatting/refactoring with behavior changes
-- If running a formatter, isolate it in its own commit (or separate PR for large reformats)
-
-### Pre-Push Self-Review
-
-**Before every push, do a code review of your own changes.**
-
-After rebasing, resolving conflicts, or completing a feature:
-
-1. **Run `git diff origin/main`** - review ALL changes that will be in the PR
-2. **Read each changed file** - don't just skim, actually read the code
-3. **Check for regressions** - especially after conflict resolution, verify you didn't break something that was working
-4. **Verify types and contracts** - TypedDicts, Protocols, return types should be semantically correct
-5. **Run targeted validation** - type check and lint; run specific unit tests for changed modules:
-   ```bash
-   uv run mypy src/ && uv run ruff check src/
-   uv run pytest tests/unit/test_<changed_module>.py -x -q  # Only if relevant tests exist
-   ```
-   Do NOT run the full test suite - that's CI's job.
-
-**Common mistakes to catch:**
-- Conflict resolution taking wrong version (e.g., breaking a TypedDict by making required fields optional)
-- Forgetting to handle `None` cases (use `or []` not `get(..., [])` when value might be explicitly `None`)
-- Redundant code left from earlier iterations
-- Import statements that are no longer needed
-
-**Don't blindly trust "main is correct"** - conflicts happen because code diverged, and either side might have the bug.
-
-### Stop-and-Split Protocol
-
-If estimated diff will exceed the target size:
-
-1. **Stop** - Do not proceed with a single large PR
-2. **Plan** - Write a slicing plan listing commit #1, #2, #3… with goals and file lists
-3. **Implement as stacked commits** - Use git-branchless to manage the stack
-4. **Submit incrementally** - `git submit` creates one PR per commit
-
-```bash
-# Example workflow for a large refactor
-git checkout origin/main
-# Make first logical change
-git add -p && git commit -m "refactor(models): rename dilemma terminology"
-# Make second logical change
-git add -p && git commit -m "refactor(graph): update mutations for new names"
-# Make third logical change
-git add -p && git commit -m "test: update tests for terminology rename"
-
-# View your stack
-git sl
-
-# Submit all as separate PRs
-git submit
-```
-
-Each commit becomes a reviewable PR. Merge bottom-up. Git-branchless handles the rebasing.
-
-### No Scope Creep
-
-- If you discover additional work during implementation, do NOT include it
-- Only include changes necessary for the PR's stated goal
-- **Never leave review suggestions dangling** - if a reviewer suggests follow-up work ("you could also...", "consider adding..."), create a GitHub issue immediately and link it in your response
-
-### Documentation
-
-- **Keep architecture docs up to date** in `docs/architecture/`
-- **Design docs** in `docs/design/` are guidelines (can be questioned); **CLAUDE.md is rules** (must be followed)
-- **Document decisions** in issues/PRs with rationale
-- **Update README.md** when adding features
-
-### File Organization
-
-```
-questfoundry/
-├── src/questfoundry/
-│   ├── __init__.py
-│   ├── cli.py                 # typer CLI entry point
-│   ├── pipeline/
-│   │   ├── orchestrator.py    # Stage execution
-│   │   └── stages/            # Stage implementations
-│   ├── prompts/
-│   │   ├── compiler.py        # Prompt assembly
-│   │   └── loader.py          # Template loading
-│   ├── artifacts/
-│   │   ├── reader.py
-│   │   ├── writer.py
-│   │   └── validator.py
-│   ├── providers/             # LLM provider clients
-│   └── export/                # Output format exporters
-├── prompts/                   # Prompt templates (outside src/)
-│   ├── templates/
-│   └── components/
-├── tests/
-│   ├── unit/
-│   ├── integration/
-│   └── e2e/
-└── docs/
-    ├── design/                # Design specifications
-    └── architecture/          # Implementation architecture
-```
-
-## Implementation Roadmap
-
-### Slice 1: DREAM Only
-- Pipeline orchestrator skeleton
-- DREAM stage implementation
-- Basic prompt compiler
-- Artifact schemas and validation
-- CLI with `qf dream` command
-
-### Slice 2: DREAM → SEED
-- Multi-stage execution
-- Context injection between stages
-- Human gate hooks (UI separate concern)
-- BRAINSTORM and SEED stages
-
-### Slice 3: Full GROW
-- 11-phase GROW algorithm
-- Path-agnostic assessment, intersection detection
-- Arc enumeration and validation
-- State derivation (codewords, overlays)
-
-### Slice 4: FILL and SHIP
-- Prose generation
-- Export formats (Twee, HTML, JSON)
-- Full validation and quality bars
-
-## Commands
-
-```bash
-# Quick validation (use these, not full test suite)
-uv run mypy src/                                    # Type check - fast, no LLM
-uv run ruff check src/                              # Lint - fast, no LLM
-uv run pytest tests/unit/test_<module>.py -x -q    # Targeted unit test
-
-# Full test suite (CI only - NEVER run locally without permission)
-uv run pytest tests/unit/ -x -q                    # All unit tests (safe, no LLM)
-uv run pytest tests/integration/ -x -q             # Integration tests (USES LLM - expensive!)
-uv run pytest --cov                                # With coverage (USES LLM - expensive!)
-
-# Git-branchless
-git sl                         # View commit stack
-git amend                      # Amend + auto-rebase descendants
-git sync                       # Rebase stack on origin/main
-git submit                     # Create PRs for each commit
-
-# CLI (once implemented)
-qf dream                       # Run DREAM stage
-qf run --to seed              # Run up to SEED
-qf status                     # Show pipeline state
-```
-
-## Key Files to Reference
-
-- `docs/design/00-spec.md` - Unified v5 specification (vision, pipeline, schemas)
-- `docs/design/procedures/` - Stage algorithm specifications
-- `docs/design/01-prompt-compiler.md` - Prompt assembly system
-- `docs/design/07-getting-started.md` - Implementation slices
-
-## Anti-Patterns to Avoid
-
-- Agent negotiation between LLM instances
-- Incremental hook discovery during branching
-- Backflow (later stages modifying earlier artifacts)
-- Unbounded iteration
-- Hidden prompts in code
-- Complex object graphs instead of flat YAML
-
-## Testing Strategy
-
-- **Unit tests** for individual functions/classes
-- **Integration tests** for stage execution with mocked LLM
-- **E2E tests** for full pipeline runs (may use real LLM)
-- Target **70% coverage** initially, increase later
-- Use pytest fixtures for common test data
-
-### Test Execution Policy (CRITICAL)
-
-**NEVER run the full test suite (`uv run pytest tests/`) without explicit user permission.**
-
-The test suite includes integration tests that make real LLM API calls. These are:
-- **Slow**: Minutes to hours depending on provider
-- **Expensive**: Each run costs real money (API tokens)
-- **Resource-intensive**: Can saturate GPU/API rate limits
-
-#### When to Run Which Tests
-
-| Situation | Command | Why |
-|-----------|---------|-----|
-| Changed a specific file | `uv run pytest tests/unit/test_<module>.py` | Test only what changed |
-| Changed models/*.py | `uv run pytest tests/unit/test_mutations.py tests/unit/test_*models*.py` | Model validation tests |
-| Changed graph/*.py | `uv run pytest tests/unit/test_graph*.py tests/unit/test_mutations.py` | Graph logic tests |
-| Changed prompts | `uv run mypy src/ && uv run ruff check` | Prompts don't have unit tests |
-| Before pushing PR | `uv run pytest tests/unit/ -x -q` | Unit tests only, stop on first failure |
-| CI is failing | Run the specific failing test locally | Don't shotgun the whole suite |
-
-#### What NEVER to Do
-
-- **NEVER** run `uv run pytest tests/` or `uv run pytest` without `-x` (stop on first failure)
-- **NEVER** run integration tests (`tests/integration/`) without user permission
-- **NEVER** run multiple test commands in parallel (saturates resources)
-- **NEVER** run full suite "just to make sure" - that's what CI is for
-
-#### Quick Validation (Default)
-
-When you need to verify changes work, use this minimal check:
-```bash
-uv run mypy src/questfoundry/  # Type check (fast, no LLM)
-uv run ruff check src/         # Lint (fast, no LLM)
-# Only if needed:
-uv run pytest tests/unit/test_<specific>.py -x -q
-```
-
-Let CI run the full suite. Your job is targeted verification.
-
-## Configuration
-
-### General Provider Precedence
-
-Configuration follows a strict precedence order (highest to lowest):
-
-1. **CLI flags** - `--provider ollama/qwen3:4b-instruct-32k`
-2. **Environment variables** - `QF_PROVIDER=openai/gpt-4o` (can be set in your shell or a `.env` file)
-3. **Project config** - `project.yaml` providers.default
-4. **Defaults** - `ollama/qwen3:4b-instruct-32k`
-
-### Hybrid Provider Configuration (Phase-Specific)
-
-Different providers can be used for each pipeline phase (discuss, summarize, serialize). This allows using creative models for discussion and reasoning models for serialization.
-
-**6-level precedence chain** (per phase):
-1. Phase-specific CLI flag (`--provider-discuss`, `--provider-summarize`, `--provider-serialize`)
-2. General CLI flag (`--provider`)
-3. Phase-specific env var (`QF_PROVIDER_DISCUSS`, `QF_PROVIDER_SUMMARIZE`, `QF_PROVIDER_SERIALIZE`)
-4. General env var (`QF_PROVIDER`)
-5. Phase-specific config (`providers.discuss`, `providers.summarize`, `providers.serialize`)
-6. Default config (`providers.default`)
-
-**Example project.yaml with hybrid providers:**
-```yaml
-name: my-adventure
-providers:
-  default: ollama/qwen3:4b-instruct-32k        # Fallback for all phases
-  discuss: ollama/qwen3:4b-instruct-32k        # Tool-enabled model for exploration
-  summarize: openai/gpt-4o        # Creative model for narrative
-  serialize: openai/o1-mini       # Reasoning model for JSON output
-```
-
-**Example CLI usage:**
-```bash
-# Override serialize phase to use o1-mini
-qf seed --provider-serialize openai/o1-mini
-
-# Full hybrid setup from CLI
-qf seed --provider-discuss ollama/qwen3:4b-instruct-32k \
-        --provider-summarize openai/gpt-4o \
-        --provider-serialize openai/o1-mini
-```
-
-**Note**: o1/o1-mini models don't support tools. While you can configure them for any phase, they will fail at runtime if tools are invoked. They are best suited for the serialize phase only.
-
-### Environment Variables
-
-```bash
-# Provider configuration
-QF_PROVIDER=ollama/qwen3:4b-instruct-32k                       # Override default provider
-QF_PROVIDER_DISCUSS=ollama/qwen3:4b-instruct-32k               # Override discuss phase
-QF_PROVIDER_SUMMARIZE=openai/gpt-4o               # Override summarize phase
-QF_PROVIDER_SERIALIZE=openai/o1-mini              # Override serialize phase
+# Provider config (defaults)
+QF_PROVIDER=ollama/qwen3:4b-instruct-32k
+
+# Override per stage
+QF_PROVIDER_DISCUSS=openai/gpt-4o            # Override discuss phase
+QF_PROVIDER_SUMMARIZE=openai/gpt-4o          # Override summarize phase
+QF_PROVIDER_SERIALIZE=openai/o1-mini         # Override serialize phase
 
 # Required for providers
 OLLAMA_HOST=http://athena.int.liesdonk.nl:11434   # Required for Ollama
