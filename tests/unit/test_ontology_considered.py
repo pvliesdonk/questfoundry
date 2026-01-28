@@ -397,8 +397,8 @@ class TestPruningImmutability:
             initial_beats=beats,
         )
 
-    def test_pruning_does_not_mutate_considered_field(self) -> None:
-        """Pruning drops paths but doesn't change dilemma.considered."""
+    def test_pruning_updates_considered_for_demoted(self) -> None:
+        """Pruning moves non-canonical answers to implicit for demoted dilemmas."""
         seed = self._make_seed_output_with_paths(dilemmas_count=6, paths_per_dilemma=2)
 
         # All dilemmas have considered=["a", "b"]
@@ -407,12 +407,17 @@ class TestPruningImmutability:
         # Prune to max 4 arcs (2 fully developed dilemmas)
         pruned = prune_to_arc_limit(seed, max_arcs=4)
 
-        # Verify dilemmas were not mutated
+        # Build path counts by dilemma to detect demotion
+        path_counts: dict[str, int] = {}
+        for path in pruned.paths:
+            path_counts[path.dilemma_id] = path_counts.get(path.dilemma_id, 0) + 1
+
         for dilemma in pruned.dilemmas:
-            assert dilemma.considered == original_considered[dilemma.dilemma_id], (
-                f"Dilemma {dilemma.dilemma_id} was mutated: "
-                f"expected {original_considered[dilemma.dilemma_id]}, got {dilemma.considered}"
-            )
+            if path_counts.get(dilemma.dilemma_id, 0) <= 1:
+                assert dilemma.considered == ["a"]
+                assert "b" in dilemma.implicit
+            else:
+                assert dilemma.considered == original_considered[dilemma.dilemma_id]
 
     def test_pruning_reduces_path_count(self) -> None:
         """Pruning removes paths to stay within arc limit."""
@@ -530,6 +535,12 @@ class TestScopedIdStandardization:
         beat_1 = next(b for b in pruned.initial_beats if b.beat_id == "artifact_beat_01")
         assert "path::artifact_natural" in beat_1.paths
         assert "path::artifact_crafted" not in beat_1.paths
+        # Demoted dilemma should keep canonical and move non-canonical to implicit
+        pruned_dilemma = next(
+            d for d in pruned.dilemmas if d.dilemma_id == "dilemma::artifact_origin"
+        )
+        assert pruned_dilemma.considered == ["natural"]
+        assert "crafted" in pruned_dilemma.implicit
 
     def test_pruning_handles_scoped_path_ids_in_consequences(self) -> None:
         """Pruning correctly drops consequences when they use scoped IDs."""
