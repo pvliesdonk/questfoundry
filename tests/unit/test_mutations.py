@@ -2014,6 +2014,12 @@ class TestNormalizeId:
         assert normalized == "mentor_trust"
         assert error is None
 
+    def test_double_scoped_dilemma_id_collapses(self) -> None:
+        """Double-scoped dilemma IDs collapse to raw ID."""
+        normalized, error = _normalize_id("dilemma::dilemma::mentor_trust", "dilemma")
+        assert normalized == "mentor_trust"
+        assert error is None
+
     def test_path_scope_accepted(self) -> None:
         """Path scope is handled correctly."""
         normalized, error = _normalize_id("path::mentor_arc", "path")
@@ -2095,6 +2101,42 @@ class TestScopedIdValidation:
                     "paths": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+    def test_double_scoped_dilemma_id_accepted(self) -> None:
+        """Double-scoped dilemma IDs are normalized in validation."""
+        graph = Graph.empty()
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
+
+        output = {
+            "entities": [],
+            "dilemmas": [
+                {"dilemma_id": "dilemma::dilemma::trust", "considered": ["yes"], "implicit": []}
+            ],
+            "paths": [
+                {
+                    "path_id": "trust_arc",
+                    "name": "Trust Arc",
+                    "dilemma_id": "dilemma::dilemma::trust",
+                    "answer_id": "yes",
+                }
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "resolution",
+                    "summary": "Trust resolved",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::dilemma::trust", "effect": "commits"}
                     ],
                 }
             ],

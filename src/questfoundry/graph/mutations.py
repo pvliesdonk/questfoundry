@@ -436,6 +436,10 @@ def _normalize_id(provided_id: str, expected_scope: str) -> tuple[str, str | Non
                 provided_id,
                 f"Wrong scope prefix: expected '{expected_scope}::', got '{scope}::'",
             )
+        # Handle accidental double-prefix like "dilemma::dilemma::foo"
+        scoped_prefix = f"{expected_scope}::"
+        while raw_id.startswith(scoped_prefix):
+            raw_id = raw_id[len(scoped_prefix) :]
         return raw_id, None
     return provided_id, None
 
@@ -1228,7 +1232,10 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
         # Find the corresponding dilemma decision
         for dilemma_decision in output.get("dilemmas", []):
-            decision_did = strip_scope_prefix(dilemma_decision.get("dilemma_id", ""))
+            raw_decision_did = dilemma_decision.get("dilemma_id", "")
+            decision_did, scope_error = _normalize_id(raw_decision_did, "dilemma")
+            if scope_error:
+                continue
             if decision_did == normalized_did:
                 considered = dilemma_decision.get("considered", [])
                 if raw_answer_id not in considered:
