@@ -355,6 +355,57 @@ class TestBrainstormMutations:
         assert archive is not None
         assert archive["entity_type"] == "location"
 
+    def test_strips_scope_prefixes_in_raw_ids(self) -> None:
+        """Scoped IDs are stored unscoped in raw_id fields."""
+        graph = Graph.empty()
+        output = {
+            "entities": [
+                {
+                    "entity_id": "entity::kay",
+                    "entity_category": "character",
+                    "concept": "Young archivist",
+                }
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "dilemma::mentor_trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": ["entity::kay"],
+                    "answers": [
+                        {
+                            "answer_id": "answer::protector",
+                            "description": "Mentor protects Kay",
+                            "is_default_path": True,
+                        },
+                        {
+                            "answer_id": "answer::manipulator",
+                            "description": "Mentor manipulates Kay",
+                            "is_default_path": False,
+                        },
+                    ],
+                }
+            ],
+        }
+
+        apply_brainstorm_mutations(graph, output)
+
+        entity = graph.get_node("entity::kay")
+        assert entity is not None
+        assert entity["raw_id"] == "kay"
+
+        dilemma = graph.get_node("dilemma::mentor_trust")
+        assert dilemma is not None
+        assert dilemma["raw_id"] == "mentor_trust"
+        assert dilemma["central_entity_ids"] == ["entity::kay"]
+
+        protector = graph.get_node("dilemma::mentor_trust::alt::protector")
+        assert protector is not None
+        assert protector["raw_id"] == "protector"
+
+        manipulator = graph.get_node("dilemma::mentor_trust::alt::manipulator")
+        assert manipulator is not None
+        assert manipulator["raw_id"] == "manipulator"
+
     def test_creates_dilemma_with_alternatives(self) -> None:
         """Creates dilemma nodes with linked answers."""
         graph = Graph.empty()
@@ -433,6 +484,38 @@ class TestValidateBrainstormMutations:
                     "dilemma_id": "trust",
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": ["kay", "mentor"],
+                    "answers": [
+                        {"answer_id": "yes", "description": "Yes", "is_default_path": True},
+                        {"answer_id": "no", "description": "No", "is_default_path": False},
+                    ],
+                }
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert errors == []
+
+    def test_scoped_entity_and_dilemma_ids_are_accepted(self) -> None:
+        """Scoped IDs are normalized during brainstorm validation."""
+        output = {
+            "entities": [
+                {
+                    "entity_id": "entity::kay",
+                    "entity_category": "character",
+                    "concept": "Archivist",
+                },
+                {
+                    "entity_id": "entity::mentor",
+                    "entity_category": "character",
+                    "concept": "Mentor",
+                },
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "dilemma::trust",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": ["entity::kay", "entity::mentor"],
                     "answers": [
                         {"answer_id": "yes", "description": "Yes", "is_default_path": True},
                         {"answer_id": "no", "description": "No", "is_default_path": False},
