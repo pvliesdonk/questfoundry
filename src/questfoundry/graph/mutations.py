@@ -593,20 +593,22 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
                 )
             )
         else:
-            entity_ids.add(entity_id)
+            entity_ids.add(strip_scope_prefix(entity_id))
     sorted_entity_ids = sorted(entity_ids)
 
     # Validate each dilemma
     for i, dilemma in enumerate(output.get("dilemmas", [])):
-        dilemma_id = dilemma.get("dilemma_id", f"<index {i}>")
+        raw_dilemma_id = dilemma.get("dilemma_id", f"<index {i}>")
+        dilemma_id = strip_scope_prefix(raw_dilemma_id)
 
         # 1. Check central_entity_ids reference valid entities
         for eid in dilemma.get("central_entity_ids", []):
-            if eid not in entity_ids:
+            normalized_eid = strip_scope_prefix(eid)
+            if normalized_eid not in entity_ids:
                 errors.append(
                     BrainstormValidationError(
                         field_path=f"dilemmas.{i}.central_entity_ids",
-                        issue=f"Entity '{eid}' not in entities list",
+                        issue=f"Entity '{normalized_eid}' not in entities list",
                         available=sorted_entity_ids,
                         provided=eid,
                     )
@@ -614,7 +616,7 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
 
         # 2. Check answer IDs are unique within this dilemma
         answers = dilemma.get("answers", [])
-        answer_ids = [a.get("answer_id") for a in answers if a.get("answer_id")]
+        answer_ids = [strip_scope_prefix(a_id) for a in answers if (a_id := a.get("answer_id"))]
         answer_id_counts = Counter(answer_ids)
         for answer_id, count in answer_id_counts.items():
             if count > 1:
@@ -695,10 +697,11 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
     # Add entities
     for i, entity in enumerate(output.get("entities", [])):
         raw_id = _require_field(entity, "entity_id", f"Entity at index {i}")
+        raw_id = strip_scope_prefix(raw_id)
         entity_id = _prefix_id("entity", raw_id)
         node_data = {
             "type": "entity",
-            "raw_id": raw_id,  # Store original ID for reference
+            "raw_id": raw_id,  # Store unscoped ID for reference
             "entity_type": entity.get("entity_category"),  # character, location, object, faction
             "concept": entity.get("concept"),
             "notes": entity.get("notes"),
@@ -713,6 +716,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         raw_id = dilemma.get("dilemma_id")
         if not raw_id:
             raise MutationError(f"Dilemma at index {i} missing dilemma_id")
+        raw_id = strip_scope_prefix(raw_id)
         dilemma_node_id = _prefix_id("dilemma", raw_id)
 
         # Prefix entity references in central_entity_ids list
@@ -735,6 +739,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             answer_local_id = answer.get("answer_id")
             if not answer_local_id:
                 raise MutationError(f"Answer at index {j} in dilemma '{raw_id}' missing answer_id")
+            answer_local_id = strip_scope_prefix(answer_local_id)
             # Answer ID format: dilemma::dilemma_raw_id::alt::answer_local_id
             answer_node_id = f"{dilemma_node_id}::alt::{answer_local_id}"
             answer_data = {

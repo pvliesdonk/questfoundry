@@ -275,7 +275,7 @@ def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
         return ""
 
     # Pipe-delimited for easy scanning, with path:: scope prefix
-    id_list = " | ".join(f"`{format_scoped_id(SCOPE_PATH, pid)}`" for pid in path_ids)
+    id_list = " | ".join(f"`{normalize_scoped_id(pid, SCOPE_PATH)}`" for pid in path_ids)
 
     lines = [
         "## VALID PATH IDs (copy exactly, no modifications)",
@@ -302,8 +302,8 @@ def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
         lines.append("")
         for pid, dilemma in path_dilemma_pairs:
             lines.append(
-                f"  - `{format_scoped_id(SCOPE_PATH, pid)}` → "
-                f"`{format_scoped_id(SCOPE_DILEMMA, dilemma)}`"
+                f"  - `{normalize_scoped_id(pid, SCOPE_PATH)}` → "
+                f"`{normalize_scoped_id(dilemma, SCOPE_DILEMMA)}`"
             )
         lines.append("")
 
@@ -425,7 +425,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
                 cat_count = len(by_category[category])
                 lines.append(f"**{category.title()}s ({cat_count}):**")
                 for raw_id in sorted(by_category[category]):
-                    lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
+                    lines.append(f"  - `{normalize_scoped_id(raw_id, SCOPE_ENTITY)}`")
                 lines.append("")
 
     # Dilemmas with answers
@@ -461,7 +461,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
                 # Sort answers for deterministic output
                 answers.sort()
                 lines.append(
-                    f"- `{format_scoped_id(SCOPE_DILEMMA, raw_id)}` → [{', '.join(answers)}]"
+                    f"- `{normalize_scoped_id(raw_id, SCOPE_DILEMMA)}` → [{', '.join(answers)}]"
                 )
 
         lines.append("")
@@ -566,7 +566,7 @@ def format_retained_entity_ids(
             cat_count = len(by_category[category])
             lines.append(f"**{category.title()}s ({cat_count}):**")
             for raw_id in sorted(by_category[category]):
-                lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
+                lines.append(f"  - `{normalize_scoped_id(raw_id, SCOPE_ENTITY)}`")
             lines.append("")
 
     return "\n".join(lines)
@@ -604,7 +604,7 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
         if category in by_category:
             entity_lines.append(f"**{category.title()}s:**")
             for raw_id in sorted(by_category[category]):
-                entity_lines.append(f"  - `{format_scoped_id(SCOPE_ENTITY, raw_id)}`")
+                entity_lines.append(f"  - `{normalize_scoped_id(raw_id, SCOPE_ENTITY)}`")
             entity_lines.append("")  # Blank line between categories
 
     # Collect dilemma IDs
@@ -613,7 +613,7 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
     for _did, ddata in sorted(dilemmas.items()):
         raw_id = ddata.get("raw_id")
         if raw_id:
-            dilemma_lines.append(f"- `{format_scoped_id(SCOPE_DILEMMA, raw_id)}`")
+            dilemma_lines.append(f"- `{normalize_scoped_id(raw_id, SCOPE_DILEMMA)}`")
 
     return {
         "entity_manifest": "\n".join(entity_lines) if entity_lines else "(No entities)",
