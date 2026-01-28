@@ -697,8 +697,8 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
     # Add entities
     for i, entity in enumerate(output.get("entities", [])):
         raw_id = _require_field(entity, "entity_id", f"Entity at index {i}")
-        raw_id = strip_scope_prefix(raw_id)
         entity_id = _prefix_id("entity", raw_id)
+        raw_id = strip_scope_prefix(entity_id)
         node_data = {
             "type": "entity",
             "raw_id": raw_id,  # Store unscoped ID for reference
@@ -716,8 +716,8 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         raw_id = dilemma.get("dilemma_id")
         if not raw_id:
             raise MutationError(f"Dilemma at index {i} missing dilemma_id")
-        raw_id = strip_scope_prefix(raw_id)
         dilemma_node_id = _prefix_id("dilemma", raw_id)
+        raw_id = strip_scope_prefix(dilemma_node_id)
 
         # Prefix entity references in central_entity_ids list
         raw_central_entities = dilemma.get("central_entity_ids", [])
@@ -739,7 +739,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             answer_local_id = answer.get("answer_id")
             if not answer_local_id:
                 raise MutationError(f"Answer at index {j} in dilemma '{raw_id}' missing answer_id")
-            answer_local_id = strip_scope_prefix(answer_local_id)
+            answer_local_id = strip_scope_prefix(_prefix_id("answer", answer_local_id))
             # Answer ID format: dilemma::dilemma_raw_id::alt::answer_local_id
             answer_node_id = f"{dilemma_node_id}::alt::{answer_local_id}"
             answer_data = {
