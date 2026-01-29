@@ -249,52 +249,55 @@ When splitting is needed, use this order (each PR should be mergeable independen
 4. **Feature/stage PR(s)** - Actual feature implementation in slices. Each PR = one coherent capability.
 5. **Cleanup PR** - Remove dead code, tighten types, refactor, docs. Keep separate.
 
-### Stacked Commits with git-branchless
+### Stacked PRs with stack-pr
 
-This project uses [git-branchless](https://github.com/arxanas/git-branchless) for managing dependent changes. This avoids the complexity and fragility of traditional stacked PRs.
+This project uses [stack-pr](https://github.com/modular/stack-pr) for submitting stacked PRs (one PR per commit, each independently reviewable, merged bottom-up). For local commit management (amending, rebasing, navigating), we use [git-branchless](https://github.com/arxanas/git-branchless).
 
-**Why git-branchless instead of stacked PRs:**
+**Why dedicated tooling instead of manual stacking:**
 - Stacked PRs + squash merge = guaranteed conflicts and orphaned PRs
 - Manual rebasing across a stack is error-prone and time-consuming
 - Deleting a base branch closes all dependent PRs (unrecoverable)
+- `stack-pr` handles branch creation, PR creation, dependency chains, and post-merge rebasing automatically
+
+> **Note**: git-branchless's `git submit --forge github` is **broken** ([issue #1550](https://github.com/arxanas/git-branchless/issues/1550), author marks it "WARNING: likely buggy!"). Do NOT use `git submit` for PR creation. Use `stack-pr submit` instead.
 
 #### Setup (one-time)
 
 ```bash
-# Install git-branchless
+# Install stack-pr (requires gh CLI)
+uv tool install stack-pr
+
+# Install git-branchless for local commit management
 cargo install --locked git-branchless
 # Or: brew install git-branchless
 
-# Initialize in this repo
+# Initialize git-branchless in this repo
 git branchless init
 ```
 
 #### Workflow
 
 ```bash
-# View your commit stack
-git sl                    # Smart log - shows commit graph
-
-# Navigate the stack
-git prev                  # Move to parent commit
-git next                  # Move to child commit
-
-# Edit commits in the stack
+# Local commit management (git-branchless)
+git branchless smartlog   # View commit stack graph
+git prev / git next       # Navigate the stack
 git amend                 # Amend current commit (auto-rebases descendants)
 git reword                # Edit commit message (auto-rebases descendants)
-
-# Sync with main
 git sync                  # Rebase entire stack onto origin/main
 
-# Submit for review (one PR per commit)
-git submit                # Push and create PRs for each commit
+# PR submission (stack-pr)
+stack-pr view             # Preview what will be submitted (safe, read-only)
+stack-pr submit           # Push branches + create/update PRs for each commit
+stack-pr land             # Merge bottom PR + rebase remaining stack
+stack-pr abandon          # Clean up: delete branches, close PRs
 ```
 
 #### Key Concepts
 
-1. **Commits, not branches** - Each logical change is one commit. Branches are created automatically when needed.
-2. **Automatic rebasing** - When you amend a commit, all descendant commits are automatically rebased.
-3. **One PR per commit** - `git submit` creates a separate PR for each commit in your stack.
+1. **Commits, not branches** - Each logical change is one commit. Branches are created automatically by the tools.
+2. **Automatic rebasing** - git-branchless auto-rebases descendants when you amend a commit.
+3. **One PR per commit** - `stack-pr submit` creates a separate PR for each commit, with dependency chains set up automatically.
+4. **Squash-merge safe** - `stack-pr land` merges the bottom PR and rebases the rest, avoiding the orphaned-commit problem.
 
 #### When Changes Are Requested
 
@@ -306,20 +309,25 @@ git prev / git next       # Or: git checkout <commit-hash>
 git add -p
 git amend                 # Automatically rebases all descendants
 
-# Re-submit
-git submit
+# Update all PRs in the stack
+stack-pr submit
 ```
 
 #### Merging
 
-After PR approval, merge from the bottom of the stack up:
+Merge from the bottom of the stack up:
 ```bash
-# GitHub merges PR #1 (squash)
-git sync                  # Syncs your stack with the new main
-git submit                # Updates remaining PRs
+# Land the bottom PR (squash-merges + rebases remaining stack)
+stack-pr land
+
+# Or if merged via GitHub UI:
+git sync                  # Rebase stack onto updated main
+stack-pr submit           # Update remaining PRs
 ```
 
-**Reference**: [Working with Stacked PRs using git-branchless](https://olivernguyen.io/w/stacked.prs/)
+**References**:
+- [stack-pr documentation](https://github.com/modular/stack-pr)
+- [git-branchless local workflow](https://github.com/arxanas/git-branchless) (use for `smartlog`, `amend`, `sync` only)
 
 ### Pull Request Requirements
 
@@ -406,8 +414,8 @@ If estimated diff will exceed the target size:
 
 1. **Stop** - Do not proceed with a single large PR
 2. **Plan** - Write a slicing plan listing commit #1, #2, #3… with goals and file lists
-3. **Implement as stacked commits** - Use git-branchless to manage the stack
-4. **Submit incrementally** - `git submit` creates one PR per commit
+3. **Implement as stacked commits** - Use git-branchless to manage the stack locally
+4. **Submit incrementally** - `stack-pr submit` creates one PR per commit
 
 ```bash
 # Example workflow for a large refactor
@@ -420,13 +428,14 @@ git add -p && git commit -m "refactor(graph): update mutations for new names"
 git add -p && git commit -m "test: update tests for terminology rename"
 
 # View your stack
-git sl
+git branchless smartlog
 
-# Submit all as separate PRs
-git submit
+# Preview, then submit all as separate PRs
+stack-pr view
+stack-pr submit
 ```
 
-Each commit becomes a reviewable PR. Merge bottom-up. Git-branchless handles the rebasing.
+Each commit becomes a reviewable PR. Merge bottom-up with `stack-pr land`.
 
 ### No Scope Creep
 
@@ -511,11 +520,15 @@ uv run pytest tests/unit/ -x -q                    # All unit tests (safe, no LL
 uv run pytest tests/integration/ -x -q             # Integration tests (USES LLM - expensive!)
 uv run pytest --cov                                # With coverage (USES LLM - expensive!)
 
-# Git-branchless
-git sl                         # View commit stack
+# Git-branchless (local commit management only)
+git branchless smartlog        # View commit stack
 git amend                      # Amend + auto-rebase descendants
 git sync                       # Rebase stack on origin/main
-git submit                     # Create PRs for each commit
+
+# stack-pr (PR submission — do NOT use `git submit`)
+stack-pr view                  # Preview stack (read-only)
+stack-pr submit                # Create/update PRs for each commit
+stack-pr land                  # Merge bottom PR + rebase rest
 
 # CLI (once implemented)
 qf dream                       # Run DREAM stage
