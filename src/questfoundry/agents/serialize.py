@@ -18,6 +18,7 @@ from questfoundry.artifacts.validator import strip_null_values
 from questfoundry.graph.context import (
     SCOPE_DILEMMA,
     SCOPE_PATH,
+    format_answer_ids_by_dilemma,
     format_path_ids_context,
     format_retained_entity_ids,
     format_valid_ids_context,
@@ -1197,6 +1198,17 @@ async def serialize_seed_as_function(
                 "retained_entity_context_updated",
                 entity_decisions=len(collected["entities"]),
             )
+
+        # After dilemmas are serialized, inject answer ID manifest so the
+        # paths section knows which answer_ids are valid per dilemma.
+        if section_name == "dilemmas" and collected.get("dilemmas"):
+            answer_ids_context = format_answer_ids_by_dilemma(collected["dilemmas"])
+            if answer_ids_context:
+                enhanced_brief = f"{enhanced_brief}\n\n{answer_ids_context}"
+                log.debug(
+                    "answer_ids_context_injected",
+                    dilemma_count=len(collected["dilemmas"]),
+                )
 
         # After paths are serialized:
         # 1. Inject path IDs for subsequent sections (consequences)
