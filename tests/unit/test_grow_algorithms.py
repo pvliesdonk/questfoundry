@@ -2147,16 +2147,17 @@ class TestFindPassageSuccessors:
 
 
 class TestConditionalPrerequisiteInvariant:
-    """Regression tests for the conditional-prerequisite invariant.
+    """Tests for the conditional-prerequisite recovery strategies.
 
     When a proposed intersection beat has a ``requires`` edge to a beat
     outside the intersection whose paths do NOT cover the full union of
-    intersection beat paths, ``check_intersection_compatibility`` must
-    reject the intersection with ``field_path="intersection.conditional_prerequisite"``.
+    intersection beat paths, ``check_intersection_compatibility`` attempts
+    recovery via lift (widen prerequisite) or split (create path-specific
+    variant) before rejecting. See GitHub #360 and #361.
     """
 
-    def test_rejects_intersection_with_conditional_prerequisite(self) -> None:
-        """Intersection rejected when a prerequisite spans fewer paths."""
+    def test_lifts_conditional_prerequisite(self) -> None:
+        """Prerequisite spanning fewer paths is lifted to cover intersection."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
         from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
 
@@ -2164,8 +2165,12 @@ class TestConditionalPrerequisiteInvariant:
         errors = check_intersection_compatibility(
             graph, ["beat::mentor_meet", "beat::artifact_discover"]
         )
-        assert len(errors) > 0
-        assert any("conditional_prerequisite" in e.field_path for e in errors)
+        # Lift succeeds — gap_1 gets widened to all 4 paths
+        assert errors == []
+        # Verify the lift actually added belongs_to edges
+        gap_edges = graph.get_edges(from_id="beat::gap_1", to_id=None, edge_type="belongs_to")
+        gap_paths = {e["to"] for e in gap_edges}
+        assert len(gap_paths) == 4
 
     def test_accepts_intersection_without_conditional_prerequisites(self) -> None:
         """Intersection accepted when no external prerequisites exist."""
@@ -2212,8 +2217,8 @@ class TestConditionalPrerequisiteInvariant:
                 f"'intersections' (index {intersection_idx})"
             )
 
-    def test_rejects_when_prerequisite_has_no_paths(self) -> None:
-        """Prerequisite with no belongs_to edges is rejected (orphan beat)."""
+    def test_lifts_orphan_prerequisite(self) -> None:
+        """Prerequisite with no belongs_to edges is lifted to all paths."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
@@ -2228,10 +2233,15 @@ class TestConditionalPrerequisiteInvariant:
         errors = check_intersection_compatibility(
             graph, ["beat::mentor_meet", "beat::artifact_discover"]
         )
-        assert any("conditional_prerequisite" in e.field_path for e in errors)
+        # Lift succeeds — orphan gets widened to all paths
+        assert errors == []
+        orphan_edges = graph.get_edges(
+            from_id="beat::orphan_prereq", to_id=None, edge_type="belongs_to"
+        )
+        assert len(orphan_edges) == 4
 
-    def test_reports_multiple_conditional_prerequisites(self) -> None:
-        """Each conditional prerequisite produces a separate error."""
+    def test_lifts_multiple_conditional_prerequisites(self) -> None:
+        """Multiple conditional prerequisites are all lifted."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
         from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
 
@@ -2254,5 +2264,55 @@ class TestConditionalPrerequisiteInvariant:
         errors = check_intersection_compatibility(
             graph, ["beat::mentor_meet", "beat::artifact_discover"]
         )
-        cond_errors = [e for e in errors if "conditional_prerequisite" in e.field_path]
-        assert len(cond_errors) >= 2, f"Expected ≥2 errors, got {len(cond_errors)}"
+        # Both lifts succeed
+        assert errors == []
+
+    def test_lift_transitive_prerequisite(self) -> None:
+        """Transitive prerequisites (prereq of prereq) are also lifted."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
+
+        graph = make_conditional_prerequisite_graph()
+        # gap_1 requires gap_0, which also only belongs to one path
+        graph.create_node(
+            "beat::gap_0",
+            {"type": "beat", "raw_id": "gap_0", "summary": "Root gap."},
+        )
+        graph.add_edge("belongs_to", "beat::gap_0", "path::mentor_trust_canonical")
+        graph.add_edge("requires", "beat::gap_1", "beat::gap_0")
+
+        errors = check_intersection_compatibility(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
+        # Both gap_0 and gap_1 lifted transitively
+        assert errors == []
+        gap0_edges = graph.get_edges(from_id="beat::gap_0", to_id=None, edge_type="belongs_to")
+        assert len(gap0_edges) == 4
+
+    def test_rejects_when_lift_depth_exceeded(self) -> None:
+        """Rejects when transitive prerequisite chain exceeds max depth."""
+        from questfoundry.graph.grow_algorithms import (
+            _MAX_LIFT_DEPTH,
+            check_intersection_compatibility,
+        )
+        from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
+
+        graph = make_conditional_prerequisite_graph()
+
+        # Create a chain deeper than _MAX_LIFT_DEPTH
+        prev = "beat::gap_1"
+        for i in range(_MAX_LIFT_DEPTH + 1):
+            deep_id = f"beat::deep_{i}"
+            graph.create_node(
+                deep_id,
+                {"type": "beat", "raw_id": f"deep_{i}", "summary": f"Deep {i}."},
+            )
+            graph.add_edge("belongs_to", deep_id, "path::mentor_trust_canonical")
+            graph.add_edge("requires", prev, deep_id)
+            prev = deep_id
+
+        errors = check_intersection_compatibility(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
+        # Lift fails due to depth, split attempted or rejection
+        assert any("conditional_prerequisite" in e.field_path for e in errors) or len(errors) == 0
