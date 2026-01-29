@@ -21,6 +21,17 @@ system: |
   - If something has a physical space where scenes can occur, consider making it a location not an object
   - A story with only 1-2 locations feels confined; more settings enable natural scene variation and convergence points
 
+  ## Interconnection Guidance
+  Dilemmas should NOT be isolated storylines. Build interconnection into the material:
+  - **Shared locations across dilemmas**: At least 2-3 locations should be relevant to multiple dilemmas
+    (e.g., an archive is where both the trust investigation AND the artifact mystery converge)
+  - **Position-based contradictions**: Characters who appear trustworthy under one dilemma
+    but suspicious under another create natural cross-dilemma tension
+  - **Dual-purpose locations**: A location that serves one function for one dilemma and a
+    different function for another (e.g., a garden is a meeting place AND a hiding spot)
+  - **Avoid isolated investigators**: If a character is central to only one dilemma with no
+    connection to others, the story will fragment into parallel tracks that never intersect
+
   2. **Dilemmas** - Binary dramatic questions that drive the story
      - Each dilemma is a yes/no question (e.g., "Can the mentor be trusted?")
      - Each dilemma has exactly TWO answers (not more, not less)
