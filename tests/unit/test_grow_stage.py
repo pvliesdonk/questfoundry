@@ -591,8 +591,8 @@ class TestPhase3Knots:
         assert result.llm_calls == 0
 
     @pytest.mark.asyncio
-    async def test_phase_3_skips_incompatible_intersections(self) -> None:
-        """Phase 3 skips intersections that fail compatibility check."""
+    async def test_phase_3_fails_when_all_intersections_rejected(self) -> None:
+        """Phase 3 fails when all proposed intersections are incompatible."""
         from questfoundry.models.grow import IntersectionProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
@@ -617,13 +617,13 @@ class TestPhase3Knots:
 
         result = await stage._phase_3_intersections(graph, mock_model)
 
-        assert result.status == "completed"
-        assert "0 applied" in result.detail
-        assert "1 skipped" in result.detail
+        # Quality gate: 100% rejection → failure (#365)
+        assert result.status == "failed"
+        assert "rejected" in result.detail
 
     @pytest.mark.asyncio
-    async def test_phase_3_filters_invalid_beat_ids(self) -> None:
-        """Phase 3 skips proposals with nonexistent beat IDs."""
+    async def test_phase_3_fails_with_invalid_beat_ids(self) -> None:
+        """Phase 3 fails when all proposals have nonexistent beat IDs."""
         from questfoundry.models.grow import IntersectionProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
@@ -647,21 +647,20 @@ class TestPhase3Knots:
 
         result = await stage._phase_3_intersections(graph, mock_model)
 
-        assert result.status == "completed"
-        assert "0 applied" in result.detail
+        # Quality gate: 100% rejection → failure (#365)
+        assert result.status == "failed"
+        assert "rejected" in result.detail
 
     @pytest.mark.asyncio
-    async def test_phase_3_skips_requires_conflict(self) -> None:
-        """Phase 3 skips intersections where beats have requires dependency."""
+    async def test_phase_3_fails_with_requires_conflict(self) -> None:
+        """Phase 3 fails when all intersections have requires dependency."""
         from questfoundry.models.grow import IntersectionProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
         graph = make_intersection_candidate_graph()
         stage = GrowStage()
 
-        # opening requires mentor_meet — these have a requires dependency
-        # But they're also from different dilemmas in this graph.
-        # Add a cross-dilemma requires to test: artifact_discover requires mentor_meet
+        # Add a cross-dilemma requires: artifact_discover requires mentor_meet
         graph.add_edge("requires", "beat::artifact_discover", "beat::mentor_meet")
 
         phase3_output = Phase3Output(
@@ -681,9 +680,9 @@ class TestPhase3Knots:
 
         result = await stage._phase_3_intersections(graph, mock_model)
 
-        assert result.status == "completed"
-        assert "0 applied" in result.detail
-        assert "1 skipped" in result.detail
+        # Quality gate: 100% rejection → failure (#365)
+        assert result.status == "failed"
+        assert "rejected" in result.detail
 
 
 class TestPhase4aSceneTypes:

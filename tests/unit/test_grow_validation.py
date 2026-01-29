@@ -588,11 +588,11 @@ class TestSpineArcExists:
         assert "No spine arc" in result.message
 
     def test_no_arcs_at_all(self) -> None:
-        """Fails when graph has no arc nodes."""
+        """Warns (not fails) when graph has no arc nodes at all."""
         graph = Graph.empty()
         result = check_spine_arc_exists(graph)
-        assert result.severity == "fail"
-        assert "0 arcs" in result.message
+        assert result.severity == "warn"
+        assert "skipped" in result.message
 
 
 class TestRunAllChecks:

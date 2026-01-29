@@ -551,6 +551,15 @@ def check_spine_arc_exists(graph: Graph) -> ValidationCheck:
     enumerate_arcs failed to find a complete path combination.
     """
     arc_nodes = graph.get_nodes_by_type("arc")
+
+    # No arcs at all is a degenerate case (empty story) — warn, not fail.
+    if not arc_nodes:
+        return ValidationCheck(
+            name="spine_arc_exists",
+            severity="warn",
+            message="No arcs exist — spine arc check skipped",
+        )
+
     for data in arc_nodes.values():
         if data.get("arc_type") == "spine":
             return ValidationCheck(
