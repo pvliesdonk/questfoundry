@@ -970,12 +970,24 @@ def _get_sections_to_retry(errors: list[SeedValidationError]) -> set[str]:
     return sections
 
 
+# Dependency order for section retries (upstream first).
+# When cross-reference errors span sections, retrying upstream first
+# allows downstream sections to use corrected data.
+_SECTION_ORDER = ["entities", "dilemmas", "paths", "consequences", "beats", "convergence"]
+
+
 def _group_errors_by_section(
     errors: list[SeedValidationError],
 ) -> dict[str, list[SeedValidationError]]:
     """Group semantic errors by their originating section.
 
     Maps field_path prefixes to section names using _FIELD_PATH_TO_SECTION.
+    Also propagates cross-reference errors to upstream sections so that
+    the root cause section is retried, not just the downstream section.
+
+    For example, a path answer_id mismatch (check 11c) targets the "paths"
+    section but the root cause is often the dilemma's considered list.
+    This function adds the error to BOTH "paths" and "dilemmas" sections.
     """
     by_section: dict[str, list[SeedValidationError]] = {}
     for error in errors:
@@ -983,7 +995,49 @@ def _group_errors_by_section(
         section = _FIELD_PATH_TO_SECTION.get(top_level)
         if section:
             by_section.setdefault(section, []).append(error)
+
+    # Propagate cross-reference errors to upstream sections.
+    _propagate_cross_section_errors(by_section)
+
     return by_section
+
+
+def _propagate_cross_section_errors(
+    by_section: dict[str, list[SeedValidationError]],
+) -> None:
+    """Add upstream section entries for cross-reference errors.
+
+    When a paths error references dilemma considered lists, the dilemma
+    section should also be retried so its considered array can be fixed.
+    """
+    paths_errors = by_section.get("paths", [])
+    if not paths_errors:
+        return
+
+    # Check 11c errors: path answer_id not in dilemma considered list.
+    # These have field_path like "paths.N.answer_id" and mention "considered".
+    cross_ref_errors = [
+        e for e in paths_errors if "answer_id" in e.field_path and "considered" in e.issue
+    ]
+    if cross_ref_errors:
+        # Create dilemma-targeted corrections from the same errors.
+        # The dilemma section needs to know which answer IDs to add to considered.
+        dilemma_errors = []
+        for error in cross_ref_errors:
+            dilemma_errors.append(
+                SeedValidationError(
+                    field_path="dilemmas",
+                    issue=(
+                        f"A path uses answer_id '{error.provided}' but it is not in "
+                        f"the dilemma's considered list. Ensure considered includes "
+                        f"all answer IDs that will have paths."
+                    ),
+                    available=error.available,
+                    provided=error.provided,
+                    category=SeedErrorCategory.SEMANTIC,
+                )
+            )
+        by_section.setdefault("dilemmas", []).extend(dilemma_errors)
 
 
 def _format_section_corrections(errors: list[SeedValidationError]) -> str:
@@ -1265,11 +1319,23 @@ async def serialize_seed_as_function(
                     f"attempt {semantic_attempt}/{max_semantic_retries}: {len(semantic_errors)} errors",
                 )
 
-            # Re-serialize only failing sections with corrections in system prompt
+            # Re-serialize only failing sections with corrections in system prompt.
+            # _group_errors_by_section also propagates cross-reference errors to
+            # upstream sections (e.g., paths answer_id mismatch → retry dilemmas too).
             section_errors = _group_errors_by_section(semantic_errors)
             retried_any = False
 
-            for section_name, errors_for_section in section_errors.items():
+            # Sort sections by dependency order (upstream first) so that
+            # retried upstream data is available for downstream retries.
+            sorted_section_names = sorted(
+                section_errors.keys(),
+                key=lambda s: _SECTION_ORDER.index(s)
+                if s in _SECTION_ORDER
+                else len(_SECTION_ORDER),
+            )
+
+            for section_name in sorted_section_names:
+                errors_for_section = section_errors[section_name]
                 section_config = next((s for s in sections if s[0] == section_name), None)
                 if section_config is None:
                     continue
@@ -1309,7 +1375,13 @@ async def serialize_seed_as_function(
                         collected[output_field] = section_data[output_field]
                         retried_any = True
 
-                        # Refresh path context for dependent sections when paths change
+                        # Refresh downstream context when upstream sections change.
+                        if section_name == "dilemmas" and collected.get("dilemmas"):
+                            answer_ids_ctx = format_answer_ids_by_dilemma(collected["dilemmas"])
+                            if answer_ids_ctx:
+                                enhanced_brief = f"{enhanced_brief}\n\n{answer_ids_ctx}"
+                                log.debug("answer_ids_context_refreshed_on_retry")
+
                         if section_name == "paths":
                             path_ids_context = format_path_ids_context(collected["paths"])
                             if path_ids_context:
