@@ -109,6 +109,14 @@ If the non-canonical answer is not promoted to a path in SEED, that dilemma has 
 
 ## Algorithm Phases
 
+> **Execution order note:** Phases 4a/4b/4c (gap detection & scene-type
+> tagging) execute **before** Phase 3 (intersection detection).  This
+> ensures each path is fully elaborated with gap beats before cross-path
+> weaving, preventing "conditional prerequisites" where a shared beat
+> depends on a path-specific gap beat.  Phase numbering is preserved for
+> historical continuity; execution order is defined in `_phase_order()`.
+> See also: **No-Conditional-Prerequisites Invariant** under Phase 3.
+
 ### Phase 1: Beat Graph Import
 
 **Input:** SEED artifacts
@@ -196,6 +204,7 @@ A beat between `reveals` and `commits` may be **logically agnostic** (player has
      - No `requires` conflicts (A requires B, B requires A)
      - No timing contradictions
      - Location resolution possible (shared location exists in both location sets)
+     - **No conditional prerequisites** (see invariant below)
    - If compatible: propose as intersection with resolved location
 4. Human reviews proposed intersections:
    - Approve: execute intersection operation (mark or merge), set resolved location
@@ -217,13 +226,36 @@ A beat between `reveals` and `commits` may be **logically agnostic** (player has
 
 **Iteration:** One pass of clustering. If human wants more intersections, re-run with different guidance.
 
+#### No-Conditional-Prerequisites Invariant
+
+For any `requires` edge A → B where A is in a proposed intersection:
+
+> **`paths(B) ⊇ paths(A_post_intersection)`**
+
+A beat that would become shared across multiple paths (via intersection
+marking) cannot depend on a beat that exists only on a strict subset of
+those paths.  If this invariant is violated, the `requires` edge would be
+silently dropped during arc enumeration for arcs missing the prerequisite's
+path.  This produces inconsistent topological orderings across arcs and
+causes `passage_dag_cycles` failures in validation.
+
+**Current strategy:** Reject the intersection.  The beats remain separate.
+
+**Future alternatives** (not yet implemented):
+- **Lift prerequisites (#360):** Also add the prerequisite beat to all
+  intersection paths, making it globally shared.  Risk: may widen a beat
+  beyond its narrative intent.
+- **Split lead-ins (#361):** Create path-specific copies of the shared beat
+  so the path-specific version keeps the dependency while others are
+  independent.  Risk: increases beat count and complexity.
+
 ---
 
 ### Phase 4: Gap Detection and Scene-Type Tagging
 
 **Purpose:** Find missing beats needed for narrative continuity AND assign scene types for pacing.
 
-**Input:** Beat graph with intersections
+**Input:** Beat graph (before intersections — see execution order note above)
 
 **Operations:**
 
