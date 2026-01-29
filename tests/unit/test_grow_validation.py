@@ -17,6 +17,7 @@ from questfoundry.graph.grow_validation import (
     check_gate_satisfiability,
     check_passage_dag_cycles,
     check_single_start,
+    check_spine_arc_exists,
     run_all_checks,
 )
 from questfoundry.pipeline.stages.grow import GrowStage
@@ -58,6 +59,18 @@ def _make_linear_passage_graph() -> Graph:
     graph.add_edge("choice_to", "choice::p1__p2", "passage::p2")
     graph.add_edge("choice_from", "choice::p2__p3", "passage::p2")
     graph.add_edge("choice_to", "choice::p2__p3", "passage::p3")
+
+    # Add a spine arc so validation passes the spine check
+    graph.create_node(
+        "arc::spine",
+        {
+            "type": "arc",
+            "raw_id": "spine",
+            "arc_type": "spine",
+            "paths": ["path::d1__a1"],
+            "sequence": ["beat::p1", "beat::p2", "beat::p3"],
+        },
+    )
 
     return graph
 
@@ -552,6 +565,34 @@ class TestCommitsTiming:
 
         checks = check_commits_timing(graph)
         assert len(checks) == 0
+
+
+class TestSpineArcExists:
+    def test_spine_arc_present(self) -> None:
+        """Passes when spine arc exists."""
+        graph = _make_linear_passage_graph()
+        result = check_spine_arc_exists(graph)
+        assert result.severity == "pass"
+        assert result.name == "spine_arc_exists"
+
+    def test_spine_arc_missing(self) -> None:
+        """Fails when no arc has arc_type 'spine'."""
+        graph = Graph.empty()
+        # Add a non-spine arc
+        graph.create_node(
+            "arc::branch",
+            {"type": "arc", "raw_id": "branch", "arc_type": "branch", "paths": [], "sequence": []},
+        )
+        result = check_spine_arc_exists(graph)
+        assert result.severity == "fail"
+        assert "No spine arc" in result.message
+
+    def test_no_arcs_at_all(self) -> None:
+        """Fails when graph has no arc nodes."""
+        graph = Graph.empty()
+        result = check_spine_arc_exists(graph)
+        assert result.severity == "fail"
+        assert "0 arcs" in result.message
 
 
 class TestRunAllChecks:

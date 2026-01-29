@@ -543,6 +543,32 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
     return checks
 
 
+def check_spine_arc_exists(graph: Graph) -> ValidationCheck:
+    """Verify that a spine arc exists in the graph.
+
+    The spine arc contains all canonical paths and is required for
+    pruning and reachability analysis. Its absence indicates that
+    enumerate_arcs failed to find a complete path combination.
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+    for data in arc_nodes.values():
+        if data.get("arc_type") == "spine":
+            return ValidationCheck(
+                name="spine_arc_exists",
+                severity="pass",
+                message="Spine arc found",
+            )
+
+    return ValidationCheck(
+        name="spine_arc_exists",
+        severity="fail",
+        message=(
+            f"No spine arc among {len(arc_nodes)} arcs. "
+            f"Story has no complete canonical path through all dilemmas."
+        ),
+    )
+
+
 def run_all_checks(graph: Graph) -> ValidationReport:
     """Run all Phase 10 validation checks and aggregate results.
 
@@ -552,6 +578,7 @@ def run_all_checks(graph: Graph) -> ValidationReport:
         check_single_start(graph),
         check_all_passages_reachable(graph),
         check_all_endings_reachable(graph),
+        check_spine_arc_exists(graph),
         check_dilemmas_resolved(graph),
         check_gate_satisfiability(graph),
         check_passage_dag_cycles(graph),
