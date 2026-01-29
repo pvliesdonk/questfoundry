@@ -1009,16 +1009,19 @@ def _propagate_cross_section_errors(
 
     When a paths error references dilemma considered lists, the dilemma
     section should also be retried so its considered array can be fixed.
+
+    Currently only propagates ``paths → dilemmas`` errors (check 11c).
+    Other cross-section dependencies (consequences→paths, beats→entities)
+    don't need propagation because their errors already point to the
+    correct section for retry.
     """
     paths_errors = by_section.get("paths", [])
     if not paths_errors:
         return
 
     # Check 11c errors: path answer_id not in dilemma considered list.
-    # These have field_path like "paths.N.answer_id" and mention "considered".
-    cross_ref_errors = [
-        e for e in paths_errors if "answer_id" in e.field_path and "considered" in e.issue
-    ]
+    # Uses the CROSS_REFERENCE category set in validate_seed_mutations().
+    cross_ref_errors = [e for e in paths_errors if e.category == SeedErrorCategory.CROSS_REFERENCE]
     if cross_ref_errors:
         # Create dilemma-targeted corrections from the same errors.
         # The dilemma section needs to know which answer IDs to add to considered.
@@ -1377,6 +1380,10 @@ async def serialize_seed_as_function(
 
                         # Refresh downstream context when upstream sections change.
                         if section_name == "dilemmas" and collected.get("dilemmas"):
+                            # Strip old answer IDs context to avoid duplication on retry.
+                            _answer_ids_header = "\n\n## Valid Answer IDs per Dilemma"
+                            if _answer_ids_header in enhanced_brief:
+                                enhanced_brief = enhanced_brief.split(_answer_ids_header, 1)[0]
                             answer_ids_ctx = format_answer_ids_by_dilemma(collected["dilemmas"])
                             if answer_ids_ctx:
                                 enhanced_brief = f"{enhanced_brief}\n\n{answer_ids_ctx}"

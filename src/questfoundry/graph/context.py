@@ -262,14 +262,7 @@ def format_answer_ids_by_dilemma(dilemmas: list[dict[str, Any]]) -> str:
     if not dilemmas:
         return ""
 
-    lines = [
-        "## Valid Answer IDs per Dilemma",
-        "",
-        "Each path's `answer_id` MUST be one of the `considered` IDs below.",
-        "Do NOT invent answer IDs or use `implicit` IDs as path answer_ids.",
-        "",
-    ]
-
+    dilemma_lines = []
     for d in sorted(dilemmas, key=lambda x: x.get("dilemma_id", "")):
         dilemma_id = d.get("dilemma_id", "")
         if not dilemma_id:
@@ -277,9 +270,20 @@ def format_answer_ids_by_dilemma(dilemmas: list[dict[str, Any]]) -> str:
         scoped = normalize_scoped_id(strip_scope_prefix(dilemma_id), SCOPE_DILEMMA)
         considered = d.get("considered", [])
         implicit = d.get("implicit", [])
-        lines.append(f"- `{scoped}` -> considered: {considered}, implicit: {implicit}")
+        dilemma_lines.append(f"- `{scoped}` -> considered: {considered}, implicit: {implicit}")
 
-    lines.append("")
+    if not dilemma_lines:
+        return ""
+
+    lines = [
+        "## Valid Answer IDs per Dilemma",
+        "",
+        "Each path's `answer_id` MUST be one of the `considered` IDs below.",
+        "Do NOT invent answer IDs or use `implicit` IDs as path answer_ids.",
+        "",
+        *dilemma_lines,
+        "",
+    ]
     return "\n".join(lines)
 
 

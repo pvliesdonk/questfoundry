@@ -3460,7 +3460,7 @@ class TestValidation11cPathAlternativeInConsidered:
         assert "option_b" in check_11c_errors[0].issue
         assert "choice_a_or_b" in check_11c_errors[0].issue
         assert check_11c_errors[0].field_path == "paths.1.answer_id"
-        assert check_11c_errors[0].category == SeedErrorCategory.SEMANTIC
+        assert check_11c_errors[0].category == SeedErrorCategory.CROSS_REFERENCE
 
     def test_empty_considered_detected(self) -> None:
         """Path with answer_id but empty considered fails validation."""

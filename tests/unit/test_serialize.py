@@ -1462,3 +1462,82 @@ class TestBeatRetryAndContextRefresh:
             # Function returns with errors rather than crashing
             assert result.success is False
             assert len(result.semantic_errors) > 0
+
+
+class TestPropagateCrossSectionErrors:
+    """Tests for _propagate_cross_section_errors and error grouping."""
+
+    def test_cross_reference_errors_propagate_to_dilemmas(self) -> None:
+        """Paths errors with CROSS_REFERENCE category create dilemma entries."""
+        from questfoundry.agents.serialize import _propagate_cross_section_errors
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        by_section: dict[str, list[SeedValidationError]] = {
+            "paths": [
+                SeedValidationError(
+                    field_path="paths.0.answer_id",
+                    issue="Path answer 'x' is not in dilemma considered list",
+                    available=["a", "b"],
+                    provided="x",
+                    category=SeedErrorCategory.CROSS_REFERENCE,
+                ),
+            ],
+        }
+        _propagate_cross_section_errors(by_section)
+        assert "dilemmas" in by_section
+        assert len(by_section["dilemmas"]) == 1
+        assert "x" in by_section["dilemmas"][0].issue
+
+    def test_no_propagation_for_semantic_errors(self) -> None:
+        """SEMANTIC errors in paths do not propagate to dilemmas."""
+        from questfoundry.agents.serialize import _propagate_cross_section_errors
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        by_section: dict[str, list[SeedValidationError]] = {
+            "paths": [
+                SeedValidationError(
+                    field_path="paths.0.dilemma_id",
+                    issue="Invalid dilemma reference",
+                    category=SeedErrorCategory.SEMANTIC,
+                ),
+            ],
+        }
+        _propagate_cross_section_errors(by_section)
+        assert "dilemmas" not in by_section
+
+    def test_no_propagation_when_no_paths_errors(self) -> None:
+        """No-op when paths section has no errors."""
+        from questfoundry.agents.serialize import _propagate_cross_section_errors
+
+        by_section: dict[str, list] = {}
+        _propagate_cross_section_errors(by_section)
+        assert "dilemmas" not in by_section
+
+    def test_multiple_cross_ref_errors_propagate_all(self) -> None:
+        """Multiple CROSS_REFERENCE errors each create a dilemma entry."""
+        from questfoundry.agents.serialize import _propagate_cross_section_errors
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        by_section: dict[str, list[SeedValidationError]] = {
+            "paths": [
+                SeedValidationError(
+                    field_path="paths.0.answer_id",
+                    issue="not in considered",
+                    provided="x",
+                    category=SeedErrorCategory.CROSS_REFERENCE,
+                ),
+                SeedValidationError(
+                    field_path="paths.1.answer_id",
+                    issue="not in considered",
+                    provided="y",
+                    category=SeedErrorCategory.CROSS_REFERENCE,
+                ),
+                SeedValidationError(
+                    field_path="paths.2.dilemma_id",
+                    issue="invalid ref",
+                    category=SeedErrorCategory.SEMANTIC,
+                ),
+            ],
+        }
+        _propagate_cross_section_errors(by_section)
+        assert len(by_section["dilemmas"]) == 2

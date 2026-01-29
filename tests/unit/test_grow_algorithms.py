@@ -2289,8 +2289,48 @@ class TestConditionalPrerequisiteInvariant:
         gap0_edges = graph.get_edges(from_id="beat::gap_0", to_id=None, edge_type="belongs_to")
         assert len(gap0_edges) == 4
 
-    def test_rejects_when_lift_depth_exceeded(self) -> None:
-        """Rejects when transitive prerequisite chain exceeds max depth."""
+    def test_rejects_when_lift_depth_exceeded_and_split_fails(self) -> None:
+        """Rejects when transitive prerequisite chain exceeds max depth and split is not viable."""
+        from questfoundry.graph.grow_algorithms import (
+            _MAX_LIFT_DEPTH,
+            check_intersection_compatibility,
+        )
+        from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
+
+        graph = make_conditional_prerequisite_graph()
+
+        # Create a chain deeper than _MAX_LIFT_DEPTH
+        prev = "beat::gap_1"
+        for i in range(_MAX_LIFT_DEPTH + 1):
+            deep_id = f"beat::deep_{i}"
+            graph.create_node(
+                deep_id,
+                {"type": "beat", "raw_id": f"deep_{i}", "summary": f"Deep {i}."},
+            )
+            graph.add_edge("belongs_to", deep_id, "path::mentor_trust_canonical")
+            graph.add_edge("requires", prev, deep_id)
+            prev = deep_id
+
+        # Pre-create the split variant nodes to block the split fallback,
+        # ensuring this test exercises the rejection path.
+        # Block both the prereq-specific and generic fallback variant names.
+        graph.create_node(
+            "beat::mentor_meet_split_gap_1",
+            {"type": "beat", "raw_id": "mentor_meet_split_gap_1", "summary": "Blocker."},
+        )
+        graph.create_node(
+            "beat::mentor_meet_split",
+            {"type": "beat", "raw_id": "mentor_meet_split", "summary": "Blocker."},
+        )
+
+        errors = check_intersection_compatibility(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
+        assert len(errors) > 0
+        assert any("conditional_prerequisite" in e.field_path for e in errors)
+
+    def test_split_succeeds_when_lift_depth_exceeded(self) -> None:
+        """Split strategy succeeds as fallback when lift depth is exceeded."""
         from questfoundry.graph.grow_algorithms import (
             _MAX_LIFT_DEPTH,
             check_intersection_compatibility,
@@ -2314,5 +2354,10 @@ class TestConditionalPrerequisiteInvariant:
         errors = check_intersection_compatibility(
             graph, ["beat::mentor_meet", "beat::artifact_discover"]
         )
-        # Lift fails due to depth, split attempted or rejection
-        assert any("conditional_prerequisite" in e.field_path for e in errors) or len(errors) == 0
+        # Lift fails but split succeeds — no errors
+        assert errors == []
+        # Verify the split variant was created (named with prereq suffix)
+        assert graph.has_node("beat::mentor_meet_split_gap_1")
+        variant_data = graph.get_node("beat::mentor_meet_split_gap_1")
+        assert variant_data is not None
+        assert variant_data.get("split_from") == "beat::mentor_meet"

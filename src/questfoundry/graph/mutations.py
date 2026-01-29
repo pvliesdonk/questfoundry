@@ -153,6 +153,9 @@ class SeedErrorCategory(Enum):
     INNER = auto()  # Schema/type error in a single section
     SEMANTIC = auto()  # Invalid ID reference (phantom IDs)
     COMPLETENESS = auto()  # Missing entity/dilemma decisions
+    CROSS_REFERENCE = (
+        auto()
+    )  # Cross-section ID mismatch (e.g. path answer_id not in dilemma considered)
     # FATAL is reserved for future use - e.g., graph corruption that requires
     # manual intervention. Currently no errors are classified as FATAL since
     # all known error types can be retried with appropriate feedback.
@@ -1246,7 +1249,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                             ),
                             available=considered,
                             provided=raw_answer_id,
-                            category=SeedErrorCategory.SEMANTIC,
+                            category=SeedErrorCategory.CROSS_REFERENCE,
                         )
                     )
                 break

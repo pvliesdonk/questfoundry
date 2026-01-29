@@ -1187,15 +1187,14 @@ class TestFormatAnswerIdsByDilemma:
         assert "dilemma::artifact_blessed_or_cursed" in result
 
     def test_dilemma_without_id_skipped(self) -> None:
-        """Dilemmas with empty or missing ID are skipped."""
+        """Dilemmas with empty or missing ID produce empty string."""
         dilemmas = [
             {"dilemma_id": "", "considered": ["a"], "implicit": []},
             {"considered": ["b"], "implicit": []},
         ]
         result = format_answer_ids_by_dilemma(dilemmas)
-        # Header still present but no dilemma lines
-        assert "Valid Answer IDs per Dilemma" in result
-        assert "dilemma::" not in result
+        # No valid dilemmas → empty string (no header injected)
+        assert result == ""
 
     def test_unscoped_dilemma_id_gets_prefix(self) -> None:
         """Dilemma IDs without scope prefix get normalized."""

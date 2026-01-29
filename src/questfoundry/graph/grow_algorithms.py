@@ -835,14 +835,20 @@ def _try_split_beat(
     if beat_data is None:
         return None
 
-    variant_id = f"{beat_id}_split"
+    # Use prereq ID in suffix to disambiguate multiple splits on the same beat.
+    prereq_suffix = prereq_id.rsplit("::", 1)[-1] if "::" in prereq_id else prereq_id
+    variant_id = f"{beat_id}_split_{prereq_suffix}"
     if graph.has_node(variant_id):
-        return None  # Name collision — can't split
+        # Fall back to generic suffix
+        variant_id = f"{beat_id}_split"
+        if graph.has_node(variant_id):
+            return None  # Name collision — can't split
 
     # Create variant with same data but different ID
+    raw_variant = variant_id.rsplit("::", 1)[-1] if "::" in variant_id else variant_id
     variant_data = {
         **beat_data,
-        "raw_id": f"{beat_data.get('raw_id', beat_id)}_split",
+        "raw_id": raw_variant,
         "split_from": beat_id,
     }
     graph.create_node(variant_id, variant_data)

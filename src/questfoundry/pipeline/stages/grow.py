@@ -806,7 +806,10 @@ class GrowStage:
                 status="failed",
                 detail=(
                     f"All {len(result.intersections)} proposed intersections rejected. "
-                    f"Story structure lacks cross-dilemma scene overlap."
+                    f"Story structure lacks cross-dilemma scene overlap. "
+                    f"Common causes: insufficient shared locations, isolated storylines, "
+                    f"or characters confined to a single dilemma. "
+                    f"Review brainstorm/seed for shared location convergence points."
                 ),
                 llm_calls=llm_calls,
                 tokens_used=tokens,
