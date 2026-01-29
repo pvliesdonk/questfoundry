@@ -245,6 +245,48 @@ def format_hierarchical_path_id(dilemma_id: str, answer_id: str) -> str:
     return f"{SCOPE_PATH}::{dilemma_raw}__{answer_id}"
 
 
+def format_answer_ids_by_dilemma(dilemmas: list[dict[str, Any]]) -> str:
+    """Format answer IDs per dilemma as context for paths serialization.
+
+    After dilemmas are serialized, each dilemma has ``considered`` and
+    ``implicit`` answer lists.  Injecting these before the paths section
+    lets the model know exactly which answer_id values are valid for each
+    dilemma, preventing phantom answer references.
+
+    Args:
+        dilemmas: List of dilemma decision dicts from serialized output.
+
+    Returns:
+        Formatted manifest string, or empty string if no dilemmas.
+    """
+    if not dilemmas:
+        return ""
+
+    dilemma_lines = []
+    for d in sorted(dilemmas, key=lambda x: x.get("dilemma_id", "")):
+        dilemma_id = d.get("dilemma_id", "")
+        if not dilemma_id:
+            continue
+        scoped = normalize_scoped_id(strip_scope_prefix(dilemma_id), SCOPE_DILEMMA)
+        considered = d.get("considered", [])
+        implicit = d.get("implicit", [])
+        dilemma_lines.append(f"- `{scoped}` -> considered: {considered}, implicit: {implicit}")
+
+    if not dilemma_lines:
+        return ""
+
+    lines = [
+        "## Valid Answer IDs per Dilemma",
+        "",
+        "Each path's `answer_id` MUST be one of the `considered` IDs below.",
+        "Do NOT invent answer IDs or use `implicit` IDs as path answer_ids.",
+        "",
+        *dilemma_lines,
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
     """Format path IDs for beat serialization with inline constraints.
 

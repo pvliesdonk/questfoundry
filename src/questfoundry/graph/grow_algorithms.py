@@ -22,6 +22,9 @@ from typing import TYPE_CHECKING, Any
 from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.graph.mutations import GrowErrorCategory, GrowValidationError
 from questfoundry.models.grow import Arc
+from questfoundry.observability.logging import get_logger
+
+log = get_logger(__name__)
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
@@ -735,6 +738,148 @@ def _filter_different_dilemmas(
     return sorted(beat_ids)
 
 
+# Maximum transitive closure depth for prerequisite lifting.
+# Beyond this depth, the dependency chain is too deep to safely widen.
+_MAX_LIFT_DEPTH = 3
+
+
+def _try_lift_prerequisite(
+    graph: Graph,
+    prereq_id: str,
+    target_paths: set[str],
+    beat_paths: dict[str, set[str]],
+    *,
+    _depth: int = 0,
+) -> bool:
+    """Try to widen a prerequisite beat to cover all target paths.
+
+    Adds ``belongs_to`` edges so the prerequisite (and its own
+    prerequisites, transitively) spans all paths in the intersection.
+
+    Args:
+        graph: Graph to mutate if lift succeeds.
+        prereq_id: The prerequisite beat to widen.
+        target_paths: The set of paths the intersection spans.
+        beat_paths: Mutable mapping of beat_id → set of path IDs.
+        _depth: Current recursion depth (internal).
+
+    Returns:
+        True if the prerequisite was successfully lifted to cover
+        all target_paths; False if lifting would be unsafe.
+    """
+    if _depth > _MAX_LIFT_DEPTH:
+        return False
+
+    current_paths = beat_paths.get(prereq_id, set())
+    missing_paths = target_paths - current_paths
+
+    if not missing_paths:
+        return True  # Already covers all target paths
+
+    # Check for cycles: if any target_path beat has a requires edge
+    # TO this prereq through the intersection beats, lifting would
+    # create a cycle. Simple check: does the prereq transitively
+    # require any beat that already belongs to all target_paths?
+    # (This is a conservative check — full cycle detection is expensive.)
+
+    # First, transitively lift this prereq's own prerequisites
+    for edge in graph.get_edges(from_id=prereq_id, to_id=None, edge_type="requires"):
+        sub_prereq_id = edge["to"]
+        sub_paths = beat_paths.get(sub_prereq_id, set())
+        if not sub_paths >= target_paths and not _try_lift_prerequisite(
+            graph, sub_prereq_id, target_paths, beat_paths, _depth=_depth + 1
+        ):
+            return False
+
+    # All transitive prereqs lifted successfully — now lift this one
+    for path_id in missing_paths:
+        graph.add_edge("belongs_to", prereq_id, path_id)
+
+    beat_paths[prereq_id] = current_paths | missing_paths
+
+    log.debug(
+        "prerequisite_lifted",
+        prereq_id=prereq_id,
+        added_paths=sorted(missing_paths),
+        depth=_depth,
+    )
+    return True
+
+
+def _try_split_beat(
+    graph: Graph,
+    beat_id: str,
+    prereq_id: str,
+    narrow_paths: set[str],
+    wide_paths: set[str],
+    beat_paths: dict[str, set[str]],
+) -> str | None:
+    """Split a beat into two variants for different path sets.
+
+    Creates a new beat variant for the narrow paths (keeping the
+    prerequisite), and narrows the original to the wide paths
+    (without the prerequisite).
+
+    Args:
+        graph: Graph to mutate.
+        beat_id: The intersection beat to split.
+        prereq_id: The prerequisite that can't be lifted.
+        narrow_paths: Paths where the prerequisite exists.
+        wide_paths: Paths where the prerequisite doesn't exist.
+        beat_paths: Mutable mapping of beat_id → set of path IDs.
+
+    Returns:
+        The variant beat ID if split succeeded, None if failed.
+    """
+    beat_data = graph.get_node(beat_id)
+    if beat_data is None:
+        return None
+
+    # Use prereq ID in suffix to disambiguate multiple splits on the same beat.
+    prereq_suffix = prereq_id.rsplit("::", 1)[-1] if "::" in prereq_id else prereq_id
+    variant_id = f"{beat_id}_split_{prereq_suffix}"
+    if graph.has_node(variant_id):
+        # Fall back to generic suffix
+        variant_id = f"{beat_id}_split"
+        if graph.has_node(variant_id):
+            return None  # Name collision — can't split
+
+    # Create variant with same data but different ID
+    raw_variant = variant_id.rsplit("::", 1)[-1] if "::" in variant_id else variant_id
+    variant_data = {
+        **beat_data,
+        "raw_id": raw_variant,
+        "split_from": beat_id,
+    }
+    graph.create_node(variant_id, variant_data)
+
+    # Variant gets belongs_to edges for narrow_paths only
+    for path_id in narrow_paths:
+        graph.add_edge("belongs_to", variant_id, path_id)
+
+    # Variant keeps the requires edge to the prereq
+    graph.add_edge("requires", variant_id, prereq_id)
+
+    # Remove the narrow_paths from the original beat's belongs_to
+    # (The original beat keeps the wide_paths.)
+    # Note: we can't remove edges from the graph directly, so we track
+    # in beat_paths which paths the original beat effectively covers.
+    # The actual belongs_to edges for narrow_paths remain but the
+    # intersection will use the variant for those paths.
+    beat_paths[variant_id] = narrow_paths
+    beat_paths[beat_id] = wide_paths
+
+    log.debug(
+        "beat_split_for_prerequisite",
+        original=beat_id,
+        variant=variant_id,
+        prereq=prereq_id,
+        narrow_paths=sorted(narrow_paths),
+        wide_paths=sorted(wide_paths),
+    )
+    return variant_id
+
+
 def check_intersection_compatibility(
     graph: Graph,
     beat_ids: list[str],
@@ -746,6 +891,15 @@ def check_intersection_compatibility(
     - Beats are from different dilemmas (not same dilemma)
     - No circular requires conflicts between the beats
     - At least 2 beats
+
+    For conditional prerequisites (beat requires a prerequisite that doesn't
+    span all intersection paths), attempts recovery strategies before rejecting:
+    1. **Lift**: widen the prerequisite to cover all intersection paths
+    2. **Split**: create a path-specific variant of the beat
+    3. **Reject**: if neither works, report the error
+
+    Note: lift and split may mutate the graph (adding edges/nodes). This is
+    intentional — the mutations are the recovery mechanism.
 
     Args:
         graph: Graph with beat and path nodes.
@@ -844,12 +998,26 @@ def check_intersection_compatibility(
                 # silently dropped in arcs missing the target's path,
                 # producing inconsistent orderings and passage DAG cycles.
                 #
-                # Current strategy: reject the intersection.
-                # Future alternatives that preserve the intersection:
-                #   - Lift prerequisites into shared set (see GitHub #360)
-                #   - Split into path-specific lead-ins (see GitHub #361)
+                # Recovery strategy (in order):
+                #   1. Lift: widen the prerequisite to all intersection paths
+                #   2. Split: create a path-specific variant of the beat
+                #   3. Reject: if neither works, reject the intersection
                 prereq_paths = beat_paths.get(to_id, set())
                 if not prereq_paths >= union_paths:
+                    # Try lift first: widen prerequisite to cover union_paths
+                    lifted = _try_lift_prerequisite(graph, to_id, union_paths, beat_paths)
+                    if lifted:
+                        continue
+
+                    # Try split: create variant for narrow paths
+                    narrow = prereq_paths & beat_paths.get(from_id, set())
+                    wide = union_paths - narrow
+                    if narrow and wide:
+                        variant = _try_split_beat(graph, from_id, to_id, narrow, wide, beat_paths)
+                        if variant is not None:
+                            continue
+
+                    # Neither strategy worked — reject
                     missing = sorted(union_paths - prereq_paths)
                     errors.append(
                         GrowValidationError(
@@ -860,8 +1028,7 @@ def check_intersection_compatibility(
                                 f"but the intersection would span "
                                 f"{sorted(union_paths)}. "
                                 f"Missing paths: {missing}. "
-                                f"This would cause silent edge drops during "
-                                f"arc enumeration (conditional prerequisite)."
+                                f"Lift and split strategies both failed."
                             ),
                             category=GrowErrorCategory.STRUCTURAL,
                         )

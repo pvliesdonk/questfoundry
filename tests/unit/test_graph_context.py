@@ -8,6 +8,7 @@ from questfoundry.graph.context import (
     SCOPE_ENTITY,
     SCOPE_PATH,
     check_structural_completeness,
+    format_answer_ids_by_dilemma,
     format_hierarchical_path_id,
     format_path_ids_context,
     format_scoped_id,
@@ -1143,3 +1144,66 @@ class TestFormatHierarchicalPathId:
         dilemma_id, answer_id = parse_hierarchical_path_id(original)
         reformatted = format_hierarchical_path_id(dilemma_id, answer_id)
         assert reformatted == original
+
+
+class TestFormatAnswerIdsByDilemma:
+    """Tests for format_answer_ids_by_dilemma function."""
+
+    def test_empty_dilemmas_returns_empty(self) -> None:
+        """Empty list returns empty string."""
+        assert format_answer_ids_by_dilemma([]) == ""
+
+    def test_single_dilemma_with_considered_and_implicit(self) -> None:
+        """Single dilemma formats considered and implicit lists."""
+        dilemmas = [
+            {
+                "dilemma_id": "dilemma::host_benevolent_or_selfish",
+                "considered": ["protector", "manipulator"],
+                "implicit": ["neutral"],
+            }
+        ]
+        result = format_answer_ids_by_dilemma(dilemmas)
+        assert "Valid Answer IDs per Dilemma" in result
+        assert "dilemma::host_benevolent_or_selfish" in result
+        assert "['protector', 'manipulator']" in result
+        assert "['neutral']" in result
+
+    def test_multiple_dilemmas_all_listed(self) -> None:
+        """Multiple dilemmas are all included in output."""
+        dilemmas = [
+            {
+                "dilemma_id": "dilemma::mentor_trust_or_betray",
+                "considered": ["trust"],
+                "implicit": ["betray"],
+            },
+            {
+                "dilemma_id": "dilemma::artifact_blessed_or_cursed",
+                "considered": ["blessed", "cursed"],
+                "implicit": [],
+            },
+        ]
+        result = format_answer_ids_by_dilemma(dilemmas)
+        assert "dilemma::mentor_trust_or_betray" in result
+        assert "dilemma::artifact_blessed_or_cursed" in result
+
+    def test_dilemma_without_id_skipped(self) -> None:
+        """Dilemmas with empty or missing ID produce empty string."""
+        dilemmas = [
+            {"dilemma_id": "", "considered": ["a"], "implicit": []},
+            {"considered": ["b"], "implicit": []},
+        ]
+        result = format_answer_ids_by_dilemma(dilemmas)
+        # No valid dilemmas → empty string (no header injected)
+        assert result == ""
+
+    def test_unscoped_dilemma_id_gets_prefix(self) -> None:
+        """Dilemma IDs without scope prefix get normalized."""
+        dilemmas = [
+            {
+                "dilemma_id": "host_benevolent_or_selfish",
+                "considered": ["protector"],
+                "implicit": [],
+            }
+        ]
+        result = format_answer_ids_by_dilemma(dilemmas)
+        assert "dilemma::host_benevolent_or_selfish" in result

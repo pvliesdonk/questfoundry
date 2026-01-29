@@ -87,9 +87,26 @@ system: |
   - Vary locations (not all beats in one place)
   - Impact dilemmas (advance, reveal, commit, complicate)
 
-  ### 5. Sketch Convergence
+  ### 5. Design Convergence Points
 
-  Hint at where paths should merge and what differences persist after convergence.
+  Paths MUST converge at specific physical locations, not abstract narrative moments.
+  Design 2-4 convergence points where characters from different dilemmas are forced
+  into the same scene:
+
+  - **Location-based convergence**: Name the specific location where paths meet
+    (e.g., "all paths converge at the archive_vault for the final confrontation")
+  - **Investigation chain**: Define a forced sequence: discovery location -> evidence location -> confrontation location
+  - **Cross-dilemma presence**: At each convergence point, characters from at least
+    2 different dilemmas must be present and affected
+
+  GOOD convergence: "Paths converge at the archive_vault where the mentor's loyalty
+  and the artifact's nature are both revealed through the same evidence."
+
+  BAD convergence: "Paths eventually merge as the story reaches its climax."
+  BAD convergence: "The emotional arcs align thematically in the final act."
+
+  Also note what differences persist after convergence - what residue remains from
+  the path choices the player made.
 
   ## ID Rules (Prevent Validation Failures)
 

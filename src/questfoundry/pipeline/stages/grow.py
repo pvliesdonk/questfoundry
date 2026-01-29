@@ -798,6 +798,23 @@ class GrowStage:
                 location=location,
             )
 
+        # Fail if all proposed intersections were rejected — the story lacks
+        # cross-dilemma scene overlap and downstream phases will degrade.
+        if len(result.intersections) > 0 and applied_count == 0:
+            return GrowPhaseResult(
+                phase="intersections",
+                status="failed",
+                detail=(
+                    f"All {len(result.intersections)} proposed intersections rejected. "
+                    f"Story structure lacks cross-dilemma scene overlap. "
+                    f"Common causes: insufficient shared locations, isolated storylines, "
+                    f"or characters confined to a single dilemma. "
+                    f"Review brainstorm/seed for shared location convergence points."
+                ),
+                llm_calls=llm_calls,
+                tokens_used=tokens,
+            )
+
         return GrowPhaseResult(
             phase="intersections",
             status="completed",
@@ -1163,6 +1180,19 @@ class GrowStage:
                 phase="enumerate_arcs",
                 status="completed",
                 detail="No arcs to enumerate",
+            )
+
+        # Fail if no spine arc exists — the spine is required for pruning
+        # and reachability analysis in downstream phases.
+        spine_exists = any(arc.arc_type == "spine" for arc in arcs)
+        if not spine_exists:
+            return GrowPhaseResult(
+                phase="enumerate_arcs",
+                status="failed",
+                detail=(
+                    f"No spine arc created among {len(arcs)} arcs. "
+                    f"A spine arc (containing all canonical paths) is required."
+                ),
             )
 
         # Create arc nodes and arc_contains edges
