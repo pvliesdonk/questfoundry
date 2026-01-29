@@ -134,10 +134,10 @@ class TestGrowStagePhaseOrder:
         assert names == [
             "validate_dag",
             "path_agnostic",
-            "intersections",
             "scene_types",
             "narrative_gaps",
             "pacing_gaps",
+            "intersections",
             "enumerate_arcs",
             "divergence",
             "convergence",

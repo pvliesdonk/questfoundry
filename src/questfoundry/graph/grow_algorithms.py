@@ -801,23 +801,71 @@ def check_intersection_compatibility(
             )
         )
 
-    # Check no circular requires between the intersection beats
+    # Check requires edges originating from intersection beats.
+    # Two checks in one pass: (1) no circular requires between intersection
+    # beats, and (2) no conditional prerequisites (see below).
     beat_set = set(beat_ids)
-    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="requires")
-    for edge in requires_edges:
-        from_id = edge["from"]
-        to_id = edge["to"]
-        if from_id in beat_set and to_id in beat_set:
-            errors.append(
-                GrowValidationError(
-                    field_path="intersection.requires",
-                    issue=(
-                        f"Beat '{from_id}' requires '{to_id}' — "
-                        f"intersection beats cannot have requires dependencies on each other"
-                    ),
-                    category=GrowErrorCategory.STRUCTURAL,
+
+    # Build beat→paths mapping for the conditional-prerequisites check.
+    belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
+    beat_paths: dict[str, set[str]] = {}
+    for edge in belongs_to_edges:
+        beat_paths.setdefault(edge["from"], set()).add(edge["to"])
+
+    # The union of all paths that the intersection would span
+    union_paths: set[str] = set()
+    for bid in beat_ids:
+        union_paths.update(beat_paths.get(bid, set()))
+
+    # Iterate only over outgoing requires edges from intersection beats
+    # (targeted lookups instead of scanning all requires edges).
+    for from_id in beat_set:
+        for edge in graph.get_edges(from_id=from_id, to_id=None, edge_type="requires"):
+            to_id = edge["to"]
+            if to_id in beat_set:
+                # Circular requires between intersection beats
+                errors.append(
+                    GrowValidationError(
+                        field_path="intersection.requires",
+                        issue=(
+                            f"Beat '{from_id}' requires '{to_id}' — "
+                            f"intersection beats cannot have requires "
+                            f"dependencies on each other"
+                        ),
+                        category=GrowErrorCategory.STRUCTURAL,
+                    )
                 )
-            )
+            else:
+                # No-conditional-prerequisites invariant: a shared beat
+                # cannot depend on a beat that exists only on a strict
+                # subset of its paths.  After intersection marking, every
+                # beat in the group will belong to the union of all paths.
+                # If a `requires` target is narrower, that edge would be
+                # silently dropped in arcs missing the target's path,
+                # producing inconsistent orderings and passage DAG cycles.
+                #
+                # Current strategy: reject the intersection.
+                # Future alternatives that preserve the intersection:
+                #   - Lift prerequisites into shared set (see GitHub #360)
+                #   - Split into path-specific lead-ins (see GitHub #361)
+                prereq_paths = beat_paths.get(to_id, set())
+                if not prereq_paths >= union_paths:
+                    missing = sorted(union_paths - prereq_paths)
+                    errors.append(
+                        GrowValidationError(
+                            field_path="intersection.conditional_prerequisite",
+                            issue=(
+                                f"Beat '{from_id}' requires '{to_id}' which "
+                                f"is only on paths {sorted(prereq_paths)}, "
+                                f"but the intersection would span "
+                                f"{sorted(union_paths)}. "
+                                f"Missing paths: {missing}. "
+                                f"This would cause silent edge drops during "
+                                f"arc enumeration (conditional prerequisite)."
+                            ),
+                            category=GrowErrorCategory.STRUCTURAL,
+                        )
+                    )
 
     return errors
 

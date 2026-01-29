@@ -2144,3 +2144,115 @@ class TestFindPassageSuccessors:
         grants = result["passage::a"][0].grants
         assert "codeword::mid_cw" in grants
         assert "codeword::b_cw" in grants
+
+
+class TestConditionalPrerequisiteInvariant:
+    """Regression tests for the conditional-prerequisite invariant.
+
+    When a proposed intersection beat has a ``requires`` edge to a beat
+    outside the intersection whose paths do NOT cover the full union of
+    intersection beat paths, ``check_intersection_compatibility`` must
+    reject the intersection with ``field_path="intersection.conditional_prerequisite"``.
+    """
+
+    def test_rejects_intersection_with_conditional_prerequisite(self) -> None:
+        """Intersection rejected when a prerequisite spans fewer paths."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
+
+        graph = make_conditional_prerequisite_graph()
+        errors = check_intersection_compatibility(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
+        assert len(errors) > 0
+        assert any("conditional_prerequisite" in e.field_path for e in errors)
+
+    def test_accepts_intersection_without_conditional_prerequisites(self) -> None:
+        """Intersection accepted when no external prerequisites exist."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        errors = check_intersection_compatibility(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
+        assert errors == []
+
+    def test_accepts_when_prerequisite_spans_all_paths(self) -> None:
+        """Intersection accepted when prerequisite covers all intersection paths."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
+
+        graph = make_conditional_prerequisite_graph()
+
+        # Make gap_1 belong to all 4 paths so it is no longer conditional
+        graph.add_edge("belongs_to", "beat::gap_1", "path::mentor_trust_alt")
+        graph.add_edge("belongs_to", "beat::gap_1", "path::artifact_quest_canonical")
+        graph.add_edge("belongs_to", "beat::gap_1", "path::artifact_quest_alt")
+
+        errors = check_intersection_compatibility(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
+        assert errors == []
+
+    def test_phase_order_gaps_before_intersections(self, tmp_path: Path) -> None:
+        """Gap-detection phases must execute before the intersections phase."""
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        stage = GrowStage(project_path=tmp_path)
+        phase_names = [name for _, name in stage._phase_order()]
+
+        gap_phases = ["scene_types", "narrative_gaps", "pacing_gaps"]
+        intersection_idx = phase_names.index("intersections")
+
+        for gap_phase in gap_phases:
+            gap_idx = phase_names.index(gap_phase)
+            assert gap_idx < intersection_idx, (
+                f"Phase '{gap_phase}' (index {gap_idx}) must come before "
+                f"'intersections' (index {intersection_idx})"
+            )
+
+    def test_rejects_when_prerequisite_has_no_paths(self) -> None:
+        """Prerequisite with no belongs_to edges is rejected (orphan beat)."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        # Create an orphan beat with no belongs_to edges
+        graph.create_node(
+            "beat::orphan_prereq",
+            {"type": "beat", "raw_id": "orphan_prereq", "summary": "Orphan."},
+        )
+        graph.add_edge("requires", "beat::mentor_meet", "beat::orphan_prereq")
+
+        errors = check_intersection_compatibility(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
+        assert any("conditional_prerequisite" in e.field_path for e in errors)
+
+    def test_reports_multiple_conditional_prerequisites(self) -> None:
+        """Each conditional prerequisite produces a separate error."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
+
+        graph = make_conditional_prerequisite_graph()
+        # Add a second path-specific gap beat required by artifact_discover
+        graph.create_node(
+            "beat::gap_2",
+            {
+                "type": "beat",
+                "raw_id": "gap_2",
+                "summary": "Second gap.",
+                "scene_type": "sequel",
+                "paths": ["artifact_quest_canonical"],
+                "is_gap_beat": True,
+            },
+        )
+        graph.add_edge("belongs_to", "beat::gap_2", "path::artifact_quest_canonical")
+        graph.add_edge("requires", "beat::artifact_discover", "beat::gap_2")
+
+        errors = check_intersection_compatibility(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
+        cond_errors = [e for e in errors if "conditional_prerequisite" in e.field_path]
+        assert len(cond_errors) >= 2, f"Expected ≥2 errors, got {len(cond_errors)}"

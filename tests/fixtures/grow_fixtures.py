@@ -642,3 +642,44 @@ def make_intersection_candidate_graph() -> Graph:
     )
 
     return graph
+
+
+def make_conditional_prerequisite_graph() -> Graph:
+    """Create a graph where an intersection candidate has a path-specific prerequisite.
+
+    Extends ``make_intersection_candidate_graph`` by adding a gap beat that
+    belongs to only one path and is required by one of the intersection
+    candidates.
+
+    Structure:
+        beat::gap_1: belongs to path::mentor_trust_canonical only
+        beat::mentor_meet requires beat::gap_1
+
+    This creates a conditional prerequisite: if mentor_meet and
+    artifact_discover are proposed as an intersection, the intersection
+    would span all 4 paths but gap_1 exists on only 1 path.  The
+    ``check_intersection_compatibility`` invariant should reject this.
+
+    Returns:
+        Graph with a path-specific prerequisite on an intersection candidate.
+    """
+    graph = make_intersection_candidate_graph()
+
+    # Add a gap beat belonging to only one path
+    graph.create_node(
+        "beat::gap_1",
+        {
+            "type": "beat",
+            "raw_id": "gap_1",
+            "summary": "A transition gap beat.",
+            "scene_type": "sequel",
+            "paths": ["mentor_trust_canonical"],
+            "is_gap_beat": True,
+        },
+    )
+    graph.add_edge("belongs_to", "beat::gap_1", "path::mentor_trust_canonical")
+
+    # mentor_meet requires gap_1 (gap_1 must come first)
+    graph.add_edge("requires", "beat::mentor_meet", "beat::gap_1")
+
+    return graph
