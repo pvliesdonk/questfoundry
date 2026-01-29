@@ -91,9 +91,10 @@ def _prune_demoted_dilemmas(
     3. Remove beats that ONLY belong to demoted paths
     4. Update beats that belong to both demoted and kept paths
 
-    IMPORTANT: Dilemmas are NOT mutated. The `considered` field is immutable
-    after SEED - it records the LLM's original intent. Development state
-    (committed vs deferred) is derived from path existence, not stored fields.
+    IMPORTANT: Dilemmas ARE updated for demoted items. Non-canonical answers
+    are moved from `considered` to `implicit` so validation reflects the
+    pruned path set. This preserves canonical intent while keeping graph
+    integrity after pruning.
 
     NOTE: All ID comparisons use strip_scope_prefix() to handle both scoped
     (path::foo) and raw (foo) ID formats consistently. This is part of the
@@ -141,8 +142,23 @@ def _prune_demoted_dilemmas(
         dropped_path_ids=list(paths_to_drop)[:5],  # Log first 5
     )
 
-    # Dilemmas are NOT modified - considered field is immutable
-    # Development state is derived from path existence
+    # Update dilemma decisions: move non-canonical answers to implicit
+    pruned_dilemmas: list[DilemmaDecision] = []
+    for dilemma in seed_output.dilemmas:
+        raw_did = strip_scope_prefix(dilemma.dilemma_id)
+        if raw_did in demoted_raw_ids and len(dilemma.considered) > 1:
+            canonical = _get_canonical_answer(dilemma)
+            noncanonical = _get_noncanonical_answers(dilemma)
+            merged_implicit = list(dict.fromkeys([*dilemma.implicit, *noncanonical]))
+            pruned_dilemmas.append(
+                DilemmaDecision(
+                    dilemma_id=dilemma.dilemma_id,
+                    considered=[canonical] if canonical else [],
+                    implicit=merged_implicit,
+                )
+            )
+        else:
+            pruned_dilemmas.append(dilemma)
 
     # 1. Filter paths (compare raw IDs)
     pruned_paths: list[Path] = [
@@ -193,7 +209,7 @@ def _prune_demoted_dilemmas(
 
     return SeedOutput(
         entities=seed_output.entities,
-        dilemmas=list(seed_output.dilemmas),  # Dilemmas are immutable - keep as-is
+        dilemmas=pruned_dilemmas,
         paths=pruned_paths,
         consequences=pruned_consequences,
         initial_beats=pruned_beats,
