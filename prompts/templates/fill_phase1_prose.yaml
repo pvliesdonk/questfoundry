@@ -42,6 +42,12 @@ system: |
   5. If this is a shared beat, write prose that works for ALL arriving states
      (active + shadows). Use ambiguous phrasing when states diverge.
 
+  ## Poly-State Examples (CRITICAL for shared beats)
+  GOOD: "The stranger's expression was unreadable" (works for trust or betrayal)
+  GOOD: "Something had shifted between them" (ambiguous emotional change)
+  BAD: "Kay trusted the mentor completely" (only works for one path state)
+  BAD: "The betrayal still burned in Kay's mind" (reveals path-specific knowledge)
+
   ## Poly-State Failure
 
   If you CANNOT write prose compatible with all shadow states because:
