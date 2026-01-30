@@ -54,6 +54,10 @@ system: |
 user: |
   Revise passage {passage_id} to fix the {issue_type} issue described above.
 
-  REMINDER: Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
+  CRITICAL REMINDERS:
+  - Fix the flagged issue specifically — do not rewrite from scratch unless necessary
+  - Follow the voice document EXACTLY — POV, tense, register, rhythm, tone
+  - Maintain continuity with the sliding window
+  - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
 
 components: []

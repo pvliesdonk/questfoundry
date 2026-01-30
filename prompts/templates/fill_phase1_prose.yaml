@@ -71,6 +71,11 @@ user: |
   Write the prose for passage {passage_id} following the voice document and
   scene type guidance above.
 
-  REMINDER: Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
+  CRITICAL REMINDERS:
+  - Follow the voice document EXACTLY — POV, tense, register, rhythm, tone
+  - Match scene type guidance for structure and length
+  - Cover beat summary content — do NOT invent major plot points
+  - For shared beats, prose must work for ALL arriving states (active + shadows)
+  - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
 
 components: []

@@ -46,6 +46,9 @@ system: |
 user: |
   Based on the creative vision and story structure above, propose a voice document.
 
-  REMINDER: Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
+  CRITICAL REMINDERS:
+  - Match POV/tense to genre conventions
+  - tone_words must be distilled from DREAM themes, not generic
+  - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
 
 components: []

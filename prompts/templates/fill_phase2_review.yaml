@@ -40,6 +40,11 @@ system: |
 user: |
   Review the passages above against the voice document. Flag any quality issues.
 
-  REMINDER: Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
+  CRITICAL REMINDERS:
+  - Be selective — flag real problems, not stylistic preferences
+  - issue_type must be one of: voice_drift, scene_type_mismatch, summary_deviation,
+    continuity_break, convergence_awkwardness, flat_prose
+  - An empty flags list is fine if no issues found
+  - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
 
 components: []
