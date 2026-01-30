@@ -1475,6 +1475,100 @@ class TestSeedCompletenessValidation:
         assert "nonexistent" in invalid_errors[0].provided
 
 
+class TestValidation11dDefaultAnswerInExplored:
+    """Test SEED validation check 11d: default answer must be in explored bucket."""
+
+    def test_default_answer_in_explored_passes(self) -> None:
+        """No error when the default answer is in explored."""
+        graph = Graph.empty()
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node(
+            "dilemma::trust::alt::yes",
+            {"type": "answer", "raw_id": "yes", "is_default_path": True},
+        )
+        graph.create_node(
+            "dilemma::trust::alt::no",
+            {"type": "answer", "raw_id": "no", "is_default_path": False},
+        )
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::no")
+
+        output = {
+            "entities": [],
+            "dilemmas": [
+                {"dilemma_id": "trust", "explored": ["yes", "no"], "unexplored": []},
+            ],
+            "paths": [
+                {"path_id": "trust_yes", "name": "Yes", "dilemma_id": "trust", "answer_id": "yes"},
+                {"path_id": "trust_no", "name": "No", "dilemma_id": "trust", "answer_id": "no"},
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+        default_errors = [e for e in errors if "default answer" in e.issue]
+        assert default_errors == []
+
+    def test_default_answer_in_unexplored_detected(self) -> None:
+        """Error when the default answer is in unexplored (inverted buckets)."""
+        graph = Graph.empty()
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node(
+            "dilemma::trust::alt::yes",
+            {"type": "answer", "raw_id": "yes", "is_default_path": True},
+        )
+        graph.create_node(
+            "dilemma::trust::alt::no",
+            {"type": "answer", "raw_id": "no", "is_default_path": False},
+        )
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::no")
+
+        output = {
+            "entities": [],
+            "dilemmas": [
+                # Inverted! Default "yes" is in unexplored
+                {"dilemma_id": "trust", "explored": ["no"], "unexplored": ["yes"]},
+            ],
+            "paths": [
+                {"path_id": "trust_no", "name": "No", "dilemma_id": "trust", "answer_id": "no"},
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+        default_errors = [e for e in errors if "default answer" in e.issue]
+        assert len(default_errors) == 1
+        assert "yes" in default_errors[0].issue
+        assert "unexplored" in default_errors[0].issue
+        assert default_errors[0].category == SeedErrorCategory.CROSS_REFERENCE
+
+    def test_no_unexplored_skips_check(self) -> None:
+        """No error when unexplored is empty (nothing to invert)."""
+        graph = Graph.empty()
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node(
+            "dilemma::trust::alt::yes",
+            {"type": "answer", "raw_id": "yes", "is_default_path": True},
+        )
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
+
+        output = {
+            "entities": [],
+            "dilemmas": [
+                {"dilemma_id": "trust", "explored": ["yes"], "unexplored": []},
+            ],
+            "paths": [
+                {"path_id": "trust_yes", "name": "Yes", "dilemma_id": "trust", "answer_id": "yes"},
+            ],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph, output)
+        default_errors = [e for e in errors if "default answer" in e.issue]
+        assert default_errors == []
+
+
 class TestBeatDilemmaAlignment:
     """Test SEED validation checks 12 and 13: beat-path-dilemma alignment."""
 

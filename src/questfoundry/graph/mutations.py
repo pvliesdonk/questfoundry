@@ -1254,6 +1254,51 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     )
                 break
 
+    # 11d. Check default (canonical) answer is in explored, not unexplored
+    # LLMs sometimes invert the buckets, putting the default answer in unexplored.
+    # This guardrail catches the inversion early so the serialize loop can retry.
+    for dilemma_decision in output.get("dilemmas", []):
+        raw_did = dilemma_decision.get("dilemma_id")
+        if not raw_did:
+            continue
+        normalized_did, scope_error = _normalize_id(raw_did, "dilemma")
+        if scope_error:
+            continue
+
+        explored = dilemma_decision.get("explored", [])
+        unexplored = dilemma_decision.get("unexplored", [])
+        if not unexplored:
+            continue  # Nothing in unexplored, no inversion possible
+
+        # Look up which answer is the default from the graph
+        prefixed_did = f"dilemma::{normalized_did}"
+        dilemma_node = graph.get_node(prefixed_did)
+        if not dilemma_node:
+            continue
+
+        # Find the default answer among the dilemma's alternatives
+        alt_edges = graph.get_edges(from_id=prefixed_did, edge_type="has_answer")
+        for edge in alt_edges:
+            alt_node = graph.get_node(edge["to"])
+            if alt_node and alt_node.get("is_default_path"):
+                default_answer_id = alt_node.get("raw_id", "")
+                if default_answer_id in unexplored and default_answer_id not in explored:
+                    errors.append(
+                        SeedValidationError(
+                            field_path="dilemmas",
+                            issue=(
+                                f"Dilemma '{normalized_did}': default answer "
+                                f"'{default_answer_id}' is in unexplored but MUST be "
+                                f"in explored. The default/canonical answer is always "
+                                f"explored. Move it from unexplored to explored."
+                            ),
+                            available=explored,
+                            provided=default_answer_id,
+                            category=SeedErrorCategory.CROSS_REFERENCE,
+                        )
+                    )
+                break  # Only one default per dilemma
+
     # NOTE: Arc count validation removed - now handled by runtime pruning (over-generate-and-select)
     # See seed_pruning.py for the new approach: LLM generates freely, runtime selects best dilemmas
 
