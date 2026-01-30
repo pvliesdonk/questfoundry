@@ -26,11 +26,23 @@ from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.graph.fill_context import (
     format_dream_vision,
+    format_entity_states,
     format_grow_summary,
+    format_lookahead_context,
     format_scene_types_summary,
+    format_shadow_states,
+    format_sliding_window,
+    format_voice_context,
+    get_arc_passage_order,
+    get_spine_arc_id,
 )
 from questfoundry.graph.graph import Graph
-from questfoundry.models.fill import FillPhase0Output, FillPhaseResult, FillResult
+from questfoundry.models.fill import (
+    FillPhase0Output,
+    FillPhase1Output,
+    FillPhaseResult,
+    FillResult,
+)
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
@@ -465,16 +477,151 @@ class FillStage:
             tokens_used=tokens,
         )
 
+    def _get_generation_order(self, graph: Graph) -> list[tuple[str, str]]:
+        """Return passage IDs in generation order with their arc IDs.
+
+        Spine arc passages first, then branch arc passages.
+        Passages already filled (have prose) are skipped unless flagged.
+
+        Returns:
+            List of (passage_id, arc_id) tuples.
+        """
+        seen: set[str] = set()
+        order: list[tuple[str, str]] = []
+
+        spine_id = get_spine_arc_id(graph)
+        all_arcs = graph.get_nodes_by_type("arc")
+
+        # Spine first
+        if spine_id:
+            for pid in get_arc_passage_order(graph, spine_id):
+                if pid not in seen:
+                    seen.add(pid)
+                    order.append((pid, spine_id))
+
+        # Branch arcs next
+        for arc_id, _arc_data in all_arcs.items():
+            if arc_id == spine_id:
+                continue
+            for pid in get_arc_passage_order(graph, arc_id):
+                pnode = graph.get_node(pid)
+                # Skip passages already filled during spine pass (unless flagged)
+                if (
+                    pid in seen
+                    and pnode
+                    and pnode.get("prose")
+                    and pnode.get("flag") != "incompatible_states"
+                ):
+                    continue
+                if pid not in seen:
+                    seen.add(pid)
+                order.append((pid, arc_id))
+
+        return order
+
     async def _phase_1_generate(
         self,
-        graph: Graph,  # noqa: ARG002
-        model: BaseChatModel,  # noqa: ARG002
+        graph: Graph,
+        model: BaseChatModel,
     ) -> FillPhaseResult:
         """Phase 1: Sequential prose generation.
 
         Generates prose for all passages in arc traversal order.
+        Spine arc first, then branches. Shared passages are only
+        generated once unless flagged as incompatible_states.
         """
-        return FillPhaseResult(phase="generate", status="skipped", detail="not yet implemented")
+        generation_order = self._get_generation_order(graph)
+        if not generation_order:
+            return FillPhaseResult(
+                phase="generate", status="completed", detail="no passages to generate"
+            )
+
+        voice_context = format_voice_context(graph)
+        total_llm_calls = 0
+        total_tokens = 0
+        passages_filled = 0
+        passages_flagged = 0
+
+        # Build passage index within each arc for sliding window
+        arc_passage_indices: dict[str, dict[str, int]] = {}
+        for _passage_id, arc_id in generation_order:
+            if arc_id not in arc_passage_indices:
+                arc_order = get_arc_passage_order(graph, arc_id)
+                arc_passage_indices[arc_id] = {pid: i for i, pid in enumerate(arc_order)}
+
+        for passage_id, arc_id in generation_order:
+            passage = graph.get_node(passage_id)
+            if not passage:
+                log.warning("passage_not_found", passage_id=passage_id)
+                continue
+
+            beat_id = passage.get("from_beat", "")
+            beat = graph.get_node(beat_id) if beat_id else None
+            beat_summary = beat.get("summary", "") if beat else ""
+            scene_type = beat.get("scene_type", "scene") if beat else "scene"
+
+            current_idx = arc_passage_indices.get(arc_id, {}).get(passage_id, 0)
+
+            context = {
+                "voice_document": voice_context,
+                "passage_id": passage.get("raw_id", passage_id),
+                "beat_summary": beat_summary,
+                "scene_type": scene_type,
+                "entity_states": format_entity_states(graph, passage_id),
+                "sliding_window": format_sliding_window(graph, arc_id, current_idx),
+                "lookahead": format_lookahead_context(graph, passage_id, arc_id),
+                "shadow_states": format_shadow_states(graph, passage_id, arc_id),
+            }
+
+            output, llm_calls, tokens = await self._fill_llm_call(
+                model,
+                "fill_phase1_prose",
+                context,
+                FillPhase1Output,
+            )
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            passage_output = output.passage
+
+            if passage_output.flag == "incompatible_states":
+                graph.update_node(
+                    passage_id,
+                    flag="incompatible_states",
+                    flag_reason=passage_output.flag_reason,
+                )
+                passages_flagged += 1
+                log.info(
+                    "passage_flagged",
+                    passage_id=passage_id,
+                    reason=passage_output.flag_reason,
+                )
+            else:
+                graph.update_node(passage_id, prose=passage_output.prose)
+                passages_filled += 1
+
+                # Apply entity updates
+                for update in passage_output.entity_updates:
+                    entity_node = graph.get_node(f"entity::{update.entity_id}")
+                    if entity_node:
+                        graph.update_node(
+                            f"entity::{update.entity_id}",
+                            **{update.field: update.value},
+                        )
+
+            log.debug(
+                "passage_generated",
+                passage_id=passage_id,
+                flag=passage_output.flag,
+            )
+
+        return FillPhaseResult(
+            phase="generate",
+            status="completed",
+            detail=f"{passages_filled} filled, {passages_flagged} flagged",
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
+        )
 
     async def _phase_2_review(
         self,
