@@ -47,6 +47,7 @@ from questfoundry.models.grow import (
     Phase9Output,
     SceneTypeTag,
 )
+from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.seed import (
     Consequence,
     ConvergenceSketch,
@@ -97,6 +98,7 @@ __all__ = [
     "Phase4bOutput",
     "Phase8cOutput",
     "Phase9Output",
+    "PhaseResult",
     "SceneTypeTag",
     "Scope",
     "SeedOutput",

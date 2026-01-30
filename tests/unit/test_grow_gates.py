@@ -1,4 +1,4 @@
-"""Tests for GROW phase gate infrastructure."""
+"""Tests for phase gate infrastructure."""
 
 from __future__ import annotations
 
@@ -11,7 +11,34 @@ from questfoundry.graph.mutations import (
     has_mutation_handler,
 )
 from questfoundry.models.grow import GrowPhaseResult
+from questfoundry.models.pipeline import PhaseResult
 from questfoundry.pipeline.gates import AutoApprovePhaseGate, PhaseGateHook
+
+
+class TestPhaseResult:
+    """Verify PhaseResult base model and inheritance."""
+
+    def test_phase_result_creation(self) -> None:
+        result = PhaseResult(phase="test", status="completed")
+        assert result.phase == "test"
+        assert result.status == "completed"
+        assert result.detail == ""
+        assert result.llm_calls == 0
+        assert result.tokens_used == 0
+
+    def test_phase_result_with_all_fields(self) -> None:
+        result = PhaseResult(
+            phase="voice", status="completed", detail="done", llm_calls=3, tokens_used=1500
+        )
+        assert result.llm_calls == 3
+        assert result.tokens_used == 1500
+
+    def test_grow_phase_result_inherits_phase_result(self) -> None:
+        assert issubclass(GrowPhaseResult, PhaseResult)
+
+    def test_grow_phase_result_is_phase_result_instance(self) -> None:
+        result = GrowPhaseResult(phase="arcs", status="completed")
+        assert isinstance(result, PhaseResult)
 
 
 class TestPhaseGateHookProtocol:
@@ -25,14 +52,22 @@ class TestPhaseGateHookProtocol:
     async def test_custom_gate_satisfies_protocol(self) -> None:
         class RejectAllPhaseGate:
             async def on_phase_complete(
-                self, _stage: str, _phase: str, _result: GrowPhaseResult
+                self, _stage: str, _phase: str, _result: PhaseResult
             ) -> str:
                 return "reject"
 
         gate: PhaseGateHook = RejectAllPhaseGate()  # type: ignore[assignment]
-        result = GrowPhaseResult(phase="test", status="completed")
+        result = PhaseResult(phase="test", status="completed")
         decision = await gate.on_phase_complete("grow", "test", result)
         assert decision == "reject"
+
+    @pytest.mark.asyncio
+    async def test_phase_gate_accepts_grow_phase_result(self) -> None:
+        """GrowPhaseResult should be accepted where PhaseResult is expected."""
+        gate = AutoApprovePhaseGate()
+        result = GrowPhaseResult(phase="test", status="completed")
+        decision = await gate.on_phase_complete("grow", "test", result)
+        assert decision == "approve"
 
 
 class TestAutoApprovePhaseGate:

@@ -22,6 +22,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from questfoundry.models.pipeline import PhaseResult
+
 # ---------------------------------------------------------------------------
 # Graph node types
 # ---------------------------------------------------------------------------
@@ -182,14 +184,13 @@ class Phase9Output(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class GrowPhaseResult(BaseModel):
-    """Result of a single GROW phase execution."""
+class GrowPhaseResult(PhaseResult):
+    """Result of a single GROW phase execution.
 
-    phase: str = Field(min_length=1)
-    status: Literal["completed", "skipped", "failed"]
-    detail: str = ""
-    llm_calls: int = 0
-    tokens_used: int = 0
+    Inherits all fields from PhaseResult. Currently identical,
+    but allows GROW-specific fields to be added without affecting
+    other stages.
+    """
 
 
 class GrowResult(BaseModel):
