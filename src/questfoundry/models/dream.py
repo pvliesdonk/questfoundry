@@ -26,6 +26,16 @@ class ContentNotes(BaseModel):
 class Scope(BaseModel):
     """Story scope constraints."""
 
+    story_size: str = Field(
+        default="standard",
+        description=(
+            'Story size preset: "vignette" (5-15 passages, tight single-thread), '
+            '"short" (15-30 passages, modest branching), '
+            '"standard" (30-60 passages, full branching), '
+            '"long" (60-120 passages, extensive branching)'
+        ),
+        min_length=1,
+    )
     branching_depth: str = Field(
         default="moderate",
         description="Branching complexity (e.g., light, moderate, heavy, extensive)",

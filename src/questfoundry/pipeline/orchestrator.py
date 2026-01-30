@@ -26,6 +26,7 @@ from questfoundry.pipeline.config import (
     load_project_config,
 )
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
+from questfoundry.pipeline.size import resolve_size_from_graph
 from questfoundry.providers.base import ProviderError
 from questfoundry.providers.factory import create_chat_model, get_default_model
 from questfoundry.providers.model_info import get_model_info
@@ -503,6 +504,15 @@ class PipelineOrchestrator:
                 stage_kwargs["resume_from"] = resume_from
             if on_phase_progress:
                 stage_kwargs["on_phase_progress"] = on_phase_progress
+
+            # Resolve size profile from DREAM vision node (for post-DREAM stages)
+            if stage_name != "dream":
+                try:
+                    graph = Graph.load(self.project_path)
+                    stage_kwargs["size_profile"] = resolve_size_from_graph(graph)
+                except Exception:
+                    log.debug("size_profile_not_resolved", stage=stage_name)
+                    # Not fatal — stages fall back to hardcoded defaults
 
             artifact_data, llm_calls, tokens_used = await stage.execute(
                 model=model,

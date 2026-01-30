@@ -1,10 +1,11 @@
-"""Tests for story size profiles."""
+"""Tests for story size profiles and DREAM Scope integration."""
 
 from __future__ import annotations
 
 import pytest
 
 from questfoundry.graph.graph import Graph
+from questfoundry.models.dream import Scope
 from questfoundry.pipeline.size import (
     PRESETS,
     VALID_PRESETS,
@@ -183,3 +184,35 @@ class TestResolveSizeFromGraph:
         profile = resolve_size_from_graph(graph)
         assert profile.preset == "long"
         assert profile.max_arcs == 32
+
+
+class TestScopeStorySize:
+    """Tests for story_size field on the DREAM Scope model."""
+
+    def test_default_story_size_is_standard(self) -> None:
+        scope = Scope(estimated_passages=30, target_word_count=15000)
+        assert scope.story_size == "standard"
+
+    def test_explicit_story_size(self) -> None:
+        scope = Scope(story_size="vignette", estimated_passages=10, target_word_count=3000)
+        assert scope.story_size == "vignette"
+
+    def test_story_size_in_model_dump(self) -> None:
+        scope = Scope(story_size="short", estimated_passages=20, target_word_count=10000)
+        data = scope.model_dump()
+        assert data["story_size"] == "short"
+
+    def test_story_size_from_dict(self) -> None:
+        scope = Scope.model_validate(
+            {
+                "story_size": "long",
+                "estimated_passages": 80,
+                "target_word_count": 40000,
+            }
+        )
+        assert scope.story_size == "long"
+
+    def test_story_size_absent_defaults_to_standard(self) -> None:
+        """Backward compatibility: old artifacts without story_size still validate."""
+        scope = Scope.model_validate({"estimated_passages": 30, "target_word_count": 15000})
+        assert scope.story_size == "standard"
