@@ -79,6 +79,16 @@ class TestVoiceDocument:
                 tone_words=["dark"],
             )
 
+    def test_invalid_tense_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            VoiceDocument(
+                pov="first",
+                tense="future",  # type: ignore[arg-type]
+                voice_register="literary",
+                sentence_rhythm="varied",
+                tone_words=["dark"],
+            )
+
     def test_empty_tone_words_rejected(self) -> None:
         with pytest.raises(ValidationError):
             VoiceDocument(
