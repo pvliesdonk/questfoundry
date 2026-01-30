@@ -1128,6 +1128,15 @@ def test_fill_command_exists() -> None:
     assert "--provider" in output
 
 
+def test_fill_no_project_fails() -> None:
+    """Test qf fill fails without project.yaml."""
+    with runner.isolated_filesystem():
+        result = runner.invoke(app, ["fill"])
+
+        assert result.exit_code == 1
+        assert "No project.yaml found" in result.stdout
+
+
 def test_grow_no_project_fails() -> None:
     """Test qf grow fails without project.yaml."""
     with runner.isolated_filesystem():
