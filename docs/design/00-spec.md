@@ -112,7 +112,7 @@ This is not a pipeline of files where each stage produces a new artifact. Rather
 | SEED | Path, Consequence, Beat | Entity (curate), Dilemma (explore) | Entity, Dilemma |
 | GROW | Arc, Passage, Choice, Codeword; new Beats | Beat (scene_type, intersection) | Path, Beat, Entity |
 | FILL | — | Passage (prose), Entity (details) | Passage, Entity, Path |
-| DRESS | Illustration, Codex | — | Passage, Entity |
+| DRESS | ArtDirection, EntityVisual, IllustrationBrief, Illustration, Codex | — | Passage, Entity, Vision, Codeword |
 | SHIP | — (export only) | — | Persistent nodes |
 
 ### LLM Output vs Graph Storage
@@ -287,32 +287,80 @@ relationship:
 
 **Lifecycle:** Created in BRAINSTORM or SEED, updated in FILL. Exported.
 
+#### ArtDirection
+
+Global visual identity document for the story's presentation layer. Analogous to FILL's voice document but for visual style.
+
+```yaml
+art_direction:
+  id: string
+  style: string                    # e.g., "watercolor", "digital painting", "ink sketch"
+  medium: string                   # what it looks like it was made with
+  palette: string[]                # dominant colors / mood
+  composition_notes: string        # framing preferences
+  negative_defaults: string        # global things to avoid in image generation
+  aspect_ratio: string             # default dimensions, e.g., "16:9"
+```
+
+**Lifecycle:** Created in DRESS (art direction phase). Exported.
+
 #### Illustration
 
-Art asset with caption.
+Art asset with diegetic caption. Each illustration is generated from an IllustrationBrief (working node) and linked to a passage via a Depicts edge.
 
 ```yaml
 illustration:
   id: string
-  asset: path
-  caption: string
+  asset: path                      # e.g., assets/<sha256>.png
+  caption: string                  # diegetic — in-world voice, not meta-description
+  category: string                 # scene | portrait | vista | item_detail
 ```
 
-**Lifecycle:** Created in DRESS. Exported.
+**Lifecycle:** Created in DRESS (image generation phase). Exported.
+
+**Diegetic constraint:** Captions must be written in the story's voice—as if they were part of the world ("The bridge where loyalties shatter"), never meta-descriptive ("An illustration of two characters on a bridge").
 
 #### Codex
 
-Player-facing encyclopedia entries for entities. Provides in-world information without spoilers.
+Player-facing encyclopedia entries for entities. Provides in-world information without spoilers. Multiple entries per entity enable spoiler-graduated knowledge: players see more as they unlock codewords.
 
 ```yaml
 codex_entry:
   id: string
-  entity_id: string               # which entity this describes
-  visible_when: codeword[]        # player must have these to see entry
-  content: string                 # player-safe, no spoilers
+  rank: integer                    # display order (1 = base knowledge, higher = deeper)
+  visible_when: codeword[]         # all must be present to unlock this tier
+  content: string                  # diegetic — in-world voice, player-safe, no spoilers
 ```
 
-**Lifecycle:** Created in DRESS. Exported.
+**Lifecycle:** Created in DRESS (codex phase). Exported.
+
+**Entity link:** Via HasEntry edge (codex_entry → entity), not an entity_id field. This follows the ontology's edge-based relationship pattern.
+
+**Cumulative model:** Multiple codex_entry nodes per entity, each with a different rank and visibility gate. SHIP displays all unlocked entries sorted by rank. Each entry is self-contained (readable without other tiers), but the LLM is instructed to minimize redundancy across tiers.
+
+**Example:**
+```yaml
+# Tier 1: always visible (visible_when: [])
+codex_entry:
+  id: codex::aldric_basic
+  rank: 1
+  visible_when: []
+  content: "A traveling scholar who offers guidance to those in need."
+
+# Tier 2: after meeting (visible_when: [met_aldric])
+codex_entry:
+  id: codex::aldric_background
+  rank: 2
+  visible_when: [met_aldric]
+  content: "Claims to be a former court advisor, exiled for speaking truth."
+
+# Tier 3: after discovery (visible_when: [discovered_betrayal])
+codex_entry:
+  id: codex::aldric_truth
+  rank: 3
+  visible_when: [discovered_betrayal]
+  content: "His exile was self-imposed — he left after orchestrating the king's downfall."
+```
 
 ---
 
@@ -506,6 +554,47 @@ arc:
 
 **Lifecycle:** Created in GROW during arc enumeration. Not exported.
 
+#### EntityVisual
+
+Per-entity visual identity profile. Ensures consistent appearance across all illustrations featuring this entity. Created during the art direction phase of DRESS, linked to its entity via a `describes_visual` edge.
+
+```yaml
+entity_visual:
+  id: string
+  description: string                   # prose description of appearance
+  distinguishing_features: string[]     # key visual identifiers
+  color_associations: string[]          # colors tied to this entity
+  reference_prompt_fragment: string     # injected into every image prompt featuring this entity
+```
+
+**Lifecycle:** Created in DRESS (art direction phase). Not exported.
+
+**Purpose:** When illustrating a passage, the image prompt assembler reads EntityVisual nodes for all entities present (via Appears edges) and injects their `reference_prompt_fragment` into the prompt. This ensures a character, location, or object looks the same across all illustrations.
+
+#### IllustrationBrief
+
+Structured image prompt with priority scoring. One brief is generated per passage; only selected briefs are rendered into Illustration nodes.
+
+```yaml
+illustration_brief:
+  id: string
+  priority: integer                     # 1=must-have, 2=important, 3=nice-to-have
+  category: string                      # scene | portrait | vista | item_detail
+  subject: string                       # what the image depicts
+  entities: string[]                    # entity IDs present in scene
+  composition: string                   # framing / camera notes
+  mood: string                          # emotional tone
+  style_overrides: map                  # empty = use global art direction
+  negative: string                      # things to avoid in this image
+  caption: string                       # proposed diegetic caption
+```
+
+**Lifecycle:** Created in DRESS (illustration phase). Not exported.
+
+**Priority scoring (hybrid):** Structural rules provide a base score (spine passages, climax scenes, and endings score higher); LLM judgment adjusts for visual interest and narrative importance. See procedures/dress.md for the full algorithm.
+
+**Linked to passage** via `targets` edge (illustration_brief → passage).
+
 ---
 
 ## Edge Types
@@ -521,6 +610,7 @@ arc:
 | **Appears** | entity → passage | role | GROW | Entity present in scene |
 | **Involves** | relationship → passage | — | GROW | Relationship active in scene |
 | **Depicts** | illustration → passage | — | DRESS | Art shown with passage |
+| **HasEntry** | codex_entry → entity | — | DRESS | Codex describes this entity |
 
 **Choice properties:**
 ```yaml
@@ -545,6 +635,9 @@ choice:
 | **grants** | beat → codeword | GROW | Beat completion grants codeword |
 | **weaves** | arc → path | GROW | Arc uses this path |
 | **from_beat** | passage → beat | GROW | Traceability |
+| **describes_visual** | entity_visual → entity | DRESS | Visual profile for entity |
+| **from_brief** | illustration → illustration_brief | DRESS | Traceability to source brief |
+| **targets** | illustration_brief → passage | DRESS | Brief targets this passage |
 
 ---
 
@@ -914,28 +1007,49 @@ Future versions may support voice modifiers per arc (e.g., "mentor_manipulator" 
 
 ### Stage 6: DRESS
 
-**Purpose:** Generate presentation layer.
+**Purpose:** Generate presentation layer — art direction, illustrations, and codex.
 
-**Input:** Completed prose.
+**Input:** Completed prose (all passages), entities, vision, codewords.
 
-**Output:**
+**Output:** ArtDirection, EntityVisual[], IllustrationBrief[], Illustration[], Codex[], Depicts edges, HasEntry edges.
 
-**Illustrations:**
-```
-Prose → image prompt extraction → asset generation → illustration node
-```
+> See `docs/design/procedures/dress.md` for the full algorithm specification.
 
-**Codex:**
-```yaml
-codex_entry:
-  entity_id: string
-  visible_when: codeword[]      # player must have these
-  content: string               # player-safe, no spoilers
-```
+#### Sub-stages
 
-**Depicts edges:** Link illustrations to passages.
+DRESS has three sub-stages with two human gates:
 
-**Human Gate:** Review art direction. Optional—story works without it.
+| Sub-stage | Purpose | Creates | Cost |
+|-----------|---------|---------|------|
+| **Art Direction** | Establish visual identity | ArtDirection, EntityVisual[] | Cheap (LLM text) |
+| **Illustration Briefs + Codex** | Generate prompts and encyclopedia | IllustrationBrief[], Codex[] | Cheap (LLM text) |
+| **Image Generation** | Render selected briefs | Illustration[] | Expensive (image API) |
+
+**Sub-stage 1: Art Direction** (discuss/summarize/serialize)
+
+Collaborative exploration of visual style, resulting in a global ArtDirection document and per-entity EntityVisual profiles. Follows the standard three-phase pattern (like DREAM).
+
+**Human Gate 1:** Review visual identity and entity visual profiles.
+
+**Sub-stage 2a: Illustration Briefs** (per passage, LLM)
+
+Generates structured image prompts (IllustrationBrief nodes) for all passages with hybrid priority scoring. Reads Appears edges to identify which entities are in each passage and injects EntityVisual prompt fragments for consistency.
+
+**Sub-stage 2b: Codex Generation** (per entity, LLM — parallel with 2a)
+
+Generates cumulative, rank-ordered, diegetic encyclopedia entries for all entities. Spoiler-graduated via codeword-gated tiers.
+
+**Human Gate 2:** Review illustration briefs (sorted by priority), select image generation budget, review codex entries.
+
+**Sub-stage 3: Image Generation** (batch with sample-first, image provider)
+
+Assembles provider-specific prompts from briefs + art direction + entity visuals. Generates one sample image for style confirmation, then batches the remainder. Stores assets as content-addressed files. Creates Illustration nodes + Depicts edges.
+
+**Diegetic constraint:** Both illustration captions and codex entries must be written in the story's voice — as if they are part of the world, not meta-descriptions.
+
+**Image provider:** Uses a provider-independent abstraction layer (not LangChain — no BaseImageModel exists). Single provider per project, starting with OpenAI gpt-image-1.
+
+**Human Gate (overall):** Two gates — after art direction (Gate 1) and after brief generation (Gate 2). Optional — story works without DRESS.
 
 ---
 
@@ -961,7 +1075,9 @@ SHIP reads from the graph, ignoring working nodes.
 | Entity | id, type, base, overlays |
 | Codeword | id, type, condition |
 | Relationship | id, from_entity, to_entity, base, overlays |
-| Illustration | id, asset, caption |
+| Illustration | id, asset, caption, category |
+| Codex | id, rank, visible_when, content |
+| ArtDirection | id, style, medium, palette, aspect_ratio |
 
 **Edges required:**
 
@@ -971,12 +1087,13 @@ SHIP reads from the graph, ignoring working nodes.
 | Appears | from (entity), to (passage), role |
 | Involves | from (relationship), to (passage) |
 | Depicts | from (illustration), to (passage) |
+| HasEntry | from (codex_entry), to (entity) |
 
 **Derived:**
 
 | Derived | From |
 |---------|------|
-| Codex entries | Entities + visibility rules |
+| Codex display | CodexEntry nodes per entity, filtered by player codewords, sorted by rank (cumulative) |
 | Start passage | Passage with no incoming Choice edges |
 | Ending passages | Passages with no outgoing Choice edges |
 
@@ -1321,8 +1438,11 @@ When users run `qf review`:
 | Entity | Yes | BRAINSTORM/SEED | Yes (FILL can update, not create) |
 | Codeword | Yes | GROW | Yes |
 | Relationship | Yes | BRAINSTORM/SEED | Yes (FILL can update, not create) |
+| ArtDirection | Yes | DRESS | Yes |
 | Illustration | Yes | DRESS | Yes |
 | Codex | Yes | DRESS | Yes |
+| EntityVisual | No | DRESS | No |
+| IllustrationBrief | No | DRESS | No |
 | Dilemma | No | BRAINSTORM | No |
 | Answer | No | BRAINSTORM | No |
 | Consequence | No | SEED | No |
@@ -1338,6 +1458,10 @@ When users run `qf review`:
 | Appears | Yes | GROW | Yes |
 | Involves | Yes | GROW | Yes |
 | Depicts | Yes | DRESS | Yes |
+| HasEntry | Yes | DRESS | Yes |
+| describes_visual | No | DRESS | No |
+| from_brief | No | DRESS | No |
+| targets | No | DRESS | No |
 | involves (dilemma) | No | BRAINSTORM | No |
 | has_answer | No | BRAINSTORM | No |
 | explores | No | SEED | No |

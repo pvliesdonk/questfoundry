@@ -7,7 +7,7 @@ Implementation roadmap for QuestFoundry v5 pipeline.
 QuestFoundry is built incrementally in **slices** — each slice delivers working software, not stubs. Complete each slice before starting the next.
 
 ```
-Slice 1 → Slice 2 → Slice 3 → Slice 4 → Polish
+Slice 1 → Slice 2 → Slice 3 → Slice 4 → Polish → Slice 5 (DRESS)
 ```
 
 For detailed specifications, see [docs/design/12-getting-started.md](docs/design/12-getting-started.md).
@@ -141,11 +141,45 @@ After core pipeline works:
 
 ---
 
+## Slice 5: DRESS (Art Direction, Illustrations, Codex)
+
+**Goal**: Presentation layer — visual identity, illustrations, and player-facing codex.
+
+**Epic**: #414
+
+| Deliverable | Status |
+|-------------|--------|
+| Ontology + procedure spec | To be detailed |
+| DRESS Pydantic models | To be detailed |
+| Graph mutations for DRESS | To be detailed |
+| Image provider abstraction | To be detailed |
+| Art direction sub-stage | To be detailed |
+| Illustration brief generation | To be detailed |
+| Codex generation | To be detailed |
+| Image generation orchestration | To be detailed |
+| Asset storage + manifest | To be detailed |
+| SHIP updates for DRESS export | To be detailed |
+| CLI: `qf dress` | To be detailed |
+| Prompt templates | To be detailed |
+
+**Test checkpoint**:
+```bash
+qf dress --project myproject
+# Gate 1: review art direction + entity visuals
+# Gate 2: review briefs + codex, set budget
+# Sample confirmation, then batch generation
+ls projects/myproject/assets/
+qf ship --format html  # verify illustrations + codex in export
+```
+
+**Design reference**: [docs/design/procedures/dress.md](docs/design/procedures/dress.md)
+
+---
+
 ## Deferred
 
 | Feature | Reason |
 |---------|--------|
-| DRESS stage | Art direction deferred; core narrative first |
 | HARVEST iteration | Optional complexity; add if needed |
 | Web UI | CLI-first; UI is separate concern |
 
