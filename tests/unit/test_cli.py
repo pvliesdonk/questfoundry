@@ -73,9 +73,24 @@ def test_init_project_yaml_content(tmp_path: Path) -> None:
 
     assert config["name"] == "test_project"
     assert config["version"] == 1
-    assert "stages" in config["pipeline"]
-    assert "dream" in config["pipeline"]["stages"]
+    assert "pipeline" not in config  # Stages are no longer written to project.yaml
     assert "default" in config["providers"]
+
+
+def test_init_with_provider(tmp_path: Path) -> None:
+    """Test qf init --provider sets provider in project.yaml."""
+    import yaml
+
+    runner.invoke(
+        app,
+        ["init", "test_project", "--path", str(tmp_path), "--provider", "openai/gpt-4o"],
+    )
+
+    config_file = tmp_path / "test_project" / "project.yaml"
+    with config_file.open() as f:
+        config = yaml.safe_load(f)
+
+    assert config["providers"]["default"] == "openai/gpt-4o"
 
 
 def test_init_existing_directory_fails(tmp_path: Path) -> None:
