@@ -46,7 +46,7 @@ def _make_fill_graph() -> Graph:
             "flag": "incompatible_states",
         },
     )
-    # Passage without prose (should be excluded)
+    # Passage without prose (included in manifest but without prose field)
     g.create_node(
         "passage::p3",
         {
@@ -71,25 +71,38 @@ class TestExtractFillArtifact:
         assert "type" not in voice  # graph metadata excluded
         assert "raw_id" not in voice
 
-    def test_extracts_filled_passages_only(self) -> None:
+    def test_extracts_all_passages(self) -> None:
+        """All passages appear in artifact — complete manifest per spec."""
         graph = _make_fill_graph()
         artifact = extract_fill_artifact(graph)
         passages = artifact["passages"]
-        # Only p1 and p2 have prose; p3 is excluded
-        assert len(passages) == 2
+        assert len(passages) == 3
         passage_ids = [p["passage_id"] for p in passages]
         assert "passage::p1" in passage_ids
         assert "passage::p2" in passage_ids
-        assert "passage::p3" not in passage_ids
+        assert "passage::p3" in passage_ids
 
-    def test_passage_prose_snippets(self) -> None:
+    def test_passage_full_prose(self) -> None:
+        """Artifact contains full prose, not truncated snippets."""
         graph = _make_fill_graph()
         artifact = extract_fill_artifact(graph)
         passages = artifact["passages"]
         p1 = next(p for p in passages if p["passage_id"] == "passage::p1")
-        assert "prose_snippet" in p1
-        assert "prose_length" in p1
-        assert p1["prose_length"] > 0
+        assert "prose" in p1
+        assert (
+            p1["prose"] == "Kay entered the crumbling tower, dust motes swirling in the pale light."
+        )
+        assert "prose_snippet" not in p1
+        assert "prose_length" not in p1
+
+    def test_passage_without_prose_has_no_prose_field(self) -> None:
+        """Passages without prose are included but lack the prose field."""
+        graph = _make_fill_graph()
+        artifact = extract_fill_artifact(graph)
+        passages = artifact["passages"]
+        p3 = next(p for p in passages if p["passage_id"] == "passage::p3")
+        assert "prose" not in p3
+        assert p3["from_beat"] == "beat::b3"
 
     def test_passage_flags_included(self) -> None:
         graph = _make_fill_graph()
@@ -98,9 +111,10 @@ class TestExtractFillArtifact:
         p2 = next(p for p in passages if p["passage_id"] == "passage::p2")
         assert p2["flag"] == "incompatible_states"
 
-    def test_prose_truncation(self) -> None:
+    def test_long_prose_not_truncated(self) -> None:
+        """Full prose is preserved regardless of length."""
         graph = Graph.empty()
-        long_prose = "A" * 300
+        long_prose = "A" * 5000
         graph.create_node(
             "passage::long",
             {"type": "passage", "raw_id": "long", "from_beat": "beat::b1", "prose": long_prose},
@@ -108,24 +122,19 @@ class TestExtractFillArtifact:
         artifact = extract_fill_artifact(graph)
         passages = artifact["passages"]
         assert len(passages) == 1
-        assert passages[0]["prose_snippet"].endswith("...")
-        assert len(passages[0]["prose_snippet"]) == 203  # 200 + "..."
-        assert passages[0]["prose_length"] == 300
+        assert passages[0]["prose"] == long_prose
 
-    def test_review_summary(self) -> None:
+    def test_no_review_summary(self) -> None:
+        """Artifact contains story data only — no telemetry."""
         graph = _make_fill_graph()
         artifact = extract_fill_artifact(graph)
-        summary = artifact["review_summary"]
-        assert summary["total_passages"] == 3
-        assert summary["passages_with_prose"] == 2
-        assert summary["passages_flagged"] == 1
+        assert "review_summary" not in artifact
 
     def test_empty_graph(self) -> None:
         graph = Graph.empty()
         artifact = extract_fill_artifact(graph)
         assert artifact["voice_document"] == {}
         assert artifact["passages"] == []
-        assert artifact["review_summary"]["total_passages"] == 0
 
     def test_no_voice_node(self) -> None:
         graph = Graph.empty()

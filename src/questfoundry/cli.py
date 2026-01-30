@@ -656,8 +656,7 @@ def _preview_grow_artifact(artifact: dict[str, Any]) -> None:
 def _preview_fill_artifact(artifact: dict[str, Any]) -> None:
     """Display preview of FILL artifact.
 
-    Reads extract_fill_artifact fields (voice_document, passages,
-    review_summary) — not FillResult telemetry.
+    Reads extract_fill_artifact fields (voice_document, passages).
     """
     voice = artifact.get("voice_document", {})
     if voice:
@@ -670,10 +669,10 @@ def _preview_fill_artifact(artifact: dict[str, Any]) -> None:
             console.print(f"  Tone: {', '.join(str(w) for w in tone_words)}")
 
     passages = artifact.get("passages", [])
-    console.print(f"  Passages with prose: [bold]{len(passages)}[/bold]")
+    with_prose = sum(1 for p in passages if p.get("prose"))
+    console.print(f"  Passages: [bold]{with_prose}[/bold]/{len(passages)} with prose")
 
-    review = artifact.get("review_summary", {})
-    flagged = review.get("passages_flagged", 0)
+    flagged = sum(1 for p in passages if p.get("flag"))
     if flagged:
         console.print(f"  [yellow]Flagged passages: {flagged}[/yellow]")
 

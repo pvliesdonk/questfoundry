@@ -191,6 +191,73 @@ class TestLLMLoggingCallback:
         content = log_file.read_text()
         assert "150" in content
 
+    def test_on_llm_end_extracts_tokens_from_message_usage_metadata(
+        self, callback: LLMLoggingCallback, tmp_path: Path
+    ) -> None:
+        """on_llm_end falls back to gen.message.usage_metadata (Ollama)."""
+        import json
+
+        run_id = uuid4()
+        callback._pending_calls[run_id] = {
+            "model": "ollama-qwen",
+            "messages": [],
+            "start_time": 0.0,
+        }
+
+        # Ollama puts usage on the message, not llm_output
+        mock_msg = MagicMock()
+        mock_msg.tool_calls = []
+        mock_msg.usage_metadata = {"total_tokens": 250, "input_tokens": 200, "output_tokens": 50}
+
+        mock_gen = MagicMock()
+        mock_gen.text = "Response"
+        mock_gen.message = mock_msg
+
+        mock_response = MagicMock()
+        mock_response.generations = [[mock_gen]]
+        mock_response.llm_output = {}  # Empty — Ollama doesn't populate this
+
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+        log_file = tmp_path / "logs" / "llm_calls.jsonl"
+        entry = json.loads(log_file.read_text().strip())
+        assert entry["tokens_used"] == 250
+
+    def test_on_llm_end_extracts_tokens_from_message_usage_metadata_object(
+        self, callback: LLMLoggingCallback, tmp_path: Path
+    ) -> None:
+        """on_llm_end handles UsageMetadata as object with attributes."""
+        import json
+
+        run_id = uuid4()
+        callback._pending_calls[run_id] = {
+            "model": "ollama-qwen",
+            "messages": [],
+            "start_time": 0.0,
+        }
+
+        # UsageMetadata as object (not dict)
+        mock_usage = MagicMock()
+        mock_usage.total_tokens = 300
+
+        mock_msg = MagicMock()
+        mock_msg.tool_calls = []
+        mock_msg.usage_metadata = mock_usage
+
+        mock_gen = MagicMock()
+        mock_gen.text = "Response"
+        mock_gen.message = mock_msg
+
+        mock_response = MagicMock()
+        mock_response.generations = [[mock_gen]]
+        mock_response.llm_output = {}
+
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+        log_file = tmp_path / "logs" / "llm_calls.jsonl"
+        entry = json.loads(log_file.read_text().strip())
+        assert entry["tokens_used"] == 300
+
     def test_on_llm_end_handles_missing_pending_call(self, callback: LLMLoggingCallback) -> None:
         """on_llm_end handles missing pending call gracefully."""
         run_id = uuid4()

@@ -165,32 +165,43 @@ class LLMLoggingCallback(BaseCallbackHandler):
                         for tc in msg.tool_calls
                     ]
 
-        # Extract token usage with warning on missing
+        # Extract token usage from multiple locations.
+        # Providers store tokens in different places:
+        # - OpenAI: response.llm_output["token_usage"]
+        # - Ollama/newer: gen.message.usage_metadata (dict or UsageMetadata)
+        # - Some: response.llm_output["usage_metadata"]
         total_tokens = 0
         llm_output = response.llm_output or {}
 
         if "token_usage" in llm_output:
             usage = llm_output["token_usage"]
             tokens = usage.get("total_tokens")
-            if tokens is None:
-                log.warning(
-                    "token_count_missing",
-                    run_id=str(run_id),
-                    usage_structure=str(usage),
-                )
-            else:
+            if tokens is not None:
                 total_tokens = tokens
         elif "usage_metadata" in llm_output:
             usage = llm_output["usage_metadata"]
             tokens = usage.get("total_tokens")
-            if tokens is None:
-                log.warning(
-                    "token_count_missing",
-                    run_id=str(run_id),
-                    usage_structure=str(usage),
-                )
-            else:
+            if tokens is not None:
                 total_tokens = tokens
+
+        # Fallback: check generation message's usage_metadata (Ollama, newer providers)
+        if (
+            total_tokens == 0
+            and response.generations
+            and len(response.generations) > 0
+            and len(response.generations[0]) > 0
+        ):
+            gen_msg = getattr(response.generations[0][0], "message", None)
+            if gen_msg is not None:
+                msg_usage = getattr(gen_msg, "usage_metadata", None)
+                if msg_usage:
+                    # usage_metadata can be a dict or UsageMetadata object
+                    if isinstance(msg_usage, dict):
+                        tokens = msg_usage.get("total_tokens")
+                    else:
+                        tokens = getattr(msg_usage, "total_tokens", None)
+                    if tokens is not None:
+                        total_tokens = int(tokens)
 
         # Get temperature if captured, otherwise use default
         temperature = call_info.get("temperature")

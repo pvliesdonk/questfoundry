@@ -187,7 +187,6 @@ def extract_fill_artifact(graph: Graph) -> dict[str, Any]:
     return {
         "voice_document": _extract_voice_document(graph),
         "passages": _extract_filled_passages(graph),
-        "review_summary": _extract_review_summary(graph),
     }
 
 
@@ -207,44 +206,27 @@ def _extract_voice_document(graph: Graph) -> dict[str, Any]:
 
 
 def _extract_filled_passages(graph: Graph) -> list[dict[str, Any]]:
-    """Extract passages with their prose (truncated for readability)."""
+    """Extract all passages with their full prose.
+
+    Per spec: "FILL Output — All passages with prose populated."
+    Includes passages without prose (flagged as missing) so the artifact
+    is a complete manifest of every passage in the story.
+    """
     passage_nodes = graph.get_nodes_by_type("passage")
     passages = []
     for passage_id in sorted(passage_nodes):
         data = passage_nodes[passage_id]
-        prose = data.get("prose", "")
-        if not prose:
-            continue
         entry: dict[str, Any] = {
             "passage_id": passage_id,
             "from_beat": data.get("from_beat", ""),
         }
-        # Truncate prose to first 200 chars for artifact readability
-        if len(prose) > 200:
-            entry["prose_snippet"] = prose[:200] + "..."
-        else:
-            entry["prose_snippet"] = prose
-        entry["prose_length"] = len(prose)
+        prose = data.get("prose", "")
+        if prose:
+            entry["prose"] = prose
         if flag := data.get("flag"):
             entry["flag"] = flag
         passages.append(entry)
     return passages
-
-
-def _extract_review_summary(graph: Graph) -> dict[str, Any]:
-    """Summarize review results from passage flags."""
-    passage_nodes = graph.get_nodes_by_type("passage")
-    total = len(passage_nodes)
-    filled = sum(1 for p in passage_nodes.values() if p.get("prose"))
-    flagged = sum(1 for p in passage_nodes.values() if p.get("flag"))
-    reviewed = sum(1 for p in passage_nodes.values() if p.get("review_flags") is not None)
-
-    return {
-        "total_passages": total,
-        "passages_with_prose": filled,
-        "passages_flagged": flagged,
-        "passages_reviewed": reviewed,
-    }
 
 
 # ---------------------------------------------------------------------------

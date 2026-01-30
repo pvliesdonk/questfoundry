@@ -298,13 +298,12 @@ class FillStage:
         artifact_data = extract_fill_artifact(graph)
         ArtifactWriter(resolved_path).write(artifact_data, "fill")
 
+        passages = artifact_data.get("passages", [])
         log.info(
             "stage_complete",
             stage="fill",
-            passages_with_prose=artifact_data.get("review_summary", {}).get(
-                "passages_with_prose", 0
-            ),
-            passages_flagged=artifact_data.get("review_summary", {}).get("passages_flagged", 0),
+            total_passages=len(passages),
+            passages_with_prose=sum(1 for p in passages if p.get("prose")),
         )
 
         return artifact_data, total_llm_calls, total_tokens
@@ -728,7 +727,6 @@ class FillStage:
         total_tokens = 0
         total_flags = sum(len(f) for f in flagged_passages.values())
         revised_flags = 0
-        revised_ids: set[str] = set()
 
         for passage_id, flags in flagged_passages.items():
             passage = graph.get_node(passage_id)
@@ -747,7 +745,10 @@ class FillStage:
                 if passage_id in order:
                     current_idx = order.index(passage_id)
 
-            # Chain revisions: each uses output from previous
+            # Chain revisions: each uses output from previous.
+            # Track whether all flags got a non-empty response (= LLM engaged).
+            # Empty prose means the LLM failed to produce a revision — keep flag.
+            all_flags_addressed = True
             for flag_data in flags:
                 context = {
                     "voice_document": voice_context,
@@ -787,20 +788,28 @@ class FillStage:
                                 entity_id=update.entity_id,
                                 reason="entity not found in graph",
                             )
+                else:
+                    all_flags_addressed = False
+                    log.warning(
+                        "revision_empty_prose",
+                        passage_id=passage_id,
+                        issue_type=flag_data.get("issue_type", ""),
+                    )
 
             # Write final prose after all flags for this passage
             if current_prose != passage.get("prose", ""):
                 graph.update_node(passage_id, prose=current_prose)
-                revised_ids.add(passage_id)
 
-        # Only clear flags for successfully revised passages
-        for pid in revised_ids:
-            graph.update_node(pid, review_flags=[])
+            # Clear flags if LLM returned prose for every flag (even if identical
+            # to original — identical output means the LLM reviewed the issue and
+            # found the text acceptable). Keep flags if any revision returned empty.
+            if all_flags_addressed:
+                graph.update_node(passage_id, review_flags=[])
 
         return FillPhaseResult(
             phase="revision",
             status="completed",
-            detail=f"{revised_flags} of {total_flags} flags addressed across {len(revised_ids)} passages",
+            detail=f"{revised_flags} of {total_flags} flags addressed across {len(flagged_passages)} passages",
             llm_calls=total_llm_calls,
             tokens_used=total_tokens,
         )

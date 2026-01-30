@@ -143,7 +143,7 @@ class TestFillStageExecute:
         # Result is artifact data (from extract_fill_artifact), not FillResult telemetry
         assert "voice_document" in result_dict
         assert "passages" in result_dict
-        assert "review_summary" in result_dict
+        assert "review_summary" not in result_dict  # No telemetry in artifact
 
         # Sum of all phase LLM calls (1 + 2 + 1 + 0 = 4)
         assert llm_calls == 4
