@@ -112,7 +112,7 @@ This is not a pipeline of files where each stage produces a new artifact. Rather
 | SEED | Path, Consequence, Beat | Entity (curate), Dilemma (explore) | Entity, Dilemma |
 | GROW | Arc, Passage, Choice, Codeword; new Beats | Beat (scene_type, intersection) | Path, Beat, Entity |
 | FILL | — | Passage (prose), Entity (details) | Passage, Entity, Path |
-| DRESS | ArtDirection, EntityVisual, IllustrationBrief, Illustration, Codex | — | Passage, Entity, Vision, Codeword |
+| DRESS | ArtDirection, EntityVisual, IllustrationBrief, Illustration, CodexEntry | — | Passage, Entity, Vision, Codeword |
 | SHIP | — (export only) | — | Persistent nodes |
 
 ### LLM Output vs Graph Storage
@@ -320,7 +320,7 @@ illustration:
 
 **Diegetic constraint:** Captions must be written in the story's voice—as if they were part of the world ("The bridge where loyalties shatter"), never meta-descriptive ("An illustration of two characters on a bridge").
 
-#### Codex
+#### CodexEntry
 
 Player-facing encyclopedia entries for entities. Provides in-world information without spoilers. Multiple entries per entity enable spoiler-graduated knowledge: players see more as they unlock codewords.
 
@@ -1076,7 +1076,7 @@ SHIP reads from the graph, ignoring working nodes.
 | Codeword | id, type, condition |
 | Relationship | id, from_entity, to_entity, base, overlays |
 | Illustration | id, asset, caption, category |
-| Codex | id, rank, visible_when, content |
+| CodexEntry | id, rank, visible_when, content |
 | ArtDirection | id, style, medium, palette, aspect_ratio |
 
 **Edges required:**
@@ -1440,7 +1440,7 @@ When users run `qf review`:
 | Relationship | Yes | BRAINSTORM/SEED | Yes (FILL can update, not create) |
 | ArtDirection | Yes | DRESS | Yes |
 | Illustration | Yes | DRESS | Yes |
-| Codex | Yes | DRESS | Yes |
+| CodexEntry | Yes | DRESS | Yes |
 | EntityVisual | No | DRESS | No |
 | IllustrationBrief | No | DRESS | No |
 | Dilemma | No | BRAINSTORM | No |

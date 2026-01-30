@@ -190,7 +190,7 @@ qf validate --pre-gate  # Check topology
 
 See [procedures/fill.md](./procedures/fill.md) for FILL phase details.
 
-> **Note**: DRESS stage (art direction) is deferred for future implementation.
+> **Note**: DRESS stage (art direction, illustrations, codex) is specified in Slice 5. See [procedures/dress.md](./procedures/dress.md) and ADR-012.
 
 **What to Add**:
 

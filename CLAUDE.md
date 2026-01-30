@@ -51,7 +51,7 @@ DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP
 - **FILL**: Generate prose for scenes
 - **SHIP**: Export to playable formats (Twee, HTML, JSON)
 
-DRESS stage (art direction) is deferred for later implementation.
+DRESS stage (art direction, illustrations, codex) is specified in Slice 5. See `docs/design/procedures/dress.md` and ADR-012.
 
 ### Key Design Principles
 
