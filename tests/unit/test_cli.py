@@ -1117,6 +1117,17 @@ def test_grow_command_exists() -> None:
     assert "--provider" in output
 
 
+def test_fill_command_exists() -> None:
+    """Test qf fill command is registered and shows help."""
+    result = runner.invoke(app, ["fill", "--help"])
+    output = _strip_ansi(result.stdout)
+
+    assert result.exit_code == 0
+    assert "prose" in output.lower()
+    assert "--project" in output
+    assert "--provider" in output
+
+
 def test_grow_no_project_fails() -> None:
     """Test qf grow fails without project.yaml."""
     with runner.isolated_filesystem():
