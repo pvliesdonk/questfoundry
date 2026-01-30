@@ -683,9 +683,12 @@ class FillStage:
             full_pid = pid if pid.startswith("passage::") else f"passage::{pid}"
             node = graph.get_node(full_pid)
             if node:
-                existing_flags = node.get("review_flags", [])
-                existing_flags.append(flag_data)
-                graph.update_node(full_pid, review_flags=existing_flags)
+                graph.update_node(
+                    full_pid,
+                    review_flags=[*node.get("review_flags", []), flag_data],
+                )
+            else:
+                log.warning("review_flag_orphaned", passage_id=pid, full_pid=full_pid)
 
         log.info("review_complete", flags_found=len(all_flags))
 
@@ -707,14 +710,15 @@ class FillStage:
         Regenerates flagged passages with extended context and
         specific issue guidance.
         """
-        # Collect passages with review flags
+        # Collect and group flags by passage to chain revisions
         passage_nodes = graph.get_nodes_by_type("passage")
-        flagged: list[tuple[str, dict[str, str]]] = []
+        flagged_passages: dict[str, list[dict[str, str]]] = {}
         for pid, pdata in passage_nodes.items():
-            for flag_data in pdata.get("review_flags", []):
-                flagged.append((pid, flag_data))
+            flags = pdata.get("review_flags", [])
+            if flags:
+                flagged_passages[pid] = list(flags)
 
-        if not flagged:
+        if not flagged_passages:
             return FillPhaseResult(
                 phase="revision", status="completed", detail="no passages to revise"
             )
@@ -722,14 +726,20 @@ class FillStage:
         voice_context = format_voice_context(graph)
         total_llm_calls = 0
         total_tokens = 0
-        revised = 0
+        total_flags = sum(len(f) for f in flagged_passages.values())
+        revised_flags = 0
+        revised_ids: set[str] = set()
 
-        for passage_id, flag_data in flagged:
+        for passage_id, flags in flagged_passages.items():
             passage = graph.get_node(passage_id)
             if not passage:
                 continue
 
-            # Find arc for extended window
+            current_prose = passage.get("prose", "")
+            if not current_prose:
+                continue
+
+            # Find arc for extended window (once per passage)
             arc_id = self._find_arc_for_passage(graph, passage_id)
             current_idx = 0
             if arc_id:
@@ -737,49 +747,60 @@ class FillStage:
                 if passage_id in order:
                     current_idx = order.index(passage_id)
 
-            context = {
-                "voice_document": voice_context,
-                "passage_id": passage.get("raw_id", passage_id),
-                "issue_type": flag_data.get("issue_type", ""),
-                "issue_description": flag_data.get("issue", ""),
-                "current_prose": passage.get("prose", ""),
-                "extended_window": format_sliding_window(
-                    graph, arc_id or "", current_idx, window_size=5
-                ),
-            }
+            # Chain revisions: each uses output from previous
+            for flag_data in flags:
+                context = {
+                    "voice_document": voice_context,
+                    "passage_id": passage.get("raw_id", passage_id),
+                    "issue_type": flag_data.get("issue_type", ""),
+                    "issue_description": flag_data.get("issue", ""),
+                    "current_prose": current_prose,
+                    "extended_window": (
+                        format_sliding_window(graph, arc_id, current_idx, window_size=5)
+                        if arc_id
+                        else ""
+                    ),
+                }
 
-            output, llm_calls, tokens = await self._fill_llm_call(
-                model,
-                "fill_phase3_revision",
-                context,
-                FillPhase1Output,  # Reuse — same passage output format
-            )
-            total_llm_calls += llm_calls
-            total_tokens += tokens
+                output, llm_calls, tokens = await self._fill_llm_call(
+                    model,
+                    "fill_phase3_revision",
+                    context,
+                    FillPhase1Output,  # Reuse — same passage output format
+                )
+                total_llm_calls += llm_calls
+                total_tokens += tokens
 
-            if output.passage.prose:
-                graph.update_node(passage_id, prose=output.passage.prose)
-                revised += 1
-                log.debug("passage_revised", passage_id=passage_id)
+                if output.passage.prose:
+                    current_prose = output.passage.prose
+                    revised_flags += 1
+                    log.debug("passage_revised_for_flag", passage_id=passage_id)
 
-                # Apply entity updates from revision
-                for update in output.passage.entity_updates:
-                    entity_node = graph.get_node(f"entity::{update.entity_id}")
-                    if entity_node:
-                        graph.update_node(
-                            f"entity::{update.entity_id}",
-                            **{update.field: update.value},
-                        )
+                    # Apply entity updates from revision
+                    for update in output.passage.entity_updates:
+                        entity_id = f"entity::{update.entity_id}"
+                        if graph.has_node(entity_id):
+                            graph.update_node(entity_id, **{update.field: update.value})
+                        else:
+                            log.warning(
+                                "entity_update_skipped",
+                                entity_id=update.entity_id,
+                                reason="entity not found in graph",
+                            )
 
-        # Clear review flags after revision
-        for pid, pdata in passage_nodes.items():
-            if pdata.get("review_flags"):
-                graph.update_node(pid, review_flags=[])
+            # Write final prose after all flags for this passage
+            if current_prose != passage.get("prose", ""):
+                graph.update_node(passage_id, prose=current_prose)
+                revised_ids.add(passage_id)
+
+        # Only clear flags for successfully revised passages
+        for pid in revised_ids:
+            graph.update_node(pid, review_flags=[])
 
         return FillPhaseResult(
             phase="revision",
             status="completed",
-            detail=f"{revised} passages revised from {len(flagged)} flags",
+            detail=f"{revised_flags} of {total_flags} flags addressed across {len(revised_ids)} passages",
             llm_calls=total_llm_calls,
             tokens_used=total_tokens,
         )

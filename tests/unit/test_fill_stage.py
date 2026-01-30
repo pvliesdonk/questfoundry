@@ -740,7 +740,7 @@ class TestPhase3Revision:
 
         assert result.phase == "revision"
         assert result.status == "completed"
-        assert "1 passages revised" in (result.detail or "")
+        assert "1 of 1 flags addressed" in (result.detail or "")
 
         # Prose should be updated
         p1 = graph.get_node("passage::p1")
@@ -757,6 +757,123 @@ class TestPhase3Revision:
         result = await stage._phase_3_revision(graph, MagicMock())
         assert result.status == "completed"
         assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_multiple_flags_chained(self) -> None:
+        """Multiple flags on same passage should chain revisions."""
+        graph = _make_reviewed_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"passage_id": "p1", "issue": "Voice drift", "issue_type": "voice_drift"},
+                {"passage_id": "p1", "issue": "Pacing issue", "issue_type": "pacing"},
+            ],
+        )
+        stage = FillStage()
+
+        call_count = 0
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+        ) -> tuple:
+            nonlocal call_count
+            call_count += 1
+            # Each revision builds on the previous prose
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(
+                        passage_id="p1", prose=f"Revision {call_count}: {context['current_prose']}"
+                    )
+                ),
+                1,
+                300,
+            )
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        result = await stage._phase_3_revision(graph, MagicMock())
+
+        assert result.status == "completed"
+        # Both flags should be addressed
+        assert "2 of 2 flags addressed" in (result.detail or "")
+
+        # LLM called twice (once per flag)
+        assert call_count == 2
+
+        # Final prose should be the chained result (revision 2 includes revision 1)
+        p1 = graph.get_node("passage::p1")
+        assert p1 is not None
+        assert p1["prose"].startswith("Revision 2:")
+        assert "Revision 1:" in p1["prose"]
+
+        # Flags should be cleared
+        assert p1.get("review_flags") == []
+
+    @pytest.mark.asyncio
+    async def test_partial_revision_failure(self) -> None:
+        """Failed revision (empty prose) should not clear flags for that passage."""
+        graph = _make_reviewed_graph()
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"passage_id": "p1", "issue": "Voice drift", "issue_type": "voice_drift"}
+            ],
+        )
+        graph.update_node(
+            "passage::p2",
+            review_flags=[{"passage_id": "p2", "issue": "Pacing issue", "issue_type": "pacing"}],
+        )
+        stage = FillStage()
+
+        call_count = 0
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+        ) -> tuple:
+            nonlocal call_count
+            call_count += 1
+            pid = context.get("passage_id", "")
+            if pid == "p1":
+                # p1 revision succeeds
+                return (
+                    FillPhase1Output(
+                        passage=FillPassageOutput(passage_id="p1", prose="Fixed prose.")
+                    ),
+                    1,
+                    300,
+                )
+            # p2 revision fails (empty prose)
+            return (
+                FillPhase1Output(passage=FillPassageOutput(passage_id="p2", prose="")),
+                1,
+                300,
+            )
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        result = await stage._phase_3_revision(graph, MagicMock())
+
+        assert result.status == "completed"
+        # Only 1 of 2 flags addressed
+        assert "1 of 2 flags addressed" in (result.detail or "")
+
+        # p1 revised and flags cleared
+        p1 = graph.get_node("passage::p1")
+        assert p1 is not None
+        assert p1["prose"] == "Fixed prose."
+        assert p1.get("review_flags") == []
+
+        # p2 unchanged with flags still present
+        p2 = graph.get_node("passage::p2")
+        assert p2 is not None
+        assert p2["prose"] == "The hall stretched before Kay."
+        assert len(p2.get("review_flags", [])) == 1
 
 
 class TestModuleLevelHelpers:
