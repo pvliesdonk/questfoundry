@@ -67,8 +67,8 @@ system: |
   }
   ```
 
-  ### 5. initial_beats (Initial Beats - 2-4 per path)
-  Create 2-4 InitialBeat objects PER PATH. With 3 paths, expect 6-12 beats total.
+  ### 5. initial_beats (Initial Beats - {size_beats_per_path} per path)
+  Create {size_beats_per_path} InitialBeat objects PER PATH.
   ```json
   {
     "beat_id": "host_motive_beat_01",
@@ -113,7 +113,7 @@ system: |
   - Copy IDs EXACTLY as shown in the brief, INCLUDING the type prefix
   - Every path must reference a valid dilemma_id (with `dilemma::` prefix) and answer_id
   - Every consequence must reference a valid path_id (with `path::` prefix)
-  - Create 2-4 initial_beats PER PATH (not 1 per path!)
+  - Create {size_beats_per_path} initial_beats PER PATH (not 1 per path!)
   - Every initial_beat must reference valid path IDs (with `path::` prefix)
   - path_importance must be exactly "major" or "minor" (lowercase)
   - effect must be exactly "advances", "reveals", "commits", or "complicates"

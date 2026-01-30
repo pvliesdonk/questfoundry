@@ -169,6 +169,7 @@ class BrainstormStage:
         serialize_model: BaseChatModel | None = None,
         summarize_provider_name: str | None = None,  # noqa: ARG002 - for future use
         serialize_provider_name: str | None = None,
+        **kwargs: Any,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the BRAINSTORM stage using the 3-phase pattern.
 
@@ -186,6 +187,7 @@ class BrainstormStage:
             summarize_model: Optional model for summarize phase (defaults to model).
             serialize_model: Optional model for serialize phase (defaults to model).
             summarize_provider_name: Provider name for summarize phase (for future use).
+            **kwargs: Additional keyword arguments (e.g., size_profile).
             serialize_provider_name: Provider name for serialize phase.
 
         Returns:
@@ -228,10 +230,12 @@ class BrainstormStage:
             tools = [*tools, *get_interactive_tools()]
 
         # Build discuss prompt with vision context
+        size_profile = kwargs.get("size_profile")
         discuss_prompt = get_brainstorm_discuss_prompt(
             vision_context=vision_context,
             research_tools_available=bool(tools),
             interactive=interactive,
+            size_profile=size_profile,
         )
 
         # Phase 1: Discuss
@@ -258,7 +262,7 @@ class BrainstormStage:
 
         # Phase 2: Summarize (use summarize_model if provided)
         log.debug("brainstorm_phase", phase="summarize")
-        summarize_prompt = get_brainstorm_summarize_prompt()
+        summarize_prompt = get_brainstorm_summarize_prompt(size_profile=size_profile)
         brief, summarize_tokens = await summarize_discussion(
             model=summarize_model or model,
             messages=messages,

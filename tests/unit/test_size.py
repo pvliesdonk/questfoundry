@@ -11,6 +11,7 @@ from questfoundry.pipeline.size import (
     VALID_PRESETS,
     get_size_profile,
     resolve_size_from_graph,
+    size_template_vars,
 )
 
 
@@ -216,3 +217,43 @@ class TestScopeStorySize:
         """Backward compatibility: old artifacts without story_size still validate."""
         scope = Scope.model_validate({"estimated_passages": 30, "target_word_count": 15000})
         assert scope.story_size == "standard"
+
+
+class TestSizeTemplateVars:
+    def test_standard_template_vars(self) -> None:
+        profile = get_size_profile("standard")
+        vars_ = size_template_vars(profile)
+        assert vars_["size_characters"] == "5-10"
+        assert vars_["size_dilemmas"] == "4-8"
+        assert vars_["size_locations"] == "3-6"
+        assert vars_["size_beats_per_path"] == "2-4"
+        assert vars_["size_preset"] == "standard"
+
+    def test_vignette_template_vars(self) -> None:
+        profile = get_size_profile("vignette")
+        vars_ = size_template_vars(profile)
+        assert vars_["size_characters"] == "2-4"
+        assert vars_["size_dilemmas"] == "2-3"
+        assert vars_["size_locations"] == "1-2"
+
+    def test_default_uses_standard(self) -> None:
+        vars_ = size_template_vars(None)
+        assert vars_["size_preset"] == "standard"
+        assert vars_["size_characters"] == "5-10"
+
+    def test_all_expected_keys_present(self) -> None:
+        vars_ = size_template_vars()
+        expected = {
+            "size_characters",
+            "size_locations",
+            "size_objects",
+            "size_dilemmas",
+            "size_entities",
+            "size_beats_per_path",
+            "size_convergence_points",
+            "size_est_passages",
+            "size_est_words",
+            "size_tone_words",
+            "size_preset",
+        }
+        assert set(vars_.keys()) == expected

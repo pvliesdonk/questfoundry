@@ -234,3 +234,31 @@ def resolve_size_from_graph(graph: Graph) -> SizeProfile:
         return get_size_profile("standard")
 
     return get_size_profile(story_size)
+
+
+def size_template_vars(profile: SizeProfile | None = None) -> dict[str, str]:
+    """Build template variable dict from a size profile.
+
+    Returns a dict mapping ``{size_*}`` template variable names to formatted
+    range strings. Falls back to ``standard`` preset if no profile is given.
+
+    Args:
+        profile: Size profile to extract ranges from. Defaults to standard.
+
+    Returns:
+        Dict with keys like ``size_characters``, ``size_dilemmas``, etc.
+    """
+    p = profile or get_size_profile("standard")
+    return {
+        "size_characters": p.range_str("characters"),
+        "size_locations": p.range_str("locations"),
+        "size_objects": p.range_str("objects"),
+        "size_dilemmas": p.range_str("dilemmas"),
+        "size_entities": p.range_str("entities"),
+        "size_beats_per_path": p.range_str("beats_per_path"),
+        "size_convergence_points": p.range_str("convergence_points"),
+        "size_est_passages": p.range_str("est_passages"),
+        "size_est_words": p.range_str("est_words"),
+        "size_tone_words": p.range_str("tone_words"),
+        "size_preset": p.preset,
+    }

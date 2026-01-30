@@ -70,7 +70,7 @@ system: |
   - description: what happens narratively
   - ripples: story effects this implies
 
-  ### Initial Beats (2-4 per path)
+  ### Initial Beats ({size_beats_per_path} per path)
   For each opening beat:
   - id: unique beat identifier
   - summary: what happens in this beat

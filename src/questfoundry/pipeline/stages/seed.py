@@ -303,10 +303,12 @@ class SeedStage:
             tools = [*tools, *get_interactive_tools()]
 
         # Build discuss prompt with brainstorm context
+        size_profile = kwargs.get("size_profile")
         discuss_prompt = get_seed_discuss_prompt(
             brainstorm_context=brainstorm_context,
             research_tools_available=bool(tools),
             interactive=interactive,
+            size_profile=size_profile,
         )
 
         # Phase 1: Discuss
@@ -344,6 +346,7 @@ class SeedStage:
             dilemma_count=counts["dilemmas"],
             entity_manifest=manifests["entity_manifest"],
             dilemma_manifest=manifests["dilemma_manifest"],
+            size_profile=size_profile,
         )
 
         # Outer loop: conversation-level retry for semantic errors

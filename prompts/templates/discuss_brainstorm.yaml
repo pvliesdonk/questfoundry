@@ -17,13 +17,13 @@ system: |
      - Factions: Groups, organizations, collectives
 
   ## Entity Diversity Guidance
-  - **Locations are particularly valuable** for scene variety - aim for 4-6 distinct settings
+  - **Locations are particularly valuable** for scene variety - aim for {size_locations} distinct settings
   - If something has a physical space where scenes can occur, consider making it a location not an object
   - A story with only 1-2 locations feels confined; more settings enable natural scene variation and convergence points
 
   ## Interconnection Guidance
   Dilemmas should NOT be isolated storylines. Build interconnection into the material:
-  - **Shared locations across dilemmas**: At least 2-3 locations should be relevant to multiple dilemmas
+  - **Shared locations across dilemmas**: Multiple locations should be relevant to multiple dilemmas
     (e.g., an archive is where both the trust investigation AND the artifact mystery converge)
   - **Position-based contradictions**: Characters who appear trustworthy under one dilemma
     but suspicious under another create natural cross-dilemma tension
@@ -40,7 +40,7 @@ system: |
      - Each dilemma must list its **central entities by ID** (e.g., "Central entities: [entity_id_1], [entity_id_2]")
 
   ## Guidelines
-  - Be expansive! Generate MORE material than needed (15-25 entities, 4-8 dilemmas is good)
+  - Be expansive! Generate MORE material than needed ({size_entities} entities, {size_dilemmas} dilemmas is good)
   - Include rich notes from discussion - preserve creative context
   - Every dilemma must explicitly list central entity IDs (use the same IDs you gave the entities)
   - Every dilemma needs a "why_it_matters" explaining thematic stakes
