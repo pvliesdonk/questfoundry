@@ -26,6 +26,17 @@ from questfoundry.models.dream import (
     DreamArtifact,
     Scope,
 )
+from questfoundry.models.fill import (
+    EntityUpdate,
+    FillPassageOutput,
+    FillPhase0Output,
+    FillPhase1Output,
+    FillPhase2Output,
+    FillPhaseResult,
+    FillResult,
+    ReviewFlag,
+    VoiceDocument,
+)
 from questfoundry.models.grow import (
     Arc,
     Choice,
@@ -82,6 +93,13 @@ __all__ = [
     "EntityDisposition",
     "EntityOverlay",
     "EntityType",
+    "EntityUpdate",
+    "FillPassageOutput",
+    "FillPhase0Output",
+    "FillPhase1Output",
+    "FillPhase2Output",
+    "FillPhaseResult",
+    "FillResult",
     "GapProposal",
     "GrowPhaseResult",
     "GrowResult",
@@ -99,7 +117,9 @@ __all__ = [
     "Phase8cOutput",
     "Phase9Output",
     "PhaseResult",
+    "ReviewFlag",
     "SceneTypeTag",
     "Scope",
     "SeedOutput",
+    "VoiceDocument",
 ]
