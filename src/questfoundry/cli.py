@@ -212,9 +212,61 @@ def _require_project(project_path: Path) -> None:
     config_file = project_path / "project.yaml"
     if not config_file.exists():
         console.print(
-            "[red]Error:[/red] No project.yaml found. Run 'qf init <name>' first or use --project."
+            "[red]Error:[/red] No project.yaml found. "
+            "Run 'qf init <name>' first, use --project, or use 'qf run --init'."
         )
         raise typer.Exit(1)
+
+
+def _ensure_project(
+    project_path: Path,
+    *,
+    auto_init: bool,
+    provider: str | None,
+) -> Path:
+    """Ensure a project exists, optionally creating it.
+
+    Behavior:
+    - If project.yaml exists: return project_path as-is.
+    - If --init: auto-create without prompting.
+    - If interactive TTY: prompt user to create.
+    - Otherwise: fail with error.
+
+    Args:
+        project_path: Resolved project path (may not exist yet).
+        auto_init: Whether --init flag was passed.
+        provider: Provider string for project creation.
+
+    Returns:
+        Path to the (possibly newly created) project directory.
+
+    Raises:
+        typer.Exit: If project doesn't exist and user declines or non-interactive.
+    """
+    config_file = project_path / "project.yaml"
+    if config_file.exists():
+        return project_path
+
+    name = project_path.name
+
+    if auto_init:
+        project_path = _init_project(name, project_path.parent, provider=provider)
+        console.print(f"[green]✓[/green] Created project: [bold]{name}[/bold]")
+        return project_path
+
+    if _is_interactive_tty():
+        if typer.confirm(f"Project '{name}' doesn't exist. Create it?", default=True):
+            project_path = _init_project(name, project_path.parent, provider=provider)
+            console.print(f"[green]✓[/green] Created project: [bold]{name}[/bold]")
+            return project_path
+        raise typer.Exit(0)
+
+    # Non-interactive without --init
+    console.print(
+        "[red]Error:[/red] No project.yaml found. "
+        "Use --init to create, or run 'qf init <name>' first."
+    )
+    raise typer.Exit(1)
 
 
 def _get_orchestrator(
@@ -1194,6 +1246,10 @@ def run(
         bool,
         typer.Option("--force", help="Re-run already completed stages."),
     ] = False,
+    init: Annotated[
+        bool,
+        typer.Option("--init", help="Create project if it doesn't exist."),
+    ] = False,
 ) -> None:
     """Run multiple pipeline stages sequentially.
 
@@ -1204,10 +1260,10 @@ def run(
     Examples:
         qf run --to seed --prompt "A mystery story"
         qf run --to brainstorm --from dream --force
-        qf run --to seed --prompt "A mystery" --interactive
+        qf run --to seed --prompt "A mystery" --init --project my-story
     """
     project_path = _resolve_project_path(project)
-    _require_project(project_path)
+    project_path = _ensure_project(project_path, auto_init=init, provider=provider)
     _configure_project_logging(project_path)
 
     log = get_logger(__name__)
