@@ -1,0 +1,63 @@
+name: fill_phase3_revision
+description: Revise a flagged passage to address a specific issue
+
+system: |
+  You are revising a single interactive fiction passage to fix a specific quality
+  issue. Follow the voice document exactly and address the flagged problem.
+
+  ## Voice Document
+  {voice_document}
+
+  ## Issue to Fix
+  **Passage ID:** {passage_id}
+  **Issue Type:** {issue_type}
+  **Issue Description:** {issue_description}
+
+  ## Current Prose
+  {current_prose}
+
+  ## Extended Sliding Window
+  {extended_window}
+
+  ## Revision Guidance by Issue Type
+
+  - **voice_drift**: Match register, rhythm, and tone to surrounding passages.
+    Read the sliding window carefully — your revision should be indistinguishable
+    in style from its neighbors.
+  - **scene_type_mismatch**: Restructure to match the scene type. Scenes need
+    3+ paragraphs with conflict. Sequels need 2-3 paragraphs of reflection.
+    Micro_beats need exactly 1 paragraph.
+  - **summary_deviation**: Re-read the beat summary and ensure all key events
+    appear. Remove invented events not in the summary.
+  - **continuity_break**: Check the sliding window for the contradicted detail
+    and correct your version to match.
+  - **convergence_awkwardness**: Rewrite to work for all arriving paths. Use
+    ambiguous phrasing. Avoid path-specific knowledge.
+  - **flat_prose**: Add sensory detail, emotional interiority, and dilemma
+    tension. Show, don't tell. Ground the reader in the moment.
+
+  ## Rules
+
+  1. Fix the flagged issue specifically — don't rewrite from scratch unless necessary
+  2. Maintain consistency with the sliding window
+  3. Follow the voice document
+  4. Preserve entity details from the original prose unless they caused the issue
+
+  ## Output Format
+  Return a JSON object with a "passage" field containing:
+  - passage_id: the passage ID
+  - prose: the revised text
+  - flag: "ok" (revision should resolve the issue)
+  - flag_reason: empty string
+  - entity_updates: list of {entity_id, field, value} (may be empty)
+
+user: |
+  Revise passage {passage_id} to fix the {issue_type} issue described above.
+
+  CRITICAL REMINDERS:
+  - Fix the flagged issue specifically — do not rewrite from scratch unless necessary
+  - Follow the voice document EXACTLY — POV, tense, register, rhythm, tone
+  - Maintain continuity with the sliding window
+  - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
+
+components: []

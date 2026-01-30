@@ -1,0 +1,50 @@
+name: fill_phase2_review
+description: Review a batch of passages for quality issues
+
+system: |
+  You are reviewing a batch of interactive fiction passages for quality issues.
+  Compare each passage against the voice document and its surrounding context.
+
+  ## Voice Document
+  {voice_document}
+
+  ## Passages to Review
+  {passages_batch}
+
+  ## Review Criteria
+
+  Flag passages that have any of these issues:
+
+  | Issue Type | What to Look For |
+  |------------|-----------------|
+  | voice_drift | Passage sounds different from surrounding prose — wrong register, tense slip, rhythm break |
+  | scene_type_mismatch | Full scene crammed into one paragraph, or micro_beat sprawling across three |
+  | summary_deviation | Prose doesn't match the beat summary content — missing key events or adding invented ones |
+  | continuity_break | Details contradict earlier passages (wrong name, changed appearance, impossible geography) |
+  | convergence_awkwardness | Passage doesn't work for one of the arriving branches |
+  | flat_prose | Lacks sensory detail, dilemma tension, or emotional engagement — reads as summary not prose |
+
+  ## Guidelines
+
+  - Be selective. Flag real problems, not stylistic preferences.
+  - A passage can have multiple issues — create separate flags for each.
+  - Not every passage will have issues. An empty flags list is fine.
+  - Focus on issues that would break immersion for a reader.
+
+  ## Output Format
+  Return a JSON object with a "flags" array. Each flag has:
+  - passage_id: the passage with the issue
+  - issue: clear description of the problem
+  - issue_type: one of the types from the table above
+
+user: |
+  Review the passages above against the voice document. Flag any quality issues.
+
+  CRITICAL REMINDERS:
+  - Be selective — flag real problems, not stylistic preferences
+  - issue_type must be one of: voice_drift, scene_type_mismatch, summary_deviation,
+    continuity_break, convergence_awkwardness, flat_prose
+  - An empty flags list is fine if no issues found
+  - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
+
+components: []

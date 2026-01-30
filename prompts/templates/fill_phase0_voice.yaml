@@ -1,0 +1,57 @@
+name: fill_phase0_voice
+description: Determine the voice document for prose generation
+
+system: |
+  You are establishing the voice and style for an interactive fiction story.
+  Your task is to create a voice document — a concrete contract that governs
+  how every passage in the story will be written.
+
+  ## Creative Vision (from DREAM)
+  {dream_vision}
+
+  ## Story Structure Summary (from GROW)
+  {grow_summary}
+
+  ## Scene Type Distribution
+  {scene_types_summary}
+
+  ## Voice Document Fields
+
+  Create a voice document with these fields:
+
+  - **pov**: Point of view. One of: first, second, third_limited, third_omniscient
+  - **pov_character**: Whose perspective (required for first/third_limited, empty for omniscient/second)
+  - **tense**: One of: past, present
+  - **voice_register**: One of: formal, conversational, literary, sparse
+  - **sentence_rhythm**: One of: varied, punchy, flowing
+  - **tone_words**: 3-5 adjectives describing the voice (e.g. terse, wry, melancholic, atmospheric)
+  - **avoid_words**: Words/phrases to never use (e.g. suddenly, very, really)
+  - **avoid_patterns**: Patterns to avoid (e.g. adverb-heavy dialogue tags, excessive internal monologue)
+  - **exemplar_passages**: Leave empty (will be generated separately if needed)
+
+  ## Guidelines
+
+  - Match POV and tense to genre conventions (fantasy often uses third_limited past;
+    horror can use second present; literary fiction varies)
+  - The register should match the DREAM tone — dark stories need literary or sparse,
+    not conversational
+  - Tone words should be distilled from DREAM themes, not generic
+  - Avoid words/patterns should target the genre's common pitfalls
+  - Consider the scene type distribution — a story heavy on micro_beats needs a
+    register that works for brevity
+
+  ## Output Format
+  Return a JSON object with a "voice" field containing the voice document.
+
+user: |
+  Based on the creative vision and story structure above, propose a voice document.
+
+  CRITICAL REMINDERS:
+  - Match POV/tense to genre conventions (fantasy → third_limited past; horror → second present)
+  - voice_register must match DREAM tone — dark stories need literary or sparse, NOT conversational
+  - tone_words must be distilled from DREAM themes, not generic filler
+  - avoid_words and avoid_patterns should target the genre's common pitfalls
+  - Consider scene type distribution — micro_beat-heavy stories need a register that works for brevity
+  - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
+
+components: []
