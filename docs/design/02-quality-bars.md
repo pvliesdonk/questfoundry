@@ -1,12 +1,12 @@
 # Quality Bars
 
-**Version**: 1.0.0
-**Last Updated**: 2026-01-01
-**Status**: Needs Review
+**Version**: 2.0.0
+**Last Updated**: 2026-01-30
+**Status**: Canonical
 
-> **Note**: This document needs review and update to align with the v5 specification.
-> Some concepts (stage names, validation timing) may have changed. See `00-spec.md`
-> for the authoritative specification and `procedures/` for stage details.
+> Updated to v5 terminology (CONNECTIONS → GROW). FILL voice document, sliding
+> window context, and review cycle are now implemented. SHIP bars (Determinism,
+> Presentation) are deferred until SHIP stage is built.
 
 ---
 
@@ -30,7 +30,7 @@ Quality bars define validation criteria for story content. Every story must pass
 
 **Automation**: Fully automatable
 
-**Stage**: CONNECTIONS (pre-FILL)
+**Stage**: GROW (pre-FILL)
 
 ```yaml
 # Validation output
@@ -60,7 +60,7 @@ integrity:
 
 **Automation**: Fully automatable (graph traversal)
 
-**Stage**: CONNECTIONS
+**Stage**: GROW
 
 ```yaml
 reachability:
@@ -86,7 +86,7 @@ reachability:
 
 **Automation**: Partial (structure automatable, meaning requires LLM)
 
-**Stage**: CONNECTIONS + FILL review
+**Stage**: GROW + FILL review
 
 ```yaml
 nonlinearity:
@@ -114,7 +114,7 @@ nonlinearity:
 
 **Automation**: Partial
 
-**Stage**: CONNECTIONS
+**Stage**: GROW
 
 ```yaml
 gateways:
@@ -133,12 +133,13 @@ gateways:
 **Definition**: Voice and register consistency across all content.
 
 **Checks**:
-- POV consistency (first person maintained)
-- Tense consistency (past tense maintained)
+- POV consistency (maintained per voice document)
+- Tense consistency (maintained per voice document)
 - Character voice consistency
-- Tone matches dream.yaml specification
+- Tone matches voice document
+- Voice document adherence (FILL Phase 0 establishes voice; Phase 2 reviews)
 
-**Automation**: LLM-based
+**Automation**: LLM-based (FILL Phase 2 review + Phase 3 revision cycle)
 
 **Stage**: FILL
 
@@ -266,7 +267,7 @@ Comprehensive validation including semantic checks:
 
 ```
 ┌─────────────┐     ┌─────────────┐     ┌─────────────┐
-│ CONNECTIONS │ ──► │  Pre-Gate   │ ──► │  FILL       │
+│    GROW     │ ──► │  Pre-Gate   │ ──► │  FILL       │
 │ Complete    │     │  Validation │     │  Stage      │
 └─────────────┘     └──────┬──────┘     └──────┬──────┘
                            │                   │
@@ -406,7 +407,7 @@ overrides:
 
 ## Integration with Pipeline
 
-### CONNECTIONS Stage
+### GROW Stage
 
 ```bash
 qf validate --pre-gate
@@ -431,6 +432,6 @@ qf validate --final
 
 ## See Also
 
-- [03-grow-stage-specification.md](./03-grow-stage-specification.md) — CONNECTIONS validation
+- [GROW Algorithm Specification](./procedures/grow.md) — GROW validation and algorithm details
 - [07-design-principles.md](./07-design-principles.md) — Underlying principles
 - [08-research-foundation.md](./08-research-foundation.md) — Research basis for bars
