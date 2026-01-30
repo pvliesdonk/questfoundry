@@ -25,6 +25,8 @@ from questfoundry.cli import (
 if TYPE_CHECKING:
     from pathlib import Path
 
+    import pytest
+
 runner = CliRunner()
 
 
@@ -73,9 +75,24 @@ def test_init_project_yaml_content(tmp_path: Path) -> None:
 
     assert config["name"] == "test_project"
     assert config["version"] == 1
-    assert "stages" in config["pipeline"]
-    assert "dream" in config["pipeline"]["stages"]
+    assert "pipeline" not in config  # Stages are no longer written to project.yaml
     assert "default" in config["providers"]
+
+
+def test_init_with_provider(tmp_path: Path) -> None:
+    """Test qf init --provider sets provider in project.yaml."""
+    import yaml
+
+    runner.invoke(
+        app,
+        ["init", "test_project", "--path", str(tmp_path), "--provider", "openai/gpt-4o"],
+    )
+
+    config_file = tmp_path / "test_project" / "project.yaml"
+    with config_file.open() as f:
+        config = yaml.safe_load(f)
+
+    assert config["providers"]["default"] == "openai/gpt-4o"
 
 
 def test_init_existing_directory_fails(tmp_path: Path) -> None:
@@ -1101,6 +1118,122 @@ def test_run_help_shows_phase_provider_flags() -> None:
     # Rich may truncate long option names in help
     assert "--provider-summari" in output or "--provider-summarize" in output
     assert "--provider-seriali" in output or "--provider-serialize" in output
+
+
+# --- Run --init Tests ---
+
+
+def test_run_init_creates_project(tmp_path: Path) -> None:
+    """Test qf run --init creates project when it doesn't exist."""
+    project_path = tmp_path / "new-project"
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--to",
+            "dream",
+            "--prompt",
+            "test",
+            "--project",
+            str(project_path),
+            "--init",
+            "--no-interactive",
+        ],
+    )
+
+    # The project should have been created (run may still fail on LLM, but init succeeds)
+    assert (project_path / "project.yaml").exists()
+    assert (project_path / "artifacts").is_dir()
+    assert "Created project" in result.stdout
+
+
+def test_run_init_existing_project_continues(tmp_path: Path) -> None:
+    """Test qf run --init with existing project proceeds normally."""
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    # Should not error about project already existing
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--to",
+            "dream",
+            "--prompt",
+            "test",
+            "--project",
+            str(project_path),
+            "--init",
+            "--no-interactive",
+        ],
+    )
+
+    # Should proceed to stage execution (may fail on LLM, but not on init)
+    assert "already exists" not in result.stdout
+
+
+def test_run_no_init_no_project_fails_non_interactive() -> None:
+    """Test qf run without --init fails when project doesn't exist."""
+    with runner.isolated_filesystem():
+        result = runner.invoke(app, ["run", "--to", "dream", "--prompt", "test"])
+
+        assert result.exit_code == 1
+        assert "No project.yaml found" in result.stdout
+
+
+def test_run_init_interactive_prompt_decline(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test qf run without --init prompts in interactive mode and user declines."""
+    project_path = tmp_path / "new-project"
+
+    # Mock TTY detection to return True
+    monkeypatch.setattr("questfoundry.cli._is_interactive_tty", lambda: True)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--to",
+            "dream",
+            "--prompt",
+            "test",
+            "--project",
+            str(project_path),
+        ],
+        input="n\n",
+    )
+
+    assert result.exit_code == 0
+    assert not (project_path / "project.yaml").exists()
+
+
+def test_run_init_interactive_prompt_accept(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Test qf run without --init prompts in interactive mode and user accepts."""
+    project_path = tmp_path / "new-project"
+
+    # Mock TTY detection to return True
+    monkeypatch.setattr("questfoundry.cli._is_interactive_tty", lambda: True)
+
+    result = runner.invoke(
+        app,
+        [
+            "run",
+            "--to",
+            "dream",
+            "--prompt",
+            "test",
+            "--project",
+            str(project_path),
+        ],
+        input="y\n",
+    )
+
+    assert (project_path / "project.yaml").exists()
+    assert "Created project" in result.stdout
 
 
 # --- GROW Command Tests ---

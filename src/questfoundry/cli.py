@@ -212,9 +212,61 @@ def _require_project(project_path: Path) -> None:
     config_file = project_path / "project.yaml"
     if not config_file.exists():
         console.print(
-            "[red]Error:[/red] No project.yaml found. Run 'qf init <name>' first or use --project."
+            "[red]Error:[/red] No project.yaml found. "
+            "Run 'qf init <name>' first, use --project, or use 'qf run --init'."
         )
         raise typer.Exit(1)
+
+
+def _ensure_project(
+    project_path: Path,
+    *,
+    auto_init: bool,
+    provider: str | None,
+) -> Path:
+    """Ensure a project exists, optionally creating it.
+
+    Behavior:
+    - If project.yaml exists: return project_path as-is.
+    - If --init: auto-create without prompting.
+    - If interactive TTY: prompt user to create.
+    - Otherwise: fail with error.
+
+    Args:
+        project_path: Resolved project path (may not exist yet).
+        auto_init: Whether --init flag was passed.
+        provider: Provider string for project creation.
+
+    Returns:
+        Path to the (possibly newly created) project directory.
+
+    Raises:
+        typer.Exit: If project doesn't exist and user declines or non-interactive.
+    """
+    config_file = project_path / "project.yaml"
+    if config_file.exists():
+        return project_path
+
+    name = project_path.name
+
+    if auto_init:
+        project_path = _init_project(name, project_path.parent, provider=provider)
+        console.print(f"[green]✓[/green] Created project: [bold]{name}[/bold]")
+        return project_path
+
+    if _is_interactive_tty():
+        if typer.confirm(f"Project '{name}' doesn't exist. Create it?", default=True):
+            project_path = _init_project(name, project_path.parent, provider=provider)
+            console.print(f"[green]✓[/green] Created project: [bold]{name}[/bold]")
+            return project_path
+        raise typer.Exit(0)
+
+    # Non-interactive without --init
+    console.print(
+        "[red]Error:[/red] No project.yaml found. "
+        "Use --init to create, or run 'qf init <name>' first."
+    )
+    raise typer.Exit(1)
 
 
 def _get_orchestrator(
@@ -700,33 +752,30 @@ def version() -> None:
     console.print(f"QuestFoundry v{__version__}")
 
 
-@app.command()
-def init(
-    name: Annotated[str, typer.Argument(help="Project name")],
-    path: Annotated[
-        Path | None,
-        typer.Option(
-            "--path",
-            "-p",
-            help="Parent directory for the project (default: --projects-dir).",
-        ),
-    ] = None,
-) -> None:
-    """Initialize a new story project.
+def _init_project(
+    name: str,
+    parent_dir: Path,
+    provider: str | None = None,
+) -> Path:
+    """Create a new project directory with config and artifacts.
 
-    Creates a project directory with the necessary structure:
-    - project.yaml: Project configuration
-    - artifacts/: Generated stage outputs
+    Args:
+        name: Project name.
+        parent_dir: Parent directory for the project.
+        provider: Optional provider string (e.g., "openai/gpt-4o").
+
+    Returns:
+        Path to the created project directory.
+
+    Raises:
+        typer.Exit: If the directory already exists.
     """
     from ruamel.yaml import YAML
 
     from questfoundry.pipeline.config import create_default_config
 
-    # Use global projects dir if no path specified
-    parent_dir = path if path is not None else _projects_dir
     parent_dir.mkdir(parents=True, exist_ok=True)
 
-    # Create project directory
     project_path = parent_dir / name
     if project_path.exists():
         console.print(f"[red]Error:[/red] Directory '{project_path}' already exists")
@@ -739,13 +788,10 @@ def init(
     artifacts_dir.mkdir()
 
     # Create project.yaml
-    config = create_default_config(name)
+    config = create_default_config(name, provider=provider)
     config_data = {
         "name": config.name,
         "version": config.version,
-        "pipeline": {
-            "stages": config.stages,
-        },
         "providers": {
             "default": f"{config.provider.name}/{config.provider.model}",
         },
@@ -756,6 +802,37 @@ def init(
     yaml_writer.default_flow_style = False
     with config_file.open("w") as f:
         yaml_writer.dump(config_data, f)
+
+    return project_path
+
+
+@app.command()
+def init(
+    name: Annotated[str, typer.Argument(help="Project name")],
+    path: Annotated[
+        Path | None,
+        typer.Option(
+            "--path",
+            "-p",
+            help="Parent directory for the project (default: --projects-dir).",
+        ),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option(
+            "--provider",
+            help="Default LLM provider (e.g., ollama/qwen3:4b-instruct-32k, openai/gpt-4o).",
+        ),
+    ] = None,
+) -> None:
+    """Initialize a new story project.
+
+    Creates a project directory with the necessary structure:
+    - project.yaml: Project configuration
+    - artifacts/: Generated stage outputs
+    """
+    parent_dir = path if path is not None else _projects_dir
+    project_path = _init_project(name, parent_dir, provider=provider)
 
     console.print(f"[green]✓[/green] Created project: [bold]{name}[/bold]")
     console.print(f"  Location: {project_path.absolute()}")
@@ -1169,6 +1246,10 @@ def run(
         bool,
         typer.Option("--force", help="Re-run already completed stages."),
     ] = False,
+    init: Annotated[
+        bool,
+        typer.Option("--init", help="Create project if it doesn't exist."),
+    ] = False,
 ) -> None:
     """Run multiple pipeline stages sequentially.
 
@@ -1179,10 +1260,10 @@ def run(
     Examples:
         qf run --to seed --prompt "A mystery story"
         qf run --to brainstorm --from dream --force
-        qf run --to seed --prompt "A mystery" --interactive
+        qf run --to seed --prompt "A mystery" --init --project my-story
     """
     project_path = _resolve_project_path(project)
-    _require_project(project_path)
+    project_path = _ensure_project(project_path, auto_init=init, provider=provider)
     _configure_project_logging(project_path)
 
     log = get_logger(__name__)

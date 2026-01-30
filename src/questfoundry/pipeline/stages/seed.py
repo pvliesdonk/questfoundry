@@ -33,6 +33,7 @@ from questfoundry.graph.mutations import format_semantic_errors_as_content
 from questfoundry.graph.seed_pruning import compute_arc_count, prune_to_arc_limit
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import get_current_run_tree, traceable
+from questfoundry.pipeline.size import get_size_profile
 from questfoundry.tools.langchain_tools import (
     get_all_research_tools,
     get_interactive_tools,
@@ -432,8 +433,8 @@ class SeedStage:
         # LLM may have explored more dilemmas than the arc limit allows.
         # Instead of retrying, we programmatically select the best dilemmas.
         original_arc_count = compute_arc_count(result.artifact)
-        size_profile = kwargs.get("size_profile")
-        max_arcs = size_profile.max_arcs if size_profile else 16
+        size_profile = kwargs.get("size_profile") or get_size_profile("standard")
+        max_arcs = size_profile.max_arcs
         pruned_artifact = prune_to_arc_limit(result.artifact, max_arcs=max_arcs, graph=graph)
         final_arc_count = compute_arc_count(pruned_artifact)
 

@@ -490,11 +490,11 @@ def format_dream_vision(graph: Graph) -> str:
     if not vision_nodes:
         return ""
 
-    dream_data = next(iter(vision_nodes.values()))
+    vision_data = next(iter(vision_nodes.values()))
     lines: list[str] = []
 
     for field in ("genre", "tone", "themes", "style_notes"):
-        value = dream_data.get(field)
+        value = vision_data.get(field)
         if value:
             if isinstance(value, list):
                 lines.append(f"**{field}:** {', '.join(str(v) for v in value)}")

@@ -15,7 +15,7 @@ Presets:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
@@ -221,17 +221,12 @@ def resolve_size_from_graph(graph: Graph) -> SizeProfile:
     Returns:
         Resolved SizeProfile.
     """
-    vision = graph.get_node("vision")
-    if vision is None:
-        return get_size_profile("standard")
-
-    scope: dict[str, Any] | None = vision.get("scope")
-    if scope is None:
-        return get_size_profile("standard")
-
+    vision = graph.get_node("vision") or {}
+    scope = vision.get("scope") or {}
     story_size = scope.get("story_size", "standard")
+
     if story_size not in PRESETS:
-        return get_size_profile("standard")
+        story_size = "standard"
 
     return get_size_profile(story_size)
 
