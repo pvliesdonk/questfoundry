@@ -212,7 +212,8 @@ class FillStage:
         if resume_from:
             if resume_from not in phase_map:
                 raise FillStageError(
-                    f"Unknown phase: '{resume_from}'. Valid phases: {', '.join(phase_map)}"
+                    f"Unknown phase: '{resume_from}'. "
+                    f"Valid phases: {', '.join(repr(p) for p in phase_map)}"
                 )
             start_idx = phase_map[resume_from]
             graph = self._load_checkpoint(resolved_path, resume_from)
@@ -235,6 +236,7 @@ class FillStage:
         phase_results: list[FillPhaseResult] = []
         total_llm_calls = 0
         total_tokens = 0
+        completed_normally = True
 
         for idx, (phase_fn, phase_name) in enumerate(phases):
             if idx < start_idx:
@@ -251,12 +253,15 @@ class FillStage:
 
             if result.status == "failed":
                 log.error("phase_failed", phase=phase_name, detail=result.detail)
+                completed_normally = False
                 break
 
             decision = await self.gate.on_phase_complete("fill", phase_name, result)
             if decision == "reject":
                 log.info("phase_rejected", phase=phase_name)
                 graph = Graph.from_dict(snapshot)
+                graph.save(resolved_path / "graph.json")
+                completed_normally = False
                 break
 
             log.debug("phase_complete", phase=phase_name, status=result.status)
@@ -264,8 +269,9 @@ class FillStage:
             if on_phase_progress is not None:
                 on_phase_progress(phase_name, result.status, result.detail)
 
-        graph.set_last_stage("fill")
-        graph.save(resolved_path / "graph.json")
+        if completed_normally:
+            graph.set_last_stage("fill")
+            graph.save(resolved_path / "graph.json")
 
         # Count results
         passage_nodes = graph.get_nodes_by_type("passage")

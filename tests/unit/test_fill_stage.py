@@ -160,6 +160,32 @@ class TestFillStageExecute:
         assert len(phases) == 1
         assert phases[0]["phase"] == "voice"
 
+        # Verify rollback was persisted — last_stage should remain "grow"
+        saved = Graph.load(tmp_path)
+        assert saved.get_last_stage() == "grow"
+
+    @pytest.mark.asyncio
+    async def test_phase_failure_stops_execution(
+        self,
+        mock_model: MagicMock,
+        grow_graph: Graph,  # noqa: ARG002
+        tmp_path: Path,
+    ) -> None:
+        stage = FillStage(project_path=tmp_path)
+        stage._phase_0_voice = AsyncMock(  # type: ignore[method-assign]
+            return_value=FillPhaseResult(phase="voice", status="failed", detail="test error")
+        )
+        result_dict, _, _ = await stage.execute(mock_model, "")
+
+        # Should stop after voice phase fails
+        phases = result_dict["phases_completed"]
+        assert len(phases) == 1
+        assert phases[0]["status"] == "failed"
+
+        # last_stage should remain "grow" (not promoted to "fill")
+        saved = Graph.load(tmp_path)
+        assert saved.get_last_stage() == "grow"
+
     @pytest.mark.asyncio
     async def test_progress_callback(
         self,
