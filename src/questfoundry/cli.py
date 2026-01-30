@@ -656,30 +656,26 @@ def _preview_grow_artifact(artifact: dict[str, Any]) -> None:
 def _preview_fill_artifact(artifact: dict[str, Any]) -> None:
     """Display preview of FILL artifact.
 
-    Reads FillResult fields (passages_filled, passages_flagged,
-    entity_updates_applied, review_cycles, phases_completed).
+    Reads extract_fill_artifact fields (voice_document, passages,
+    review_summary) — not FillResult telemetry.
     """
-    filled = artifact.get("passages_filled", 0)
-    flagged = artifact.get("passages_flagged", 0)
-    entity_updates = artifact.get("entity_updates_applied", 0)
-    review_cycles = artifact.get("review_cycles", 0)
+    voice = artifact.get("voice_document", {})
+    if voice:
+        pov = voice.get("pov", "?")
+        tense = voice.get("tense", "?")
+        register = voice.get("voice_register", "?")
+        console.print(f"  Voice: [bold]{pov}[/bold] {tense}, {register}")
+        tone_words = voice.get("tone_words", [])
+        if tone_words:
+            console.print(f"  Tone: {', '.join(str(w) for w in tone_words)}")
 
-    console.print(f"  Passages filled: [bold]{filled}[/bold]")
+    passages = artifact.get("passages", [])
+    console.print(f"  Passages with prose: [bold]{len(passages)}[/bold]")
+
+    review = artifact.get("review_summary", {})
+    flagged = review.get("passages_flagged", 0)
     if flagged:
-        console.print(f"  [yellow]Passages flagged: {flagged}[/yellow]")
-    if entity_updates:
-        console.print(f"  Entity updates: {entity_updates}")
-    if review_cycles:
-        console.print(f"  Review cycles: {review_cycles}")
-
-    # Show phase summary
-    phases = artifact.get("phases_completed", [])
-    if phases:
-        failed = [p for p in phases if p.get("status") == "failed"]
-        if failed:
-            console.print(f"  [red]Failed phases: {len(failed)}[/red]")
-        else:
-            console.print(f"  Phases: [green]{len(phases)} completed[/green]")
+        console.print(f"  [yellow]Flagged passages: {flagged}[/yellow]")
 
 
 # Stage preview function mapping (defined after functions exist)
