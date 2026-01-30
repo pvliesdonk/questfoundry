@@ -13,7 +13,9 @@ from questfoundry.models.fill import (
     FillPassageOutput,
     FillPhase0Output,
     FillPhase1Output,
+    FillPhase2Output,
     FillPhaseResult,
+    ReviewFlag,
     VoiceDocument,
 )
 from questfoundry.pipeline.gates import AutoApprovePhaseGate, PhaseGateHook
@@ -92,8 +94,22 @@ def _mock_implemented_phases(stage: FillStage) -> None:
     ) -> FillPhaseResult:
         return FillPhaseResult(phase="generate", status="completed", llm_calls=2, tokens_used=1000)
 
+    async def _fake_phase_2(
+        graph: Graph,  # noqa: ARG001
+        model: MagicMock,  # noqa: ARG001
+    ) -> FillPhaseResult:
+        return FillPhaseResult(phase="review", status="completed", llm_calls=1, tokens_used=200)
+
+    async def _fake_phase_3(
+        graph: Graph,  # noqa: ARG001
+        model: MagicMock,  # noqa: ARG001
+    ) -> FillPhaseResult:
+        return FillPhaseResult(phase="revision", status="completed", llm_calls=0, tokens_used=0)
+
     stage._phase_0_voice = _fake_phase_0  # type: ignore[method-assign]
     stage._phase_1_generate = _fake_phase_1  # type: ignore[method-assign]
+    stage._phase_2_review = _fake_phase_2  # type: ignore[method-assign]
+    stage._phase_3_revision = _fake_phase_3  # type: ignore[method-assign]
 
 
 class TestFillStageExecute:
@@ -127,14 +143,12 @@ class TestFillStageExecute:
         phases = result_dict["phases_completed"]
         assert len(phases) == 4
         assert [p["phase"] for p in phases] == ["voice", "generate", "review", "revision"]
-        # Phases 0-1 are completed; phases 2-3 are still skipped
-        assert phases[0]["status"] == "completed"
-        assert phases[1]["status"] == "completed"
-        assert all(p["status"] == "skipped" for p in phases[2:])
+        # All phases are completed
+        assert all(p["status"] == "completed" for p in phases)
 
-        # Phase 0 + Phase 1 contribute LLM calls
-        assert llm_calls == 3
-        assert tokens == 1500
+        # Sum of all phase LLM calls (1 + 2 + 1 + 0 = 4)
+        assert llm_calls == 4
+        assert tokens == 1700
 
     @pytest.mark.asyncio
     async def test_sets_last_stage(
@@ -598,20 +612,132 @@ class TestGenerationOrder:
         assert passage_ids.count("passage::p2") == 2
 
 
-class TestSkeletonPhases:
+def _make_reviewed_graph() -> Graph:
+    """Create a graph with filled passages for Phase 2/3 testing."""
+    g = _make_prose_graph()
+    g.update_node("passage::p1", prose="Kay entered the tower.")
+    g.update_node("passage::p2", prose="The hall stretched before Kay.")
+    return g
+
+
+class TestPhase2Review:
     @pytest.mark.asyncio
-    async def test_phase_2_review_skipped(self) -> None:
+    async def test_review_finds_flags(self) -> None:
+        graph = _make_reviewed_graph()
         stage = FillStage()
-        result = await stage._phase_2_review(Graph.empty(), MagicMock())
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+        ) -> tuple:
+            return (
+                FillPhase2Output(
+                    flags=[
+                        ReviewFlag(
+                            passage_id="p1",
+                            issue="Voice drift detected",
+                            issue_type="voice_drift",
+                        )
+                    ]
+                ),
+                1,
+                200,
+            )
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        result = await stage._phase_2_review(graph, MagicMock())
+
         assert result.phase == "review"
-        assert result.status == "skipped"
+        assert result.status == "completed"
+        assert "1 issues" in (result.detail or "")
+
+        # Flag should be stored on passage node
+        p1 = graph.get_node("passage::p1")
+        assert p1 is not None
+        assert len(p1.get("review_flags", [])) == 1
 
     @pytest.mark.asyncio
-    async def test_phase_3_revision_skipped(self) -> None:
+    async def test_no_passages_to_review(self) -> None:
+        graph = Graph.empty()
         stage = FillStage()
-        result = await stage._phase_3_revision(Graph.empty(), MagicMock())
+        result = await stage._phase_2_review(graph, MagicMock())
+        assert result.status == "completed"
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_empty_flags_is_fine(self) -> None:
+        graph = _make_reviewed_graph()
+        stage = FillStage()
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+        ) -> tuple:
+            return FillPhase2Output(flags=[]), 1, 200
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        result = await stage._phase_2_review(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert "0 issues" in (result.detail or "")
+
+
+class TestPhase3Revision:
+    @pytest.mark.asyncio
+    async def test_revises_flagged_passage(self) -> None:
+        graph = _make_reviewed_graph()
+        # Add review flags manually
+        graph.update_node(
+            "passage::p1",
+            review_flags=[
+                {"passage_id": "p1", "issue": "Voice drift", "issue_type": "voice_drift"}
+            ],
+        )
+        stage = FillStage()
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+        ) -> tuple:
+            return (
+                FillPhase1Output(
+                    passage=FillPassageOutput(passage_id="p1", prose="Revised prose for Kay.")
+                ),
+                1,
+                300,
+            )
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        result = await stage._phase_3_revision(graph, MagicMock())
+
         assert result.phase == "revision"
-        assert result.status == "skipped"
+        assert result.status == "completed"
+        assert "1 passages revised" in (result.detail or "")
+
+        # Prose should be updated
+        p1 = graph.get_node("passage::p1")
+        assert p1 is not None
+        assert p1["prose"] == "Revised prose for Kay."
+
+        # Review flags should be cleared
+        assert p1.get("review_flags") == []
+
+    @pytest.mark.asyncio
+    async def test_no_flags_returns_completed(self) -> None:
+        graph = _make_reviewed_graph()
+        stage = FillStage()
+        result = await stage._phase_3_revision(graph, MagicMock())
+        assert result.status == "completed"
+        assert result.llm_calls == 0
 
 
 class TestModuleLevelHelpers:
