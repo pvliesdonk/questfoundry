@@ -54,6 +54,7 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.pipeline.gates import PhaseGateHook
+    from questfoundry.pipeline.size import SizeProfile
     from questfoundry.pipeline.stages.base import (
         AssistantMessageFn,
         LLMCallbackFn,
@@ -114,6 +115,7 @@ class FillStage:
         self._provider_name: str | None = None
         self._serialize_model: BaseChatModel | None = None
         self._serialize_provider_name: str | None = None
+        self._size_profile: SizeProfile | None = None
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -178,7 +180,7 @@ class FillStage:
         serialize_provider_name: str | None = None,
         resume_from: str | None = None,
         on_phase_progress: PhaseProgressFn | None = None,
-        **kwargs: Any,  # noqa: ARG002
+        **kwargs: Any,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the FILL stage.
 
@@ -221,6 +223,7 @@ class FillStage:
         self._provider_name = provider_name
         self._serialize_model = serialize_model
         self._serialize_provider_name = serialize_provider_name
+        self._size_profile = kwargs.get("size_profile")
         log.info("stage_start", stage="fill")
 
         phases = self._phase_order()
@@ -438,10 +441,13 @@ class FillStage:
         Reads DREAM vision and GROW structure, calls LLM to produce a
         VoiceDocument, and stores it as a ``voice`` node in the graph.
         """
+        from questfoundry.pipeline.size import size_template_vars
+
         context = {
             "dream_vision": format_dream_vision(graph),
             "grow_summary": format_grow_summary(graph),
             "scene_types_summary": format_scene_types_summary(graph),
+            **size_template_vars(self._size_profile),
         }
 
         output, llm_calls, tokens = await self._fill_llm_call(
