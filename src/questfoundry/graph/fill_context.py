@@ -296,6 +296,8 @@ def format_shadow_states(
     if not arc_node:
         return ""
     active_paths = set(arc_node.get("paths", []))
+    if not active_paths:
+        return ""
 
     # Find shadow arcs (other arcs containing this beat)
     lines: list[str] = []
@@ -435,17 +437,16 @@ def format_scene_types_summary(graph: Graph) -> str:
         Summary string with counts per scene type.
     """
     beats = graph.get_nodes_by_type("beat")
-    counts: dict[str, int] = {"scene": 0, "sequel": 0, "micro_beat": 0}
+    counts: dict[str, int] = {}
     for beat_data in beats.values():
         scene_type = beat_data.get("scene_type", "scene")
-        if scene_type in counts:
-            counts[scene_type] += 1
+        counts[scene_type] = counts.get(scene_type, 0) + 1
 
     total = sum(counts.values())
     if total == 0:
         return "(no beats with scene types)"
 
-    parts = [f"{count} {stype}" for stype, count in counts.items() if count > 0]
+    parts = [f"{count} {stype}" for stype, count in sorted(counts.items()) if count > 0]
     return f"{total} beats total: {', '.join(parts)}"
 
 

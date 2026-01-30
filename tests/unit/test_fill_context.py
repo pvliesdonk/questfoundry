@@ -311,7 +311,8 @@ class TestFormatLookaheadContext:
     def test_convergence_point(self, fill_graph: Graph) -> None:
         # p_aftermath is convergence point for branch_1_0
         result = format_lookahead_context(fill_graph, "passage::p_aftermath", "arc::spine_0_0")
-        assert "Convergence" in result or result == ""
+        assert "Convergence" in result
+        assert "branch_1_0" in result
 
     def test_no_lookahead_needed(self, fill_graph: Graph) -> None:
         result = format_lookahead_context(fill_graph, "passage::p_opening", "arc::spine_0_0")
@@ -349,7 +350,8 @@ class TestFormatEntityStates:
 
     def test_entity_with_overlays(self, fill_graph: Graph) -> None:
         result = format_entity_states(fill_graph, "passage::p_opening")
-        assert "betrayal_committed" in result or "mood" in result
+        assert "betrayal_committed" in result
+        assert "mood" in result
 
     def test_no_entities(self, fill_graph: Graph) -> None:
         # Create a passage with no entities
