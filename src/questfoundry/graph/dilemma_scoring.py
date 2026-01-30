@@ -17,6 +17,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from questfoundry.graph.context import get_default_answer_from_graph
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -53,8 +54,6 @@ def _get_paths_for_dilemma(
 
     Returns (canonical_path, noncanonical_path).
     """
-    from questfoundry.graph.seed_pruning import get_default_answer_from_graph
-
     # Find dilemma decision to get canonical answer
     dilemma_decision = next(
         (d for d in seed_output.dilemmas if d.dilemma_id == dilemma_id),

@@ -15,13 +15,13 @@ from questfoundry.graph.context import (
     STATE_DEFERRED,
     STATE_LATENT,
     count_paths_per_dilemma,
+    get_default_answer_from_graph,
     get_dilemma_development_states,
 )
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.seed_pruning import (
     _prune_demoted_dilemmas,
     compute_arc_count,
-    get_default_answer_from_graph,
     prune_to_arc_limit,
 )
 from questfoundry.models.seed import (

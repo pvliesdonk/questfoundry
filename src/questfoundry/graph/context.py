@@ -161,6 +161,31 @@ def strip_scope_prefix(scoped_id: str) -> str:
     return raw_id
 
 
+def get_default_answer_from_graph(graph: Graph, dilemma_id: str) -> str | None:
+    """Look up the default (canonical) answer for a dilemma from the graph.
+
+    Uses the ``is_default_path`` flag on answer nodes rather than relying on
+    the ordering of the ``explored`` list, which LLMs do not guarantee.
+
+    Args:
+        graph: The story graph containing dilemma and answer nodes.
+        dilemma_id: Raw or scoped dilemma ID.
+
+    Returns:
+        The raw answer ID marked as default, or None if not found.
+    """
+    raw_did = strip_scope_prefix(dilemma_id)
+    prefixed_did = f"dilemma::{raw_did}"
+    alt_edges = graph.get_edges(from_id=prefixed_did, edge_type="has_answer")
+    for edge in alt_edges:
+        alt_node = graph.get_node(edge["to"])
+        if alt_node and alt_node.get("is_default_path"):
+            raw_id = alt_node.get("raw_id")
+            if raw_id:
+                return str(raw_id)
+    return None
+
+
 def format_scoped_id(scope: str, raw_id: str) -> str:
     """Format a raw ID with its scope prefix.
 

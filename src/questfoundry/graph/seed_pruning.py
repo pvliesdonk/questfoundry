@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from questfoundry.graph.context import strip_scope_prefix
+from questfoundry.graph.context import get_default_answer_from_graph, strip_scope_prefix
 from questfoundry.graph.dilemma_scoring import select_dilemmas_for_full_exploration
 from questfoundry.models.seed import (
     Consequence,
@@ -30,30 +30,6 @@ if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
 log = get_logger(__name__)
-
-
-def get_default_answer_from_graph(graph: Graph, dilemma_id: str) -> str | None:
-    """Look up the default (canonical) answer for a dilemma from the graph.
-
-    Uses the ``is_default_path`` flag on answer nodes rather than relying on
-    the ordering of the ``explored`` list, which LLMs do not guarantee.
-
-    Args:
-        graph: The story graph containing dilemma and answer nodes.
-        dilemma_id: Raw or scoped dilemma ID.
-
-    Returns:
-        The raw answer ID marked as default, or None if not found.
-    """
-    raw_did = strip_scope_prefix(dilemma_id)
-    prefixed_did = f"dilemma::{raw_did}"
-    alt_edges = graph.get_edges(from_id=prefixed_did, edge_type="has_answer")
-    for edge in alt_edges:
-        alt_node = graph.get_node(edge["to"])
-        if alt_node and alt_node.get("is_default_path"):
-            raw_id: str = alt_node.get("raw_id", "")
-            return raw_id
-    return None
 
 
 def _get_canonical_answer(dilemma: DilemmaDecision, graph: Graph | None = None) -> str | None:
@@ -72,6 +48,7 @@ def _get_canonical_answer(dilemma: DilemmaDecision, graph: Graph | None = None) 
 def _get_noncanonical_answers(dilemma: DilemmaDecision, graph: Graph | None = None) -> list[str]:
     """Get non-canonical answers (all explored except the canonical one)."""
     canonical = _get_canonical_answer(dilemma, graph)
+    # If canonical is None (no default found), all explored answers are non-canonical
     return [a for a in dilemma.explored if a != canonical]
 
 
