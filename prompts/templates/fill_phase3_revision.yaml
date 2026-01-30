@@ -49,7 +49,7 @@ system: |
   - prose: the revised text
   - flag: "ok" (revision should resolve the issue)
   - flag_reason: empty string
-  - entity_updates: list of {entity_id, field, value} (may be empty)
+  - entity_updates: list of {{entity_id, field, value}} (may be empty)
 
 user: |
   Revise passage {passage_id} to fix the {issue_type} issue described above.

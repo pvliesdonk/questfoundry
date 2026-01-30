@@ -71,7 +71,7 @@ system: |
   - prose: the generated text
   - flag: "ok" or "incompatible_states"
   - flag_reason: explanation if flagged (empty otherwise)
-  - entity_updates: list of {entity_id, field, value} (may be empty)
+  - entity_updates: list of {{entity_id, field, value}} (may be empty)
 
 user: |
   Write the prose for passage {passage_id} following the voice document and
