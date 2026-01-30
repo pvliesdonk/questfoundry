@@ -155,7 +155,7 @@ class SeedErrorCategory(Enum):
     COMPLETENESS = auto()  # Missing entity/dilemma decisions
     CROSS_REFERENCE = (
         auto()
-    )  # Cross-section ID mismatch (e.g. path answer_id not in dilemma considered)
+    )  # Cross-section ID mismatch (e.g. path answer_id not in dilemma explored)
     # FATAL is reserved for future use - e.g., graph corruption that requires
     # manual intervention. Currently no errors are classified as FATAL since
     # all known error types can be retried with appropriate feedback.
@@ -455,15 +455,15 @@ def _clean_dict(data: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in data.items() if v is not None}
 
 
-def _backfill_considered_from_paths(output: dict[str, Any]) -> None:
-    """Backfill empty considered arrays from path answer_ids (in-place mutation).
+def _backfill_explored_from_paths(output: dict[str, Any]) -> None:
+    """Backfill empty explored arrays from path answer_ids (in-place mutation).
 
-    Handles cases where LLM serialized paths but left considered empty.
-    The path's answer_id IS what was considered - if a path exists for
-    an answer, that answer was necessarily considered.
+    Handles cases where LLM serialized paths but left explored empty.
+    The path's answer_id IS what was explored - if a path exists for
+    an answer, that answer was necessarily explored.
 
     This runs BEFORE validation to fix data integrity issues in
-    graphs where dilemmas have `considered: []` but paths exist
+    graphs where dilemmas have `explored: []` but paths exist
     with valid `answer_id` values.
 
     Args:
@@ -477,15 +477,14 @@ def _backfill_considered_from_paths(output: dict[str, Any]) -> None:
         if answer_id:
             path_answers.setdefault(dilemma_id, set()).add(answer_id)
 
-    # Backfill empty considered arrays
+    # Backfill empty explored arrays
     for dilemma in output.get("dilemmas", []):
-        considered = dilemma.get("considered", [])
         explored = dilemma.get("explored", [])
-        if not considered and not explored:
+        if not explored:
             dilemma_id = strip_scope_prefix(dilemma.get("dilemma_id", ""))
             path_answer_ids = path_answers.get(dilemma_id, set())
             if path_answer_ids:
-                dilemma["considered"] = sorted(path_answer_ids)
+                dilemma["explored"] = sorted(path_answer_ids)
 
 
 # Registry of stages with mutation handlers
@@ -1195,8 +1194,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
             )
         )
 
-    # 11b. Check each considered answer has a path
-    # For each dilemma decision, verify path count matches considered count
+    # 11b. Check each explored answer has a path
+    # For each dilemma decision, verify path count matches explored count
     for dilemma_decision in output.get("dilemmas", []):
         raw_did = dilemma_decision.get("dilemma_id")
         if not raw_did:
@@ -1205,27 +1204,27 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         if scope_error:
             continue
 
-        considered = dilemma_decision.get("considered", [])
+        explored = dilemma_decision.get("explored", [])
         path_count = dilemma_path_counts.get(normalized_did, 0)
 
-        if len(considered) > path_count:
-            missing_count = len(considered) - path_count
+        if len(explored) > path_count:
+            missing_count = len(explored) - path_count
             errors.append(
                 SeedValidationError(
                     field_path="paths",
                     issue=(
-                        f"Dilemma '{normalized_did}' has {len(considered)} considered answers "
+                        f"Dilemma '{normalized_did}' has {len(explored)} explored answers "
                         f"but only {path_count} path(s). "
-                        f"Create {missing_count} more path(s) - one for EACH considered answer."
+                        f"Create {missing_count} more path(s) - one for EACH explored answer."
                     ),
-                    available=considered,
+                    available=explored,
                     provided=str(path_count),
                     category=SeedErrorCategory.COMPLETENESS,
                 )
             )
 
-    # 11c. Check each path's answer_id is in its dilemma's considered list
-    # This catches data integrity issues where paths exist but considered is empty/mismatched
+    # 11c. Check each path's answer_id is in its dilemma's explored list
+    # This catches data integrity issues where paths exist but explored is empty/mismatched
     for i, path in enumerate(output.get("paths", [])):
         raw_did = path.get("dilemma_id")
         raw_answer_id = path.get("answer_id")
@@ -1238,21 +1237,66 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         for dilemma_decision in output.get("dilemmas", []):
             decision_did = strip_scope_prefix(dilemma_decision.get("dilemma_id", ""))
             if decision_did == normalized_did:
-                considered = dilemma_decision.get("considered", [])
-                if raw_answer_id not in considered:
+                explored = dilemma_decision.get("explored", [])
+                if raw_answer_id not in explored:
                     errors.append(
                         SeedValidationError(
                             field_path=f"paths.{i}.answer_id",
                             issue=(
                                 f"Path answer '{raw_answer_id}' is not in dilemma "
-                                f"'{normalized_did}' considered list: {considered}"
+                                f"'{normalized_did}' explored list: {explored}"
                             ),
-                            available=considered,
+                            available=explored,
                             provided=raw_answer_id,
                             category=SeedErrorCategory.CROSS_REFERENCE,
                         )
                     )
                 break
+
+    # 11d. Check default (canonical) answer is in explored, not unexplored
+    # LLMs sometimes invert the buckets, putting the default answer in unexplored.
+    # This guardrail catches the inversion early so the serialize loop can retry.
+    for dilemma_decision in output.get("dilemmas", []):
+        raw_did = dilemma_decision.get("dilemma_id")
+        if not raw_did:
+            continue
+        normalized_did, scope_error = _normalize_id(raw_did, "dilemma")
+        if scope_error:
+            continue
+
+        explored = dilemma_decision.get("explored", [])
+        unexplored = dilemma_decision.get("unexplored", [])
+        if not unexplored:
+            continue  # Nothing in unexplored, no inversion possible
+
+        # Look up which answer is the default from the graph
+        prefixed_did = f"dilemma::{normalized_did}"
+        dilemma_node = graph.get_node(prefixed_did)
+        if not dilemma_node:
+            continue
+
+        # Find the default answer among the dilemma's alternatives
+        alt_edges = graph.get_edges(from_id=prefixed_did, edge_type="has_answer")
+        for edge in alt_edges:
+            alt_node = graph.get_node(edge["to"])
+            if alt_node and alt_node.get("is_default_path"):
+                default_answer_id = alt_node.get("raw_id", "")
+                if default_answer_id in unexplored and default_answer_id not in explored:
+                    errors.append(
+                        SeedValidationError(
+                            field_path="dilemmas",
+                            issue=(
+                                f"Dilemma '{normalized_did}': default answer "
+                                f"'{default_answer_id}' is in unexplored but MUST be "
+                                f"in explored. The default/canonical answer is always "
+                                f"explored. Move it from unexplored to explored."
+                            ),
+                            available=explored,
+                            provided=default_answer_id,
+                            category=SeedErrorCategory.CROSS_REFERENCE,
+                        )
+                    )
+                break  # Only one default per dilemma
 
     # NOTE: Arc count validation removed - now handled by runtime pruning (over-generate-and-select)
     # See seed_pruning.py for the new approach: LLM generates freely, runtime selects best dilemmas
@@ -1331,7 +1375,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
 
     First validates all cross-references, then applies mutations.
 
-    Updates entity dispositions, creates paths from considered dilemmas,
+    Updates entity dispositions, creates paths from explored dilemmas,
     creates consequences, and creates initial beats.
 
     Node IDs are prefixed by type to match BRAINSTORM's namespacing:
@@ -1349,9 +1393,9 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         SeedMutationError: If semantic validation fails (with feedback for retry).
         MutationError: If required id fields are missing.
     """
-    # Migration: backfill empty considered arrays from path answer_ids
-    # This fixes legacy data where LLM serialized paths but left considered empty
-    _backfill_considered_from_paths(output)
+    # Migration: backfill empty explored arrays from path answer_ids
+    # This fixes legacy data where LLM serialized paths but left explored empty
+    _backfill_explored_from_paths(output)
 
     # Validate cross-references first
     errors = validate_seed_mutations(graph, output)
@@ -1373,14 +1417,14 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         raw_id = _require_field(dilemma_decision, "dilemma_id", f"Dilemma decision at index {i}")
         dilemma_node_id = _prefix_id("dilemma", raw_id)
         if graph.has_node(dilemma_node_id):
-            considered = dilemma_decision.get("considered", [])
+            explored = dilemma_decision.get("explored", [])
             graph.update_node(
                 dilemma_node_id,
-                considered=considered,
-                implicit=dilemma_decision.get("implicit", []),
+                explored=explored,
+                unexplored=dilemma_decision.get("unexplored", []),
             )
 
-    # Create paths from considered dilemmas (must be created before consequences)
+    # Create paths from explored dilemmas (must be created before consequences)
     for i, path in enumerate(output.get("paths", [])):
         raw_id = _require_field(path, "path_id", f"Path at index {i}")
         path_node_id = _prefix_id("path", raw_id)

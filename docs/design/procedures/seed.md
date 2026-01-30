@@ -102,7 +102,7 @@ LLMs are poor at counting and self-constraint. Instead of teaching the LLM to st
 3. **Runtime selects top N** - The highest-scoring dilemmas are kept fully explored (up to 4 dilemmas = 16 arcs)
 4. **Runtime prunes excess** - Demoted dilemmas have their paths, consequences, and beats removed
 
-**Key invariant: The `considered` field is immutable after SEED.** Pruning only drops paths; it never modifies the dilemma's `considered` field. This separation between "LLM intent" (stored as `considered`) and "runtime state" (derived from path existence) ensures:
+**Key invariant: The `explored` field is immutable after SEED.** Pruning only drops paths; it never modifies the dilemma's `explored` field. This separation between "LLM intent" (stored as `explored`) and "runtime state" (derived from path existence) ensures:
 - The pruning operation is idempotent
 - Arc count is derived from actual paths, not potentially stale metadata
 - Debugging is simpler—you can see what the LLM originally intended vs what survived pruning
@@ -153,8 +153,8 @@ LLM proposes exploration map per dilemma:
 ```yaml
 dilemma_exploration:
   - dilemma_id: dilemma::mentor_trust
-    considered:
-      - answer_id: mentor_protector    # canonical, always considered
+    explored:
+      - answer_id: mentor_protector    # canonical, always explored
         rationale: "Spine path - mentor as ally"
       - answer_id: mentor_manipulator  # non-canonical
         rationale: "Dark branch - doubles content but adds replayability"
@@ -512,7 +512,7 @@ Fits comfortably in modern context windows.
 **Recovery:** In most cases, the runtime's over-generate-and-select pattern handles this automatically by:
 1. Scoring dilemmas by quality criteria
 2. Selecting the top N dilemmas for full exploration (up to 4 = 16 arcs)
-3. Demoting excess dilemmas (moving non-canonical to `implicit`)
+3. Demoting excess dilemmas (moving non-canonical to `unexplored`)
 
 If automatic pruning produces unsatisfactory results:
 1. Return to Phase 2

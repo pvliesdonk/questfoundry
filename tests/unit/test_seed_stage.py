@@ -98,7 +98,7 @@ async def test_execute_calls_all_three_phases() -> None:
         mock_summarize.return_value = ("Brief summary", 100)
         mock_artifact = SeedOutput(
             entities=[{"entity_id": "kay", "disposition": "retained"}],
-            dilemmas=[{"dilemma_id": "trust", "explored": ["yes"], "implicit": ["no"]}],
+            dilemmas=[{"dilemma_id": "trust", "explored": ["yes"], "unexplored": ["no"]}],
             paths=[
                 {
                     "name": "Trust Arc",
@@ -460,7 +460,7 @@ def test_seed_output_model_validates() -> None:
     """SeedOutput model validates correctly."""
     output = SeedOutput(
         entities=[{"entity_id": "kay", "disposition": "retained"}],
-        dilemmas=[{"dilemma_id": "trust", "explored": ["yes"], "implicit": []}],
+        dilemmas=[{"dilemma_id": "trust", "explored": ["yes"], "unexplored": []}],
         paths=[
             {
                 "name": "Trust Arc",

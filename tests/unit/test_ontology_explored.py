@@ -1,9 +1,9 @@
-"""Tests for the 'explored' to 'considered' ontology change.
+"""Tests for the 'considered' to 'explored' ontology change.
 
 This module tests:
-1. Backward compatibility: old 'explored' field migrates to 'considered'
+1. Backward compatibility: old 'considered' field migrates to 'explored'
 2. Development state derivation from path existence
-3. Arc count derivation from paths (not from considered field)
+3. Arc count derivation from paths (not from explored field)
 4. Dilemma immutability during pruning
 5. Scoped ID standardization in pruning (issue #219, PR #220)
 """
@@ -32,41 +32,41 @@ from questfoundry.models.seed import (
 
 
 class TestDilemmaDecisionBackwardCompat:
-    """Test backward compatibility for old 'explored' field."""
+    """Test backward compatibility for old 'considered' field."""
 
-    def test_new_considered_field_works(self) -> None:
-        """New 'considered' field is accepted."""
+    def test_new_explored_field_works(self) -> None:
+        """New 'explored' field is accepted."""
         decision = DilemmaDecision(
             dilemma_id="test_dilemma",
-            considered=["alt_a", "alt_b"],
-            implicit=["alt_c"],
+            explored=["alt_a", "alt_b"],
+            unexplored=["alt_c"],
         )
-        assert decision.considered == ["alt_a", "alt_b"]
-        assert decision.implicit == ["alt_c"]
+        assert decision.explored == ["alt_a", "alt_b"]
+        assert decision.unexplored == ["alt_c"]
 
-    def test_old_explored_field_migrates(self) -> None:
-        """Old 'explored' field is migrated to 'considered'."""
-        # Simulate old graph data with 'explored' field
+    def test_old_considered_field_migrates(self) -> None:
+        """Old 'considered' field is migrated to 'explored'."""
+        # Simulate old graph data with 'considered' field
         old_data = {
             "dilemma_id": "test_dilemma",
-            "explored": ["alt_a", "alt_b"],
-            "implicit": ["alt_c"],
+            "considered": ["alt_a", "alt_b"],
+            "unexplored": ["alt_c"],
         }
         decision = DilemmaDecision.model_validate(old_data)
-        assert decision.considered == ["alt_a", "alt_b"]
-        assert decision.implicit == ["alt_c"]
+        assert decision.explored == ["alt_a", "alt_b"]
+        assert decision.unexplored == ["alt_c"]
 
-    def test_considered_takes_precedence_over_explored(self) -> None:
-        """If both 'considered' and 'explored' present, 'considered' is used."""
+    def test_explored_takes_precedence_over_considered(self) -> None:
+        """If both 'explored' and 'considered' present, 'explored' is used."""
         # This shouldn't happen in practice, but test the behavior
         data = {
             "dilemma_id": "test_dilemma",
-            "considered": ["new_alt"],
-            "explored": ["old_alt"],
-            "implicit": [],
+            "explored": ["new_alt"],
+            "considered": ["old_alt"],
+            "unexplored": [],
         }
         decision = DilemmaDecision.model_validate(data)
-        assert decision.considered == ["new_alt"]
+        assert decision.explored == ["new_alt"]
 
 
 class TestCountPathsPerDilemma:
@@ -76,8 +76,8 @@ class TestCountPathsPerDilemma:
         """Counts paths grouped by dilemma_id."""
         seed = SeedOutput(
             dilemmas=[
-                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
-                DilemmaDecision(dilemma_id="t2", considered=["c"], implicit=[]),
+                DilemmaDecision(dilemma_id="t1", explored=["a", "b"], unexplored=[]),
+                DilemmaDecision(dilemma_id="t2", explored=["c"], unexplored=[]),
             ],
             paths=[
                 Path(
@@ -114,7 +114,7 @@ class TestCountPathsPerDilemma:
     def test_handles_scoped_dilemma_ids(self) -> None:
         """Handles dilemma_id with scope prefix."""
         seed = SeedOutput(
-            dilemmas=[DilemmaDecision(dilemma_id="t1", considered=["a"], implicit=[])],
+            dilemmas=[DilemmaDecision(dilemma_id="t1", explored=["a"], unexplored=[])],
             paths=[
                 Path(
                     path_id="th1",
@@ -134,7 +134,7 @@ class TestCountPathsPerDilemma:
     def test_empty_paths_returns_empty_dict(self) -> None:
         """Returns empty dict when no paths."""
         seed = SeedOutput(
-            dilemmas=[DilemmaDecision(dilemma_id="t1", considered=["a"], implicit=[])],
+            dilemmas=[DilemmaDecision(dilemma_id="t1", explored=["a"], unexplored=[])],
             paths=[],
         )
 
@@ -147,10 +147,10 @@ class TestGetDilemmaDevelopmentStates:
     """Test derivation of development states from path existence."""
 
     def test_committed_state_when_path_exists(self) -> None:
-        """Alternative in 'considered' with path is 'committed'."""
+        """Alternative in 'explored' with path is 'committed'."""
         seed = SeedOutput(
             dilemmas=[
-                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
+                DilemmaDecision(dilemma_id="t1", explored=["a", "b"], unexplored=[]),
             ],
             paths=[
                 Path(
@@ -177,11 +177,11 @@ class TestGetDilemmaDevelopmentStates:
         assert states["t1"]["a"] == STATE_COMMITTED
         assert states["t1"]["b"] == STATE_COMMITTED
 
-    def test_deferred_state_when_considered_but_no_path(self) -> None:
-        """Alternative in 'considered' without path is 'deferred'."""
+    def test_deferred_state_when_explored_but_no_path(self) -> None:
+        """Alternative in 'explored' without path is 'deferred'."""
         seed = SeedOutput(
             dilemmas=[
-                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
+                DilemmaDecision(dilemma_id="t1", explored=["a", "b"], unexplored=[]),
             ],
             paths=[
                 Path(
@@ -198,13 +198,13 @@ class TestGetDilemmaDevelopmentStates:
         states = get_dilemma_development_states(seed)
 
         assert states["t1"]["a"] == STATE_COMMITTED
-        assert states["t1"]["b"] == STATE_DEFERRED  # Considered but no path
+        assert states["t1"]["b"] == STATE_DEFERRED  # Explored but no path
 
-    def test_latent_state_for_implicit_alternatives(self) -> None:
-        """Alternative in 'implicit' is 'latent'."""
+    def test_latent_state_for_unexplored_alternatives(self) -> None:
+        """Alternative in 'unexplored' is 'latent'."""
         seed = SeedOutput(
             dilemmas=[
-                DilemmaDecision(dilemma_id="t1", considered=["a"], implicit=["b"]),
+                DilemmaDecision(dilemma_id="t1", explored=["a"], unexplored=["b"]),
             ],
             paths=[
                 Path(
@@ -221,23 +221,23 @@ class TestGetDilemmaDevelopmentStates:
         states = get_dilemma_development_states(seed)
 
         assert states["t1"]["a"] == STATE_COMMITTED
-        assert states["t1"]["b"] == STATE_LATENT  # In implicit, never considered
+        assert states["t1"]["b"] == STATE_LATENT  # In unexplored, never explored
 
 
 class TestComputeArcCountFromPaths:
-    """Test that arc count is derived from path existence, not considered field."""
+    """Test that arc count is derived from path existence, not explored field."""
 
-    def test_arc_count_from_paths_not_considered(self) -> None:
+    def test_arc_count_from_paths_not_explored(self) -> None:
         """Arc count is 2^n where n = dilemmas with 2+ paths."""
         seed = SeedOutput(
             dilemmas=[
-                # Both alts considered, but only one has path
-                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
-                # Both alts considered and have paths
-                DilemmaDecision(dilemma_id="t2", considered=["c", "d"], implicit=[]),
+                # Both alts explored, but only one has path
+                DilemmaDecision(dilemma_id="t1", explored=["a", "b"], unexplored=[]),
+                # Both alts explored and have paths
+                DilemmaDecision(dilemma_id="t2", explored=["c", "d"], unexplored=[]),
             ],
             paths=[
-                # t1: only one path (despite 2 considered)
+                # t1: only one path (despite 2 explored)
                 Path(
                     path_id="th1",
                     name="Path 1",
@@ -275,7 +275,7 @@ class TestComputeArcCountFromPaths:
         """Arc count is 1 when no dilemmas have 2+ paths."""
         seed = SeedOutput(
             dilemmas=[
-                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
+                DilemmaDecision(dilemma_id="t1", explored=["a", "b"], unexplored=[]),
             ],
             paths=[
                 Path(
@@ -297,8 +297,8 @@ class TestComputeArcCountFromPaths:
         """Arc count is 2^n for multiple fully developed dilemmas."""
         seed = SeedOutput(
             dilemmas=[
-                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
-                DilemmaDecision(dilemma_id="t2", considered=["c", "d"], implicit=[]),
+                DilemmaDecision(dilemma_id="t1", explored=["a", "b"], unexplored=[]),
+                DilemmaDecision(dilemma_id="t2", explored=["c", "d"], unexplored=[]),
             ],
             paths=[
                 Path(
@@ -360,8 +360,8 @@ class TestPruningImmutability:
             dilemmas.append(
                 DilemmaDecision(
                     dilemma_id=tid,
-                    considered=["a", "b"],
-                    implicit=[],
+                    explored=["a", "b"],
+                    unexplored=[],
                 )
             )
 
@@ -397,12 +397,12 @@ class TestPruningImmutability:
             initial_beats=beats,
         )
 
-    def test_pruning_updates_considered_for_demoted(self) -> None:
-        """Pruning moves non-canonical answers to implicit for demoted dilemmas."""
+    def test_pruning_updates_explored_for_demoted(self) -> None:
+        """Pruning moves non-canonical answers to unexplored for demoted dilemmas."""
         seed = self._make_seed_output_with_paths(dilemmas_count=6, paths_per_dilemma=2)
 
-        # All dilemmas have considered=["a", "b"]
-        original_considered = {t.dilemma_id: list(t.considered) for t in seed.dilemmas}
+        # All dilemmas have explored=["a", "b"]
+        original_explored = {t.dilemma_id: list(t.explored) for t in seed.dilemmas}
 
         # Prune to max 4 arcs (2 fully developed dilemmas)
         pruned = prune_to_arc_limit(seed, max_arcs=4)
@@ -414,10 +414,10 @@ class TestPruningImmutability:
 
         for dilemma in pruned.dilemmas:
             if path_counts.get(dilemma.dilemma_id, 0) <= 1:
-                assert dilemma.considered == ["a"]
-                assert "b" in dilemma.implicit
+                assert dilemma.explored == ["a"]
+                assert "b" in dilemma.unexplored
             else:
-                assert dilemma.considered == original_considered[dilemma.dilemma_id]
+                assert dilemma.explored == original_explored[dilemma.dilemma_id]
 
     def test_pruning_reduces_path_count(self) -> None:
         """Pruning removes paths to stay within arc limit."""
@@ -467,8 +467,8 @@ class TestScopedIdStandardization:
             dilemmas=[
                 DilemmaDecision(
                     dilemma_id="dilemma::artifact_origin",
-                    considered=["natural", "crafted"],
-                    implicit=[],
+                    explored=["natural", "crafted"],
+                    unexplored=[],
                 ),
             ],
             paths=[
@@ -476,7 +476,7 @@ class TestScopedIdStandardization:
                     path_id="path::artifact_natural",
                     name="Natural Origin",
                     dilemma_id="dilemma::artifact_origin",
-                    answer_id="natural",  # Canonical (first in considered)
+                    answer_id="natural",  # Canonical (first in explored)
                     path_importance="major",
                     description="Artifact formed naturally",
                 ),
@@ -535,12 +535,12 @@ class TestScopedIdStandardization:
         beat_1 = next(b for b in pruned.initial_beats if b.beat_id == "artifact_beat_01")
         assert "path::artifact_natural" in beat_1.paths
         assert "path::artifact_crafted" not in beat_1.paths
-        # Demoted dilemma should keep canonical and move non-canonical to implicit
+        # Demoted dilemma should keep canonical and move non-canonical to unexplored
         pruned_dilemma = next(
             d for d in pruned.dilemmas if d.dilemma_id == "dilemma::artifact_origin"
         )
-        assert pruned_dilemma.considered == ["natural"]
-        assert "crafted" in pruned_dilemma.implicit
+        assert pruned_dilemma.explored == ["natural"]
+        assert "crafted" in pruned_dilemma.unexplored
 
     def test_pruning_handles_scoped_path_ids_in_consequences(self) -> None:
         """Pruning correctly drops consequences when they use scoped IDs."""
@@ -548,8 +548,8 @@ class TestScopedIdStandardization:
             dilemmas=[
                 DilemmaDecision(
                     dilemma_id="t1",
-                    considered=["alt_a", "alt_b"],
-                    implicit=[],
+                    explored=["alt_a", "alt_b"],
+                    unexplored=[],
                 ),
             ],
             paths=[
@@ -610,8 +610,8 @@ class TestScopedIdStandardization:
             dilemmas=[
                 DilemmaDecision(
                     dilemma_id="dilemma::keeper_trust",  # Scoped in dilemma
-                    considered=["protector", "manipulator"],
-                    implicit=[],
+                    explored=["protector", "manipulator"],
+                    unexplored=[],
                 ),
             ],
             paths=[
@@ -660,7 +660,7 @@ class TestScopedIdStandardization:
         """compute_arc_count groups paths correctly with scoped dilemma_ids."""
         seed = SeedOutput(
             dilemmas=[
-                DilemmaDecision(dilemma_id="t1", considered=["a", "b"], implicit=[]),
+                DilemmaDecision(dilemma_id="t1", explored=["a", "b"], unexplored=[]),
             ],
             paths=[
                 Path(

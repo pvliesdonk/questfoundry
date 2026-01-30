@@ -336,20 +336,20 @@ dilemma:
   involves: entity_id[]
   why_it_matters: string          # thematic stakes
   # Added by SEED:
-  considered: answer_id[]         # which answers LLM intended to explore
-  implicit: answer_id[]           # answers not explored (for FILL shadows)
+  explored: answer_id[]           # which answers LLM intended to explore
+  unexplored: answer_id[]         # answers not explored (for FILL shadows)
 ```
 
 **Lifecycle:** Created in BRAINSTORM, exploration decisions added in SEED. Not exported.
 
-**The `implicit` field** holds answers that are intentionally NOT explored as paths. These provide narrative context for the FILL stage—the "road not taken" that gives meaning to the chosen path. For example, if we explore "mentor is deceptive", the implicit "mentor is trustworthy" informs how the deception contrasts with what could have been.
+**The `unexplored` field** holds answers that are intentionally NOT explored as paths. These provide narrative context for the FILL stage—the "road not taken" that gives meaning to the chosen path. For example, if we explore "mentor is deceptive", the unexplored "mentor is trustworthy" informs how the deception contrasts with what could have been.
 
 **Derived development states** (computed from path existence, not stored):
 - **committed**: Answer has a path in the graph (will become a story path)
-- **deferred**: Answer in `considered` but no path (LLM intended to explore but was pruned)
-- **latent**: Answer not in `considered` (never intended for exploration, becomes shadow)
+- **deferred**: Answer in `explored` but no path (LLM intended to explore but was pruned)
+- **latent**: Answer not in `explored` (never intended for exploration, becomes shadow)
 
-The `considered` field records what the LLM *intended* to explore. Actual path existence determines what was *committed*. This separation allows pruning to drop paths without modifying the dilemma's stored intent, keeping the field immutable after SEED.
+The `explored` field records what the LLM *intended* to explore. Actual path existence determines what was *committed*. This separation allows pruning to drop paths without modifying the dilemma's stored intent, keeping the field immutable after SEED.
 
 **Binary constraint:** Exactly two answers per dilemma. This keeps contrasts crisp.
 
@@ -667,7 +667,7 @@ seed:
   dilemmas:
     - dilemma_id: string              # Format: dilemma::dilemma_name
       explored: answer_id[]           # always includes canonical; may include non-canonical
-      implicit: answer_id[]           # non-explored answers (context for FILL)
+      unexplored: answer_id[]         # non-explored answers (context for FILL)
 
   paths:
     - id: string                      # Format: path::dilemma_id__answer_id (hierarchical)

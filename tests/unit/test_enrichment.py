@@ -223,8 +223,8 @@ class TestEnrichDilemmas:
             "dilemmas": [  # Input uses legacy "dilemmas" key
                 {
                     "dilemma_id": "host_motivation",
-                    "considered": ["benevolent"],
-                    "implicit": ["self_serving"],
+                    "explored": ["benevolent"],
+                    "unexplored": ["self_serving"],
                 },
             ],
         }
@@ -237,14 +237,14 @@ class TestEnrichDilemmas:
         assert dilemma["why_it_matters"] == "Determines whether protagonist can trust their guide"
         # Entity IDs should have prefix stripped
         assert dilemma["central_entity_ids"] == ["the_host", "the_manor"]
-        assert dilemma["considered"] == ["benevolent"]
-        assert dilemma["implicit"] == ["self_serving"]
+        assert dilemma["explored"] == ["benevolent"]
+        assert dilemma["unexplored"] == ["self_serving"]
 
     def test_handles_unknown_dilemma(self, graph_with_dilemmas: Graph) -> None:
         """Enrichment handles dilemmas not in graph gracefully."""
         artifact = {
             "dilemmas": [
-                {"dilemma_id": "unknown_dilemma", "considered": ["option_a"], "implicit": []},
+                {"dilemma_id": "unknown_dilemma", "explored": ["option_a"], "unexplored": []},
             ],
         }
 
@@ -254,7 +254,7 @@ class TestEnrichDilemmas:
         assert dilemma["dilemma_id"] == "unknown_dilemma"
         assert "question" not in dilemma
         assert "why_it_matters" not in dilemma
-        assert dilemma["considered"] == ["option_a"]
+        assert dilemma["explored"] == ["option_a"]
 
     def test_handles_prefixed_dilemma_ids(self, graph_with_dilemmas: Graph) -> None:
         """Enrichment strips prefix from dilemma_id for graph lookup."""
@@ -262,8 +262,8 @@ class TestEnrichDilemmas:
             "dilemmas": [
                 {
                     "dilemma_id": "dilemma::host_motivation",
-                    "considered": ["benevolent"],
-                    "implicit": [],
+                    "explored": ["benevolent"],
+                    "unexplored": [],
                 },
             ],
         }
@@ -276,14 +276,14 @@ class TestEnrichDilemmas:
         # But graph lookup succeeds with prefix stripped
         assert dilemma["question"] == "Is the host benevolent or self-serving?"
         assert dilemma["why_it_matters"] == "Determines whether protagonist can trust their guide"
-        assert dilemma["considered"] == ["benevolent"]
+        assert dilemma["explored"] == ["benevolent"]
 
     def test_enriches_multiple_dilemmas(self, graph_with_dilemmas: Graph) -> None:
         """Enrichment works for multiple dilemmas."""
         artifact = {
             "dilemmas": [
-                {"dilemma_id": "host_motivation", "considered": ["benevolent"], "implicit": []},
-                {"dilemma_id": "killer_identity", "considered": ["suspect_a"], "implicit": []},
+                {"dilemma_id": "host_motivation", "explored": ["benevolent"], "unexplored": []},
+                {"dilemma_id": "killer_identity", "explored": ["suspect_a"], "unexplored": []},
             ],
         }
 

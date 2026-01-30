@@ -1476,7 +1476,7 @@ class TestPropagateCrossSectionErrors:
             "paths": [
                 SeedValidationError(
                     field_path="paths.0.answer_id",
-                    issue="Path answer 'x' is not in dilemma considered list",
+                    issue="Path answer 'x' is not in dilemma explored list",
                     available=["a", "b"],
                     provided="x",
                     category=SeedErrorCategory.CROSS_REFERENCE,
@@ -1522,13 +1522,13 @@ class TestPropagateCrossSectionErrors:
             "paths": [
                 SeedValidationError(
                     field_path="paths.0.answer_id",
-                    issue="not in considered",
+                    issue="not in explored",
                     provided="x",
                     category=SeedErrorCategory.CROSS_REFERENCE,
                 ),
                 SeedValidationError(
                     field_path="paths.1.answer_id",
-                    issue="not in considered",
+                    issue="not in explored",
                     provided="y",
                     category=SeedErrorCategory.CROSS_REFERENCE,
                 ),

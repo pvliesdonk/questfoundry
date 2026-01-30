@@ -438,7 +438,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
         "",
         "### Rules",
         "- Every entity above needs a decision (retained/cut)",
-        "- Every dilemma above needs a decision (explored/implicit answers)",
+        "- Every dilemma above needs a decision (explored/unexplored answers)",
         "- Path answer_id must be from that dilemma's answers list",
     ])
 

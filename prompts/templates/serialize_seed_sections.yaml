@@ -65,36 +65,36 @@ dilemmas_prompt: |
     "dilemmas": [
       {
         "dilemma_id": "dilemma::host_benevolent_or_selfish",
-        "considered": ["protector", "manipulator"],
-        "implicit": []
+        "explored": ["protector", "manipulator"],
+        "unexplored": []
       }
     ]
   }
   ```
 
-  Note: `considered` and `implicit` contain raw answer IDs (no prefix) since
+  Note: `explored` and `unexplored` contain raw answer IDs (no prefix) since
   they are local to each dilemma.
 
   ## Rules
   - dilemma_id must include the `dilemma::` prefix and match EXACTLY an ID from the manifest
-  - considered: Answer IDs to explore as paths (MUST include the default path)
-  - implicit: Answer IDs NOT explored (become shadows)
+  - explored: Answer IDs to explore as paths (MUST include the default path)
+  - unexplored: Answer IDs NOT explored (become shadows)
   - Generate a decision for EVERY dilemma in the manifest
 
-  ## CRITICAL INVARIANT: considered ↔ paths linkage
-  The `considered` array defines which answers will have paths created.
-  For EACH answer_id in `considered`, you MUST create a path later.
-  The path's `answer_id` field MUST match an entry in `considered`.
+  ## CRITICAL INVARIANT: explored ↔ paths linkage
+  The `explored` array defines which answers will have paths created.
+  For EACH answer_id in `explored`, you MUST create a path later.
+  The path's `answer_id` field MUST match an entry in `explored`.
 
-  WRONG: `considered: []` with paths that have `answer_id` values
-  WRONG: `considered: ["opt_a"]` but path uses `answer_id: "opt_b"`
-  RIGHT: `considered: ["opt_a", "opt_b"]` and paths use those exact IDs
+  WRONG: `explored: []` with paths that have `answer_id` values
+  WRONG: `explored: ["opt_a"]` but path uses `answer_id: "opt_b"`
+  RIGHT: `explored: ["opt_a", "opt_b"]` and paths use those exact IDs
 
   ## What NOT to Do
   - Do NOT skip dilemmas because they aren't mentioned in the brief
   - Do NOT invent dilemmas not in the manifest
   - Do NOT partially complete the list
-  - Do NOT leave `considered` empty if you plan to create paths for that dilemma
+  - Do NOT leave `explored` empty if you plan to create paths for that dilemma
   - Do NOT omit the `dilemma::` prefix from dilemma_id
 
   ## Output
@@ -105,7 +105,7 @@ paths_prompt: |
   You are generating PATHS for a SEED stage based on dilemma decisions.
 
   ## Generation Requirements (CRITICAL)
-  For each "considered" answer in the dilemma decisions, you MUST generate a path.
+  For each "explored" answer in the dilemma decisions, you MUST generate a path.
   Each path represents one storyline that will be developed in the story.
 
   ## Scoped ID Format (CRITICAL)
@@ -117,12 +117,12 @@ paths_prompt: |
 
   Copy IDs EXACTLY as shown in the manifest, including the prefixes.
 
-  ## CRITICAL INVARIANT: answer_id MUST match considered
+  ## CRITICAL INVARIANT: answer_id MUST match explored
   Each path's `answer_id` MUST be one of the IDs listed in the dilemma's
-  `considered` array. This is a hard constraint enforced by validation.
+  `explored` array. This is a hard constraint enforced by validation.
 
-  WRONG: Path with `answer_id: "option_b"` when dilemma has `considered: ["option_a"]`
-  RIGHT: Path with `answer_id: "option_a"` when dilemma has `considered: ["option_a", "option_b"]`
+  WRONG: Path with `answer_id: "option_b"` when dilemma has `explored: ["option_a"]`
+  RIGHT: Path with `answer_id: "option_a"` when dilemma has `explored: ["option_a", "option_b"]`
 
   ## Schema
   Return a JSON object with a "paths" array. Each item is a Path:
@@ -166,18 +166,18 @@ paths_prompt: |
 
   ## Rules
   - path_importance must be exactly "major" or "minor" (lowercase)
-  - unexplored_answer_ids: IDs of answers NOT explored (implicit ones)
+  - unexplored_answer_ids: IDs of answers NOT explored (unexplored ones)
   - consequence_ids: References to consequences for this path
-  - Generate a path for EACH considered answer from dilemma decisions
-  - answer_id MUST be one of the IDs from the dilemma's `considered` array
+  - Generate a path for EACH explored answer from dilemma decisions
+  - answer_id MUST be one of the IDs from the dilemma's `explored` array
   - path_id MUST include the `path::` prefix and use hierarchical format
   - dilemma_id MUST include the `dilemma::` prefix
 
   ## What NOT to Do
   - Do NOT reuse dilemma IDs as path IDs
-  - Do NOT skip answers marked as "considered"
-  - Do NOT create paths for "implicit" answers (they become shadows, not paths)
-  - Do NOT use an answer_id that isn't in the dilemma's `considered` list
+  - Do NOT skip answers marked as "explored"
+  - Do NOT create paths for "unexplored" answers (they become shadows, not paths)
+  - Do NOT use an answer_id that isn't in the dilemma's `explored` list
   - Do NOT omit the `path::` or `dilemma::` prefixes
 
   ## Output

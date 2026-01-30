@@ -37,7 +37,7 @@ class ScoredDilemma:
     dilemma_id: str
     score: float
     rationale: list[str]
-    is_fully_explored: bool  # Has 2+ answers in explored
+    is_fully_explored: bool  # Has 2+ answers explored as paths
     canonical_path_id: str | None
     noncanonical_path_id: str | None
 
@@ -63,8 +63,8 @@ def _get_paths_for_dilemma(
     if not paths:
         return None, None
 
-    # Assume first considered answer is canonical (typical pattern)
-    canonical_ans = dilemma_decision.considered[0] if dilemma_decision.considered else None
+    # Assume first explored answer is canonical (typical pattern)
+    canonical_ans = dilemma_decision.explored[0] if dilemma_decision.explored else None
 
     canonical_path = None
     noncanonical_path = None
@@ -123,7 +123,7 @@ def score_dilemma(seed_output: SeedOutput, dilemma_id: str) -> ScoredDilemma:
 
     canonical_path, noncanonical_path = _get_paths_for_dilemma(seed_output, dilemma_id)
 
-    # is_fully_explored is derived from actual path existence, not from considered field
+    # is_fully_explored is derived from actual path existence, not from explored field
     # A dilemma is fully explored when BOTH canonical and non-canonical paths exist
     is_fully_explored = canonical_path is not None and noncanonical_path is not None
 

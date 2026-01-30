@@ -7,7 +7,7 @@ programmatically select the best content.
 The pruning process:
 1. Rank dilemmas by quality score (see dilemma_scoring.py)
 2. Select top N dilemmas for full exploration (N determined by arc limit)
-3. Demote remaining dilemmas: move non-canonical to implicit
+3. Demote remaining dilemmas: move non-canonical to unexplored
 4. Drop paths, consequences, and beats for demoted non-canonical answers
 """
 
@@ -29,14 +29,14 @@ log = get_logger(__name__)
 
 def _get_canonical_answer(dilemma: DilemmaDecision) -> str | None:
     """Get the canonical (first) answer for a dilemma."""
-    return dilemma.considered[0] if dilemma.considered else None
+    return dilemma.explored[0] if dilemma.explored else None
 
 
 def _get_noncanonical_answers(dilemma: DilemmaDecision) -> list[str]:
-    """Get non-canonical answers (all considered except first)."""
-    if len(dilemma.considered) <= 1:
+    """Get non-canonical answers (all explored except first)."""
+    if len(dilemma.explored) <= 1:
         return []
-    return dilemma.considered[1:]
+    return dilemma.explored[1:]
 
 
 def prune_to_arc_limit(
@@ -92,7 +92,7 @@ def _prune_demoted_dilemmas(
     4. Update beats that belong to both demoted and kept paths
 
     IMPORTANT: Dilemmas ARE updated for demoted items. Non-canonical answers
-    are moved from `considered` to `implicit` so validation reflects the
+    are moved from `explored` to `unexplored` so validation reflects the
     pruned path set. This preserves canonical intent while keeping graph
     integrity after pruning.
 
@@ -142,19 +142,19 @@ def _prune_demoted_dilemmas(
         dropped_path_ids=list(paths_to_drop)[:5],  # Log first 5
     )
 
-    # Update dilemma decisions: move non-canonical answers to implicit
+    # Update dilemma decisions: move non-canonical answers to unexplored
     pruned_dilemmas: list[DilemmaDecision] = []
     for dilemma in seed_output.dilemmas:
         raw_did = strip_scope_prefix(dilemma.dilemma_id)
-        if raw_did in demoted_raw_ids and len(dilemma.considered) > 1:
+        if raw_did in demoted_raw_ids and len(dilemma.explored) > 1:
             canonical = _get_canonical_answer(dilemma)
             noncanonical = _get_noncanonical_answers(dilemma)
-            merged_implicit = list(dict.fromkeys([*dilemma.implicit, *noncanonical]))
+            merged_unexplored = list(dict.fromkeys([*dilemma.unexplored, *noncanonical]))
             pruned_dilemmas.append(
                 DilemmaDecision(
                     dilemma_id=dilemma.dilemma_id,
-                    considered=[canonical] if canonical else [],
-                    implicit=merged_implicit,
+                    explored=[canonical] if canonical else [],
+                    unexplored=merged_unexplored,
                 )
             )
         else:
@@ -223,7 +223,7 @@ def compute_arc_count(seed_output: SeedOutput) -> int:
     Arc count = 2^n where n = dilemmas with 2+ paths (fully developed).
 
     IMPORTANT: This is derived from actual path existence, NOT from the
-    `considered` field. The `considered` field records LLM intent; actual
+    `explored` field. The `explored` field records LLM intent; actual
     path existence determines what will become story arcs.
 
     Args:
