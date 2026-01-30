@@ -582,7 +582,7 @@ def test_seed_no_prompt_noninteractive_uses_default(tmp_path: Path) -> None:
 
 def test_stage_order_constant() -> None:
     """Test STAGE_ORDER contains expected stages in order."""
-    assert STAGE_ORDER == ["dream", "brainstorm", "seed", "grow"]
+    assert STAGE_ORDER == ["dream", "brainstorm", "seed", "grow", "fill"]
 
 
 def test_stage_prompts_has_all_stages() -> None:
@@ -1115,6 +1115,26 @@ def test_grow_command_exists() -> None:
     assert "branching structure" in output.lower()
     assert "--project" in output
     assert "--provider" in output
+
+
+def test_fill_command_exists() -> None:
+    """Test qf fill command is registered and shows help."""
+    result = runner.invoke(app, ["fill", "--help"])
+    output = _strip_ansi(result.stdout)
+
+    assert result.exit_code == 0
+    assert "prose" in output.lower()
+    assert "--project" in output
+    assert "--provider" in output
+
+
+def test_fill_no_project_fails() -> None:
+    """Test qf fill fails without project.yaml."""
+    with runner.isolated_filesystem():
+        result = runner.invoke(app, ["fill"])
+
+        assert result.exit_code == 1
+        assert "No project.yaml found" in result.stdout
 
 
 def test_grow_no_project_fails() -> None:
