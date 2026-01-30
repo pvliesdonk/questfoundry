@@ -13,7 +13,9 @@ The pruning process:
 
 from __future__ import annotations
 
-from questfoundry.graph.context import strip_scope_prefix
+from typing import TYPE_CHECKING
+
+from questfoundry.graph.context import get_default_answer_from_graph, strip_scope_prefix
 from questfoundry.graph.dilemma_scoring import select_dilemmas_for_full_exploration
 from questfoundry.models.seed import (
     Consequence,
@@ -24,24 +26,36 @@ from questfoundry.models.seed import (
 )
 from questfoundry.observability.logging import get_logger
 
+if TYPE_CHECKING:
+    from questfoundry.graph.graph import Graph
+
 log = get_logger(__name__)
 
 
-def _get_canonical_answer(dilemma: DilemmaDecision) -> str | None:
-    """Get the canonical (first) answer for a dilemma."""
+def _get_canonical_answer(dilemma: DilemmaDecision, graph: Graph | None = None) -> str | None:
+    """Get the canonical (default) answer for a dilemma.
+
+    When a graph is provided, looks up ``is_default_path`` for a reliable
+    determination. Falls back to ``explored[0]`` when no graph is available.
+    """
+    if graph is not None:
+        default = get_default_answer_from_graph(graph, dilemma.dilemma_id)
+        if default is not None:
+            return default
     return dilemma.explored[0] if dilemma.explored else None
 
 
-def _get_noncanonical_answers(dilemma: DilemmaDecision) -> list[str]:
-    """Get non-canonical answers (all explored except first)."""
-    if len(dilemma.explored) <= 1:
-        return []
-    return dilemma.explored[1:]
+def _get_noncanonical_answers(dilemma: DilemmaDecision, graph: Graph | None = None) -> list[str]:
+    """Get non-canonical answers (all explored except the canonical one)."""
+    canonical = _get_canonical_answer(dilemma, graph)
+    # If canonical is None (no default found), all explored answers are non-canonical
+    return [a for a in dilemma.explored if a != canonical]
 
 
 def prune_to_arc_limit(
     seed_output: SeedOutput,
     max_arcs: int = 16,
+    graph: Graph | None = None,
 ) -> SeedOutput:
     """Prune seed output to stay within arc count limits.
 
@@ -52,6 +66,7 @@ def prune_to_arc_limit(
     Args:
         seed_output: The full SEED output (potentially over-generated).
         max_arcs: Maximum number of arcs to allow (default 16 = 4 fully explored).
+        graph: Story graph for looking up canonical answers via is_default_path.
 
     Returns:
         Pruned SeedOutput with arc count within limits.
@@ -64,6 +79,7 @@ def prune_to_arc_limit(
     selected, demoted = select_dilemmas_for_full_exploration(
         seed_output,
         max_fully_explored=max_fully_explored,
+        graph=graph,
     )
 
     if not demoted:
@@ -76,12 +92,13 @@ def prune_to_arc_limit(
         return seed_output
 
     # Prune the output
-    return _prune_demoted_dilemmas(seed_output, set(demoted))
+    return _prune_demoted_dilemmas(seed_output, set(demoted), graph=graph)
 
 
 def _prune_demoted_dilemmas(
     seed_output: SeedOutput,
     demoted_dilemma_ids: set[str],
+    graph: Graph | None = None,
 ) -> SeedOutput:
     """Remove non-canonical content for demoted dilemmas.
 
@@ -129,7 +146,7 @@ def _prune_demoted_dilemmas(
         if raw_dilemma_id in demoted_raw_ids:
             dilemma = dilemma_lookup.get(raw_dilemma_id)
             if dilemma:
-                canonical_answer = _get_canonical_answer(dilemma)
+                canonical_answer = _get_canonical_answer(dilemma, graph)
                 # Drop if not the canonical answer
                 if path.answer_id != canonical_answer:
                     # Store raw path ID for consistent comparison
@@ -147,8 +164,8 @@ def _prune_demoted_dilemmas(
     for dilemma in seed_output.dilemmas:
         raw_did = strip_scope_prefix(dilemma.dilemma_id)
         if raw_did in demoted_raw_ids and len(dilemma.explored) > 1:
-            canonical = _get_canonical_answer(dilemma)
-            noncanonical = _get_noncanonical_answers(dilemma)
+            canonical = _get_canonical_answer(dilemma, graph)
+            noncanonical = _get_noncanonical_answers(dilemma, graph)
             merged_unexplored = list(dict.fromkeys([*dilemma.unexplored, *noncanonical]))
             pruned_dilemmas.append(
                 DilemmaDecision(

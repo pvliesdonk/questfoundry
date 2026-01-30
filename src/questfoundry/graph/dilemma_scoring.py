@@ -17,9 +17,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+from questfoundry.graph.context import get_default_answer_from_graph
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
+    from questfoundry.graph.graph import Graph
     from questfoundry.models.seed import (
         Consequence,
         InitialBeat,
@@ -43,9 +45,12 @@ class ScoredDilemma:
 
 
 def _get_paths_for_dilemma(
-    seed_output: SeedOutput, dilemma_id: str
+    seed_output: SeedOutput, dilemma_id: str, graph: Graph | None = None
 ) -> tuple[Path | None, Path | None]:
     """Get canonical and non-canonical paths for a dilemma.
+
+    When a graph is provided, uses ``is_default_path`` to determine which
+    answer is canonical. Falls back to ``explored[0]`` without a graph.
 
     Returns (canonical_path, noncanonical_path).
     """
@@ -63,8 +68,12 @@ def _get_paths_for_dilemma(
     if not paths:
         return None, None
 
-    # Assume first explored answer is canonical (typical pattern)
-    canonical_ans = dilemma_decision.explored[0] if dilemma_decision.explored else None
+    # Determine canonical answer: prefer graph lookup over explored ordering
+    canonical_ans: str | None = None
+    if graph is not None:
+        canonical_ans = get_default_answer_from_graph(graph, dilemma_id)
+    if canonical_ans is None:
+        canonical_ans = dilemma_decision.explored[0] if dilemma_decision.explored else None
 
     canonical_path = None
     noncanonical_path = None
@@ -88,7 +97,9 @@ def _get_consequences_for_path(seed_output: SeedOutput, path_id: str) -> list[Co
     return [c for c in seed_output.consequences if c.path_id == path_id]
 
 
-def score_dilemma(seed_output: SeedOutput, dilemma_id: str) -> ScoredDilemma:
+def score_dilemma(
+    seed_output: SeedOutput, dilemma_id: str, graph: Graph | None = None
+) -> ScoredDilemma:
     """Score a dilemma's value for full exploration.
 
     Higher scores indicate dilemmas more worth exploring both answers.
@@ -98,6 +109,7 @@ def score_dilemma(seed_output: SeedOutput, dilemma_id: str) -> ScoredDilemma:
     Args:
         seed_output: The full SEED output to analyze.
         dilemma_id: The dilemma to score.
+        graph: Story graph for canonical answer lookup via is_default_path.
 
     Returns:
         ScoredDilemma with computed score and rationale.
@@ -121,7 +133,7 @@ def score_dilemma(seed_output: SeedOutput, dilemma_id: str) -> ScoredDilemma:
             noncanonical_path_id=None,
         )
 
-    canonical_path, noncanonical_path = _get_paths_for_dilemma(seed_output, dilemma_id)
+    canonical_path, noncanonical_path = _get_paths_for_dilemma(seed_output, dilemma_id, graph)
 
     # is_fully_explored is derived from actual path existence, not from explored field
     # A dilemma is fully explored when BOTH canonical and non-canonical paths exist
@@ -217,6 +229,7 @@ def score_dilemma(seed_output: SeedOutput, dilemma_id: str) -> ScoredDilemma:
 
 def rank_dilemmas_for_exploration(
     seed_output: SeedOutput,
+    graph: Graph | None = None,
 ) -> list[ScoredDilemma]:
     """Rank all dilemmas by their exploration value.
 
@@ -225,6 +238,7 @@ def rank_dilemmas_for_exploration(
 
     Args:
         seed_output: The full SEED output to analyze.
+        graph: Story graph for canonical answer lookup via is_default_path.
 
     Returns:
         List of ScoredDilemma objects sorted by score descending.
@@ -232,7 +246,7 @@ def rank_dilemmas_for_exploration(
     scored_dilemmas: list[ScoredDilemma] = []
 
     for dilemma_decision in seed_output.dilemmas:
-        scored = score_dilemma(seed_output, dilemma_decision.dilemma_id)
+        scored = score_dilemma(seed_output, dilemma_decision.dilemma_id, graph)
         scored_dilemmas.append(scored)
 
     # Sort by score descending
@@ -251,6 +265,7 @@ def rank_dilemmas_for_exploration(
 def select_dilemmas_for_full_exploration(
     seed_output: SeedOutput,
     max_fully_explored: int = 4,
+    graph: Graph | None = None,
 ) -> tuple[list[str], list[str]]:
     """Select which dilemmas should have both answers explored.
 
@@ -260,13 +275,14 @@ def select_dilemmas_for_full_exploration(
     Args:
         seed_output: The full SEED output to analyze.
         max_fully_explored: Maximum dilemmas to fully explore (default 4 = 16 arcs).
+        graph: Story graph for canonical answer lookup via is_default_path.
 
     Returns:
         Tuple of (selected_dilemma_ids, demoted_dilemma_ids).
         - selected: Dilemmas that should keep both answers
         - demoted: Dilemmas that should have non-canonical moved to implicit
     """
-    ranked = rank_dilemmas_for_exploration(seed_output)
+    ranked = rank_dilemmas_for_exploration(seed_output, graph)
 
     # Filter to only dilemmas that have non-canonical paths (fully explored)
     fully_explored = [d for d in ranked if d.is_fully_explored]

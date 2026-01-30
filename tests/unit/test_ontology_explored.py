@@ -15,8 +15,10 @@ from questfoundry.graph.context import (
     STATE_DEFERRED,
     STATE_LATENT,
     count_paths_per_dilemma,
+    get_default_answer_from_graph,
     get_dilemma_development_states,
 )
+from questfoundry.graph.graph import Graph
 from questfoundry.graph.seed_pruning import (
     _prune_demoted_dilemmas,
     compute_arc_count,
@@ -685,3 +687,145 @@ class TestScopedIdStandardization:
         # Should correctly count 2 paths for t1 → 2^1 = 2 arcs
         arc_count = compute_arc_count(seed)
         assert arc_count == 2
+
+
+def _make_graph_with_dilemma(
+    dilemma_id: str,
+    answers: list[tuple[str, bool]],
+) -> Graph:
+    """Create a minimal graph with a dilemma node and answer nodes.
+
+    Args:
+        dilemma_id: Raw dilemma ID (without prefix).
+        answers: List of (answer_id, is_default_path) tuples.
+    """
+    graph = Graph()
+    prefixed = f"dilemma::{dilemma_id}"
+    graph.create_node(prefixed, {"type": "dilemma", "raw_id": dilemma_id})
+    for answer_id, is_default in answers:
+        alt_id = f"{prefixed}::alt::{answer_id}"
+        graph.create_node(
+            alt_id,
+            {"type": "alternative", "raw_id": answer_id, "is_default_path": is_default},
+        )
+        graph.add_edge("has_answer", prefixed, alt_id)
+    return graph
+
+
+class TestCanonicalAnswerFromGraph:
+    """Test that pruning uses is_default_path from the graph."""
+
+    def test_get_default_answer_from_graph(self) -> None:
+        """get_default_answer_from_graph returns the answer with is_default_path."""
+        graph = _make_graph_with_dilemma("t1", [("alt_a", True), ("alt_b", False)])
+        assert get_default_answer_from_graph(graph, "t1") == "alt_a"
+
+    def test_get_default_answer_returns_none_when_missing(self) -> None:
+        """Returns None when no answer has is_default_path."""
+        graph = _make_graph_with_dilemma("t1", [("alt_a", False), ("alt_b", False)])
+        assert get_default_answer_from_graph(graph, "t1") is None
+
+    def test_get_default_answer_handles_scoped_dilemma_id(self) -> None:
+        """Works with scoped dilemma ID input."""
+        graph = _make_graph_with_dilemma("t1", [("alt_a", False), ("alt_b", True)])
+        assert get_default_answer_from_graph(graph, "dilemma::t1") == "alt_b"
+
+    def test_pruning_uses_graph_default_not_explored_order(self) -> None:
+        """When graph says alt_b is default but explored=[alt_a, alt_b],
+        pruning keeps alt_b (the actual default) not alt_a (first in list)."""
+        # Graph: alt_b is the default answer
+        graph = _make_graph_with_dilemma("t1", [("alt_a", False), ("alt_b", True)])
+
+        # LLM put alt_a first in explored (the bug scenario)
+        seed = SeedOutput(
+            dilemmas=[
+                DilemmaDecision(
+                    dilemma_id="t1",
+                    explored=["alt_a", "alt_b"],
+                    unexplored=[],
+                ),
+            ],
+            paths=[
+                Path(
+                    path_id="path_a",
+                    name="Path A",
+                    dilemma_id="t1",
+                    answer_id="alt_a",
+                    path_importance="major",
+                    description="desc",
+                ),
+                Path(
+                    path_id="path_b",
+                    name="Path B",
+                    dilemma_id="t1",
+                    answer_id="alt_b",
+                    path_importance="major",
+                    description="desc",
+                ),
+            ],
+            initial_beats=[
+                InitialBeat(
+                    beat_id="beat_1",
+                    summary="Test",
+                    paths=["path_a", "path_b"],
+                    dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
+                ),
+            ],
+        )
+
+        # Demote t1 WITH graph - should keep alt_b (default), drop alt_a
+        pruned = _prune_demoted_dilemmas(seed, {"t1"}, graph=graph)
+
+        path_ids = [p.path_id for p in pruned.paths]
+        assert "path_b" in path_ids, "Default path (alt_b) should be kept"
+        assert "path_a" not in path_ids, "Non-default path (alt_a) should be dropped"
+
+        # Dilemma should have alt_b in explored, alt_a in unexplored
+        pruned_dilemma = pruned.dilemmas[0]
+        assert pruned_dilemma.explored == ["alt_b"]
+        assert "alt_a" in pruned_dilemma.unexplored
+
+    def test_pruning_without_graph_uses_explored_order(self) -> None:
+        """Without graph, pruning falls back to explored[0] as canonical."""
+        seed = SeedOutput(
+            dilemmas=[
+                DilemmaDecision(
+                    dilemma_id="t1",
+                    explored=["alt_a", "alt_b"],
+                    unexplored=[],
+                ),
+            ],
+            paths=[
+                Path(
+                    path_id="path_a",
+                    name="Path A",
+                    dilemma_id="t1",
+                    answer_id="alt_a",
+                    path_importance="major",
+                    description="desc",
+                ),
+                Path(
+                    path_id="path_b",
+                    name="Path B",
+                    dilemma_id="t1",
+                    answer_id="alt_b",
+                    path_importance="major",
+                    description="desc",
+                ),
+            ],
+            initial_beats=[
+                InitialBeat(
+                    beat_id="beat_1",
+                    summary="Test",
+                    paths=["path_a", "path_b"],
+                    dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
+                ),
+            ],
+        )
+
+        # Demote t1 WITHOUT graph - should keep alt_a (first in explored)
+        pruned = _prune_demoted_dilemmas(seed, {"t1"})
+
+        path_ids = [p.path_id for p in pruned.paths]
+        assert "path_a" in path_ids, "explored[0] should be kept without graph"
+        assert "path_b" not in path_ids
