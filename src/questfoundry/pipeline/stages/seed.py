@@ -428,7 +428,7 @@ class SeedStage:
         # LLM may have explored more dilemmas than the arc limit allows.
         # Instead of retrying, we programmatically select the best dilemmas.
         original_arc_count = compute_arc_count(result.artifact)
-        pruned_artifact = prune_to_arc_limit(result.artifact, max_arcs=16)
+        pruned_artifact = prune_to_arc_limit(result.artifact, max_arcs=16, graph=graph)
         final_arc_count = compute_arc_count(pruned_artifact)
 
         if original_arc_count != final_arc_count:
