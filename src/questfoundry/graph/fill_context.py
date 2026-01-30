@@ -481,19 +481,19 @@ def format_dream_vision(graph: Graph) -> str:
     """Extract DREAM vision context from graph.
 
     Args:
-        graph: Graph containing dream artifact data.
+        graph: Graph containing the vision node from DREAM stage.
 
     Returns:
         Formatted DREAM vision, or empty string if not found.
     """
-    dream_nodes = graph.get_nodes_by_type("dream")
-    if not dream_nodes:
+    vision_nodes = graph.get_nodes_by_type("vision")
+    if not vision_nodes:
         return ""
 
-    dream_data = next(iter(dream_nodes.values()))
+    dream_data = next(iter(vision_nodes.values()))
     lines: list[str] = []
 
-    for field in ("genre", "tone", "themes", "setting_sketch"):
+    for field in ("genre", "tone", "themes", "style_notes"):
         value = dream_data.get(field)
         if value:
             if isinstance(value, list):

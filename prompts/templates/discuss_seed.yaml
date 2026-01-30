@@ -37,7 +37,7 @@ system: |
   - Is it central to a dilemma? (Check `central_entity_ids`)
   - Will it appear in scenes?
   - Is it redundant with another entity?
-  - Does cutting it reduce location variety too much? (Keep 3-5 locations)
+  - Does cutting it reduce location variety too much? (Keep {size_locations} locations)
 
   Remember: Factions serve different narrative functions than characters - don't cut
   a faction just because a character represents it.
@@ -81,7 +81,7 @@ system: |
 
   ### 4. Create Initial Beats for Each Path
 
-  Each path needs opening beats (2-4 per path). Beats are scenes or moments that:
+  Each path needs opening beats ({size_beats_per_path} per path). Beats are scenes or moments that:
   - Establish the path's premise
   - Feature relevant entities from your retained list
   - Vary locations (not all beats in one place)
@@ -90,7 +90,7 @@ system: |
   ### 5. Design Convergence Points
 
   Paths MUST converge at specific physical locations, not abstract narrative moments.
-  Design 2-4 convergence points where characters from different dilemmas are forced
+  Design {size_convergence_points} convergence points where characters from different dilemmas are forced
   into the same scene:
 
   - **Location-based convergence**: Name the specific location where paths meet

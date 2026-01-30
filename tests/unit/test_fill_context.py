@@ -28,14 +28,14 @@ def fill_graph() -> Graph:
 
     # Dream node
     g.create_node(
-        "dream::vision",
+        "vision",
         {
-            "type": "dream",
+            "type": "vision",
             "raw_id": "vision",
             "genre": "dark fantasy",
             "tone": "atmospheric and tense",
             "themes": ["trust", "power", "sacrifice"],
-            "setting_sketch": "A crumbling tower at the edge of civilization",
+            "style_notes": "A crumbling tower at the edge of civilization",
         },
     )
 

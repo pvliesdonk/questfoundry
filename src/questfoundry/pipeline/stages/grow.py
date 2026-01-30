@@ -45,6 +45,7 @@ if TYPE_CHECKING:
     from questfoundry.graph.grow_algorithms import PassageSuccessor
     from questfoundry.models.grow import GapProposal
     from questfoundry.pipeline.gates import PhaseGateHook
+    from questfoundry.pipeline.size import SizeProfile
     from questfoundry.pipeline.stages.base import (
         AssistantMessageFn,
         LLMCallbackFn,
@@ -104,6 +105,7 @@ class GrowStage:
         self._provider_name: str | None = None
         self._serialize_model: BaseChatModel | None = None
         self._serialize_provider_name: str | None = None
+        self._size_profile: SizeProfile | None = None
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -191,7 +193,7 @@ class GrowStage:
         serialize_provider_name: str | None = None,
         resume_from: str | None = None,
         on_phase_progress: PhaseProgressFn | None = None,
-        **kwargs: Any,  # noqa: ARG002
+        **kwargs: Any,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the GROW stage.
 
@@ -235,6 +237,7 @@ class GrowStage:
         self._provider_name = provider_name
         self._serialize_model = serialize_model
         self._serialize_provider_name = serialize_provider_name
+        self._size_profile = kwargs.get("size_profile")
         log.info("stage_start", stage="grow")
 
         phases = self._phase_order()
@@ -1174,8 +1177,14 @@ class GrowStage:
         """
         from questfoundry.graph.grow_algorithms import enumerate_arcs
 
+        max_arc_count = None
+        if self._size_profile is not None:
+            # Safety ceiling: 4x the target max_arcs to allow for combinatorial
+            # expansion during enumeration before hitting the hard limit.
+            max_arc_count = self._size_profile.max_arcs * 4
+
         try:
-            arcs = enumerate_arcs(graph)
+            arcs = enumerate_arcs(graph, max_arc_count=max_arc_count)
         except ValueError as e:
             return GrowPhaseResult(
                 phase="enumerate_arcs",

@@ -24,7 +24,7 @@ system: |
   - **tense**: One of: past, present
   - **voice_register**: One of: formal, conversational, literary, sparse
   - **sentence_rhythm**: One of: varied, punchy, flowing
-  - **tone_words**: 3-5 adjectives describing the voice (e.g. terse, wry, melancholic, atmospheric)
+  - **tone_words**: {size_tone_words} adjectives describing the voice (e.g. terse, wry, melancholic, atmospheric)
   - **avoid_words**: Words/phrases to never use (e.g. suddenly, very, really)
   - **avoid_patterns**: Patterns to avoid (e.g. adverb-heavy dialogue tags, excessive internal monologue)
   - **exemplar_passages**: Leave empty (will be generated separately if needed)
