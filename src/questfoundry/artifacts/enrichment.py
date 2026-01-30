@@ -247,8 +247,14 @@ def _extract_choices(graph: Graph) -> list[dict[str, Any]]:
             "label": data.get("label", ""),
         }
         if from_edges:
+            if len(from_edges) > 1:
+                log.warning(
+                    "multiple_choice_from_edges", choice_id=choice_id, count=len(from_edges)
+                )
             entry["from_passage"] = from_edges[0]["to"]
         if to_edges:
+            if len(to_edges) > 1:
+                log.warning("multiple_choice_to_edges", choice_id=choice_id, count=len(to_edges))
             entry["to_passage"] = to_edges[0]["to"]
         if requires_edges:
             entry["requires"] = sorted(e["to"] for e in requires_edges)
@@ -268,6 +274,8 @@ def _extract_codewords(graph: Graph) -> list[dict[str, Any]]:
             "codeword_id": cw_id,
         }
         if tracks_edges:
+            if len(tracks_edges) > 1:
+                log.warning("multiple_tracks_edges", codeword_id=cw_id, count=len(tracks_edges))
             entry["tracks"] = tracks_edges[0]["to"]
         if grants_edges:
             entry["granted_by"] = sorted(e["from"] for e in grants_edges)
