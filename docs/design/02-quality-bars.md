@@ -136,7 +136,7 @@ gateways:
 - POV consistency (maintained per voice document)
 - Tense consistency (maintained per voice document)
 - Character voice consistency
-- Tone matches dream vision specification
+- Tone matches voice document
 - Voice document adherence (FILL Phase 0 establishes voice; Phase 2 reviews)
 
 **Automation**: LLM-based (FILL Phase 2 review + Phase 3 revision cycle)
@@ -432,6 +432,6 @@ qf validate --final
 
 ## See Also
 
-- [03-grow-stage-specification.md](./03-grow-stage-specification.md) — GROW validation
+- [GROW Algorithm Specification](./procedures/grow.md) — GROW validation and algorithm details
 - [07-design-principles.md](./07-design-principles.md) — Underlying principles
 - [08-research-foundation.md](./08-research-foundation.md) — Research basis for bars
