@@ -590,12 +590,36 @@ class TestGenerationOrder:
         stage = FillStage()
         order = stage._get_generation_order(graph)
 
-        # p1 has prose and is not flagged — skipped in branch pass
-        # p2 has no prose — appears once from spine, once from branch
+        # Shared passages appear exactly once — deduped by seen set
+        # p1 filled from spine, p2 unfilled from spine, both skipped in branch
         passage_ids = [pid for pid, _ in order]
         assert passage_ids.count("passage::p1") == 1
-        # p2 is unfilled: appears in spine pass, then again in branch (no prose to skip)
-        assert passage_ids.count("passage::p2") == 2
+        assert passage_ids.count("passage::p2") == 1
+        assert len(order) == 2
+
+    def test_incompatible_flagged_regenerated_in_branch(self) -> None:
+        graph = _make_prose_graph()
+        # Add branch arc sharing beats with spine
+        graph.create_node(
+            "arc::branch_1_0",
+            {
+                "type": "arc",
+                "raw_id": "branch_1_0",
+                "arc_type": "branch",
+                "paths": ["path::alt"],
+                "sequence": ["beat::b1", "beat::b2"],
+            },
+        )
+        # p1 has prose but is flagged incompatible — should re-generate in branch
+        graph.update_node("passage::p1", prose="Filled.", flag="incompatible_states")
+        stage = FillStage()
+        order = stage._get_generation_order(graph)
+
+        passage_ids = [pid for pid, _ in order]
+        # p1 appears twice: spine + branch (flagged incompatible)
+        assert passage_ids.count("passage::p1") == 2
+        # p2 appears once (deduped, no flag)
+        assert passage_ids.count("passage::p2") == 1
 
 
 class TestSkeletonPhases:

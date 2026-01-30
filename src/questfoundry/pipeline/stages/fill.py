@@ -505,15 +505,13 @@ class FillStage:
                 continue
             for pid in get_arc_passage_order(graph, arc_id):
                 if pid in seen:
-                    # Re-generate shared passages only if flagged incompatible
+                    # Re-generate only if flagged incompatible_states
                     pnode = graph.get_node(pid)
-                    if pnode and pnode.get("prose") and pnode.get("flag") != "incompatible_states":
-                        continue
-                    # Flagged or unfilled shared passage — regenerate under this arc
-                    order.append((pid, arc_id))
-                else:
-                    seen.add(pid)
-                    order.append((pid, arc_id))
+                    if pnode and pnode.get("flag") == "incompatible_states":
+                        order.append((pid, arc_id))
+                    continue
+                seen.add(pid)
+                order.append((pid, arc_id))
 
         return order
 
@@ -596,8 +594,10 @@ class FillStage:
                 )
             else:
                 graph.update_node(passage_id, prose=passage_output.prose)
-                if passage_output.prose:
-                    passages_filled += 1
+                if not passage_output.prose:
+                    log.warning("empty_prose_returned", passage_id=passage_id)
+                    continue
+                passages_filled += 1
 
                 # Apply entity updates
                 for update in passage_output.entity_updates:
