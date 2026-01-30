@@ -1,0 +1,306 @@
+"""Tests for FILL stage skeleton."""
+
+from __future__ import annotations
+
+from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
+
+import pytest
+
+from questfoundry.graph.graph import Graph
+from questfoundry.models.fill import FillPhaseResult
+from questfoundry.pipeline.gates import AutoApprovePhaseGate, PhaseGateHook
+from questfoundry.pipeline.stages.fill import (
+    FillStage,
+    FillStageError,
+    create_fill_stage,
+    fill_stage,
+)
+
+
+@pytest.fixture
+def grow_graph(tmp_path: Path) -> Graph:
+    """Create a minimal GROW-completed graph."""
+    g = Graph.empty()
+    g.set_last_stage("grow")
+
+    # Minimal passage for counting
+    g.create_node(
+        "passage::p1",
+        {"type": "passage", "raw_id": "p1", "from_beat": "", "summary": "test"},
+    )
+
+    g.save(tmp_path / "graph.json")
+    return g
+
+
+@pytest.fixture
+def mock_model() -> MagicMock:
+    """Create a mock LangChain model."""
+    return MagicMock()
+
+
+class TestFillStageInit:
+    def test_default_gate(self) -> None:
+        stage = FillStage()
+        assert isinstance(stage.gate, AutoApprovePhaseGate)
+
+    def test_custom_gate(self) -> None:
+        gate = MagicMock(spec=PhaseGateHook)
+        stage = FillStage(gate=gate)
+        assert stage.gate is gate
+
+    def test_name(self) -> None:
+        assert FillStage.name == "fill"
+
+    def test_project_path(self) -> None:
+        stage = FillStage(project_path=Path("/tmp/test"))
+        assert stage.project_path == Path("/tmp/test")
+
+
+class TestFillStageExecute:
+    @pytest.mark.asyncio
+    async def test_requires_project_path(self, mock_model: MagicMock) -> None:
+        stage = FillStage()
+        with pytest.raises(FillStageError, match="project_path is required"):
+            await stage.execute(mock_model, "")
+
+    @pytest.mark.asyncio
+    async def test_requires_grow_completed(self, mock_model: MagicMock, tmp_path: Path) -> None:
+        g = Graph.empty()
+        g.set_last_stage("seed")
+        g.save(tmp_path / "graph.json")
+
+        stage = FillStage(project_path=tmp_path)
+        with pytest.raises(FillStageError, match="FILL requires completed GROW"):
+            await stage.execute(mock_model, "")
+
+    @pytest.mark.asyncio
+    async def test_skeleton_runs_all_phases(
+        self,
+        mock_model: MagicMock,
+        grow_graph: Graph,  # noqa: ARG002
+        tmp_path: Path,
+    ) -> None:
+        stage = FillStage(project_path=tmp_path)
+        result_dict, llm_calls, tokens = await stage.execute(mock_model, "")
+
+        # All skeleton phases return "skipped"
+        phases = result_dict["phases_completed"]
+        assert len(phases) == 4
+        assert all(p["status"] == "skipped" for p in phases)
+        assert [p["phase"] for p in phases] == ["voice", "generate", "review", "revision"]
+
+        # No LLM calls in skeleton
+        assert llm_calls == 0
+        assert tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_sets_last_stage(
+        self,
+        mock_model: MagicMock,
+        grow_graph: Graph,  # noqa: ARG002
+        tmp_path: Path,
+    ) -> None:
+        stage = FillStage(project_path=tmp_path)
+        await stage.execute(mock_model, "")
+
+        saved = Graph.load(tmp_path)
+        assert saved.get_last_stage() == "fill"
+
+    @pytest.mark.asyncio
+    async def test_resume_from_phase(
+        self,
+        mock_model: MagicMock,
+        grow_graph: Graph,  # noqa: ARG002
+        tmp_path: Path,
+    ) -> None:
+        stage = FillStage(project_path=tmp_path)
+
+        # First run to create checkpoints
+        await stage.execute(mock_model, "")
+
+        # Resume from review phase
+        result_dict, _, _ = await stage.execute(
+            mock_model, "", resume_from="review", project_path=tmp_path
+        )
+
+        # Should only have review and revision phases
+        phases = result_dict["phases_completed"]
+        assert len(phases) == 2
+        assert phases[0]["phase"] == "review"
+        assert phases[1]["phase"] == "revision"
+
+    @pytest.mark.asyncio
+    async def test_resume_invalid_phase(
+        self,
+        mock_model: MagicMock,
+        grow_graph: Graph,  # noqa: ARG002
+        tmp_path: Path,
+    ) -> None:
+        stage = FillStage(project_path=tmp_path)
+        with pytest.raises(FillStageError, match="Unknown phase"):
+            await stage.execute(mock_model, "", resume_from="nonexistent", project_path=tmp_path)
+
+    @pytest.mark.asyncio
+    async def test_gate_reject_rolls_back(
+        self,
+        mock_model: MagicMock,
+        grow_graph: Graph,  # noqa: ARG002
+        tmp_path: Path,
+    ) -> None:
+        gate = MagicMock()
+        gate.on_phase_complete = AsyncMock(return_value="reject")
+
+        stage = FillStage(project_path=tmp_path, gate=gate)
+        result_dict, _, _ = await stage.execute(mock_model, "")
+
+        # Should stop after first phase (voice) is rejected
+        phases = result_dict["phases_completed"]
+        assert len(phases) == 1
+        assert phases[0]["phase"] == "voice"
+
+        # Verify rollback was persisted — last_stage should remain "grow"
+        saved = Graph.load(tmp_path)
+        assert saved.get_last_stage() == "grow"
+
+    @pytest.mark.asyncio
+    async def test_phase_failure_stops_execution(
+        self,
+        mock_model: MagicMock,
+        grow_graph: Graph,  # noqa: ARG002
+        tmp_path: Path,
+    ) -> None:
+        stage = FillStage(project_path=tmp_path)
+        stage._phase_0_voice = AsyncMock(  # type: ignore[method-assign]
+            return_value=FillPhaseResult(phase="voice", status="failed", detail="test error")
+        )
+        result_dict, _, _ = await stage.execute(mock_model, "")
+
+        # Should stop after voice phase fails
+        phases = result_dict["phases_completed"]
+        assert len(phases) == 1
+        assert phases[0]["status"] == "failed"
+
+        # last_stage should remain "grow" (not promoted to "fill")
+        saved = Graph.load(tmp_path)
+        assert saved.get_last_stage() == "grow"
+
+    @pytest.mark.asyncio
+    async def test_progress_callback(
+        self,
+        mock_model: MagicMock,
+        grow_graph: Graph,  # noqa: ARG002
+        tmp_path: Path,
+    ) -> None:
+        progress_calls: list[tuple[str, str, str | None]] = []
+
+        def on_progress(phase: str, status: str, detail: str | None) -> None:
+            progress_calls.append((phase, status, detail))
+
+        stage = FillStage(project_path=tmp_path)
+        await stage.execute(mock_model, "", on_phase_progress=on_progress)
+
+        assert len(progress_calls) == 4
+        assert progress_calls[0][0] == "voice"
+
+    @pytest.mark.asyncio
+    async def test_project_path_override(
+        self,
+        mock_model: MagicMock,
+        grow_graph: Graph,  # noqa: ARG002
+        tmp_path: Path,
+    ) -> None:
+        stage = FillStage(project_path=Path("/nonexistent"))
+        # Override with tmp_path
+        result_dict, _, _ = await stage.execute(mock_model, "", project_path=tmp_path)
+        assert result_dict["passages_filled"] == 0
+
+
+class TestPhaseOrder:
+    def test_four_phases(self) -> None:
+        stage = FillStage()
+        phases = stage._phase_order()
+        assert len(phases) == 4
+
+    def test_phase_names(self) -> None:
+        stage = FillStage()
+        names = [name for _, name in stage._phase_order()]
+        assert names == ["voice", "generate", "review", "revision"]
+
+
+class TestCheckpointing:
+    def test_checkpoint_path(self) -> None:
+        stage = FillStage()
+        path = stage._get_checkpoint_path(Path("/proj"), "voice")
+        assert path == Path("/proj/snapshots/fill-pre-voice.json")
+
+    def test_save_and_load_checkpoint(self, tmp_path: Path) -> None:
+        stage = FillStage()
+        g = Graph.empty()
+        g.set_last_stage("grow")
+
+        stage._save_checkpoint(g, tmp_path, "voice")
+        loaded = stage._load_checkpoint(tmp_path, "voice")
+        assert loaded.get_last_stage() == "grow"
+
+    def test_load_missing_checkpoint(self, tmp_path: Path) -> None:
+        stage = FillStage()
+        with pytest.raises(FillStageError, match="No checkpoint found"):
+            stage._load_checkpoint(tmp_path, "nonexistent")
+
+
+class TestSkeletonPhases:
+    @pytest.mark.asyncio
+    async def test_phase_0_voice_skipped(self) -> None:
+        stage = FillStage()
+        result = await stage._phase_0_voice(Graph.empty(), MagicMock())
+        assert result.phase == "voice"
+        assert result.status == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_phase_1_generate_skipped(self) -> None:
+        stage = FillStage()
+        result = await stage._phase_1_generate(Graph.empty(), MagicMock())
+        assert result.phase == "generate"
+        assert result.status == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_phase_2_review_skipped(self) -> None:
+        stage = FillStage()
+        result = await stage._phase_2_review(Graph.empty(), MagicMock())
+        assert result.phase == "review"
+        assert result.status == "skipped"
+
+    @pytest.mark.asyncio
+    async def test_phase_3_revision_skipped(self) -> None:
+        stage = FillStage()
+        result = await stage._phase_3_revision(Graph.empty(), MagicMock())
+        assert result.phase == "revision"
+        assert result.status == "skipped"
+
+
+class TestModuleLevelHelpers:
+    def test_fill_stage_singleton(self) -> None:
+        assert fill_stage.name == "fill"
+        assert isinstance(fill_stage, FillStage)
+
+    def test_create_fill_stage_defaults(self) -> None:
+        stage = create_fill_stage()
+        assert isinstance(stage, FillStage)
+        assert stage.project_path is None
+        assert isinstance(stage.gate, AutoApprovePhaseGate)
+
+    def test_create_fill_stage_with_args(self, tmp_path: Path) -> None:
+        gate = MagicMock(spec=PhaseGateHook)
+        stage = create_fill_stage(project_path=tmp_path, gate=gate)
+        assert stage.project_path == tmp_path
+        assert stage.gate is gate
+
+
+class TestFillPhaseResultInheritance:
+    def test_fill_phase_result_is_phase_result(self) -> None:
+        from questfoundry.models.pipeline import PhaseResult
+
+        result = FillPhaseResult(phase="voice", status="completed")
+        assert isinstance(result, PhaseResult)
