@@ -171,6 +171,82 @@ def _enrich_dilemmas(graph: Graph, dilemma_decisions: list[dict[str, Any]]) -> l
     return enriched_dilemmas
 
 
+def extract_fill_artifact(graph: Graph) -> dict[str, Any]:
+    """Extract FILL prose data from graph into a human-readable artifact.
+
+    Reads voice document, passage prose, and entity updates from the graph
+    to build a flat artifact dict suitable for YAML export.
+
+    Args:
+        graph: Graph after FILL phases have completed.
+
+    Returns:
+        Dict with voice_document, passages (with prose snippets),
+        and review_summary.
+    """
+    return {
+        "voice_document": _extract_voice_document(graph),
+        "passages": _extract_filled_passages(graph),
+        "review_summary": _extract_review_summary(graph),
+    }
+
+
+# ---------------------------------------------------------------------------
+# FILL artifact extraction helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_voice_document(graph: Graph) -> dict[str, Any]:
+    """Extract the voice document from graph."""
+    voice_nodes = graph.get_nodes_by_type("voice")
+    if not voice_nodes:
+        return {}
+
+    voice_data = next(iter(voice_nodes.values()))
+    return {k: v for k, v in voice_data.items() if k not in ("type", "raw_id") and v is not None}
+
+
+def _extract_filled_passages(graph: Graph) -> list[dict[str, Any]]:
+    """Extract passages with their prose (truncated for readability)."""
+    passage_nodes = graph.get_nodes_by_type("passage")
+    passages = []
+    for passage_id in sorted(passage_nodes):
+        data = passage_nodes[passage_id]
+        prose = data.get("prose", "")
+        if not prose:
+            continue
+        entry: dict[str, Any] = {
+            "passage_id": passage_id,
+            "from_beat": data.get("from_beat", ""),
+        }
+        # Truncate prose to first 200 chars for artifact readability
+        if len(prose) > 200:
+            entry["prose_snippet"] = prose[:200] + "..."
+        else:
+            entry["prose_snippet"] = prose
+        entry["prose_length"] = len(prose)
+        if flag := data.get("flag"):
+            entry["flag"] = flag
+        passages.append(entry)
+    return passages
+
+
+def _extract_review_summary(graph: Graph) -> dict[str, Any]:
+    """Summarize review results from passage flags."""
+    passage_nodes = graph.get_nodes_by_type("passage")
+    total = len(passage_nodes)
+    filled = sum(1 for p in passage_nodes.values() if p.get("prose"))
+    flagged = sum(1 for p in passage_nodes.values() if p.get("flag"))
+    reviewed = sum(1 for p in passage_nodes.values() if p.get("review_flags") is not None)
+
+    return {
+        "total_passages": total,
+        "passages_with_prose": filled,
+        "passages_flagged": flagged,
+        "passages_reviewed": reviewed,
+    }
+
+
 # ---------------------------------------------------------------------------
 # GROW artifact extraction helpers
 # ---------------------------------------------------------------------------
