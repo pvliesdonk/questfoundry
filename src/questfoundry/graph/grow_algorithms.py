@@ -267,7 +267,7 @@ def topological_sort_beats(graph: Graph, beat_ids: list[str]) -> list[str]:
 # ---------------------------------------------------------------------------
 
 
-def enumerate_arcs(graph: Graph) -> list[Arc]:
+def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Arc]:
     """Enumerate all arcs from the Cartesian product of paths across dilemmas.
 
     For each dilemma, collects its paths. Takes the Cartesian product across
@@ -279,12 +279,14 @@ def enumerate_arcs(graph: Graph) -> list[Arc]:
 
     Args:
         graph: Graph containing dilemma, path, and beat nodes.
+        max_arc_count: Safety ceiling for arc count. Defaults to
+            ``_MAX_ARC_COUNT`` (64) if not provided.
 
     Returns:
         List of Arc models, spine first, then branches sorted by ID.
 
     Raises:
-        None - returns empty list if no dilemmas/paths exist.
+        ValueError: If arc count exceeds the limit.
     """
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
     path_nodes = graph.get_nodes_by_type("path")
@@ -346,10 +348,11 @@ def enumerate_arcs(graph: Graph) -> list[Arc]:
         )
 
     # Check combinatorial limit
-    if len(arcs) > _MAX_ARC_COUNT:
+    limit = max_arc_count if max_arc_count is not None else _MAX_ARC_COUNT
+    if len(arcs) > limit:
         # This will be caught by the phase and raised as GrowMutationError
         raise ValueError(
-            f"Arc count ({len(arcs)}) exceeds limit of {_MAX_ARC_COUNT}. "
+            f"Arc count ({len(arcs)}) exceeds limit of {limit}. "
             f"Reduce the number of dilemmas or paths."
         )
 

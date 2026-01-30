@@ -242,6 +242,7 @@ class SeedStage:
         summarize_provider_name: str | None = None,  # noqa: ARG002 - for future use
         serialize_provider_name: str | None = None,
         max_outer_retries: int = 2,
+        **kwargs: Any,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the SEED stage using the 3-phase pattern.
 
@@ -428,7 +429,9 @@ class SeedStage:
         # LLM may have explored more dilemmas than the arc limit allows.
         # Instead of retrying, we programmatically select the best dilemmas.
         original_arc_count = compute_arc_count(result.artifact)
-        pruned_artifact = prune_to_arc_limit(result.artifact, max_arcs=16, graph=graph)
+        size_profile = kwargs.get("size_profile")
+        max_arcs = size_profile.max_arcs if size_profile else 16
+        pruned_artifact = prune_to_arc_limit(result.artifact, max_arcs=max_arcs, graph=graph)
         final_arc_count = compute_arc_count(pruned_artifact)
 
         if original_arc_count != final_arc_count:
@@ -450,7 +453,8 @@ class SeedStage:
 
         # Warn if arc count is too low (linear story instead of IF)
         # This indicates the LLM didn't generate enough branching content
-        if final_arc_count < 4:
+        min_arcs_warning = max(2, max_arcs // 4)
+        if final_arc_count < min_arcs_warning:
             dilemmas_fully_explored = sum(
                 1 for d in artifact_data.get("dilemmas", []) if len(d.get("explored", [])) >= 2
             )
