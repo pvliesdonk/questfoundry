@@ -480,8 +480,7 @@ def _backfill_explored_from_paths(output: dict[str, Any]) -> None:
     # Backfill empty explored arrays
     for dilemma in output.get("dilemmas", []):
         explored = dilemma.get("explored", [])
-        considered = dilemma.get("considered", [])
-        if not explored and not considered:
+        if not explored:
             dilemma_id = strip_scope_prefix(dilemma.get("dilemma_id", ""))
             path_answer_ids = path_answers.get(dilemma_id, set())
             if path_answer_ids:

@@ -123,7 +123,7 @@ def score_dilemma(seed_output: SeedOutput, dilemma_id: str) -> ScoredDilemma:
 
     canonical_path, noncanonical_path = _get_paths_for_dilemma(seed_output, dilemma_id)
 
-    # is_fully_explored is derived from actual path existence, not from considered field
+    # is_fully_explored is derived from actual path existence, not from explored field
     # A dilemma is fully explored when BOTH canonical and non-canonical paths exist
     is_fully_explored = canonical_path is not None and noncanonical_path is not None
 

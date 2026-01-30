@@ -223,7 +223,7 @@ def compute_arc_count(seed_output: SeedOutput) -> int:
     Arc count = 2^n where n = dilemmas with 2+ paths (fully developed).
 
     IMPORTANT: This is derived from actual path existence, NOT from the
-    `considered` field. The `considered` field records LLM intent; actual
+    `explored` field. The `explored` field records LLM intent; actual
     path existence determines what will become story arcs.
 
     Args:

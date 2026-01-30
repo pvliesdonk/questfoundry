@@ -3356,8 +3356,12 @@ class TestBackfillExploredFromPaths:
 
         assert output["dilemmas"][0]["explored"] == ["option_a"]
 
-    def test_supports_old_considered_field(self) -> None:
-        """Checks both 'explored' and 'considered' for existing values."""
+    def test_backfills_when_only_old_considered_key_present(self) -> None:
+        """Old 'considered' key is ignored; backfill uses 'explored' only.
+
+        Pydantic migration handles considered→explored at the model layer.
+        The backfill function only checks 'explored'.
+        """
         output = {
             "dilemmas": [
                 {"dilemma_id": "choice_a_or_b", "considered": ["existing"]},
@@ -3373,9 +3377,8 @@ class TestBackfillExploredFromPaths:
 
         _backfill_explored_from_paths(output)
 
-        # considered is not empty, so no backfill
-        assert "explored" not in output["dilemmas"][0]
-        assert output["dilemmas"][0]["considered"] == ["existing"]
+        # 'explored' key absent means backfill triggers (old 'considered' ignored)
+        assert output["dilemmas"][0]["explored"] == ["option_a"]
 
     def test_no_paths_no_backfill(self) -> None:
         """Empty paths list does not modify dilemmas."""
