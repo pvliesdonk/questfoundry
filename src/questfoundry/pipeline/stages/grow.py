@@ -304,6 +304,7 @@ class GrowStage:
             if on_phase_progress is not None:
                 on_phase_progress(phase_name, result.status, result.detail)
 
+        graph.set_last_stage("grow")
         graph.save(resolved_path / "graph.json")
 
         # Count created nodes
@@ -330,6 +331,13 @@ class GrowStage:
             phases_completed=phase_results,
             spine_arc_id=spine_arc_id,
         )
+
+        # Write human-readable artifact (story data extracted from graph)
+        from questfoundry.artifacts.enrichment import extract_grow_artifact
+        from questfoundry.artifacts.writer import ArtifactWriter
+
+        artifact_data = extract_grow_artifact(graph)
+        ArtifactWriter(resolved_path).write(artifact_data, "grow")
 
         log.info(
             "stage_complete",
@@ -1370,6 +1378,7 @@ class GrowStage:
                     "from_beat": beat_id,
                     "summary": beat_data.get("summary", ""),
                     "entities": beat_data.get("entities", []),
+                    "prose": None,
                 },
             )
             graph.add_edge("passage_from", passage_id, beat_id)

@@ -20,6 +20,27 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
+def extract_grow_artifact(graph: Graph) -> dict[str, Any]:
+    """Extract GROW story data from graph into a human-readable artifact.
+
+    Reads arc, beat, passage, choice, and codeword nodes plus their
+    connecting edges to build a flat artifact dict suitable for YAML export.
+
+    Args:
+        graph: Graph after GROW phases have completed.
+
+    Returns:
+        Dict with arcs, beats, passages, choices, codewords lists.
+    """
+    return {
+        "arcs": _extract_arcs(graph),
+        "beats": _extract_beats(graph),
+        "passages": _extract_passages(graph),
+        "choices": _extract_choices(graph),
+        "codewords": _extract_codewords(graph),
+    }
+
+
 def enrich_seed_artifact(graph: Graph, artifact: dict[str, Any]) -> dict[str, Any]:
     """Enrich SEED artifact with BRAINSTORM entity and dilemma details.
 
@@ -148,3 +169,109 @@ def _enrich_dilemmas(graph: Graph, dilemma_decisions: list[dict[str, Any]]) -> l
     )
 
     return enriched_dilemmas
+
+
+# ---------------------------------------------------------------------------
+# GROW artifact extraction helpers
+# ---------------------------------------------------------------------------
+
+
+def _extract_arcs(graph: Graph) -> list[dict[str, Any]]:
+    """Extract arc nodes with their beat sequences from arc_contains edges."""
+    arc_nodes = graph.get_nodes_by_type("arc")
+    arcs = []
+    for arc_id in sorted(arc_nodes):
+        data = arc_nodes[arc_id]
+        # Collect beats in this arc via arc_contains edges
+        contains_edges = graph.get_edges(from_id=arc_id, edge_type="arc_contains")
+        beat_sequence = sorted(e["to"] for e in contains_edges)
+        entry: dict[str, Any] = {
+            "arc_id": arc_id,
+            "arc_type": data.get("arc_type", "branch"),
+            "beat_sequence": beat_sequence,
+        }
+        arcs.append(entry)
+    return arcs
+
+
+def _extract_beats(graph: Graph) -> list[dict[str, Any]]:
+    """Extract beat nodes with path membership from belongs_to edges."""
+    beat_nodes = graph.get_nodes_by_type("beat")
+    beats = []
+    for beat_id in sorted(beat_nodes):
+        data = beat_nodes[beat_id]
+        belongs_edges = graph.get_edges(from_id=beat_id, edge_type="belongs_to")
+        belongs_to = sorted(e["to"] for e in belongs_edges)
+        entry: dict[str, Any] = {
+            "beat_id": beat_id,
+            "summary": data.get("summary", ""),
+        }
+        if scene_type := data.get("scene_type"):
+            entry["scene_type"] = scene_type
+        if belongs_to:
+            entry["belongs_to"] = belongs_to
+        if entities := data.get("entities"):
+            entry["entities"] = entities
+        beats.append(entry)
+    return beats
+
+
+def _extract_passages(graph: Graph) -> list[dict[str, Any]]:
+    """Extract passage nodes with their source beat."""
+    passage_nodes = graph.get_nodes_by_type("passage")
+    passages = []
+    for passage_id in sorted(passage_nodes):
+        data = passage_nodes[passage_id]
+        entry: dict[str, Any] = {
+            "passage_id": passage_id,
+            "from_beat": data.get("from_beat", ""),
+            "summary": data.get("summary", ""),
+        }
+        if entities := data.get("entities"):
+            entry["entities"] = entities
+        passages.append(entry)
+    return passages
+
+
+def _extract_choices(graph: Graph) -> list[dict[str, Any]]:
+    """Extract choice nodes with from/to passages from edges."""
+    choice_nodes = graph.get_nodes_by_type("choice")
+    choices = []
+    for choice_id in sorted(choice_nodes):
+        data = choice_nodes[choice_id]
+        from_edges = graph.get_edges(from_id=choice_id, edge_type="choice_from")
+        to_edges = graph.get_edges(from_id=choice_id, edge_type="choice_to")
+        requires_edges = graph.get_edges(from_id=choice_id, edge_type="requires")
+        entry: dict[str, Any] = {
+            "choice_id": choice_id,
+            "label": data.get("label", ""),
+        }
+        if from_edges:
+            entry["from_passage"] = from_edges[0]["to"]
+        if to_edges:
+            entry["to_passage"] = to_edges[0]["to"]
+        if requires_edges:
+            entry["requires"] = sorted(e["to"] for e in requires_edges)
+        choices.append(entry)
+    return choices
+
+
+def _extract_codewords(graph: Graph) -> list[dict[str, Any]]:
+    """Extract codeword nodes with tracks and granted_by relationships."""
+    codeword_nodes = graph.get_nodes_by_type("codeword")
+    codewords = []
+    for cw_id in sorted(codeword_nodes):
+        data = codeword_nodes[cw_id]
+        tracks_edges = graph.get_edges(from_id=cw_id, edge_type="tracks")
+        grants_edges = graph.get_edges(to_id=cw_id, edge_type="grants")
+        entry: dict[str, Any] = {
+            "codeword_id": cw_id,
+        }
+        if tracks_edges:
+            entry["tracks"] = tracks_edges[0]["to"]
+        if grants_edges:
+            entry["granted_by"] = sorted(e["from"] for e in grants_edges)
+        if raw_id := data.get("raw_id"):
+            entry["raw_id"] = raw_id
+        codewords.append(entry)
+    return codewords
