@@ -140,11 +140,10 @@ class TestFillStageExecute:
         _mock_implemented_phases(stage)
         result_dict, llm_calls, tokens = await stage.execute(mock_model, "")
 
-        phases = result_dict["phases_completed"]
-        assert len(phases) == 4
-        assert [p["phase"] for p in phases] == ["voice", "generate", "review", "revision"]
-        # All phases are completed
-        assert all(p["status"] == "completed" for p in phases)
+        # Result is artifact data (from extract_fill_artifact), not FillResult telemetry
+        assert "voice_document" in result_dict
+        assert "passages" in result_dict
+        assert "review_summary" in result_dict
 
         # Sum of all phase LLM calls (1 + 2 + 1 + 0 = 4)
         assert llm_calls == 4
@@ -177,16 +176,16 @@ class TestFillStageExecute:
         # First run to create checkpoints
         await stage.execute(mock_model, "")
 
-        # Resume from review phase
-        result_dict, _, _ = await stage.execute(
+        # Resume from review phase — only review + revision run
+        result_dict, llm_calls, _ = await stage.execute(
             mock_model, "", resume_from="review", project_path=tmp_path
         )
 
-        # Should only have review and revision phases
-        phases = result_dict["phases_completed"]
-        assert len(phases) == 2
-        assert phases[0]["phase"] == "review"
-        assert phases[1]["phase"] == "revision"
+        # Should return artifact data
+        assert "voice_document" in result_dict
+
+        # Only review (1 call) + revision (0 calls) = 1 LLM call
+        assert llm_calls == 1
 
     @pytest.mark.asyncio
     async def test_resume_invalid_phase(
@@ -211,12 +210,10 @@ class TestFillStageExecute:
 
         stage = FillStage(project_path=tmp_path, gate=gate)
         _mock_implemented_phases(stage)
-        result_dict, _, _ = await stage.execute(mock_model, "")
+        _, llm_calls, _ = await stage.execute(mock_model, "")
 
-        # Should stop after first phase (voice) is rejected
-        phases = result_dict["phases_completed"]
-        assert len(phases) == 1
-        assert phases[0]["phase"] == "voice"
+        # Should stop after first phase (voice) is rejected — only 1 LLM call
+        assert llm_calls == 1
 
         # Verify rollback was persisted — last_stage should remain "grow"
         saved = Graph.load(tmp_path)
@@ -233,12 +230,10 @@ class TestFillStageExecute:
         stage._phase_0_voice = AsyncMock(  # type: ignore[method-assign]
             return_value=FillPhaseResult(phase="voice", status="failed", detail="test error")
         )
-        result_dict, _, _ = await stage.execute(mock_model, "")
+        _, llm_calls, _ = await stage.execute(mock_model, "")
 
-        # Should stop after voice phase fails
-        phases = result_dict["phases_completed"]
-        assert len(phases) == 1
-        assert phases[0]["status"] == "failed"
+        # Should stop after voice phase fails — 0 LLM calls (failed immediately)
+        assert llm_calls == 0
 
         # last_stage should remain "grow" (not promoted to "fill")
         saved = Graph.load(tmp_path)
@@ -274,7 +269,7 @@ class TestFillStageExecute:
         _mock_implemented_phases(stage)
         # Override with tmp_path
         result_dict, _, _ = await stage.execute(mock_model, "", project_path=tmp_path)
-        assert result_dict["passages_filled"] == 0
+        assert "voice_document" in result_dict
 
 
 class TestPhaseOrder:

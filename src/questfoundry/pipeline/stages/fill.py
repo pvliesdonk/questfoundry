@@ -43,7 +43,6 @@ from questfoundry.models.fill import (
     FillPhase1Output,
     FillPhase2Output,
     FillPhaseResult,
-    FillResult,
 )
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
@@ -206,7 +205,7 @@ class FillStage:
             **kwargs: Additional keyword arguments (ignored).
 
         Returns:
-            Tuple of (FillResult dict, total_llm_calls, total_tokens).
+            Tuple of (artifact_data dict, total_llm_calls, total_tokens).
 
         Raises:
             FillStageError: If project_path is not provided or GROW not completed.
@@ -292,27 +291,23 @@ class FillStage:
             graph.set_last_stage("fill")
             graph.save(resolved_path / "graph.json")
 
-        # Count results
-        passage_nodes = graph.get_nodes_by_type("passage")
-        passages_filled = sum(1 for p in passage_nodes.values() if p.get("prose"))
-        passages_flagged = sum(
-            1 for p in passage_nodes.values() if p.get("flag") == "incompatible_states"
-        )
+        # Write human-readable artifact (story data extracted from graph)
+        from questfoundry.artifacts.enrichment import extract_fill_artifact
+        from questfoundry.artifacts.writer import ArtifactWriter
 
-        fill_result = FillResult(
-            passages_filled=passages_filled,
-            passages_flagged=passages_flagged,
-            phases_completed=phase_results,
-        )
+        artifact_data = extract_fill_artifact(graph)
+        ArtifactWriter(resolved_path).write(artifact_data, "fill")
 
         log.info(
             "stage_complete",
             stage="fill",
-            passages_filled=fill_result.passages_filled,
-            passages_flagged=fill_result.passages_flagged,
+            passages_with_prose=artifact_data.get("review_summary", {}).get(
+                "passages_with_prose", 0
+            ),
+            passages_flagged=artifact_data.get("review_summary", {}).get("passages_flagged", 0),
         )
 
-        return fill_result.model_dump(), total_llm_calls, total_tokens
+        return artifact_data, total_llm_calls, total_tokens
 
     # -------------------------------------------------------------------------
     # LLM helper
