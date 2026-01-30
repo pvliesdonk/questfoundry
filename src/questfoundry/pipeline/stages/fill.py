@@ -24,8 +24,13 @@ from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
+from questfoundry.graph.fill_context import (
+    format_dream_vision,
+    format_grow_summary,
+    format_scene_types_summary,
+)
 from questfoundry.graph.graph import Graph
-from questfoundry.models.fill import FillPhaseResult, FillResult
+from questfoundry.models.fill import FillPhase0Output, FillPhaseResult, FillResult
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
@@ -417,14 +422,48 @@ class FillStage:
 
     async def _phase_0_voice(
         self,
-        graph: Graph,  # noqa: ARG002
-        model: BaseChatModel,  # noqa: ARG002
+        graph: Graph,
+        model: BaseChatModel,
     ) -> FillPhaseResult:
         """Phase 0: Voice determination.
 
-        Establishes the voice document governing all prose generation.
+        Reads DREAM vision and GROW structure, calls LLM to produce a
+        VoiceDocument, and stores it as a ``voice`` node in the graph.
         """
-        return FillPhaseResult(phase="voice", status="skipped", detail="not yet implemented")
+        context = {
+            "dream_vision": format_dream_vision(graph),
+            "grow_summary": format_grow_summary(graph),
+            "scene_types_summary": format_scene_types_summary(graph),
+        }
+
+        output, llm_calls, tokens = await self._fill_llm_call(
+            model,
+            "fill_phase0_voice",
+            context,
+            FillPhase0Output,
+        )
+
+        # Store the voice document as a graph node
+        voice_data: dict[str, Any] = {
+            "type": "voice",
+            "raw_id": "voice",
+            **output.voice.model_dump(),
+        }
+        graph.create_node("voice::voice", voice_data)
+        log.info(
+            "voice_document_created",
+            pov=output.voice.pov,
+            tense=output.voice.tense,
+            register=output.voice.voice_register,
+        )
+
+        return FillPhaseResult(
+            phase="voice",
+            status="completed",
+            detail=f"pov={output.voice.pov}, tense={output.voice.tense}, register={output.voice.voice_register}",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
 
     async def _phase_1_generate(
         self,
