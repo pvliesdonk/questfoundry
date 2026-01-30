@@ -81,9 +81,13 @@ DEFAULT_GROW_PROMPT = (
     "Build the complete branching structure from the SEED graph: "
     "enumerate arcs, create passages, derive choices and codewords."
 )
+DEFAULT_FILL_PROMPT = (
+    "Generate prose for all passages: determine voice document, "
+    "write prose per passage, review quality, and revise flagged passages."
+)
 
 # Pipeline stage order and configuration
-STAGE_ORDER = ["dream", "brainstorm", "seed", "grow"]
+STAGE_ORDER = ["dream", "brainstorm", "seed", "grow", "fill"]
 
 # Stage prompt configuration for the run command
 # Maps stage name to (default_interactive_prompt, default_noninteractive_prompt)
@@ -103,6 +107,10 @@ STAGE_PROMPTS: dict[str, tuple[str, str | None]] = {
     "grow": (
         DEFAULT_GROW_PROMPT,
         DEFAULT_GROW_PROMPT,  # Same for both modes (GROW ignores prompt)
+    ),
+    "fill": (
+        DEFAULT_FILL_PROMPT,
+        DEFAULT_FILL_PROMPT,  # Same for both modes (FILL ignores prompt)
     ),
 }
 
@@ -424,7 +432,7 @@ def _run_stage_command(
         """Display phase progress for stages that emit phase progress events."""
         detail_str = f" ({detail})" if detail else ""
 
-        if stage_name == "grow":
+        if stage_name in ("grow", "fill"):
             status_icon = "[green]✓[/green]" if status == "completed" else "[yellow]○[/yellow]"
             console.print(f"  {status_icon} {phase}{detail_str}")
             return
@@ -475,8 +483,8 @@ def _run_stage_command(
         )
     else:
         # Non-interactive mode
-        if stage_name == "grow":
-            # GROW shows phase-by-phase progress instead of spinner
+        if stage_name in ("grow", "fill"):
+            # GROW/FILL show phase-by-phase progress instead of spinner
             console.print(f"[dim]Running {stage_name.upper()} stage...[/dim]")
             result = asyncio.run(
                 _run_stage_async(
@@ -645,12 +653,43 @@ def _preview_grow_artifact(artifact: dict[str, Any]) -> None:
             console.print(f"  Phases: [green]{len(phases)} completed[/green]")
 
 
+def _preview_fill_artifact(artifact: dict[str, Any]) -> None:
+    """Display preview of FILL artifact."""
+    voice = artifact.get("voice_document", {})
+    if voice:
+        pov = voice.get("pov", "?")
+        tense = voice.get("tense", "?")
+        register = voice.get("voice_register", "?")
+        console.print(f"  Voice: [bold]{pov}[/bold] {tense}, {register}")
+        tone_words = voice.get("tone_words", [])
+        if tone_words:
+            console.print(f"  Tone: {', '.join(str(w) for w in tone_words)}")
+
+    passages = artifact.get("passages", [])
+    console.print(f"  Passages with prose: [bold]{len(passages)}[/bold]")
+
+    review = artifact.get("review_summary", {})
+    flagged = review.get("passages_flagged", 0)
+    if flagged:
+        console.print(f"  [yellow]Flagged passages: {flagged}[/yellow]")
+
+    # Show phase summary
+    phases = artifact.get("phases_completed", [])
+    if phases:
+        failed = [p for p in phases if p.get("status") == "failed"]
+        if failed:
+            console.print(f"  [red]Failed phases: {len(failed)}[/red]")
+        else:
+            console.print(f"  Phases: [green]{len(phases)} completed[/green]")
+
+
 # Stage preview function mapping (defined after functions exist)
 STAGE_PREVIEW_FNS: dict[str, PreviewFn] = {
     "dream": _preview_dream_artifact,
     "brainstorm": _preview_brainstorm_artifact,
     "seed": _preview_seed_artifact,
     "grow": _preview_grow_artifact,
+    "fill": _preview_fill_artifact,
 }
 
 
@@ -1009,13 +1048,78 @@ def grow(
 
 
 @app.command()
+def fill(
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option(
+            "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
+        ),
+    ] = None,
+    provider_discuss: Annotated[
+        str | None,
+        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+    ] = None,
+    provider_summarize: Annotated[
+        str | None,
+        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+    ] = None,
+    provider_serialize: Annotated[
+        str | None,
+        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
+    ] = None,
+    resume_from: Annotated[
+        str | None,
+        typer.Option("--resume-from", help="Resume from named phase (skips earlier phases)"),
+    ] = None,
+) -> None:
+    """Run FILL stage - generate prose for all passages.
+
+    Takes the branching structure from GROW and generates prose for
+    each passage: determines voice document, writes prose per passage,
+    reviews quality, and revises flagged passages.
+
+    This stage runs 4 phases (voice, generate, review, revision)
+    and manages graph mutations internally.
+
+    Requires GROW stage to have completed first.
+    """
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+    _configure_project_logging(project_path)
+
+    _run_stage_command(
+        stage_name="fill",
+        project_path=project_path,
+        prompt=None,  # Uses DEFAULT_FILL_PROMPT via STAGE_PROMPTS
+        provider=provider,
+        interactive=False,  # FILL is never interactive (graph-driven)
+        default_interactive_prompt=DEFAULT_FILL_PROMPT,
+        default_noninteractive_prompt=DEFAULT_FILL_PROMPT,
+        preview_fn=_preview_fill_artifact,
+        next_step_hint="qf ship",
+        provider_discuss=provider_discuss,
+        provider_summarize=provider_summarize,
+        provider_serialize=provider_serialize,
+        resume_from=resume_from,
+    )
+
+
+@app.command()
 def run(
     to_stage: Annotated[
         str,
         typer.Option(
             "--to",
             "-t",
-            help="Run stages up to and including this stage (dream, brainstorm, seed, grow).",
+            help="Run stages up to and including this stage (dream, brainstorm, seed, grow, fill).",
         ),
     ],
     from_stage: Annotated[
