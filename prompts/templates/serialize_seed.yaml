@@ -68,7 +68,7 @@ system: |
   ```
 
   ### 5. initial_beats (Initial Beats - {size_beats_per_path} per path)
-  Create {size_beats_per_path} InitialBeat objects PER PATH.
+  Create {size_beats_per_path} InitialBeat objects PER PATH (e.g., with 3 paths and a "2-4" range, expect 6-12 beats total).
   ```json
   {
     "beat_id": "host_motive_beat_01",

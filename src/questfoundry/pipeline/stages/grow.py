@@ -1179,6 +1179,8 @@ class GrowStage:
 
         max_arc_count = None
         if self._size_profile is not None:
+            # Safety ceiling: 4x the target max_arcs to allow for combinatorial
+            # expansion during enumeration before hitting the hard limit.
             max_arc_count = self._size_profile.max_arcs * 4
 
         try:

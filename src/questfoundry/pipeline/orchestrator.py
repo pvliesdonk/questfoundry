@@ -510,8 +510,8 @@ class PipelineOrchestrator:
                 try:
                     graph = Graph.load(self.project_path)
                     stage_kwargs["size_profile"] = resolve_size_from_graph(graph)
-                except Exception:
-                    log.debug("size_profile_not_resolved", stage=stage_name)
+                except (KeyError, ValueError, AttributeError, TypeError) as e:
+                    log.debug("size_profile_not_resolved", stage=stage_name, error=str(e))
                     # Not fatal — stages fall back to hardcoded defaults
 
             artifact_data, llm_calls, tokens_used = await stage.execute(
