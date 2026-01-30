@@ -29,6 +29,7 @@ from questfoundry.graph.fill_context import (
     format_entity_states,
     format_grow_summary,
     format_lookahead_context,
+    format_passages_batch,
     format_scene_types_summary,
     format_shadow_states,
     format_sliding_window,
@@ -40,8 +41,8 @@ from questfoundry.graph.graph import Graph
 from questfoundry.models.fill import (
     FillPhase0Output,
     FillPhase1Output,
+    FillPhase2Output,
     FillPhaseResult,
-    FillResult,
 )
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
@@ -204,7 +205,7 @@ class FillStage:
             **kwargs: Additional keyword arguments (ignored).
 
         Returns:
-            Tuple of (FillResult dict, total_llm_calls, total_tokens).
+            Tuple of (artifact_data dict, total_llm_calls, total_tokens).
 
         Raises:
             FillStageError: If project_path is not provided or GROW not completed.
@@ -290,27 +291,23 @@ class FillStage:
             graph.set_last_stage("fill")
             graph.save(resolved_path / "graph.json")
 
-        # Count results
-        passage_nodes = graph.get_nodes_by_type("passage")
-        passages_filled = sum(1 for p in passage_nodes.values() if p.get("prose"))
-        passages_flagged = sum(
-            1 for p in passage_nodes.values() if p.get("flag") == "incompatible_states"
-        )
+        # Write human-readable artifact (story data extracted from graph)
+        from questfoundry.artifacts.enrichment import extract_fill_artifact
+        from questfoundry.artifacts.writer import ArtifactWriter
 
-        fill_result = FillResult(
-            passages_filled=passages_filled,
-            passages_flagged=passages_flagged,
-            phases_completed=phase_results,
-        )
+        artifact_data = extract_fill_artifact(graph)
+        ArtifactWriter(resolved_path).write(artifact_data, "fill")
 
         log.info(
             "stage_complete",
             stage="fill",
-            passages_filled=fill_result.passages_filled,
-            passages_flagged=fill_result.passages_flagged,
+            passages_with_prose=artifact_data.get("review_summary", {}).get(
+                "passages_with_prose", 0
+            ),
+            passages_flagged=artifact_data.get("review_summary", {}).get("passages_flagged", 0),
         )
 
-        return fill_result.model_dump(), total_llm_calls, total_tokens
+        return artifact_data, total_llm_calls, total_tokens
 
     # -------------------------------------------------------------------------
     # LLM helper
@@ -628,27 +625,200 @@ class FillStage:
             tokens_used=total_tokens,
         )
 
+    REVIEW_BATCH_SIZE = 8
+
     async def _phase_2_review(
         self,
-        graph: Graph,  # noqa: ARG002
-        model: BaseChatModel,  # noqa: ARG002
+        graph: Graph,
+        model: BaseChatModel,
     ) -> FillPhaseResult:
         """Phase 2: Review.
 
-        Reviews passages for quality issues.
+        Reviews passages in batches for quality issues. Collects
+        ReviewFlag objects that Phase 3 will use for targeted revision.
         """
-        return FillPhaseResult(phase="review", status="skipped", detail="not yet implemented")
+        passage_nodes = graph.get_nodes_by_type("passage")
+        filled_ids = [
+            pid
+            for pid, pdata in passage_nodes.items()
+            if pdata.get("prose") and pdata.get("flag") != "incompatible_states"
+        ]
+        if not filled_ids:
+            return FillPhaseResult(
+                phase="review", status="completed", detail="no passages to review"
+            )
+
+        voice_context = format_voice_context(graph)
+        all_flags: list[dict[str, str]] = []
+        total_llm_calls = 0
+        total_tokens = 0
+
+        # Process in batches
+        for i in range(0, len(filled_ids), self.REVIEW_BATCH_SIZE):
+            batch_ids = filled_ids[i : i + self.REVIEW_BATCH_SIZE]
+            batch_context = format_passages_batch(graph, batch_ids)
+
+            output, llm_calls, tokens = await self._fill_llm_call(
+                model,
+                "fill_phase2_review",
+                {"voice_document": voice_context, "passages_batch": batch_context},
+                FillPhase2Output,
+            )
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            for flag in output.flags:
+                all_flags.append(
+                    {
+                        "passage_id": flag.passage_id,
+                        "issue": flag.issue,
+                        "issue_type": flag.issue_type,
+                    }
+                )
+
+        # Store flags on passage nodes for Phase 3
+        for flag_data in all_flags:
+            pid = flag_data["passage_id"]
+            # Find the full passage node ID
+            full_pid = pid if pid.startswith("passage::") else f"passage::{pid}"
+            node = graph.get_node(full_pid)
+            if node:
+                graph.update_node(
+                    full_pid,
+                    review_flags=[*node.get("review_flags", []), flag_data],
+                )
+            else:
+                log.warning("review_flag_orphaned", passage_id=pid, full_pid=full_pid)
+
+        log.info("review_complete", flags_found=len(all_flags))
+
+        return FillPhaseResult(
+            phase="review",
+            status="completed",
+            detail=f"{len(all_flags)} issues found across {len(filled_ids)} passages",
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
+        )
 
     async def _phase_3_revision(
         self,
-        graph: Graph,  # noqa: ARG002
-        model: BaseChatModel,  # noqa: ARG002
+        graph: Graph,
+        model: BaseChatModel,
     ) -> FillPhaseResult:
         """Phase 3: Revision.
 
-        Regenerates flagged passages.
+        Regenerates flagged passages with extended context and
+        specific issue guidance.
         """
-        return FillPhaseResult(phase="revision", status="skipped", detail="not yet implemented")
+        # Collect and group flags by passage to chain revisions
+        passage_nodes = graph.get_nodes_by_type("passage")
+        flagged_passages: dict[str, list[dict[str, str]]] = {}
+        for pid, pdata in passage_nodes.items():
+            flags = pdata.get("review_flags", [])
+            if flags:
+                flagged_passages[pid] = list(flags)
+
+        if not flagged_passages:
+            return FillPhaseResult(
+                phase="revision", status="completed", detail="no passages to revise"
+            )
+
+        voice_context = format_voice_context(graph)
+        total_llm_calls = 0
+        total_tokens = 0
+        total_flags = sum(len(f) for f in flagged_passages.values())
+        revised_flags = 0
+        revised_ids: set[str] = set()
+
+        for passage_id, flags in flagged_passages.items():
+            passage = graph.get_node(passage_id)
+            if not passage:
+                continue
+
+            current_prose = passage.get("prose", "")
+            if not current_prose:
+                continue
+
+            # Find arc for extended window (once per passage)
+            arc_id = self._find_arc_for_passage(graph, passage_id)
+            current_idx = 0
+            if arc_id:
+                order = get_arc_passage_order(graph, arc_id)
+                if passage_id in order:
+                    current_idx = order.index(passage_id)
+
+            # Chain revisions: each uses output from previous
+            for flag_data in flags:
+                context = {
+                    "voice_document": voice_context,
+                    "passage_id": passage.get("raw_id", passage_id),
+                    "issue_type": flag_data.get("issue_type", ""),
+                    "issue_description": flag_data.get("issue", ""),
+                    "current_prose": current_prose,
+                    "extended_window": (
+                        format_sliding_window(graph, arc_id, current_idx, window_size=5)
+                        if arc_id
+                        else ""
+                    ),
+                }
+
+                output, llm_calls, tokens = await self._fill_llm_call(
+                    model,
+                    "fill_phase3_revision",
+                    context,
+                    FillPhase1Output,  # Reuse — same passage output format
+                )
+                total_llm_calls += llm_calls
+                total_tokens += tokens
+
+                if output.passage.prose:
+                    current_prose = output.passage.prose
+                    revised_flags += 1
+                    log.debug("passage_revised_for_flag", passage_id=passage_id)
+
+                    # Apply entity updates from revision
+                    for update in output.passage.entity_updates:
+                        entity_id = f"entity::{update.entity_id}"
+                        if graph.has_node(entity_id):
+                            graph.update_node(entity_id, **{update.field: update.value})
+                        else:
+                            log.warning(
+                                "entity_update_skipped",
+                                entity_id=update.entity_id,
+                                reason="entity not found in graph",
+                            )
+
+            # Write final prose after all flags for this passage
+            if current_prose != passage.get("prose", ""):
+                graph.update_node(passage_id, prose=current_prose)
+                revised_ids.add(passage_id)
+
+        # Only clear flags for successfully revised passages
+        for pid in revised_ids:
+            graph.update_node(pid, review_flags=[])
+
+        return FillPhaseResult(
+            phase="revision",
+            status="completed",
+            detail=f"{revised_flags} of {total_flags} flags addressed across {len(revised_ids)} passages",
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
+        )
+
+    def _find_arc_for_passage(self, graph: Graph, passage_id: str) -> str | None:
+        """Find the first arc containing a passage's beat."""
+        passage = graph.get_node(passage_id)
+        if not passage:
+            return None
+        beat_id = passage.get("from_beat", "")
+        if not beat_id:
+            return None
+
+        all_arcs = graph.get_nodes_by_type("arc")
+        for arc_id, arc_data in all_arcs.items():
+            if beat_id in arc_data.get("sequence", []):
+                return str(arc_id)
+        return None
 
 
 # -------------------------------------------------------------------------
