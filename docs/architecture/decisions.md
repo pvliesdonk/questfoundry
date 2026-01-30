@@ -102,7 +102,7 @@ Prompts live in `/prompts/` **outside** `src/questfoundry/`.
 ## ADR-005: DRESS Stage Deferred
 
 **Date**: 2026-01-01
-**Status**: Accepted
+**Status**: Superseded by ADR-012
 
 ### Context
 Original vision included DRESS stage for art direction/image prompts.
@@ -423,6 +423,56 @@ Additionally, classify errors by type for targeted retry strategies:
 - Tool calls preserved in summarize input for research context visibility
 
 See [Manifest-First Freeze Architecture](manifest-first-freeze.md) for implementation details.
+
+---
+
+## ADR-012: DRESS Stage Design
+
+**Date**: 2026-01-30
+**Status**: Accepted (supersedes ADR-005)
+
+### Context
+
+The core narrative pipeline (DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP) is complete. The deferred DRESS stage (ADR-005) needs design decisions before implementation. Key questions: image provider abstraction, codex data model, entity visual consistency, illustration priority, and diegetic constraints.
+
+### Decision
+
+DRESS is a three-sub-stage pipeline with two human gates:
+
+1. **Art Direction** (discuss/summarize/serialize) → Gate 1
+2. **Illustration Briefs + Codex Generation** (parallel) → Gate 2
+3. **Image Generation** (batch with sample-first confirmation)
+
+Key design choices:
+
+- **Own image provider abstraction** — LangChain Python has no `BaseImageModel`; only a DALL-E tool wrapper. We create a thin `ImageProvider` protocol in `providers/image/`. Single provider per project, starting with OpenAI `gpt-image-1`.
+- **Cumulative codex with HasEntry edges** — Multiple `codex_entry` nodes per entity, ranked and codeword-gated. Uses `HasEntry` edge (codex_entry → entity) instead of an `entity_id` field, following the ontology's edge-based relationship pattern.
+- **Diegetic constraint** — Illustration captions and codex entries must be written in the story's voice (in-world), never meta-descriptive.
+- **Entity visual profiles** — `EntityVisual` working nodes store per-entity appearance descriptions and `reference_prompt_fragment` strings injected into every image prompt featuring that entity, ensuring cross-illustration consistency.
+- **Hybrid priority scoring** — Structural rules (spine passages, climax scenes, endings score higher) combined with LLM judgment (visual interest, narrative importance).
+- **Sample-first image generation** — Generate one sample, get user confirmation, then batch the rest. Controls cost and catches style issues early.
+
+### Rationale
+
+- **Own abstraction over LangChain**: No existing Python library provides a provider-agnostic image generation interface analogous to `BaseChatModel` for LLMs. The interface is simple (prompt in, image out) so the abstraction is thin.
+- **Cumulative codex over replacement**: Players who unlock multiple tiers see all of them (sorted by rank), giving a natural sense of deepening knowledge. Each entry is self-contained, avoiding dependency chains.
+- **HasEntry edge over entity_id field**: Consistent with the ontology pattern where inter-node relationships use edges (Appears, Involves, Depicts), not embedded ID fields.
+- **Diegetic constraint**: Art captions like "The bridge where loyalties shatter" serve the narrative; "An illustration of two characters on a bridge" breaks immersion.
+- **Entity visuals as working nodes**: Not exported (players don't see prompt fragments), but critical for generation consistency. Linked via `describes_visual` edge.
+- **Hybrid priority**: Pure structural rules miss narratively important moments in branch passages; pure LLM judgment is inconsistent. Combining both provides stable, quality-weighted ordering.
+- **Sample-first**: Image generation is expensive. A single sample confirms the art direction translates well to the image provider before committing to batch generation.
+
+### Consequences
+
+- New persistent nodes: ArtDirection, modified Illustration (caption + category), modified Codex (rank + tiers)
+- New working nodes: EntityVisual, IllustrationBrief
+- New persistent edge: HasEntry (codex_entry → entity)
+- New working edges: describes_visual, from_brief, targets
+- Image provider is decoupled from LLM provider — separate config in `project.yaml`
+- SHIP must handle cumulative codex display (filter by codewords, sort by rank)
+- Asset storage uses content-addressed files (`assets/<sha256>.png`)
+
+See `docs/design/procedures/dress.md` for the full algorithm specification.
 
 ---
 
