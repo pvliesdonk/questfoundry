@@ -142,6 +142,7 @@ def _render_discuss_template(
         raw_data.get("research_tools_section", "") if research_tools_available else ""
     )
     mode_section = raw_data.get("non_interactive_section", "") if not interactive else ""
+    size_presets_section = raw_data.get("size_presets_section", "")
 
     system_template = raw_data.get("system", "")
     prompt = ChatPromptTemplate.from_template(system_template)
@@ -149,6 +150,7 @@ def _render_discuss_template(
     return prompt.format(
         research_tools_section=research_section,
         mode_section=mode_section,
+        size_presets_section=size_presets_section,
         **kwargs,
     )
 

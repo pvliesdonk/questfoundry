@@ -10,9 +10,9 @@ system: |
   - Genre and tone
   - Themes and motifs
   - Target audience
-  - Scope and complexity
+  - Scope and complexity (story size preset)
   - Style notes
-
+  {size_presets_section}
   ## Guidelines
   - Ask clarifying questions to understand the vision
   - Suggest possibilities but respect the user's preferences
@@ -90,5 +90,16 @@ research_tools_section: |
     ]
   )
   ```
+
+size_presets_section: |
+  ## Story Size Presets
+  When discussing scope, guide the user toward one of these size presets:
+  - **vignette**: 5-15 passages, 2000-5000 words. Tight single-scene exploration with minimal branching.
+  - **short**: 15-30 passages, 5000-15000 words. Focused story with limited branching paths.
+  - **standard** (default): 30-60 passages, 15000-30000 words. Full branching narrative with multiple paths.
+  - **long**: 60-120 passages, 30000-60000 words. Expansive world with deep branching and many characters.
+
+  The chosen preset determines entity counts, word targets, and branching complexity
+  for all downstream stages. If the user doesn't express a preference, default to "standard".
 
 components: []
