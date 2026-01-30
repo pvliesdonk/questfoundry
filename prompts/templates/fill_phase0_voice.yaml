@@ -47,8 +47,11 @@ user: |
   Based on the creative vision and story structure above, propose a voice document.
 
   CRITICAL REMINDERS:
-  - Match POV/tense to genre conventions
-  - tone_words must be distilled from DREAM themes, not generic
+  - Match POV/tense to genre conventions (fantasy → third_limited past; horror → second present)
+  - voice_register must match DREAM tone — dark stories need literary or sparse, NOT conversational
+  - tone_words must be distilled from DREAM themes, not generic filler
+  - avoid_words and avoid_patterns should target the genre's common pitfalls
+  - Consider scene type distribution — micro_beat-heavy stories need a register that works for brevity
   - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
 
 components: []
