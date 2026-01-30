@@ -56,11 +56,11 @@ def get_dilemma_development_states(
 ) -> dict[str, dict[str, str]]:
     """Compute development states for all answers in a SEED output.
 
-    Development states are derived from comparing the `considered` field
+    Development states are derived from comparing the `explored` field
     (LLM intent) against actual path existence:
-    - **committed**: Answer in `considered` AND has a path
-    - **deferred**: Answer in `considered` but NO path (pruned)
-    - **latent**: Answer not in `considered` (never intended for exploration)
+    - **committed**: Answer in `explored` AND has a path
+    - **deferred**: Answer in `explored` but NO path (pruned)
+    - **latent**: Answer not in `explored` (never intended for exploration)
 
     Args:
         seed_output: The SEED output containing dilemma decisions and paths.
@@ -90,20 +90,20 @@ def get_dilemma_development_states(
             did = did.split("::", 1)[1]
 
         dilemma_states: dict[str, str] = {}
-        considered_set = set(dilemma.considered)
-        implicit_set = set(dilemma.implicit)
+        explored_set = set(dilemma.explored)
+        unexplored_set = set(dilemma.unexplored)
         path_answers = answer_has_path.get(did, set())
 
-        # Process all known answers (from considered + implicit)
-        all_answers = considered_set | implicit_set
+        # Process all known answers (from explored + unexplored)
+        all_answers = explored_set | unexplored_set
         for ans_id in all_answers:
-            if ans_id in considered_set:
+            if ans_id in explored_set:
                 if ans_id in path_answers:
                     dilemma_states[ans_id] = STATE_COMMITTED
                 else:
                     dilemma_states[ans_id] = STATE_DEFERRED
             else:
-                # In implicit, never considered
+                # In unexplored, never explored
                 dilemma_states[ans_id] = STATE_LATENT
 
         states[did] = dilemma_states
@@ -248,8 +248,8 @@ def format_hierarchical_path_id(dilemma_id: str, answer_id: str) -> str:
 def format_answer_ids_by_dilemma(dilemmas: list[dict[str, Any]]) -> str:
     """Format answer IDs per dilemma as context for paths serialization.
 
-    After dilemmas are serialized, each dilemma has ``considered`` and
-    ``implicit`` answer lists.  Injecting these before the paths section
+    After dilemmas are serialized, each dilemma has ``explored`` and
+    ``unexplored`` answer lists.  Injecting these before the paths section
     lets the model know exactly which answer_id values are valid for each
     dilemma, preventing phantom answer references.
 
@@ -268,9 +268,9 @@ def format_answer_ids_by_dilemma(dilemmas: list[dict[str, Any]]) -> str:
         if not dilemma_id:
             continue
         scoped = normalize_scoped_id(strip_scope_prefix(dilemma_id), SCOPE_DILEMMA)
-        considered = d.get("considered", [])
-        implicit = d.get("implicit", [])
-        dilemma_lines.append(f"- `{scoped}` -> considered: {considered}, implicit: {implicit}")
+        explored = d.get("explored", [])
+        unexplored = d.get("unexplored", [])
+        dilemma_lines.append(f"- `{scoped}` -> explored: {explored}, unexplored: {unexplored}")
 
     if not dilemma_lines:
         return ""
@@ -278,8 +278,8 @@ def format_answer_ids_by_dilemma(dilemmas: list[dict[str, Any]]) -> str:
     lines = [
         "## Valid Answer IDs per Dilemma",
         "",
-        "Each path's `answer_id` MUST be one of the `considered` IDs below.",
-        "Do NOT invent answer IDs or use `implicit` IDs as path answer_ids.",
+        "Each path's `answer_id` MUST be one of the `explored` IDs below.",
+        "Do NOT invent answer IDs or use `unexplored` IDs as path answer_ids.",
         "",
         *dilemma_lines,
         "",
@@ -618,7 +618,7 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
     """Format entity and dilemma manifests for SEED summarize prompt.
 
     Returns bullet lists of entity/dilemma IDs that the summarize phase must
-    make decisions about (retain/cut for entities, explored/implicit for
+    make decisions about (retain/cut for entities, explored/unexplored for
     dilemmas). Simpler than serialize manifest - just lists IDs without
     validation context.
 

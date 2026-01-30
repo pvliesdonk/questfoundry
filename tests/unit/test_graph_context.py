@@ -1153,13 +1153,13 @@ class TestFormatAnswerIdsByDilemma:
         """Empty list returns empty string."""
         assert format_answer_ids_by_dilemma([]) == ""
 
-    def test_single_dilemma_with_considered_and_implicit(self) -> None:
-        """Single dilemma formats considered and implicit lists."""
+    def test_single_dilemma_with_explored_and_unexplored(self) -> None:
+        """Single dilemma formats explored and unexplored lists."""
         dilemmas = [
             {
                 "dilemma_id": "dilemma::host_benevolent_or_selfish",
-                "considered": ["protector", "manipulator"],
-                "implicit": ["neutral"],
+                "explored": ["protector", "manipulator"],
+                "unexplored": ["neutral"],
             }
         ]
         result = format_answer_ids_by_dilemma(dilemmas)
@@ -1173,13 +1173,13 @@ class TestFormatAnswerIdsByDilemma:
         dilemmas = [
             {
                 "dilemma_id": "dilemma::mentor_trust_or_betray",
-                "considered": ["trust"],
-                "implicit": ["betray"],
+                "explored": ["trust"],
+                "unexplored": ["betray"],
             },
             {
                 "dilemma_id": "dilemma::artifact_blessed_or_cursed",
-                "considered": ["blessed", "cursed"],
-                "implicit": [],
+                "explored": ["blessed", "cursed"],
+                "unexplored": [],
             },
         ]
         result = format_answer_ids_by_dilemma(dilemmas)
@@ -1189,8 +1189,8 @@ class TestFormatAnswerIdsByDilemma:
     def test_dilemma_without_id_skipped(self) -> None:
         """Dilemmas with empty or missing ID produce empty string."""
         dilemmas = [
-            {"dilemma_id": "", "considered": ["a"], "implicit": []},
-            {"considered": ["b"], "implicit": []},
+            {"dilemma_id": "", "explored": ["a"], "unexplored": []},
+            {"explored": ["b"], "unexplored": []},
         ]
         result = format_answer_ids_by_dilemma(dilemmas)
         # No valid dilemmas → empty string (no header injected)
@@ -1201,8 +1201,8 @@ class TestFormatAnswerIdsByDilemma:
         dilemmas = [
             {
                 "dilemma_id": "host_benevolent_or_selfish",
-                "considered": ["protector"],
-                "implicit": [],
+                "explored": ["protector"],
+                "unexplored": [],
             }
         ]
         result = format_answer_ids_by_dilemma(dilemmas)

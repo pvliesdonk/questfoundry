@@ -134,9 +134,9 @@ def _enrich_dilemmas(graph: Graph, dilemma_decisions: list[dict[str, Any]]) -> l
         if value := node.get("central_entity_ids"):
             enriched["central_entity_ids"] = [eid.split("::")[-1] for eid in value]
 
-        # Add SEED decision fields (support both old 'explored' and new 'considered')
-        enriched["considered"] = decision.get("considered", decision.get("explored", []))
-        enriched["implicit"] = decision.get("implicit", [])
+        # Add SEED decision fields (support both old 'considered' and new 'explored')
+        enriched["explored"] = decision.get("explored", decision.get("considered", []))
+        enriched["unexplored"] = decision.get("unexplored", decision.get("implicit", []))
 
         enriched_dilemmas.append(enriched)
 

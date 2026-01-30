@@ -986,7 +986,7 @@ def _group_errors_by_section(
     the root cause section is retried, not just the downstream section.
 
     For example, a path answer_id mismatch (check 11c) targets the "paths"
-    section but the root cause is often the dilemma's considered list.
+    section but the root cause is often the dilemma's explored list.
     This function adds the error to BOTH "paths" and "dilemmas" sections.
     """
     by_section: dict[str, list[SeedValidationError]] = {}
@@ -1007,8 +1007,8 @@ def _propagate_cross_section_errors(
 ) -> None:
     """Add upstream section entries for cross-reference errors.
 
-    When a paths error references dilemma considered lists, the dilemma
-    section should also be retried so its considered array can be fixed.
+    When a paths error references dilemma explored lists, the dilemma
+    section should also be retried so its explored array can be fixed.
 
     Currently only propagates ``paths → dilemmas`` errors (check 11c).
     Other cross-section dependencies (consequences→paths, beats→entities)
@@ -1019,12 +1019,12 @@ def _propagate_cross_section_errors(
     if not paths_errors:
         return
 
-    # Check 11c errors: path answer_id not in dilemma considered list.
+    # Check 11c errors: path answer_id not in dilemma explored list.
     # Uses the CROSS_REFERENCE category set in validate_seed_mutations().
     cross_ref_errors = [e for e in paths_errors if e.category == SeedErrorCategory.CROSS_REFERENCE]
     if cross_ref_errors:
         # Create dilemma-targeted corrections from the same errors.
-        # The dilemma section needs to know which answer IDs to add to considered.
+        # The dilemma section needs to know which answer IDs to add to explored.
         dilemma_errors = []
         for error in cross_ref_errors:
             dilemma_errors.append(
@@ -1032,7 +1032,7 @@ def _propagate_cross_section_errors(
                     field_path="dilemmas",
                     issue=(
                         f"A path uses answer_id '{error.provided}' but it is not in "
-                        f"the dilemma's considered list. Ensure considered includes "
+                        f"the dilemma's explored list. Ensure explored includes "
                         f"all answer IDs that will have paths."
                     ),
                     available=error.available,

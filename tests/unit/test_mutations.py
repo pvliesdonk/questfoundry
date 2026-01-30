@@ -10,7 +10,7 @@ from questfoundry.graph.mutations import (
     BrainstormValidationError,
     SeedErrorCategory,
     SeedValidationError,
-    _backfill_considered_from_paths,
+    _backfill_explored_from_paths,
     _format_available_with_suggestions,
     _normalize_id,
     _prefix_id,
@@ -148,8 +148,8 @@ class TestApplyMutations:
         output = {
             "entities": [{"entity_id": "char_001", "disposition": "retained"}],
             "dilemmas": [
-                {"dilemma_id": "t0", "considered": ["a", "b"], "implicit": []},
-                {"dilemma_id": "t1", "considered": ["a", "b"], "implicit": []},
+                {"dilemma_id": "t0", "explored": ["a", "b"], "unexplored": []},
+                {"dilemma_id": "t1", "explored": ["a", "b"], "unexplored": []},
             ],
             "paths": [
                 {"path_id": "path_0", "dilemma_id": "t0", "answer_id": "a"},
@@ -843,7 +843,7 @@ class TestSeedMutations:
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "mentor_trust", "considered": ["protector"], "implicit": []},
+                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
             ],
             "paths": [
                 {
@@ -919,8 +919,8 @@ class TestSeedMutations:
             "dilemmas": [
                 {
                     "dilemma_id": "mentor_trust",
-                    "considered": ["protector", "manipulator"],
-                    "implicit": [],
+                    "explored": ["protector", "manipulator"],
+                    "unexplored": [],
                 },
             ],
             "paths": [
@@ -1010,7 +1010,7 @@ class TestSeedMutations:
             ],
             # Completeness: decisions for all dilemmas
             "dilemmas": [
-                {"dilemma_id": "mentor_trust", "considered": ["protector"], "implicit": []},
+                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
             ],
             # Path must be in SEED output for beat path references to validate
             "paths": [
@@ -1120,7 +1120,7 @@ class TestSeedCompletenessValidation:
                 {"entity_id": "mentor", "disposition": "cut"},
             ],
             "dilemmas": [
-                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},
+                {"dilemma_id": "trust", "explored": ["yes"], "unexplored": []},
             ],
             "paths": [
                 {
@@ -1194,7 +1194,7 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "trust", "considered": [], "implicit": []},
+                {"dilemma_id": "trust", "explored": [], "unexplored": []},
                 # Missing: loyalty
             ],
             "paths": [],
@@ -1275,8 +1275,8 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},
-                {"dilemma_id": "loyalty", "considered": [], "implicit": []},
+                {"dilemma_id": "trust", "explored": ["yes"], "unexplored": []},
+                {"dilemma_id": "loyalty", "explored": [], "unexplored": []},
             ],
             "paths": [
                 {
@@ -1310,8 +1310,8 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},
-                {"dilemma_id": "loyalty", "considered": ["stand"], "implicit": []},
+                {"dilemma_id": "trust", "explored": ["yes"], "unexplored": []},
+                {"dilemma_id": "loyalty", "explored": ["stand"], "unexplored": []},
             ],
             "paths": [
                 {
@@ -1344,7 +1344,7 @@ class TestSeedCompletenessValidation:
 
         output = {
             "entities": [],
-            "dilemmas": [{"dilemma_id": "trust", "considered": ["yes"], "implicit": []}],
+            "dilemmas": [{"dilemma_id": "trust", "explored": ["yes"], "unexplored": []}],
             "paths": [
                 {
                     "path_id": "trust_arc",
@@ -1361,8 +1361,8 @@ class TestSeedCompletenessValidation:
         path_errors = [e for e in errors if "has no path" in e.issue]
         assert path_errors == []
 
-    def test_missing_paths_for_considered_answers(self) -> None:
-        """Each considered answer needs its own path - missing paths caught."""
+    def test_missing_paths_for_explored_answers(self) -> None:
+        """Each explored answer needs its own path - missing paths caught."""
         graph = Graph.empty()
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
         graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
@@ -1373,8 +1373,8 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "dilemmas": [
-                # Both answers considered, but only 1 path created
-                {"dilemma_id": "trust", "considered": ["yes", "no"], "implicit": []},
+                # Both answers explored, but only 1 path created
+                {"dilemma_id": "trust", "explored": ["yes", "no"], "unexplored": []},
             ],
             "paths": [
                 {
@@ -1390,14 +1390,14 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        missing_path_errors = [e for e in errors if "considered answers" in e.issue]
+        missing_path_errors = [e for e in errors if "explored answers" in e.issue]
         assert len(missing_path_errors) == 1
-        assert "2 considered answers" in missing_path_errors[0].issue
+        assert "2 explored answers" in missing_path_errors[0].issue
         assert "1 path" in missing_path_errors[0].issue
         assert missing_path_errors[0].category == SeedErrorCategory.COMPLETENESS
 
-    def test_all_considered_alternatives_have_paths(self) -> None:
-        """When each considered answer has a path, validation passes."""
+    def test_all_explored_alternatives_have_paths(self) -> None:
+        """When each explored answer has a path, validation passes."""
         graph = Graph.empty()
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
         graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
@@ -1408,7 +1408,7 @@ class TestSeedCompletenessValidation:
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "trust", "considered": ["yes", "no"], "implicit": []},
+                {"dilemma_id": "trust", "explored": ["yes", "no"], "unexplored": []},
             ],
             "paths": [
                 {
@@ -1429,7 +1429,7 @@ class TestSeedCompletenessValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        missing_path_errors = [e for e in errors if "considered answers" in e.issue]
+        missing_path_errors = [e for e in errors if "explored answers" in e.issue]
         assert missing_path_errors == []
 
     # NOTE: Arc count validation tests removed - now handled by runtime pruning
@@ -1498,8 +1498,8 @@ class TestBeatDilemmaAlignment:
         return {
             "entities": [{"entity_id": "hero", "disposition": "retained"}],
             "dilemmas": [
-                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},
-                {"dilemma_id": "loyalty", "considered": ["faithful"], "implicit": []},
+                {"dilemma_id": "trust", "explored": ["yes"], "unexplored": []},
+                {"dilemma_id": "loyalty", "explored": ["faithful"], "unexplored": []},
             ],
             "paths": [
                 {
@@ -1722,9 +1722,9 @@ class TestSeedDuplicateValidation:
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},
-                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},  # Duplicate!
-                {"dilemma_id": "trust", "considered": ["yes"], "implicit": []},  # Triple!
+                {"dilemma_id": "trust", "explored": ["yes"], "unexplored": []},
+                {"dilemma_id": "trust", "explored": ["yes"], "unexplored": []},  # Duplicate!
+                {"dilemma_id": "trust", "explored": ["yes"], "unexplored": []},  # Triple!
             ],
             "paths": [],
             "initial_beats": [],
@@ -1842,7 +1842,7 @@ class TestMutationIntegration:
             ],
             # Completeness: decisions for all dilemmas
             "dilemmas": [
-                {"dilemma_id": "mentor_trust", "considered": ["protector"], "implicit": []},
+                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
             ],
             "paths": [
                 {
@@ -2162,7 +2162,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [],
-            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "explored": ["yes"], "unexplored": []}],
             "paths": [
                 {
                     "path_id": "trust_arc",
@@ -2198,7 +2198,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "explored": ["yes"], "unexplored": []}],
             "paths": [
                 {
                     "path_id": "mentor",
@@ -2251,7 +2251,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [],
-            "dilemmas": [{"dilemma_id": "entity::trust", "considered": [], "implicit": []}],
+            "dilemmas": [{"dilemma_id": "entity::trust", "explored": [], "unexplored": []}],
             "paths": [],
             "initial_beats": [],
         }
@@ -2274,7 +2274,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "explored": ["yes"], "unexplored": []}],
             "paths": [
                 {
                     "path_id": "mentor",
@@ -2379,7 +2379,7 @@ class TestScopedIdValidation:
                 {"entity_id": "entity::hero", "disposition": "retained"},
                 {"entity_id": "entity::mentor", "disposition": "retained"},
             ],
-            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "explored": ["yes"], "unexplored": []}],
             "paths": [
                 {
                     "path_id": "mentor_arc",
@@ -2417,7 +2417,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "explored": ["yes"], "unexplored": []}],
             "paths": [
                 {
                     "path_id": "mentor_arc",
@@ -2458,7 +2458,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "explored": ["yes"], "unexplored": []}],
             "paths": [
                 {
                     "path_id": "mentor_arc",
@@ -2505,7 +2505,7 @@ class TestScopedIdValidation:
 
         output = {
             "entities": [{"entity_id": "entity::hero", "disposition": "retained"}],
-            "dilemmas": [{"dilemma_id": "dilemma::trust", "considered": ["yes"], "implicit": []}],
+            "dilemmas": [{"dilemma_id": "dilemma::trust", "explored": ["yes"], "unexplored": []}],
             "paths": [
                 {
                     "path_id": "path::mentor_arc",  # Scoped ID in definition
@@ -2912,7 +2912,7 @@ class TestTypeAwareFeedback:
                 {"entity_id": "isolation_protocol", "disposition": "retained"},
             ],
             "dilemmas": [
-                {"dilemma_id": "trust_or_betray", "considered": [], "implicit": []},
+                {"dilemma_id": "trust_or_betray", "explored": [], "unexplored": []},
             ],
             "paths": [],
             "initial_beats": [
@@ -2959,7 +2959,7 @@ class TestTypeAwareFeedback:
         output = {
             "entities": [{"entity_id": "hero", "disposition": "retained"}],
             "dilemmas": [
-                {"dilemma_id": "trust_or_betray", "considered": ["trust"], "implicit": []},
+                {"dilemma_id": "trust_or_betray", "explored": ["trust"], "unexplored": []},
             ],
             "paths": [
                 {
@@ -3002,7 +3002,7 @@ class TestTypeAwareFeedback:
         output = {
             "entities": [{"entity_id": "hero", "disposition": "retained"}],
             "dilemmas": [
-                {"dilemma_id": "trust_or_betray", "considered": [], "implicit": []},
+                {"dilemma_id": "trust_or_betray", "explored": [], "unexplored": []},
             ],
             "paths": [],
             "initial_beats": [
@@ -3178,14 +3178,14 @@ class TestCutEntityInBeats:
         assert "initial_beats.0.location_alternatives" in cut_errors[0].field_path
 
 
-class TestBackfillConsideredFromPaths:
-    """Tests for _backfill_considered_from_paths migration function."""
+class TestBackfillExploredFromPaths:
+    """Tests for _backfill_explored_from_paths migration function."""
 
-    def test_backfills_empty_considered_from_paths(self) -> None:
-        """Empty considered array is filled from path alternative_ids."""
+    def test_backfills_empty_explored_from_paths(self) -> None:
+        """Empty explored array is filled from path alternative_ids."""
         output = {
             "dilemmas": [
-                {"dilemma_id": "choice_a_or_b", "considered": []},
+                {"dilemma_id": "choice_a_or_b", "explored": []},
             ],
             "paths": [
                 {
@@ -3201,15 +3201,15 @@ class TestBackfillConsideredFromPaths:
             ],
         }
 
-        _backfill_considered_from_paths(output)
+        _backfill_explored_from_paths(output)
 
-        assert output["dilemmas"][0]["considered"] == ["option_a", "option_b"]
+        assert output["dilemmas"][0]["explored"] == ["option_a", "option_b"]
 
-    def test_preserves_existing_considered(self) -> None:
-        """Non-empty considered array is not modified."""
+    def test_preserves_existing_explored(self) -> None:
+        """Non-empty explored array is not modified."""
         output = {
             "dilemmas": [
-                {"dilemma_id": "choice_a_or_b", "considered": ["existing_value"]},
+                {"dilemma_id": "choice_a_or_b", "explored": ["existing_value"]},
             ],
             "paths": [
                 {
@@ -3220,15 +3220,15 @@ class TestBackfillConsideredFromPaths:
             ],
         }
 
-        _backfill_considered_from_paths(output)
+        _backfill_explored_from_paths(output)
 
-        assert output["dilemmas"][0]["considered"] == ["existing_value"]
+        assert output["dilemmas"][0]["explored"] == ["existing_value"]
 
     def test_handles_scoped_dilemma_ids(self) -> None:
         """Handles dilemma IDs with scope prefix (dilemma::id)."""
         output = {
             "dilemmas": [
-                {"dilemma_id": "dilemma::choice_a_or_b", "considered": []},
+                {"dilemma_id": "dilemma::choice_a_or_b", "explored": []},
             ],
             "paths": [
                 {
@@ -3239,15 +3239,15 @@ class TestBackfillConsideredFromPaths:
             ],
         }
 
-        _backfill_considered_from_paths(output)
+        _backfill_explored_from_paths(output)
 
-        assert output["dilemmas"][0]["considered"] == ["option_a"]
+        assert output["dilemmas"][0]["explored"] == ["option_a"]
 
     def test_handles_mixed_scoped_and_unscoped(self) -> None:
         """Matches dilemma with scoped ID to path with unscoped ID."""
         output = {
             "dilemmas": [
-                {"dilemma_id": "dilemma::choice_a_or_b", "considered": []},
+                {"dilemma_id": "dilemma::choice_a_or_b", "explored": []},
             ],
             "paths": [
                 {
@@ -3258,15 +3258,15 @@ class TestBackfillConsideredFromPaths:
             ],
         }
 
-        _backfill_considered_from_paths(output)
+        _backfill_explored_from_paths(output)
 
-        assert output["dilemmas"][0]["considered"] == ["option_a"]
+        assert output["dilemmas"][0]["explored"] == ["option_a"]
 
-    def test_supports_old_explored_field(self) -> None:
-        """Checks both 'considered' and 'explored' for existing values."""
+    def test_supports_old_considered_field(self) -> None:
+        """Checks both 'explored' and 'considered' for existing values."""
         output = {
             "dilemmas": [
-                {"dilemma_id": "choice_a_or_b", "explored": ["existing"]},
+                {"dilemma_id": "choice_a_or_b", "considered": ["existing"]},
             ],
             "paths": [
                 {
@@ -3277,46 +3277,46 @@ class TestBackfillConsideredFromPaths:
             ],
         }
 
-        _backfill_considered_from_paths(output)
+        _backfill_explored_from_paths(output)
 
-        # explored is not empty, so no backfill
-        assert "considered" not in output["dilemmas"][0]
-        assert output["dilemmas"][0]["explored"] == ["existing"]
+        # considered is not empty, so no backfill
+        assert "explored" not in output["dilemmas"][0]
+        assert output["dilemmas"][0]["considered"] == ["existing"]
 
     def test_no_paths_no_backfill(self) -> None:
         """Empty paths list does not modify dilemmas."""
         output = {
             "dilemmas": [
-                {"dilemma_id": "choice_a_or_b", "considered": []},
+                {"dilemma_id": "choice_a_or_b", "explored": []},
             ],
             "paths": [],
         }
 
-        _backfill_considered_from_paths(output)
+        _backfill_explored_from_paths(output)
 
-        assert output["dilemmas"][0]["considered"] == []
+        assert output["dilemmas"][0]["explored"] == []
 
     def test_path_without_alternative_id_ignored(self) -> None:
         """Paths without answer_id are skipped."""
         output = {
             "dilemmas": [
-                {"dilemma_id": "choice_a_or_b", "considered": []},
+                {"dilemma_id": "choice_a_or_b", "explored": []},
             ],
             "paths": [
                 {"path_id": "path1", "dilemma_id": "choice_a_or_b"},  # no answer_id
             ],
         }
 
-        _backfill_considered_from_paths(output)
+        _backfill_explored_from_paths(output)
 
-        assert output["dilemmas"][0]["considered"] == []
+        assert output["dilemmas"][0]["explored"] == []
 
     def test_multiple_dilemmas_independently_backfilled(self) -> None:
         """Each dilemma is backfilled from its own paths."""
         output = {
             "dilemmas": [
-                {"dilemma_id": "dilemma_one", "considered": []},
-                {"dilemma_id": "dilemma_two", "considered": []},
+                {"dilemma_id": "dilemma_one", "explored": []},
+                {"dilemma_id": "dilemma_two", "explored": []},
             ],
             "paths": [
                 {"path_id": "t1", "dilemma_id": "dilemma_one", "answer_id": "opt_a"},
@@ -3325,17 +3325,17 @@ class TestBackfillConsideredFromPaths:
             ],
         }
 
-        _backfill_considered_from_paths(output)
+        _backfill_explored_from_paths(output)
 
-        assert output["dilemmas"][0]["considered"] == ["opt_a"]
-        assert output["dilemmas"][1]["considered"] == ["opt_x", "opt_y"]
+        assert output["dilemmas"][0]["explored"] == ["opt_a"]
+        assert output["dilemmas"][1]["explored"] == ["opt_x", "opt_y"]
 
 
-class TestValidation11cPathAlternativeInConsidered:
-    """Tests for validation check 11c: path.answer_id IN dilemma.considered."""
+class TestValidation11cPathAlternativeInExplored:
+    """Tests for validation check 11c: path.answer_id IN dilemma.explored."""
 
-    def test_path_alternative_in_considered_passes(self) -> None:
-        """Path with answer_id matching considered passes validation."""
+    def test_path_alternative_in_explored_passes(self) -> None:
+        """Path with answer_id matching explored passes validation."""
         graph = Graph.empty()
         graph.create_node(
             "dilemma::choice_a_or_b",
@@ -3352,7 +3352,7 @@ class TestValidation11cPathAlternativeInConsidered:
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "choice_a_or_b", "considered": ["option_a", "option_b"]},
+                {"dilemma_id": "choice_a_or_b", "explored": ["option_a", "option_b"]},
             ],
             "paths": [
                 {
@@ -3392,12 +3392,12 @@ class TestValidation11cPathAlternativeInConsidered:
 
         # Filter for 11c errors specifically
         check_11c_errors = [
-            e for e in errors if "is not in dilemma" in e.issue and "considered list" in e.issue
+            e for e in errors if "is not in dilemma" in e.issue and "explored list" in e.issue
         ]
         assert check_11c_errors == []
 
-    def test_path_alternative_not_in_considered_detected(self) -> None:
-        """Path with answer_id NOT in considered fails validation."""
+    def test_path_alternative_not_in_explored_detected(self) -> None:
+        """Path with answer_id NOT in explored fails validation."""
         graph = Graph.empty()
         graph.create_node(
             "dilemma::choice_a_or_b",
@@ -3414,7 +3414,7 @@ class TestValidation11cPathAlternativeInConsidered:
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "choice_a_or_b", "considered": ["option_a"]},  # missing option_b!
+                {"dilemma_id": "choice_a_or_b", "explored": ["option_a"]},  # missing option_b!
             ],
             "paths": [
                 {
@@ -3426,7 +3426,7 @@ class TestValidation11cPathAlternativeInConsidered:
                 {
                     "path_id": "path2",
                     "dilemma_id": "choice_a_or_b",
-                    "answer_id": "option_b",  # not in considered!
+                    "answer_id": "option_b",  # not in explored!
                     "name": "Path Two",
                 },
             ],
@@ -3454,7 +3454,7 @@ class TestValidation11cPathAlternativeInConsidered:
 
         # Filter for 11c errors specifically
         check_11c_errors = [
-            e for e in errors if "is not in dilemma" in e.issue and "considered list" in e.issue
+            e for e in errors if "is not in dilemma" in e.issue and "explored list" in e.issue
         ]
         assert len(check_11c_errors) == 1
         assert "option_b" in check_11c_errors[0].issue
@@ -3462,8 +3462,8 @@ class TestValidation11cPathAlternativeInConsidered:
         assert check_11c_errors[0].field_path == "paths.1.answer_id"
         assert check_11c_errors[0].category == SeedErrorCategory.CROSS_REFERENCE
 
-    def test_empty_considered_detected(self) -> None:
-        """Path with answer_id but empty considered fails validation."""
+    def test_empty_explored_detected(self) -> None:
+        """Path with answer_id but empty explored fails validation."""
         graph = Graph.empty()
         graph.create_node(
             "dilemma::choice_a_or_b",
@@ -3479,7 +3479,7 @@ class TestValidation11cPathAlternativeInConsidered:
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "choice_a_or_b", "considered": []},  # empty!
+                {"dilemma_id": "choice_a_or_b", "explored": []},  # empty!
             ],
             "paths": [
                 {
@@ -3505,7 +3505,7 @@ class TestValidation11cPathAlternativeInConsidered:
 
         # Filter for 11c errors
         check_11c_errors = [
-            e for e in errors if "is not in dilemma" in e.issue and "considered list" in e.issue
+            e for e in errors if "is not in dilemma" in e.issue and "explored list" in e.issue
         ]
         assert len(check_11c_errors) == 1
         assert "option_a" in check_11c_errors[0].issue
@@ -3527,7 +3527,7 @@ class TestValidation11cPathAlternativeInConsidered:
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "dilemma::choice_a_or_b", "considered": ["option_a"]},  # scoped
+                {"dilemma_id": "dilemma::choice_a_or_b", "explored": ["option_a"]},  # scoped
             ],
             "paths": [
                 {
@@ -3553,7 +3553,7 @@ class TestValidation11cPathAlternativeInConsidered:
 
         # Filter for 11c errors
         check_11c_errors = [
-            e for e in errors if "is not in dilemma" in e.issue and "considered list" in e.issue
+            e for e in errors if "is not in dilemma" in e.issue and "explored list" in e.issue
         ]
         assert check_11c_errors == []
 
@@ -3593,11 +3593,14 @@ class TestBackfillIntegrationWithApplySeedMutations:
             "dilemma::choice_a_or_b::alt::option_b",
         )
 
-        # Legacy data pattern: paths exist but considered is empty
+        # Legacy data pattern: paths exist but explored is empty
         output = {
             "entities": [],
             "dilemmas": [
-                {"dilemma_id": "choice_a_or_b", "considered": []},  # empty - should be backfilled
+                {
+                    "dilemma_id": "choice_a_or_b",
+                    "explored": [],
+                },  # empty explored - should be backfilled
             ],
             "paths": [
                 {
@@ -3637,7 +3640,7 @@ class TestBackfillIntegrationWithApplySeedMutations:
         # Should NOT raise because backfill fixes the data before validation
         apply_seed_mutations(graph, output)
 
-        # Verify the dilemma node was updated with backfilled considered
+        # Verify the dilemma node was updated with backfilled explored
         dilemma_node = graph.get_node("dilemma::choice_a_or_b")
         assert dilemma_node is not None
-        assert sorted(dilemma_node.get("considered", [])) == ["option_a", "option_b"]
+        assert sorted(dilemma_node.get("explored", [])) == ["option_a", "option_b"]

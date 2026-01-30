@@ -54,39 +54,42 @@ class DilemmaDecision(BaseModel):
     explore as paths. The canonical answer is always explored (spine).
     Non-canonical answers become branches only if explicitly explored.
 
-    The `considered` field records the LLM's *intent* - which answers it
+    The `explored` field records the LLM's *intent* - which answers it
     wanted to explore. Actual path existence is derived at runtime from the
     graph, not from this field. This separation allows pruning to drop paths
     without modifying the dilemma's stored intent.
 
     Development states (computed, not stored):
     - committed: Answer has a path in the graph
-    - deferred: Answer in `considered` but no path (pruned)
-    - latent: Answer not in `considered` (never intended for exploration)
+    - deferred: Answer in `explored` but no path (pruned)
+    - latent: Answer not in `explored` (never intended for exploration)
 
     Attributes:
         dilemma_id: Dilemma ID from BRAINSTORM.
-        considered: Answer IDs the LLM intended to explore as paths.
-        implicit: Answer IDs not explored (context for FILL shadows).
+        explored: Answer IDs the LLM intended to explore as paths.
+        unexplored: Answer IDs not explored (context for FILL shadows).
     """
 
     dilemma_id: str = Field(min_length=1, description="Dilemma ID from BRAINSTORM")
-    considered: list[str] = Field(
+    explored: list[str] = Field(
         min_length=1,
         description="Answer IDs the LLM intended to explore as paths",
     )
-    implicit: list[str] = Field(
+    unexplored: list[str] = Field(
         default_factory=list,
         description="Answer IDs not explored (become shadows)",
     )
 
     @model_validator(mode="before")
     @classmethod
-    def migrate_explored_field(cls, data: dict[str, Any]) -> dict[str, Any]:
-        """Migrate old 'explored' field to 'considered'."""
-        if isinstance(data, dict) and "explored" in data and "considered" not in data:
+    def migrate_considered_field(cls, data: dict[str, Any]) -> dict[str, Any]:
+        """Migrate old 'considered' field to 'explored'."""
+        if isinstance(data, dict) and "considered" in data and "explored" not in data:
             data = dict(data)  # Avoid mutating input
-            data["considered"] = data.pop("explored")
+            data["explored"] = data.pop("considered")
+        if isinstance(data, dict) and "implicit" in data and "unexplored" not in data:
+            data = dict(data)
+            data["unexplored"] = data.pop("implicit")
         return data
 
 

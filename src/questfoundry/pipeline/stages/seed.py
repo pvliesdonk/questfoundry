@@ -452,7 +452,7 @@ class SeedStage:
         # This indicates the LLM didn't generate enough branching content
         if final_arc_count < 4:
             dilemmas_fully_explored = sum(
-                1 for d in artifact_data.get("dilemmas", []) if len(d.get("considered", [])) >= 2
+                1 for d in artifact_data.get("dilemmas", []) if len(d.get("explored", [])) >= 2
             )
             log.warning(
                 "seed_low_arc_count",
