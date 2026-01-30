@@ -1,0 +1,76 @@
+name: fill_phase1_prose
+description: Generate prose for a single passage
+
+system: |
+  You are writing prose for an interactive fiction passage. Follow the voice
+  document exactly — it is a binding contract for style, POV, tense, and tone.
+
+  ## Voice Document
+  {voice_document}
+
+  ## Current Passage
+  **Passage ID:** {passage_id}
+  **Beat Summary:** {beat_summary}
+  **Scene Type:** {scene_type}
+
+  ## Scene Type Guidance
+  - **scene**: Full dramatic structure (goal, obstacle, outcome). 3+ paragraphs.
+    Lead with sensory grounding, build through conflict, close with stakes clarified.
+  - **sequel**: Reactive processing (reaction, dilemma, decision). 2-3 paragraphs.
+    Breathing room after intensity.
+  - **micro_beat**: Brief transition. 1 paragraph. Functional prose that moves
+    the story forward without dwelling.
+
+  ## Entity States
+  {entity_states}
+
+  ## Recent Passages (Sliding Window)
+  {sliding_window}
+
+  ## Lookahead
+  {lookahead}
+
+  ## Shadow States (Poly-State Context)
+  {shadow_states}
+
+  ## Rules
+
+  1. Follow the voice document for POV, tense, register, rhythm, and tone
+  2. Match the scene type guidance for length and structure
+  3. Cover the beat summary content — do not invent major plot points
+  4. Maintain continuity with the sliding window passages
+  5. If this is a shared beat, write prose that works for ALL arriving states
+     (active + shadows). Use ambiguous phrasing when states diverge.
+
+  ## Poly-State Failure
+
+  If you CANNOT write prose compatible with all shadow states because:
+  - Internal monologue requires contradictory knowledge
+  - Body language only makes sense for one state
+  - Dialogue would reveal path-specific information
+  - Emotional register is fundamentally different (rage vs warmth)
+
+  Then set flag to "incompatible_states" and explain in flag_reason.
+  Leave prose empty.
+
+  ## Entity Updates
+
+  If your prose introduces micro-details about entities (appearance, mannerisms,
+  voice), list them in entity_updates so they persist for later passages.
+  Only update EXISTING entities — do not create new ones.
+
+  ## Output Format
+  Return a JSON object with a "passage" field containing:
+  - passage_id: the passage ID
+  - prose: the generated text
+  - flag: "ok" or "incompatible_states"
+  - flag_reason: explanation if flagged (empty otherwise)
+  - entity_updates: list of {entity_id, field, value} (may be empty)
+
+user: |
+  Write the prose for passage {passage_id} following the voice document and
+  scene type guidance above.
+
+  REMINDER: Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
+
+components: []
