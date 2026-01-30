@@ -20,7 +20,7 @@
 - EntityVisual nodes (per-entity appearance profiles)
 - IllustrationBrief nodes (structured image prompts with priorities)
 - Illustration nodes (generated image assets)
-- Codex nodes (diegetic encyclopedia entries, spoiler-graduated)
+- CodexEntry nodes (diegetic encyclopedia entries, spoiler-graduated)
 - Depicts edges (illustration → passage)
 - HasEntry edges (codex_entry → entity)
 - Asset files (`projects/<name>/assets/`)
@@ -129,6 +129,7 @@ Not all passages need illustrations. Image generation is expensive, so DRESS ass
 | ≥ 5 | 1 | Must-have |
 | 3–4 | 2 | Important |
 | 1–2 | 3 | Nice-to-have |
+| ≤ 0 | — | Skip (no brief generated) |
 
 ### Cumulative Codex Model
 
@@ -363,11 +364,11 @@ Present to user for review:
 **Operations:**
 
 1. **Prompt assembly:** For each selected brief:
-   - Start with brief's `subject` and `composition`
-   - Append entity `reference_prompt_fragment` for each entity in `entities[]`
-   - Apply global art direction (style, medium, palette)
-   - Apply brief's `style_overrides` (if any)
-   - Set negative prompt: brief's `negative` + art direction's `negative_defaults`
+   - Assemble entity descriptions: join `reference_prompt_fragment` for each entity in `entities[]`
+   - Combine with action: append brief's `subject`, `composition`, and `mood`
+   - Apply global style: append ArtDirection's `style`, `medium`, and `palette`
+   - Apply overrides: append any `style_overrides` from the brief
+   - Set negative prompt: combine brief's `negative` with ArtDirection's `negative_defaults`
    - Format for provider (e.g., DALL-E expects a single text prompt; A1111 expects separate positive/negative)
 
 2. **Sample generation:**
