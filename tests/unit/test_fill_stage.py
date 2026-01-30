@@ -1,14 +1,18 @@
-"""Tests for FILL stage skeleton."""
+"""Tests for FILL stage."""
 
 from __future__ import annotations
 
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from questfoundry.graph.graph import Graph
-from questfoundry.models.fill import FillPhaseResult
+from questfoundry.models.fill import (
+    FillPhase0Output,
+    FillPhaseResult,
+    VoiceDocument,
+)
 from questfoundry.pipeline.gates import AutoApprovePhaseGate, PhaseGateHook
 from questfoundry.pipeline.stages.fill import (
     FillStage,
@@ -58,6 +62,30 @@ class TestFillStageInit:
         assert stage.project_path == Path("/tmp/test")
 
 
+def _mock_phase_0(stage: FillStage) -> None:
+    """Replace _phase_0_voice with a mock that creates a voice node."""
+
+    async def _fake_phase_0(
+        graph: Graph,
+        model: MagicMock,  # noqa: ARG001
+    ) -> FillPhaseResult:
+        graph.create_node(
+            "voice::voice",
+            {
+                "type": "voice",
+                "raw_id": "voice",
+                "pov": "third_limited",
+                "tense": "past",
+                "voice_register": "literary",
+                "sentence_rhythm": "varied",
+                "tone_words": ["atmospheric"],
+            },
+        )
+        return FillPhaseResult(phase="voice", status="completed", llm_calls=1, tokens_used=500)
+
+    stage._phase_0_voice = _fake_phase_0  # type: ignore[method-assign]
+
+
 class TestFillStageExecute:
     @pytest.mark.asyncio
     async def test_requires_project_path(self, mock_model: MagicMock) -> None:
@@ -76,24 +104,26 @@ class TestFillStageExecute:
             await stage.execute(mock_model, "")
 
     @pytest.mark.asyncio
-    async def test_skeleton_runs_all_phases(
+    async def test_runs_all_phases(
         self,
         mock_model: MagicMock,
         grow_graph: Graph,  # noqa: ARG002
         tmp_path: Path,
     ) -> None:
         stage = FillStage(project_path=tmp_path)
+        _mock_phase_0(stage)
         result_dict, llm_calls, tokens = await stage.execute(mock_model, "")
 
-        # All skeleton phases return "skipped"
         phases = result_dict["phases_completed"]
         assert len(phases) == 4
-        assert all(p["status"] == "skipped" for p in phases)
         assert [p["phase"] for p in phases] == ["voice", "generate", "review", "revision"]
+        # Phase 0 is completed; phases 1-3 are still skipped
+        assert phases[0]["status"] == "completed"
+        assert all(p["status"] == "skipped" for p in phases[1:])
 
-        # No LLM calls in skeleton
-        assert llm_calls == 0
-        assert tokens == 0
+        # Phase 0 contributes 1 LLM call
+        assert llm_calls == 1
+        assert tokens == 500
 
     @pytest.mark.asyncio
     async def test_sets_last_stage(
@@ -103,6 +133,7 @@ class TestFillStageExecute:
         tmp_path: Path,
     ) -> None:
         stage = FillStage(project_path=tmp_path)
+        _mock_phase_0(stage)
         await stage.execute(mock_model, "")
 
         saved = Graph.load(tmp_path)
@@ -116,6 +147,7 @@ class TestFillStageExecute:
         tmp_path: Path,
     ) -> None:
         stage = FillStage(project_path=tmp_path)
+        _mock_phase_0(stage)
 
         # First run to create checkpoints
         await stage.execute(mock_model, "")
@@ -153,6 +185,7 @@ class TestFillStageExecute:
         gate.on_phase_complete = AsyncMock(return_value="reject")
 
         stage = FillStage(project_path=tmp_path, gate=gate)
+        _mock_phase_0(stage)
         result_dict, _, _ = await stage.execute(mock_model, "")
 
         # Should stop after first phase (voice) is rejected
@@ -199,6 +232,7 @@ class TestFillStageExecute:
             progress_calls.append((phase, status, detail))
 
         stage = FillStage(project_path=tmp_path)
+        _mock_phase_0(stage)
         await stage.execute(mock_model, "", on_phase_progress=on_progress)
 
         assert len(progress_calls) == 4
@@ -212,6 +246,7 @@ class TestFillStageExecute:
         tmp_path: Path,
     ) -> None:
         stage = FillStage(project_path=Path("/nonexistent"))
+        _mock_phase_0(stage)
         # Override with tmp_path
         result_dict, _, _ = await stage.execute(mock_model, "", project_path=tmp_path)
         assert result_dict["passages_filled"] == 0
@@ -250,14 +285,93 @@ class TestCheckpointing:
             stage._load_checkpoint(tmp_path, "nonexistent")
 
 
-class TestSkeletonPhases:
-    @pytest.mark.asyncio
-    async def test_phase_0_voice_skipped(self) -> None:
-        stage = FillStage()
-        result = await stage._phase_0_voice(Graph.empty(), MagicMock())
-        assert result.phase == "voice"
-        assert result.status == "skipped"
+def _make_voice_output() -> FillPhase0Output:
+    """Create a valid FillPhase0Output for mocking."""
+    return FillPhase0Output(
+        voice=VoiceDocument(
+            pov="third_limited",
+            tense="past",
+            voice_register="literary",
+            sentence_rhythm="varied",
+            tone_words=["atmospheric", "tense"],
+            avoid_words=["suddenly"],
+            avoid_patterns=["adverb-heavy dialogue tags"],
+        )
+    )
 
+
+class TestPhase0Voice:
+    @pytest.mark.asyncio
+    async def test_creates_voice_node(self) -> None:
+        graph = Graph.empty()
+        graph.create_node(
+            "dream::vision",
+            {"type": "dream", "raw_id": "vision", "genre": "dark fantasy"},
+        )
+        stage = FillStage()
+
+        with patch.object(
+            stage,
+            "_fill_llm_call",
+            new_callable=AsyncMock,
+            return_value=(_make_voice_output(), 1, 500),
+        ):
+            result = await stage._phase_0_voice(graph, MagicMock())
+
+        assert result.phase == "voice"
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert result.tokens_used == 500
+
+        # Voice node should be created in graph
+        voice_node = graph.get_node("voice::voice")
+        assert voice_node is not None
+        assert voice_node["pov"] == "third_limited"
+        assert voice_node["tense"] == "past"
+        assert voice_node["voice_register"] == "literary"
+
+    @pytest.mark.asyncio
+    async def test_passes_context_to_llm(self) -> None:
+        graph = Graph.empty()
+        graph.create_node(
+            "dream::vision",
+            {"type": "dream", "raw_id": "vision", "genre": "dark fantasy"},
+        )
+        graph.create_node(
+            "beat::b1",
+            {"type": "beat", "raw_id": "b1", "summary": "test", "scene_type": "scene"},
+        )
+        stage = FillStage()
+
+        mock_llm_call = AsyncMock(return_value=(_make_voice_output(), 1, 500))
+        with patch.object(stage, "_fill_llm_call", mock_llm_call):
+            await stage._phase_0_voice(graph, MagicMock())
+
+        # Verify context was passed with expected keys
+        call_args = mock_llm_call.call_args
+        context = call_args[0][2]  # Third positional arg
+        assert "dream_vision" in context
+        assert "grow_summary" in context
+        assert "scene_types_summary" in context
+
+    @pytest.mark.asyncio
+    async def test_llm_failure_raises(self) -> None:
+        graph = Graph.empty()
+        stage = FillStage()
+
+        with (
+            patch.object(
+                stage,
+                "_fill_llm_call",
+                new_callable=AsyncMock,
+                side_effect=FillStageError("LLM call failed"),
+            ),
+            pytest.raises(FillStageError, match="LLM call failed"),
+        ):
+            await stage._phase_0_voice(graph, MagicMock())
+
+
+class TestSkeletonPhases:
     @pytest.mark.asyncio
     async def test_phase_1_generate_skipped(self) -> None:
         stage = FillStage()
