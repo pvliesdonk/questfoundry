@@ -504,18 +504,16 @@ class FillStage:
             if arc_id == spine_id:
                 continue
             for pid in get_arc_passage_order(graph, arc_id):
-                pnode = graph.get_node(pid)
-                # Skip passages already filled during spine pass (unless flagged)
-                if (
-                    pid in seen
-                    and pnode
-                    and pnode.get("prose")
-                    and pnode.get("flag") != "incompatible_states"
-                ):
-                    continue
-                if pid not in seen:
+                if pid in seen:
+                    # Re-generate shared passages only if flagged incompatible
+                    pnode = graph.get_node(pid)
+                    if pnode and pnode.get("prose") and pnode.get("flag") != "incompatible_states":
+                        continue
+                    # Flagged or unfilled shared passage — regenerate under this arc
+                    order.append((pid, arc_id))
+                else:
                     seen.add(pid)
-                order.append((pid, arc_id))
+                    order.append((pid, arc_id))
 
         return order
 
@@ -598,15 +596,22 @@ class FillStage:
                 )
             else:
                 graph.update_node(passage_id, prose=passage_output.prose)
-                passages_filled += 1
+                if passage_output.prose:
+                    passages_filled += 1
 
                 # Apply entity updates
                 for update in passage_output.entity_updates:
-                    entity_node = graph.get_node(f"entity::{update.entity_id}")
-                    if entity_node:
+                    entity_id = f"entity::{update.entity_id}"
+                    if graph.has_node(entity_id):
                         graph.update_node(
-                            f"entity::{update.entity_id}",
+                            entity_id,
                             **{update.field: update.value},
+                        )
+                    else:
+                        log.warning(
+                            "entity_update_skipped",
+                            entity_id=update.entity_id,
+                            reason="entity not found in graph",
                         )
 
             log.debug(

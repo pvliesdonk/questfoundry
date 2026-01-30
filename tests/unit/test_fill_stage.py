@@ -590,10 +590,12 @@ class TestGenerationOrder:
         stage = FillStage()
         order = stage._get_generation_order(graph)
 
-        # p1 should appear once (spine), p2 appears twice (spine + branch)
-        # But p1 in branch is skipped because it already has prose
+        # p1 has prose and is not flagged — skipped in branch pass
+        # p2 has no prose — appears once from spine, once from branch
         passage_ids = [pid for pid, _ in order]
         assert passage_ids.count("passage::p1") == 1
+        # p2 is unfilled: appears in spine pass, then again in branch (no prose to skip)
+        assert passage_ids.count("passage::p2") == 2
 
 
 class TestSkeletonPhases:
