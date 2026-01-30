@@ -46,8 +46,8 @@ system: |
   ### Dilemma Decisions
   For each dilemma from brainstorm:
   - dilemma_id: the dilemma ID from brainstorm
-  - considered: list of answer IDs that become paths (MUST include canonical)
-  - implicit: list of answer IDs NOT explored (shadows for narrative depth)
+  - explored: list of answer IDs that become paths (MUST include canonical)
+  - unexplored: list of answer IDs NOT explored (shadows for narrative depth)
 
   Include all answers you explored in the discussion. The system will
   balance scope automatically if needed.
@@ -118,8 +118,8 @@ system: |
   ### Dilemma Decisions Manifest
   List EVERY dilemma ID with its decision:
   ```
-  - trust_or_betray: considered=[trust, betray], implicit=[]
-  - weather_storm_clear: considered=[storm], implicit=[clear]
+  - trust_or_betray: explored=[trust, betray], unexplored=[]
+  - weather_storm_clear: explored=[storm], unexplored=[clear]
   ```
   VERIFY: Your list should have exactly {dilemma_count} items.
 

@@ -131,7 +131,7 @@ Compare to qwen3:4b's consequence: "The diary reveals a hidden truth about a pas
 
 **Schema Compliance Issues:**
 - `central_entity_ids: []` on all dilemmas (empty arrays)
-- Several dilemmas have `considered: ['']` (empty strings)
+- Several dilemmas have `explored: ['']` (empty strings)
 - Consequence for "vault_of_truth" describes a booby-trap (logical inconsistency)
 
 **Notable:** Despite being a MoE model with only 3.6B active parameters, it produced richer output than GPT-4o. The routing mechanism appears to activate appropriate experts for creative writing tasks.
@@ -159,7 +159,7 @@ The pipeline's constrained prompts with clear schemas allow small models to punc
 Schema validation should catch:
 - Beat count < 2 per path
 - Empty `central_entity_ids` arrays on dilemmas
-- Empty strings in `considered` arrays
+- Empty strings in `explored` arrays
 - Logical inconsistencies between alternative selection and consequence description
 
 ### 4. Cost Optimization

@@ -32,13 +32,13 @@ system: |
   ```json
   {
     "dilemma_id": "dilemma::host_benevolent_or_selfish",
-    "considered": ["protector", "manipulator"],
-    "implicit": []
+    "explored": ["protector", "manipulator"],
+    "unexplored": []
   }
   ```
   NOTES:
-  - The default path answer (is_default_path=true) MUST be in "considered", never in "implicit".
-  - **Arc Count**: At least 2 dilemmas should have BOTH answers in "considered" for proper IF branching.
+  - The default path answer (is_default_path=true) MUST be in "explored", never in "unexplored".
+  - **Arc Count**: At least 2 dilemmas should have BOTH answers in "explored" for proper IF branching.
   - Dilemmas with only canonical answer explored don't contribute to branching.
 
   ### 3. paths (Story Paths)

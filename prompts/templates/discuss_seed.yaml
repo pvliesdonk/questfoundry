@@ -58,12 +58,12 @@ system: |
     - GOOD: Answer A = confrontation, Answer B = investigation
     - BAD: Both lead to same scene with slightly different dialogue
 
-  Leave as implicit (shadow) when:
+  Leave as unexplored (shadow) when:
   - The answer is atmospheric, not plot-changing
   - One side is clearly "right" (no real dilemma)
   - The content would be similar either way
 
-  **The Power of Shadows**: Implicit answers are NOT failures - they create
+  **The Power of Shadows**: Unexplored answers are NOT failures - they create
   narrative depth. A story where Mentor is benevolent becomes MORE powerful when
   the player COULD have discovered he was manipulative - but didn't. The shadow
   enriches the text without adding complexity.
