@@ -652,10 +652,14 @@ async def _serialize_beats_per_path(
     max_retries: int,
     callbacks: list[BaseCallbackHandler] | None,
     on_phase_progress: PhaseProgressFn | None = None,
+    max_concurrency: int = 2,
 ) -> tuple[list[dict[str, Any]], int]:
-    """Serialize beats for all paths in parallel.
+    """Serialize beats for all paths with bounded concurrency.
 
-    Uses asyncio.gather() to run per-path serialization concurrently.
+    Creates tasks for all paths but limits how many run simultaneously
+    using an asyncio.Semaphore.  Default of 2 prevents flooding Ollama
+    (whose OLLAMA_NUM_PARALLEL defaults to 1) while still allowing
+    pipelining.
 
     Args:
         model: Chat model to use.
@@ -665,20 +669,24 @@ async def _serialize_beats_per_path(
         provider_name: Provider name for strategy selection.
         max_retries: Maximum Pydantic validation retries per path.
         callbacks: LangChain callback handlers.
+        on_phase_progress: Callback for progress reporting.
+        max_concurrency: Max parallel LLM requests (default 2).
 
     Returns:
         Tuple of (all beats merged, total tokens used).
     """
-    log.info("serialize_beats_per_path_started", path_count=len(paths))
+    log.info(
+        "serialize_beats_per_path_started",
+        path_count=len(paths),
+        max_concurrency=max_concurrency,
+    )
 
     path_count = len(paths)
+    semaphore = asyncio.Semaphore(max_concurrency)
 
-    # Create tasks for parallel execution
-    tasks: list[asyncio.Future[tuple[list[dict[str, Any]], int]]] = []
-    task_to_path_id: dict[asyncio.Future[tuple[list[dict[str, Any]], int]], str] = {}
-    for path in paths:
-        task = asyncio.create_task(
-            _serialize_path_beats(
+    async def _limited_serialize(path: dict[str, Any]) -> tuple[list[dict[str, Any]], int]:
+        async with semaphore:
+            return await _serialize_path_beats(
                 model=model,
                 path_data=path,
                 per_path_prompt_template=per_path_prompt,
@@ -687,7 +695,12 @@ async def _serialize_beats_per_path(
                 max_retries=max_retries,
                 callbacks=callbacks,
             )
-        )
+
+    # Create tasks for all paths (semaphore limits actual concurrency)
+    tasks: list[asyncio.Future[tuple[list[dict[str, Any]], int]]] = []
+    task_to_path_id: dict[asyncio.Future[tuple[list[dict[str, Any]], int]], str] = {}
+    for path in paths:
+        task = asyncio.create_task(_limited_serialize(path))
         tasks.append(task)
         task_to_path_id[task] = str(path.get("path_id", ""))
 

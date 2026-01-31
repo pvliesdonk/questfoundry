@@ -11,9 +11,11 @@ from pydantic import BaseModel
 from questfoundry.providers.base import ProviderError
 from questfoundry.providers.factory import (
     PROVIDER_DEFAULTS,
+    _query_ollama_num_ctx,
     create_chat_model,
     create_model_for_structured_output,
     get_default_model,
+    unload_ollama_model,
 )
 from questfoundry.providers.model_info import (
     DEFAULT_CONTEXT_WINDOW,
@@ -629,3 +631,170 @@ def test_get_model_info_reasoning_models_no_tools(
     assert info.context_window == expected_context
     assert info.supports_tools is expected_tools
     assert info.supports_vision is expected_vision
+
+
+# --- Tests for unload_ollama_model ---
+
+
+class TestUnloadOllamaModel:
+    """Tests for the Ollama model unloading utility."""
+
+    @pytest.mark.asyncio
+    async def test_sends_keep_alive_zero(self) -> None:
+        """Sends POST with keep_alive=0 to Ollama API."""
+        from unittest.mock import AsyncMock
+
+        mock_model = MagicMock()
+        mock_model.base_url = "http://localhost:11434"
+        mock_model.model = "qwen3:4b"
+
+        mock_response = MagicMock()
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            await unload_ollama_model(mock_model)
+
+            mock_client.post.assert_called_once_with(
+                "http://localhost:11434/api/generate",
+                json={"model": "qwen3:4b", "keep_alive": 0},
+            )
+
+    @pytest.mark.asyncio
+    async def test_noop_for_non_ollama_model(self) -> None:
+        """Silently returns when model has no base_url (e.g., OpenAI)."""
+        mock_model = MagicMock(spec=[])  # no attributes
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            await unload_ollama_model(mock_model)
+            mock_cls.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_noop_when_base_url_is_none(self) -> None:
+        """Returns when base_url is None."""
+        mock_model = MagicMock()
+        mock_model.base_url = None
+        mock_model.model = "qwen3:4b"
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            await unload_ollama_model(mock_model)
+            mock_cls.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_logs_warning_on_failure(self) -> None:
+        """Logs warning but doesn't raise on connection failure."""
+        from unittest.mock import AsyncMock
+
+        mock_model = MagicMock()
+        mock_model.base_url = "http://localhost:11434"
+        mock_model.model = "qwen3:4b"
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=ConnectionError("refused"))
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Should not raise
+            await unload_ollama_model(mock_model)
+
+
+# --- Tests for _query_ollama_num_ctx ---
+
+
+class TestQueryOllamaNumCtx:
+    """Tests for querying Ollama /api/show for num_ctx."""
+
+    def test_returns_num_ctx_from_parameters(self) -> None:
+        """Extracts num_ctx from the parameters field."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "parameters": "temperature  0.7\nnum_ctx  32768\nrepeat_penalty  1",
+            "model_info": {},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=None)
+
+            result = _query_ollama_num_ctx("http://localhost:11434", "qwen3:4b")
+
+        assert result == 32768
+
+    def test_falls_back_to_arch_context_length(self) -> None:
+        """Uses model_info context_length when parameters lacks num_ctx."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "parameters": "temperature  0.7",
+            "model_info": {"qwen3.context_length": 262144},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=None)
+
+            result = _query_ollama_num_ctx("http://localhost:11434", "qwen3:4b")
+
+        assert result == 262144
+
+    def test_returns_none_on_connection_error(self) -> None:
+        """Returns None when Ollama is unreachable."""
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value.__enter__ = MagicMock(side_effect=ConnectionError("refused"))
+
+            result = _query_ollama_num_ctx("http://localhost:11434", "qwen3:4b")
+
+        assert result is None
+
+    def test_returns_none_when_no_context_info(self) -> None:
+        """Returns None when response has no num_ctx or context_length."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "parameters": "temperature  0.7",
+            "model_info": {"general.architecture": "qwen3"},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=None)
+
+            result = _query_ollama_num_ctx("http://localhost:11434", "qwen3:4b")
+
+        assert result is None
+
+    def test_prefers_parameters_over_arch(self) -> None:
+        """parameters num_ctx takes precedence over model_info context_length."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "parameters": "num_ctx  32768",
+            "model_info": {"qwen3.context_length": 262144},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=None)
+
+            result = _query_ollama_num_ctx("http://localhost:11434", "qwen3:4b")
+
+        # parameters num_ctx (32768) should be returned, not arch (262144)
+        assert result == 32768

@@ -260,6 +260,11 @@ class BrainstormStage:
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
+        # Unload discuss model from VRAM if switching to a different Ollama model
+        unload_after_discuss = kwargs.get("unload_after_discuss")
+        if unload_after_discuss is not None:
+            await unload_after_discuss()
+
         # Phase 2: Summarize (use summarize_model if provided)
         log.debug("brainstorm_phase", phase="summarize")
         summarize_prompt = get_brainstorm_summarize_prompt(size_profile=size_profile)
@@ -274,6 +279,11 @@ class BrainstormStage:
             on_phase_progress("summarize", "completed", None)
         total_llm_calls += 1
         total_tokens += summarize_tokens
+
+        # Unload summarize model from VRAM if switching to a different Ollama model
+        unload_after_summarize = kwargs.get("unload_after_summarize")
+        if unload_after_summarize is not None:
+            await unload_after_summarize()
 
         # Phase 3: Serialize (use serialize_model if provided)
         log.debug("brainstorm_phase", phase="serialize")

@@ -181,7 +181,7 @@ class DressStage:
         serialize_provider_name: str | None = None,
         resume_from: str | None = None,
         image_provider: str | None = None,
-        **kwargs: Any,  # noqa: ARG002
+        **kwargs: Any,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the DRESS stage.
 
@@ -225,6 +225,8 @@ class DressStage:
         self._on_llm_end = on_llm_end
         self._summarize_model = summarize_model
         self._user_prompt = user_prompt
+        self._unload_after_discuss = kwargs.get("unload_after_discuss")
+        self._unload_after_summarize = kwargs.get("unload_after_summarize")
         if image_provider is not None:
             self._image_provider_spec = image_provider
 
@@ -395,6 +397,10 @@ class DressStage:
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
+        # Unload discuss model from VRAM if switching to a different Ollama model
+        if self._unload_after_discuss is not None:
+            await self._unload_after_discuss()
+
         # Phase 2: Summarize
         summarize_template = loader.load("dress_summarize")
         brief, summarize_tokens = await summarize_discussion(
@@ -406,6 +412,10 @@ class DressStage:
         )
         total_llm_calls += 1
         total_tokens += summarize_tokens
+
+        # Unload summarize model from VRAM if switching to a different Ollama model
+        if self._unload_after_summarize is not None:
+            await self._unload_after_summarize()
 
         # Phase 3: Serialize
         entity_ids = "\n".join(
