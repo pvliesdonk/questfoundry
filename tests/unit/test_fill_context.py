@@ -850,9 +850,8 @@ class TestFormatEntryStates:
             {"type": "arc", "paths": ["path::trust", "path::betray"]},
         )
         result = format_entry_states(g, "passage::p1", "arc::a1")
-        assert "cautious warmth" in result
-        assert "defensive guilt" in result
-        assert "ACTIVE" in result
+        assert "path::trust: cautious warmth <- ACTIVE" in result
+        assert "path::betray: defensive guilt <- ACTIVE" in result
 
     def test_marks_active_paths(self) -> None:
         g = Graph.empty()
@@ -879,6 +878,5 @@ class TestFormatEntryStates:
         result = format_entry_states(g, "passage::p1", "arc::a1")
         assert "path::trust: cautious warmth <- ACTIVE" in result
         # betray is NOT active in this arc
-        assert (
-            "path::betray: defensive guilt\n" in result or "path::betray: defensive guilt" in result
-        )
+        assert "path::betray: defensive guilt" in result
+        assert "path::betray: defensive guilt <- ACTIVE" not in result

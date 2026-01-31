@@ -149,11 +149,13 @@ class GrowStage:
             All phases are async and accept (graph, model) parameters.
             Deterministic phases ignore the model parameter.
         """
-        # Gap detection (4a/4b/4c) runs BEFORE intersections (3) so that
-        # each path is fully elaborated before cross-path weaving.  This
-        # prevents "conditional prerequisites" — a shared beat depending on
-        # a path-specific gap beat — which would cause silent `requires`
-        # edge drops during arc enumeration and passage DAG cycles.
+        # Phases 4a-4d run BEFORE intersections (3) so that each path is
+        # fully elaborated before cross-path weaving.  Gap detection
+        # (4a/4b/4c) prevents "conditional prerequisites" — a shared beat
+        # depending on a path-specific gap beat — which would cause silent
+        # `requires` edge drops during arc enumeration and passage DAG
+        # cycles.  Phase 4d (atmospheric) annotates beats with sensory
+        # detail and entry states that intersections need for shared beats.
         # See: check_intersection_compatibility() invariant, #357/#358/#359.
         return [
             (self._phase_1_validate_dag, "validate_dag"),
