@@ -10,6 +10,17 @@ from questfoundry.providers.factory import (
     create_chat_model,
     create_model_for_structured_output,
 )
+from questfoundry.providers.image import (
+    ImageContentPolicyError,
+    ImageProvider,
+    ImageProviderConnectionError,
+    ImageProviderError,
+    ImageResult,
+)
+from questfoundry.providers.image_openai import (
+    OpenAIImageProvider,
+    create_image_provider,
+)
 from questfoundry.providers.model_info import (
     ModelInfo,
     get_model_info,
@@ -21,13 +32,20 @@ from questfoundry.providers.structured_output import (
 )
 
 __all__ = [
+    "ImageContentPolicyError",
+    "ImageProvider",
+    "ImageProviderConnectionError",
+    "ImageProviderError",
+    "ImageResult",
     "ModelInfo",
+    "OpenAIImageProvider",
     "ProviderConnectionError",
     "ProviderError",
     "ProviderModelError",
     "ProviderRateLimitError",
     "StructuredOutputStrategy",
     "create_chat_model",
+    "create_image_provider",
     "create_model_for_structured_output",
     "get_default_strategy",
     "get_model_info",
