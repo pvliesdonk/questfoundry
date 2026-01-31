@@ -227,6 +227,16 @@ class TestIntersectionProposal:
 
 
 class TestSceneTypeTag:
+    def _make_tag(self, **overrides: str) -> SceneTypeTag:
+        defaults = {
+            "beat_id": "b1",
+            "scene_type": "scene",
+            "narrative_function": "introduce",
+            "exit_mood": "quiet dread",
+        }
+        defaults.update(overrides)
+        return SceneTypeTag(**defaults)  # type: ignore[arg-type]
+
     @pytest.mark.parametrize(
         "scene_type",
         [
@@ -236,12 +246,42 @@ class TestSceneTypeTag:
         ],
     )
     def test_valid_scene_types(self, scene_type: str) -> None:
-        tag = SceneTypeTag(beat_id="b1", scene_type=scene_type)  # type: ignore[arg-type]
+        tag = self._make_tag(scene_type=scene_type)
         assert tag.scene_type == scene_type
 
     def test_invalid_scene_type_rejected(self) -> None:
         with pytest.raises(ValidationError, match="scene_type"):
-            SceneTypeTag(beat_id="b1", scene_type="epic")  # type: ignore[arg-type]
+            self._make_tag(scene_type="epic")
+
+    @pytest.mark.parametrize(
+        "func",
+        [
+            pytest.param("introduce", id="introduce"),
+            pytest.param("develop", id="develop"),
+            pytest.param("complicate", id="complicate"),
+            pytest.param("confront", id="confront"),
+            pytest.param("resolve", id="resolve"),
+        ],
+    )
+    def test_valid_narrative_functions(self, func: str) -> None:
+        tag = self._make_tag(narrative_function=func)
+        assert tag.narrative_function == func
+
+    def test_invalid_narrative_function_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="narrative_function"):
+            self._make_tag(narrative_function="climax")
+
+    def test_exit_mood_valid(self) -> None:
+        tag = self._make_tag(exit_mood="shaken resolve")
+        assert tag.exit_mood == "shaken resolve"
+
+    def test_exit_mood_too_short_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="exit_mood"):
+            self._make_tag(exit_mood="x")
+
+    def test_exit_mood_too_long_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="exit_mood"):
+            self._make_tag(exit_mood="a" * 41)
 
 
 class TestGapProposal:
