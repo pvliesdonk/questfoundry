@@ -46,6 +46,7 @@ from questfoundry.graph.dress_mutations import (
     apply_dress_art_direction,
     apply_dress_brief,
     apply_dress_codex,
+    apply_dress_illustration,
     validate_dress_codex_entries,
 )
 from questfoundry.graph.fill_context import format_dream_vision, get_spine_arc_id
@@ -59,6 +60,7 @@ from questfoundry.models.dress import (
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
+from questfoundry.providers.image_openai import create_image_provider
 from questfoundry.providers.structured_output import with_structured_output
 from questfoundry.tools.langchain_tools import (
     get_all_research_tools,
@@ -110,6 +112,7 @@ class DressStage:
         self,
         project_path: Path | None = None,
         gate: PhaseGateHook | None = None,
+        image_provider: str | None = None,
     ) -> None:
         self.project_path = project_path
         self.gate = gate or AutoApprovePhaseGate()
@@ -124,6 +127,7 @@ class DressStage:
         self._on_llm_end: LLMCallbackFn | None = None
         self._summarize_model: BaseChatModel | None = None
         self._user_prompt: str = ""
+        self._image_provider_spec: str | None = image_provider
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -176,6 +180,7 @@ class DressStage:
         summarize_provider_name: str | None = None,  # noqa: ARG002
         serialize_provider_name: str | None = None,
         resume_from: str | None = None,
+        image_provider: str | None = None,
         **kwargs: Any,  # noqa: ARG002
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the DRESS stage.
@@ -220,6 +225,8 @@ class DressStage:
         self._on_llm_end = on_llm_end
         self._summarize_model = summarize_model
         self._user_prompt = user_prompt
+        if image_provider is not None:
+            self._image_provider_spec = image_provider
 
         log.info("stage_start", stage="dress")
 
@@ -701,16 +708,152 @@ class DressStage:
         )
 
     # -------------------------------------------------------------------------
-    # Phases 3-4: Stubs (implemented in later PRs)
+    # Phase 3: Human Review Gate
     # -------------------------------------------------------------------------
 
-    async def _phase_3_review(self, graph: Graph, model: BaseChatModel) -> DressPhaseResult:
-        """Phase 3: Human review gate (not yet implemented)."""
-        raise NotImplementedError("Phase 3 (review) will be implemented in PR 6")
+    async def _phase_3_review(
+        self,
+        graph: Graph,
+        model: BaseChatModel,  # noqa: ARG002
+    ) -> DressPhaseResult:
+        """Phase 3: Review briefs and select which to render.
 
-    async def _phase_4_generate(self, graph: Graph, model: BaseChatModel) -> DressPhaseResult:
-        """Phase 4: Image generation (not yet implemented)."""
-        raise NotImplementedError("Phase 4 (generate) will be implemented in PR 6")
+        In auto-approve mode all briefs are selected. In interactive
+        mode (future), a gate would present briefs for budget selection.
+        Stores the selection as metadata on the graph.
+        """
+        briefs = graph.get_nodes_by_type("illustration_brief")
+        if not briefs:
+            return DressPhaseResult(
+                phase="review",
+                status="completed",
+                detail="no briefs to review",
+            )
+
+        # Sort by priority (1=must-have first)
+        sorted_briefs = sorted(
+            briefs.items(),
+            key=lambda item: item[1].get("priority", 99),
+        )
+        selected_ids = [bid for bid, _ in sorted_briefs]
+
+        # Store selection in graph metadata for Phase 4
+        graph.upsert_node(
+            "dress_meta::selection",
+            {
+                "type": "dress_meta",
+                "selected_briefs": selected_ids,
+                "total_briefs": len(briefs),
+            },
+        )
+
+        log.info(
+            "review_complete",
+            selected=len(selected_ids),
+            total=len(briefs),
+        )
+
+        return DressPhaseResult(
+            phase="review",
+            status="completed",
+            detail=f"{len(selected_ids)} of {len(briefs)} briefs selected",
+        )
+
+    # -------------------------------------------------------------------------
+    # Phase 4: Image Generation
+    # -------------------------------------------------------------------------
+
+    async def _phase_4_generate(
+        self,
+        graph: Graph,
+        model: BaseChatModel,  # noqa: ARG002
+    ) -> DressPhaseResult:
+        """Phase 4: Generate images for selected illustration briefs.
+
+        Uses the configured ImageProvider to render each brief into
+        an image, then stores via AssetManager and creates Illustration
+        nodes in the graph.
+        """
+        from questfoundry.artifacts.assets import AssetManager
+        from questfoundry.providers.image import ImageProviderError
+
+        if not self._image_provider_spec:
+            return DressPhaseResult(
+                phase="generate",
+                status="completed",
+                detail="no image provider configured, skipping generation",
+            )
+
+        # Get selected briefs from Phase 3
+        selection = graph.get_node("dress_meta::selection")
+        if not selection:
+            return DressPhaseResult(
+                phase="generate",
+                status="completed",
+                detail="no selection metadata, skipping generation",
+            )
+
+        selected_ids: list[str] = selection.get("selected_briefs", [])
+        if not selected_ids:
+            return DressPhaseResult(
+                phase="generate",
+                status="completed",
+                detail="no briefs selected",
+            )
+
+        if self.project_path is None:
+            raise DressStageError("project_path is required for image generation")
+
+        provider = create_image_provider(self._image_provider_spec)
+        asset_mgr = AssetManager(self.project_path)
+        art_dir = graph.get_node("art_direction::main") or {}
+        aspect_ratio = art_dir.get("aspect_ratio", "16:9")
+
+        generated = 0
+        failed = 0
+
+        for brief_id in selected_ids:
+            brief_data = graph.get_node(brief_id)
+            if not brief_data:
+                log.warning("brief_not_found", brief_id=brief_id)
+                failed += 1
+                continue
+
+            positive, negative = assemble_image_prompt(graph, brief_data)
+
+            try:
+                result = await provider.generate(
+                    positive,
+                    negative_prompt=negative,
+                    aspect_ratio=aspect_ratio,
+                )
+                asset_path = asset_mgr.store(result.image_data, result.content_type)
+
+                apply_dress_illustration(
+                    graph,
+                    brief_id=brief_id,
+                    asset_path=asset_path,
+                    caption=brief_data.get("caption", ""),
+                    category=brief_data.get("category", "scene"),
+                )
+                generated += 1
+
+            except ImageProviderError as e:
+                log.warning("image_gen_failed", brief_id=brief_id, error=str(e))
+                failed += 1
+                continue
+
+        log.info(
+            "generate_complete",
+            generated=generated,
+            failed=failed,
+        )
+
+        return DressPhaseResult(
+            phase="generate",
+            status="completed",
+            detail=f"{generated} images generated, {failed} failed",
+        )
 
 
 # -------------------------------------------------------------------------
@@ -721,9 +864,10 @@ class DressStage:
 def create_dress_stage(
     project_path: Path | None = None,
     gate: PhaseGateHook | None = None,
+    image_provider: str | None = None,
 ) -> DressStage:
     """Create a DressStage instance."""
-    return DressStage(project_path=project_path, gate=gate)
+    return DressStage(project_path=project_path, gate=gate, image_provider=image_provider)
 
 
 # Singleton instance for registration (project_path provided at execution)
@@ -857,3 +1001,61 @@ def describe_priority_context(graph: Graph, passage_id: str, base_score: int) ->
         parts.append(f"Divergence point: {len(choices)} choices")
 
     return "\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# Image prompt assembly
+# ---------------------------------------------------------------------------
+
+
+def assemble_image_prompt(
+    graph: Graph,
+    brief: dict[str, Any],
+) -> tuple[str, str | None]:
+    """Build positive + negative prompt from brief + art direction + entity visuals.
+
+    Combines entity reference fragments, subject, composition, mood, and
+    global art direction into a single positive prompt. Negative prompt
+    merges brief-specific and global negatives.
+
+    Args:
+        graph: Story graph containing art direction and entity visual nodes.
+        brief: IllustrationBrief data dict.
+
+    Returns:
+        Tuple of (positive_prompt, negative_prompt_or_None).
+    """
+    from questfoundry.graph.context import strip_scope_prefix
+
+    art_dir = graph.get_node("art_direction::main") or {}
+
+    # Entity visual fragments for consistency
+    entity_fragments: list[str] = []
+    for eid in brief.get("entities", []):
+        raw_eid = strip_scope_prefix(eid)
+        ev = graph.get_node(f"entity_visual::{raw_eid}")
+        if ev:
+            frag = ev.get("reference_prompt_fragment", "")
+            if frag:
+                entity_fragments.append(frag)
+
+    palette = art_dir.get("palette", [])
+    palette_str = ", ".join(palette) + " palette" if palette else ""
+
+    positive_parts = [
+        " and ".join(entity_fragments) if entity_fragments else "",
+        brief.get("subject", ""),
+        brief.get("composition", ""),
+        brief.get("mood", ""),
+        f"{art_dir.get('style', '')}, {art_dir.get('medium', '')} style".strip(", "),
+        palette_str,
+    ]
+    positive = ", ".join(p for p in positive_parts if p)
+
+    negative_parts = [
+        brief.get("negative", ""),
+        art_dir.get("negative_defaults", ""),
+    ]
+    negative = ", ".join(n for n in negative_parts if n)
+
+    return positive, negative or None
