@@ -220,6 +220,36 @@ def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
     return chat_model
 
 
+async def unload_ollama_model(chat_model: BaseChatModel) -> None:
+    """Send keep_alive=0 to Ollama to immediately unload a model from VRAM.
+
+    Used between pipeline phases when switching to a different Ollama model,
+    so the outgoing model frees GPU memory for the incoming one.
+
+    Safe to call on non-Ollama models (silently returns).
+
+    Args:
+        chat_model: The model to unload. Must have ``base_url`` and ``model``
+            attributes (ChatOllama instances do).
+    """
+    import httpx
+
+    base_url = getattr(chat_model, "base_url", None)
+    model_name = getattr(chat_model, "model", None)
+    if not base_url or not model_name:
+        return
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            await client.post(
+                f"{base_url}/api/generate",
+                json={"model": model_name, "keep_alive": 0},
+            )
+        log.info("ollama_model_unloaded", model=model_name)
+    except Exception as e:
+        log.warning("ollama_unload_failed", model=model_name, error=str(e))
+
+
 def _is_reasoning_model(model: str) -> bool:
     """Check if model is an OpenAI reasoning model (o1/o3 families).
 

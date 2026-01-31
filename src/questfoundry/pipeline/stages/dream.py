@@ -39,7 +39,7 @@ if TYPE_CHECKING:
         LLMCallbackFn,
         UserInputFn,
     )
-    from questfoundry.pipeline.stages.base import PhaseProgressFn
+    from questfoundry.pipeline.stages.base import PhaseProgressFn, UnloadHookFn
 
 
 class DreamStage:
@@ -78,6 +78,9 @@ class DreamStage:
         serialize_model: BaseChatModel | None = None,
         summarize_provider_name: str | None = None,  # noqa: ARG002 - for future use
         serialize_provider_name: str | None = None,
+        unload_after_discuss: UnloadHookFn | None = None,
+        unload_after_summarize: UnloadHookFn | None = None,
+        **_kwargs: Any,
     ) -> tuple[dict[str, Any], int, int]:
         """Execute the DREAM stage using the 3-phase pattern.
 
@@ -142,6 +145,10 @@ class DreamStage:
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
+        # Unload discuss model from VRAM if switching to a different Ollama model
+        if unload_after_discuss is not None:
+            await unload_after_discuss()
+
         # Phase 2: Summarize (use summarize_model if provided)
         log.debug("dream_phase", phase="summarize")
         brief, summarize_tokens = await summarize_discussion(
@@ -153,6 +160,10 @@ class DreamStage:
             on_phase_progress("summarize", "completed", None)
         total_llm_calls += 1  # Summarize is a single call
         total_tokens += summarize_tokens
+
+        # Unload summarize model from VRAM if switching to a different Ollama model
+        if unload_after_summarize is not None:
+            await unload_after_summarize()
 
         # Phase 3: Serialize (use serialize_model if provided)
         log.debug("dream_phase", phase="serialize")

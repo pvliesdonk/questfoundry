@@ -28,7 +28,11 @@ from questfoundry.pipeline.config import (
 from questfoundry.pipeline.gates import AutoApproveGate, GateHook
 from questfoundry.pipeline.size import resolve_size_from_graph
 from questfoundry.providers.base import ProviderError
-from questfoundry.providers.factory import create_chat_model, get_default_model
+from questfoundry.providers.factory import (
+    create_chat_model,
+    get_default_model,
+    unload_ollama_model,
+)
 from questfoundry.providers.model_info import get_model_info
 
 if TYPE_CHECKING:
@@ -486,6 +490,31 @@ class PipelineOrchestrator:
             if self._enable_llm_logging:
                 log.debug("llm_logging_enabled", stage=stage_name)
 
+            # Build Ollama model-eviction hooks for phase transitions.
+            # When switching from one Ollama model to a different one,
+            # send keep_alive=0 to free VRAM before the new model loads.
+            discuss_provider = self._get_resolved_discuss_provider()
+            summarize_provider = self._get_resolved_phase_provider("summarize")
+            serialize_provider = self._get_resolved_phase_provider("serialize")
+
+            async def _noop() -> None:
+                pass
+
+            unload_after_discuss = _noop
+            unload_after_summarize = _noop
+
+            if discuss_provider != summarize_provider and discuss_provider.startswith("ollama"):
+                _discuss_model = model  # capture for closure
+
+                async def unload_after_discuss() -> None:
+                    await unload_ollama_model(_discuss_model)
+
+            if summarize_provider != serialize_provider and summarize_provider.startswith("ollama"):
+                _summarize_model = summarize_model  # capture for closure
+
+                async def unload_after_summarize() -> None:
+                    await unload_ollama_model(_summarize_model)
+
             # Execute stage with new LangChain-native protocol
             log.debug("stage_execute", stage=stage_name)
 
@@ -535,6 +564,9 @@ class PipelineOrchestrator:
                 serialize_model=serialize_model,
                 summarize_provider_name=self._summarize_provider_name,
                 serialize_provider_name=self._serialize_provider_name,
+                # Ollama model-eviction hooks (no-ops when same model across phases)
+                unload_after_discuss=unload_after_discuss,
+                unload_after_summarize=unload_after_summarize,
                 **stage_kwargs,
             )
 

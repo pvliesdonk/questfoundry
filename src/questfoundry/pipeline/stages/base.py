@@ -14,6 +14,8 @@ AssistantMessageFn = Callable[[str], None]
 LLMCallbackFn = Callable[[str], None]
 # Phase progress callback: (phase_name, status, detail) -> None
 PhaseProgressFn = Callable[[str, str, str | None], None]
+# Async hook called between pipeline phases to unload Ollama models from VRAM
+UnloadHookFn = Callable[[], Awaitable[None]]
 
 
 class Stage(Protocol):

@@ -334,6 +334,11 @@ class SeedStage:
         total_llm_calls += discuss_calls
         total_tokens += discuss_tokens
 
+        # Unload discuss model from VRAM if switching to a different Ollama model
+        unload_after_discuss = kwargs.get("unload_after_discuss")
+        if unload_after_discuss is not None:
+            await unload_after_discuss()
+
         # Load graph once for summarize manifest and serialize validation
         graph = Graph.load(resolved_path)
 
@@ -354,6 +359,9 @@ class SeedStage:
         # Each iteration runs summarize -> serialize; on semantic errors,
         # we append feedback to messages and retry the whole cycle.
         result: SerializeResult | None = None
+        # Unload summarize model once before first serialize (not every retry)
+        _summarize_unloaded = False
+        unload_after_summarize = kwargs.get("unload_after_summarize")
 
         for outer_attempt in range(max_outer_retries + 1):
             # Phase 2: Summarize (use summarize_model if provided)
@@ -376,6 +384,11 @@ class SeedStage:
 
             # Track brief in conversation history as assistant output
             messages.append(AIMessage(content=brief))
+
+            # Unload summarize model once before first serialize call
+            if unload_after_summarize is not None and not _summarize_unloaded:
+                await unload_after_summarize()
+                _summarize_unloaded = True
 
             # Phase 3: Serialize (use serialize_model if provided)
             log.debug("seed_phase", phase="serialize", outer_attempt=outer_attempt + 1)
