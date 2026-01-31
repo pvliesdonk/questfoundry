@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from questfoundry.models.pipeline import PhaseResult
 
@@ -177,12 +177,31 @@ class EntryStateBeat(BaseModel):
     beat_id: str = Field(min_length=1)
     moods: list[EntryMood] = Field(min_length=1)
 
+    @model_validator(mode="after")
+    def _validate_unique_mood_paths(self) -> EntryStateBeat:
+        path_ids = [mood.path_id for mood in self.moods]
+        if len(path_ids) != len(set(path_ids)):
+            raise ValueError("path_id in moods list must be unique for a single beat")
+        return self
+
 
 class Phase4dOutput(BaseModel):
     """Wrapper for Phase 4d structured output (atmospheric details + entry states)."""
 
     details: list[AtmosphericDetail] = Field(default_factory=list)
     entry_states: list[EntryStateBeat] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_unique_beat_ids(self) -> Phase4dOutput:
+        if self.details:
+            detail_ids = [d.beat_id for d in self.details]
+            if len(detail_ids) != len(set(detail_ids)):
+                raise ValueError("beat_id in details list must be unique")
+        if self.entry_states:
+            entry_ids = [es.beat_id for es in self.entry_states]
+            if len(entry_ids) != len(set(entry_ids)):
+                raise ValueError("beat_id in entry_states list must be unique")
+        return self
 
 
 class PathMiniArc(BaseModel):
@@ -205,6 +224,14 @@ class Phase4eOutput(BaseModel):
     """Wrapper for Phase 4e structured output (per-path mini-arcs)."""
 
     arcs: list[PathMiniArc] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_unique_path_ids(self) -> Phase4eOutput:
+        if self.arcs:
+            path_ids = [arc.path_id for arc in self.arcs]
+            if len(path_ids) != len(set(path_ids)):
+                raise ValueError("path_id in arcs list must be unique")
+        return self
 
 
 class GapProposal(BaseModel):

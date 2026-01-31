@@ -482,6 +482,16 @@ class TestEntryStateBeat:
         )
         assert len(esb.moods) == 2
 
+    def test_duplicate_path_ids_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"path_id.*unique"):
+            EntryStateBeat(
+                beat_id="b1",
+                moods=[
+                    EntryMood(path_id="p1", mood="quiet dread"),
+                    EntryMood(path_id="p1", mood="bitter resolve"),
+                ],
+            )
+
 
 class TestPhase4dOutput:
     def test_default_empty(self) -> None:
@@ -506,6 +516,28 @@ class TestPhase4dOutput:
         )
         assert len(out.details) == 1
         assert len(out.entry_states) == 1
+
+    def test_duplicate_detail_beat_ids_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"beat_id.*details.*unique"):
+            Phase4dOutput(
+                details=[
+                    AtmosphericDetail(
+                        beat_id="b1", atmospheric_detail="Dusty library with creaking shelves"
+                    ),
+                    AtmosphericDetail(
+                        beat_id="b1", atmospheric_detail="Rain-slicked cobblestones at dusk"
+                    ),
+                ],
+            )
+
+    def test_duplicate_entry_state_beat_ids_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"beat_id.*entry_states.*unique"):
+            Phase4dOutput(
+                entry_states=[
+                    EntryStateBeat(beat_id="b1", moods=[EntryMood(path_id="p1", mood="dread")]),
+                    EntryStateBeat(beat_id="b1", moods=[EntryMood(path_id="p2", mood="hope")]),
+                ],
+            )
 
 
 class TestPathMiniArc:
@@ -552,3 +584,18 @@ class TestPhase4eOutput:
             ],
         )
         assert len(out.arcs) == 2
+
+    def test_duplicate_path_ids_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"path_id.*unique"):
+            Phase4eOutput(
+                arcs=[
+                    PathMiniArc(
+                        path_id="p1",
+                        path_theme="Trust earned through vulnerability",
+                        path_mood="warmth",
+                    ),
+                    PathMiniArc(
+                        path_id="p1", path_theme="Different theme entirely here", path_mood="cold"
+                    ),
+                ],
+            )
