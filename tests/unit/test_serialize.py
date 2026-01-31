@@ -1157,6 +1157,51 @@ class TestFormatSectionCorrections:
 
         assert result == ""
 
+    def test_formats_cross_reference_errors(self) -> None:
+        """Should format CROSS_REFERENCE errors as bucket misplacement corrections."""
+        from questfoundry.agents.serialize import _format_section_corrections
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="dilemmas",
+                issue=(
+                    "Dilemma 'loyalty': default answer 'trusts_council' is in "
+                    "unexplored but MUST be in explored."
+                ),
+                available=["betrays_council"],
+                provided="trusts_council",
+                category=SeedErrorCategory.CROSS_REFERENCE,
+            )
+        ]
+
+        result = _format_section_corrections(errors)
+
+        assert "BUCKET MISPLACEMENT" in result
+        assert "MOVE 'trusts_council' TO EXPLORED" in result
+        assert "Reason:" in result
+
+    def test_cross_reference_does_not_produce_invalid_correction(self) -> None:
+        """CROSS_REFERENCE errors should NOT appear as 'X is INVALID' substitutions."""
+        from questfoundry.agents.serialize import _format_section_corrections
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+
+        errors = [
+            SeedValidationError(
+                field_path="paths.0.answer_id",
+                issue="Path answer 'X' is not in dilemma explored list",
+                available=["Y"],
+                provided="X",
+                category=SeedErrorCategory.CROSS_REFERENCE,
+            )
+        ]
+
+        result = _format_section_corrections(errors)
+
+        assert "MANDATORY CORRECTIONS" not in result
+        assert "is INVALID" not in result
+        assert "BUCKET MISPLACEMENT" in result
+
 
 class TestBeatRetryAndContextRefresh:
     """Tests for beat retry and path context refresh functionality."""

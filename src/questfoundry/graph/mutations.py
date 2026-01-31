@@ -1634,6 +1634,16 @@ def format_semantic_errors_as_content(errors: list[SeedValidationError]) -> str:
         if len(semantic_errors) > _MAX_ERRORS_DISPLAY:
             lines.append(f"  ... and {len(semantic_errors) - _MAX_ERRORS_DISPLAY} more")
 
+    # Cross-reference errors (bucket misplacement, answer not in explored)
+    cross_ref_errors = by_category.get(SeedErrorCategory.CROSS_REFERENCE, [])
+    if cross_ref_errors:
+        lines.append("")
+        lines.append("**Bucket misplacement** - these answers are in the wrong list:")
+        for e in cross_ref_errors[:_MAX_ERRORS_DISPLAY]:
+            lines.append(f"  - {e.issue}")
+        if len(cross_ref_errors) > _MAX_ERRORS_DISPLAY:
+            lines.append(f"  ... and {len(cross_ref_errors) - _MAX_ERRORS_DISPLAY} more")
+
     # Inner/structural errors (rarely should make it to outer loop, but handle gracefully)
     inner_errors = by_category.get(SeedErrorCategory.INNER, [])
     if inner_errors:

@@ -1053,8 +1053,15 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
     corrections: list[str] = []
     missing_items: list[str] = []
 
+    cross_ref_items: list[str] = []
+
     for error in errors:
         category = categorize_error(error)
+
+        # Handle CROSS_REFERENCE errors (bucket misplacement, answer not in explored)
+        if category == SeedErrorCategory.CROSS_REFERENCE:
+            cross_ref_items.append(f"- MOVE '{error.provided}' TO EXPLORED. Reason: {error.issue}")
+            continue
 
         # Handle COMPLETENESS errors (missing decisions)
         if category == SeedErrorCategory.COMPLETENESS:
@@ -1093,12 +1100,26 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
         else:
             corrections.append(f"- '{error.provided}' is INVALID. {suggestion}")
 
-    if not corrections and not missing_items:
+    if not corrections and not missing_items and not cross_ref_items:
         return ""
 
     lines: list[str] = []
 
+    if cross_ref_items:
+        lines.extend(
+            [
+                "## BUCKET MISPLACEMENT (CRITICAL)",
+                "The following answers are in the WRONG bucket. Fix them EXACTLY as described:",
+                "",
+                *cross_ref_items,
+                "",
+                "Move these answers between explored/unexplored as instructed above.",
+            ]
+        )
+
     if corrections:
+        if lines:
+            lines.append("")
         lines.extend(
             [
                 "## MANDATORY CORRECTIONS",
@@ -1404,18 +1425,26 @@ async def serialize_seed_as_function(
 
             # Handle beats separately - not in sections list but generated per-path
             if "beats" in section_errors:
+                beat_corrections = _format_section_corrections(section_errors["beats"])
                 log.debug(
                     "serialize_beats_retry",
                     attempt=semantic_attempt,
                     error_count=len(section_errors["beats"]),
+                    has_corrections=bool(beat_corrections),
                 )
+                # Append corrections to the per-path prompt so the LLM
+                # receives feedback about what went wrong (e.g., missing
+                # commits beats for specific paths).
+                beat_prompt = prompts["per_path_beats"]
+                if beat_corrections:
+                    beat_prompt = f"{beat_prompt}\n\n{beat_corrections}"
                 try:
                     # Re-generate all beats with current (possibly corrected) paths.
                     # If paths is empty, _serialize_beats_per_path returns ([], 0) gracefully.
                     beats, beats_tokens = await _serialize_beats_per_path(
                         model=model,
                         paths=collected["paths"],
-                        per_path_prompt=prompts["per_path_beats"],
+                        per_path_prompt=beat_prompt,
                         entity_context=entity_context,
                         provider_name=provider_name,
                         max_retries=max_retries,

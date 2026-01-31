@@ -2979,6 +2979,55 @@ class TestFormatSemanticErrorsAsContent:
         assert "ensuring you only reference" in result
         assert "BRAINSTORM" in result
 
+    def test_formats_cross_reference_errors(self) -> None:
+        """Should format CROSS_REFERENCE errors in Bucket misplacement section."""
+        from questfoundry.graph.mutations import format_semantic_errors_as_content
+
+        errors = [
+            SeedValidationError(
+                field_path="dilemmas",
+                issue=(
+                    "Dilemma 'loyalty': default answer 'trusts_council' is in "
+                    "unexplored but MUST be in explored. Move it from unexplored "
+                    "to explored."
+                ),
+                available=["betrays_council"],
+                provided="trusts_council",
+                category=SeedErrorCategory.CROSS_REFERENCE,
+            ),
+        ]
+
+        result = format_semantic_errors_as_content(errors)
+
+        assert "Bucket misplacement" in result
+        assert "trusts_council" in result
+        assert "Move it from unexplored" in result
+
+    def test_formats_mixed_with_cross_reference(self) -> None:
+        """Should handle CROSS_REFERENCE alongside other error categories."""
+        from questfoundry.graph.mutations import format_semantic_errors_as_content
+
+        errors = [
+            SeedValidationError(
+                field_path="entities",
+                issue="Missing decision for entity 'hero'",
+                available=[],
+                provided="",
+            ),
+            SeedValidationError(
+                field_path="dilemmas",
+                issue="Default answer 'X' is in unexplored but MUST be in explored.",
+                available=[],
+                provided="X",
+                category=SeedErrorCategory.CROSS_REFERENCE,
+            ),
+        ]
+
+        result = format_semantic_errors_as_content(errors)
+
+        assert "Missing items" in result
+        assert "Bucket misplacement" in result
+
 
 class TestTypeAwareFeedback:
     """Tests for type-aware cross-type error messages in validate_seed_mutations.
