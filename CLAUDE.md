@@ -317,12 +317,14 @@ git push origin feat/dress-stage
 
 #### Merging the Stack (Bottom-Up)
 
-```bash
-# 1. Merge the bottom PR (feat/dress-models → main)
-gh pr merge <PR1> --squash --delete-branch
+**CRITICAL: Retarget dependent PRs BEFORE merging.** If you merge with `--delete-branch` first, GitHub closes dependent PRs and they cannot be reopened. Always retarget, then merge.
 
-# 2. Retarget PR 2 to main (base branch deleted, GitHub may do this automatically)
+```bash
+# 1. Retarget PR 2 to main BEFORE merging PR 1
 gh pr edit <PR2> --base main
+
+# 2. Now merge the bottom PR (safe — PR 2 already points to main)
+gh pr merge <PR1> --squash --delete-branch
 
 # 3. Rebase PR 2 onto updated main to remove duplicate commits
 git checkout feat/dress-mutations
@@ -331,17 +333,21 @@ git rebase origin/main
 git push --force-with-lease origin feat/dress-mutations
 # Wait for CI to pass
 
-# 4. Merge PR 2
+# 4. For the next layer, retarget FIRST again
+gh pr edit <PR3> --base main
+
+# 5. Merge PR 2
 gh pr merge <PR2> --squash --delete-branch
 
-# 5. Repeat for PR 3
-gh pr edit <PR3> --base main
+# 6. Rebase PR 3 onto updated main
 git checkout feat/dress-stage
 git fetch origin main
 git rebase origin/main
 git push --force-with-lease origin feat/dress-stage
 gh pr merge <PR3> --squash --delete-branch
 ```
+
+**Pattern: always `gh pr edit --base main` on the NEXT PR before `gh pr merge` on the CURRENT PR.** This prevents the dependent PR from being auto-closed when the base branch is deleted.
 
 **Note:** `--force-with-lease` is safe here because the parent PR was just squash-merged into main — rebasing removes the now-duplicate commits. This is the ONE case where force-push is acceptable.
 
