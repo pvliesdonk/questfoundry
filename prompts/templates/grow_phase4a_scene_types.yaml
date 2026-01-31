@@ -67,6 +67,7 @@ user: |
 
   REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs
   section. Every beat needs scene_type + narrative_function + exit_mood.
+  Do NOT assign the same narrative_function to 4+ consecutive beats.
   Do NOT add prose before or after the JSON.
 
 components: []
