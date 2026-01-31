@@ -1,6 +1,6 @@
 """Prompt templates for agents.
 
-Uses LangChain's ChatPromptTemplate for variable injection, with templates
+Uses LangChain's PromptTemplate for variable injection, with templates
 stored externally in YAML files under prompts/templates/.
 """
 
@@ -9,7 +9,7 @@ from __future__ import annotations
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.prompts import PromptTemplate
 
 from questfoundry.pipeline.size import size_template_vars
 from questfoundry.prompts.loader import PromptLoader
@@ -145,7 +145,7 @@ def _render_discuss_template(
     size_presets_section = raw_data.get("size_presets_section", "")
 
     system_template = raw_data.get("system", "")
-    prompt = ChatPromptTemplate.from_template(system_template)
+    prompt = PromptTemplate.from_template(system_template)
 
     return prompt.format(
         research_tools_section=research_section,
@@ -195,7 +195,7 @@ def get_brainstorm_summarize_prompt(
     """
     loader = _get_loader()
     template = loader.load("summarize_brainstorm")
-    prompt = ChatPromptTemplate.from_template(template.system)
+    prompt = PromptTemplate.from_template(template.system)
     return prompt.format(**size_template_vars(size_profile))
 
 
@@ -255,7 +255,7 @@ def get_seed_summarize_prompt(
 
     # Render the system template with brainstorm context and manifest info
     system_template = raw_data.get("system", "")
-    prompt = ChatPromptTemplate.from_template(system_template)
+    prompt = PromptTemplate.from_template(system_template)
     return prompt.format(
         brainstorm_context=brainstorm_context,
         entity_count=entity_count,
@@ -298,5 +298,5 @@ def get_seed_serialize_prompt(
     """
     loader = _get_loader()
     template = loader.load("serialize_seed")
-    prompt = ChatPromptTemplate.from_template(template.system)
+    prompt = PromptTemplate.from_template(template.system)
     return prompt.format(**size_template_vars(size_profile))

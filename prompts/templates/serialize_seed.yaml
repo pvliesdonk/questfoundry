@@ -20,21 +20,21 @@ system: |
   ### 1. entities (Entity Decisions)
   For EVERY entity from brainstorm (characters, locations, objects, AND factions), create an EntityDecision:
   ```json
-  {
+  {{
     "entity_id": "entity::butler",
     "disposition": "retained"
-  }
+  }}
   ```
   IMPORTANT: Include ALL entity types - don't skip factions!
 
   ### 2. dilemmas (Dilemma Decisions)
   For each dilemma from brainstorm, create a DilemmaDecision:
   ```json
-  {
+  {{
     "dilemma_id": "dilemma::host_benevolent_or_selfish",
     "explored": ["protector", "manipulator"],
     "unexplored": []
-  }
+  }}
   ```
   NOTES:
   - The default path answer (is_default_path=true) MUST be in "explored", never in "unexplored".
@@ -44,7 +44,7 @@ system: |
   ### 3. paths (Story Paths)
   For each explored answer, create a Path:
   ```json
-  {
+  {{
     "path_id": "path::host_benevolent_or_selfish__protector",
     "name": "Human Readable Path Name",
     "dilemma_id": "dilemma::host_benevolent_or_selfish",
@@ -53,46 +53,46 @@ system: |
     "path_importance": "major",
     "description": "What this path is about",
     "consequence_ids": ["host_revealed"]
-  }
+  }}
   ```
 
   ### 4. consequences (Narrative Consequences)
   For each path, create its Consequences:
   ```json
-  {
+  {{
     "consequence_id": "host_revealed",
     "path_id": "path::host_benevolent_or_selfish__protector",
     "description": "What happens narratively",
     "narrative_effects": ["story effect 1", "story effect 2"]
-  }
+  }}
   ```
 
   ### 5. initial_beats (Initial Beats - {size_beats_per_path} per path)
   Create {size_beats_per_path} InitialBeat objects PER PATH (e.g., with 3 paths and a "2-4" range, expect 6-12 beats total).
   ```json
-  {
+  {{
     "beat_id": "host_motive_beat_01",
     "summary": "What happens in this beat",
     "paths": ["path::host_benevolent_or_selfish__protector"],
     "dilemma_impacts": [
-      {
+      {{
         "dilemma_id": "dilemma::host_benevolent_or_selfish",
         "effect": "advances",
         "note": "Explanation of the impact"
-      }
+      }}
     ],
     "entities": ["entity::butler", "entity::guest"],
     "location": "entity::manor",
     "location_alternatives": ["entity::garden"]
-  }
+  }}
   ```
 
   ### 6. convergence_sketch
   ```json
-  {
+  {{
     "convergence_points": ["where paths should merge"],
     "residue_notes": ["differences that persist after convergence"]
-  }
+  }}
   ```
 
   ## Mapping Rules
