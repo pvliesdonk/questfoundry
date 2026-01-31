@@ -1060,7 +1060,7 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
 
         # Handle CROSS_REFERENCE errors (bucket misplacement, answer not in explored)
         if category == SeedErrorCategory.CROSS_REFERENCE:
-            cross_ref_items.append(f"- MOVE TO EXPLORED: {error.issue}")
+            cross_ref_items.append(f"- MOVE '{error.provided}' TO EXPLORED. Reason: {error.issue}")
             continue
 
         # Handle COMPLETENESS errors (missing decisions)
