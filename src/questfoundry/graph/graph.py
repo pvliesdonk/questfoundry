@@ -423,6 +423,35 @@ class Graph:
         }
         self._data["edges"].append(edge)
 
+    def remove_edge(
+        self,
+        edge_type: str,
+        from_id: str,
+        to_id: str,
+    ) -> bool:
+        """Remove a specific edge by type and endpoints.
+
+        Removes the first matching edge. If no matching edge exists,
+        returns False without raising an error.
+
+        Args:
+            edge_type: Type of edge (e.g., "describes_visual", "targets").
+            from_id: Source node ID.
+            to_id: Target node ID.
+
+        Returns:
+            True if an edge was removed, False if no match found.
+        """
+        for i, edge in enumerate(self._data["edges"]):
+            if (
+                edge.get("type") == edge_type
+                and edge.get("from") == from_id
+                and edge.get("to") == to_id
+            ):
+                self._data["edges"].pop(i)
+                return True
+        return False
+
     def get_edges(
         self,
         from_id: str | None = None,
