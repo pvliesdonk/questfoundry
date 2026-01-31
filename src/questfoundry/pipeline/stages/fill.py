@@ -25,9 +25,11 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.graph.fill_context import (
+    format_atmospheric_detail,
     format_dramatic_questions,
     format_dream_vision,
     format_entity_states,
+    format_entry_states,
     format_grow_summary,
     format_lookahead_context,
     format_narrative_context,
@@ -569,6 +571,8 @@ class FillStage:
                 "scene_type": scene_type,
                 "dramatic_questions": format_dramatic_questions(graph, arc_id, beat_id),
                 "narrative_context": format_narrative_context(graph, passage_id),
+                "atmospheric_detail": format_atmospheric_detail(graph, passage_id),
+                "entry_states": format_entry_states(graph, passage_id, arc_id),
                 "entity_states": format_entity_states(graph, passage_id),
                 "sliding_window": format_sliding_window(graph, arc_id, current_idx),
                 "lookahead": format_lookahead_context(graph, passage_id, arc_id),

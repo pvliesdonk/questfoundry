@@ -57,7 +57,7 @@ class TestGrowStageExecute:
         assert tokens == 0
         # All phases run to completion (empty graph = no work to do)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 15
+        assert len(phases) == 16
         for phase in phases:
             assert phase["status"] == "completed"
 
@@ -123,10 +123,10 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_fifteen_phases(self) -> None:
+    def test_phase_order_returns_sixteen_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 15
+        assert len(phases) == 16
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -137,6 +137,7 @@ class TestGrowStagePhaseOrder:
             "scene_types",
             "narrative_gaps",
             "pacing_gaps",
+            "atmospheric",
             "intersections",
             "enumerate_arcs",
             "divergence",

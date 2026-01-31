@@ -7,9 +7,11 @@ import pytest
 from questfoundry.graph.fill_context import (
     compute_open_questions,
     derive_pacing,
+    format_atmospheric_detail,
     format_dramatic_questions,
     format_dream_vision,
     format_entity_states,
+    format_entry_states,
     format_grow_summary,
     format_lookahead_context,
     format_narrative_context,
@@ -764,3 +766,117 @@ class TestFormatNarrativeContext:
         result = format_narrative_context(g, "passage::p1")
         assert "develop" in result
         assert "Exit Mood" not in result
+
+
+# ---------------------------------------------------------------------------
+# Atmospheric Detail and Entry States Tests
+# ---------------------------------------------------------------------------
+
+
+class TestFormatAtmosphericDetail:
+    """Tests for format_atmospheric_detail."""
+
+    def test_returns_empty_for_missing_passage(self) -> None:
+        g = Graph.empty()
+        assert format_atmospheric_detail(g, "passage::nope") == ""
+
+    def test_returns_empty_when_no_detail(self, fill_graph: Graph) -> None:
+        """Beats without atmospheric_detail get empty context."""
+        result = format_atmospheric_detail(fill_graph, "passage::p_opening")
+        assert result == ""
+
+    def test_formats_atmospheric_detail(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "beat::b1",
+            {
+                "type": "beat",
+                "raw_id": "b1",
+                "atmospheric_detail": "Cold stone walls slick with condensation",
+            },
+        )
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
+        )
+        result = format_atmospheric_detail(g, "passage::p1")
+        assert "Cold stone walls" in result
+        assert "sensory" in result.lower()
+
+    def test_returns_empty_when_beat_missing(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::missing"},
+        )
+        assert format_atmospheric_detail(g, "passage::p1") == ""
+
+
+class TestFormatEntryStates:
+    """Tests for format_entry_states."""
+
+    def test_returns_empty_for_missing_passage(self) -> None:
+        g = Graph.empty()
+        assert format_entry_states(g, "passage::nope", "arc::a1") == ""
+
+    def test_returns_empty_when_no_entry_states(self) -> None:
+        g = Graph.empty()
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
+        )
+        assert format_entry_states(g, "passage::p1", "arc::a1") == ""
+
+    def test_formats_entry_states(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "beat::shared",
+            {
+                "type": "beat",
+                "raw_id": "shared",
+                "entry_states": [
+                    {"path_id": "path::trust", "mood": "cautious warmth"},
+                    {"path_id": "path::betray", "mood": "defensive guilt"},
+                ],
+            },
+        )
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::shared"},
+        )
+        g.create_node(
+            "arc::a1",
+            {"type": "arc", "paths": ["path::trust", "path::betray"]},
+        )
+        result = format_entry_states(g, "passage::p1", "arc::a1")
+        assert "path::trust: cautious warmth <- ACTIVE" in result
+        assert "path::betray: defensive guilt <- ACTIVE" in result
+
+    def test_marks_active_paths(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "beat::shared",
+            {
+                "type": "beat",
+                "raw_id": "shared",
+                "entry_states": [
+                    {"path_id": "path::trust", "mood": "cautious warmth"},
+                    {"path_id": "path::betray", "mood": "defensive guilt"},
+                ],
+            },
+        )
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::shared"},
+        )
+        # Arc only includes trust path
+        g.create_node(
+            "arc::a1",
+            {"type": "arc", "paths": ["path::trust"]},
+        )
+        result = format_entry_states(g, "passage::p1", "arc::a1")
+        assert "path::trust: cautious warmth <- ACTIVE" in result
+        # betray is NOT active in this arc
+        assert "path::betray: defensive guilt" in result
+        assert "path::betray: defensive guilt <- ACTIVE" not in result

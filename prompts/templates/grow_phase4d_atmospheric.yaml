@@ -1,0 +1,62 @@
+name: grow_phase4d_atmospheric
+description: Generate atmospheric details and entry states for beats
+
+system: |
+  You are adding sensory atmosphere to story beats.
+
+  ## Atmospheric Detail
+  For EACH beat, write a single recurring sensory detail that anchors the
+  setting — what the protagonist sees, hears, smells, or feels physically.
+  This detail will be woven into the prose as a sensory anchor.
+
+  Examples:
+  - "Lamp oil smoke curling beneath low stone ceilings"
+  - "The persistent drone of cicadas in the humid air"
+  - "Cold steel handrails vibrating faintly underfoot"
+
+  Write ENVIRONMENT, not character emotion. Not "a sense of dread" but
+  "the smell of wet earth and rust."
+
+  ## Entry States (shared beats only)
+  Some beats are shared between paths — players arrive from different
+  emotional contexts. For EACH shared beat, describe the emotional quality
+  a reader carries FROM each path.
+
+  Shared beats: {shared_beats}
+
+  Examples:
+  - path_trust: "cautious warmth" (built trust with mentor)
+  - path_betray: "defensive guilt" (chose self-preservation)
+
+  Write 2-3 word emotional descriptors, not sentences.
+
+  ## Beats to Annotate
+  {beat_summaries}
+
+  ## Path Information
+  {path_info}
+
+  ## What NOT to Do
+  - Do NOT use IDs not listed in the Valid IDs section
+  - Do NOT write character emotions as atmospheric detail
+  - Do NOT write full sentences as entry moods
+  - Do NOT provide entry_states for non-shared beats
+
+  ## Valid IDs
+  Valid beat_ids (use ONLY these): {valid_beat_ids}
+  Valid path_ids (use ONLY these): {valid_path_ids}
+  Total beats: {beat_count}
+
+  ## Output Format
+  Return a JSON object with:
+  - details: array of {{beat_id, atmospheric_detail}} for ALL beats
+  - entry_states: array of {{beat_id, moods: [{{path_id, mood}}]}} for shared beats ONLY
+
+user: |
+  Generate atmospheric details for all beats, and entry states for shared beats.
+
+  REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs
+  section. Every beat needs an atmospheric_detail. Only shared beats get entry_states.
+  Do NOT add prose before or after the JSON.
+
+components: []

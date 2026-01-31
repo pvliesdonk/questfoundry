@@ -1,6 +1,6 @@
 """End-to-end integration tests for the GROW stage.
 
-Runs all 15 GROW phases on the E2E fixture graph with a mocked LLM,
+Runs all 16 GROW phases on the E2E fixture graph with a mocked LLM,
 verifying that phases execute correctly and produce valid output
 structure. Also tests context formatting stays within token budgets.
 """
@@ -23,11 +23,14 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
     Other phases return empty/minimal results for simplicity.
     """
     from questfoundry.models.grow import (
+        AtmosphericDetail,
         PathAgnosticAssessment,
+        PathMiniArc,
         Phase2Output,
         Phase3Output,
         Phase4aOutput,
         Phase4bOutput,
+        Phase4dOutput,
         Phase8cOutput,
         Phase9Output,
         SceneTypeTag,
@@ -80,6 +83,26 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
     ]
     phase4a_output = Phase4aOutput(tags=tags)
     phase4b_output = Phase4bOutput(gaps=[])
+
+    # Phase 4d: atmospheric details for all beats
+    phase4d_output = Phase4dOutput(
+        details=[
+            AtmosphericDetail(
+                beat_id=bid,
+                atmospheric_detail="Dim light filters through dusty windows",
+            )
+            for bid in sorted(beat_nodes.keys())
+        ],
+        entry_states=[],
+    )
+
+    # Phase 4e: generic path arc (called per-path with PathMiniArc schema)
+    phase4e_output = PathMiniArc(
+        path_id="placeholder",
+        path_theme="A journey through uncertainty and choice",
+        path_mood="quiet tension",
+    )
+
     phase8c_output = Phase8cOutput(overlays=[])
     phase9_output = Phase9Output(labels=[])
 
@@ -88,6 +111,8 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
         Phase3Output: phase3_output,
         Phase4aOutput: phase4a_output,
         Phase4bOutput: phase4b_output,
+        Phase4dOutput: phase4d_output,
+        PathMiniArc: phase4e_output,
         Phase8cOutput: phase8c_output,
         Phase9Output: phase9_output,
     }
@@ -127,12 +152,12 @@ def pipeline_result(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 
 
 class TestGrowFullPipeline:
-    """E2E tests running all 15 GROW phases on the fixture graph."""
+    """E2E tests running all 16 GROW phases on the fixture graph."""
 
     def test_all_phases_complete(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify all 15 phases complete with no failures."""
+        """Verify all 16 phases complete with no failures."""
         phases = pipeline_result["result_dict"]["phases_completed"]
-        assert len(phases) == 15
+        assert len(phases) == 16
         for phase in phases:
             assert phase["status"] in ("completed", "skipped"), (
                 f"Phase {phase['phase']} has unexpected status: {phase['status']}"
