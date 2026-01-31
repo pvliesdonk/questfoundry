@@ -28,6 +28,50 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
+def _parse_temperature_from_repr(repr_str: str) -> float | None:
+    """Extract temperature from a model's repr string.
+
+    LangChain serializes some models (e.g., ChatOllama) with empty kwargs
+    but includes parameters in the repr string like:
+    ``ChatOllama(model='qwen3:4b', temperature=0.7, ...)``.
+
+    Returns None if temperature cannot be parsed.
+    """
+    import re
+
+    match = re.search(r"temperature=([\d.]+)", repr_str)
+    if match:
+        try:
+            return float(match.group(1))
+        except ValueError:
+            pass
+    return None
+
+
+def _extract_message_tokens(gen_msg: object) -> tuple[int, int, int]:
+    """Extract total, input, and output tokens from a message's usage_metadata.
+
+    Handles both dict and object-style usage_metadata.
+
+    Returns:
+        Tuple of (total_tokens, input_tokens, output_tokens).
+    """
+    msg_usage = getattr(gen_msg, "usage_metadata", None)
+    if not msg_usage:
+        return 0, 0, 0
+
+    if isinstance(msg_usage, dict):
+        total = msg_usage.get("total_tokens") or 0
+        inp = msg_usage.get("input_tokens") or 0
+        out = msg_usage.get("output_tokens") or 0
+    else:
+        total = getattr(msg_usage, "total_tokens", 0) or 0
+        inp = getattr(msg_usage, "input_tokens", 0) or 0
+        out = getattr(msg_usage, "output_tokens", 0) or 0
+
+    return int(total), int(inp), int(out)
+
+
 class LLMLoggingCallback(BaseCallbackHandler):
     """Callback handler that logs LLM calls to JSONL.
 
@@ -76,8 +120,11 @@ class LLMLoggingCallback(BaseCallbackHandler):
             or serialized.get("id", ["unknown"])[-1]  # Last part of ID list
         )
 
-        # Extract temperature (may be None if not set, defaults applied in create_entry)
+        # Extract temperature - check kwargs first, then parse from repr
+        # (Ollama serializes with empty kwargs but includes temp in repr)
         temperature = model_kwargs.get("temperature")
+        if temperature is None:
+            temperature = _parse_temperature_from_repr(serialized.get("repr", ""))
 
         # Flatten messages for storage
         flat_messages = []
@@ -133,6 +180,7 @@ class LLMLoggingCallback(BaseCallbackHandler):
         call_info = self._pending_calls.pop(run_id, {})
         run_metadata = self._run_metadata.pop(run_id, {})
         stage = run_metadata.get("stage", "")
+        phase = run_metadata.get("phase", "")
 
         # Calculate duration if start_time was recorded
         duration_seconds = 0.0
@@ -171,18 +219,20 @@ class LLMLoggingCallback(BaseCallbackHandler):
         # - Ollama/newer: gen.message.usage_metadata (dict or UsageMetadata)
         # - Some: response.llm_output["usage_metadata"]
         total_tokens = 0
+        input_tokens = 0
+        output_tokens = 0
         llm_output = response.llm_output or {}
 
         if "token_usage" in llm_output:
             usage = llm_output["token_usage"]
-            tokens = usage.get("total_tokens")
-            if tokens is not None:
-                total_tokens = tokens
+            total_tokens = usage.get("total_tokens") or 0
+            input_tokens = usage.get("prompt_tokens") or usage.get("input_tokens") or 0
+            output_tokens = usage.get("completion_tokens") or usage.get("output_tokens") or 0
         elif "usage_metadata" in llm_output:
             usage = llm_output["usage_metadata"]
-            tokens = usage.get("total_tokens")
-            if tokens is not None:
-                total_tokens = tokens
+            total_tokens = usage.get("total_tokens") or 0
+            input_tokens = usage.get("input_tokens") or 0
+            output_tokens = usage.get("output_tokens") or 0
 
         # Fallback: check generation message's usage_metadata (Ollama, newer providers)
         if (
@@ -193,25 +243,36 @@ class LLMLoggingCallback(BaseCallbackHandler):
         ):
             gen_msg = getattr(response.generations[0][0], "message", None)
             if gen_msg is not None:
-                msg_usage = getattr(gen_msg, "usage_metadata", None)
-                if msg_usage:
-                    # usage_metadata can be a dict or UsageMetadata object
-                    if isinstance(msg_usage, dict):
-                        tokens = msg_usage.get("total_tokens")
-                    else:
-                        tokens = getattr(msg_usage, "total_tokens", None)
-                    if tokens is not None:
-                        total_tokens = int(tokens)
+                total_tokens, input_tokens, output_tokens = _extract_message_tokens(gen_msg)
+
+        # Enrich model name from response_metadata when serialized name is
+        # a class name (e.g., "ChatOllama") rather than actual model ID
+        model_name = call_info.get("model", "unknown")
+        if response.generations and len(response.generations[0]) > 0:
+            gen_msg = getattr(response.generations[0][0], "message", None)
+            if gen_msg is not None:
+                resp_meta = getattr(gen_msg, "response_metadata", None)
+                if isinstance(resp_meta, dict):
+                    actual_model = resp_meta.get("model") or resp_meta.get("model_name")
+                    if (
+                        isinstance(actual_model, str)
+                        and actual_model
+                        and (model_name.startswith("Chat") or model_name == "unknown")
+                    ):
+                        model_name = actual_model
 
         # Get temperature if captured, otherwise use default
         temperature = call_info.get("temperature")
         entry_kwargs: dict[str, Any] = {
-            "stage": stage,  # Extracted from metadata passed via RunnableConfig
-            "model": call_info.get("model", "unknown"),
+            "stage": stage,
+            "model": model_name,
             "messages": call_info.get("messages", []),
             "content": content,
             "tokens_used": total_tokens,
-            "finish_reason": "stop",  # Default, can be extracted from response metadata
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
+            "phase": phase,
+            "finish_reason": "stop",
             "duration_seconds": duration_seconds,
             "tool_calls": tool_calls if tool_calls else None,
         }
