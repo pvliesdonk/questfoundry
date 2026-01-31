@@ -626,7 +626,7 @@ class TestComputeOpenQuestions:
     def test_sorted_by_escalation(self, dq_graph: Graph) -> None:
         """Results are sorted by escalation count descending."""
         result = compute_open_questions(dq_graph, "arc::spine", "beat::b3")
-        assert result[0]["escalations"] >= result[1]["escalations"]
+        assert result[0]["escalations"] > result[1]["escalations"]
 
     def test_complicates_counts_as_escalation(self, dq_graph: Graph) -> None:
         """Complicates effect counts as an escalation."""
