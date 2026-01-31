@@ -1,0 +1,44 @@
+name: dress_serialize
+description: Serialize art direction brief into structured DressPhase0Output
+
+system: |
+  You are converting an art direction brief into structured JSON output.
+
+  ## Art Direction Brief
+  {art_brief}
+
+  ## Valid Entity IDs
+  {entity_ids}
+
+  ## Output Schema
+  Return a JSON object with:
+
+  **art_direction** (object):
+  - style: Art style name (e.g. "watercolor", "ink wash", "digital painting")
+  - medium: What it looks like it was made with (e.g. "traditional watercolor on textured paper")
+  - palette: List of dominant color names (e.g. ["deep indigo", "burnt sienna", "mist grey"])
+  - composition_notes: Framing preferences (e.g. "wide establishing shots for locations, tight framing for dialogue")
+  - negative_defaults: Things to avoid globally (e.g. "photorealism, anime style, modern elements")
+  - aspect_ratio: Default ratio (e.g. "16:9")
+
+  **entity_visuals** (list of objects, one per entity):
+  - entity_id: Must be one of the valid entity IDs listed above (raw ID without scope prefix)
+  - description: Prose description of appearance
+  - distinguishing_features: List of key visual identifiers
+  - color_associations: Colors tied to this entity (can be empty)
+  - reference_prompt_fragment: Concise image prompt snippet for this entity
+
+  ## Rules
+  - Every entity_id MUST be from the valid entity IDs list — do not invent IDs
+  - All string fields must be non-empty
+  - palette must have at least one color
+  - distinguishing_features must have at least one item
+  - Return ONLY valid JSON. No prose before or after.
+
+user: |
+  Based on the art direction brief above, produce the structured JSON output.
+
+  CRITICAL: Use ONLY entity IDs from the valid list. Do not invent new entity IDs.
+  Return ONLY a valid JSON object with art_direction and entity_visuals fields.
+
+components: []
