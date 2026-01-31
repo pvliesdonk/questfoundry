@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from questfoundry.observability.logging import get_logger
+
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
@@ -726,7 +728,11 @@ def format_narrative_context(graph: Graph, passage_id: str) -> str:
 
     narrative_function = beat.get("narrative_function", "")
     exit_mood = beat.get("exit_mood", "")
-    scene_type = beat.get("scene_type", "scene")
+    scene_type = beat.get("scene_type", "")
+    if not scene_type:
+        log = get_logger(__name__)
+        log.warning("missing_scene_type", beat_id=beat_id)
+        scene_type = "scene"
 
     if not narrative_function:
         return ""
