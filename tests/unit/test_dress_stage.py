@@ -1,4 +1,4 @@
-"""Tests for DRESS stage skeleton and Phase 0 (art direction)."""
+"""Tests for DRESS stage skeleton, Phase 0, Phase 1, and Phase 2."""
 
 from __future__ import annotations
 
@@ -14,14 +14,20 @@ if TYPE_CHECKING:
 from questfoundry.graph.graph import Graph
 from questfoundry.models.dress import (
     ArtDirection,
+    CodexEntry,
     DressPhase0Output,
+    DressPhase1Output,
+    DressPhase2Output,
     EntityVisualWithId,
+    IllustrationBrief,
 )
 from questfoundry.pipeline.stages.dress import (
     DressStage,
     DressStageError,
+    compute_structural_score,
     create_dress_stage,
     dress_stage,
+    map_score_to_priority,
 )
 
 # ---------------------------------------------------------------------------
@@ -182,6 +188,21 @@ class TestPhase0ArtDirection:
 
         stage = DressStage(project_path=tmp_path)
 
+        mock_brief_output = DressPhase1Output(
+            brief=IllustrationBrief(
+                priority=2,
+                category="scene",
+                subject="test",
+                composition="Wide",
+                mood="test",
+                caption="test",
+            ),
+            llm_adjustment=0,
+        )
+        mock_codex_out = DressPhase2Output(
+            entries=[CodexEntry(rank=1, visible_when=[], content="Base knowledge.")]
+        )
+
         with (
             patch(
                 "questfoundry.pipeline.stages.dress.run_discuss_phase",
@@ -198,13 +219,25 @@ class TestPhase0ArtDirection:
                 new_callable=AsyncMock,
                 return_value=(mock_phase0_output, 300),
             ),
-            # Phase 0 succeeds, Phase 1 raises NotImplementedError
-            pytest.raises(NotImplementedError, match="PR 5"),
+            patch.object(
+                stage,
+                "_dress_llm_call",
+                new_callable=AsyncMock,
+                # Order is deterministic: dict insertion order (Python 3.7+).
+                # Phase 1: 1 passage, Phase 2: protagonist then aldric.
+                side_effect=[
+                    (mock_brief_output, 1, 50),  # Phase 1: opening passage
+                    (mock_codex_out, 1, 50),  # Phase 2: protagonist
+                    (mock_codex_out, 1, 50),  # Phase 2: aldric
+                ],
+            ),
+            # Phases 0-2 succeed, Phase 3 raises NotImplementedError
+            pytest.raises(NotImplementedError, match="PR 6"),
         ):
             await stage.execute(MagicMock(), "Establish art direction")
 
-        # Verify graph was updated (checkpoint before Phase 1 has Phase 0 results)
-        checkpoint = tmp_path / "snapshots" / "dress-pre-briefs.json"
+        # Verify graph was updated (checkpoint before review has all results)
+        checkpoint = tmp_path / "snapshots" / "dress-pre-review.json"
         assert checkpoint.exists()
         graph = Graph.load_from_file(checkpoint)
         assert graph.get_node("art_direction::main") is not None
@@ -294,23 +327,11 @@ class TestPhase0ArtDirection:
 
 
 # ---------------------------------------------------------------------------
-# Phase stubs
+# Phase stubs (3-4 remain)
 # ---------------------------------------------------------------------------
 
 
 class TestPhaseStubs:
-    @pytest.mark.asyncio()
-    async def test_phase1_not_implemented(self) -> None:
-        stage = DressStage()
-        with pytest.raises(NotImplementedError, match="PR 5"):
-            await stage._phase_1_briefs(Graph(), MagicMock())
-
-    @pytest.mark.asyncio()
-    async def test_phase2_not_implemented(self) -> None:
-        stage = DressStage()
-        with pytest.raises(NotImplementedError, match="PR 5"):
-            await stage._phase_2_codex(Graph(), MagicMock())
-
     @pytest.mark.asyncio()
     async def test_phase3_not_implemented(self) -> None:
         stage = DressStage()
@@ -373,3 +394,287 @@ class TestExtractArtifact:
         artifact = stage._extract_artifact(Graph())
         assert artifact["art_direction"] == {}
         assert artifact["entity_visuals"] == {}
+
+
+# ---------------------------------------------------------------------------
+# Priority scoring
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def scored_graph() -> Graph:
+    """Graph with arcs, beats, and passages for priority scoring tests."""
+    g = Graph()
+    # Spine arc with 3 beats
+    g.create_node(
+        "arc::spine",
+        {
+            "type": "arc",
+            "arc_type": "spine",
+            "sequence": ["beat::opening", "beat::climax", "beat::ending"],
+        },
+    )
+    g.create_node("beat::opening", {"type": "beat", "scene_type": "establishing"})
+    g.create_node("beat::climax", {"type": "beat", "scene_type": "climax"})
+    g.create_node("beat::ending", {"type": "beat", "scene_type": "resolution"})
+    # Branch arc
+    g.create_node(
+        "arc::branch1",
+        {"type": "arc", "arc_type": "branch", "sequence": ["beat::side"]},
+    )
+    g.create_node("beat::side", {"type": "beat", "scene_type": "transition"})
+    # Passages
+    g.create_node(
+        "passage::opening",
+        {
+            "type": "passage",
+            "from_beat": "beat::opening",
+            "prose": "The story begins.",
+            "entities": ["entity::castle"],
+        },
+    )
+    g.create_node(
+        "passage::climax",
+        {"type": "passage", "from_beat": "beat::climax", "prose": "The battle rages."},
+    )
+    g.create_node(
+        "passage::ending",
+        {"type": "passage", "from_beat": "beat::ending", "prose": "Peace returns."},
+    )
+    g.create_node(
+        "passage::side",
+        {"type": "passage", "from_beat": "beat::side", "prose": "Meanwhile..."},
+    )
+    # Location entity
+    g.create_node("entity::castle", {"type": "entity", "entity_type": "location"})
+    return g
+
+
+class TestPriorityScoring:
+    def test_spine_opening_with_location(self, scored_graph: Graph) -> None:
+        """Spine opening + location = high score."""
+        score = compute_structural_score(scored_graph, "passage::opening")
+        # spine(+3) + opening(+2) + location(+1) = 6
+        assert score == 6
+
+    def test_spine_climax(self, scored_graph: Graph) -> None:
+        """Spine climax = high score."""
+        score = compute_structural_score(scored_graph, "passage::climax")
+        # spine(+3) + climax(+2) = 5
+        assert score == 5
+
+    def test_spine_ending(self, scored_graph: Graph) -> None:
+        score = compute_structural_score(scored_graph, "passage::ending")
+        # spine(+3) + ending(+2) = 5
+        assert score == 5
+
+    def test_branch_transition(self, scored_graph: Graph) -> None:
+        """Branch transition = moderate score (single-beat arc is both opening and ending)."""
+        score = compute_structural_score(scored_graph, "passage::side")
+        # transition(-1) + opening(+2) + ending(+2) = 3  (sole beat in branch arc)
+        assert score == 3
+
+    def test_nonexistent_passage(self, scored_graph: Graph) -> None:
+        assert compute_structural_score(scored_graph, "passage::nope") == 0
+
+
+class TestMapScoreToPriority:
+    def test_high_score_must_have(self) -> None:
+        assert map_score_to_priority(5) == 1
+        assert map_score_to_priority(8) == 1
+
+    def test_medium_score_important(self) -> None:
+        assert map_score_to_priority(3) == 2
+        assert map_score_to_priority(4) == 2
+
+    def test_low_score_nice_to_have(self) -> None:
+        assert map_score_to_priority(1) == 3
+        assert map_score_to_priority(2) == 3
+
+    def test_zero_or_negative_skip(self) -> None:
+        assert map_score_to_priority(0) == 0
+        assert map_score_to_priority(-1) == 0
+
+
+# ---------------------------------------------------------------------------
+# Phase 1: Illustration Briefs
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def mock_brief_output() -> DressPhase1Output:
+    return DressPhase1Output(
+        brief=IllustrationBrief(
+            priority=2,
+            category="scene",
+            subject="Scholar arrives at the ancient bridge",
+            entities=["protagonist"],
+            composition="Wide establishing shot",
+            mood="foreboding",
+            caption="The bridge loomed through the mist.",
+        ),
+        llm_adjustment=1,  # Enough to push base_score=0 to priority 3
+    )
+
+
+class TestPhase1Briefs:
+    @pytest.mark.asyncio()
+    async def test_creates_brief_nodes(self, mock_brief_output: DressPhase1Output) -> None:
+        """Phase 1 creates illustration_brief nodes for passages with prose."""
+        g = Graph()
+        g.create_node(
+            "art_direction::main",
+            {"type": "art_direction", "style": "ink", "palette": ["grey"]},
+        )
+        g.create_node(
+            "passage::opening",
+            {"type": "passage", "raw_id": "opening", "prose": "The wind howled."},
+        )
+
+        stage = DressStage()
+        with patch.object(
+            stage,
+            "_dress_llm_call",
+            new_callable=AsyncMock,
+            return_value=(mock_brief_output, 1, 100),
+        ):
+            result = await stage._phase_1_briefs(g, MagicMock())
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert g.get_node("illustration_brief::opening") is not None
+
+    @pytest.mark.asyncio()
+    async def test_skips_passages_without_prose(self) -> None:
+        """Passages without prose should be skipped."""
+        g = Graph()
+        g.create_node("passage::empty", {"type": "passage", "raw_id": "empty"})
+
+        stage = DressStage()
+        result = await stage._phase_1_briefs(g, MagicMock())
+
+        assert result.status == "completed"
+        assert "skipped" in result.detail
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio()
+    async def test_no_passages(self) -> None:
+        g = Graph()
+        stage = DressStage()
+        result = await stage._phase_1_briefs(g, MagicMock())
+        assert result.detail == "no passages"
+
+    @pytest.mark.asyncio()
+    async def test_low_priority_skipped(self) -> None:
+        """Brief with very low combined score is skipped."""
+        g = Graph()
+        g.create_node(
+            "passage::boring", {"type": "passage", "raw_id": "boring", "prose": "Nothing happened."}
+        )
+
+        low_output = DressPhase1Output(
+            brief=IllustrationBrief(
+                priority=3,
+                category="scene",
+                subject="Nothing",
+                composition="Static",
+                mood="flat",
+                caption="...",
+            ),
+            llm_adjustment=-2,
+        )
+
+        stage = DressStage()
+        with patch.object(
+            stage,
+            "_dress_llm_call",
+            new_callable=AsyncMock,
+            return_value=(low_output, 1, 50),
+        ):
+            result = await stage._phase_1_briefs(g, MagicMock())
+
+        # base_score=0, llm_adj=-2 → total=-2 → priority=0 → skipped
+        assert g.get_node("illustration_brief::boring") is None
+        assert "skipped" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: Codex Entries
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture()
+def mock_codex_output() -> DressPhase2Output:
+    return DressPhase2Output(
+        entries=[
+            CodexEntry(rank=1, visible_when=[], content="A young scholar of the old academy."),
+            CodexEntry(
+                rank=2,
+                visible_when=["met_aldric"],
+                content="The scholar secretly studies forbidden texts.",
+            ),
+        ]
+    )
+
+
+class TestPhase2Codex:
+    @pytest.mark.asyncio()
+    async def test_creates_codex_nodes(self, mock_codex_output: DressPhase2Output) -> None:
+        """Phase 2 creates codex nodes for each entity."""
+        g = Graph()
+        g.create_node(
+            "entity::protagonist",
+            {
+                "type": "entity",
+                "raw_id": "protagonist",
+                "entity_type": "character",
+                "concept": "Scholar",
+            },
+        )
+        g.create_node(
+            "codeword::met_aldric",
+            {"type": "codeword", "raw_id": "met_aldric", "trigger": "Meets aldric"},
+        )
+
+        stage = DressStage()
+        with patch.object(
+            stage,
+            "_dress_llm_call",
+            new_callable=AsyncMock,
+            return_value=(mock_codex_output, 1, 150),
+        ):
+            result = await stage._phase_2_codex(g, MagicMock())
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert g.get_node("codex::protagonist_rank1") is not None
+        assert g.get_node("codex::protagonist_rank2") is not None
+
+    @pytest.mark.asyncio()
+    async def test_no_entities(self) -> None:
+        g = Graph()
+        stage = DressStage()
+        result = await stage._phase_2_codex(g, MagicMock())
+        assert result.detail == "no entities"
+
+    @pytest.mark.asyncio()
+    async def test_logs_validation_warnings(self, mock_codex_output: DressPhase2Output) -> None:
+        """Codex validation warnings are logged but don't fail the phase."""
+        g = Graph()
+        g.create_node(
+            "entity::protagonist",
+            {"type": "entity", "raw_id": "protagonist", "entity_type": "character"},
+        )
+        # No codewords defined — met_aldric in visible_when will trigger warning
+
+        stage = DressStage()
+        with patch.object(
+            stage,
+            "_dress_llm_call",
+            new_callable=AsyncMock,
+            return_value=(mock_codex_output, 1, 150),
+        ):
+            result = await stage._phase_2_codex(g, MagicMock())
+
+        assert result.status == "completed"
+        assert g.get_node("codex::protagonist_rank1") is not None

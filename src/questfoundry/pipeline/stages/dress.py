@@ -23,25 +23,43 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, TypeVar
+
+from langchain_core.messages import HumanMessage, SystemMessage
+from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents import (
     run_discuss_phase,
     serialize_to_artifact,
     summarize_discussion,
 )
+from questfoundry.agents.serialize import extract_tokens
+from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.graph.dress_context import (
+    format_art_direction_context,
+    format_entity_for_codex,
+    format_entity_visuals_for_passage,
+    format_passage_for_brief,
     format_vision_and_entities,
 )
-from questfoundry.graph.dress_mutations import apply_dress_art_direction
+from questfoundry.graph.dress_mutations import (
+    apply_dress_art_direction,
+    apply_dress_brief,
+    apply_dress_codex,
+    validate_dress_codex_entries,
+)
+from questfoundry.graph.fill_context import format_dream_vision, get_spine_arc_id
 from questfoundry.graph.graph import Graph
 from questfoundry.models.dress import (
     DressPhase0Output,
+    DressPhase1Output,
+    DressPhase2Output,
     DressPhaseResult,
 )
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
+from questfoundry.providers.structured_output import with_structured_output
 from questfoundry.tools.langchain_tools import (
     get_all_research_tools,
     get_interactive_tools,
@@ -58,6 +76,8 @@ if TYPE_CHECKING:
         PhaseProgressFn,
         UserInputFn,
     )
+
+T = TypeVar("T", bound=BaseModel)
 
 log = get_logger(__name__)
 
@@ -422,16 +442,267 @@ class DressStage:
         )
 
     # -------------------------------------------------------------------------
-    # Phases 1-4: Stubs (implemented in later PRs)
+    # LLM helper (structured output with retry — same pattern as FILL)
     # -------------------------------------------------------------------------
 
-    async def _phase_1_briefs(self, graph: Graph, model: BaseChatModel) -> DressPhaseResult:
-        """Phase 1: Illustration briefs (not yet implemented)."""
-        raise NotImplementedError("Phase 1 (briefs) will be implemented in PR 5")
+    @traceable(name="DRESS LLM Call", run_type="llm", tags=["stage:dress"])
+    async def _dress_llm_call(
+        self,
+        model: BaseChatModel,
+        template_name: str,
+        context: dict[str, Any],
+        output_schema: type[T],
+        max_retries: int = 3,
+    ) -> tuple[T, int, int]:
+        """Call LLM with structured output and retry on validation failure.
 
-    async def _phase_2_codex(self, graph: Graph, model: BaseChatModel) -> DressPhaseResult:
-        """Phase 2: Codex entries (not yet implemented)."""
-        raise NotImplementedError("Phase 2 (codex) will be implemented in PR 5")
+        Args:
+            model: LangChain chat model.
+            template_name: Prompt template name (without .yaml).
+            context: Variables to inject into the prompt template.
+            output_schema: Pydantic model class for structured output.
+            max_retries: Maximum retry attempts.
+
+        Returns:
+            Tuple of (validated_result, llm_calls, tokens_used).
+
+        Raises:
+            DressStageError: After max_retries exhausted.
+        """
+        from questfoundry.observability.tracing import build_runnable_config
+        from questfoundry.prompts.loader import PromptLoader
+
+        loader = PromptLoader(_get_prompts_path())
+        template = loader.load(template_name)
+
+        system_text = template.system.format(**context) if context else template.system
+        user_text = template.user.format(**context) if template.user else None
+
+        effective_model = self._serialize_model or model
+        effective_provider = self._serialize_provider_name or self._provider_name
+        structured_model = with_structured_output(
+            effective_model, output_schema, provider_name=effective_provider
+        )
+
+        messages: list[SystemMessage | HumanMessage] = [SystemMessage(content=system_text)]
+        if user_text:
+            messages.append(HumanMessage(content=user_text))
+
+        config = build_runnable_config(
+            run_name=f"dress_{template_name}",
+            metadata={"stage": "dress", "phase": template_name},
+            callbacks=self._callbacks,
+        )
+
+        llm_calls = 0
+        total_tokens = 0
+
+        for attempt in range(max_retries):
+            log.debug(
+                "dress_llm_call",
+                template=template_name,
+                attempt=attempt + 1,
+            )
+
+            try:
+                result = await structured_model.ainvoke(messages, config=config)
+                llm_calls += 1
+                # Note: extract_tokens returns 0 for Pydantic model results
+                # from with_structured_output. Token counts for structured
+                # output calls are not tracked. This matches FILL stage behavior.
+                total_tokens += extract_tokens(result)
+
+                validated = (
+                    result
+                    if isinstance(result, output_schema)
+                    else output_schema.model_validate(result)
+                )
+                return validated, llm_calls, total_tokens
+
+            except (ValidationError, TypeError) as e:
+                log.warning(
+                    "dress_llm_validation_fail",
+                    template=template_name,
+                    attempt=attempt + 1,
+                    error=str(e),
+                )
+
+                if attempt < max_retries - 1:
+                    expected = get_all_field_paths(output_schema)
+                    error_msg = (
+                        f"Your response failed validation:\n{e}\n\n"
+                        f"Expected fields: {', '.join(expected)}\n"
+                        f"Please fix the errors and try again."
+                    )
+                    # Append error feedback to conversation history so the
+                    # LLM can see what went wrong and fix it
+                    messages.append(HumanMessage(content=error_msg))
+
+        raise DressStageError(
+            f"LLM call for {template_name} failed after {max_retries} attempts. "
+            f"Could not produce valid {output_schema.__name__} output."
+        )
+
+    # -------------------------------------------------------------------------
+    # Phase 1: Illustration Briefs
+    # -------------------------------------------------------------------------
+
+    async def _phase_1_briefs(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+    ) -> DressPhaseResult:
+        """Phase 1: Generate illustration briefs for passages.
+
+        Iterates all passages, computes structural priority, calls LLM
+        for each to generate a brief, and applies to graph.
+        """
+        passages = graph.get_nodes_by_type("passage")
+        if not passages:
+            return DressPhaseResult(phase="briefs", status="completed", detail="no passages")
+
+        art_direction_ctx = format_art_direction_context(graph)
+        total_llm_calls = 0
+        total_tokens = 0
+        briefs_created = 0
+        briefs_skipped = 0
+
+        for passage_id, passage_data in passages.items():
+            # Skip passages without prose
+            if not passage_data.get("prose"):
+                briefs_skipped += 1
+                continue
+
+            # Compute structural priority
+            base_score = compute_structural_score(graph, passage_id)
+
+            # Build context
+            passage_ctx = format_passage_for_brief(graph, passage_id)
+            entity_visuals_ctx = format_entity_visuals_for_passage(graph, passage_id)
+            priority_ctx = describe_priority_context(graph, passage_id, base_score)
+
+            context = {
+                "art_direction": art_direction_ctx,
+                "passage_context": passage_ctx,
+                "entity_visuals": entity_visuals_ctx or "No entity visual profiles available.",
+                "priority_context": priority_ctx,
+            }
+
+            output, llm_calls, tokens = await self._dress_llm_call(
+                model, "dress_brief", context, DressPhase1Output
+            )
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            # Combine structural score + LLM adjustment
+            final_priority = map_score_to_priority(base_score + output.llm_adjustment)
+            if final_priority < 1:
+                briefs_skipped += 1
+                log.debug(
+                    "brief_skipped",
+                    passage_id=passage_id,
+                    base_score=base_score,
+                    llm_adj=output.llm_adjustment,
+                )
+                continue
+
+            brief_dict = output.brief.model_dump()
+            # Override LLM's priority with our computed value (structural + adjustment)
+            brief_dict["priority"] = final_priority
+            apply_dress_brief(graph, passage_id, brief_dict, final_priority)
+            briefs_created += 1
+
+        log.info(
+            "briefs_phase_complete",
+            created=briefs_created,
+            skipped=briefs_skipped,
+        )
+
+        return DressPhaseResult(
+            phase="briefs",
+            status="completed",
+            detail=f"{briefs_created} briefs created, {briefs_skipped} skipped",
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
+        )
+
+    # -------------------------------------------------------------------------
+    # Phase 2: Codex Entries
+    # -------------------------------------------------------------------------
+
+    async def _phase_2_codex(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+    ) -> DressPhaseResult:
+        """Phase 2: Generate codex entries for entities.
+
+        Iterates entities, builds per-entity context with codewords,
+        calls LLM for codex tiers, validates, and applies to graph.
+        """
+        entities = graph.get_nodes_by_type("entity")
+        if not entities:
+            return DressPhaseResult(phase="codex", status="completed", detail="no entities")
+
+        vision_ctx = format_dream_vision(graph)
+        codewords = graph.get_nodes_by_type("codeword")
+        codeword_list = "\n".join(
+            f"- `{cw_data.get('raw_id', cw_id)}`: {cw_data.get('trigger', '')}"
+            for cw_id, cw_data in codewords.items()
+        )
+
+        total_llm_calls = 0
+        total_tokens = 0
+        codex_created = 0
+        validation_warnings = 0
+
+        for entity_id in entities:
+            entity_details_ctx = format_entity_for_codex(graph, entity_id)
+
+            context = {
+                "vision_context": vision_ctx or "No creative vision available.",
+                "entity_details": entity_details_ctx,
+                "codewords": codeword_list or "No codewords defined.",
+            }
+
+            output, llm_calls, tokens = await self._dress_llm_call(
+                model, "dress_codex", context, DressPhase2Output
+            )
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            # Validate entries
+            entry_dicts = [e.model_dump() for e in output.entries]
+            errors = validate_dress_codex_entries(graph, entity_id, entry_dicts)
+            if errors:
+                validation_warnings += 1
+                log.warning(
+                    "codex_validation_issues",
+                    entity_id=entity_id,
+                    errors=errors,
+                )
+
+            apply_dress_codex(graph, entity_id, entry_dicts)
+            codex_created += len(entry_dicts)
+
+        log.info(
+            "codex_phase_complete",
+            entries_created=codex_created,
+            entities=len(entities),
+            warnings=validation_warnings,
+        )
+
+        return DressPhaseResult(
+            phase="codex",
+            status="completed",
+            detail=f"{codex_created} entries for {len(entities)} entities",
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
+        )
+
+    # -------------------------------------------------------------------------
+    # Phases 3-4: Stubs (implemented in later PRs)
+    # -------------------------------------------------------------------------
 
     async def _phase_3_review(self, graph: Graph, model: BaseChatModel) -> DressPhaseResult:
         """Phase 3: Human review gate (not yet implemented)."""
@@ -457,3 +728,132 @@ def create_dress_stage(
 
 # Singleton instance for registration (project_path provided at execution)
 dress_stage = DressStage()
+
+
+# ---------------------------------------------------------------------------
+# Priority scoring helpers
+# ---------------------------------------------------------------------------
+
+
+def compute_structural_score(graph: Graph, passage_id: str) -> int:
+    """Compute structural importance score for a passage.
+
+    Scoring rules:
+        +3 for spine arc passage
+        +2 for opening (first passage in any arc)
+        +2 for ending (last passage in any arc)
+        +2 for climax scene type
+        +1 for new location introduction
+        -1 for transition scene type
+
+    Args:
+        graph: Story graph with arcs, beats, and passages.
+        passage_id: The passage node ID.
+
+    Returns:
+        Integer score (higher = more important).
+    """
+    score = 0
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return score
+
+    # Get beat metadata
+    beat_id = passage.get("from_beat", "")
+    beat = graph.get_node(beat_id) if beat_id else None
+    scene_type = beat.get("scene_type", "") if beat else ""
+
+    # Scene type bonuses
+    if scene_type == "climax":
+        score += 2
+    elif scene_type == "transition":
+        score -= 1
+
+    # Check arc position
+    spine_id = get_spine_arc_id(graph)
+    arcs = graph.get_nodes_by_type("arc")
+
+    for arc_id, arc_data in arcs.items():
+        sequence = arc_data.get("sequence", [])
+        if not sequence or not beat_id:
+            continue
+
+        if beat_id not in sequence:
+            continue
+
+        # Spine bonus
+        if arc_id == spine_id:
+            score += 3
+
+        # Opening/ending
+        if beat_id == sequence[0]:
+            score += 2
+        if beat_id == sequence[-1]:
+            score += 2
+
+    # New location introduction
+    entity_ids = passage.get("entities", [])
+    for eid in entity_ids:
+        enode = graph.get_node(eid)
+        if enode and enode.get("entity_type") == "location":
+            score += 1
+            break  # Only count once
+
+    return score
+
+
+def map_score_to_priority(score: int) -> int:
+    """Map a structural score to illustration priority (1-3).
+
+    Args:
+        score: Combined structural + LLM adjustment score.
+
+    Returns:
+        Priority: 1 (must-have), 2 (important), 3 (nice-to-have),
+        or 0 for skip.
+    """
+    if score >= 5:
+        return 1
+    if score >= 3:
+        return 2
+    if score >= 1:
+        return 3
+    return 0
+
+
+def describe_priority_context(graph: Graph, passage_id: str, base_score: int) -> str:
+    """Describe the structural position of a passage for the LLM.
+
+    Args:
+        graph: Story graph.
+        passage_id: Passage node ID.
+        base_score: Pre-computed structural score.
+
+    Returns:
+        Human-readable priority context string.
+    """
+    parts: list[str] = [f"Structural base score: {base_score}"]
+
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return parts[0]
+
+    beat_id = passage.get("from_beat", "")
+    beat = graph.get_node(beat_id) if beat_id else None
+    scene_type = beat.get("scene_type", "") if beat else ""
+    if scene_type:
+        parts.append(f"Scene type: {scene_type}")
+
+    spine_id = get_spine_arc_id(graph)
+    if spine_id:
+        spine = graph.get_node(spine_id)
+        if spine and beat_id in spine.get("sequence", []):
+            parts.append("Position: spine arc (main storyline)")
+        else:
+            parts.append("Position: branch arc")
+
+    choices = graph.get_edges(from_id=passage_id, edge_type="choice")
+    if choices:
+        parts.append(f"Divergence point: {len(choices)} choices")
+
+    return "\n".join(parts)
