@@ -42,16 +42,11 @@ def test_dream_artifact_valid_full() -> None:
         audience="adult",
         themes=["betrayal", "redemption"],
         style_notes="Hard-boiled narration",
-        scope=Scope(
-            target_word_count=15000,
-            estimated_passages=40,
-            branching_depth="moderate",
-            estimated_playtime_minutes=30,
-        ),
+        scope=Scope(story_size="short"),
     )
     assert artifact.subgenre == "noir"
     assert artifact.scope is not None
-    assert artifact.scope.target_word_count == 15000
+    assert artifact.scope.story_size == "short"
 
 
 def test_dream_artifact_invalid_empty_genre() -> None:
@@ -102,25 +97,11 @@ def test_dream_artifact_invalid_empty_themes() -> None:
     assert "themes" in str(exc_info.value)
 
 
-def test_scope_invalid_word_count() -> None:
-    """Word count below minimum should fail."""
+def test_scope_invalid_story_size() -> None:
+    """Invalid story_size should fail validation."""
     with pytest.raises(ValidationError) as exc_info:
-        Scope(
-            target_word_count=500,  # Below 1000 minimum
-            estimated_passages=10,
-        )
-    assert "target_word_count" in str(exc_info.value)
-
-
-def test_scope_invalid_branching_depth() -> None:
-    """Empty branching depth should fail."""
-    with pytest.raises(ValidationError) as exc_info:
-        Scope(
-            target_word_count=10000,
-            estimated_passages=10,
-            branching_depth="",  # Empty string not allowed
-        )
-    assert "branching_depth" in str(exc_info.value)
+        Scope(story_size="tiny")  # type: ignore[arg-type]
+    assert "story_size" in str(exc_info.value)
 
 
 def test_dream_artifact_accepts_flexible_audience() -> None:
@@ -132,16 +113,6 @@ def test_dream_artifact_accepts_flexible_audience() -> None:
         themes=["betrayal"],
     )
     assert artifact.audience == "adults"
-
-
-def test_scope_accepts_flexible_branching_depth() -> None:
-    """Branching depth accepts any non-empty string for LLM flexibility."""
-    scope = Scope(
-        target_word_count=10000,
-        estimated_passages=10,
-        branching_depth="extensive",  # Custom value
-    )
-    assert scope.branching_depth == "extensive"
 
 
 # --- ArtifactWriter Tests ---
@@ -406,11 +377,7 @@ def test_roundtrip_preserves_data(tmp_path: Path) -> None:
         audience="adult",
         themes=["betrayal", "redemption"],
         style_notes="Hard-boiled narration in first person.",
-        scope=Scope(
-            target_word_count=15000,
-            estimated_passages=40,
-            branching_depth="moderate",
-        ),
+        scope=Scope(story_size="short"),
     )
 
     writer = ArtifactWriter(tmp_path)
@@ -426,26 +393,17 @@ def test_roundtrip_preserves_data(tmp_path: Path) -> None:
     assert loaded.themes == original.themes
     assert loaded.style_notes == original.style_notes
     assert loaded.scope is not None
-    assert loaded.scope.target_word_count == original.scope.target_word_count
+    assert loaded.scope.story_size == original.scope.story_size
 
 
 def test_scope_defaults_to_standard() -> None:
-    """Scope model defaults to standard preset values.
-
-    All fields have sensible defaults so Scope() is valid without arguments,
-    enabling DreamArtifact to always include a scope.
-    """
+    """Scope model defaults to standard when no story_size given."""
     scope = Scope()
     assert scope.story_size == "standard"
-    assert scope.branching_depth == "moderate"
-    assert scope.estimated_passages == 45
-    assert scope.target_word_count == 20000
 
-    # Explicit values override defaults
-    scope = Scope(story_size="vignette", estimated_passages=10, target_word_count=3000)
+    # Explicit value overrides default
+    scope = Scope(story_size="vignette")
     assert scope.story_size == "vignette"
-    assert scope.estimated_passages == 10
-    assert scope.target_word_count == 3000
 
 
 def test_scope_defaults_when_omitted() -> None:
@@ -462,4 +420,3 @@ def test_scope_defaults_when_omitted() -> None:
         # scope not provided — gets default Scope with standard values
     )
     assert artifact.scope.story_size == "standard"
-    assert artifact.scope.estimated_passages == 45

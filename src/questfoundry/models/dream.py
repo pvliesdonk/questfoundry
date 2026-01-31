@@ -24,27 +24,17 @@ class ContentNotes(BaseModel):
 
 
 class Scope(BaseModel):
-    """Story scope constraints."""
+    """Story scope — just the size preset.
+
+    Numeric ranges (passages, word count, branching) are derived from
+    PRESETS in ``pipeline/size.py`` at runtime. The LLM only needs to
+    pick one word.
+    """
 
     story_size: Literal["vignette", "short", "standard", "long"] = Field(
         default="standard",
-        description=(
-            'Story size preset: "vignette" (5-15 passages, tight single-thread), '
-            '"short" (15-30 passages, modest branching), '
-            '"standard" (30-60 passages, full branching), '
-            '"long" (60-120 passages, extensive branching)'
-        ),
+        description='Story size preset: "vignette", "short", "standard", or "long"',
     )
-    branching_depth: str = Field(
-        default="moderate",
-        description="Branching complexity (e.g., light, moderate, heavy, extensive)",
-        min_length=1,
-    )
-    estimated_passages: int = Field(default=45, description="Target scene count", ge=5)
-    estimated_playtime_minutes: int | None = Field(
-        default=None, description="Target reading time", ge=1
-    )
-    target_word_count: int = Field(default=20000, description="Approximate final length", ge=1000)
 
 
 class DreamArtifact(BaseModel):
