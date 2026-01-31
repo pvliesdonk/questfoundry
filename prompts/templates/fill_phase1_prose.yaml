@@ -16,6 +16,9 @@ system: |
   ## Open Dramatic Questions
   {dramatic_questions}
 
+  ## Narrative Pacing
+  {narrative_context}
+
   ## Scene Type Guidance
   - **scene**: Full dramatic structure (goal, obstacle, outcome). 3+ paragraphs.
     Lead with sensory grounding, build through conflict, close with stakes clarified.
@@ -23,6 +26,18 @@ system: |
     Breathing room after intensity.
   - **micro_beat**: Brief transition. 1 paragraph. Functional prose that moves
     the story forward without dwelling.
+
+  ## Narrative Function Guidance
+  - **introduce**: Ground the reader. Establish new elements through sensory detail
+    and action, not exposition. End with a hook or question.
+  - **develop**: Deepen what is already known. Layer in contradiction, nuance, or
+    intimacy. Show character through choice, not description.
+  - **complicate**: Raise stakes or introduce obstacles. The reader should feel
+    the ground shift. End with the situation worse or more uncertain.
+  - **confront**: Direct engagement with tension. Strip away ambiguity. Force
+    characters (and reader) to face what they have been avoiding.
+  - **resolve**: Settle a thread. Provide earned clarity — not easy answers.
+    The resolution should feel inevitable in hindsight.
 
   ## Entity States
   {entity_states}
@@ -40,11 +55,14 @@ system: |
 
   1. Follow the voice document for POV, tense, register, rhythm, and tone
   2. Match the scene type guidance for length and structure
-  3. Cover the beat summary content — do not invent major plot points
-  4. Maintain continuity with the sliding window passages
-  5. Let open dramatic questions create subtext — do not resolve them unless
+  3. Match the narrative function guidance for dramatic purpose
+  4. Match the target length — do not over-write micro_beats or under-write confrontations
+  5. Cover the beat summary content — do not invent major plot points
+  6. Maintain continuity with the sliding window passages
+  7. Let open dramatic questions create subtext — do not resolve them unless
      this beat commits to an answer
-  6. If this is a shared beat, write prose that works for ALL arriving states
+  8. Build toward the exit mood through imagery and rhythm — do not state it directly
+  9. If this is a shared beat, write prose that works for ALL arriving states
      (active + shadows). Use ambiguous phrasing when states diverge.
 
   ## Poly-State Examples (CRITICAL for shared beats)
