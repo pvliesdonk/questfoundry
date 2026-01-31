@@ -29,9 +29,10 @@ system: |
     {"story_size": "<preset>", "branching_depth": "<depth>", "estimated_passages": <int>, "target_word_count": <int>}
     Valid story_size: "vignette", "short", "standard", "long".
     Match branching_depth to size: vignette="light", short="light", standard="moderate", long="heavy".
-    If the brief says "vignette" → story_size="vignette", estimated_passages=10, target_word_count=3000.
-    If the brief says "short" → story_size="short", estimated_passages=20, target_word_count=10000.
-    If no size is mentioned → story_size="standard", estimated_passages=45, target_word_count=20000.
+    If the brief says "vignette" → story_size="vignette", estimated_passages=10, target_word_count=3500.
+    If the brief says "short" → story_size="short", estimated_passages=22, target_word_count=10000.
+    If the brief says "long" → story_size="long", estimated_passages=90, target_word_count=45000.
+    If no size is mentioned → story_size="standard", estimated_passages=45, target_word_count=22500.
   - content_notes (warnings/guidance, NOT specific scenes or character arcs)
 
   Do NOT serialize specific characters, scenes, endings, or mechanics into

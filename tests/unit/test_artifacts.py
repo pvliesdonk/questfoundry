@@ -448,11 +448,11 @@ def test_scope_defaults_to_standard() -> None:
     assert scope.target_word_count == 3000
 
 
-def test_optional_scope_is_none_by_default() -> None:
-    """DreamArtifact.scope defaults to None.
+def test_scope_defaults_when_omitted() -> None:
+    """DreamArtifact.scope defaults to standard preset when omitted.
 
-    The scope field is optional in DreamArtifact - it can be omitted entirely.
-    This is different from scope's internal required fields.
+    The scope field uses default_factory=Scope, so it's always present
+    with standard preset values even when not explicitly provided.
     """
     artifact = DreamArtifact(
         genre="mystery",
