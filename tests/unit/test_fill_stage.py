@@ -255,7 +255,7 @@ class TestFillStageExecute:
         _mock_implemented_phases(stage)
         await stage.execute(mock_model, "", on_phase_progress=on_progress)
 
-        assert len(progress_calls) == 4
+        assert len(progress_calls) == 5
         assert progress_calls[0][0] == "voice"
 
     @pytest.mark.asyncio
@@ -273,15 +273,15 @@ class TestFillStageExecute:
 
 
 class TestPhaseOrder:
-    def test_four_phases(self) -> None:
+    def test_five_phases(self) -> None:
         stage = FillStage()
         phases = stage._phase_order()
-        assert len(phases) == 4
+        assert len(phases) == 5
 
     def test_phase_names(self) -> None:
         stage = FillStage()
         names = [name for _, name in stage._phase_order()]
-        assert names == ["voice", "generate", "review", "revision"]
+        assert names == ["voice", "generate", "review", "revision", "arc_validation"]
 
 
 class TestCheckpointing:
