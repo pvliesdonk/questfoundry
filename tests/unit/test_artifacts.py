@@ -30,7 +30,7 @@ def test_dream_artifact_valid_minimal() -> None:
     assert artifact.version == 1
     assert artifact.genre == "mystery"
     assert artifact.subgenre is None
-    assert artifact.scope is None
+    assert artifact.scope.story_size == "standard"
 
 
 def test_dream_artifact_valid_full() -> None:
@@ -429,26 +429,23 @@ def test_roundtrip_preserves_data(tmp_path: Path) -> None:
     assert loaded.scope.target_word_count == original.scope.target_word_count
 
 
-def test_scope_requires_word_count_and_passages() -> None:
-    """Scope model requires target_word_count and estimated_passages.
+def test_scope_defaults_to_standard() -> None:
+    """Scope model defaults to standard preset values.
 
-    These fields have no defaults in the Pydantic model, so they must
-    be provided when creating a Scope instance.
+    All fields have sensible defaults so Scope() is valid without arguments,
+    enabling DreamArtifact to always include a scope.
     """
-    # Missing target_word_count should fail
-    with pytest.raises(ValidationError) as exc_info:
-        Scope(estimated_passages=10)  # type: ignore[call-arg]
-    assert "target_word_count" in str(exc_info.value)
+    scope = Scope()
+    assert scope.story_size == "standard"
+    assert scope.branching_depth == "moderate"
+    assert scope.estimated_passages == 45
+    assert scope.target_word_count == 20000
 
-    # Missing estimated_passages should fail
-    with pytest.raises(ValidationError) as exc_info:
-        Scope(target_word_count=10000)  # type: ignore[call-arg]
-    assert "estimated_passages" in str(exc_info.value)
-
-    # Both provided should succeed
-    scope = Scope(target_word_count=10000, estimated_passages=10)
-    assert scope.target_word_count == 10000
+    # Explicit values override defaults
+    scope = Scope(story_size="vignette", estimated_passages=10, target_word_count=3000)
+    assert scope.story_size == "vignette"
     assert scope.estimated_passages == 10
+    assert scope.target_word_count == 3000
 
 
 def test_optional_scope_is_none_by_default() -> None:
@@ -462,6 +459,7 @@ def test_optional_scope_is_none_by_default() -> None:
         tone=["dark"],
         audience="adult",
         themes=["betrayal"],
-        # scope not provided
+        # scope not provided — gets default Scope with standard values
     )
-    assert artifact.scope is None
+    assert artifact.scope.story_size == "standard"
+    assert artifact.scope.estimated_passages == 45

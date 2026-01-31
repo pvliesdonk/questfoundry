@@ -40,11 +40,11 @@ class Scope(BaseModel):
         description="Branching complexity (e.g., light, moderate, heavy, extensive)",
         min_length=1,
     )
-    estimated_passages: int = Field(description="Target scene count", ge=5)
+    estimated_passages: int = Field(default=45, description="Target scene count", ge=5)
     estimated_playtime_minutes: int | None = Field(
         default=None, description="Target reading time", ge=1
     )
-    target_word_count: int = Field(description="Approximate final length", ge=1000)
+    target_word_count: int = Field(default=20000, description="Approximate final length", ge=1000)
 
 
 class DreamArtifact(BaseModel):
@@ -57,7 +57,7 @@ class DreamArtifact(BaseModel):
         default=None, description="Content advisory notes for inclusions and exclusions"
     )
     genre: str = Field(description="Primary genre", min_length=1)
-    scope: Scope | None = Field(default=None)
+    scope: Scope = Field(default_factory=Scope)
     style_notes: str | None = Field(default=None, description="Style guidance", min_length=1)
     subgenre: str | None = Field(
         default=None, description="Optional genre refinement", min_length=1
