@@ -19,39 +19,9 @@ from questfoundry.agents.prompts import (
     get_seed_summarize_prompt,
 )
 
-HUMAN_PREFIX = "Human:"
-
 
 class TestNoHumanPrefix:
     """Every prompt builder must return raw text, never 'Human: …'."""
-
-    def test_brainstorm_discuss_prompt(self) -> None:
-        result = get_brainstorm_discuss_prompt(
-            vision_context="test vision",
-            research_tools_available=False,
-            interactive=False,
-        )
-        assert not result.startswith(HUMAN_PREFIX), (
-            f"get_brainstorm_discuss_prompt() starts with '{HUMAN_PREFIX}'"
-        )
-
-    def test_brainstorm_summarize_prompt(self) -> None:
-        result = get_brainstorm_summarize_prompt()
-        assert not result.startswith(HUMAN_PREFIX), (
-            f"get_brainstorm_summarize_prompt() starts with '{HUMAN_PREFIX}'"
-        )
-
-    def test_seed_summarize_prompt(self) -> None:
-        result = get_seed_summarize_prompt(brainstorm_context="test context")
-        assert not result.startswith(HUMAN_PREFIX), (
-            f"get_seed_summarize_prompt() starts with '{HUMAN_PREFIX}'"
-        )
-
-    def test_seed_serialize_prompt(self) -> None:
-        result = get_seed_serialize_prompt()
-        assert not result.startswith(HUMAN_PREFIX), (
-            f"get_seed_serialize_prompt() starts with '{HUMAN_PREFIX}'"
-        )
 
     @pytest.mark.parametrize(
         "func,kwargs",
