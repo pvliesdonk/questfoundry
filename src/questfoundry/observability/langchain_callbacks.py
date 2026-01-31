@@ -8,6 +8,7 @@ including JSONL logging for LLM calls.
 
 from __future__ import annotations
 
+import re
 from time import perf_counter
 from typing import TYPE_CHECKING, Any
 
@@ -37,8 +38,6 @@ def _parse_temperature_from_repr(repr_str: str) -> float | None:
 
     Returns None if temperature cannot be parsed.
     """
-    import re
-
     match = re.search(r"temperature=([\d.]+)", repr_str)
     if match:
         try:
@@ -61,13 +60,19 @@ def _extract_message_tokens(gen_msg: object) -> tuple[int, int, int]:
         return 0, 0, 0
 
     if isinstance(msg_usage, dict):
-        total = msg_usage.get("total_tokens") or 0
-        inp = msg_usage.get("input_tokens") or 0
-        out = msg_usage.get("output_tokens") or 0
+        total = msg_usage.get("total_tokens")
+        total = 0 if total is None else int(total)
+        inp = msg_usage.get("input_tokens")
+        inp = 0 if inp is None else int(inp)
+        out = msg_usage.get("output_tokens")
+        out = 0 if out is None else int(out)
     else:
-        total = getattr(msg_usage, "total_tokens", 0) or 0
-        inp = getattr(msg_usage, "input_tokens", 0) or 0
-        out = getattr(msg_usage, "output_tokens", 0) or 0
+        total = getattr(msg_usage, "total_tokens", None)
+        total = 0 if total is None else int(total)
+        inp = getattr(msg_usage, "input_tokens", None)
+        inp = 0 if inp is None else int(inp)
+        out = getattr(msg_usage, "output_tokens", None)
+        out = 0 if out is None else int(out)
 
     return int(total), int(inp), int(out)
 
@@ -234,32 +239,32 @@ class LLMLoggingCallback(BaseCallbackHandler):
             input_tokens = usage.get("input_tokens") or 0
             output_tokens = usage.get("output_tokens") or 0
 
-        # Fallback: check generation message's usage_metadata (Ollama, newer providers)
+        # Extract gen_msg once for both token fallback and model name enrichment
+        gen_msg = None
         if (
-            total_tokens == 0
-            and response.generations
+            response.generations
             and len(response.generations) > 0
             and len(response.generations[0]) > 0
         ):
             gen_msg = getattr(response.generations[0][0], "message", None)
-            if gen_msg is not None:
-                total_tokens, input_tokens, output_tokens = _extract_message_tokens(gen_msg)
+
+        # Fallback: check generation message's usage_metadata (Ollama, newer providers)
+        if total_tokens == 0 and gen_msg is not None:
+            total_tokens, input_tokens, output_tokens = _extract_message_tokens(gen_msg)
 
         # Enrich model name from response_metadata when serialized name is
         # a class name (e.g., "ChatOllama") rather than actual model ID
         model_name = call_info.get("model", "unknown")
-        if response.generations and len(response.generations[0]) > 0:
-            gen_msg = getattr(response.generations[0][0], "message", None)
-            if gen_msg is not None:
-                resp_meta = getattr(gen_msg, "response_metadata", None)
-                if isinstance(resp_meta, dict):
-                    actual_model = resp_meta.get("model") or resp_meta.get("model_name")
-                    if (
-                        isinstance(actual_model, str)
-                        and actual_model
-                        and (model_name.startswith("Chat") or model_name == "unknown")
-                    ):
-                        model_name = actual_model
+        if gen_msg is not None:
+            resp_meta = getattr(gen_msg, "response_metadata", None)
+            if isinstance(resp_meta, dict):
+                actual_model = resp_meta.get("model") or resp_meta.get("model_name")
+                if (
+                    isinstance(actual_model, str)
+                    and actual_model
+                    and (model_name.startswith("Chat") or model_name == "unknown")
+                ):
+                    model_name = actual_model
 
         # Get temperature if captured, otherwise use default
         temperature = call_info.get("temperature")
