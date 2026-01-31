@@ -256,13 +256,21 @@ def _ensure_project(
     name = project_path.name
 
     if auto_init:
-        project_path = _init_project(name, project_path.parent, provider=provider)
+        # For simple names (no path separators), default to _projects_dir
+        # so that `qf run --init --project foo` creates projects/foo/
+        parent = project_path.parent
+        if len(project_path.parts) == 1:
+            parent = _projects_dir
+        project_path = _init_project(name, parent, provider=provider)
         console.print(f"[green]✓[/green] Created project: [bold]{name}[/bold]")
         return project_path
 
     if _is_interactive_tty():
         if typer.confirm(f"Project '{name}' doesn't exist. Create it?", default=True):
-            project_path = _init_project(name, project_path.parent, provider=provider)
+            parent = project_path.parent
+            if len(project_path.parts) == 1:
+                parent = _projects_dir
+            project_path = _init_project(name, parent, provider=provider)
             console.print(f"[green]✓[/green] Created project: [bold]{name}[/bold]")
             return project_path
         raise typer.Exit(0)
