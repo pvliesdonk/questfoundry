@@ -599,7 +599,7 @@ def test_seed_no_prompt_noninteractive_uses_default(tmp_path: Path) -> None:
 
 def test_stage_order_constant() -> None:
     """Test STAGE_ORDER contains expected stages in order."""
-    assert STAGE_ORDER == ["dream", "brainstorm", "seed", "grow", "fill"]
+    assert STAGE_ORDER == ["dream", "brainstorm", "seed", "grow", "fill", "dress"]
 
 
 def test_stage_prompts_has_all_stages() -> None:
