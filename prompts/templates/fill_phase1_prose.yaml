@@ -57,6 +57,9 @@ system: |
   ## Shadow States (Poly-State Context)
   {shadow_states}
 
+  ## Path Arcs
+  {path_arcs}
+
   ## Rules
 
   1. Follow the voice document for POV, tense, register, rhythm, and tone

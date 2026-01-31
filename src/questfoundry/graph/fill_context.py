@@ -839,6 +839,64 @@ def format_entry_states(graph: Graph, passage_id: str, arc_id: str) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Path arc context
+# ---------------------------------------------------------------------------
+
+
+def format_path_arc_context(graph: Graph, passage_id: str, arc_id: str) -> str:
+    """Format path arc context for a passage.
+
+    Shows the thematic through-line and mood of active paths in the arc
+    being generated, giving the prose writer emotional direction.
+
+    Args:
+        graph: Graph containing passage, arc, and path nodes.
+        passage_id: The passage being generated.
+        arc_id: The arc being traversed.
+
+    Returns:
+        Formatted path arc context, or empty string if no path arcs set.
+    """
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return ""
+
+    arc_node = graph.get_node(arc_id)
+    if not arc_node:
+        return ""
+
+    arc_paths = arc_node.get("paths", [])
+    if not arc_paths:
+        return ""
+
+    lines: list[str] = []
+    for path_id in sorted(arc_paths):
+        path_node = graph.get_node(path_id)
+        if not path_node:
+            continue
+        theme = path_node.get("path_theme", "")
+        mood = path_node.get("path_mood", "")
+        if not theme and not mood:
+            continue
+        raw_id = path_node.get("raw_id", path_id)
+        parts = [f"**{raw_id}**"]
+        if mood:
+            parts.append(f"Mood: {mood}")
+        if theme:
+            parts.append(f"Theme: {theme}")
+        lines.append("- " + " | ".join(parts))
+
+    if not lines:
+        return ""
+
+    return (
+        "**Path Arcs** (thematic context for active paths):\n\n"
+        + "\n".join(lines)
+        + "\n\nLet the path mood and theme subtly inform tone and imagery."
+    )
+
+
 def format_passages_batch(
     graph: Graph,
     passage_ids: list[str],

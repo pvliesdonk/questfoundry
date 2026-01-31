@@ -164,6 +164,7 @@ class GrowStage:
             (self._phase_4b_narrative_gaps, "narrative_gaps"),
             (self._phase_4c_pacing_gaps, "pacing_gaps"),
             (self._phase_4d_atmospheric, "atmospheric"),
+            (self._phase_4e_path_arcs, "path_arcs"),
             (self._phase_3_intersections, "intersections"),
             (self._phase_5_enumerate_arcs, "enumerate_arcs"),
             (self._phase_6_divergence, "divergence"),
@@ -1264,6 +1265,92 @@ class GrowStage:
             ),
             llm_calls=llm_calls,
             tokens_used=tokens,
+        )
+
+    async def _phase_4e_path_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 4e: Per-path thematic mini-arcs.
+
+        Generates a thematic through-line and mood descriptor for each path.
+        One LLM call per path.
+        """
+        from questfoundry.graph.grow_algorithms import get_path_beat_sequence
+        from questfoundry.models.grow import PathMiniArc
+
+        path_nodes = graph.get_nodes_by_type("path")
+        if not path_nodes:
+            return GrowPhaseResult(
+                phase="path_arcs",
+                status="completed",
+                detail="No paths to annotate",
+            )
+
+        total_llm_calls = 0
+        total_tokens = 0
+        applied = 0
+
+        for pid in sorted(path_nodes.keys()):
+            pdata = path_nodes[pid]
+            dilemma_id = pdata.get("dilemma_id", "")
+            dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
+            dilemma_question = dilemma_node.get("question", "") if dilemma_node else ""
+
+            # Get ordered beat sequence for this path
+            try:
+                beat_ids = get_path_beat_sequence(graph, pid)
+            except ValueError:
+                log.warning("phase4e_cycle_in_path", path_id=pid)
+                continue
+
+            if not beat_ids:
+                log.warning("phase4e_no_beats_for_path", path_id=pid)
+                continue
+
+            # Build beat sequence description
+            beat_lines: list[str] = []
+            for i, bid in enumerate(beat_ids, 1):
+                bdata = graph.get_node(bid)
+                if not bdata:
+                    continue
+                summary = bdata.get("summary", "")
+                narrative_fn = bdata.get("narrative_function", "")
+                scene_type = bdata.get("scene_type", "")
+                beat_lines.append(
+                    f"{i}. {bid}: {summary} [function={narrative_fn}, scene_type={scene_type}]"
+                )
+
+            context = {
+                "path_id": pid,
+                "dilemma_question": dilemma_question or "(no dilemma question)",
+                "beat_sequence": "\n".join(beat_lines) if beat_lines else "(no beats)",
+            }
+
+            try:
+                result, llm_calls, tokens = await self._grow_llm_call(
+                    model=model,
+                    template_name="grow_phase4e_path_arcs",
+                    context=context,
+                    output_schema=PathMiniArc,
+                )
+            except GrowStageError as e:
+                log.warning("phase4e_llm_failed", path_id=pid, error=str(e))
+                continue
+
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            graph.update_node(
+                pid,
+                path_theme=result.path_theme,
+                path_mood=result.path_mood,
+            )
+            applied += 1
+
+        return GrowPhaseResult(
+            phase="path_arcs",
+            status="completed",
+            detail=f"Applied path arcs to {applied}/{len(path_nodes)} paths",
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
         )
 
     # -------------------------------------------------------------------------
