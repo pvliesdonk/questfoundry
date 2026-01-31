@@ -755,6 +755,90 @@ def format_narrative_context(graph: Graph, passage_id: str) -> str:
     return "\n".join(lines)
 
 
+# ---------------------------------------------------------------------------
+# Atmospheric detail and entry states
+# ---------------------------------------------------------------------------
+
+
+def format_atmospheric_detail(graph: Graph, passage_id: str) -> str:
+    """Format atmospheric detail for a passage's beat.
+
+    Args:
+        graph: Graph containing passage and beat nodes.
+        passage_id: The passage being generated.
+
+    Returns:
+        Formatted atmospheric detail, or empty string if not set.
+    """
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return ""
+
+    beat_id = passage.get("from_beat", "")
+    beat = graph.get_node(beat_id) if beat_id else None
+    if not beat:
+        return ""
+
+    detail = beat.get("atmospheric_detail", "")
+    if not detail:
+        return ""
+
+    return (
+        f"**Atmospheric Detail:** {detail}\n\n"
+        "Weave this sensory detail into the prose as a recurring anchor. "
+        "Do not state it as a list — embed it naturally."
+    )
+
+
+def format_entry_states(graph: Graph, passage_id: str, arc_id: str) -> str:
+    """Format entry state context for shared beats.
+
+    For poly-state beats, shows how readers arrive from different paths.
+
+    Args:
+        graph: Graph containing passage, beat, and arc nodes.
+        passage_id: The passage being generated.
+        arc_id: The arc being traversed.
+
+    Returns:
+        Formatted entry states, or empty string if not a shared beat.
+    """
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return ""
+
+    beat_id = passage.get("from_beat", "")
+    beat = graph.get_node(beat_id) if beat_id else None
+    if not beat:
+        return ""
+
+    entry_states = beat.get("entry_states", [])
+    if not entry_states:
+        return ""
+
+    # Identify active paths from the arc
+    arc_node = graph.get_node(arc_id)
+    active_paths: set[str] = set()
+    if arc_node:
+        active_paths = set(arc_node.get("paths", []))
+
+    lines = [
+        "**Entry States** (how readers arrive at this shared beat):",
+        "",
+    ]
+
+    for entry in entry_states:
+        path_id = entry.get("path_id", "")
+        mood = entry.get("mood", "")
+        indicator = " <- ACTIVE" if path_id in active_paths else ""
+        lines.append(f"- {path_id}: {mood}{indicator}")
+
+    lines.append("")
+    lines.append("Write prose that accommodates ALL entry moods.")
+
+    return "\n".join(lines)
+
+
 def format_passages_batch(
     graph: Graph,
     passage_ids: list[str],
