@@ -556,7 +556,7 @@ def compute_open_questions(
             if effect == "commits":
                 dilemma_state[did]["closed"] = True
             else:
-                dilemma_state[did]["escalations"] = int(dilemma_state[did]["escalations"]) + 1
+                dilemma_state[did]["escalations"] += 1
 
     # Determine action at the current beat
     current_beat = graph.get_node(current_beat_id)
@@ -578,7 +578,7 @@ def compute_open_questions(
             {
                 "dilemma_id": did,
                 "question": question,
-                "escalations": int(state["escalations"]),
+                "escalations": state["escalations"],
                 "action_here": current_impacts.get(did, ""),
             }
         )
