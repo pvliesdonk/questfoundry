@@ -110,7 +110,7 @@ class TestPathToFieldName:
 
     def test_nested_field(self) -> None:
         """Nested field path with dot notation."""
-        assert _path_to_field_name(("scope", "target_word_count")) == "scope.target_word_count"
+        assert _path_to_field_name(("scope", "story_size")) == "scope.story_size"
 
     def test_strips_list_indices(self) -> None:
         """List indices are stripped from path."""
@@ -311,7 +311,7 @@ class TestDreamArtifactErrors:
             "tone": ["epic"],
             "audience": "adult",
             "themes": ["heroism"],
-            "scope": {"target_word_count": 100},  # Below minimum of 1000
+            "scope": {"story_size": "tiny"},  # Invalid value
         }
         try:
             DreamArtifact.model_validate(data)
@@ -319,9 +319,8 @@ class TestDreamArtifactErrors:
         except ValidationError as e:
             details = pydantic_errors_to_details(e.errors(), data)
 
-        # Should have error for scope.target_word_count and missing estimated_passages
         fields = {d.field for d in details}
-        assert "scope.target_word_count" in fields or "scope.estimated_passages" in fields
+        assert "scope.story_size" in fields
 
     def test_dream_list_item_error(self) -> None:
         """List item validation errors reference parent field without indices."""
@@ -476,9 +475,7 @@ class TestGetAllFieldPaths:
         assert "content_notes" in paths
 
         # Nested scope fields
-        assert "scope.target_word_count" in paths
-        assert "scope.estimated_passages" in paths
-        assert "scope.branching_depth" in paths
+        assert "scope.story_size" in paths
 
         # Nested content_notes fields
         assert "content_notes.includes" in paths
