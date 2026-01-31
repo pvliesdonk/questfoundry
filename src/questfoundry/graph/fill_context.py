@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from questfoundry.observability.logging import get_logger
+
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
@@ -632,6 +634,123 @@ def format_dramatic_questions(
 
     lines.append("")
     lines.append("Do NOT resolve these unless this beat commits to an answer.")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Deterministic pacing derivation
+# ---------------------------------------------------------------------------
+
+_INTENSITY_MAP: dict[tuple[str, str], str] = {
+    ("introduce", "scene"): "medium",
+    ("introduce", "sequel"): "low",
+    ("introduce", "micro_beat"): "low",
+    ("develop", "scene"): "medium",
+    ("develop", "sequel"): "low",
+    ("develop", "micro_beat"): "low",
+    ("complicate", "scene"): "high",
+    ("complicate", "sequel"): "medium",
+    ("complicate", "micro_beat"): "medium",
+    ("confront", "scene"): "high",
+    ("confront", "sequel"): "medium",
+    ("confront", "micro_beat"): "high",
+    ("resolve", "scene"): "high",
+    ("resolve", "sequel"): "medium",
+    ("resolve", "micro_beat"): "low",
+}
+
+_LENGTH_MAP: dict[tuple[str, str], str] = {
+    ("introduce", "scene"): "medium",
+    ("introduce", "sequel"): "medium",
+    ("introduce", "micro_beat"): "short",
+    ("develop", "scene"): "medium",
+    ("develop", "sequel"): "medium",
+    ("develop", "micro_beat"): "short",
+    ("complicate", "scene"): "medium",
+    ("complicate", "sequel"): "medium",
+    ("complicate", "micro_beat"): "short",
+    ("confront", "scene"): "long",
+    ("confront", "sequel"): "medium",
+    ("confront", "micro_beat"): "short",
+    ("resolve", "scene"): "long",
+    ("resolve", "sequel"): "medium",
+    ("resolve", "micro_beat"): "short",
+}
+
+_TARGET_LENGTH_TEXT: dict[str, str] = {
+    "short": "**Short** (1 paragraph, ~50-100 words). Every word must earn its place.",
+    "medium": "**Medium** (2-3 paragraphs, ~150-250 words). Standard pacing.",
+    "long": "**Long** (3-5 paragraphs, ~250-400 words). Take space for the moment.",
+}
+
+
+def derive_pacing(narrative_function: str, scene_type: str) -> tuple[str, str]:
+    """Derive intensity and target_length from narrative function and scene type.
+
+    Uses a deterministic lookup table — no LLM call needed.
+
+    Args:
+        narrative_function: One of introduce/develop/complicate/confront/resolve.
+        scene_type: One of scene/sequel/micro_beat.
+
+    Returns:
+        Tuple of (intensity, target_length). Falls back to ("medium", "medium")
+        for unknown combinations.
+    """
+    key = (narrative_function, scene_type)
+    intensity = _INTENSITY_MAP.get(key, "medium")
+    target_length = _LENGTH_MAP.get(key, "medium")
+    return intensity, target_length
+
+
+def format_narrative_context(graph: Graph, passage_id: str) -> str:
+    """Format narrative pacing context for a passage.
+
+    Extracts narrative_function, exit_mood from the beat node,
+    derives intensity and target_length deterministically.
+
+    Args:
+        graph: Graph containing passage and beat nodes.
+        passage_id: The passage being generated.
+
+    Returns:
+        Formatted narrative context, or empty string if metadata not available.
+    """
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return ""
+
+    beat_id = passage.get("from_beat", "")
+    beat = graph.get_node(beat_id) if beat_id else None
+    if not beat:
+        return ""
+
+    narrative_function = beat.get("narrative_function", "")
+    exit_mood = beat.get("exit_mood", "")
+    scene_type = beat.get("scene_type", "")
+    if not scene_type:
+        log = get_logger(__name__)
+        log.warning("missing_scene_type", beat_id=beat_id)
+        scene_type = "scene"
+
+    if not narrative_function:
+        return ""
+
+    intensity, target_length = derive_pacing(narrative_function, scene_type)
+    length_guidance = _TARGET_LENGTH_TEXT.get(target_length, _TARGET_LENGTH_TEXT["medium"])
+
+    lines: list[str] = [
+        f"**Narrative Function:** {narrative_function}",
+        f"**Intensity:** {intensity}",
+        f"**Target Length:** {length_guidance}",
+    ]
+
+    if exit_mood:
+        lines.append(
+            f"**Exit Mood:** The reader should leave this passage feeling: **{exit_mood}**"
+        )
+        lines.append("Let this mood build through imagery and rhythm. Do not state it directly.")
 
     return "\n".join(lines)
 

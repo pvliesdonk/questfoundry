@@ -1,10 +1,10 @@
 name: grow_phase4a_scene_types
-description: Classify beats as scene, sequel, or micro_beat
+description: Classify beats by scene type, narrative function, and exit mood
 
 system: |
-  You are classifying story beats by their narrative function.
+  You are classifying story beats on two axes, and assigning an exit mood.
 
-  ## Scene Types
+  ## Axis 1: Scene Type (how the prose flows)
   - **scene**: Active conflict, action, confrontation, or decision moment.
     The protagonist faces opposition or makes a critical choice.
   - **sequel**: Reaction, reflection, or processing. The protagonist
@@ -12,10 +12,30 @@ system: |
   - **micro_beat**: Brief transitional moment (travel, time skip, minor
     observation) that connects larger beats without standalone drama.
 
+  ## Axis 2: Narrative Function (what dramatic role the beat plays)
+  - **introduce**: Establishes something new (character, setting, threat, question).
+  - **develop**: Deepens understanding of established elements.
+  - **complicate**: Adds obstacles, reversals, or new stakes.
+  - **confront**: Direct engagement with the central tension.
+  - **resolve**: Settles a question, closes a thread, or reveals truth.
+
+  A beat's scene_type and narrative_function are independent:
+  a sequel can "complicate" (processing that reveals new stakes),
+  a scene can "introduce" (action that establishes a new threat).
+
+  ## Axis 3: Exit Mood (2-3 words for how the reader feels leaving this beat)
+  Examples: "quiet dread", "shaken resolve", "grim determination",
+  "reluctant hope", "cold clarity", "breathless tension", "numb acceptance",
+  "fierce defiance", "bitter calm", "fragile trust"
+
+  Write a SHORT emotional phrase (2-3 words). Not a sentence.
+  GOOD: "bitter resolve"
+  BAD: "The reader feels a sense of growing unease about what comes next"
+
   ## Classification Guidelines
   1. Beats with dilemma_impacts (commits/escalates) are scenes — they drive conflict forward
-  2. Opening/setup beats are scenes (they introduce conflict or establish stakes)
-  3. Beats after major decisions are sequels (processing the choice, emotional reaction)
+  2. Opening/setup beats are scenes with function "introduce"
+  3. Beats after major decisions are sequels
   4. Short connecting beats with no named characters acting are micro_beats
   5. When in doubt between scene and sequel, prefer scene
 
@@ -26,6 +46,8 @@ system: |
   - Do NOT use IDs not listed in the Valid IDs section
   - Do NOT leave any beat unclassified
   - Do NOT add explanatory prose before or after the JSON output
+  - Do NOT assign the same narrative_function to 4+ consecutive beats
+  - Do NOT write exit_mood as a full sentence
 
   ## Valid IDs
   Valid beat_ids (use ONLY these): {valid_beat_ids}
@@ -35,12 +57,17 @@ system: |
   Return a JSON object with a "tags" array. Each tag has:
   - beat_id: the beat ID being classified
   - scene_type: one of "scene", "sequel", or "micro_beat"
+  - narrative_function: one of "introduce", "develop", "complicate", "confront", or "resolve"
+  - exit_mood: 2-3 word emotional descriptor
 
   Classify ALL beats listed above. Every beat must get exactly one tag.
 
 user: |
-  Classify each beat above by its narrative function.
+  Classify each beat by scene type, narrative function, and exit mood.
 
-  REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section. Do NOT add prose before or after the JSON.
+  REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs
+  section. Every beat needs scene_type + narrative_function + exit_mood.
+  Do NOT assign the same narrative_function to 4+ consecutive beats.
+  Do NOT add prose before or after the JSON.
 
 components: []

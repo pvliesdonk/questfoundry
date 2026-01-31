@@ -1533,7 +1533,12 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
     # Phase 4a: tag all beats with alternating scene types
     scene_types = ["scene", "sequel", "micro_beat"]
     tags = [
-        SceneTypeTag(beat_id=bid, scene_type=scene_types[i % 3])
+        SceneTypeTag(
+            narrative_function="introduce",
+            exit_mood="quiet dread",
+            beat_id=bid,
+            scene_type=scene_types[i % 3],
+        )
         for i, bid in enumerate(sorted(beat_nodes.keys()))
     ]
     phase4a_output = Phase4aOutput(tags=tags)

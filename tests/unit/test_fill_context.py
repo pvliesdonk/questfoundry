@@ -6,11 +6,13 @@ import pytest
 
 from questfoundry.graph.fill_context import (
     compute_open_questions,
+    derive_pacing,
     format_dramatic_questions,
     format_dream_vision,
     format_entity_states,
     format_grow_summary,
     format_lookahead_context,
+    format_narrative_context,
     format_passage_context,
     format_passages_batch,
     format_scene_types_summary,
@@ -665,3 +667,100 @@ class TestFormatDramaticQuestions:
         g = Graph.empty()
         result = format_dramatic_questions(g, "arc::nope", "beat::b1")
         assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# Pacing Derivation and Narrative Context Tests
+# ---------------------------------------------------------------------------
+
+
+class TestDerivePacing:
+    """Tests for derive_pacing deterministic lookup."""
+
+    def test_confront_scene_is_high_long(self) -> None:
+        intensity, length = derive_pacing("confront", "scene")
+        assert intensity == "high"
+        assert length == "long"
+
+    def test_introduce_micro_beat_is_low_short(self) -> None:
+        intensity, length = derive_pacing("introduce", "micro_beat")
+        assert intensity == "low"
+        assert length == "short"
+
+    def test_develop_sequel_is_low_medium(self) -> None:
+        intensity, length = derive_pacing("develop", "sequel")
+        assert intensity == "low"
+        assert length == "medium"
+
+    def test_resolve_scene_is_high_long(self) -> None:
+        intensity, length = derive_pacing("resolve", "scene")
+        assert intensity == "high"
+        assert length == "long"
+
+    def test_unknown_falls_back_to_medium(self) -> None:
+        intensity, length = derive_pacing("unknown", "unknown")
+        assert intensity == "medium"
+        assert length == "medium"
+
+    def test_all_15_combinations_defined(self) -> None:
+        functions = ["introduce", "develop", "complicate", "confront", "resolve"]
+        types = ["scene", "sequel", "micro_beat"]
+        for func in functions:
+            for stype in types:
+                intensity, length = derive_pacing(func, stype)
+                assert intensity in ("low", "medium", "high")
+                assert length in ("short", "medium", "long")
+
+
+class TestFormatNarrativeContext:
+    """Tests for format_narrative_context."""
+
+    def test_returns_empty_for_missing_passage(self) -> None:
+        g = Graph.empty()
+        assert format_narrative_context(g, "passage::nope") == ""
+
+    def test_returns_empty_when_no_narrative_function(self, fill_graph: Graph) -> None:
+        """Beats without narrative_function get empty context (graceful degradation)."""
+        result = format_narrative_context(fill_graph, "passage::p_opening")
+        assert result == ""
+
+    def test_formats_with_narrative_function(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "beat::b1",
+            {
+                "type": "beat",
+                "raw_id": "b1",
+                "scene_type": "scene",
+                "narrative_function": "confront",
+                "exit_mood": "bitter resolve",
+            },
+        )
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
+        )
+        result = format_narrative_context(g, "passage::p1")
+        assert "confront" in result
+        assert "high" in result.lower()
+        assert "bitter resolve" in result
+        assert "Long" in result
+
+    def test_formats_without_exit_mood(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "beat::b1",
+            {
+                "type": "beat",
+                "raw_id": "b1",
+                "scene_type": "sequel",
+                "narrative_function": "develop",
+            },
+        )
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
+        )
+        result = format_narrative_context(g, "passage::p1")
+        assert "develop" in result
+        assert "Exit Mood" not in result

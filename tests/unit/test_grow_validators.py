@@ -157,8 +157,18 @@ class TestValidatePhase4aOutput:
     def test_valid_output_no_errors(self) -> None:
         result = Phase4aOutput(
             tags=[
-                SceneTypeTag(beat_id="beat::b1", scene_type="scene"),
-                SceneTypeTag(beat_id="beat::b2", scene_type="sequel"),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::b1",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::b2",
+                    scene_type="sequel",
+                ),
             ]
         )
         errors = validate_phase4a_output(
@@ -170,7 +180,12 @@ class TestValidatePhase4aOutput:
     def test_invalid_beat_id(self) -> None:
         result = Phase4aOutput(
             tags=[
-                SceneTypeTag(beat_id="beat::phantom", scene_type="scene"),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::phantom",
+                    scene_type="scene",
+                ),
             ]
         )
         errors = validate_phase4a_output(
@@ -367,9 +382,24 @@ class TestCountEntries:
     def test_counts_tags(self) -> None:
         result = Phase4aOutput(
             tags=[
-                SceneTypeTag(beat_id="b1", scene_type="scene"),
-                SceneTypeTag(beat_id="b2", scene_type="sequel"),
-                SceneTypeTag(beat_id="b3", scene_type="micro_beat"),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="b1",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="b2",
+                    scene_type="sequel",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="b3",
+                    scene_type="micro_beat",
+                ),
             ]
         )
         assert count_entries(result) == 3

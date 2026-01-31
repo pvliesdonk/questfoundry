@@ -904,7 +904,12 @@ class GrowStage:
             if tag.beat_id not in beat_nodes:
                 log.warning("phase4a_invalid_beat_id", beat_id=tag.beat_id)
                 continue
-            graph.update_node(tag.beat_id, scene_type=tag.scene_type)
+            graph.update_node(
+                tag.beat_id,
+                scene_type=tag.scene_type,
+                narrative_function=tag.narrative_function,
+                exit_mood=tag.exit_mood,
+            )
             applied += 1
 
         return GrowPhaseResult(
