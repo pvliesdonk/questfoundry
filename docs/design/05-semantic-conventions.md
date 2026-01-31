@@ -331,18 +331,16 @@ _meta:
 
 ```yaml
 # WRONG: Open string
-beat_type: string
+narrative_function: string
 
-# CORRECT: Enum
-beat_type:
+# CORRECT: Enum (set by GROW Phase 4a)
+narrative_function:
   enum:
-    - opening
-    - inciting_incident
-    - turning_point
-    - midpoint_reversal
-    - crisis
-    - climax
-    - resolution
+    - introduce
+    - develop
+    - complicate
+    - confront
+    - resolve
 ```
 
 ---
