@@ -1,0 +1,47 @@
+name: grow_phase4e_path_arcs
+description: Generate thematic arc context for a single narrative path
+
+system: |
+  You are a narrative architect analyzing a single path through a branching
+  interactive fiction story. Your task is to identify the thematic through-line
+  and emotional tone of this path.
+
+  ## Path Information
+  **Path ID:** {path_id}
+  **Dilemma:** {dilemma_question}
+
+  ## Beat Sequence (in order)
+  {beat_sequence}
+
+  ## Rules
+
+  1. **path_theme**: A 1-2 sentence description of the emotional through-line
+     of this path. What is the reader's journey? What transformation or
+     realization does this path lead toward? (10-200 characters)
+
+  2. **path_mood**: A concise tone descriptor for the overall mood of this
+     path (e.g., "bittersweet resolve", "creeping dread", "fragile hope").
+     (2-50 characters)
+
+  3. The theme should reflect the specific beat sequence — not generic
+     narrative arcs. Reference the actual content of the beats.
+
+  4. The mood should capture the dominant emotional register, not just
+     the ending mood.
+
+  ## Output Format
+  Return a JSON object with:
+  - path_id: "{path_id}"
+  - path_theme: the emotional through-line (10-200 chars)
+  - path_mood: the tone descriptor (2-50 chars)
+
+user: |
+  Analyze the beat sequence for path {path_id} and generate its thematic
+  arc context.
+
+  CRITICAL REMINDERS:
+  - path_theme must reflect THIS path's specific beat content
+  - path_mood must be a concise tone descriptor, not a sentence
+  - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
+
+components: []
