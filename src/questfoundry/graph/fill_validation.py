@@ -53,7 +53,7 @@ def check_intensity_progression(graph: Graph, arc_id: str) -> ValidationCheck:
             message=f"Arc has {len(sequence)} beats (< 3), too short to check",
         )
 
-    # Split into thirds
+    # Split into approximate thirds (first N, middle, last N where N = len//3)
     third = len(sequence) // 3
     first_third = sequence[:third]
     final_third = sequence[-third:]
@@ -142,6 +142,7 @@ def check_dramatic_questions_closed(graph: Graph, arc_id: str) -> ValidationChec
             message="All dramatic questions are resolved by arc end",
         )
 
+    # str() needed: compute_open_questions returns dict[str, str | int]
     unclosed = [str(q.get("dilemma_id", "?")) for q in open_qs]
     return ValidationCheck(
         name="dramatic_questions_closed",
