@@ -249,85 +249,114 @@ When splitting is needed, use this order (each PR should be mergeable independen
 4. **Feature/stage PR(s)** - Actual feature implementation in slices. Each PR = one coherent capability.
 5. **Cleanup PR** - Remove dead code, tighten types, refactor, docs. Keep separate.
 
-### Stacked PRs with stack-pr
+### Stacked PRs (Vanilla Git)
 
-This project uses [stack-pr](https://github.com/modular/stack-pr) for submitting stacked PRs (one PR per commit, each independently reviewable, merged bottom-up). For local commit management (amending, rebasing, navigating), we use [git-branchless](https://github.com/arxanas/git-branchless).
+When a feature is too large for a single PR, split it into a stack of dependent PRs. Each PR is a separate branch with multiple atomic commits, reviewed independently, and merged bottom-up.
 
-**Why dedicated tooling instead of manual stacking:**
-- Stacked PRs + squash merge = guaranteed conflicts and orphaned PRs
-- Manual rebasing across a stack is error-prone and time-consuming
-- Deleting a base branch closes all dependent PRs (unrecoverable)
-- `stack-pr` handles branch creation, PR creation, dependency chains, and post-merge rebasing automatically
+**Why vanilla Git instead of stacking tools (stack-pr, git-branchless):**
+- Preserves atomic commits (multiple commits per PR, not one fat commit)
+- No external tool dependencies or version breakage
+- CI triggers work reliably (no force-push hash mismatches)
+- Full control over merge strategy
 
-> **Note**: git-branchless's `git submit --forge github` is **broken** ([issue #1550](https://github.com/arxanas/git-branchless/issues/1550), author marks it "WARNING: likely buggy!"). Do NOT use `git submit` for PR creation. Use `stack-pr submit` instead.
-
-#### Setup (one-time)
+#### Creating a Stack
 
 ```bash
-# Install stack-pr (requires gh CLI)
-uv tool install stack-pr
+# PR 1: Models
+git fetch origin main
+git checkout -b feat/dress-models origin/main
+git add -p && git commit -m "feat(models): add ArtDirection schema"
+git add -p && git commit -m "feat(models): add IllustrationBrief schema"
+git add -p && git commit -m "test(models): add DRESS model validation tests"
+git push -u origin feat/dress-models
+gh pr create --base main --title "feat(models): add DRESS stage Pydantic models"
 
-# Install git-branchless for local commit management
-cargo install --locked git-branchless
-# Or: brew install git-branchless
+# PR 2: Mutations (depends on PR 1)
+git checkout -b feat/dress-mutations feat/dress-models
+git add -p && git commit -m "feat(graph): add dress mutation helpers"
+git add -p && git commit -m "feat(graph): add dress validation functions"
+git add -p && git commit -m "test(graph): add dress mutation tests"
+git push -u origin feat/dress-mutations
+gh pr create --base feat/dress-models --title "feat(graph): add DRESS mutations"
 
-# Initialize git-branchless in this repo
-git branchless init
+# PR 3: Stage implementation (depends on PR 2)
+git checkout -b feat/dress-stage feat/dress-mutations
+# ... commits ...
+git push -u origin feat/dress-stage
+gh pr create --base feat/dress-mutations --title "feat(dress): implement DRESS stage"
 ```
 
-#### Workflow
+**Stack visualization:**
+```
+main
+  └─ feat/dress-models     (PR1 → main)        3 commits
+      └─ feat/dress-mutations (PR2 → PR1)       3 commits
+          └─ feat/dress-stage   (PR3 → PR2)      5 commits
+```
+
+#### Addressing Review Comments
+
+Add new commits — never amend or rebase branches with open PRs:
 
 ```bash
-# Local commit management (git-branchless)
-git branchless smartlog   # View commit stack graph
-git prev / git next       # Navigate the stack
-git amend                 # Amend current commit (auto-rebases descendants)
-git reword                # Edit commit message (auto-rebases descendants)
-git sync                  # Rebase entire stack onto origin/main
+# Fix something in PR 2
+git checkout feat/dress-mutations
+git add -p && git commit -m "fix: address review - add input validation"
+git push origin feat/dress-mutations
 
-# PR submission (stack-pr)
-stack-pr view             # Preview what will be submitted (safe, read-only)
-stack-pr submit           # Push branches + create/update PRs for each commit
-stack-pr land             # Merge bottom PR + rebase remaining stack
-stack-pr abandon          # Clean up: delete branches, close PRs
+# Propagate to dependent branches via merge
+git checkout feat/dress-stage
+git merge feat/dress-mutations
+git push origin feat/dress-stage
 ```
 
-#### Key Concepts
+**Rules:**
+- Always `git push` (never `--force` or `--force-with-lease`) on branches with open PRs
+- Never `git commit --amend` or `git rebase` on branches with open PRs
+- Update dependent branches one at a time, push before moving to the next
 
-1. **Commits, not branches** - Each logical change is one commit. Branches are created automatically by the tools.
-2. **Automatic rebasing** - git-branchless auto-rebases descendants when you amend a commit.
-3. **One PR per commit** - `stack-pr submit` creates a separate PR for each commit, with dependency chains set up automatically.
-4. **Squash-merge safe** - `stack-pr land` merges the bottom PR and rebases the rest, avoiding the orphaned-commit problem.
-
-#### When Changes Are Requested
+#### Merging the Stack (Bottom-Up)
 
 ```bash
-# Navigate to the commit that needs changes
-git prev / git next       # Or: git checkout <commit-hash>
+# 1. Merge the bottom PR (feat/dress-models → main)
+gh pr merge <PR1> --squash --delete-branch
 
-# Make your changes
-git add -p
-git amend                 # Automatically rebases all descendants
+# 2. Retarget PR 2 to main (base branch deleted, GitHub may do this automatically)
+gh pr edit <PR2> --base main
 
-# Update all PRs in the stack
-stack-pr submit
+# 3. Rebase PR 2 onto updated main to remove duplicate commits
+git checkout feat/dress-mutations
+git fetch origin main
+git rebase origin/main
+git push --force-with-lease origin feat/dress-mutations
+# Wait for CI to pass
+
+# 4. Merge PR 2
+gh pr merge <PR2> --squash --delete-branch
+
+# 5. Repeat for PR 3
+gh pr edit <PR3> --base main
+git checkout feat/dress-stage
+git fetch origin main
+git rebase origin/main
+git push --force-with-lease origin feat/dress-stage
+gh pr merge <PR3> --squash --delete-branch
 ```
 
-#### Merging
+**Note:** `--force-with-lease` is safe here because the parent PR was just squash-merged into main — rebasing removes the now-duplicate commits. This is the ONE case where force-push is acceptable.
 
-Merge from the bottom of the stack up:
+#### CI Not Triggering
+
+If CI doesn't trigger after a push or rebase, close and reopen the PR:
+
 ```bash
-# Land the bottom PR (squash-merges + rebases remaining stack)
-stack-pr land
-
-# Or if merged via GitHub UI:
-git sync                  # Rebase stack onto updated main
-stack-pr submit           # Update remaining PRs
+gh pr close <number> && gh pr reopen <number>
 ```
 
-**References**:
-- [stack-pr documentation](https://github.com/modular/stack-pr)
-- [git-branchless local workflow](https://github.com/arxanas/git-branchless) (use for `smartlog`, `amend`, `sync` only)
+The `workflow_dispatch` trigger on the CI workflow also allows manual runs:
+```bash
+gh workflow run CI --ref <branch-name>
+```
 
 ### Pull Request Requirements
 
@@ -413,29 +442,35 @@ After rebasing, resolving conflicts, or completing a feature:
 If estimated diff will exceed the target size:
 
 1. **Stop** - Do not proceed with a single large PR
-2. **Plan** - Write a slicing plan listing commit #1, #2, #3… with goals and file lists
-3. **Implement as stacked commits** - Use git-branchless to manage the stack locally
-4. **Submit incrementally** - `stack-pr submit` creates one PR per commit
+2. **Plan** - Write a slicing plan listing PR #1, #2, #3… with goals and file lists
+3. **Implement as stacked branches** - One branch per PR, each branching from its parent
+4. **Submit incrementally** - Create PRs with correct base branches (see "Stacked PRs" above)
 
 ```bash
-# Example workflow for a large refactor
-git checkout origin/main
-# Make first logical change
-git add -p && git commit -m "refactor(models): rename dilemma terminology"
-# Make second logical change
+# Example: splitting a large refactor into 3 PRs
+git fetch origin main
+
+# PR 1: Rename terminology in models
+git checkout -b refactor/rename-models origin/main
+git add -p && git commit -m "refactor(models): rename dilemma to choice"
+git add -p && git commit -m "refactor(models): update TypedDict fields"
+git push -u origin refactor/rename-models
+gh pr create --base main --title "refactor(models): rename dilemma terminology"
+
+# PR 2: Update graph layer (depends on PR 1)
+git checkout -b refactor/rename-graph refactor/rename-models
 git add -p && git commit -m "refactor(graph): update mutations for new names"
-# Make third logical change
+git push -u origin refactor/rename-graph
+gh pr create --base refactor/rename-models --title "refactor(graph): update mutations"
+
+# PR 3: Update tests (depends on PR 2)
+git checkout -b refactor/rename-tests refactor/rename-graph
 git add -p && git commit -m "test: update tests for terminology rename"
-
-# View your stack
-git branchless smartlog
-
-# Preview, then submit all as separate PRs
-stack-pr view
-stack-pr submit
+git push -u origin refactor/rename-tests
+gh pr create --base refactor/rename-graph --title "test: update terminology tests"
 ```
 
-Each commit becomes a reviewable PR. Merge bottom-up with `stack-pr land`.
+Merge bottom-up: PR 1, retarget PR 2 to main, merge PR 2, etc.
 
 ### No Scope Creep
 
@@ -519,16 +554,6 @@ uv run pytest tests/unit/test_<module>.py -x -q    # Targeted unit test
 uv run pytest tests/unit/ -x -q                    # All unit tests (safe, no LLM)
 uv run pytest tests/integration/ -x -q             # Integration tests (USES LLM - expensive!)
 uv run pytest --cov                                # With coverage (USES LLM - expensive!)
-
-# Git-branchless (local commit management only)
-git branchless smartlog        # View commit stack
-git amend                      # Amend + auto-rebase descendants
-git sync                       # Rebase stack on origin/main
-
-# stack-pr (PR submission — do NOT use `git submit`)
-stack-pr view                  # Preview stack (read-only)
-stack-pr submit                # Create/update PRs for each commit
-stack-pr land                  # Merge bottom PR + rebase rest
 
 # CLI (once implemented)
 qf dream                       # Run DREAM stage

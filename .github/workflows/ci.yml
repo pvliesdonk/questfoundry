@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:  # Manual trigger for when CI doesn't fire after stack-pr operations
 
 jobs:
   lint:
