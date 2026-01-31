@@ -697,10 +697,30 @@ class TestPhase4aSceneTypes:
 
         phase4a_output = Phase4aOutput(
             tags=[
-                SceneTypeTag(beat_id="beat::opening", scene_type="scene"),
-                SceneTypeTag(beat_id="beat::mentor_meet", scene_type="sequel"),
-                SceneTypeTag(beat_id="beat::mentor_commits_canonical", scene_type="scene"),
-                SceneTypeTag(beat_id="beat::mentor_commits_alt", scene_type="scene"),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::opening",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::mentor_meet",
+                    scene_type="sequel",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::mentor_commits_canonical",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::mentor_commits_alt",
+                    scene_type="scene",
+                ),
             ]
         )
 
@@ -732,8 +752,18 @@ class TestPhase4aSceneTypes:
 
         phase4a_output = Phase4aOutput(
             tags=[
-                SceneTypeTag(beat_id="beat::opening", scene_type="scene"),
-                SceneTypeTag(beat_id="beat::nonexistent", scene_type="sequel"),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::opening",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::nonexistent",
+                    scene_type="sequel",
+                ),
             ]
         )
 
@@ -2190,14 +2220,34 @@ class TestGrowSemanticValidation:
         # Second call: both tags have good beat_ids → 0 errors → pass
         bad_result = Phase4aOutput(
             tags=[
-                SceneTypeTag(beat_id="beat::bad1", scene_type="scene"),
-                SceneTypeTag(beat_id="beat::bad2", scene_type="sequel"),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::bad1",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::bad2",
+                    scene_type="sequel",
+                ),
             ]
         )
         good_result = Phase4aOutput(
             tags=[
-                SceneTypeTag(beat_id="beat::b1", scene_type="scene"),
-                SceneTypeTag(beat_id="beat::b2", scene_type="sequel"),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::b1",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::b2",
+                    scene_type="sequel",
+                ),
             ]
         )
 
@@ -2258,10 +2308,30 @@ class TestGrowSemanticValidation:
         # 4 tags, 1 bad → 25% error ratio → no retry
         partial_result = Phase4aOutput(
             tags=[
-                SceneTypeTag(beat_id="beat::b1", scene_type="scene"),
-                SceneTypeTag(beat_id="beat::b2", scene_type="sequel"),
-                SceneTypeTag(beat_id="beat::b3", scene_type="scene"),
-                SceneTypeTag(beat_id="beat::bad", scene_type="sequel"),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::b1",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::b2",
+                    scene_type="sequel",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::b3",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::bad",
+                    scene_type="sequel",
+                ),
             ]
         )
 
@@ -2320,8 +2390,18 @@ class TestGrowSemanticValidation:
         # All attempts return bad data
         bad_result = Phase4aOutput(
             tags=[
-                SceneTypeTag(beat_id="beat::bad1", scene_type="scene"),
-                SceneTypeTag(beat_id="beat::bad2", scene_type="sequel"),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::bad1",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::bad2",
+                    scene_type="sequel",
+                ),
             ]
         )
 
@@ -2377,8 +2457,18 @@ class TestGrowSemanticValidation:
 
         good_result = Phase4aOutput(
             tags=[
-                SceneTypeTag(beat_id="beat::b1", scene_type="scene"),
-                SceneTypeTag(beat_id="beat::b2", scene_type="sequel"),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::b1",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="beat::b2",
+                    scene_type="sequel",
+                ),
             ]
         )
 
