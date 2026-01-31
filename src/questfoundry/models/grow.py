@@ -20,7 +20,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from questfoundry.models.pipeline import PhaseResult
 
@@ -147,6 +147,91 @@ class Phase4aOutput(BaseModel):
     """Wrapper for Phase 4a structured output (scene-type tags)."""
 
     tags: list[SceneTypeTag] = Field(default_factory=list)
+
+
+class AtmosphericDetail(BaseModel):
+    """Phase 4d: Sensory environment detail for a beat."""
+
+    beat_id: str = Field(min_length=1)
+    atmospheric_detail: str = Field(
+        min_length=10,
+        max_length=200,
+        description="Recurring sensory detail for this beat's setting (sight, sound, smell, texture)",
+    )
+
+
+class EntryMood(BaseModel):
+    """Phase 4d: Per-path entry mood for shared beats."""
+
+    path_id: str = Field(min_length=1)
+    mood: str = Field(
+        min_length=2,
+        max_length=50,
+        description="Emotional quality arriving from this path (2-3 words)",
+    )
+
+
+class EntryStateBeat(BaseModel):
+    """Phase 4d: Entry mood assignments for a single shared beat."""
+
+    beat_id: str = Field(min_length=1)
+    moods: list[EntryMood] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def _validate_unique_mood_paths(self) -> EntryStateBeat:
+        path_ids = [mood.path_id for mood in self.moods]
+        if len(path_ids) != len(set(path_ids)):
+            raise ValueError("path_id in moods list must be unique for a single beat")
+        return self
+
+
+class Phase4dOutput(BaseModel):
+    """Wrapper for Phase 4d structured output (atmospheric details + entry states)."""
+
+    details: list[AtmosphericDetail] = Field(default_factory=list)
+    entry_states: list[EntryStateBeat] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_unique_beat_ids(self) -> Phase4dOutput:
+        if self.details:
+            detail_ids = [d.beat_id for d in self.details]
+            if len(detail_ids) != len(set(detail_ids)):
+                raise ValueError("beat_id in details list must be unique")
+        if self.entry_states:
+            entry_ids = [es.beat_id for es in self.entry_states]
+            if len(entry_ids) != len(set(entry_ids)):
+                raise ValueError("beat_id in entry_states list must be unique")
+        return self
+
+
+class PathMiniArc(BaseModel):
+    """Phase 4e: Path-level narrative metadata."""
+
+    path_id: str = Field(min_length=1)
+    path_theme: str = Field(
+        min_length=10,
+        max_length=200,
+        description="Emotional through-line for this path",
+    )
+    path_mood: str = Field(
+        min_length=2,
+        max_length=50,
+        description="Overall quality/tone descriptor (2-3 words)",
+    )
+
+
+class Phase4eOutput(BaseModel):
+    """Wrapper for Phase 4e structured output (per-path mini-arcs)."""
+
+    arcs: list[PathMiniArc] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_unique_path_ids(self) -> Phase4eOutput:
+        if self.arcs:
+            path_ids = [arc.path_id for arc in self.arcs]
+            if len(path_ids) != len(set(path_ids)):
+                raise ValueError("path_id in arcs list must be unique")
+        return self
 
 
 class GapProposal(BaseModel):

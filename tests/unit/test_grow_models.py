@@ -7,10 +7,13 @@ from pydantic import ValidationError
 
 from questfoundry.models.grow import (
     Arc,
+    AtmosphericDetail,
     Choice,
     ChoiceLabel,
     Codeword,
     EntityOverlay,
+    EntryMood,
+    EntryStateBeat,
     GapProposal,
     GrowPhaseResult,
     GrowResult,
@@ -18,6 +21,9 @@ from questfoundry.models.grow import (
     OverlayProposal,
     Passage,
     PathAgnosticAssessment,
+    PathMiniArc,
+    Phase4dOutput,
+    Phase4eOutput,
     SceneTypeTag,
 )
 
@@ -410,3 +416,186 @@ class TestGrowResult:
         result = GrowResult.model_validate(data)
         assert result.arc_count == 3
         assert result.phases_completed[0].phase == "validate"
+
+
+class TestAtmosphericDetail:
+    def test_valid_detail(self) -> None:
+        ad = AtmosphericDetail(
+            beat_id="b1",
+            atmospheric_detail="Cold stone walls slick with condensation",
+        )
+        assert ad.beat_id == "b1"
+        assert "stone walls" in ad.atmospheric_detail
+
+    def test_empty_beat_id_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="beat_id"):
+            AtmosphericDetail(beat_id="", atmospheric_detail="Some detail here enough")
+
+    def test_too_short_detail_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="atmospheric_detail"):
+            AtmosphericDetail(beat_id="b1", atmospheric_detail="short")
+
+    def test_too_long_detail_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="atmospheric_detail"):
+            AtmosphericDetail(beat_id="b1", atmospheric_detail="x" * 201)
+
+
+class TestEntryMood:
+    def test_valid_mood(self) -> None:
+        em = EntryMood(path_id="path_trust", mood="wary hope")
+        assert em.path_id == "path_trust"
+        assert em.mood == "wary hope"
+
+    def test_empty_path_id_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="path_id"):
+            EntryMood(path_id="", mood="wary hope")
+
+    def test_too_short_mood_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="mood"):
+            EntryMood(path_id="p1", mood="x")
+
+    def test_too_long_mood_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="mood"):
+            EntryMood(path_id="p1", mood="x" * 51)
+
+
+class TestEntryStateBeat:
+    def test_valid_entry_state(self) -> None:
+        esb = EntryStateBeat(
+            beat_id="b1",
+            moods=[EntryMood(path_id="p1", mood="quiet dread")],
+        )
+        assert esb.beat_id == "b1"
+        assert len(esb.moods) == 1
+
+    def test_empty_moods_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="moods"):
+            EntryStateBeat(beat_id="b1", moods=[])
+
+    def test_multiple_moods(self) -> None:
+        esb = EntryStateBeat(
+            beat_id="shared_beat",
+            moods=[
+                EntryMood(path_id="p1", mood="wary hope"),
+                EntryMood(path_id="p2", mood="bitter resolve"),
+            ],
+        )
+        assert len(esb.moods) == 2
+
+    def test_duplicate_path_ids_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"path_id.*unique"):
+            EntryStateBeat(
+                beat_id="b1",
+                moods=[
+                    EntryMood(path_id="p1", mood="quiet dread"),
+                    EntryMood(path_id="p1", mood="bitter resolve"),
+                ],
+            )
+
+
+class TestPhase4dOutput:
+    def test_default_empty(self) -> None:
+        out = Phase4dOutput()
+        assert out.details == []
+        assert out.entry_states == []
+
+    def test_with_details_and_entry_states(self) -> None:
+        out = Phase4dOutput(
+            details=[
+                AtmosphericDetail(
+                    beat_id="b1",
+                    atmospheric_detail="Dusty library with creaking shelves",
+                ),
+            ],
+            entry_states=[
+                EntryStateBeat(
+                    beat_id="b2",
+                    moods=[EntryMood(path_id="p1", mood="quiet dread")],
+                ),
+            ],
+        )
+        assert len(out.details) == 1
+        assert len(out.entry_states) == 1
+
+    def test_duplicate_detail_beat_ids_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"beat_id.*details.*unique"):
+            Phase4dOutput(
+                details=[
+                    AtmosphericDetail(
+                        beat_id="b1", atmospheric_detail="Dusty library with creaking shelves"
+                    ),
+                    AtmosphericDetail(
+                        beat_id="b1", atmospheric_detail="Rain-slicked cobblestones at dusk"
+                    ),
+                ],
+            )
+
+    def test_duplicate_entry_state_beat_ids_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"beat_id.*entry_states.*unique"):
+            Phase4dOutput(
+                entry_states=[
+                    EntryStateBeat(beat_id="b1", moods=[EntryMood(path_id="p1", mood="dread")]),
+                    EntryStateBeat(beat_id="b1", moods=[EntryMood(path_id="p2", mood="hope")]),
+                ],
+            )
+
+
+class TestPathMiniArc:
+    def test_valid_mini_arc(self) -> None:
+        arc = PathMiniArc(
+            path_id="path_trust",
+            path_theme="The cost of vulnerability in a world that punishes openness",
+            path_mood="melancholy determination",
+        )
+        assert arc.path_id == "path_trust"
+        assert "vulnerability" in arc.path_theme
+
+    def test_empty_path_id_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="path_id"):
+            PathMiniArc(path_id="", path_theme="A long enough theme", path_mood="quiet dread")
+
+    def test_too_short_theme_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="path_theme"):
+            PathMiniArc(path_id="p1", path_theme="short", path_mood="quiet dread")
+
+    def test_too_short_mood_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="path_mood"):
+            PathMiniArc(path_id="p1", path_theme="A long enough theme", path_mood="x")
+
+
+class TestPhase4eOutput:
+    def test_default_empty(self) -> None:
+        out = Phase4eOutput()
+        assert out.arcs == []
+
+    def test_with_arcs(self) -> None:
+        out = Phase4eOutput(
+            arcs=[
+                PathMiniArc(
+                    path_id="p1",
+                    path_theme="Trust earned through shared vulnerability",
+                    path_mood="fragile warmth",
+                ),
+                PathMiniArc(
+                    path_id="p2",
+                    path_theme="Self-preservation at the cost of connection",
+                    path_mood="cold clarity",
+                ),
+            ],
+        )
+        assert len(out.arcs) == 2
+
+    def test_duplicate_path_ids_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"path_id.*unique"):
+            Phase4eOutput(
+                arcs=[
+                    PathMiniArc(
+                        path_id="p1",
+                        path_theme="Trust earned through vulnerability",
+                        path_mood="warmth",
+                    ),
+                    PathMiniArc(
+                        path_id="p1", path_theme="Different theme entirely here", path_mood="cold"
+                    ),
+                ],
+            )
