@@ -34,6 +34,7 @@ from questfoundry.graph.fill_context import (
     format_lookahead_context,
     format_narrative_context,
     format_passages_batch,
+    format_path_arc_context,
     format_scene_types_summary,
     format_shadow_states,
     format_sliding_window,
@@ -577,6 +578,7 @@ class FillStage:
                 "sliding_window": format_sliding_window(graph, arc_id, current_idx),
                 "lookahead": format_lookahead_context(graph, passage_id, arc_id),
                 "shadow_states": format_shadow_states(graph, passage_id, arc_id),
+                "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
             }
 
             output, llm_calls, tokens = await self._fill_llm_call(
