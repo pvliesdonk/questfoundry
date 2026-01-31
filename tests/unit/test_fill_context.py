@@ -5,6 +5,8 @@ from __future__ import annotations
 import pytest
 
 from questfoundry.graph.fill_context import (
+    compute_open_questions,
+    format_dramatic_questions,
     format_dream_vision,
     format_entity_states,
     format_grow_summary,
@@ -435,3 +437,231 @@ class TestFormatPassagesBatch:
     def test_passage_without_prose(self, fill_graph: Graph) -> None:
         result = format_passages_batch(fill_graph, ["passage::p_aftermath"])
         assert "(no prose)" in result
+
+
+# ---------------------------------------------------------------------------
+# Dramatic Question Tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def dq_graph() -> Graph:
+    """Graph with dilemmas and dilemma_impacts for dramatic question tests."""
+    g = Graph.empty()
+
+    # Dilemmas
+    g.create_node(
+        "dilemma::mentor_trust",
+        {
+            "type": "dilemma",
+            "raw_id": "mentor_trust",
+            "question": "Can the mentor be trusted?",
+        },
+    )
+    g.create_node(
+        "dilemma::artifact_cost",
+        {
+            "type": "dilemma",
+            "raw_id": "artifact_cost",
+            "question": "Is the artifact worth the cost?",
+        },
+    )
+
+    # Beats with dilemma_impacts
+    g.create_node(
+        "beat::b1",
+        {
+            "type": "beat",
+            "raw_id": "b1",
+            "summary": "Kay meets the mentor",
+            "scene_type": "scene",
+            "dilemma_impacts": [
+                {
+                    "dilemma_id": "dilemma::mentor_trust",
+                    "effect": "advances",
+                    "note": "First meeting establishes the question",
+                },
+            ],
+        },
+    )
+    g.create_node(
+        "beat::b2",
+        {
+            "type": "beat",
+            "raw_id": "b2",
+            "summary": "Mentor reveals the artifact",
+            "scene_type": "scene",
+            "dilemma_impacts": [
+                {
+                    "dilemma_id": "dilemma::mentor_trust",
+                    "effect": "reveals",
+                    "note": "More about the mentor's past",
+                },
+                {
+                    "dilemma_id": "dilemma::artifact_cost",
+                    "effect": "advances",
+                    "note": "Artifact's power is shown",
+                },
+            ],
+        },
+    )
+    g.create_node(
+        "beat::b3",
+        {
+            "type": "beat",
+            "raw_id": "b3",
+            "summary": "Kay discovers the mentor's secret",
+            "scene_type": "scene",
+            "dilemma_impacts": [
+                {
+                    "dilemma_id": "dilemma::mentor_trust",
+                    "effect": "complicates",
+                    "note": "Secret changes everything",
+                },
+            ],
+        },
+    )
+    g.create_node(
+        "beat::b4",
+        {
+            "type": "beat",
+            "raw_id": "b4",
+            "summary": "Kay commits to trusting the mentor",
+            "scene_type": "scene",
+            "dilemma_impacts": [
+                {
+                    "dilemma_id": "dilemma::mentor_trust",
+                    "effect": "commits",
+                    "note": "Trust is locked in",
+                },
+            ],
+        },
+    )
+    g.create_node(
+        "beat::b5",
+        {
+            "type": "beat",
+            "raw_id": "b5",
+            "summary": "Aftermath",
+            "scene_type": "sequel",
+            "dilemma_impacts": [],
+        },
+    )
+
+    # Arc with beat sequence
+    g.create_node(
+        "arc::spine",
+        {
+            "type": "arc",
+            "raw_id": "spine",
+            "arc_type": "spine",
+            "paths": ["path::trust"],
+            "sequence": ["beat::b1", "beat::b2", "beat::b3", "beat::b4", "beat::b5"],
+        },
+    )
+
+    return g
+
+
+class TestComputeOpenQuestions:
+    """Tests for compute_open_questions."""
+
+    def test_empty_arc(self) -> None:
+        """No questions when arc doesn't exist."""
+        g = Graph.empty()
+        result = compute_open_questions(g, "arc::nonexistent", "beat::b1")
+        assert result == []
+
+    def test_first_beat_no_prior(self, dq_graph: Graph) -> None:
+        """First beat has no open questions (no prior beats)."""
+        result = compute_open_questions(dq_graph, "arc::spine", "beat::b1")
+        assert result == []
+
+    def test_single_advance(self, dq_graph: Graph) -> None:
+        """After b1, mentor_trust should be open with 1 escalation."""
+        result = compute_open_questions(dq_graph, "arc::spine", "beat::b2")
+        assert len(result) == 1
+        assert result[0]["dilemma_id"] == "dilemma::mentor_trust"
+        assert result[0]["escalations"] == 1
+        assert result[0]["question"] == "Can the mentor be trusted?"
+
+    def test_multiple_dilemmas(self, dq_graph: Graph) -> None:
+        """After b2, both dilemmas should be open."""
+        result = compute_open_questions(dq_graph, "arc::spine", "beat::b3")
+        assert len(result) == 2
+        # mentor_trust has 2 escalations (advances + reveals), artifact_cost has 1
+        mentor = next(q for q in result if q["dilemma_id"] == "dilemma::mentor_trust")
+        artifact = next(q for q in result if q["dilemma_id"] == "dilemma::artifact_cost")
+        assert mentor["escalations"] == 2
+        assert artifact["escalations"] == 1
+
+    def test_escalation_count(self, dq_graph: Graph) -> None:
+        """After b3, mentor_trust should have 3 escalations."""
+        result = compute_open_questions(dq_graph, "arc::spine", "beat::b4")
+        mentor = next(q for q in result if q["dilemma_id"] == "dilemma::mentor_trust")
+        assert mentor["escalations"] == 3
+
+    def test_commits_closes_question(self, dq_graph: Graph) -> None:
+        """After b4 commits, mentor_trust should be closed."""
+        result = compute_open_questions(dq_graph, "arc::spine", "beat::b5")
+        dilemma_ids = [q["dilemma_id"] for q in result]
+        assert "dilemma::mentor_trust" not in dilemma_ids
+        # artifact_cost should still be open
+        assert "dilemma::artifact_cost" in dilemma_ids
+
+    def test_action_here_advances(self, dq_graph: Graph) -> None:
+        """Current beat's action is tracked."""
+        result = compute_open_questions(dq_graph, "arc::spine", "beat::b2")
+        # b2 has reveals on mentor_trust
+        assert result[0]["action_here"] == "reveals"
+
+    def test_action_here_commits(self, dq_graph: Graph) -> None:
+        """Commits action is tracked at current beat."""
+        result = compute_open_questions(dq_graph, "arc::spine", "beat::b4")
+        mentor = next(q for q in result if q["dilemma_id"] == "dilemma::mentor_trust")
+        assert mentor["action_here"] == "commits"
+
+    def test_sorted_by_escalation(self, dq_graph: Graph) -> None:
+        """Results are sorted by escalation count descending."""
+        result = compute_open_questions(dq_graph, "arc::spine", "beat::b3")
+        assert result[0]["escalations"] > result[1]["escalations"]
+
+    def test_complicates_counts_as_escalation(self, dq_graph: Graph) -> None:
+        """Complicates effect counts as an escalation."""
+        result = compute_open_questions(dq_graph, "arc::spine", "beat::b4")
+        mentor = next(q for q in result if q["dilemma_id"] == "dilemma::mentor_trust")
+        # advances(1) + reveals(1) + complicates(1) = 3
+        assert mentor["escalations"] == 3
+
+
+class TestFormatDramaticQuestions:
+    """Tests for format_dramatic_questions."""
+
+    def test_empty_when_no_questions(self, dq_graph: Graph) -> None:
+        """Returns empty string when no open questions."""
+        result = format_dramatic_questions(dq_graph, "arc::spine", "beat::b1")
+        assert result == ""
+
+    def test_formats_open_questions(self, dq_graph: Graph) -> None:
+        """Formats open questions with escalation notes."""
+        result = format_dramatic_questions(dq_graph, "arc::spine", "beat::b3")
+        assert "Can the mentor be trusted?" in result
+        assert "Is the artifact worth the cost?" in result
+        assert "UNRESOLVED" in result
+
+    def test_commits_note(self, dq_graph: Graph) -> None:
+        """Shows resolving note when current beat commits."""
+        result = format_dramatic_questions(dq_graph, "arc::spine", "beat::b4")
+        assert "RESOLVING" in result
+
+    def test_complicates_note(self, dq_graph: Graph) -> None:
+        """Shows complicating note for complicates action."""
+        result = format_dramatic_questions(dq_graph, "arc::spine", "beat::b3")
+        # b3 complicates mentor_trust
+        assert "complicating" in result
+
+    def test_nonexistent_arc(self) -> None:
+        """Returns empty for nonexistent arc."""
+        g = Graph.empty()
+        result = format_dramatic_questions(g, "arc::nope", "beat::b1")
+        assert result == ""

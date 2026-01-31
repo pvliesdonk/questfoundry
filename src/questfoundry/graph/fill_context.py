@@ -504,6 +504,138 @@ def format_dream_vision(graph: Graph) -> str:
     return "\n".join(lines)
 
 
+def compute_open_questions(
+    graph: Graph,
+    arc_id: str,
+    current_beat_id: str,
+) -> list[dict[str, str | int]]:
+    """Compute open dramatic questions at a point in the arc.
+
+    Walks the arc's beat sequence up to (but not including) the current beat,
+    tracking dilemma_impacts. Each dilemma IS a dramatic question; impacts
+    determine whether the question is open, escalating, or closed.
+
+    Mapping:
+        - advances / reveals / complicates → question is open and escalating
+        - commits → question is closed (answered)
+
+    Args:
+        graph: Graph containing arc, beat, and dilemma nodes.
+        arc_id: The arc being traversed.
+        current_beat_id: The beat being generated (walk stops here).
+
+    Returns:
+        List of open question dicts, each with:
+        ``dilemma_id``, ``question``, ``escalations``, ``action_here``.
+        Sorted by escalation count (most escalated first).
+    """
+    arc_node = graph.get_node(arc_id)
+    if not arc_node:
+        return []
+
+    sequence = arc_node.get("sequence", [])
+    if not sequence:
+        return []
+
+    # Track state per dilemma: escalations count and whether committed
+    dilemma_state: dict[str, dict[str, int | bool]] = {}
+
+    for beat_id in sequence:
+        if beat_id == current_beat_id:
+            break
+        beat = graph.get_node(beat_id)
+        if not beat:
+            continue
+        for impact in beat.get("dilemma_impacts", []):
+            did = impact.get("dilemma_id", "")
+            if not did:
+                continue
+            if did not in dilemma_state:
+                dilemma_state[did] = {"escalations": 0, "closed": False}
+            effect = impact.get("effect", "")
+            if effect == "commits":
+                dilemma_state[did]["closed"] = True
+            else:
+                dilemma_state[did]["escalations"] += 1
+
+    # Determine action at the current beat
+    current_beat = graph.get_node(current_beat_id)
+    current_impacts: dict[str, str] = {}
+    if current_beat:
+        for impact in current_beat.get("dilemma_impacts", []):
+            did = impact.get("dilemma_id", "")
+            if did:
+                current_impacts[did] = impact.get("effect", "")
+
+    # Build result: open questions only
+    open_questions: list[dict[str, str | int]] = []
+    for did, state in dilemma_state.items():
+        if state["closed"]:
+            continue
+        dilemma_node = graph.get_node(did)
+        question = dilemma_node.get("question", "") if dilemma_node else ""
+        open_questions.append(
+            {
+                "dilemma_id": did,
+                "question": question,
+                "escalations": state["escalations"],
+                "action_here": current_impacts.get(did, ""),
+            }
+        )
+
+    # Sort by escalations descending (most developed questions first)
+    open_questions.sort(key=lambda q: int(q["escalations"]), reverse=True)
+    return open_questions
+
+
+def format_dramatic_questions(
+    graph: Graph,
+    arc_id: str,
+    current_beat_id: str,
+) -> str:
+    """Format open dramatic questions as context for prose generation.
+
+    Args:
+        graph: Graph containing arc, beat, and dilemma nodes.
+        arc_id: The arc being traversed.
+        current_beat_id: The beat being generated.
+
+    Returns:
+        Formatted dramatic questions string, or empty string if none.
+    """
+    questions = compute_open_questions(graph, arc_id, current_beat_id)
+    if not questions:
+        return ""
+
+    lines: list[str] = []
+    lines.append("These questions are UNRESOLVED. Let them create subtext in the prose.")
+
+    for q in questions:
+        question_text = q["question"]
+        escalations = int(q["escalations"])
+        action = q["action_here"]
+
+        if action == "commits":
+            note = "RESOLVING here — this question is being answered"
+        elif action == "complicates":
+            note = "complicating — new doubts introduced"
+        elif action in ("advances", "reveals"):
+            note = "advancing — tension building"
+        elif escalations > 2:
+            note = f"escalated {escalations}x — high tension"
+        elif escalations > 0:
+            note = f"escalated {escalations}x"
+        else:
+            note = "just opened"
+
+        lines.append(f'- "{question_text}" ({note})')
+
+    lines.append("")
+    lines.append("Do NOT resolve these unless this beat commits to an answer.")
+
+    return "\n".join(lines)
+
+
 def format_passages_batch(
     graph: Graph,
     passage_ids: list[str],

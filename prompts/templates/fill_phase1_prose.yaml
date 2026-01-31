@@ -13,6 +13,9 @@ system: |
   **Beat Summary:** {beat_summary}
   **Scene Type:** {scene_type}
 
+  ## Open Dramatic Questions
+  {dramatic_questions}
+
   ## Scene Type Guidance
   - **scene**: Full dramatic structure (goal, obstacle, outcome). 3+ paragraphs.
     Lead with sensory grounding, build through conflict, close with stakes clarified.
@@ -39,7 +42,9 @@ system: |
   2. Match the scene type guidance for length and structure
   3. Cover the beat summary content — do not invent major plot points
   4. Maintain continuity with the sliding window passages
-  5. If this is a shared beat, write prose that works for ALL arriving states
+  5. Let open dramatic questions create subtext — do not resolve them unless
+     this beat commits to an answer
+  6. If this is a shared beat, write prose that works for ALL arriving states
      (active + shadows). Use ambiguous phrasing when states diverge.
 
   ## Poly-State Examples (CRITICAL for shared beats)
