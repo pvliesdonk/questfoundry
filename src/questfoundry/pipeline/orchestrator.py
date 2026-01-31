@@ -505,6 +505,11 @@ class PipelineOrchestrator:
             if on_phase_progress:
                 stage_kwargs["on_phase_progress"] = on_phase_progress
 
+            # Stage-specific options
+            image_provider = context.get("image_provider")
+            if image_provider:
+                stage_kwargs["image_provider"] = image_provider
+
             # Resolve size profile from DREAM vision node (for post-DREAM stages)
             if stage_name != "dream":
                 try:
