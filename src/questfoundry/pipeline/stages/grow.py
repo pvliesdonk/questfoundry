@@ -161,6 +161,7 @@ class GrowStage:
             (self._phase_4a_scene_types, "scene_types"),
             (self._phase_4b_narrative_gaps, "narrative_gaps"),
             (self._phase_4c_pacing_gaps, "pacing_gaps"),
+            (self._phase_4d_atmospheric, "atmospheric"),
             (self._phase_3_intersections, "intersections"),
             (self._phase_5_enumerate_arcs, "enumerate_arcs"),
             (self._phase_6_divergence, "divergence"),
@@ -1152,6 +1153,113 @@ class GrowStage:
             phase="pacing_gaps",
             status="completed",
             detail=(f"Found {len(issues)} pacing issues, inserted {inserted} correction beats"),
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    async def _phase_4d_atmospheric(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 4d: Atmospheric detail and entry states for beats.
+
+        Generates sensory environment details for all beats and per-path
+        entry moods for shared (path-agnostic) beats. Single batch LLM call.
+        """
+        from questfoundry.models.grow import Phase4dOutput
+
+        beat_nodes = graph.get_nodes_by_type("beat")
+        if not beat_nodes:
+            return GrowPhaseResult(
+                phase="atmospheric",
+                status="completed",
+                detail="No beats to annotate",
+            )
+
+        path_nodes = graph.get_nodes_by_type("path")
+
+        # Build beat summaries and identify shared beats
+        beat_summaries: list[str] = []
+        shared_beats: list[str] = []
+        for bid in sorted(beat_nodes.keys()):
+            data = beat_nodes[bid]
+            summary = data.get("summary", "")
+            scene_type = data.get("scene_type", "")
+            narrative_fn = data.get("narrative_function", "")
+            beat_summaries.append(
+                f"- {bid}: {summary} [scene_type={scene_type}, function={narrative_fn}]"
+            )
+            if data.get("path_agnostic_for"):
+                shared_beats.append(bid)
+
+        # Build path info for entry state context
+        path_info_lines: list[str] = []
+        for pid in sorted(path_nodes.keys()):
+            pdata = path_nodes[pid]
+            dilemma = pdata.get("dilemma_id", "")
+            path_info_lines.append(f"- {pid}: dilemma={dilemma}")
+
+        context = {
+            "beat_summaries": "\n".join(beat_summaries),
+            "beat_count": str(len(beat_nodes)),
+            "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
+            "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
+            "shared_beats": ", ".join(shared_beats) if shared_beats else "(none)",
+            "path_info": "\n".join(path_info_lines) if path_info_lines else "(no paths)",
+        }
+
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model=model,
+                template_name="grow_phase4d_atmospheric",
+                context=context,
+                output_schema=Phase4dOutput,
+            )
+        except GrowStageError as e:
+            return GrowPhaseResult(
+                phase="atmospheric",
+                status="failed",
+                detail=str(e),
+            )
+
+        # Apply atmospheric details
+        applied_details = 0
+        for detail in result.details:
+            if detail.beat_id not in beat_nodes:
+                log.warning("phase4d_invalid_beat_id", beat_id=detail.beat_id)
+                continue
+            graph.update_node(
+                detail.beat_id,
+                atmospheric_detail=detail.atmospheric_detail,
+            )
+            applied_details += 1
+
+        # Apply entry states (shared beats only)
+        applied_entries = 0
+        valid_path_set = set(path_nodes.keys())
+        for entry_beat in result.entry_states:
+            if entry_beat.beat_id not in beat_nodes:
+                log.warning("phase4d_invalid_entry_beat_id", beat_id=entry_beat.beat_id)
+                continue
+            if entry_beat.beat_id not in shared_beats:
+                log.warning(
+                    "phase4d_entry_for_non_shared_beat",
+                    beat_id=entry_beat.beat_id,
+                )
+                continue
+            valid_moods = [
+                {"path_id": em.path_id, "mood": em.mood}
+                for em in entry_beat.moods
+                if em.path_id in valid_path_set
+            ]
+            if valid_moods:
+                graph.update_node(entry_beat.beat_id, entry_states=valid_moods)
+                applied_entries += 1
+
+        return GrowPhaseResult(
+            phase="atmospheric",
+            status="completed",
+            detail=(
+                f"Applied atmospheric details to {applied_details}/{len(beat_nodes)} beats, "
+                f"entry states to {applied_entries}/{len(shared_beats)} shared beats"
+            ),
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
