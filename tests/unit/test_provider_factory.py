@@ -11,6 +11,7 @@ from pydantic import BaseModel
 from questfoundry.providers.base import ProviderError
 from questfoundry.providers.factory import (
     PROVIDER_DEFAULTS,
+    _query_ollama_num_ctx,
     create_chat_model,
     create_model_for_structured_output,
     get_default_model,
@@ -700,3 +701,100 @@ class TestUnloadOllamaModel:
 
             # Should not raise
             await unload_ollama_model(mock_model)
+
+
+# --- Tests for _query_ollama_num_ctx ---
+
+
+class TestQueryOllamaNumCtx:
+    """Tests for querying Ollama /api/show for num_ctx."""
+
+    def test_returns_num_ctx_from_parameters(self) -> None:
+        """Extracts num_ctx from the parameters field."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "parameters": "temperature  0.7\nnum_ctx  32768\nrepeat_penalty  1",
+            "model_info": {},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=None)
+
+            result = _query_ollama_num_ctx("http://localhost:11434", "qwen3:4b")
+
+        assert result == 32768
+
+    def test_falls_back_to_arch_context_length(self) -> None:
+        """Uses model_info context_length when parameters lacks num_ctx."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "parameters": "temperature  0.7",
+            "model_info": {"qwen3.context_length": 262144},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=None)
+
+            result = _query_ollama_num_ctx("http://localhost:11434", "qwen3:4b")
+
+        assert result == 262144
+
+    def test_returns_none_on_connection_error(self) -> None:
+        """Returns None when Ollama is unreachable."""
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value.__enter__ = MagicMock(side_effect=ConnectionError("refused"))
+
+            result = _query_ollama_num_ctx("http://localhost:11434", "qwen3:4b")
+
+        assert result is None
+
+    def test_returns_none_when_no_context_info(self) -> None:
+        """Returns None when response has no num_ctx or context_length."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "parameters": "temperature  0.7",
+            "model_info": {"general.architecture": "qwen3"},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=None)
+
+            result = _query_ollama_num_ctx("http://localhost:11434", "qwen3:4b")
+
+        assert result is None
+
+    def test_prefers_parameters_over_arch(self) -> None:
+        """parameters num_ctx takes precedence over model_info context_length."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            "parameters": "num_ctx  32768",
+            "model_info": {"qwen3.context_length": 262144},
+        }
+        mock_response.raise_for_status = MagicMock()
+
+        mock_client = MagicMock()
+        mock_client.post.return_value = mock_response
+
+        with patch("httpx.Client") as mock_cls:
+            mock_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
+            mock_cls.return_value.__exit__ = MagicMock(return_value=None)
+
+            result = _query_ollama_num_ctx("http://localhost:11434", "qwen3:4b")
+
+        # parameters num_ctx (32768) should be returned, not arch (262144)
+        assert result == 32768

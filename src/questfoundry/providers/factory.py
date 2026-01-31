@@ -164,6 +164,53 @@ def create_model_for_structured_output(
     return base_model
 
 
+def _query_ollama_num_ctx(host: str, model: str) -> int | None:
+    """Query Ollama /api/show to get the model's configured num_ctx.
+
+    Parses the ``parameters`` field from the response which contains the
+    Modelfile-configured values (e.g., ``num_ctx  32768``).
+
+    Args:
+        host: Ollama server base URL.
+        model: Model name.
+
+    Returns:
+        The num_ctx value from the model's configuration, or None if the
+        query fails or the value is not found.
+    """
+    import httpx
+
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            resp = client.post(f"{host}/api/show", json={"model": model})
+            resp.raise_for_status()
+            data = resp.json()
+    except Exception as exc:
+        log.warning("ollama_show_failed", model=model, error=str(exc))
+        return None
+
+    # Parse the 'parameters' field: newline-separated "key  value" pairs
+    parameters = data.get("parameters", "")
+    for line in parameters.splitlines():
+        parts = line.split()
+        if len(parts) >= 2 and parts[0] == "num_ctx":
+            try:
+                num_ctx = int(parts[-1])
+                log.info("ollama_num_ctx_from_model", model=model, num_ctx=num_ctx)
+                return num_ctx
+            except ValueError:
+                pass
+
+    # Fallback: check model_info for architecture context_length
+    model_info = data.get("model_info", {})
+    for key, value in model_info.items():
+        if key.endswith(".context_length") and isinstance(value, int):
+            log.info("ollama_num_ctx_from_arch", model=model, num_ctx=value)
+            return value
+
+    return None
+
+
 def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
     """Create base Ollama chat model (unstructured).
 
@@ -174,7 +221,9 @@ def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
             - temperature: Sampling temperature (optional, uses model default if not provided)
             - top_p: Nucleus sampling parameter
             - seed: Random seed for reproducibility
-            - num_ctx: Context window size (default 32768)
+            - num_ctx: Context window size override. When not provided,
+              queries Ollama ``/api/show`` for the model's configured value,
+              falling back to 32768.
 
     Returns:
         Configured ChatOllama model.
@@ -199,11 +248,19 @@ def _create_ollama_base_model(model: str, **kwargs: Any) -> BaseChatModel:
             "OLLAMA_HOST not configured. Set OLLAMA_HOST environment variable.",
         )
 
+    # Resolve num_ctx: explicit kwarg > query Ollama /api/show > fallback 32768
+    num_ctx = kwargs.get("num_ctx")
+    if num_ctx is None:
+        num_ctx = _query_ollama_num_ctx(host, model)
+    if num_ctx is None:
+        num_ctx = 32_768
+        log.debug("ollama_num_ctx_fallback", model=model, num_ctx=num_ctx)
+
     # Build model kwargs - only include parameters that are provided
     model_kwargs: dict[str, Any] = {
         "model": model,
         "base_url": host,
-        "num_ctx": kwargs.get("num_ctx", 32768),  # Default 32k to avoid truncation
+        "num_ctx": num_ctx,
     }
 
     # Temperature is provided by phase settings; if absent, model uses its default
