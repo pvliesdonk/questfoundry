@@ -123,10 +123,24 @@ class Phase3Output(BaseModel):
 
 
 class SceneTypeTag(BaseModel):
-    """Phase 4a: Tags beats with scene type classification."""
+    """Phase 4a: Tags beats with scene type, narrative function, and exit mood."""
 
     beat_id: str = Field(min_length=1)
     scene_type: Literal["scene", "sequel", "micro_beat"]
+    narrative_function: Literal["introduce", "develop", "complicate", "confront", "resolve"] = (
+        Field(
+            description=(
+                "What dramatic role this beat plays: introduce (establish new elements), "
+                "develop (deepen understanding), complicate (raise stakes/obstacles), "
+                "confront (direct engagement with tension), resolve (settle a thread)"
+            ),
+        )
+    )
+    exit_mood: str = Field(
+        min_length=2,
+        max_length=40,
+        description="2-3 word emotional descriptor for how reader feels leaving this beat",
+    )
 
 
 class Phase4aOutput(BaseModel):
