@@ -163,6 +163,7 @@ class FillStage:
             (self._phase_1_generate, "generate"),
             (self._phase_2_review, "review"),
             (self._phase_3_revision, "revision"),
+            (self._phase_4_arc_validation, "arc_validation"),
         ]
 
     @traceable(name="FILL Stage", run_type="chain", tags=["stage:fill"])
@@ -844,6 +845,53 @@ class FillStage:
             if beat_id in arc_data.get("sequence", []):
                 return str(arc_id)
         return None
+
+    async def _phase_4_arc_validation(
+        self,
+        graph: Graph,
+        model: BaseChatModel,  # noqa: ARG002
+    ) -> FillPhaseResult:
+        """Phase 4: Arc-level validation (deterministic, no LLM).
+
+        Runs structural checks on each arc after prose generation:
+        intensity progression, dramatic question closure, and
+        narrative function variety.
+        """
+        from questfoundry.graph.fill_validation import run_arc_validation
+
+        report = run_arc_validation(graph)
+
+        pass_count = len([c for c in report.checks if c.severity == "pass"])
+        warn_count = len([c for c in report.checks if c.severity == "warn"])
+        fail_count = len([c for c in report.checks if c.severity == "fail"])
+
+        if report.has_failures:
+            log.warning(
+                "arc_validation_failed",
+                failures=fail_count,
+                warnings=warn_count,
+                passes=pass_count,
+                summary=report.summary,
+            )
+            return FillPhaseResult(
+                phase="arc_validation",
+                status="failed",
+                detail=report.summary,
+            )
+
+        if report.has_warnings:
+            log.info(
+                "arc_validation_passed_with_warnings",
+                warnings=warn_count,
+                passes=pass_count,
+                summary=report.summary,
+            )
+
+        return FillPhaseResult(
+            phase="arc_validation",
+            status="completed",
+            detail=report.summary or f"{pass_count} checks passed",
+        )
 
 
 # -------------------------------------------------------------------------
