@@ -1485,11 +1485,14 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
     from unittest.mock import AsyncMock
 
     from questfoundry.models.grow import (
+        AtmosphericDetail,
         PathAgnosticAssessment,
+        PathMiniArc,
         Phase2Output,
         Phase3Output,
         Phase4aOutput,
         Phase4bOutput,
+        Phase4dOutput,
         Phase8cOutput,
         Phase9Output,
         SceneTypeTag,
@@ -1546,11 +1549,31 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
     # Phase 4b/4c: no gaps proposed (keeps test graphs simple)
     phase4b_output = Phase4bOutput(gaps=[])
 
+    # Phase 4d: atmospheric details for all beats, no entry states
+    phase4d_output = Phase4dOutput(
+        details=[
+            AtmosphericDetail(
+                beat_id=bid,
+                atmospheric_detail="Dim light filters through dusty windows",
+            )
+            for bid in sorted(beat_nodes.keys())
+        ],
+        entry_states=[],
+    )
+
     # Phase 8c: no overlays proposed (keeps test graphs simple)
     phase8c_output = Phase8cOutput(overlays=[])
 
     # Phase 9: no labels proposed (fallback "choose this path" used)
     phase9_output = Phase9Output(labels=[])
+
+    # Phase 4e: PathMiniArc is called per-path (single object, not wrapper)
+    # The mock will return a generic PathMiniArc for any path
+    phase4e_output = PathMiniArc(
+        path_id="placeholder",
+        path_theme="A journey through uncertainty and choice",
+        path_mood="quiet tension",
+    )
 
     # Map schema -> output
     output_by_schema: dict[type, object] = {
@@ -1558,6 +1581,8 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         Phase3Output: phase3_output,
         Phase4aOutput: phase4a_output,
         Phase4bOutput: phase4b_output,
+        Phase4dOutput: phase4d_output,
+        PathMiniArc: phase4e_output,
         Phase8cOutput: phase8c_output,
         Phase9Output: phase9_output,
     }
@@ -1587,9 +1612,9 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All 15 phases should run (completed or skipped)
+        # All 16 phases should run (completed or skipped)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 15
+        assert len(phases) == 16
         for phase in phases:
             assert phase["status"] in ("completed", "skipped")
 
