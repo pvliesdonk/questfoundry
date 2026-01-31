@@ -86,8 +86,10 @@ DEFAULT_FILL_PROMPT = (
     "write prose per passage, review quality, and revise flagged passages."
 )
 
+DEFAULT_DRESS_PROMPT = "Establish art direction, generate illustration briefs and codex entries."
+
 # Pipeline stage order and configuration
-STAGE_ORDER = ["dream", "brainstorm", "seed", "grow", "fill"]
+STAGE_ORDER = ["dream", "brainstorm", "seed", "grow", "fill", "dress"]
 
 # Stage prompt configuration for the run command
 # Maps stage name to (default_interactive_prompt, default_noninteractive_prompt)
@@ -111,6 +113,10 @@ STAGE_PROMPTS: dict[str, tuple[str, str | None]] = {
     "fill": (
         DEFAULT_FILL_PROMPT,
         DEFAULT_FILL_PROMPT,  # Same for both modes (FILL ignores prompt)
+    ),
+    "dress": (
+        DEFAULT_DRESS_PROMPT,
+        DEFAULT_DRESS_PROMPT,  # Same for both modes
     ),
 }
 
@@ -433,11 +439,12 @@ def _run_stage_command(
     provider_summarize: str | None = None,
     provider_serialize: str | None = None,
     resume_from: str | None = None,
+    image_provider: str | None = None,
 ) -> None:
     """Common logic for running a stage command.
 
     This is the main helper that consolidates the shared logic across
-    dream, brainstorm, and seed commands.
+    dream, brainstorm, seed, and dress commands.
 
     Args:
         stage_name: Name of the stage (e.g., "dream", "brainstorm", "seed").
@@ -453,6 +460,8 @@ def _run_stage_command(
         provider_discuss: Optional provider override for discuss phase.
         provider_summarize: Optional provider override for summarize phase.
         provider_serialize: Optional provider override for serialize phase.
+        resume_from: Phase name to resume execution from.
+        image_provider: Image provider spec for DRESS stage (e.g., ``openai/gpt-image-1``).
     """
     log = get_logger(__name__)
 
@@ -478,13 +487,15 @@ def _run_stage_command(
     context: dict[str, Any] = {"user_prompt": prompt, "interactive": use_interactive}
     if resume_from:
         context["resume_from"] = resume_from
+    if image_provider:
+        context["image_provider"] = image_provider
 
     # Add phase progress callback (used by GROW, and optionally by other stages)
     def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
         """Display phase progress for stages that emit phase progress events."""
         detail_str = f" ({detail})" if detail else ""
 
-        if stage_name in ("grow", "fill"):
+        if stage_name in ("grow", "fill", "dress"):
             status_icon = "[green]✓[/green]" if status == "completed" else "[yellow]○[/yellow]"
             console.print(f"  {status_icon} {phase}{detail_str}")
             return
@@ -535,8 +546,8 @@ def _run_stage_command(
         )
     else:
         # Non-interactive mode
-        if stage_name in ("grow", "fill"):
-            # GROW/FILL show phase-by-phase progress instead of spinner
+        if stage_name in ("grow", "fill", "dress"):
+            # GROW/FILL/DRESS show phase-by-phase progress instead of spinner
             console.print(f"[dim]Running {stage_name.upper()} stage...[/dim]")
             result = asyncio.run(
                 _run_stage_async(
@@ -729,6 +740,31 @@ def _preview_fill_artifact(artifact: dict[str, Any]) -> None:
         console.print(f"  [yellow]Flagged passages: {flagged}[/yellow]")
 
 
+def _preview_dress_artifact(artifact: dict[str, Any]) -> None:
+    """Display preview of DRESS artifact."""
+    art_dir = artifact.get("art_direction", {})
+    if art_dir:
+        style = art_dir.get("style", "?")
+        medium = art_dir.get("medium", "?")
+        console.print(f"  Art direction: [bold]{style}[/bold] ({medium})")
+        palette = art_dir.get("palette", [])
+        if palette:
+            console.print(f"  Palette: {', '.join(str(c) for c in palette)}")
+
+    visuals = artifact.get("entity_visuals", {})
+    console.print(f"  Entity visuals: [bold]{len(visuals)}[/bold]")
+
+    briefs = artifact.get("briefs", {})
+    console.print(f"  Illustration briefs: [bold]{len(briefs)}[/bold]")
+
+    codex = artifact.get("codex_entries", {})
+    console.print(f"  Codex entries: [bold]{len(codex)}[/bold]")
+
+    illustrations = artifact.get("illustrations", {})
+    if illustrations:
+        console.print(f"  Illustrations generated: [bold]{len(illustrations)}[/bold]")
+
+
 # Stage preview function mapping (defined after functions exist)
 STAGE_PREVIEW_FNS: dict[str, PreviewFn] = {
     "dream": _preview_dream_artifact,
@@ -736,6 +772,7 @@ STAGE_PREVIEW_FNS: dict[str, PreviewFn] = {
     "seed": _preview_seed_artifact,
     "grow": _preview_grow_artifact,
     "fill": _preview_fill_artifact,
+    "dress": _preview_dress_artifact,
 }
 
 
@@ -1175,11 +1212,78 @@ def fill(
         default_interactive_prompt=DEFAULT_FILL_PROMPT,
         default_noninteractive_prompt=DEFAULT_FILL_PROMPT,
         preview_fn=_preview_fill_artifact,
+        next_step_hint="qf dress",
+        provider_discuss=provider_discuss,
+        provider_summarize=provider_summarize,
+        provider_serialize=provider_serialize,
+        resume_from=resume_from,
+    )
+
+
+@app.command()
+def dress(
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option(
+            "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
+        ),
+    ] = None,
+    provider_discuss: Annotated[
+        str | None,
+        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+    ] = None,
+    provider_summarize: Annotated[
+        str | None,
+        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+    ] = None,
+    provider_serialize: Annotated[
+        str | None,
+        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
+    ] = None,
+    image_provider: Annotated[
+        str | None,
+        typer.Option("--image-provider", help="Image provider (e.g., openai/gpt-image-1)"),
+    ] = None,
+    resume_from: Annotated[
+        str | None,
+        typer.Option("--resume-from", help="Resume from named phase (skips earlier phases)"),
+    ] = None,
+) -> None:
+    """Run DRESS stage - art direction, illustrations, and codex.
+
+    Establishes visual identity, generates illustration briefs for
+    passages, creates codex entries for entities, and optionally
+    generates images via an image provider.
+
+    Requires FILL stage to have completed first.
+    """
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+    _configure_project_logging(project_path)
+
+    _run_stage_command(
+        stage_name="dress",
+        project_path=project_path,
+        prompt=None,
+        provider=provider,
+        interactive=False,
+        default_interactive_prompt=DEFAULT_DRESS_PROMPT,
+        default_noninteractive_prompt=DEFAULT_DRESS_PROMPT,
+        preview_fn=_preview_dress_artifact,
         next_step_hint="qf ship",
         provider_discuss=provider_discuss,
         provider_summarize=provider_summarize,
         provider_serialize=provider_serialize,
         resume_from=resume_from,
+        image_provider=image_provider,
     )
 
 
