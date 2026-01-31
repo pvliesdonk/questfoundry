@@ -14,6 +14,7 @@ from questfoundry.providers.factory import (
     create_chat_model,
     create_model_for_structured_output,
     get_default_model,
+    unload_ollama_model,
 )
 from questfoundry.providers.model_info import (
     DEFAULT_CONTEXT_WINDOW,
@@ -629,3 +630,73 @@ def test_get_model_info_reasoning_models_no_tools(
     assert info.context_window == expected_context
     assert info.supports_tools is expected_tools
     assert info.supports_vision is expected_vision
+
+
+# --- Tests for unload_ollama_model ---
+
+
+class TestUnloadOllamaModel:
+    """Tests for the Ollama model unloading utility."""
+
+    @pytest.mark.asyncio
+    async def test_sends_keep_alive_zero(self) -> None:
+        """Sends POST with keep_alive=0 to Ollama API."""
+        from unittest.mock import AsyncMock
+
+        mock_model = MagicMock()
+        mock_model.base_url = "http://localhost:11434"
+        mock_model.model = "qwen3:4b"
+
+        mock_response = MagicMock()
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            await unload_ollama_model(mock_model)
+
+            mock_client.post.assert_called_once_with(
+                "http://localhost:11434/api/generate",
+                json={"model": "qwen3:4b", "keep_alive": 0},
+            )
+
+    @pytest.mark.asyncio
+    async def test_noop_for_non_ollama_model(self) -> None:
+        """Silently returns when model has no base_url (e.g., OpenAI)."""
+        mock_model = MagicMock(spec=[])  # no attributes
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            await unload_ollama_model(mock_model)
+            mock_cls.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_noop_when_base_url_is_none(self) -> None:
+        """Returns when base_url is None."""
+        mock_model = MagicMock()
+        mock_model.base_url = None
+        mock_model.model = "qwen3:4b"
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            await unload_ollama_model(mock_model)
+            mock_cls.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_logs_warning_on_failure(self) -> None:
+        """Logs warning but doesn't raise on connection failure."""
+        from unittest.mock import AsyncMock
+
+        mock_model = MagicMock()
+        mock_model.base_url = "http://localhost:11434"
+        mock_model.model = "qwen3:4b"
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=ConnectionError("refused"))
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Should not raise
+            await unload_ollama_model(mock_model)

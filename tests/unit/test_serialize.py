@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -1586,3 +1587,50 @@ class TestPropagateCrossSectionErrors:
         }
         _propagate_cross_section_errors(by_section)
         assert len(by_section["dilemmas"]) == 2
+
+
+class TestSerializeBeatsPerPathConcurrency:
+    """Tests for concurrency limiting in _serialize_beats_per_path."""
+
+    @pytest.mark.asyncio
+    async def test_respects_max_concurrency(self) -> None:
+        """Semaphore limits how many paths serialize concurrently."""
+        import asyncio
+
+        from questfoundry.agents.serialize import _serialize_beats_per_path
+
+        peak_concurrent = 0
+        current_concurrent = 0
+        lock = asyncio.Lock()
+
+        async def _mock_serialize_path_beats(**_kwargs: Any) -> tuple[list[dict[str, Any]], int]:
+            nonlocal peak_concurrent, current_concurrent
+            async with lock:
+                current_concurrent += 1
+                peak_concurrent = max(peak_concurrent, current_concurrent)
+            await asyncio.sleep(0.05)
+            async with lock:
+                current_concurrent -= 1
+            return [{"beat_id": "b1"}], 100
+
+        paths = [{"path_id": f"path_{i}"} for i in range(6)]
+
+        with patch(
+            "questfoundry.agents.serialize._serialize_path_beats",
+            side_effect=_mock_serialize_path_beats,
+        ):
+            beats, tokens = await _serialize_beats_per_path(
+                model=MagicMock(),
+                paths=paths,
+                per_path_prompt="test",
+                entity_context="test",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+                max_concurrency=2,
+            )
+
+        assert len(beats) == 6
+        assert tokens == 600
+        # Semaphore should cap concurrency at 2
+        assert peak_concurrent <= 2
