@@ -24,6 +24,7 @@ from questfoundry.models.dress import (
 from questfoundry.pipeline.stages.dress import (
     DressStage,
     DressStageError,
+    assemble_image_prompt,
     compute_structural_score,
     create_dress_stage,
     dress_stage,
@@ -235,18 +236,15 @@ class TestPhase0ArtDirection:
                     (mock_codex_out, 1, 50),  # Phase 2: aldric
                 ],
             ),
-            # Phases 0-2 succeed, Phase 3 raises NotImplementedError
-            pytest.raises(NotImplementedError, match="PR 6"),
         ):
             await stage.execute(MagicMock(), "Establish art direction")
 
-        # Verify graph was updated (checkpoint before review has all results)
-        checkpoint = tmp_path / "snapshots" / "dress-pre-review.json"
-        assert checkpoint.exists()
-        graph = Graph.load_from_file(checkpoint)
+        # Verify graph was updated (final graph has all phase results)
+        graph = Graph.load(tmp_path)
         assert graph.get_node("art_direction::main") is not None
         assert graph.get_node("entity_visual::protagonist") is not None
         assert graph.get_node("entity_visual::aldric") is not None
+        assert graph.get_last_stage() == "dress"
 
     @pytest.mark.asyncio()
     async def test_phase0_counts_metrics(
@@ -331,22 +329,144 @@ class TestPhase0ArtDirection:
 
 
 # ---------------------------------------------------------------------------
-# Phase stubs (3-4 remain)
+# Phase 3: Review Gate
 # ---------------------------------------------------------------------------
 
 
-class TestPhaseStubs:
+class TestPhase3Review:
     @pytest.mark.asyncio()
-    async def test_phase3_not_implemented(self) -> None:
+    async def test_selects_all_briefs(self) -> None:
+        """Auto-approve mode selects all briefs sorted by priority."""
+        g = Graph()
+        g.create_node(
+            "illustration_brief::opening",
+            {"type": "illustration_brief", "priority": 2, "subject": "Opening scene"},
+        )
+        g.create_node(
+            "illustration_brief::climax",
+            {"type": "illustration_brief", "priority": 1, "subject": "Climax"},
+        )
+
         stage = DressStage()
-        with pytest.raises(NotImplementedError, match="PR 6"):
-            await stage._phase_3_review(Graph(), MagicMock())
+        result = await stage._phase_3_review(g, MagicMock())
+
+        assert result.status == "completed"
+        assert "2 of 2" in result.detail
+
+        selection = g.get_node("dress_meta::selection")
+        assert selection is not None
+        # Should be sorted by priority (1 first)
+        assert selection["selected_briefs"][0] == "illustration_brief::climax"
 
     @pytest.mark.asyncio()
-    async def test_phase4_not_implemented(self) -> None:
+    async def test_no_briefs(self) -> None:
+        g = Graph()
         stage = DressStage()
-        with pytest.raises(NotImplementedError, match="PR 6"):
-            await stage._phase_4_generate(Graph(), MagicMock())
+        result = await stage._phase_3_review(g, MagicMock())
+        assert result.detail == "no briefs to review"
+
+
+# ---------------------------------------------------------------------------
+# Phase 4: Image Generation
+# ---------------------------------------------------------------------------
+
+
+class TestPhase4Generate:
+    @pytest.mark.asyncio()
+    async def test_generates_images(self, tmp_path: Path) -> None:
+        """Phase 4 generates images and creates illustration nodes."""
+        g = Graph()
+        g.create_node(
+            "art_direction::main",
+            {"type": "art_direction", "style": "ink", "aspect_ratio": "16:9"},
+        )
+        g.create_node(
+            "illustration_brief::opening",
+            {
+                "type": "illustration_brief",
+                "subject": "Opening scene",
+                "composition": "Wide shot",
+                "mood": "foreboding",
+                "caption": "The wind howled.",
+                "category": "scene",
+                "entities": [],
+            },
+        )
+        g.create_node("passage::opening", {"type": "passage"})
+        g.add_edge("targets", "illustration_brief::opening", "passage::opening")
+        g.upsert_node(
+            "dress_meta::selection",
+            {
+                "type": "dress_meta",
+                "selected_briefs": ["illustration_brief::opening"],
+                "total_briefs": 1,
+            },
+        )
+
+        mock_result = MagicMock()
+        mock_result.image_data = b"fake_png_data"
+        mock_result.content_type = "image/png"
+
+        mock_provider = AsyncMock()
+        mock_provider.generate = AsyncMock(return_value=mock_result)
+
+        stage = DressStage(project_path=tmp_path, image_provider="openai/gpt-image-1")
+
+        with patch(
+            "questfoundry.pipeline.stages.dress.create_image_provider",
+            return_value=mock_provider,
+        ):
+            result = await stage._phase_4_generate(g, MagicMock())
+
+        assert result.status == "completed"
+        assert "1 images generated" in result.detail
+        assert g.get_node("illustration::\x6fpening") is not None
+
+    @pytest.mark.asyncio()
+    async def test_no_provider_skips(self) -> None:
+        """Phase 4 skips gracefully when no image provider configured."""
+        g = Graph()
+        stage = DressStage()
+        result = await stage._phase_4_generate(g, MagicMock())
+        assert "no image provider" in result.detail
+
+    @pytest.mark.asyncio()
+    async def test_no_selection_skips(self) -> None:
+        stage = DressStage(image_provider="openai/gpt-image-1")
+        g = Graph()
+        result = await stage._phase_4_generate(g, MagicMock())
+        assert "no selection metadata" in result.detail
+
+    @pytest.mark.asyncio()
+    async def test_provider_error_continues(self, tmp_path: Path) -> None:
+        """ImageProviderError on one brief doesn't stop others."""
+        from questfoundry.providers.image import ImageProviderError
+
+        g = Graph()
+        g.create_node("art_direction::main", {"type": "art_direction", "style": "ink"})
+        g.create_node(
+            "illustration_brief::fail",
+            {"type": "illustration_brief", "subject": "Fail", "entities": []},
+        )
+        g.upsert_node(
+            "dress_meta::selection",
+            {"type": "dress_meta", "selected_briefs": ["illustration_brief::fail"]},
+        )
+
+        mock_provider = AsyncMock()
+        mock_provider.generate = AsyncMock(
+            side_effect=ImageProviderError("openai", "content policy")
+        )
+
+        stage = DressStage(project_path=tmp_path, image_provider="openai/test")
+
+        with patch(
+            "questfoundry.pipeline.stages.dress.create_image_provider",
+            return_value=mock_provider,
+        ):
+            result = await stage._phase_4_generate(g, MagicMock())
+
+        assert "0 images generated, 1 failed" in result.detail
 
 
 # ---------------------------------------------------------------------------
@@ -682,3 +802,98 @@ class TestPhase2Codex:
 
         assert result.status == "completed"
         assert g.get_node("codex::protagonist_rank1") is not None
+
+
+# ---------------------------------------------------------------------------
+# AssetManager
+# ---------------------------------------------------------------------------
+
+
+class TestAssetManager:
+    def test_store_creates_file(self, tmp_path: Path) -> None:
+        from questfoundry.artifacts.assets import AssetManager
+
+        mgr = AssetManager(tmp_path)
+        path = mgr.store(b"fake_png_data", "image/png")
+
+        assert path.startswith("assets/")
+        assert path.endswith(".png")
+        assert (tmp_path / path).exists()
+        assert (tmp_path / path).read_bytes() == b"fake_png_data"
+
+    def test_deduplication(self, tmp_path: Path) -> None:
+        from questfoundry.artifacts.assets import AssetManager
+
+        mgr = AssetManager(tmp_path)
+        path1 = mgr.store(b"same_data", "image/png")
+        path2 = mgr.store(b"same_data", "image/png")
+
+        assert path1 == path2
+
+    def test_webp_extension(self, tmp_path: Path) -> None:
+        from questfoundry.artifacts.assets import AssetManager
+
+        mgr = AssetManager(tmp_path)
+        path = mgr.store(b"webp_data", "image/webp")
+        assert path.endswith(".webp")
+
+
+# ---------------------------------------------------------------------------
+# Image prompt assembly
+# ---------------------------------------------------------------------------
+
+
+class TestAssembleImagePrompt:
+    def test_combines_art_direction_and_brief(self) -> None:
+        g = Graph()
+        g.create_node(
+            "art_direction::main",
+            {
+                "type": "art_direction",
+                "style": "watercolor",
+                "medium": "traditional paper",
+                "palette": ["deep indigo", "gold"],
+                "negative_defaults": "photorealism",
+            },
+        )
+
+        brief = {
+            "subject": "Scholar at the bridge",
+            "composition": "Wide shot",
+            "mood": "foreboding",
+            "negative": "modern elements",
+            "entities": [],
+        }
+
+        positive, negative = assemble_image_prompt(g, brief)
+
+        assert "Scholar at the bridge" in positive
+        assert "watercolor" in positive
+        assert "deep indigo" in positive
+        assert negative is not None
+        assert "modern elements" in negative
+        assert "photorealism" in negative
+
+    def test_includes_entity_visuals(self) -> None:
+        g = Graph()
+        g.create_node("art_direction::main", {"type": "art_direction", "style": "ink"})
+        g.create_node(
+            "entity_visual::hero",
+            {
+                "type": "entity_visual",
+                "reference_prompt_fragment": "tall warrior, scarred face",
+            },
+        )
+
+        brief = {"subject": "Battle scene", "entities": ["hero"]}
+        positive, _negative = assemble_image_prompt(g, brief)
+
+        assert "tall warrior, scarred face" in positive
+
+    def test_no_art_direction(self) -> None:
+        g = Graph()
+        brief = {"subject": "A simple scene", "entities": []}
+        positive, negative = assemble_image_prompt(g, brief)
+
+        assert "A simple scene" in positive
+        assert negative is None
