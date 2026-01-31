@@ -727,8 +727,15 @@ class GrowStage:
                 alternatives = data.get("location_alternatives", [])
                 summary = data.get("summary", "")
                 entities = data.get("entities", [])
+                dilemma_ids = [
+                    impact["dilemma_id"]
+                    for impact in data.get("dilemma_impacts", [])
+                    if "dilemma_id" in impact
+                ]
+                dilemma_tag = dilemma_ids[0] if dilemma_ids else "unknown"
                 beat_info[bid] = (
-                    f'- {bid}: summary="{summary}", '
+                    f"- {bid} [dilemma: {dilemma_tag}]: "
+                    f'summary="{summary}", '
                     f'location="{location}", '
                     f"location_alternatives={alternatives}, "
                     f"entities={entities}"

@@ -19,14 +19,22 @@ system: |
   5. CRITICAL: Each beat can appear in at most ONE intersection. Never assign the
      same beat to multiple intersections.
 
+  ## Dilemma Matching (CRITICAL)
+  Each beat below is tagged with `[dilemma: ...]`. Use this tag to ensure
+  every intersection mixes beats from DIFFERENT dilemmas:
+
+  GOOD: beat from [dilemma: dilemma::A] + beat from [dilemma: dilemma::B] = valid (2 different dilemmas)
+  BAD:  beat from [dilemma: dilemma::A] + beat from [dilemma: dilemma::A] = INVALID (same dilemma)
+
   ## What NOT to Do
-  - Do NOT group beats from the same dilemma (those are paths, not intersections)
+  - Do NOT group beats that share the same [dilemma: ...] tag
   - Do NOT propose intersections with only 1 beat
   - Do NOT use beat IDs not listed in the Valid IDs section
   - Do NOT force intersections where there is no natural scene overlap
   - Do NOT reuse a beat ID across multiple intersection proposals
 
   ## Candidate Beats
+  Each beat is tagged with its dilemma in [dilemma: ...]. Mix different dilemmas.
   {beat_summaries}
 
   ## Valid IDs
