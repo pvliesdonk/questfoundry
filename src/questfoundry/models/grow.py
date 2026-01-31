@@ -149,6 +149,64 @@ class Phase4aOutput(BaseModel):
     tags: list[SceneTypeTag] = Field(default_factory=list)
 
 
+class AtmosphericDetail(BaseModel):
+    """Phase 4d: Sensory environment detail for a beat."""
+
+    beat_id: str = Field(min_length=1)
+    atmospheric_detail: str = Field(
+        min_length=10,
+        max_length=200,
+        description="Recurring sensory detail for this beat's setting (sight, sound, smell, texture)",
+    )
+
+
+class EntryMood(BaseModel):
+    """Phase 4d: Per-path entry mood for shared beats."""
+
+    path_id: str = Field(min_length=1)
+    mood: str = Field(
+        min_length=2,
+        max_length=50,
+        description="Emotional quality arriving from this path (2-3 words)",
+    )
+
+
+class EntryStateBeat(BaseModel):
+    """Phase 4d: Entry mood assignments for a single shared beat."""
+
+    beat_id: str = Field(min_length=1)
+    moods: list[EntryMood] = Field(min_length=1)
+
+
+class Phase4dOutput(BaseModel):
+    """Wrapper for Phase 4d structured output (atmospheric details + entry states)."""
+
+    details: list[AtmosphericDetail] = Field(default_factory=list)
+    entry_states: list[EntryStateBeat] = Field(default_factory=list)
+
+
+class PathMiniArc(BaseModel):
+    """Phase 4e: Path-level narrative metadata."""
+
+    path_id: str = Field(min_length=1)
+    path_theme: str = Field(
+        min_length=10,
+        max_length=200,
+        description="Emotional through-line for this path",
+    )
+    path_mood: str = Field(
+        min_length=2,
+        max_length=50,
+        description="Overall quality/tone descriptor (2-3 words)",
+    )
+
+
+class Phase4eOutput(BaseModel):
+    """Wrapper for Phase 4e structured output (per-path mini-arcs)."""
+
+    arcs: list[PathMiniArc] = Field(default_factory=list)
+
+
 class GapProposal(BaseModel):
     """Phase 4b/4c: Proposes new beats to fill structural gaps."""
 
