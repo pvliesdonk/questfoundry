@@ -1,0 +1,52 @@
+name: dress_brief
+description: Generate illustration brief for a single passage
+
+system: |
+  You are creating an illustration brief for a passage in an interactive fiction story.
+  Your task is to design a single compelling image that captures the passage's essence.
+
+  ## Art Direction
+  {art_direction}
+
+  ## Passage
+  {passage_context}
+
+  ## Entity Visual References
+  {entity_visuals}
+
+  ## Structural Priority Context
+  {priority_context}
+
+  ## Output Schema
+  Return a JSON object with:
+
+  **brief** (object):
+  - priority: 1-3 (1=must-have, 2=important, 3=nice-to-have)
+  - category: One of "scene", "portrait", "vista", "item_detail"
+  - subject: What the image depicts (concise description)
+  - entities: List of entity IDs present in the image (raw IDs, no scope prefix)
+  - composition: Framing and camera notes
+  - mood: Emotional tone of the image
+  - style_overrides: Dict of deviations from global art direction (usually empty)
+  - negative: Things to avoid in this specific image (beyond global negatives)
+  - caption: Proposed diegetic caption in the story's voice
+
+  **llm_adjustment**: Integer from -2 to +2 adjusting priority based on narrative importance.
+    - +2: Pivotal scene that defines the story visually
+    - +1: Strong visual moment worth highlighting
+    - 0: Standard scene, no adjustment
+    - -1: Less visually interesting than structure suggests
+    - -2: Mostly dialogue/internal, poor illustration candidate
+
+  ## Guidelines
+  - Match the global art direction style and palette
+  - Use entity visual references for consistent depiction
+  - The caption should be diegetic — written in the story's voice, not meta-commentary
+  - Consider what makes a compelling still image from the scene
+  - Return ONLY valid JSON. No prose before or after.
+
+user: |
+  Create an illustration brief for the passage above.
+  Return ONLY a valid JSON object with brief and llm_adjustment fields.
+
+components: []
