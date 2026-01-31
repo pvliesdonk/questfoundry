@@ -17,6 +17,7 @@ from questfoundry.graph.fill_context import (
     format_narrative_context,
     format_passage_context,
     format_passages_batch,
+    format_path_arc_context,
     format_scene_types_summary,
     format_shadow_states,
     format_sliding_window,
@@ -880,3 +881,74 @@ class TestFormatEntryStates:
         # betray is NOT active in this arc
         assert "path::betray: defensive guilt" in result
         assert "path::betray: defensive guilt <- ACTIVE" not in result
+
+
+class TestFormatPathArcContext:
+    """Tests for format_path_arc_context."""
+
+    def test_missing_passage(self) -> None:
+        g = Graph.empty()
+        result = format_path_arc_context(g, "passage::nonexistent", "arc::a1")
+        assert result == ""
+
+    def test_missing_arc(self) -> None:
+        g = Graph.empty()
+        g.create_node("passage::p1", {"type": "passage", "raw_id": "p1"})
+        result = format_path_arc_context(g, "passage::p1", "arc::nonexistent")
+        assert result == ""
+
+    def test_no_path_arcs_set(self) -> None:
+        g = Graph.empty()
+        g.create_node("passage::p1", {"type": "passage", "raw_id": "p1"})
+        g.create_node("arc::a1", {"type": "arc", "paths": ["path::trust"]})
+        g.create_node("path::trust", {"type": "path", "raw_id": "trust"})
+        result = format_path_arc_context(g, "passage::p1", "arc::a1")
+        assert result == ""
+
+    def test_formats_path_arcs(self) -> None:
+        g = Graph.empty()
+        g.create_node("passage::p1", {"type": "passage", "raw_id": "p1"})
+        g.create_node("arc::a1", {"type": "arc", "paths": ["path::trust", "path::betray"]})
+        g.create_node(
+            "path::trust",
+            {
+                "type": "path",
+                "raw_id": "trust",
+                "path_theme": "A slow surrender to vulnerability",
+                "path_mood": "fragile hope",
+            },
+        )
+        g.create_node(
+            "path::betray",
+            {
+                "type": "path",
+                "raw_id": "betray",
+                "path_theme": "The cost of self-preservation",
+                "path_mood": "bitter resolve",
+            },
+        )
+        result = format_path_arc_context(g, "passage::p1", "arc::a1")
+        assert "Path Arcs" in result
+        assert "fragile hope" in result
+        assert "A slow surrender to vulnerability" in result
+        assert "bitter resolve" in result
+        assert "The cost of self-preservation" in result
+
+    def test_skips_paths_without_arcs(self) -> None:
+        g = Graph.empty()
+        g.create_node("passage::p1", {"type": "passage", "raw_id": "p1"})
+        g.create_node("arc::a1", {"type": "arc", "paths": ["path::trust", "path::betray"]})
+        g.create_node(
+            "path::trust",
+            {
+                "type": "path",
+                "raw_id": "trust",
+                "path_theme": "A slow surrender to vulnerability",
+                "path_mood": "fragile hope",
+            },
+        )
+        # betray has no path_theme or path_mood
+        g.create_node("path::betray", {"type": "path", "raw_id": "betray"})
+        result = format_path_arc_context(g, "passage::p1", "arc::a1")
+        assert "fragile hope" in result
+        assert "betray" not in result
