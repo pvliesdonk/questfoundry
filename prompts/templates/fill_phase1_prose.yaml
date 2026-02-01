@@ -67,6 +67,9 @@ system: |
   ## Path Arcs
   {path_arcs}
 
+  ## Vocabulary Note
+  {vocabulary_note}
+
   ## Rules
 
   1. Follow the voice document for POV, tense, register, rhythm, and tone

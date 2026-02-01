@@ -31,6 +31,9 @@ system: |
 
   These are starting points, not rigid rules. Deviate when the passage content demands it.
 
+  ## Recent Compositions (Anti-Repetition)
+  {composition_log}
+
   ## Output Schema
   Return a JSON object with:
 

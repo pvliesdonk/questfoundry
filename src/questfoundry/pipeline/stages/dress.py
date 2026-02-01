@@ -596,6 +596,10 @@ class DressStage:
         briefs_created = 0
         briefs_skipped = 0
 
+        # Composition log: accumulate recent compositions/moods to inject
+        # as anti-repetition signal into subsequent brief prompts.
+        recent_compositions: list[str] = []
+
         for passage_id, passage_data in passages.items():
             # Skip passages without prose
             if not passage_data.get("prose"):
@@ -610,11 +614,19 @@ class DressStage:
             entity_visuals_ctx = format_entity_visuals_for_passage(graph, passage_id)
             priority_ctx = describe_priority_context(graph, passage_id, base_score)
 
+            # Format composition log (last 5 entries)
+            if recent_compositions:
+                comp_log = "Recent briefs used these compositions — DO NOT repeat:\n"
+                comp_log += "\n".join(f"- {c}" for c in recent_compositions[-5:])
+            else:
+                comp_log = ""
+
             context = {
                 "art_direction": art_direction_ctx,
                 "passage_context": passage_ctx,
                 "entity_visuals": entity_visuals_ctx or "No entity visual profiles available.",
                 "priority_context": priority_ctx,
+                "composition_log": comp_log,
             }
 
             output, llm_calls, tokens = await self._dress_llm_call(
@@ -640,6 +652,13 @@ class DressStage:
             brief_dict["priority"] = final_priority
             apply_dress_brief(graph, passage_id, brief_dict, final_priority)
             briefs_created += 1
+
+            # Log composition for anti-repetition in subsequent briefs
+            comp = brief_dict.get("composition", "")
+            mood = brief_dict.get("mood", "")
+            category = brief_dict.get("category", "")
+            if comp or mood:
+                recent_compositions.append(f"{category}: {comp} | mood: {mood}")
 
         log.info(
             "briefs_phase_complete",

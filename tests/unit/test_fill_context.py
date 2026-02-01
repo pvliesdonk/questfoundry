@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from questfoundry.graph.fill_context import (
+    compute_lexical_diversity,
     compute_open_questions,
     derive_pacing,
     format_atmospheric_detail,
@@ -21,6 +22,7 @@ from questfoundry.graph.fill_context import (
     format_scene_types_summary,
     format_shadow_states,
     format_sliding_window,
+    format_vocabulary_note,
     format_voice_context,
     get_arc_passage_order,
     get_spine_arc_id,
@@ -952,3 +954,112 @@ class TestFormatPathArcContext:
         result = format_path_arc_context(g, "passage::p1", "arc::a1")
         assert "fragile hope" in result
         assert "betray" not in result
+
+
+# ---------------------------------------------------------------------------
+# Lexical diversity helpers
+# ---------------------------------------------------------------------------
+
+
+class TestLexicalDiversity:
+    """Tests for compute_lexical_diversity and format_vocabulary_note."""
+
+    def test_empty_input(self) -> None:
+        assert compute_lexical_diversity([]) == 1.0
+        assert compute_lexical_diversity([""]) == 1.0
+
+    def test_high_diversity(self) -> None:
+        texts = ["The quick brown fox jumps", "over a lazy dog sleeping"]
+        ratio = compute_lexical_diversity(texts)
+        assert ratio > 0.8  # all unique words
+
+    def test_low_diversity(self) -> None:
+        texts = ["the the the the the", "the the the the the"]
+        ratio = compute_lexical_diversity(texts)
+        assert ratio < 0.2  # only one unique word
+
+    def test_vocabulary_note_below_threshold(self) -> None:
+        note = format_vocabulary_note(0.3)
+        assert "VOCABULARY ALERT" in note
+        assert "0.30" in note
+
+    def test_vocabulary_note_above_threshold(self) -> None:
+        assert format_vocabulary_note(0.5) == ""
+        assert format_vocabulary_note(0.4) == ""
+
+    def test_vocabulary_note_custom_threshold(self) -> None:
+        assert format_vocabulary_note(0.5, threshold=0.6) != ""
+        assert format_vocabulary_note(0.5, threshold=0.4) == ""
+
+
+# ---------------------------------------------------------------------------
+# Echo prompt at convergence
+# ---------------------------------------------------------------------------
+
+
+class TestEchoPrompt:
+    """Tests for thematic echo at convergence points."""
+
+    def test_convergence_includes_echo(self) -> None:
+        """At convergence, lookahead should include opening passage echo."""
+        g = Graph()
+        # Spine arc with two beats
+        g.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": ["beat::b1", "beat::conv"],
+            },
+        )
+        # Branch arc converging at beat::conv
+        g.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "converges_at": "beat::conv",
+                "sequence": ["beat::br1"],
+            },
+        )
+        g.create_node("beat::b1", {"type": "beat", "summary": "opening"})
+        g.create_node("beat::conv", {"type": "beat", "summary": "convergence"})
+        g.create_node("beat::br1", {"type": "beat", "summary": "branch beat"})
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "from_beat": "beat::b1", "prose": "The rain began to fall."},
+        )
+        g.create_node(
+            "passage::conv",
+            {"type": "passage", "from_beat": "beat::conv"},
+        )
+        g.add_edge("passage_from", "passage::p1", "beat::b1")
+        g.add_edge("passage_from", "passage::conv", "beat::conv")
+
+        result = format_lookahead_context(g, "passage::conv", "arc::spine")
+        assert "Thematic Echo" in result
+        assert "The rain began to fall." in result
+
+    def test_no_echo_at_normal_passage(self) -> None:
+        """Non-juncture passages should not have echo prompts."""
+        g = Graph()
+        g.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": ["beat::b1", "beat::b2"],
+            },
+        )
+        g.create_node("beat::b1", {"type": "beat"})
+        g.create_node("beat::b2", {"type": "beat"})
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "from_beat": "beat::b1", "prose": "Opening."},
+        )
+        g.create_node("passage::p2", {"type": "passage", "from_beat": "beat::b2"})
+        g.add_edge("passage_from", "passage::p1", "beat::b1")
+        g.add_edge("passage_from", "passage::p2", "beat::b2")
+
+        result = format_lookahead_context(g, "passage::p2", "arc::spine")
+        assert "Thematic Echo" not in result

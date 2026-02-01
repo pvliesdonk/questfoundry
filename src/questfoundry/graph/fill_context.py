@@ -294,6 +294,20 @@ def format_lookahead_context(
                         lines.append(prose)
                         lines.append("")
 
+    # Echo prompt: at structural junctures (convergence or divergence),
+    # inject the opening sentence from the story's first passage as a
+    # thematic callback anchor. The LLM can echo imagery or phrasing
+    # to create narrative resonance.
+    if convergence_arcs or (
+        arc_node.get("arc_type") == "branch" and arc_node.get("diverges_at") == beat_id
+    ):
+        echo = _extract_opening_echo(graph, arc_id)
+        if echo:
+            lines.append("**Thematic Echo (for callback):**")
+            lines.append(f'Opening image: "{echo}"')
+            lines.append("Consider echoing or inverting this imagery to create resonance.")
+            lines.append("")
+
     return "\n".join(lines).strip()
 
 
@@ -427,6 +441,42 @@ def _find_passage_for_beat(graph: Graph, beat_id: str | None) -> str | None:
     for edge in graph.get_edges(to_id=beat_id, edge_type="passage_from"):
         return str(edge["from"])
     return None
+
+
+def _extract_opening_echo(graph: Graph, arc_id: str) -> str:
+    """Extract the opening sentence from the story's first passage.
+
+    Used as a thematic callback anchor at convergence/divergence points.
+
+    Args:
+        graph: Graph containing passage nodes.
+        arc_id: Current arc (used to find spine).
+
+    Returns:
+        First sentence of the first passage, or empty string.
+    """
+    spine_id = get_spine_arc_id(graph)
+    target_arc = spine_id or arc_id
+    passage_order = get_arc_passage_order(graph, target_arc)
+    if not passage_order:
+        return ""
+
+    first_passage = graph.get_node(passage_order[0])
+    if not first_passage:
+        return ""
+
+    prose = str(first_passage.get("prose", ""))
+    if not prose:
+        return ""
+
+    # Extract first sentence (split on period, question mark, or exclamation)
+    for end_char in (".", "!", "?"):
+        idx = prose.find(end_char)
+        if idx > 0:
+            return prose[: idx + 1].strip()
+
+    # No sentence-ending punctuation found; return first 100 chars
+    return prose[:100].strip()
 
 
 def _is_first_branch_beat(graph: Graph, arc_id: str, beat_id: str) -> bool:
@@ -930,6 +980,44 @@ def format_path_arc_context(graph: Graph, passage_id: str, arc_id: str) -> str:
         "**Path Arcs** (thematic context for active paths):\n\n"
         + "\n".join(lines)
         + "\n\nLet the path mood and theme subtly inform tone and imagery."
+    )
+
+
+def compute_lexical_diversity(prose_texts: list[str]) -> float:
+    """Compute type-token ratio across recent prose passages.
+
+    Args:
+        prose_texts: List of prose strings to analyze.
+
+    Returns:
+        Ratio of unique words to total words (0.0-1.0).
+        Returns 1.0 if no words are found.
+    """
+    words: list[str] = []
+    for text in prose_texts:
+        words.extend(text.lower().split())
+    if not words:
+        return 1.0
+    return len(set(words)) / len(words)
+
+
+def format_vocabulary_note(diversity_ratio: float, threshold: float = 0.4) -> str:
+    """Format a vocabulary refresh instruction if diversity is low.
+
+    Args:
+        diversity_ratio: Type-token ratio from compute_lexical_diversity.
+        threshold: Below this ratio, inject a refresh instruction.
+
+    Returns:
+        Instruction string, or empty string if diversity is acceptable.
+    """
+    if diversity_ratio >= threshold:
+        return ""
+    return (
+        "**VOCABULARY ALERT:** Recent passages show repetitive word choices "
+        f"(diversity ratio: {diversity_ratio:.2f}). For this passage, actively "
+        "seek fresh verbs, adjectives, and metaphors. Avoid words that appeared "
+        "frequently in the sliding window."
     )
 
 

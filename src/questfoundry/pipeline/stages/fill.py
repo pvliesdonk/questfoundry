@@ -25,6 +25,7 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.graph.fill_context import (
+    compute_lexical_diversity,
     format_atmospheric_detail,
     format_dramatic_questions,
     format_dream_vision,
@@ -39,6 +40,7 @@ from questfoundry.graph.fill_context import (
     format_shadow_states,
     format_sliding_window,
     format_story_identity,
+    format_vocabulary_note,
     format_voice_context,
     get_arc_passage_order,
     get_spine_arc_id,
@@ -69,6 +71,17 @@ if TYPE_CHECKING:
     )
 
 T = TypeVar("T", bound=BaseModel)
+
+# Sliding window size varies by narrative function: resolve passages need
+# more prior context for thematic callbacks; introduce passages need less
+# to avoid anchoring on prior voice before establishing their own.
+_SLIDING_WINDOW_SIZES: dict[str, int] = {
+    "introduce": 1,
+    "develop": 3,
+    "complicate": 3,
+    "confront": 3,
+    "resolve": 5,
+}
 
 
 def _get_prompts_path() -> Path:
@@ -560,6 +573,12 @@ class FillStage:
         passages_filled = 0
         passages_flagged = 0
 
+        # Lexical diversity tracking: recompute every N passages from
+        # the sliding window prose to detect vocabulary convergence.
+        _DIVERSITY_CHECK_INTERVAL = 5
+        recent_prose: list[str] = []
+        vocabulary_note = ""
+
         # Build passage index within each arc for sliding window
         arc_passage_indices: dict[str, dict[str, int]] = {}
         for _passage_id, arc_id in generation_order:
@@ -580,6 +599,11 @@ class FillStage:
 
             current_idx = arc_passage_indices.get(arc_id, {}).get(passage_id, 0)
 
+            # Dynamic sliding window: resolve needs more context for
+            # callbacks, introduce needs less to avoid anchoring on prior voice.
+            narrative_function = beat.get("narrative_function", "develop") if beat else "develop"
+            window_size = _SLIDING_WINDOW_SIZES.get(narrative_function, 3)
+
             context = {
                 "voice_document": voice_context,
                 "story_identity": story_identity_context,
@@ -591,10 +615,11 @@ class FillStage:
                 "atmospheric_detail": format_atmospheric_detail(graph, passage_id),
                 "entry_states": format_entry_states(graph, passage_id, arc_id),
                 "entity_states": format_entity_states(graph, passage_id),
-                "sliding_window": format_sliding_window(graph, arc_id, current_idx),
+                "sliding_window": format_sliding_window(graph, arc_id, current_idx, window_size),
                 "lookahead": format_lookahead_context(graph, passage_id, arc_id),
                 "shadow_states": format_shadow_states(graph, passage_id, arc_id),
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
+                "vocabulary_note": vocabulary_note,
             }
 
             output, llm_calls, tokens = await self._fill_llm_call(
@@ -627,6 +652,14 @@ class FillStage:
                     log.warning("empty_prose_returned", passage_id=passage_id)
                     continue
                 passages_filled += 1
+
+                # Track prose for lexical diversity monitoring
+                recent_prose.append(passage_output.prose)
+                if len(recent_prose) % _DIVERSITY_CHECK_INTERVAL == 0:
+                    ratio = compute_lexical_diversity(recent_prose[-_DIVERSITY_CHECK_INTERVAL:])
+                    vocabulary_note = format_vocabulary_note(ratio)
+                    if vocabulary_note:
+                        log.info("lexical_diversity_low", ratio=f"{ratio:.2f}")
 
                 # Apply entity updates
                 for update in passage_output.entity_updates:
