@@ -32,7 +32,6 @@ class Scope(BaseModel):
     """
 
     story_size: Literal["vignette", "short", "standard", "long"] = Field(
-        default="standard",
         description='Story size preset: "vignette", "short", "standard", or "long"',
     )
 
@@ -47,7 +46,7 @@ class DreamArtifact(BaseModel):
         default=None, description="Content advisory notes for inclusions and exclusions"
     )
     genre: str = Field(description="Primary genre", min_length=1)
-    scope: Scope = Field(default_factory=Scope)
+    scope: Scope = Field(description="Story scope with size preset")
     style_notes: str | None = Field(default=None, description="Style guidance", min_length=1)
     subgenre: str | None = Field(
         default=None, description="Optional genre refinement", min_length=1

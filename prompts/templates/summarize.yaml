@@ -11,7 +11,7 @@ system: |
   - Target audience
   - Core themes to explore
   - Style guidance for writing
-  - Scope constraints (word count range, passage count, branching complexity)
+  - Story size: one of "vignette", "short", "standard", or "long" (preserve the exact keyword from the discussion)
   - Content notes (what to include/exclude)
 
   ## Guidelines
@@ -34,7 +34,7 @@ system: |
 
   **Keep only:**
   - Genre, tone, themes (high-level)
-  - Audience and scope constraints
+  - Audience and story size (exact keyword: vignette/short/standard/long)
   - Style guidance
   - Content warnings/notes (general, not specific scenes)
 
