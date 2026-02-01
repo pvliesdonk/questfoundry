@@ -51,8 +51,7 @@ class TestA1111Provider:
         with patch.object(provider._client, "post", mock_post):
             await provider.generate("test prompt")
 
-        call_kwargs = mock_post.call_args
-        payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
+        payload = mock_post.call_args.kwargs["json"]
         assert payload["override_settings"]["sd_model_checkpoint"] == "dreamshaper_8"
 
     @pytest.mark.asyncio()
@@ -63,8 +62,7 @@ class TestA1111Provider:
         with patch.object(provider._client, "post", mock_post):
             await provider.generate("test prompt")
 
-        call_kwargs = mock_post.call_args
-        payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
+        payload = mock_post.call_args.kwargs["json"]
         assert "override_settings" not in payload
 
     @pytest.mark.asyncio()
@@ -75,8 +73,7 @@ class TestA1111Provider:
         with patch.object(provider._client, "post", mock_post):
             await provider.generate("a castle", negative_prompt="blurry, low quality")
 
-        call_kwargs = mock_post.call_args
-        payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
+        payload = mock_post.call_args.kwargs["json"]
         assert payload["negative_prompt"] == "blurry, low quality"
 
     @pytest.mark.asyncio()
@@ -88,8 +85,7 @@ class TestA1111Provider:
             with patch.object(provider._client, "post", mock_post):
                 await provider.generate("test", aspect_ratio=ratio)
 
-            call_kwargs = mock_post.call_args
-            payload = call_kwargs.kwargs.get("json") or call_kwargs[1].get("json")
+            payload = mock_post.call_args.kwargs["json"]
             assert payload["width"] == expected_w, f"Wrong width for {ratio}"
             assert payload["height"] == expected_h, f"Wrong height for {ratio}"
 
@@ -101,7 +97,7 @@ class TestA1111Provider:
         with patch.object(provider._client, "post", mock_post):
             await provider.generate("test", aspect_ratio="4:3")
 
-        payload = mock_post.call_args.kwargs.get("json") or mock_post.call_args[1].get("json")
+        payload = mock_post.call_args.kwargs["json"]
         assert payload["width"] == 512
         assert payload["height"] == 512
 
@@ -131,7 +127,22 @@ class TestA1111Provider:
                 new_callable=AsyncMock,
                 side_effect=httpx.ReadTimeout("timeout"),
             ),
-            pytest.raises(ImageProviderConnectionError, match="timed out"),
+            pytest.raises(ImageProviderConnectionError, match="timed out after"),
+        ):
+            await provider.generate("test")
+
+    @pytest.mark.asyncio()
+    async def test_pool_timeout_error(self) -> None:
+        provider = A1111ImageProvider(host="http://localhost:7860")
+
+        with (
+            patch.object(
+                provider._client,
+                "post",
+                new_callable=AsyncMock,
+                side_effect=httpx.PoolTimeout("pool exhausted"),
+            ),
+            pytest.raises(ImageProviderConnectionError, match="timed out after"),
         ):
             await provider.generate("test")
 
@@ -156,6 +167,19 @@ class TestA1111Provider:
         with (
             patch.object(
                 provider._client, "post", new_callable=AsyncMock, return_value=bad_response
+            ),
+            pytest.raises(ImageProviderError, match="missing 'images'"),
+        ):
+            await provider.generate("test")
+
+    @pytest.mark.asyncio()
+    async def test_empty_images_array(self) -> None:
+        provider = A1111ImageProvider(host="http://localhost:7860")
+        empty_response = httpx.Response(200, json={"images": []})
+
+        with (
+            patch.object(
+                provider._client, "post", new_callable=AsyncMock, return_value=empty_response
             ),
             pytest.raises(ImageProviderError, match="missing 'images'"),
         ):
@@ -192,6 +216,15 @@ class TestA1111Provider:
             result = await provider.generate("test")
 
         assert result.provider_metadata["seed"] == 12345
+
+    @pytest.mark.asyncio()
+    async def test_aclose(self) -> None:
+        provider = A1111ImageProvider(host="http://localhost:7860")
+
+        with patch.object(provider._client, "aclose", new_callable=AsyncMock) as mock_close:
+            await provider.aclose()
+
+        mock_close.assert_called_once()
 
 
 class TestA1111FactoryRouting:
