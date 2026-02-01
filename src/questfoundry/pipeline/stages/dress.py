@@ -823,6 +823,54 @@ class DressStage:
         )
 
     # -------------------------------------------------------------------------
+    # Public: standalone image generation
+    # -------------------------------------------------------------------------
+
+    async def run_generate_only(
+        self,
+        project_path: Path,
+        *,
+        on_phase_progress: PhaseProgressFn | None = None,
+    ) -> DressPhaseResult:
+        """Run Phase 4 (image generation) only on an existing project.
+
+        Loads the graph, verifies brief selection exists, generates images,
+        and saves the updated graph.
+
+        Args:
+            project_path: Path to the project directory.
+            on_phase_progress: Optional progress callback.
+
+        Returns:
+            DressPhaseResult from Phase 4.
+
+        Raises:
+            DressStageError: If no brief selection exists or project is invalid.
+        """
+        graph = Graph.load(project_path)
+
+        selection = graph.get_node("dress_meta::selection")
+        if not selection:
+            raise DressStageError(
+                "No brief selection found in graph. "
+                "Run 'qf dress' first to generate briefs and selections."
+            )
+
+        self.project_path = project_path
+
+        # Phase 4 does not use the LLM model, but the signature requires it.
+        # Pass None — the model param is unused (marked ARG002 in _phase_4_generate).
+        result = await self._phase_4_generate(graph, None)  # type: ignore[arg-type]
+
+        if result.status != "failed":
+            graph.save(project_path / "graph.json")
+
+        if on_phase_progress is not None:
+            on_phase_progress("generate", result.status, result.detail)
+
+        return result
+
+    # -------------------------------------------------------------------------
     # Phase 4: Image Generation
     # -------------------------------------------------------------------------
 

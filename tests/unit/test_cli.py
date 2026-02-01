@@ -1447,6 +1447,101 @@ def test_grow_preview_function_with_overlays() -> None:
     assert "4" in text
 
 
+# --- Generate Images Command Tests ---
+
+
+def test_generate_images_no_project_fails() -> None:
+    """generate-images fails when no project exists."""
+    result = runner.invoke(app, ["generate-images", "--project", "/nonexistent/path"])
+    assert result.exit_code != 0
+
+
+def test_generate_images_no_provider_fails(tmp_path: Path) -> None:
+    """generate-images fails when no image provider is specified."""
+    from ruamel.yaml import YAML
+
+    project = tmp_path / "test-proj"
+    project.mkdir()
+    yaml_writer = YAML()
+    with (project / "project.yaml").open("w") as f:
+        yaml_writer.dump(
+            {
+                "name": "test-proj",
+                "version": "0.1.0",
+                "providers": {"default": "ollama/qwen3:4b-instruct-32k"},
+            },
+            f,
+        )
+
+    result = runner.invoke(app, ["generate-images", "--project", str(project)])
+    assert result.exit_code != 0
+    assert "No image provider" in result.stdout
+
+
+def test_generate_images_no_selection_fails(tmp_path: Path) -> None:
+    """generate-images fails when dress has not been run yet."""
+    from ruamel.yaml import YAML
+
+    from questfoundry.graph.graph import Graph
+
+    project = tmp_path / "test-proj"
+    project.mkdir()
+    yaml_writer = YAML()
+    with (project / "project.yaml").open("w") as f:
+        yaml_writer.dump(
+            {
+                "name": "test-proj",
+                "version": "0.1.0",
+                "providers": {"default": "ollama/qwen3:4b-instruct-32k"},
+            },
+            f,
+        )
+
+    g = Graph()
+    g.set_last_stage("dress")
+    g.save(project / "graph.json")
+
+    result = runner.invoke(
+        app, ["generate-images", "--project", str(project), "--image-provider", "placeholder"]
+    )
+    assert result.exit_code != 0
+    assert "No brief selection" in result.stdout
+
+
+def test_generate_images_success(tmp_path: Path) -> None:
+    """generate-images succeeds with valid graph and provider."""
+    from ruamel.yaml import YAML
+
+    from questfoundry.graph.graph import Graph
+
+    project = tmp_path / "test-proj"
+    project.mkdir()
+    yaml_writer = YAML()
+    with (project / "project.yaml").open("w") as f:
+        yaml_writer.dump(
+            {
+                "name": "test-proj",
+                "version": "0.1.0",
+                "providers": {"default": "ollama/qwen3:4b-instruct-32k"},
+            },
+            f,
+        )
+
+    g = Graph()
+    g.set_last_stage("dress")
+    g.upsert_node(
+        "dress_meta::selection",
+        {"type": "dress_meta", "selected_briefs": [], "total_briefs": 0},
+    )
+    g.save(project / "graph.json")
+
+    result = runner.invoke(
+        app, ["generate-images", "--project", str(project), "--image-provider", "placeholder"]
+    )
+    assert result.exit_code == 0
+    assert "complete" in result.stdout.lower()
+
+
 def test_stage_prompts_grow_has_defaults() -> None:
     """Test GROW stage has both interactive and non-interactive prompts (same value)."""
     interactive_prompt, noninteractive_prompt = STAGE_PROMPTS["grow"]

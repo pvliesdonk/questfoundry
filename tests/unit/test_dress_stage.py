@@ -1076,3 +1076,151 @@ class TestCreateCoverBrief:
         brief = g.get_node("illustration_brief::cover")
         assert brief is not None
         assert "thriller" in brief["subject"]
+
+
+# ---------------------------------------------------------------------------
+# Standalone generate-images (run_generate_only)
+# ---------------------------------------------------------------------------
+
+
+class TestRunGenerateOnly:
+    @pytest.mark.asyncio()
+    async def test_generates_and_saves_graph(self, tmp_path: Path) -> None:
+        """run_generate_only generates images and saves updated graph."""
+        g = Graph()
+        g.set_last_stage("dress")
+        g.create_node("art_direction::main", {"type": "art_direction", "style": "ink"})
+        g.create_node(
+            "illustration_brief::opening",
+            {
+                "type": "illustration_brief",
+                "subject": "Opening scene",
+                "composition": "Wide",
+                "mood": "ominous",
+                "caption": "The wind howled.",
+                "category": "scene",
+                "entities": [],
+            },
+        )
+        g.create_node("passage::opening", {"type": "passage"})
+        g.add_edge("targets", "illustration_brief::opening", "passage::opening")
+        g.upsert_node(
+            "dress_meta::selection",
+            {
+                "type": "dress_meta",
+                "selected_briefs": ["illustration_brief::opening"],
+                "total_briefs": 1,
+            },
+        )
+        g.save(tmp_path / "graph.json")
+
+        mock_result = MagicMock()
+        mock_result.image_data = b"fake_png"
+        mock_result.content_type = "image/png"
+        mock_result.provider_metadata = {"quality": "placeholder"}
+
+        mock_provider = AsyncMock()
+        mock_provider.generate = AsyncMock(return_value=mock_result)
+
+        stage = DressStage(image_provider="placeholder")
+
+        with patch(
+            "questfoundry.pipeline.stages.dress.create_image_provider",
+            return_value=mock_provider,
+        ):
+            result = await stage.run_generate_only(tmp_path)
+
+        assert result.status == "completed"
+        assert "1 images generated" in result.detail
+
+        # Verify graph was saved with illustration node
+        reloaded = Graph.load(tmp_path)
+        assert reloaded.get_node("illustration::opening") is not None
+
+    @pytest.mark.asyncio()
+    async def test_raises_without_selection(self, tmp_path: Path) -> None:
+        """run_generate_only raises if no brief selection exists."""
+        g = Graph()
+        g.set_last_stage("dress")
+        g.save(tmp_path / "graph.json")
+
+        stage = DressStage(image_provider="placeholder")
+        with pytest.raises(DressStageError, match="No brief selection"):
+            await stage.run_generate_only(tmp_path)
+
+    @pytest.mark.asyncio()
+    async def test_respects_image_budget(self, tmp_path: Path) -> None:
+        """run_generate_only respects the image budget setting."""
+        g = Graph()
+        g.set_last_stage("dress")
+        g.create_node("art_direction::main", {"type": "art_direction", "style": "ink"})
+        for name, priority in [("a", 2), ("b", 1), ("c", 3)]:
+            bid = f"illustration_brief::{name}"
+            pid = f"passage::{name}"
+            g.create_node(
+                bid,
+                {
+                    "type": "illustration_brief",
+                    "priority": priority,
+                    "subject": name,
+                    "caption": name,
+                    "category": "scene",
+                    "entities": [],
+                },
+            )
+            g.create_node(pid, {"type": "passage"})
+            g.add_edge("targets", bid, pid)
+        g.upsert_node(
+            "dress_meta::selection",
+            {
+                "type": "dress_meta",
+                "selected_briefs": [
+                    "illustration_brief::a",
+                    "illustration_brief::b",
+                    "illustration_brief::c",
+                ],
+            },
+        )
+        g.save(tmp_path / "graph.json")
+
+        mock_result = MagicMock()
+        mock_result.image_data = b"fake"
+        mock_result.content_type = "image/png"
+        mock_result.provider_metadata = {"quality": "placeholder"}
+
+        mock_provider = AsyncMock()
+        mock_provider.generate = AsyncMock(return_value=mock_result)
+
+        stage = DressStage(image_provider="placeholder")
+        stage._image_budget = 1
+
+        with patch(
+            "questfoundry.pipeline.stages.dress.create_image_provider",
+            return_value=mock_provider,
+        ):
+            result = await stage.run_generate_only(tmp_path)
+
+        assert "1 images generated" in result.detail
+
+    @pytest.mark.asyncio()
+    async def test_calls_progress_callback(self, tmp_path: Path) -> None:
+        """run_generate_only calls the on_phase_progress callback."""
+        g = Graph()
+        g.set_last_stage("dress")
+        g.upsert_node(
+            "dress_meta::selection",
+            {"type": "dress_meta", "selected_briefs": []},
+        )
+        g.save(tmp_path / "graph.json")
+
+        stage = DressStage(image_provider="placeholder")
+        progress_calls: list[tuple[str, str, str | None]] = []
+
+        def _on_progress(phase: str, status: str, detail: str | None) -> None:
+            progress_calls.append((phase, status, detail))
+
+        await stage.run_generate_only(tmp_path, on_phase_progress=_on_progress)
+
+        assert len(progress_calls) == 1
+        assert progress_calls[0][0] == "generate"
+        assert progress_calls[0][1] == "completed"
