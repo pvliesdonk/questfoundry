@@ -564,7 +564,7 @@ class PipelineOrchestrator:
                 stage_kwargs["on_phase_progress"] = on_phase_progress
 
             # Stage-specific options
-            image_provider = context.get("image_provider") or self._get_resolved_image_provider()
+            image_provider = self._get_resolved_image_provider()
             if image_provider:
                 stage_kwargs["image_provider"] = image_provider
 
