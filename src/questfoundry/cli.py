@@ -289,6 +289,7 @@ def _get_orchestrator(
     provider_discuss_override: str | None = None,
     provider_summarize_override: str | None = None,
     provider_serialize_override: str | None = None,
+    image_provider_override: str | None = None,
 ) -> PipelineOrchestrator:
     """Get a pipeline orchestrator for the project.
 
@@ -298,6 +299,8 @@ def _get_orchestrator(
         provider_discuss_override: Optional provider override for discuss phase.
         provider_summarize_override: Optional provider override for summarize phase.
         provider_serialize_override: Optional provider override for serialize phase.
+        image_provider_override: Optional image provider override
+            (e.g., "openai/gpt-image-1", "placeholder").
 
     Returns:
         Configured PipelineOrchestrator.
@@ -310,6 +313,7 @@ def _get_orchestrator(
         provider_discuss_override=provider_discuss_override,
         provider_summarize_override=provider_summarize_override,
         provider_serialize_override=provider_serialize_override,
+        image_provider_override=image_provider_override,
         enable_llm_logging=_log_enabled,
     )
 
@@ -403,6 +407,7 @@ async def _run_stage_async(
     provider_discuss: str | None = None,
     provider_summarize: str | None = None,
     provider_serialize: str | None = None,
+    image_provider: str | None = None,
 ) -> StageResult:
     """Run a stage asynchronously and close orchestrator.
 
@@ -414,6 +419,7 @@ async def _run_stage_async(
         provider_discuss: Optional provider override for discuss phase.
         provider_summarize: Optional provider override for summarize phase.
         provider_serialize: Optional provider override for serialize phase.
+        image_provider: Optional image provider override for DRESS stage.
 
     Returns:
         StageResult from the stage execution.
@@ -425,6 +431,7 @@ async def _run_stage_async(
         provider_discuss_override=provider_discuss,
         provider_summarize_override=provider_summarize,
         provider_serialize_override=provider_serialize,
+        image_provider_override=image_provider,
     )
     log.debug("provider_configured", provider=f"{orchestrator.config.provider.name}")
     try:
@@ -550,6 +557,7 @@ def _run_stage_command(
                 provider_discuss,
                 provider_summarize,
                 provider_serialize,
+                image_provider,
             )
         )
     else:

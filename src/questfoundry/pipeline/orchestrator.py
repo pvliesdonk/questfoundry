@@ -115,6 +115,7 @@ class PipelineOrchestrator:
         provider_discuss_override: str | None = None,
         provider_summarize_override: str | None = None,
         provider_serialize_override: str | None = None,
+        image_provider_override: str | None = None,
         enable_llm_logging: bool = False,
     ) -> None:
         """Initialize the orchestrator.
@@ -128,6 +129,8 @@ class PipelineOrchestrator:
             provider_discuss_override: Optional provider override for discuss phase.
             provider_summarize_override: Optional provider override for summarize phase.
             provider_serialize_override: Optional provider override for serialize phase.
+            image_provider_override: Optional image provider override
+                (e.g., "openai/gpt-image-1", "placeholder").
             enable_llm_logging: If True, log LLM calls to logs/llm_calls.jsonl.
 
         Raises:
@@ -142,6 +145,11 @@ class PipelineOrchestrator:
             4. General env var (QF_PROVIDER)
             5. Phase-specific config (e.g., providers.discuss)
             6. Default config (providers.default)
+
+            Image provider resolution (opt-in, no default):
+            1. --image-provider CLI flag
+            2. QF_IMAGE_PROVIDER env var
+            3. providers.image config
         """
         self.project_path = project_path
         self._gate = gate or AutoApproveGate()
@@ -149,6 +157,7 @@ class PipelineOrchestrator:
         self._provider_discuss_override = provider_discuss_override
         self._provider_summarize_override = provider_summarize_override
         self._provider_serialize_override = provider_serialize_override
+        self._image_provider_override = image_provider_override
         self._enable_llm_logging = enable_llm_logging
 
         # Load configuration
@@ -349,6 +358,26 @@ class PipelineOrchestrator:
             or config_provider
         )
 
+    def _get_resolved_image_provider(self) -> str | None:
+        """Get the final resolved image provider string.
+
+        Image generation is opt-in — returns None if no provider is configured
+        at any level.
+
+        Precedence chain:
+        1. --image-provider CLI flag
+        2. QF_IMAGE_PROVIDER env var
+        3. providers.image config
+
+        Returns:
+            Image provider string (e.g., "openai/gpt-image-1") or None.
+        """
+        return (
+            self._image_provider_override
+            or os.environ.get("QF_IMAGE_PROVIDER")
+            or self.config.providers.get_image_provider()
+        )
+
     def _get_phase_model(
         self,
         phase: Literal["summarize", "serialize"],
@@ -535,7 +564,7 @@ class PipelineOrchestrator:
                 stage_kwargs["on_phase_progress"] = on_phase_progress
 
             # Stage-specific options
-            image_provider = context.get("image_provider")
+            image_provider = context.get("image_provider") or self._get_resolved_image_provider()
             if image_provider:
                 stage_kwargs["image_provider"] = image_provider
 
