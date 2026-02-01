@@ -210,6 +210,8 @@ class TestIllustrationBrief:
             entities=["entity::protagonist", "entity::aldric"],
             composition="wide shot, silhouetted against sunset",
             mood="tense, bittersweet",
+            style_overrides={},
+            negative="",
             caption="The bridge where loyalties shatter",
         )
         assert brief.priority == 1
@@ -223,8 +225,11 @@ class TestIllustrationBrief:
                 priority=4,
                 category="scene",
                 subject="subject",
+                entities=[],
                 composition="comp",
                 mood="mood",
+                style_overrides={},
+                negative="",
                 caption="caption",
             )
 
@@ -234,8 +239,11 @@ class TestIllustrationBrief:
                 priority=0,
                 category="scene",
                 subject="subject",
+                entities=[],
                 composition="comp",
                 mood="mood",
+                style_overrides={},
+                negative="",
                 caption="caption",
             )
 
@@ -244,11 +252,40 @@ class TestIllustrationBrief:
             priority=3,
             category="vista",
             subject="An empty battlefield",
+            entities=[],
             composition="panoramic",
             mood="somber",
+            style_overrides={},
+            negative="",
             caption="Where the silence speaks loudest",
         )
         assert brief.entities == []
+
+    def test_missing_entities_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            IllustrationBrief(
+                priority=1,
+                category="scene",
+                subject="subject",
+                composition="comp",
+                mood="mood",
+                style_overrides={},
+                negative="",
+                caption="caption",
+            )
+
+    def test_missing_caption_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            IllustrationBrief(
+                priority=1,
+                category="scene",
+                subject="subject",
+                entities=[],
+                composition="comp",
+                mood="mood",
+                style_overrides={},
+                negative="",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -292,44 +329,36 @@ class TestDressPhase0Output:
 
 
 class TestDressPhase1Output:
+    def _make_brief(self, **overrides: object) -> IllustrationBrief:
+        defaults: dict[str, object] = {
+            "priority": 1,
+            "category": "scene",
+            "subject": "subject",
+            "entities": [],
+            "composition": "comp",
+            "mood": "mood",
+            "style_overrides": {},
+            "negative": "",
+            "caption": "caption",
+        }
+        defaults.update(overrides)
+        return IllustrationBrief(**defaults)  # type: ignore[arg-type]
+
     def test_valid_phase1(self) -> None:
         output = DressPhase1Output(
-            brief=IllustrationBrief(
-                priority=1,
-                category="scene",
-                subject="subject",
-                composition="comp",
-                mood="mood",
-                caption="caption",
-            ),
+            brief=self._make_brief(),
             llm_adjustment=1,
         )
         assert output.llm_adjustment == 1
 
-    def test_default_adjustment(self) -> None:
-        output = DressPhase1Output(
-            brief=IllustrationBrief(
-                priority=2,
-                category="scene",
-                subject="subject",
-                composition="comp",
-                mood="mood",
-                caption="caption",
-            ),
-        )
-        assert output.llm_adjustment == 0
+    def test_missing_adjustment_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            DressPhase1Output(brief=self._make_brief())
 
     def test_adjustment_out_of_range(self) -> None:
         with pytest.raises(ValidationError):
             DressPhase1Output(
-                brief=IllustrationBrief(
-                    priority=1,
-                    category="scene",
-                    subject="subject",
-                    composition="comp",
-                    mood="mood",
-                    caption="caption",
-                ),
+                brief=self._make_brief(),
                 llm_adjustment=3,
             )
 

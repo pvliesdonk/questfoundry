@@ -125,6 +125,9 @@ class IllustrationBrief(BaseModel):
 
     One brief per passage. Only selected briefs are rendered into
     Illustration nodes during Phase 4.
+
+    All fields are required (no defaults) so that OpenAI strict JSON
+    schema mode can enforce the complete schema via JSON_MODE.
     """
 
     priority: int = Field(ge=1, le=3, description="1=must-have, 2=important, 3=nice-to-have")
@@ -133,17 +136,15 @@ class IllustrationBrief(BaseModel):
     )
     subject: str = Field(min_length=1, description="What the image depicts")
     entities: list[str] = Field(
-        default_factory=list,
         description="Entity IDs present in scene",
     )
-    composition: str = Field(min_length=1, description="Framing / camera notes")
+    caption: str = Field(min_length=1, description="Proposed diegetic caption")
     mood: str = Field(min_length=1, description="Emotional tone")
+    composition: str = Field(min_length=1, description="Framing / camera notes")
     style_overrides: dict[str, str] = Field(
-        default_factory=dict,
         description="Deviations from global art direction (usually empty)",
     )
-    negative: str = Field(default="", description="Things to avoid in this image")
-    caption: str = Field(min_length=1, description="Proposed diegetic caption")
+    negative: str = Field(description="Things to avoid in this image")
 
 
 # ---------------------------------------------------------------------------
@@ -168,7 +169,6 @@ class DressPhase1Output(BaseModel):
 
     brief: IllustrationBrief
     llm_adjustment: int = Field(
-        default=0,
         ge=-2,
         le=2,
         description="LLM priority adjustment (-2 to +2)",

@@ -61,7 +61,10 @@ from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
 from questfoundry.providers.image_openai import create_image_provider
-from questfoundry.providers.structured_output import with_structured_output
+from questfoundry.providers.structured_output import (
+    StructuredOutputStrategy,
+    with_structured_output,
+)
 from questfoundry.tools.langchain_tools import (
     get_all_research_tools,
     get_interactive_tools,
@@ -472,6 +475,7 @@ class DressStage:
         max_retries: int = 3,
         *,
         creative: bool = False,
+        strategy: StructuredOutputStrategy | None = None,
     ) -> tuple[T, int, int]:
         """Call LLM with structured output and retry on validation failure.
 
@@ -484,6 +488,8 @@ class DressStage:
             creative: Use the discuss-phase model (creative temperature) instead
                 of the serialize model. Enable for illustration briefs where
                 mood/caption diversity matters.
+            strategy: Override the default structured output strategy for this
+                call. If None, uses the provider-level default.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -510,7 +516,10 @@ class DressStage:
             effective_model = self._serialize_model or model
             effective_provider = self._serialize_provider_name or self._provider_name
         structured_model = with_structured_output(
-            effective_model, output_schema, provider_name=effective_provider
+            effective_model,
+            output_schema,
+            strategy=strategy,
+            provider_name=effective_provider,
         )
 
         messages: list[SystemMessage | HumanMessage] = [SystemMessage(content=system_text)]
@@ -630,7 +639,12 @@ class DressStage:
             }
 
             output, llm_calls, tokens = await self._dress_llm_call(
-                model, "dress_brief", context, DressPhase1Output, creative=True
+                model,
+                "dress_brief",
+                context,
+                DressPhase1Output,
+                creative=True,
+                strategy=StructuredOutputStrategy.JSON_MODE,
             )
             total_llm_calls += llm_calls
             total_tokens += tokens
