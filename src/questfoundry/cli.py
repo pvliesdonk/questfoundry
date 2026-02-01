@@ -1315,6 +1315,42 @@ def dress(
     )
 
 
+def _run_ship(
+    project_path: Path,
+    export_format: str = "twee",
+    output_dir: Path | None = None,
+) -> Path:
+    """Run SHIP stage and return the output file path.
+
+    Args:
+        project_path: Path to the project directory.
+        export_format: Export format name (json, twee, html).
+        output_dir: Custom output directory.
+
+    Returns:
+        Path to the exported file.
+
+    Raises:
+        typer.Exit: On ShipStageError.
+    """
+    from questfoundry.pipeline.stages.ship import ShipStage, ShipStageError
+
+    console.print()
+    console.print(f"[dim]Exporting story as {export_format}...[/dim]")
+
+    try:
+        stage = ShipStage(project_path)
+        output_file = stage.execute(export_format=export_format, output_dir=output_dir)
+    except ShipStageError as e:
+        console.print(f"\n[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+    console.print()
+    console.print(f"[green]✓[/green] SHIP stage completed ({export_format})")
+    console.print(f"  Output: [cyan]{output_file}[/cyan]")
+    return output_file
+
+
 @app.command()
 def ship(
     project: Annotated[
@@ -1338,7 +1374,7 @@ def ship(
         typer.Option(
             "--output",
             "-o",
-            help="Custom output directory (default: {project}/exports/{format}/).",
+            help="Custom output directory (default: PROJECT/exports/FORMAT/).",
         ),
     ] = None,
 ) -> None:
@@ -1354,8 +1390,6 @@ def ship(
 
     Requires FILL stage to have completed first (all passages need prose).
     """
-    from questfoundry.pipeline.stages.ship import ShipStage, ShipStageError
-
     project_path = _resolve_project_path(project)
     _require_project(project_path)
     _configure_project_logging(project_path)
@@ -1363,19 +1397,7 @@ def ship(
     log = get_logger(__name__)
     log.info("ship_cli_start", format=export_format)
 
-    console.print()
-    console.print(f"[dim]Exporting story as {export_format}...[/dim]")
-
-    try:
-        stage = ShipStage(project_path)
-        output_file = stage.execute(export_format=export_format, output_dir=output)
-    except ShipStageError as e:
-        console.print(f"\n[red]Error:[/red] {e}")
-        raise typer.Exit(1) from None
-
-    console.print()
-    console.print(f"[green]✓[/green] SHIP stage completed ({export_format})")
-    console.print(f"  Output: [cyan]{output_file}[/cyan]")
+    _run_ship(project_path, export_format=export_format, output_dir=output)
 
 
 @app.command("generate-images")
@@ -1636,22 +1658,12 @@ def run(
     for stage_name in stages_to_run:
         # SHIP is deterministic (no LLM) — handle separately
         if stage_name == "ship":
-            from questfoundry.pipeline.stages.ship import ShipStage, ShipStageError
-
-            console.print()
-            console.print("[dim]Exporting story as twee...[/dim]")
             try:
-                ship_stage = ShipStage(project_path)
-                output_file = ship_stage.execute(export_format="twee")
-            except ShipStageError as e:
-                console.print(f"\n[red]Error:[/red] {e}")
+                _run_ship(project_path, export_format="twee")
+            except typer.Exit:
                 console.print()
                 console.print("[red]Pipeline stopped at SHIP stage.[/red]")
-                raise typer.Exit(1) from None
-
-            console.print()
-            console.print("[green]✓[/green] SHIP stage completed (twee)")
-            console.print(f"  Output: [cyan]{output_file}[/cyan]")
+                raise
             continue
 
         default_interactive_prompt, default_noninteractive_prompt = STAGE_PROMPTS[stage_name]

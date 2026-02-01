@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from questfoundry.export import build_export_context, get_exporter
 from questfoundry.graph.graph import Graph
 from questfoundry.observability.logging import get_logger
-from questfoundry.pipeline.config import load_project_config
+from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -76,7 +76,11 @@ class ShipStage:
         if not passages:
             raise ShipStageError("Graph contains no passages — nothing to export.")
 
-        missing_prose = [pid for pid, data in passages.items() if not data.get("prose")]
+        missing_prose = [
+            pid
+            for pid, data in passages.items()
+            if not data.get("prose") or not str(data["prose"]).strip()
+        ]
         if missing_prose:
             raise ShipStageError(
                 f"{len(missing_prose)} passage(s) missing prose. "
@@ -87,7 +91,7 @@ class ShipStage:
         try:
             config = load_project_config(self._project_path)
             project_name = config.name
-        except Exception:
+        except (ProjectConfigError, FileNotFoundError, KeyError):
             project_name = self._project_path.name
 
         # Build export context

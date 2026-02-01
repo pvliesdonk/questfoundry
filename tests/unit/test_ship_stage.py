@@ -32,7 +32,7 @@ def _create_project_with_graph(project_path: Path, *, with_prose: bool = True) -
         {
             "type": "passage",
             "raw_id": "intro",
-            "prose": "You stand at the gates." if with_prose else "",
+            "prose": "You stand at the gates." if with_prose else None,
         },
     )
     g.create_node(
@@ -40,7 +40,7 @@ def _create_project_with_graph(project_path: Path, *, with_prose: bool = True) -
         {
             "type": "passage",
             "raw_id": "castle",
-            "prose": "You enter the castle." if with_prose else "",
+            "prose": "You enter the castle." if with_prose else None,
             "is_ending": True,
         },
     )
@@ -157,6 +157,26 @@ class TestShipStage:
         with pytest.raises(ShipStageError, match="Unknown export format"):
             stage.execute(export_format="pdf")
 
+    def test_whitespace_prose_raises(self, tmp_path: Path) -> None:
+        """Whitespace-only prose should be rejected."""
+        from ruamel.yaml import YAML
+
+        project = tmp_path / "my-story"
+        project.mkdir(parents=True, exist_ok=True)
+
+        yaml_writer = YAML()
+        config = {"name": "test", "version": "1.0", "providers": {"default": "ollama/test"}}
+        with (project / "project.yaml").open("w") as f:
+            yaml_writer.dump(config, f)
+
+        g = Graph()
+        g.create_node("passage::intro", {"type": "passage", "raw_id": "intro", "prose": "   "})
+        g.save(project / "graph.json")
+
+        stage = ShipStage(project)
+        with pytest.raises(ShipStageError, match="missing prose"):
+            stage.execute()
+
     def test_project_name_from_config(self, tmp_path: Path) -> None:
         project = tmp_path / "my-story"
         _create_project_with_graph(project)
@@ -168,3 +188,20 @@ class TestShipStage:
 
         data = json.loads(result.read_text())
         assert data["title"] == "test-story"
+
+    def test_project_name_fallback(self, tmp_path: Path) -> None:
+        """Project name falls back to directory name if config is missing."""
+        project = tmp_path / "my-fallback-story"
+        project.mkdir(parents=True, exist_ok=True)
+
+        g = Graph()
+        g.create_node("passage::intro", {"type": "passage", "raw_id": "intro", "prose": "Hello."})
+        g.save(project / "graph.json")
+
+        stage = ShipStage(project)
+        result = stage.execute(export_format="json")
+
+        import json
+
+        data = json.loads(result.read_text())
+        assert data["title"] == "my-fallback-story"
