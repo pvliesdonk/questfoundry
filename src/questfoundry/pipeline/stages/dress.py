@@ -823,13 +823,68 @@ class DressStage:
         )
 
     # -------------------------------------------------------------------------
+    # Public: standalone image generation
+    # -------------------------------------------------------------------------
+
+    async def run_generate_only(
+        self,
+        project_path: Path,
+        *,
+        image_budget: int = 0,
+        on_phase_progress: PhaseProgressFn | None = None,
+    ) -> DressPhaseResult:
+        """Run Phase 4 (image generation) only on an existing project.
+
+        Loads the graph, verifies brief selection exists, generates images,
+        and saves the updated graph.
+
+        Args:
+            project_path: Path to the project directory.
+            image_budget: Maximum number of images to generate (0 = unlimited).
+            on_phase_progress: Optional progress callback.
+
+        Returns:
+            DressPhaseResult from Phase 4.
+
+        Raises:
+            DressStageError: If no brief selection exists or project is invalid.
+        """
+        try:
+            graph = Graph.load(project_path)
+        except Exception as e:
+            raise DressStageError(
+                f"Failed to load graph from {project_path}. "
+                "Ensure 'qf dress' has been run successfully."
+            ) from e
+
+        selection = graph.get_node("dress_meta::selection")
+        if not selection:
+            raise DressStageError(
+                "No brief selection found in graph. "
+                "Run 'qf dress' first to generate briefs and selections."
+            )
+
+        self.project_path = project_path
+        self._image_budget = image_budget
+
+        result = await self._phase_4_generate(graph)
+
+        if result.status != "failed":
+            graph.save(project_path / "graph.json")
+
+        if on_phase_progress is not None:
+            on_phase_progress("generate", result.status, result.detail)
+
+        return result
+
+    # -------------------------------------------------------------------------
     # Phase 4: Image Generation
     # -------------------------------------------------------------------------
 
     async def _phase_4_generate(
         self,
         graph: Graph,
-        model: BaseChatModel,  # noqa: ARG002
+        model: BaseChatModel | None = None,  # noqa: ARG002
     ) -> DressPhaseResult:
         """Phase 4: Generate images for selected illustration briefs.
 

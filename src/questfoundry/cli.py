@@ -1311,6 +1311,108 @@ def dress(
     )
 
 
+@app.command("generate-images")
+def generate_images(
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    image_provider: Annotated[
+        str | None,
+        typer.Option(
+            "--image-provider",
+            help="Image provider (e.g., openai/gpt-image-1, placeholder).",
+        ),
+    ] = None,
+    image_budget: Annotated[
+        int,
+        typer.Option("--image-budget", help="Max images to generate (0=all selected briefs)."),
+    ] = 0,
+) -> None:
+    """Generate images for an existing DRESS project.
+
+    Runs only the image generation phase (Phase 4) of the DRESS stage.
+    Requires that 'qf dress' has already been run to create briefs
+    and selections.
+
+    The image provider is resolved in order: --image-provider flag,
+    QF_IMAGE_PROVIDER env var, providers.image in project.yaml.
+
+    Examples:
+        qf generate-images --project my-story --image-provider placeholder
+        qf generate-images -p my-story --image-provider openai/gpt-image-1 --image-budget 3
+    """
+    import os
+
+    from questfoundry.pipeline.config import load_project_config
+    from questfoundry.pipeline.stages.dress import DressStage, DressStageError
+
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+    _configure_project_logging(project_path)
+
+    log = get_logger(__name__)
+
+    # Resolve image provider: CLI flag → env var → project.yaml
+    resolved_provider = (
+        image_provider
+        or os.environ.get("QF_IMAGE_PROVIDER")
+        or load_project_config(project_path).providers.get_image_provider()
+    )
+
+    if not resolved_provider:
+        console.print(
+            "[red]Error:[/red] No image provider specified. "
+            "Use --image-provider, set QF_IMAGE_PROVIDER, "
+            "or add providers.image to project.yaml."
+        )
+        raise typer.Exit(1)
+
+    log.info(
+        "generate_images_start",
+        provider=resolved_provider,
+        budget=image_budget,
+    )
+
+    stage = DressStage(
+        project_path=project_path,
+        image_provider=resolved_provider,
+    )
+
+    def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
+        detail_str = f" ({detail})" if detail else ""
+        status_icon = "[green]✓[/green]" if status == "completed" else "[red]✗[/red]"
+        console.print(f"  {status_icon} {phase}{detail_str}")
+
+    console.print()
+    console.print(f"[dim]Generating images with {resolved_provider}...[/dim]")
+
+    try:
+        result = asyncio.run(
+            stage.run_generate_only(
+                project_path,
+                image_budget=image_budget,
+                on_phase_progress=_on_phase_progress,
+            )
+        )
+    except DressStageError as e:
+        console.print(f"\n[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+    console.print()
+    if result.status == "failed":
+        console.print(f"[red]✗[/red] Image generation failed: {result.detail}")
+        raise typer.Exit(1)
+
+    console.print(f"[green]✓[/green] Image generation complete: {result.detail}")
+    if _log_enabled:
+        console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
+
+
 @app.command()
 def run(
     to_stage: Annotated[
