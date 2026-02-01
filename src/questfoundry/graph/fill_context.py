@@ -185,13 +185,7 @@ def format_sliding_window(
             continue
         raw_id = pnode.get("raw_id", pid)
         lines.append(f"### {raw_id}")
-        # Truncate to first and last sentence to reduce token usage and
-        # limit self-plagiarism amplification from feeding full prose back.
-        sentences = [s.strip() for s in prose.split(".") if s.strip()]
-        if len(sentences) <= 2:
-            lines.append(prose)
-        else:
-            lines.append(f"{sentences[0]}. [...] {sentences[-1]}.")
+        lines.append(prose)
         lines.append("")
 
     return "\n".join(lines).strip() if lines else "(no previous passages)"
