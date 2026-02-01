@@ -408,7 +408,7 @@ class TestPhase4Generate:
         mock_result.image_data = b"fake_png_data"
         mock_result.content_type = "image/png"
 
-        mock_provider = AsyncMock()
+        mock_provider = AsyncMock(spec=["generate"])
         mock_provider.generate = AsyncMock(return_value=mock_result)
 
         stage = DressStage(project_path=tmp_path, image_provider="openai/gpt-image-1")
@@ -454,7 +454,7 @@ class TestPhase4Generate:
             {"type": "dress_meta", "selected_briefs": ["illustration_brief::fail"]},
         )
 
-        mock_provider = AsyncMock()
+        mock_provider = AsyncMock(spec=["generate"])
         mock_provider.generate = AsyncMock(
             side_effect=ImageProviderError("openai", "content policy")
         )
@@ -1119,7 +1119,7 @@ class TestRunGenerateOnly:
         mock_result.content_type = "image/png"
         mock_result.provider_metadata = {"quality": "placeholder"}
 
-        mock_provider = AsyncMock()
+        mock_provider = AsyncMock(spec=["generate"])
         mock_provider.generate = AsyncMock(return_value=mock_result)
 
         stage = DressStage(image_provider="placeholder")
@@ -1188,7 +1188,7 @@ class TestRunGenerateOnly:
         mock_result.content_type = "image/png"
         mock_result.provider_metadata = {"quality": "placeholder"}
 
-        mock_provider = AsyncMock()
+        mock_provider = AsyncMock(spec=["generate"])
         mock_provider.generate = AsyncMock(return_value=mock_result)
 
         stage = DressStage(image_provider="placeholder")
