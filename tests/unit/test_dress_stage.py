@@ -470,6 +470,122 @@ class TestPhase4Generate:
         assert "0 images generated, 1 failed" in result.detail
 
 
+class TestPhase4SkipExisting:
+    """Tests for skip-existing-illustrations behavior."""
+
+    def _make_graph_with_illustration(self) -> Graph:
+        """Create a graph where one brief already has an illustration."""
+        g = Graph()
+        g.create_node("art_direction::main", {"type": "art_direction", "style": "ink"})
+        g.create_node(
+            "illustration_brief::opening",
+            {
+                "type": "illustration_brief",
+                "subject": "Opening scene",
+                "composition": "Wide",
+                "mood": "ominous",
+                "entities": [],
+            },
+        )
+        g.create_node("passage::opening", {"type": "passage"})
+        g.add_edge("targets", "illustration_brief::opening", "passage::opening")
+        # Existing illustration for this brief
+        g.upsert_node(
+            "illustration::opening",
+            {"type": "illustration", "asset": "images/old.png", "quality": "low"},
+        )
+        g.add_edge("Depicts", "illustration::opening", "passage::opening")
+        g.add_edge("from_brief", "illustration::opening", "illustration_brief::opening")
+        g.upsert_node(
+            "dress_meta::selection",
+            {
+                "type": "dress_meta",
+                "selected_briefs": ["illustration_brief::opening"],
+            },
+        )
+        return g
+
+    @pytest.mark.asyncio()
+    async def test_skips_existing_illustrations(self, tmp_path: Path) -> None:
+        g = self._make_graph_with_illustration()
+
+        mock_provider = AsyncMock(spec=["generate"])
+        stage = DressStage(project_path=tmp_path, image_provider="a1111/test")
+
+        with patch(
+            "questfoundry.pipeline.stages.dress.create_image_provider",
+            return_value=mock_provider,
+        ):
+            result = await stage._phase_4_generate(g, MagicMock())
+
+        assert "already have illustrations" in result.detail
+        mock_provider.generate.assert_not_called()
+
+    @pytest.mark.asyncio()
+    async def test_force_regenerates_existing(self, tmp_path: Path) -> None:
+        g = self._make_graph_with_illustration()
+
+        mock_result = MagicMock()
+        mock_result.image_data = b"new_png"
+        mock_result.content_type = "image/png"
+        mock_result.provider_metadata = {"quality": "high"}
+
+        mock_provider = AsyncMock(spec=["generate"])
+        mock_provider.generate = AsyncMock(return_value=mock_result)
+
+        stage = DressStage(project_path=tmp_path, image_provider="a1111/test")
+        stage._force_regenerate = True
+
+        with patch(
+            "questfoundry.pipeline.stages.dress.create_image_provider",
+            return_value=mock_provider,
+        ):
+            result = await stage._phase_4_generate(g, MagicMock())
+
+        assert "1 images generated" in result.detail
+        mock_provider.generate.assert_called_once()
+
+    @pytest.mark.asyncio()
+    async def test_partial_skip(self, tmp_path: Path) -> None:
+        """One brief has illustration, another doesn't — only new one generated."""
+        g = self._make_graph_with_illustration()
+
+        # Add a second brief WITHOUT an illustration
+        g.create_node(
+            "illustration_brief::climax",
+            {
+                "type": "illustration_brief",
+                "subject": "Climax scene",
+                "composition": "Close-up",
+                "mood": "intense",
+                "entities": [],
+            },
+        )
+        g.create_node("passage::climax", {"type": "passage"})
+        g.add_edge("targets", "illustration_brief::climax", "passage::climax")
+        selection = g.get_node("dress_meta::selection")
+        selection["selected_briefs"].append("illustration_brief::climax")
+
+        mock_result = MagicMock()
+        mock_result.image_data = b"new_png"
+        mock_result.content_type = "image/png"
+        mock_result.provider_metadata = {"quality": "high"}
+
+        mock_provider = AsyncMock(spec=["generate"])
+        mock_provider.generate = AsyncMock(return_value=mock_result)
+
+        stage = DressStage(project_path=tmp_path, image_provider="a1111/test")
+
+        with patch(
+            "questfoundry.pipeline.stages.dress.create_image_provider",
+            return_value=mock_provider,
+        ):
+            result = await stage._phase_4_generate(g, MagicMock())
+
+        assert "1 images generated" in result.detail
+        mock_provider.generate.assert_called_once()
+
+
 # ---------------------------------------------------------------------------
 # Checkpoints
 # ---------------------------------------------------------------------------

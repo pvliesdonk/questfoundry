@@ -833,6 +833,7 @@ class DressStage:
         project_path: Path,
         *,
         image_budget: int = 0,
+        force: bool = False,
         on_phase_progress: PhaseProgressFn | None = None,
     ) -> DressPhaseResult:
         """Run Phase 4 (image generation) only on an existing project.
@@ -843,6 +844,7 @@ class DressStage:
         Args:
             project_path: Path to the project directory.
             image_budget: Maximum number of images to generate (0 = unlimited).
+            force: If True, regenerate images even if illustrations already exist.
             on_phase_progress: Optional progress callback.
 
         Returns:
@@ -868,6 +870,7 @@ class DressStage:
 
         self.project_path = project_path
         self._image_budget = image_budget
+        self._force_regenerate = force
 
         result = await self._phase_4_generate(graph)
 
@@ -929,6 +932,35 @@ class DressStage:
                 budget=self._image_budget,
                 selected=len(selected_ids),
             )
+
+        # Skip briefs that already have illustrations (unless --force)
+        if not getattr(self, "_force_regenerate", False):
+            from questfoundry.graph.context import strip_scope_prefix
+
+            already_generated = []
+            for bid in selected_ids:
+                targets = graph.get_edges(from_id=bid, edge_type="targets")
+                if targets:
+                    passage_id = targets[0]["to"]
+                    illust_id = f"illustration::{strip_scope_prefix(passage_id)}"
+                    if graph.has_node(illust_id):
+                        already_generated.append(bid)
+            if already_generated:
+                log.info(
+                    "skipped_existing_illustrations",
+                    count=len(already_generated),
+                    total=len(selected_ids),
+                )
+                selected_ids = [b for b in selected_ids if b not in already_generated]
+            if not selected_ids:
+                return DressPhaseResult(
+                    phase="generate",
+                    status="completed",
+                    detail=(
+                        f"all {len(already_generated)} briefs already have "
+                        "illustrations (use --force to regenerate)"
+                    ),
+                )
 
         if self.project_path is None:
             raise DressStageError("project_path is required for image generation")
