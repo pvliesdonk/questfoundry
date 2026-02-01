@@ -49,4 +49,9 @@ def create_image_provider(
             return OpenAIImageProvider(model=model, **kwargs)
         return OpenAIImageProvider(**kwargs)
 
+    if provider_lower == "a1111":
+        from questfoundry.providers.image_a1111 import A1111ImageProvider
+
+        return A1111ImageProvider(model=model, **kwargs)
+
     raise ImageProviderError(provider_lower, f"Unknown image provider: {provider_lower}")
