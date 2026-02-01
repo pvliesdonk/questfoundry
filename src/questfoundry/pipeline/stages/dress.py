@@ -131,6 +131,7 @@ class DressStage:
         self._summarize_model: BaseChatModel | None = None
         self._user_prompt: str = ""
         self._image_provider_spec: str | None = image_provider
+        self._image_budget: int = 0
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -232,6 +233,7 @@ class DressStage:
         self._unload_after_summarize = kwargs.get("unload_after_summarize")
         if image_provider is not None:
             self._image_provider_spec = image_provider
+        self._image_budget = kwargs.get("image_budget", 0)
 
         log.info("stage_start", stage="dress")
 
@@ -856,6 +858,15 @@ class DressStage:
                 detail="no briefs selected",
             )
 
+        # Apply budget: select top N briefs by priority (1 first, then 2, then 3)
+        if self._image_budget > 0 and len(selected_ids) > self._image_budget:
+            selected_ids = _apply_image_budget(graph, selected_ids, self._image_budget)
+            log.info(
+                "image_budget_applied",
+                budget=self._image_budget,
+                selected=len(selected_ids),
+            )
+
         if self.project_path is None:
             raise DressStageError("project_path is required for image generation")
 
@@ -911,6 +922,39 @@ class DressStage:
             status="completed",
             detail=f"{generated} images generated, {failed} failed",
         )
+
+
+# -------------------------------------------------------------------------
+# Budget helpers
+# -------------------------------------------------------------------------
+
+
+def _apply_image_budget(
+    graph: Graph,
+    brief_ids: list[str],
+    budget: int,
+) -> list[str]:
+    """Select top N briefs by priority for image generation.
+
+    Sorts briefs by priority (1=must-have first), then by ID for
+    stable ordering. Returns at most ``budget`` brief IDs.
+
+    Args:
+        graph: Story graph containing brief nodes.
+        brief_ids: All selected brief IDs.
+        budget: Maximum number of briefs to keep.
+
+    Returns:
+        List of brief IDs, at most ``budget`` items.
+    """
+
+    def _brief_priority(bid: str) -> tuple[int, str]:
+        node = graph.get_node(bid)
+        priority = node.get("priority", 3) if node else 3
+        return (priority, bid)
+
+    sorted_ids = sorted(brief_ids, key=_brief_priority)
+    return sorted_ids[:budget]
 
 
 # -------------------------------------------------------------------------

@@ -567,6 +567,9 @@ class PipelineOrchestrator:
             image_provider = self._get_resolved_image_provider()
             if image_provider:
                 stage_kwargs["image_provider"] = image_provider
+            image_budget = context.get("image_budget", 0)
+            if image_budget > 0:
+                stage_kwargs["image_budget"] = image_budget
 
             # Resolve size profile from DREAM vision node (for post-DREAM stages)
             if stage_name != "dream":
