@@ -24,7 +24,7 @@ system: |
   - Consider how the medium affects mood (watercolor = dreamlike, ink = stark, etc.)
   - Entity visuals must be specific enough to maintain consistency across images
   - Include distinguishing features and color associations for each entity
-  - The reference_prompt_fragment for each entity should describe APPEARANCE ONLY (clothing, colors, build, distinguishing features — no camera angles, framing, or action poses)
+  - The reference_prompt_fragment for each entity should describe APPEARANCE ONLY (clothing, colors, build, distinguishing features — no camera angles, framing, poses, or actions)
   - Think about what should be AVOIDED globally (photorealism for a stylized story, etc.)
   {mode_section}
 

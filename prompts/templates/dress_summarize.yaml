@@ -15,7 +15,7 @@ system: |
     - Physical description
     - Distinguishing features
     - Color associations
-    - A concise reference prompt fragment for image generation (appearance only — no camera angles or action poses)
+    - A concise reference prompt fragment for image generation (appearance only — no camera angles, framing, poses, or actions)
 
   ## Guidelines
   - Extract concrete decisions, not vague ideas
