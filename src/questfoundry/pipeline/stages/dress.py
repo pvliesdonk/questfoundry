@@ -971,8 +971,11 @@ class DressStage:
             )
             prepared.append((brief_id, positive, negative, brief_data))
 
-        # Free VRAM between LLM distillation and image generation
-        if distiller is not None and model is not None:
+        # Free VRAM between LLM distillation and image generation.
+        # Only unload when the provider actually used an LLM for distillation
+        # (e.g., A1111 with llm= set). Rule-based distillers don't load VRAM.
+        used_llm = getattr(provider, "_llm", None) is not None
+        if used_llm and model is not None:
             from questfoundry.providers.factory import unload_ollama_model
 
             await unload_ollama_model(model)
