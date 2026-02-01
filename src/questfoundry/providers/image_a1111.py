@@ -139,25 +139,18 @@ _PUNCT_SPLIT = re.compile(r"[;.]+")
 def _condense_to_tags(text: str) -> str:
     """Strip articles, prepositions and filler from prose, return comma-tags.
 
-    Splits on semicolons/periods into separate tag groups, then removes
-    filler words and collapses whitespace within each group.
+    Normalises semicolons/periods to commas, then removes filler words
+    and collapses whitespace within each tag.
     """
     if not text or not text.strip():
         return ""
-    # Split on semicolons and periods into groups
-    groups = _PUNCT_SPLIT.split(text)
-    result_parts: list[str] = []
-    for group in groups:
-        # Split on commas to get sub-tags
-        sub_tags = [t.strip() for t in group.split(",")]
-        cleaned: list[str] = []
-        for tag in sub_tags:
-            words = tag.split()
-            kept = [w for w in words if w.lower() not in _STRIP_WORDS]
-            if kept:
-                cleaned.append(" ".join(kept))
-        result_parts.extend(cleaned)
-    return ", ".join(result_parts)
+    # Normalise all separators to commas, then process each tag
+    normalised = _PUNCT_SPLIT.sub(",", text)
+    tags = (
+        " ".join(w for w in tag.strip().split() if w.lower() not in _STRIP_WORDS)
+        for tag in normalised.split(",")
+    )
+    return ", ".join(filter(None, tags))
 
 
 def _truncate_words(text: str, limit: int) -> str:
@@ -246,7 +239,11 @@ class A1111ImageProvider:
 
     @staticmethod
     def _build_sd15_prompt(brief: ImageBrief, entities: list[str]) -> str:
-        """Build a flat SD 1.5 prompt (~60 words), subject-first."""
+        """Build a flat SD 1.5 prompt (~60 words), subject-first.
+
+        SD 1.5 CLIP has a 77-token window; ~1.25 tokens per word gives
+        ~60 words.  SDXL uses 55 words per chunk (2 x 77-token encoders).
+        """
         parts: list[str] = []
 
         # Subject first — most important for CLIP

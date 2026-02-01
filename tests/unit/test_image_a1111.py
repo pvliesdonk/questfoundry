@@ -372,9 +372,10 @@ class TestCondenseToTags:
             "and prismatic lens flares for mythic objects"
         )
         result = _condense_to_tags(text)
-        # Filler words stripped
-        assert "with" not in result.split(", ")
-        assert "occasional" not in result.lower().split(", ")
+        # Filler words stripped (case-insensitive check for all)
+        lower_tags = result.lower().split(", ")
+        assert "with" not in lower_tags
+        assert "occasional" not in lower_tags
         # Content preserved
         assert "clean vector shapes" in result
         assert "chrome highlights" in result
