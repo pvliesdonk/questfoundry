@@ -948,10 +948,11 @@ def _create_cover_brief(graph: Graph) -> bool:
     Returns:
         True if cover brief was created, False if insufficient data.
     """
-    vision = graph.get_node("vision")
-    if not vision:
+    vision_nodes = graph.get_nodes_by_type("vision")
+    if not vision_nodes:
         log.debug("cover_skipped", reason="no vision node")
         return False
+    vision = next(iter(vision_nodes.values()))
 
     art_dir = graph.get_node("art_direction::main")
 
@@ -962,7 +963,13 @@ def _create_cover_brief(graph: Graph) -> bool:
     tone_str = ", ".join(tone) if isinstance(tone, list) else str(tone)
     themes_str = ", ".join(themes) if isinstance(themes, list) else str(themes)
 
-    subject = f"Cover image for a {genre} story. Tone: {tone_str}. Themes: {themes_str}."
+    # Build subject from non-empty parts
+    parts = [f"Cover image for a {genre} story"]
+    if tone_str:
+        parts.append(f"Tone: {tone_str}")
+    if themes_str:
+        parts.append(f"Themes: {themes_str}")
+    subject = ". ".join(parts) + "."
 
     # Build mood from art direction or vision
     mood = tone_str if tone_str else "evocative"
@@ -977,10 +984,15 @@ def _create_cover_brief(graph: Graph) -> bool:
     # Style overrides from art direction
     style_overrides = ""
     if art_dir:
+        style_parts = []
         style = art_dir.get("style", "")
         medium = art_dir.get("medium", "")
-        if style or medium:
-            style_overrides = f"Style: {style}. Medium: {medium}."
+        if style:
+            style_parts.append(f"Style: {style}")
+        if medium:
+            style_parts.append(f"Medium: {medium}")
+        if style_parts:
+            style_overrides = ". ".join(style_parts) + "."
 
     brief_data = {
         "category": "vista",
