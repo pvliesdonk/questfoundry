@@ -88,6 +88,26 @@ T = TypeVar("T", bound=BaseModel)
 
 log = get_logger(__name__)
 
+# Aspect ratios supported by all image providers.
+_VALID_ASPECT_RATIOS = {"1:1", "16:9", "9:16", "3:2", "2:3"}
+
+
+def _parse_aspect_ratio(raw: str) -> str:
+    """Extract a valid aspect ratio from an LLM-generated string.
+
+    The art_direction node may contain verbose text like
+    ``"16:9 (story panels), 4:5 (character plates)"`` instead of a
+    clean ratio.  This function extracts the first token that matches
+    a provider-supported ratio, falling back to ``"16:9"``.
+    """
+    import re
+
+    for match in re.finditer(r"\b(\d+:\d+)\b", raw):
+        if match.group(1) in _VALID_ASPECT_RATIOS:
+            return match.group(1)
+    log.warning("invalid_aspect_ratio", raw=raw, fallback="16:9")
+    return "16:9"
+
 
 def _get_prompts_path() -> Path:
     """Get the prompts directory path."""
@@ -968,7 +988,7 @@ class DressStage:
         provider = create_image_provider(self._image_provider_spec, llm=model)
         asset_mgr = AssetManager(self.project_path)
         art_dir = graph.get_node("art_direction::main") or {}
-        aspect_ratio = art_dir.get("aspect_ratio", "16:9")
+        aspect_ratio = _parse_aspect_ratio(art_dir.get("aspect_ratio", "16:9"))
 
         generated = 0
         failed = 0
@@ -1355,7 +1375,7 @@ def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
         art_medium=art_dir.get("medium") or None,
         palette=art_dir.get("palette", []),
         negative_defaults=art_dir.get("negative_defaults") or None,
-        aspect_ratio=art_dir.get("aspect_ratio", "16:9"),
+        aspect_ratio=_parse_aspect_ratio(art_dir.get("aspect_ratio", "16:9")),
         category=brief.get("category", "scene"),
     )
 

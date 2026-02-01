@@ -470,6 +470,38 @@ class TestPhase4Generate:
         assert "0 images generated, 1 failed" in result.detail
 
 
+class TestParseAspectRatio:
+    """Tests for _parse_aspect_ratio helper."""
+
+    def test_clean_ratio(self) -> None:
+        from questfoundry.pipeline.stages.dress import _parse_aspect_ratio
+
+        assert _parse_aspect_ratio("16:9") == "16:9"
+
+    def test_verbose_llm_output(self) -> None:
+        from questfoundry.pipeline.stages.dress import _parse_aspect_ratio
+
+        raw = "16:9 (story panels), 4:5 (character plates), 21:9 (chases)"
+        assert _parse_aspect_ratio(raw) == "16:9"
+
+    def test_unsupported_ratio_skipped(self) -> None:
+        from questfoundry.pipeline.stages.dress import _parse_aspect_ratio
+
+        # 4:5 is not supported, should skip to 9:16 which is
+        assert _parse_aspect_ratio("4:5, 9:16") == "9:16"
+
+    def test_no_valid_ratio_falls_back(self) -> None:
+        from questfoundry.pipeline.stages.dress import _parse_aspect_ratio
+
+        assert _parse_aspect_ratio("widescreen cinematic") == "16:9"
+
+    def test_all_valid_ratios(self) -> None:
+        from questfoundry.pipeline.stages.dress import _parse_aspect_ratio
+
+        for ratio in ("1:1", "16:9", "9:16", "3:2", "2:3"):
+            assert _parse_aspect_ratio(ratio) == ratio
+
+
 class TestPhase4SkipExisting:
     """Tests for skip-existing-illustrations behavior."""
 
