@@ -90,7 +90,7 @@ class ShipStage:
 
         # Get story title: graph (from FILL) → project config → directory name
         vision = graph.get_node("vision::main")
-        story_title = (vision or {}).get("story_title", "")
+        story_title = (vision or {}).get("story_title") or ""
         if not story_title:
             try:
                 config = load_project_config(self._project_path)

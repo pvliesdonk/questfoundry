@@ -277,6 +277,17 @@ class TestFillPhase0Output:
         with pytest.raises(ValidationError):
             FillPhase0Output(voice=voice, story_title="")
 
+    def test_whitespace_only_title_rejected(self) -> None:
+        voice = VoiceDocument(
+            pov="first",
+            tense="past",
+            voice_register="sparse",
+            sentence_rhythm="punchy",
+            tone_words=["terse"],
+        )
+        with pytest.raises(ValidationError):
+            FillPhase0Output(voice=voice, story_title="   ")
+
 
 class TestFillPhase1Output:
     def test_wraps_passage_output(self) -> None:
