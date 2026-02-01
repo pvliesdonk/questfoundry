@@ -60,6 +60,8 @@ from questfoundry.models.dress import (
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
+from questfoundry.providers.image import PromptDistiller
+from questfoundry.providers.image_brief import ImageBrief, flatten_brief_to_prompt
 from questfoundry.providers.image_factory import create_image_provider
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
@@ -939,6 +941,13 @@ class DressStage:
         generated = 0
         failed = 0
 
+        # Resolve distiller once; used for logging and dispatch.
+        distiller: PromptDistiller | None = (
+            provider if isinstance(provider, PromptDistiller) else None
+        )
+
+        # --- Pass 1: build briefs and distill prompts ----------------------
+        prepared: list[tuple[str, str, str | None, dict[str, Any]]] = []
         for brief_id in selected_ids:
             brief_data = graph.get_node(brief_id)
             if not brief_data:
@@ -946,8 +955,24 @@ class DressStage:
                 failed += 1
                 continue
 
-            positive, negative = assemble_image_prompt(graph, brief_data)
+            image_brief = build_image_brief(graph, brief_data)
 
+            if distiller is not None:
+                positive, negative = await distiller.distill_prompt(image_brief)
+            else:
+                positive, negative = flatten_brief_to_prompt(image_brief)
+
+            log.debug(
+                "image_prompt_distilled",
+                brief_id=brief_id,
+                positive_len=len(positive),
+                negative_len=len(negative or ""),
+                distilled=distiller is not None,
+            )
+            prepared.append((brief_id, positive, negative, brief_data))
+
+        # --- Pass 2: generate images (GPU-only, LLM no longer needed) -----
+        for brief_id, positive, negative, brief_data in prepared:
             try:
                 result = await provider.generate(
                     positive,
@@ -1252,28 +1277,23 @@ def describe_priority_context(graph: Graph, passage_id: str, base_score: int) ->
 # ---------------------------------------------------------------------------
 
 
-def assemble_image_prompt(
-    graph: Graph,
-    brief: dict[str, Any],
-) -> tuple[str, str | None]:
-    """Build positive + negative prompt from brief + art direction + entity visuals.
+def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
+    """Build a structured :class:`ImageBrief` from graph nodes.
 
-    Combines entity reference fragments, subject, composition, mood, and
-    global art direction into a single positive prompt. Negative prompt
-    merges brief-specific and global negatives.
+    Gathers entity visual fragments, art direction, and brief fields
+    into a typed intermediate representation consumed by image providers.
 
     Args:
         graph: Story graph containing art direction and entity visual nodes.
         brief: IllustrationBrief data dict.
 
     Returns:
-        Tuple of (positive_prompt, negative_prompt_or_None).
+        Populated :class:`ImageBrief`.
     """
     from questfoundry.graph.context import strip_scope_prefix
 
     art_dir = graph.get_node("art_direction::main") or {}
 
-    # Entity visual fragments for consistency
     entity_fragments: list[str] = []
     for eid in brief.get("entities", []):
         raw_eid = strip_scope_prefix(eid)
@@ -1283,23 +1303,35 @@ def assemble_image_prompt(
             if frag:
                 entity_fragments.append(frag)
 
-    palette = art_dir.get("palette", [])
-    palette_str = ", ".join(palette) + " palette" if palette else ""
+    return ImageBrief(
+        subject=brief.get("subject", ""),
+        composition=brief.get("composition", ""),
+        mood=brief.get("mood", ""),
+        negative=brief.get("negative") or None,
+        style_overrides=brief.get("style_overrides") or None,
+        entity_fragments=entity_fragments,
+        art_style=art_dir.get("style") or None,
+        art_medium=art_dir.get("medium") or None,
+        palette=art_dir.get("palette", []),
+        negative_defaults=art_dir.get("negative_defaults") or None,
+        aspect_ratio=art_dir.get("aspect_ratio", "16:9"),
+        category=brief.get("category", "scene"),
+    )
 
-    positive_parts = [
-        " and ".join(entity_fragments) if entity_fragments else "",
-        brief.get("subject", ""),
-        brief.get("composition", ""),
-        brief.get("mood", ""),
-        f"{art_dir.get('style', '')}, {art_dir.get('medium', '')} style".strip(", "),
-        palette_str,
-    ]
-    positive = ", ".join(p for p in positive_parts if p)
 
-    negative_parts = [
-        brief.get("negative", ""),
-        art_dir.get("negative_defaults", ""),
-    ]
-    negative = ", ".join(n for n in negative_parts if n)
+def assemble_image_prompt(
+    graph: Graph,
+    brief: dict[str, Any],
+) -> tuple[str, str | None]:
+    """Build positive + negative prompt strings from brief + graph data.
 
-    return positive, negative or None
+    Convenience wrapper: builds an :class:`ImageBrief` then flattens it.
+
+    Args:
+        graph: Story graph containing art direction and entity visual nodes.
+        brief: IllustrationBrief data dict.
+
+    Returns:
+        Tuple of (positive_prompt, negative_prompt_or_None).
+    """
+    return flatten_brief_to_prompt(build_image_brief(graph, brief))
