@@ -60,7 +60,7 @@ from questfoundry.models.dress import (
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
-from questfoundry.providers.image_openai import create_image_provider
+from questfoundry.providers.image_factory import create_image_provider
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
     with_structured_output,

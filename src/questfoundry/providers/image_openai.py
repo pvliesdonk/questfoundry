@@ -204,33 +204,3 @@ class OpenAIImageProvider:
             raise ImageProviderError("openai", f"API error (HTTP {status}): {error}") from error
 
         raise ImageProviderError("openai", f"Image generation failed: {error}") from error
-
-
-def create_image_provider(
-    provider_spec: str,
-    **kwargs: Any,
-) -> OpenAIImageProvider:
-    """Factory: create an image provider from a spec string.
-
-    Args:
-        provider_spec: Format ``provider/model`` (e.g., ``openai/gpt-image-1``).
-        **kwargs: Additional provider options.
-
-    Returns:
-        Configured image provider.
-
-    Raises:
-        ImageProviderError: If provider is unknown.
-    """
-    if "/" in provider_spec:
-        provider, model = provider_spec.split("/", 1)
-    else:
-        provider = provider_spec
-        model = "gpt-image-1"
-
-    provider_lower = provider.lower()
-
-    if provider_lower == "openai":
-        return OpenAIImageProvider(model=model, **kwargs)
-
-    raise ImageProviderError(provider_lower, f"Unknown image provider: {provider_lower}")

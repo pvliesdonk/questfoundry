@@ -236,7 +236,7 @@ class TestOpenAIImageProvider:
 
 class TestCreateImageProvider:
     def test_openai_with_model(self) -> None:
-        from questfoundry.providers.image_openai import create_image_provider
+        from questfoundry.providers.image_factory import create_image_provider
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
             provider = create_image_provider("openai/gpt-image-1")
@@ -245,7 +245,7 @@ class TestCreateImageProvider:
         assert provider._model == "gpt-image-1"
 
     def test_openai_default_model(self) -> None:
-        from questfoundry.providers.image_openai import create_image_provider
+        from questfoundry.providers.image_factory import create_image_provider
 
         with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
             provider = create_image_provider("openai")
@@ -253,7 +253,7 @@ class TestCreateImageProvider:
         assert provider._model == "gpt-image-1"
 
     def test_unknown_provider_raises(self) -> None:
-        from questfoundry.providers.image_openai import create_image_provider
+        from questfoundry.providers.image_factory import create_image_provider
 
         with pytest.raises(ImageProviderError, match="Unknown image provider"):
             create_image_provider("midjourney/v6")
