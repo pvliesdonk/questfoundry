@@ -11,6 +11,7 @@ import pytest
 
 from questfoundry.providers.image import ImageProviderConnectionError, ImageProviderError
 from questfoundry.providers.image_a1111 import _ASPECT_RATIO_TO_SIZE, A1111ImageProvider
+from questfoundry.providers.image_brief import ImageBrief
 
 
 def _fake_response(
@@ -254,6 +255,112 @@ class TestA1111Provider:
             await provider.aclose()
 
         mock_close.assert_called_once()
+
+
+class TestA1111DistillPrompt:
+    """Tests for PromptDistiller implementation."""
+
+    def _make_brief(self, **overrides: object) -> ImageBrief:
+        defaults = {
+            "subject": "Battle scene in courtyard",
+            "composition": "Wide shot, low angle, golden hour lighting",
+            "mood": "epic and foreboding",
+            "art_style": "watercolor",
+            "art_medium": "traditional paper",
+            "entity_fragments": ["tall warrior, scarred face"],
+            "palette": ["crimson", "gold"],
+            "negative": "modern elements",
+            "negative_defaults": "photorealism",
+        }
+        defaults.update(overrides)
+        return ImageBrief(**defaults)
+
+    def test_conforms_to_prompt_distiller(self) -> None:
+        from questfoundry.providers.image import PromptDistiller
+
+        provider = A1111ImageProvider(host="http://localhost:7860")
+        assert isinstance(provider, PromptDistiller)
+
+    @pytest.mark.asyncio()
+    async def test_rule_based_tag_order(self) -> None:
+        """Style/medium should come before subject in SD prompts."""
+        provider = A1111ImageProvider(host="http://localhost:7860")
+        brief = self._make_brief()
+        positive, negative = await provider.distill_prompt(brief)
+
+        # Style anchors should appear before subject
+        style_pos = positive.find("watercolor")
+        subject_pos = positive.find("Battle scene")
+        assert style_pos < subject_pos, "Style should precede subject for CLIP priority"
+
+        assert negative is not None
+        assert "modern elements" in negative
+        assert "photorealism" in negative
+
+    @pytest.mark.asyncio()
+    async def test_rule_based_truncation(self) -> None:
+        """Prompts exceeding ~60 words should be truncated."""
+        long_composition = " ".join(f"word{i}" for i in range(80))
+        provider = A1111ImageProvider(host="http://localhost:7860")
+        brief = self._make_brief(composition=long_composition)
+        positive, _ = await provider.distill_prompt(brief)
+
+        word_count = len(positive.split())
+        assert word_count <= 60
+
+    @pytest.mark.asyncio()
+    async def test_rule_based_no_art_direction(self) -> None:
+        provider = A1111ImageProvider(host="http://localhost:7860")
+        brief = self._make_brief(art_style=None, art_medium=None, palette=[])
+        positive, _ = await provider.distill_prompt(brief)
+
+        assert "Battle scene" in positive
+        assert "watercolor" not in positive
+
+    @pytest.mark.asyncio()
+    async def test_rule_based_includes_style_overrides(self) -> None:
+        provider = A1111ImageProvider(host="http://localhost:7860")
+        brief = self._make_brief(style_overrides="darker palette")
+        positive, _ = await provider.distill_prompt(brief)
+        assert "darker palette" in positive
+
+    @pytest.mark.asyncio()
+    async def test_llm_distillation(self) -> None:
+        mock_llm = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.content = "watercolor, warrior battle, courtyard, epic, golden hour"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+
+        provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
+        brief = self._make_brief()
+        positive, negative = await provider.distill_prompt(brief)
+
+        assert positive == "watercolor, warrior battle, courtyard, epic, golden hour"
+        mock_llm.ainvoke.assert_called_once()
+
+        # Negative still passed through directly
+        assert negative is not None
+        assert "modern elements" in negative
+
+    @pytest.mark.asyncio()
+    async def test_no_llm_falls_back_to_rule_based(self) -> None:
+        provider = A1111ImageProvider(host="http://localhost:7860")
+        assert provider._llm is None
+        brief = self._make_brief()
+        positive, _ = await provider.distill_prompt(brief)
+        # Should still produce valid output via rule-based path
+        assert "watercolor" in positive
+        assert "Battle scene" in positive
+
+    def test_factory_passes_llm(self) -> None:
+        from questfoundry.providers.image_factory import create_image_provider
+
+        mock_llm = AsyncMock()
+        provider = create_image_provider(
+            "a1111/dreamshaper_8", host="http://localhost:7860", llm=mock_llm
+        )
+        assert isinstance(provider, A1111ImageProvider)
+        assert provider._llm is mock_llm
 
 
 class TestA1111FactoryRouting:

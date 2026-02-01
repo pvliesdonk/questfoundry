@@ -264,3 +264,66 @@ class TestCreateImageProvider:
         assert _ASPECT_RATIO_TO_SIZE["1:1"] == "1024x1024"
         assert _ASPECT_RATIO_TO_SIZE["16:9"] == "1792x1024"
         assert _ASPECT_RATIO_TO_SIZE["9:16"] == "1024x1792"
+
+
+# ---------------------------------------------------------------------------
+# OpenAI PromptDistiller
+# ---------------------------------------------------------------------------
+
+
+class TestOpenAIDistillPrompt:
+    @pytest.mark.asyncio()
+    async def test_formats_as_prose(self) -> None:
+        from questfoundry.providers.image import PromptDistiller
+        from questfoundry.providers.image_brief import ImageBrief
+        from questfoundry.providers.image_openai import (
+            OpenAIImageProvider as _OpenAI,
+        )
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            provider = _OpenAI()
+
+        assert isinstance(provider, PromptDistiller)
+
+        brief = ImageBrief(
+            subject="Battle in the courtyard",
+            composition="Wide shot, low angle",
+            mood="epic",
+            art_style="oil painting",
+            art_medium="canvas",
+            entity_fragments=["tall warrior, scarred face"],
+            palette=["crimson", "gold"],
+            negative="gore",
+            negative_defaults="photorealism",
+        )
+
+        positive, negative = await provider.distill_prompt(brief)
+
+        assert "Battle in the courtyard" in positive
+        assert "Composition: Wide shot, low angle" in positive
+        assert "Style: oil painting" in positive
+        assert "tall warrior, scarred face" in positive
+        assert "Palette: crimson, gold" in positive
+        assert negative is not None
+        assert "gore" in negative
+        assert "photorealism" in negative
+
+    @pytest.mark.asyncio()
+    async def test_includes_style_overrides(self) -> None:
+        from questfoundry.providers.image_brief import ImageBrief
+        from questfoundry.providers.image_openai import (
+            OpenAIImageProvider as _OpenAI,
+        )
+
+        with patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}):
+            provider = _OpenAI()
+
+        brief = ImageBrief(
+            subject="Storm",
+            composition="",
+            mood="",
+            style_overrides="darker and grittier",
+        )
+
+        positive, _ = await provider.distill_prompt(brief)
+        assert "darker and grittier" in positive

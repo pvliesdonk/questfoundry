@@ -886,7 +886,7 @@ class DressStage:
     async def _phase_4_generate(
         self,
         graph: Graph,
-        model: BaseChatModel | None = None,  # noqa: ARG002
+        model: BaseChatModel | None = None,
     ) -> DressPhaseResult:
         """Phase 4: Generate images for selected illustration briefs.
 
@@ -933,7 +933,7 @@ class DressStage:
         if self.project_path is None:
             raise DressStageError("project_path is required for image generation")
 
-        provider = create_image_provider(self._image_provider_spec)
+        provider = create_image_provider(self._image_provider_spec, llm=model)
         asset_mgr = AssetManager(self.project_path)
         art_dir = graph.get_node("art_direction::main") or {}
         aspect_ratio = art_dir.get("aspect_ratio", "16:9")
@@ -970,6 +970,15 @@ class DressStage:
                 distilled=distiller is not None,
             )
             prepared.append((brief_id, positive, negative, brief_data))
+
+        # Free VRAM between LLM distillation and image generation.
+        # Only unload when the provider actually used an LLM for distillation
+        # (e.g., A1111 with llm= set). Rule-based distillers don't load VRAM.
+        used_llm = getattr(provider, "_llm", None) is not None
+        if used_llm and model is not None:
+            from questfoundry.providers.factory import unload_ollama_model
+
+            await unload_ollama_model(model)
 
         # --- Pass 2: generate images (GPU-only, LLM no longer needed) -----
         for brief_id, positive, negative, brief_data in prepared:

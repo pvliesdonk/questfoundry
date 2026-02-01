@@ -19,6 +19,8 @@ from questfoundry.providers.image import (
 if TYPE_CHECKING:
     from openai import AsyncOpenAI
 
+    from questfoundry.providers.image_brief import ImageBrief
+
 log = get_logger(__name__)
 
 # Aspect ratio → OpenAI size mapping
@@ -82,6 +84,41 @@ class OpenAIImageProvider:
                 "openai", "openai package not installed. Run: uv add openai"
             ) from e
         return _AsyncOpenAI(api_key=self._api_key)
+
+    # -- PromptDistiller implementation ------------------------------------
+
+    async def distill_prompt(self, brief: ImageBrief) -> tuple[str, str | None]:
+        """Format a structured brief as natural-language prose for DALL-E.
+
+        DALL-E 3 and gpt-image-1 handle prose paragraphs well, so this
+        keeps the full detail rather than condensing to tags.
+        """
+        parts: list[str] = []
+
+        if brief.entity_fragments:
+            parts.append("; ".join(brief.entity_fragments))
+        parts.append(brief.subject)
+        if brief.composition:
+            parts.append(f"Composition: {brief.composition}")
+        if brief.mood:
+            parts.append(f"Mood: {brief.mood}")
+        if brief.art_style:
+            parts.append(f"Style: {brief.art_style}")
+        if brief.art_medium:
+            parts.append(f"Medium: {brief.art_medium}")
+        if brief.style_overrides:
+            parts.append(brief.style_overrides)
+        if brief.palette:
+            parts.append(f"Palette: {', '.join(brief.palette)}")
+
+        prompt = "\n".join(p for p in parts if p)
+
+        negative = brief.negative
+        if brief.negative_defaults:
+            negative = (
+                f"{negative}, {brief.negative_defaults}" if negative else brief.negative_defaults
+            )
+        return prompt, negative or None
 
     async def generate(
         self,
