@@ -37,6 +37,11 @@ def create_image_provider(
 
     provider_lower = provider.lower()
 
+    if provider_lower == "placeholder":
+        from questfoundry.providers.image_placeholder import PlaceholderImageProvider
+
+        return PlaceholderImageProvider(**kwargs)
+
     if provider_lower == "openai":
         from questfoundry.providers.image_openai import OpenAIImageProvider
 
