@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 from pydantic import ValidationError
 
@@ -329,8 +331,8 @@ class TestDressPhase0Output:
 
 
 class TestDressPhase1Output:
-    def _make_brief(self, **overrides: object) -> IllustrationBrief:
-        defaults: dict[str, object] = {
+    def _make_brief(self, **overrides: Any) -> IllustrationBrief:
+        defaults: dict[str, Any] = {
             "priority": 1,
             "category": "scene",
             "subject": "subject",
@@ -342,7 +344,7 @@ class TestDressPhase1Output:
             "caption": "caption",
         }
         defaults.update(overrides)
-        return IllustrationBrief(**defaults)  # type: ignore[arg-type]
+        return IllustrationBrief(**defaults)
 
     def test_valid_phase1(self) -> None:
         output = DressPhase1Output(

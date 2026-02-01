@@ -126,8 +126,9 @@ class IllustrationBrief(BaseModel):
     One brief per passage. Only selected briefs are rendered into
     Illustration nodes during Phase 4.
 
-    All fields are required (no defaults) so that OpenAI strict JSON
-    schema mode can enforce the complete schema via JSON_MODE.
+    All fields are required (no defaults) so that JSON_MODE (json_schema)
+    enforces the complete schema. The TOOL strategy (function_calling) on
+    OpenAI models allowed caption to be omitted ~50% of the time.
     """
 
     priority: int = Field(ge=1, le=3, description="1=must-have, 2=important, 3=nice-to-have")
