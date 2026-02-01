@@ -380,8 +380,8 @@ class TestA1111DistillPrompt:
 
         call_args = mock_llm.ainvoke.call_args[0][0]
         system_msg = call_args[0].content
-        assert "40 tags" in system_msg
-        assert "HARD LIMIT" in system_msg
+        assert "40" in system_msg
+        assert "TAG BUDGET" in system_msg
         assert "subject" in system_msg.lower()
 
     @pytest.mark.asyncio()

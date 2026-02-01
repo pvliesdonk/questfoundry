@@ -99,6 +99,14 @@ def _resolve_preset(model: str | None) -> _A1111Preset:
     return _SD15_PRESET
 
 
+def _truncate_tags(text: str, limit: int) -> str:
+    """Truncate a comma-separated tag string to at most *limit* tags."""
+    tags = [t.strip() for t in text.split(",") if t.strip()]
+    if len(tags) <= limit:
+        return text
+    return ", ".join(tags[:limit])
+
+
 class A1111ImageProvider:
     """Image provider using Automatic1111 Stable Diffusion WebUI.
 
@@ -188,43 +196,54 @@ class A1111ImageProvider:
         tag_limit = 75 if is_xl else 40
         if is_xl:
             format_instruction = (
-                "Use EXACTLY this format:\n"
-                "<scene tags> BREAK <style tags>\n"
-                "Scene: subject, entities, composition, mood.\n"
-                "Style: art style, medium, palette, quality boosters."
+                "FORMAT: <scene tags> BREAK <style tags>\n"
+                "Scene chunk: subject + key entities + one composition tag + mood.\n"
+                "Style chunk: art style, medium, palette, quality boosters.\n"
+                "Scene chunk: ~50 tags. Style chunk: ~20 tags."
             )
             example = (
-                "Example output:\n"
-                "warrior on bridge, scarred face, jade pendant, wide shot, golden hour, "
-                "epic BREAK watercolor, traditional paper, crimson gold palette, "
-                "masterpiece, best quality\n"
-                "Negative example:\n"
-                "photorealism, modern elements, text, watermark"
+                "EXAMPLE (13 tags total — this is the right length):\n"
+                "warrior on bridge, scarred face, jade pendant, wide shot, "
+                "golden hour, epic BREAK watercolor, traditional paper, "
+                "crimson gold palette, masterpiece, best quality\n"
+                "blurry, text, watermark, deformed hands"
             )
         else:
             format_instruction = (
-                "Single flat line of tags. "
+                "FORMAT: Single flat line of tags.\n"
                 "Order: subject, entities, composition, style, mood, palette."
             )
             example = (
-                "Example output:\n"
+                "EXAMPLE (8 tags total — this is the right length):\n"
                 "warrior on bridge, scarred face, wide shot, watercolor, "
-                "epic mood, crimson gold palette\n"
-                "Negative example:\n"
-                "photorealism, modern elements, text, watermark"
+                "epic mood, crimson gold palette, masterpiece, best quality\n"
+                "blurry, text, watermark, deformed hands"
             )
 
         system_msg = (
-            "You are a Stable Diffusion prompt engineer. "
-            "Convert the brief below into SD tags.\n\n"
+            f"TAG BUDGET: {tag_limit} tags. You MUST use FEWER than {tag_limit}. "
+            "Anything beyond this is silently discarded by SD CLIP.\n\n"
+            "You are a Stable Diffusion prompt distiller. The brief below is "
+            "REFERENCE MATERIAL, not a checklist. Most of it must be discarded. "
+            "Your job is to extract only the visually essential elements.\n\n"
+            "PRIORITY TIERS (spend your tag budget here):\n"
+            "1. Subject — what is in the image (5-8 tags)\n"
+            "2. Key entities — most important 1-2 characters/objects (3-5 tags)\n"
+            "3. Composition — ONE camera/framing tag only (1 tag)\n"
+            "4. Style/medium — art style and medium (2-4 tags)\n"
+            "5. Mood/palette — only if budget remains (1-3 tags)\n"
+            "6. Quality boosters — masterpiece, best quality (1-2 tags)\n\n"
+            "DROP EVERYTHING ELSE. No backstory. No lighting details beyond one "
+            "word. No spatial relationships. No abstract concepts.\n\n"
             "RULES:\n"
-            f"- HARD LIMIT: {tag_limit} tags maximum. SD CLIP ignores everything beyond this.\n"
-            "- Each tag is a short comma-separated phrase (1-4 words).\n"
-            "- Strip all prose, articles, prepositions. Tags only.\n"
-            "- Output ONLY tags on line 1 (positive) and line 2 (negative). "
-            "No labels, no explanation.\n"
+            "- Each tag is 1-4 words, comma-separated.\n"
+            "- No prose, no articles, no prepositions, no sentences.\n"
+            "- Output EXACTLY two lines. Line 1: positive. Line 2: negative.\n"
+            "- No labels, no explanation, no commentary.\n"
             f"- {format_instruction}\n\n"
-            f"{example}"
+            f"{example}\n\n"
+            f"REMINDER: {tag_limit} tag budget. Count before you answer. "
+            "Shorter is better. Aim for 60-70% of budget, not 100%."
         )
 
         from langchain_core.messages import HumanMessage, SystemMessage
@@ -245,6 +264,11 @@ class A1111ImageProvider:
                 positive = positive[len(prefix) :].strip()
             if negative and negative.startswith(prefix):
                 negative = negative[len(prefix) :].strip()
+
+        # Hard-truncate to CLIP token limits — LLMs routinely overshoot.
+        positive = _truncate_tags(positive, tag_limit)
+        if negative:
+            negative = _truncate_tags(negative, 30)
 
         return positive, negative or None
 
