@@ -17,10 +17,8 @@ from questfoundry.providers.image import (
     ImageProviderError,
     ImageResult,
 )
-from questfoundry.providers.image_openai import (
-    OpenAIImageProvider,
-    create_image_provider,
-)
+from questfoundry.providers.image_factory import create_image_provider
+from questfoundry.providers.image_openai import OpenAIImageProvider
 from questfoundry.providers.model_info import (
     ModelInfo,
     get_model_info,
