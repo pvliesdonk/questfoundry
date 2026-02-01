@@ -10,7 +10,10 @@ import hashlib
 import struct
 import zlib
 
+from questfoundry.observability.logging import get_logger
 from questfoundry.providers.image import ImageResult
+
+log = get_logger(__name__)
 
 # Aspect ratio → (width, height) for placeholder images.
 # Kept small to minimize memory/disk usage during testing.
@@ -36,7 +39,7 @@ _PALETTE: list[tuple[int, int, int]] = [
 def _make_png(width: int, height: int, r: int, g: int, b: int) -> bytes:
     """Generate a minimal solid-color PNG in pure Python.
 
-    Creates an uncompressed RGB PNG with no filtering.
+    Creates a compressed RGB PNG with no filtering.
     Not optimized for size — these are throwaway test images.
 
     Args:
@@ -111,8 +114,9 @@ class PlaceholderImageProvider:
             ImageResult with a solid-color PNG and ``quality="placeholder"``
             in provider_metadata.
         """
-        size = _ASPECT_RATIO_TO_SIZE.get(aspect_ratio, _ASPECT_RATIO_TO_SIZE["1:1"])
-        width, height = size
+        if aspect_ratio not in _ASPECT_RATIO_TO_SIZE:
+            log.warning("unknown_aspect_ratio", aspect_ratio=aspect_ratio, fallback="1:1")
+        width, height = _ASPECT_RATIO_TO_SIZE.get(aspect_ratio, _ASPECT_RATIO_TO_SIZE["1:1"])
 
         # Deterministic color from prompt hash
         idx = int(hashlib.md5(prompt.encode()).hexdigest(), 16) % len(_PALETTE)
