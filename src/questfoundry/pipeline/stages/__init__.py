@@ -39,6 +39,7 @@ from questfoundry.pipeline.stages.seed import (
     create_seed_stage,
     seed_stage,
 )
+from questfoundry.pipeline.stages.ship import ShipStage, ShipStageError
 
 # Register built-in stages
 register_stage(dream_stage)
@@ -60,6 +61,8 @@ __all__ = [
     "GrowStageError",
     "SeedStage",
     "SeedStageError",
+    "ShipStage",
+    "ShipStageError",
     "Stage",
     "brainstorm_stage",
     "create_brainstorm_stage",
