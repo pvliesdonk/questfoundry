@@ -42,11 +42,11 @@ system: |
   - category: One of "scene", "portrait", "vista", "item_detail"
   - subject: What the image depicts (concise description)
   - entities: List of entity IDs present in the image (raw IDs, no scope prefix)
-  - composition: Framing and camera notes
-  - mood: Emotional tone of the image
-  - style_overrides: Dict of deviations from global art direction (usually empty)
-  - negative: Things to avoid in this specific image (beyond global negatives)
   - caption: Proposed diegetic caption in the story's voice
+  - mood: Emotional tone of the image
+  - composition: Framing and camera notes (2-4 sentences)
+  - style_overrides: Dict of string deviations from global art direction (usually empty)
+  - negative: Things to avoid in this specific image (1-2 sentences; empty string if none)
 
   **llm_adjustment**: Integer from -2 to +2 adjusting priority based on narrative importance.
     - +2: Pivotal scene that defines the story visually
