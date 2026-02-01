@@ -599,7 +599,7 @@ def test_seed_no_prompt_noninteractive_uses_default(tmp_path: Path) -> None:
 
 def test_stage_order_constant() -> None:
     """Test STAGE_ORDER contains expected stages in order."""
-    assert STAGE_ORDER == ["dream", "brainstorm", "seed", "grow", "fill", "dress"]
+    assert STAGE_ORDER == ["dream", "brainstorm", "seed", "grow", "fill", "dress", "ship"]
 
 
 def test_stage_prompts_has_all_stages() -> None:
@@ -1115,9 +1115,9 @@ def test_run_help_shows_phase_provider_flags() -> None:
 
     assert result.exit_code == 0
     assert "--provider-discuss" in output
-    # Rich may truncate long option names in help
-    assert "--provider-summari" in output or "--provider-summarize" in output
-    assert "--provider-seriali" in output or "--provider-serialize" in output
+    # Rich may truncate long option names with ellipsis depending on column width
+    assert "--provider-summar" in output
+    assert "--provider-serial" in output
 
 
 # --- Run --init Tests ---
