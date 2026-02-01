@@ -156,35 +156,75 @@ class A1111ImageProvider:
         return await self._distill_with_llm(brief)
 
     async def _distill_with_llm(self, brief: ImageBrief) -> tuple[str, str | None]:
-        """Use an LLM to condense the brief into SD-optimised tags."""
+        """Use an LLM to condense the brief into SD-optimised tags.
+
+        SD CLIP has a hard token window — anything beyond it is silently
+        ignored. SD 1.5: ~77 tokens (~40 tags). SDXL: ~150 tokens (~75 tags
+        across two chunks separated by BREAK).
+        """
         assert self._llm is not None  # guaranteed by caller
         is_xl = self._preset is _SDXL_PRESET
         entity_cap = 3 if is_xl else 2
         capped_entities = brief.entity_fragments[:entity_cap]
 
         brief_text = (
-            f"Style: {brief.art_style or 'not specified'}\n"
-            f"Medium: {brief.art_medium or 'not specified'}\n"
             f"Subject: {brief.subject}\n"
             f"Composition: {brief.composition}\n"
             f"Mood: {brief.mood}\n"
             f"Entities: {'; '.join(capped_entities) if capped_entities else 'none'}\n"
+            f"Style: {brief.art_style or 'not specified'}\n"
+            f"Medium: {brief.art_medium or 'not specified'}\n"
             f"Palette: {', '.join(brief.palette) if brief.palette else 'not specified'}\n"
         )
         if brief.style_overrides:
             brief_text += f"Style overrides: {brief.style_overrides}\n"
 
-        word_limit = 110 if is_xl else 60
-        break_instruction = (
-            " For SDXL, separate scene content from style with BREAK." if is_xl else ""
+        negative_raw = ", ".join(
+            n for n in [brief.negative or "", brief.negative_defaults or ""] if n
         )
+        if negative_raw:
+            brief_text += f"Negative: {negative_raw}\n"
+
+        tag_limit = 75 if is_xl else 40
+        if is_xl:
+            format_instruction = (
+                "Use EXACTLY this format:\n"
+                "<scene tags> BREAK <style tags>\n"
+                "Scene: subject, entities, composition, mood.\n"
+                "Style: art style, medium, palette, quality boosters."
+            )
+            example = (
+                "Example output:\n"
+                "warrior on bridge, scarred face, jade pendant, wide shot, golden hour, "
+                "epic BREAK watercolor, traditional paper, crimson gold palette, "
+                "masterpiece, best quality\n"
+                "Negative example:\n"
+                "photorealism, modern elements, text, watermark"
+            )
+        else:
+            format_instruction = (
+                "Single flat line of tags. "
+                "Order: subject, entities, composition, style, mood, palette."
+            )
+            example = (
+                "Example output:\n"
+                "warrior on bridge, scarred face, wide shot, watercolor, "
+                "epic mood, crimson gold palette\n"
+                "Negative example:\n"
+                "photorealism, modern elements, text, watermark"
+            )
+
         system_msg = (
-            "You are a Stable Diffusion prompt engineer. Condense the "
-            "following image brief into comma-separated SD tags. "
-            "Output ONLY the tags, no explanation. "
-            f"Maximum {word_limit} words. "
-            "Put subject first, then entities, then composition. "
-            f"Style/medium goes last.{break_instruction}"
+            "You are a Stable Diffusion prompt engineer. "
+            "Convert the brief below into SD tags.\n\n"
+            "RULES:\n"
+            f"- HARD LIMIT: {tag_limit} tags maximum. SD CLIP ignores everything beyond this.\n"
+            "- Each tag is a short comma-separated phrase (1-4 words).\n"
+            "- Strip all prose, articles, prepositions. Tags only.\n"
+            "- Output ONLY tags on line 1 (positive) and line 2 (negative). "
+            "No labels, no explanation.\n"
+            f"- {format_instruction}\n\n"
+            f"{example}"
         )
 
         from langchain_core.messages import HumanMessage, SystemMessage
@@ -192,13 +232,20 @@ class A1111ImageProvider:
         response = await self._llm.ainvoke(
             [SystemMessage(content=system_msg), HumanMessage(content=brief_text)]
         )
-        positive = (
-            response.content.strip() if hasattr(response, "content") else str(response).strip()
-        )
+        raw = response.content.strip() if hasattr(response, "content") else str(response).strip()
 
-        # Negative prompt — pass through as-is (SD native)
-        negative_parts = [brief.negative or "", brief.negative_defaults or ""]
-        negative = ", ".join(n for n in negative_parts if n)
+        # Parse two-line output: line 1 = positive, line 2 = negative
+        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
+        positive = lines[0] if lines else raw
+        negative = lines[1] if len(lines) > 1 else None
+
+        # Strip any accidental labels the LLM may prepend
+        for prefix in ("Positive:", "positive:", "Negative:", "negative:"):
+            if positive.startswith(prefix):
+                positive = positive[len(prefix) :].strip()
+            if negative and negative.startswith(prefix):
+                negative = negative[len(prefix) :].strip()
+
         return positive, negative or None
 
     async def generate(
@@ -248,7 +295,8 @@ class A1111ImageProvider:
             host=self._host,
             model=self._model,
             size=f"{width}x{height}",
-            prompt_preview=prompt[:80],
+            positive_prompt=prompt,
+            negative_prompt=negative_prompt or "",
         )
 
         try:

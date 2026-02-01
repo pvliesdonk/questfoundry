@@ -367,8 +367,8 @@ class TestA1111DistillPrompt:
             await provider.distill_prompt(brief)
 
     @pytest.mark.asyncio()
-    async def test_llm_system_prompt_subject_first(self) -> None:
-        """LLM distiller should instruct subject-first ordering."""
+    async def test_llm_system_prompt_tag_limit(self) -> None:
+        """SD 1.5 distiller should enforce 40-tag limit."""
         mock_llm = AsyncMock()
         mock_response = AsyncMock()
         mock_response.content = "warrior battle, courtyard, epic, watercolor"
@@ -378,18 +378,18 @@ class TestA1111DistillPrompt:
         brief = self._make_brief()
         await provider.distill_prompt(brief)
 
-        # Check the system message content
         call_args = mock_llm.ainvoke.call_args[0][0]
         system_msg = call_args[0].content
-        assert "subject first" in system_msg.lower()
-        assert "style/medium goes last" in system_msg.lower()
+        assert "40 tags" in system_msg
+        assert "HARD LIMIT" in system_msg
+        assert "subject" in system_msg.lower()
 
     @pytest.mark.asyncio()
     async def test_llm_sdxl_break_instruction(self) -> None:
-        """SDXL LLM distiller should mention BREAK."""
+        """SDXL LLM distiller should mention BREAK and 75-tag limit."""
         mock_llm = AsyncMock()
         mock_response = AsyncMock()
-        mock_response.content = "scene BREAK style"
+        mock_response.content = "scene tags BREAK style tags"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
         provider = A1111ImageProvider(model="sdxl_base", host="http://localhost:7860", llm=mock_llm)
@@ -399,7 +399,7 @@ class TestA1111DistillPrompt:
         call_args = mock_llm.ainvoke.call_args[0][0]
         system_msg = call_args[0].content
         assert "BREAK" in system_msg
-        assert "110" in system_msg
+        assert "75 tags" in system_msg
 
     @pytest.mark.asyncio()
     async def test_llm_entity_cap(self) -> None:
@@ -420,10 +420,14 @@ class TestA1111DistillPrompt:
         assert "frag4" not in human_msg
 
     @pytest.mark.asyncio()
-    async def test_llm_distillation(self) -> None:
+    async def test_llm_distillation_two_line_output(self) -> None:
+        """LLM returns positive on line 1, negative on line 2."""
         mock_llm = AsyncMock()
         mock_response = AsyncMock()
-        mock_response.content = "warrior battle, courtyard, epic, watercolor, golden hour"
+        mock_response.content = (
+            "warrior battle, courtyard, epic, watercolor, golden hour\n"
+            "photorealism, modern elements, text"
+        )
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
         provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
@@ -431,11 +435,56 @@ class TestA1111DistillPrompt:
         positive, negative = await provider.distill_prompt(brief)
 
         assert positive == "warrior battle, courtyard, epic, watercolor, golden hour"
+        assert negative == "photorealism, modern elements, text"
         mock_llm.ainvoke.assert_called_once()
 
-        # Negative still passed through directly
-        assert negative is not None
-        assert "modern elements" in negative
+    @pytest.mark.asyncio()
+    async def test_llm_distillation_single_line_output(self) -> None:
+        """LLM returns only positive — negative is None."""
+        mock_llm = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.content = "warrior battle, courtyard, epic, watercolor"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+
+        provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
+        brief = self._make_brief()
+        positive, negative = await provider.distill_prompt(brief)
+
+        assert positive == "warrior battle, courtyard, epic, watercolor"
+        assert negative is None
+
+    @pytest.mark.asyncio()
+    async def test_llm_strips_labels(self) -> None:
+        """LLM output with 'Positive:' / 'Negative:' labels gets stripped."""
+        mock_llm = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.content = (
+            "Positive: warrior, courtyard, watercolor\nNegative: photorealism, text"
+        )
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+
+        provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
+        brief = self._make_brief()
+        positive, negative = await provider.distill_prompt(brief)
+
+        assert positive == "warrior, courtyard, watercolor"
+        assert negative == "photorealism, text"
+
+    @pytest.mark.asyncio()
+    async def test_llm_receives_negative_in_brief(self) -> None:
+        """Negative prompt text is included in the brief sent to the LLM."""
+        mock_llm = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.content = "tags\nbad things"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+
+        provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
+        brief = self._make_brief(negative="blurry", negative_defaults="text, watermark")
+        await provider.distill_prompt(brief)
+
+        human_msg = mock_llm.ainvoke.call_args[0][0][1].content
+        assert "blurry" in human_msg
+        assert "text, watermark" in human_msg
 
     def test_factory_passes_llm(self) -> None:
         from questfoundry.providers.image_factory import create_image_provider

@@ -1017,8 +1017,9 @@ class DressStage:
             log.debug(
                 "image_prompt_distilled",
                 brief_id=brief_id,
-                positive_len=len(positive),
-                negative_len=len(negative or ""),
+                positive_prompt=positive,
+                negative_prompt=negative or "",
+                positive_words=len(positive.split()),
                 distilled=distiller is not None,
             )
             prepared.append((brief_id, positive, negative, brief_data))
