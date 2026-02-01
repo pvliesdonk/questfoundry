@@ -223,6 +223,11 @@ def _render_codex_passage(codex_entries: list[ExportCodexEntry]) -> list[str]:
     return lines
 
 
+def _escape_sugarcube(text: str) -> str:
+    """Escape SugarCube macro delimiters to prevent unintended execution."""
+    return text.replace("<<", "&lt;&lt;").replace(">>", "&gt;&gt;")
+
+
 def _render_art_direction_passage(art_direction: dict[str, Any]) -> list[str]:
     """Render art direction as a metadata-only passage.
 
@@ -231,5 +236,7 @@ def _render_art_direction_passage(art_direction: dict[str, Any]) -> list[str]:
     """
     lines = [':: StoryArtDirection {"position":"0,0","size":"100,100"}']
     for key, value in sorted(art_direction.items()):
-        lines.append(f"{key}: {value}")
+        safe_key = _escape_sugarcube(str(key))
+        safe_value = _escape_sugarcube(str(value))
+        lines.append(f"{safe_key}: {safe_value}")
     return lines

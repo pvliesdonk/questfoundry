@@ -69,7 +69,9 @@ class HtmlExporter:
         if context.codex_entries:
             codex_html = _render_codex_panel(context.codex_entries)
 
-        # Build art direction meta tag
+        # Build art direction meta tag.
+        # json.dumps() serializes to JSON, then html.escape() escapes any
+        # HTML-special chars (<, >, &, ", ') for safe embedding in an attribute.
         art_direction_meta = ""
         if context.art_direction:
             art_direction_meta = f'<meta name="art-direction" content="{html.escape(json.dumps(context.art_direction))}">'
@@ -115,10 +117,12 @@ def _render_passage_div(
 
     # Illustration
     if illustration is not None:
+        parts.append("  <figure>")
         parts.append(
-            f'  <figure><img src="{html.escape(illustration.asset_path)}" alt="{html.escape(illustration.caption)}" />'
+            f'    <img src="{html.escape(illustration.asset_path)}" alt="{html.escape(illustration.caption)}" />'
         )
-        parts.append(f"  <figcaption>{html.escape(illustration.caption)}</figcaption></figure>")
+        parts.append(f"    <figcaption>{html.escape(illustration.caption)}</figcaption>")
+        parts.append("  </figure>")
 
     # Prose
     parts.append(f'  <div class="prose">{prose_escaped}</div>')
@@ -154,6 +158,8 @@ def _render_codex_panel(codex_entries: list[ExportCodexEntry]) -> str:
     parts = ['<div id="codex" class="codex-panel">']
     parts.append("  <h2>Codex</h2>")
     for entry in sorted_entries:
+        # json.dumps() handles quoting/escaping of codeword values,
+        # html.escape() makes the JSON safe inside an HTML attribute.
         visible_attr = ""
         if entry.visible_when:
             visible_attr = f' data-visible-when="{html.escape(json.dumps(entry.visible_when))}"'

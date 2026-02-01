@@ -87,6 +87,21 @@ class TestBundleAssets:
         assert (output / "assets" / "a.png").read_bytes() == b"aaa"
         assert (output / "assets" / "b.png").read_bytes() == b"bbb"
 
+    def test_path_traversal_rejected(self, tmp_path: Path) -> None:
+        """Asset paths that resolve outside the project are skipped."""
+        project = tmp_path / "project"
+        project.mkdir()
+        outside = tmp_path / "secret"
+        outside.mkdir()
+        (outside / "passwd.txt").write_bytes(b"secret")
+
+        output = tmp_path / "output"
+        ill = _make_illustration(asset_path="../secret/passwd.txt")
+        copied = bundle_assets([ill], project, output)
+
+        assert copied == 0
+        assert not (output / ".." / "secret" / "passwd.txt").exists()
+
     def test_partial_missing(self, tmp_path: Path) -> None:
         """When some assets exist and some don't, copies what it can."""
         project = tmp_path / "project"

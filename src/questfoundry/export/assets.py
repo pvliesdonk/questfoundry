@@ -36,14 +36,19 @@ def bundle_assets(
         Number of assets successfully copied.
     """
     copied = 0
+    project_resolved = project_path.resolve()
     for ill in illustrations:
         src = project_path / ill.asset_path
-        if not src.exists():
+        src_resolved = src.resolve()
+        if not src_resolved.is_relative_to(project_resolved):
+            log.warning("asset_outside_project", path=str(src), passage=ill.passage_id)
+            continue
+        if not src_resolved.exists():
             log.warning("asset_missing", path=str(src), passage=ill.passage_id)
             continue
         dest = output_dir / ill.asset_path
         dest.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(src, dest)
+        shutil.copy2(src_resolved, dest)
         copied += 1
 
     if copied:
