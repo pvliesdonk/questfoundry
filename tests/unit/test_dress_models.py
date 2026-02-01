@@ -212,13 +212,13 @@ class TestIllustrationBrief:
             entities=["entity::protagonist", "entity::aldric"],
             composition="wide shot, silhouetted against sunset",
             mood="tense, bittersweet",
-            style_overrides={},
+            style_overrides="",
             negative="",
             caption="The bridge where loyalties shatter",
         )
         assert brief.priority == 1
         assert len(brief.entities) == 2
-        assert brief.style_overrides == {}
+        assert brief.style_overrides == ""
         assert brief.negative == ""
 
     def test_priority_out_of_range(self) -> None:
@@ -230,7 +230,7 @@ class TestIllustrationBrief:
                 entities=[],
                 composition="comp",
                 mood="mood",
-                style_overrides={},
+                style_overrides="",
                 negative="",
                 caption="caption",
             )
@@ -244,7 +244,7 @@ class TestIllustrationBrief:
                 entities=[],
                 composition="comp",
                 mood="mood",
-                style_overrides={},
+                style_overrides="",
                 negative="",
                 caption="caption",
             )
@@ -257,7 +257,7 @@ class TestIllustrationBrief:
             entities=[],
             composition="panoramic",
             mood="somber",
-            style_overrides={},
+            style_overrides="",
             negative="",
             caption="Where the silence speaks loudest",
         )
@@ -271,7 +271,7 @@ class TestIllustrationBrief:
                 subject="subject",
                 composition="comp",
                 mood="mood",
-                style_overrides={},
+                style_overrides="",
                 negative="",
                 caption="caption",
             )
@@ -285,7 +285,7 @@ class TestIllustrationBrief:
                 entities=[],
                 composition="comp",
                 mood="mood",
-                style_overrides={},
+                style_overrides="",
                 negative="",
             )
 
@@ -339,7 +339,7 @@ class TestDressPhase1Output:
             "entities": [],
             "composition": "comp",
             "mood": "mood",
-            "style_overrides": {},
+            "style_overrides": "",
             "negative": "",
             "caption": "caption",
         }

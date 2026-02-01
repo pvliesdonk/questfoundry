@@ -45,7 +45,7 @@ system: |
   - caption: Proposed diegetic caption in the story's voice
   - mood: Emotional tone of the image
   - composition: Framing and camera notes (2-4 sentences)
-  - style_overrides: Dict of string deviations from global art direction (usually empty)
+  - style_overrides: Deviations from global art direction (usually empty string)
   - negative: Things to avoid in this specific image (1-2 sentences; empty string if none)
 
   **llm_adjustment**: Integer from -2 to +2 adjusting priority based on narrative importance.

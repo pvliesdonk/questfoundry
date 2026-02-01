@@ -146,8 +146,8 @@ class IllustrationBrief(BaseModel):
     caption: str = Field(min_length=1, description="Proposed diegetic caption")
     mood: str = Field(min_length=1, description="Emotional tone")
     composition: str = Field(min_length=1, description="Framing / camera notes")
-    style_overrides: dict[str, str] = Field(
-        description="Deviations from global art direction (usually empty)",
+    style_overrides: str = Field(
+        description="Deviations from global art direction (usually empty string)",
     )
     negative: str = Field(description="Things to avoid in this image")
 
