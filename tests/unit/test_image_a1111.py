@@ -12,6 +12,7 @@ import pytest
 from questfoundry.providers.image import ImageProviderConnectionError, ImageProviderError
 from questfoundry.providers.image_a1111 import (
     _SD15_PRESET,
+    _SDXL_LIGHTNING_PRESET,
     _SDXL_PRESET,
     A1111ImageProvider,
     _resolve_preset,
@@ -303,7 +304,32 @@ class TestA1111Presets:
         assert _resolve_preset("realvisxl_v40") is _SDXL_PRESET
 
     def test_sdxl_preset_case_insensitive(self) -> None:
-        assert _resolve_preset("SDXL_turbo") is _SDXL_PRESET
+        assert _resolve_preset("SDXL_base_v2") is _SDXL_PRESET
+
+    def test_sdxl_lightning_preset(self) -> None:
+        assert _resolve_preset("dreamshaperXL_lightningDPMSDE") is _SDXL_LIGHTNING_PRESET
+
+    def test_sdxl_turbo_preset(self) -> None:
+        assert _resolve_preset("sdxl_turbo_v3") is _SDXL_LIGHTNING_PRESET
+
+    def test_sdxl_lightning_case_insensitive(self) -> None:
+        assert _resolve_preset("SDXL_Lightning_v2") is _SDXL_LIGHTNING_PRESET
+
+    @pytest.mark.asyncio()
+    async def test_sdxl_lightning_sampler_in_payload(self) -> None:
+        provider = A1111ImageProvider(
+            model="dreamshaperXL_lightningDPMSDE", host="http://localhost:7860"
+        )
+        mock_post = AsyncMock(return_value=_fake_response())
+
+        with patch.object(provider._client, "post", mock_post):
+            await provider.generate("test")
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["sampler_name"] == "DPM++ SDE"
+        assert payload["scheduler"] == "karras"
+        assert payload["steps"] == 6
+        assert payload["cfg_scale"] == 2.0
 
     @pytest.mark.asyncio()
     async def test_sdxl_sampler_in_payload(self) -> None:

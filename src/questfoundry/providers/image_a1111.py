@@ -84,17 +84,41 @@ _SDXL_PRESET = _A1111Preset(
     quality_tier="high",
 )
 
+_SDXL_LIGHTNING_PRESET = _A1111Preset(
+    sizes={
+        "1:1": (1024, 1024),
+        "16:9": (1344, 768),
+        "9:16": (768, 1344),
+        "3:2": (1216, 832),
+        "2:3": (832, 1216),
+    },
+    steps=6,
+    sampler="DPM++ SDE",
+    scheduler="karras",
+    cfg_scale=2.0,
+    quality_tier="high",
+)
+
 _XL_TAGS = ("sdxl", "xl_", "_xl", "-xl")
+_LIGHTNING_TAGS = ("lightning", "turbo")
 
 
 def _resolve_preset(model: str | None) -> _A1111Preset:
     """Choose generation preset based on checkpoint name.
 
-    Matches models containing "sdxl", "xl_", "_xl", or "-xl"
-    (case-insensitive). Examples: ``sdxl_base``, ``realvisxl_v40``,
-    ``dreamshaperXL``.
+    Detection order:
+    1. Lightning/Turbo SDXL — low steps, low CFG, DPM++ SDE
+    2. Standard SDXL — matches "sdxl", "xl_", "_xl", "-xl"
+    3. SD 1.5 — fallback default
     """
-    if model and any(tag in model.lower() for tag in _XL_TAGS):
+    if not model:
+        return _SD15_PRESET
+    lower = model.lower()
+    is_xl = any(tag in lower for tag in _XL_TAGS)
+    is_lightning = any(tag in lower for tag in _LIGHTNING_TAGS)
+    if is_xl and is_lightning:
+        return _SDXL_LIGHTNING_PRESET
+    if is_xl:
         return _SDXL_PRESET
     return _SD15_PRESET
 
