@@ -11,7 +11,10 @@ from __future__ import annotations
 
 import base64
 from dataclasses import dataclass, field
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from questfoundry.providers.image_brief import ImageBrief
 
 
 @dataclass(frozen=True)
@@ -86,6 +89,28 @@ class ImageProvider(Protocol):
 
         Raises:
             ImageProviderError: If generation fails.
+        """
+        ...
+
+
+@runtime_checkable
+class PromptDistiller(Protocol):
+    """Protocol for providers that transform structured briefs.
+
+    Providers implementing this receive an :class:`ImageBrief` and return
+    provider-optimised ``(positive, negative)`` prompt strings.  Providers
+    that do *not* implement this protocol fall back to
+    :func:`flatten_brief_to_prompt`.
+    """
+
+    async def distill_prompt(self, brief: ImageBrief) -> tuple[str, str | None]:  # pragma: no cover
+        """Transform a structured brief into provider-native prompts.
+
+        Args:
+            brief: Structured image brief from the DRESS stage.
+
+        Returns:
+            Tuple of (positive_prompt, negative_prompt_or_None).
         """
         ...
 

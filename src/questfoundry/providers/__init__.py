@@ -16,7 +16,9 @@ from questfoundry.providers.image import (
     ImageProviderConnectionError,
     ImageProviderError,
     ImageResult,
+    PromptDistiller,
 )
+from questfoundry.providers.image_brief import ImageBrief, flatten_brief_to_prompt
 from questfoundry.providers.image_factory import create_image_provider
 from questfoundry.providers.image_openai import OpenAIImageProvider
 from questfoundry.providers.model_info import (
@@ -30,6 +32,7 @@ from questfoundry.providers.structured_output import (
 )
 
 __all__ = [
+    "ImageBrief",
     "ImageContentPolicyError",
     "ImageProvider",
     "ImageProviderConnectionError",
@@ -37,6 +40,7 @@ __all__ = [
     "ImageResult",
     "ModelInfo",
     "OpenAIImageProvider",
+    "PromptDistiller",
     "ProviderConnectionError",
     "ProviderError",
     "ProviderModelError",
@@ -45,6 +49,7 @@ __all__ = [
     "create_chat_model",
     "create_image_provider",
     "create_model_for_structured_output",
+    "flatten_brief_to_prompt",
     "get_default_strategy",
     "get_model_info",
     "with_structured_output",
