@@ -1382,7 +1382,6 @@ def generate_images(
         project_path=project_path,
         image_provider=resolved_provider,
     )
-    stage._image_budget = image_budget
 
     def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
         detail_str = f" ({detail})" if detail else ""
@@ -1396,6 +1395,7 @@ def generate_images(
         result = asyncio.run(
             stage.run_generate_only(
                 project_path,
+                image_budget=image_budget,
                 on_phase_progress=_on_phase_progress,
             )
         )

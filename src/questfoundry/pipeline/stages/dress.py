@@ -830,6 +830,7 @@ class DressStage:
         self,
         project_path: Path,
         *,
+        image_budget: int = 0,
         on_phase_progress: PhaseProgressFn | None = None,
     ) -> DressPhaseResult:
         """Run Phase 4 (image generation) only on an existing project.
@@ -839,6 +840,7 @@ class DressStage:
 
         Args:
             project_path: Path to the project directory.
+            image_budget: Maximum number of images to generate (0 = unlimited).
             on_phase_progress: Optional progress callback.
 
         Returns:
@@ -847,7 +849,13 @@ class DressStage:
         Raises:
             DressStageError: If no brief selection exists or project is invalid.
         """
-        graph = Graph.load(project_path)
+        try:
+            graph = Graph.load(project_path)
+        except Exception as e:
+            raise DressStageError(
+                f"Failed to load graph from {project_path}. "
+                "Ensure 'qf dress' has been run successfully."
+            ) from e
 
         selection = graph.get_node("dress_meta::selection")
         if not selection:
@@ -857,10 +865,9 @@ class DressStage:
             )
 
         self.project_path = project_path
+        self._image_budget = image_budget
 
-        # Phase 4 does not use the LLM model, but the signature requires it.
-        # Pass None — the model param is unused (marked ARG002 in _phase_4_generate).
-        result = await self._phase_4_generate(graph, None)  # type: ignore[arg-type]
+        result = await self._phase_4_generate(graph)
 
         if result.status != "failed":
             graph.save(project_path / "graph.json")
@@ -877,7 +884,7 @@ class DressStage:
     async def _phase_4_generate(
         self,
         graph: Graph,
-        model: BaseChatModel,  # noqa: ARG002
+        model: BaseChatModel | None = None,  # noqa: ARG002
     ) -> DressPhaseResult:
         """Phase 4: Generate images for selected illustration briefs.
 
