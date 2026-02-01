@@ -88,6 +88,26 @@ T = TypeVar("T", bound=BaseModel)
 
 log = get_logger(__name__)
 
+# Aspect ratios supported by all image providers.
+_VALID_ASPECT_RATIOS = {"1:1", "16:9", "9:16", "3:2", "2:3"}
+
+
+def _parse_aspect_ratio(raw: str) -> str:
+    """Extract a valid aspect ratio from an LLM-generated string.
+
+    The art_direction node may contain verbose text like
+    ``"16:9 (story panels), 4:5 (character plates)"`` instead of a
+    clean ratio.  This function extracts the first token that matches
+    a provider-supported ratio, falling back to ``"16:9"``.
+    """
+    import re
+
+    for match in re.finditer(r"\b(\d+:\d+)\b", raw):
+        if match.group(1) in _VALID_ASPECT_RATIOS:
+            return match.group(1)
+    log.warning("invalid_aspect_ratio", raw=raw, fallback="16:9")
+    return "16:9"
+
 
 def _get_prompts_path() -> Path:
     """Get the prompts directory path."""
@@ -833,6 +853,7 @@ class DressStage:
         project_path: Path,
         *,
         image_budget: int = 0,
+        force: bool = False,
         on_phase_progress: PhaseProgressFn | None = None,
     ) -> DressPhaseResult:
         """Run Phase 4 (image generation) only on an existing project.
@@ -843,6 +864,7 @@ class DressStage:
         Args:
             project_path: Path to the project directory.
             image_budget: Maximum number of images to generate (0 = unlimited).
+            force: If True, regenerate images even if illustrations already exist.
             on_phase_progress: Optional progress callback.
 
         Returns:
@@ -868,6 +890,7 @@ class DressStage:
 
         self.project_path = project_path
         self._image_budget = image_budget
+        self._force_regenerate = force
 
         result = await self._phase_4_generate(graph)
 
@@ -930,13 +953,39 @@ class DressStage:
                 selected=len(selected_ids),
             )
 
+        # Skip briefs that already have illustrations (unless --force)
+        if not getattr(self, "_force_regenerate", False):
+            already_generated: list[str] = []
+            for bid in selected_ids:
+                # Check for from_brief edges pointing to this brief
+                incoming = graph.get_edges(to_id=bid, edge_type="from_brief")
+                if any(e["from"].startswith("illustration::") for e in incoming):
+                    already_generated.append(bid)
+            if already_generated:
+                skip_set = set(already_generated)
+                log.info(
+                    "skipped_existing_illustrations",
+                    count=len(skip_set),
+                    total=len(selected_ids),
+                )
+                selected_ids = [b for b in selected_ids if b not in skip_set]
+            if not selected_ids:
+                return DressPhaseResult(
+                    phase="generate",
+                    status="completed",
+                    detail=(
+                        f"all {len(already_generated)} briefs already have "
+                        "illustrations (use --force to regenerate)"
+                    ),
+                )
+
         if self.project_path is None:
             raise DressStageError("project_path is required for image generation")
 
         provider = create_image_provider(self._image_provider_spec, llm=model)
         asset_mgr = AssetManager(self.project_path)
         art_dir = graph.get_node("art_direction::main") or {}
-        aspect_ratio = art_dir.get("aspect_ratio", "16:9")
+        aspect_ratio = _parse_aspect_ratio(art_dir.get("aspect_ratio", "16:9"))
 
         generated = 0
         failed = 0
@@ -1323,7 +1372,7 @@ def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
         art_medium=art_dir.get("medium") or None,
         palette=art_dir.get("palette", []),
         negative_defaults=art_dir.get("negative_defaults") or None,
-        aspect_ratio=art_dir.get("aspect_ratio", "16:9"),
+        aspect_ratio=_parse_aspect_ratio(art_dir.get("aspect_ratio", "16:9")),
         category=brief.get("category", "scene"),
     )
 

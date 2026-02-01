@@ -1421,12 +1421,17 @@ def generate_images(
         int,
         typer.Option("--image-budget", help="Max images to generate (0=all selected briefs)."),
     ] = 0,
+    force: Annotated[
+        bool,
+        typer.Option("--force", help="Regenerate images even if illustrations already exist."),
+    ] = False,
 ) -> None:
     """Generate images for an existing DRESS project.
 
     Runs only the image generation phase (Phase 4) of the DRESS stage.
     Requires that 'qf dress' has already been run to create briefs
-    and selections.
+    and selections. By default, briefs that already have illustrations
+    are skipped; use --force to regenerate them.
 
     The image provider is resolved in order: --image-provider flag,
     QF_IMAGE_PROVIDER env var, providers.image in project.yaml.
@@ -1485,6 +1490,7 @@ def generate_images(
             stage.run_generate_only(
                 project_path,
                 image_budget=image_budget,
+                force=force,
                 on_phase_progress=_on_phase_progress,
             )
         )

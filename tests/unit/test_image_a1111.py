@@ -10,7 +10,12 @@ import httpx
 import pytest
 
 from questfoundry.providers.image import ImageProviderConnectionError, ImageProviderError
-from questfoundry.providers.image_a1111 import _ASPECT_RATIO_TO_SIZE, A1111ImageProvider
+from questfoundry.providers.image_a1111 import (
+    _SD15_PRESET,
+    _SDXL_PRESET,
+    A1111ImageProvider,
+    _resolve_preset,
+)
 from questfoundry.providers.image_brief import ImageBrief
 
 
@@ -43,7 +48,7 @@ class TestA1111Provider:
 
         assert result.image_data == b"fake_png_data"
         assert result.content_type == "image/png"
-        assert result.provider_metadata["quality"] == "low"
+        assert result.provider_metadata["quality"] == "medium"
 
     @pytest.mark.asyncio()
     async def test_checkpoint_override(self) -> None:
@@ -79,10 +84,10 @@ class TestA1111Provider:
         assert payload["negative_prompt"] == "blurry, low quality"
 
     @pytest.mark.asyncio()
-    async def test_aspect_ratio_mapping(self) -> None:
+    async def test_aspect_ratio_mapping_sd15(self) -> None:
         provider = A1111ImageProvider(host="http://localhost:7860")
 
-        for ratio, (expected_w, expected_h) in _ASPECT_RATIO_TO_SIZE.items():
+        for ratio, (expected_w, expected_h) in _SD15_PRESET.sizes.items():
             mock_post = AsyncMock(return_value=_fake_response())
             with patch.object(provider._client, "post", mock_post):
                 await provider.generate("test", aspect_ratio=ratio)
@@ -92,7 +97,20 @@ class TestA1111Provider:
             assert payload["height"] == expected_h, f"Wrong height for {ratio}"
 
     @pytest.mark.asyncio()
-    async def test_unknown_ratio_defaults_512(self) -> None:
+    async def test_aspect_ratio_mapping_sdxl(self) -> None:
+        provider = A1111ImageProvider(model="sdxl_base", host="http://localhost:7860")
+
+        for ratio, (expected_w, expected_h) in _SDXL_PRESET.sizes.items():
+            mock_post = AsyncMock(return_value=_fake_response())
+            with patch.object(provider._client, "post", mock_post):
+                await provider.generate("test", aspect_ratio=ratio)
+
+            payload = mock_post.call_args.kwargs["json"]
+            assert payload["width"] == expected_w, f"Wrong width for {ratio}"
+            assert payload["height"] == expected_h, f"Wrong height for {ratio}"
+
+    @pytest.mark.asyncio()
+    async def test_unknown_ratio_falls_back_to_1x1(self) -> None:
         provider = A1111ImageProvider(host="http://localhost:7860")
         mock_post = AsyncMock(return_value=_fake_response())
 
@@ -100,8 +118,9 @@ class TestA1111Provider:
             await provider.generate("test", aspect_ratio="4:3")
 
         payload = mock_post.call_args.kwargs["json"]
-        assert payload["width"] == 512
-        assert payload["height"] == 512
+        # Falls back to preset 1:1 size (768x768 for SD 1.5)
+        assert payload["width"] == 768
+        assert payload["height"] == 768
 
     @pytest.mark.asyncio()
     async def test_connection_error(self) -> None:
@@ -195,7 +214,7 @@ class TestA1111Provider:
             A1111ImageProvider()
 
     @pytest.mark.asyncio()
-    async def test_quality_metadata(self) -> None:
+    async def test_quality_metadata_sd15(self) -> None:
         provider = A1111ImageProvider(host="http://localhost:7860")
 
         with patch.object(
@@ -203,7 +222,18 @@ class TestA1111Provider:
         ):
             result = await provider.generate("test")
 
-        assert result.provider_metadata["quality"] == "low"
+        assert result.provider_metadata["quality"] == "medium"
+
+    @pytest.mark.asyncio()
+    async def test_quality_metadata_sdxl(self) -> None:
+        provider = A1111ImageProvider(model="sdxl_base", host="http://localhost:7860")
+
+        with patch.object(
+            provider._client, "post", new_callable=AsyncMock, return_value=_fake_response()
+        ):
+            result = await provider.generate("test")
+
+        assert result.provider_metadata["quality"] == "high"
 
     @pytest.mark.asyncio()
     async def test_seed_in_metadata(self) -> None:
@@ -255,6 +285,53 @@ class TestA1111Provider:
             await provider.aclose()
 
         mock_close.assert_called_once()
+
+
+class TestA1111Presets:
+    """Tests for model-aware generation presets."""
+
+    def test_sd15_preset_default(self) -> None:
+        assert _resolve_preset(None) is _SD15_PRESET
+
+    def test_sd15_preset_dreamshaper(self) -> None:
+        assert _resolve_preset("dreamshaper_8") is _SD15_PRESET
+
+    def test_sdxl_preset_sdxl(self) -> None:
+        assert _resolve_preset("sdxl_base") is _SDXL_PRESET
+
+    def test_sdxl_preset_xl_suffix(self) -> None:
+        assert _resolve_preset("realvisxl_v40") is _SDXL_PRESET
+
+    def test_sdxl_preset_case_insensitive(self) -> None:
+        assert _resolve_preset("SDXL_turbo") is _SDXL_PRESET
+
+    @pytest.mark.asyncio()
+    async def test_sdxl_sampler_in_payload(self) -> None:
+        provider = A1111ImageProvider(model="sdxl_base", host="http://localhost:7860")
+        mock_post = AsyncMock(return_value=_fake_response())
+
+        with patch.object(provider._client, "post", mock_post):
+            await provider.generate("test")
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["sampler_name"] == "DPM++ 2M"
+        assert payload["scheduler"] == "karras"
+        assert payload["steps"] == 35
+        assert payload["cfg_scale"] == 7.5
+
+    @pytest.mark.asyncio()
+    async def test_sd15_sampler_in_payload(self) -> None:
+        provider = A1111ImageProvider(host="http://localhost:7860")
+        mock_post = AsyncMock(return_value=_fake_response())
+
+        with patch.object(provider._client, "post", mock_post):
+            await provider.generate("test")
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["sampler_name"] == "DPM++ 2M"
+        assert payload["scheduler"] == "karras"
+        assert payload["steps"] == 30
+        assert payload["cfg_scale"] == 7.0
 
 
 class TestA1111DistillPrompt:

@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 import httpx
@@ -30,16 +31,72 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-# SD-friendly pixel dimensions (multiples of 8).
-_ASPECT_RATIO_TO_SIZE: dict[str, tuple[int, int]] = {
-    "1:1": (512, 512),
-    "16:9": (768, 432),
-    "9:16": (432, 768),
-    "3:2": (768, 512),
-    "2:3": (512, 768),
-}
+_DEFAULT_TIMEOUT = 180.0  # SDXL at high res can be slow on consumer GPUs
 
-_DEFAULT_TIMEOUT = 120.0  # Image generation can be slow on consumer GPUs
+
+# -- Model-aware generation presets ----------------------------------------
+
+
+@dataclass(frozen=True)
+class _A1111Preset:
+    """Generation parameters tuned for a specific SD architecture.
+
+    Note: A1111 splits sampler and scheduler into separate fields.
+    ``sampler`` is the algorithm (e.g., "DPM++ 2M"), ``scheduler``
+    controls the noise schedule (e.g., "karras").
+    """
+
+    sizes: dict[str, tuple[int, int]] = field(repr=False)
+    steps: int = 30
+    sampler: str = "DPM++ 2M"
+    scheduler: str = "karras"
+    cfg_scale: float = 7.0
+    quality_tier: str = "medium"
+
+
+_SD15_PRESET = _A1111Preset(
+    sizes={
+        "1:1": (768, 768),
+        "16:9": (1024, 768),
+        "9:16": (768, 1024),
+        "3:2": (768, 512),
+        "2:3": (512, 768),
+    },
+    steps=30,
+    sampler="DPM++ 2M",
+    scheduler="karras",
+    cfg_scale=7.0,
+    quality_tier="medium",
+)
+
+_SDXL_PRESET = _A1111Preset(
+    sizes={
+        "1:1": (1024, 1024),
+        "16:9": (1344, 768),
+        "9:16": (768, 1344),
+        "3:2": (1216, 832),
+        "2:3": (832, 1216),
+    },
+    steps=35,
+    sampler="DPM++ 2M",
+    scheduler="karras",
+    cfg_scale=7.5,
+    quality_tier="high",
+)
+
+_XL_TAGS = ("sdxl", "xl_", "_xl", "-xl")
+
+
+def _resolve_preset(model: str | None) -> _A1111Preset:
+    """Choose generation preset based on checkpoint name.
+
+    Matches models containing "sdxl", "xl_", "_xl", or "-xl"
+    (case-insensitive). Examples: ``sdxl_base``, ``realvisxl_v40``,
+    ``dreamshaperXL``.
+    """
+    if model and any(tag in model.lower() for tag in _XL_TAGS):
+        return _SDXL_PRESET
+    return _SD15_PRESET
 
 
 class A1111ImageProvider:
@@ -68,6 +125,7 @@ class A1111ImageProvider:
         # Strip trailing slash for consistent URL construction
         self._host = self._host.rstrip("/")
         self._model = model
+        self._preset = _resolve_preset(model)
         self._llm = llm
         self._client = httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT)
 
@@ -198,16 +256,18 @@ class A1111ImageProvider:
             ImageProviderConnectionError: If A1111 is unreachable.
             ImageProviderError: On API errors or unexpected responses.
         """
-        width, height = _ASPECT_RATIO_TO_SIZE.get(aspect_ratio, (512, 512))
+        default_size = self._preset.sizes["1:1"]
+        width, height = self._preset.sizes.get(aspect_ratio, default_size)
 
         payload: dict[str, Any] = {
             "prompt": prompt,
             "negative_prompt": negative_prompt or "",
             "width": width,
             "height": height,
-            "steps": 25,
-            "cfg_scale": 7.0,
-            "sampler_name": "Euler a",
+            "steps": self._preset.steps,
+            "cfg_scale": self._preset.cfg_scale,
+            "sampler_name": self._preset.sampler,
+            "scheduler": self._preset.scheduler,
         }
 
         if self._model:
@@ -277,10 +337,10 @@ class A1111ImageProvider:
                 )
 
         metadata: dict[str, Any] = {
-            "quality": "low",
+            "quality": self._preset.quality_tier,
             "model": active_model,
             "size": f"{width}x{height}",
-            "steps": 25,
+            "steps": self._preset.steps,
         }
         if seed is not None:
             metadata["seed"] = seed
