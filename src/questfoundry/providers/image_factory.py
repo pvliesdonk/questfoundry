@@ -40,6 +40,8 @@ def create_image_provider(
     if provider_lower == "openai":
         from questfoundry.providers.image_openai import OpenAIImageProvider
 
-        return OpenAIImageProvider(model=model or "gpt-image-1", **kwargs)
+        if model:
+            return OpenAIImageProvider(model=model, **kwargs)
+        return OpenAIImageProvider(**kwargs)
 
     raise ImageProviderError(provider_lower, f"Unknown image provider: {provider_lower}")
