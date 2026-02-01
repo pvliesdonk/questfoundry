@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from questfoundry.export.base import (
     ExportChoice,
+    ExportCodexEntry,
     ExportContext,
     ExportIllustration,
     ExportPassage,
@@ -194,3 +195,108 @@ class TestTweeExporter:
 
         assert result.exists()
         assert nested.exists()
+
+    def test_codex_passage_rendered(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Test",
+            passages=[
+                ExportPassage(id="p1", prose="Start.", is_start=True),
+            ],
+            choices=[],
+            codex_entries=[
+                ExportCodexEntry(
+                    entity_id="Ancient Sword",
+                    rank=1,
+                    visible_when=["codeword::sword_found"],
+                    content="A legendary blade.",
+                ),
+            ],
+        )
+        exporter = TweeExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert ":: Codex" in content
+        assert "!! Ancient Sword" in content
+        assert "A legendary blade." in content
+        assert "<<if $sword_found>>" in content
+        assert "<</if>>" in content
+
+    def test_codex_not_rendered_when_empty(self, tmp_path: Path) -> None:
+        exporter = TweeExporter()
+        result = exporter.export(_simple_context(), tmp_path / "out")
+        content = result.read_text()
+
+        assert ":: Codex" not in content
+
+    def test_codex_entry_without_visible_when(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Test",
+            passages=[
+                ExportPassage(id="p1", prose="Start.", is_start=True),
+            ],
+            choices=[],
+            codex_entries=[
+                ExportCodexEntry(
+                    entity_id="World Lore",
+                    rank=1,
+                    visible_when=[],
+                    content="Always visible lore.",
+                ),
+            ],
+        )
+        exporter = TweeExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert ":: Codex" in content
+        assert "!! World Lore" in content
+        assert "Always visible lore." in content
+        assert "<<if" not in content.split(":: Codex")[1]
+
+    def test_codex_sorted_by_rank(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Test",
+            passages=[
+                ExportPassage(id="p1", prose="Start.", is_start=True),
+            ],
+            choices=[],
+            codex_entries=[
+                ExportCodexEntry(entity_id="Zeta", rank=3, content="Third."),
+                ExportCodexEntry(entity_id="Alpha", rank=1, content="First."),
+                ExportCodexEntry(entity_id="Beta", rank=2, content="Second."),
+            ],
+        )
+        exporter = TweeExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        codex_section = content.split(":: Codex")[1]
+        alpha_pos = codex_section.index("Alpha")
+        beta_pos = codex_section.index("Beta")
+        zeta_pos = codex_section.index("Zeta")
+        assert alpha_pos < beta_pos < zeta_pos
+
+    def test_art_direction_passage(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Test",
+            passages=[
+                ExportPassage(id="p1", prose="Start.", is_start=True),
+            ],
+            choices=[],
+            art_direction={"palette": "dark fantasy", "mood": "brooding"},
+        )
+        exporter = TweeExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert ":: StoryArtDirection" in content
+        assert "mood: brooding" in content
+        assert "palette: dark fantasy" in content
+
+    def test_art_direction_not_rendered_when_none(self, tmp_path: Path) -> None:
+        exporter = TweeExporter()
+        result = exporter.export(_simple_context(), tmp_path / "out")
+        content = result.read_text()
+
+        assert "StoryArtDirection" not in content

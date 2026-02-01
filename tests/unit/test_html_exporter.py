@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 
 from questfoundry.export.base import (
     ExportChoice,
+    ExportCodexEntry,
     ExportContext,
     ExportIllustration,
     ExportPassage,
@@ -172,3 +173,79 @@ class TestHtmlExporter:
 
         assert result.exists()
         assert nested.exists()
+
+    def test_codex_panel_rendered(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Test",
+            passages=[
+                ExportPassage(id="p1", prose="Start.", is_start=True),
+            ],
+            choices=[],
+            codex_entries=[
+                ExportCodexEntry(
+                    entity_id="Ancient Sword",
+                    rank=1,
+                    visible_when=["codeword::sword_found"],
+                    content="A legendary blade.",
+                ),
+            ],
+        )
+        exporter = HtmlExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert 'id="codex"' in content
+        assert 'class="codex-entry"' in content
+        assert "Ancient Sword" in content
+        assert "A legendary blade." in content
+        assert "data-visible-when=" in content
+        assert "codeword::sword_found" in content
+
+    def test_codex_toggle_button(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Test",
+            passages=[
+                ExportPassage(id="p1", prose="Start.", is_start=True),
+            ],
+            choices=[],
+            codex_entries=[
+                ExportCodexEntry(entity_id="Lore", rank=1, content="Some lore."),
+            ],
+        )
+        exporter = HtmlExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert 'id="codex-toggle"' in content
+        assert "updateCodexVisibility" in content
+
+    def test_codex_not_rendered_when_empty(self, tmp_path: Path) -> None:
+        exporter = HtmlExporter()
+        result = exporter.export(_simple_context(), tmp_path / "out")
+        content = result.read_text()
+
+        assert 'id="codex"' not in content
+        assert 'id="codex-toggle"' not in content
+
+    def test_art_direction_meta(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Test",
+            passages=[
+                ExportPassage(id="p1", prose="Start.", is_start=True),
+            ],
+            choices=[],
+            art_direction={"palette": "dark fantasy", "mood": "brooding"},
+        )
+        exporter = HtmlExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert 'name="art-direction"' in content
+        assert "dark fantasy" in content
+
+    def test_art_direction_not_rendered_when_none(self, tmp_path: Path) -> None:
+        exporter = HtmlExporter()
+        result = exporter.export(_simple_context(), tmp_path / "out")
+        content = result.read_text()
+
+        assert "art-direction" not in content
