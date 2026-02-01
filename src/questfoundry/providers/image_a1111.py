@@ -194,19 +194,22 @@ class A1111ImageProvider:
             brief_text += f"Negative: {negative_raw}\n"
 
         tag_limit = 75 if is_xl else 40
+        tag_target = "25-35" if is_xl else "15-25"
         if is_xl:
             format_instruction = (
                 "FORMAT: <scene tags> BREAK <style tags>\n"
-                "Scene chunk: subject + key entities + one composition tag + mood.\n"
-                "Style chunk: art style, medium, palette, quality boosters.\n"
-                "Scene chunk: ~50 tags. Style chunk: ~20 tags."
+                "Scene chunk: subject + entities + composition + mood + lighting.\n"
+                "Style chunk: art style, medium, palette, quality boosters."
             )
             example = (
-                "EXAMPLE (13 tags total — this is the right length):\n"
-                "warrior on bridge, scarred face, jade pendant, wide shot, "
-                "golden hour, epic BREAK watercolor, traditional paper, "
-                "crimson gold palette, masterpiece, best quality\n"
-                "blurry, text, watermark, deformed hands"
+                "EXAMPLE (27 tags — this is the right length):\n"
+                "warrior on bridge, scarred face, jade pendant, leather armor, "
+                "two soldiers behind, wide shot, golden hour, mist rising, "
+                "epic tension, warm rimlight, torch glow BREAK watercolor, "
+                "traditional paper, bold ink outlines, crimson gold palette, "
+                "desaturated background, masterpiece, best quality, "
+                "highly detailed, sharp focus\n"
+                "blurry, text, watermark, deformed hands, extra fingers"
             )
         else:
             format_instruction = (
@@ -214,27 +217,33 @@ class A1111ImageProvider:
                 "Order: subject, entities, composition, style, mood, palette."
             )
             example = (
-                "EXAMPLE (8 tags total — this is the right length):\n"
-                "warrior on bridge, scarred face, wide shot, watercolor, "
-                "epic mood, crimson gold palette, masterpiece, best quality\n"
-                "blurry, text, watermark, deformed hands"
+                "EXAMPLE (18 tags — this is the right length):\n"
+                "warrior on bridge, scarred face, jade pendant, leather armor, "
+                "two soldiers behind, wide shot, golden hour, mist, epic tension, "
+                "warm rimlight, watercolor, ink outlines, crimson gold palette, "
+                "masterpiece, best quality, highly detailed, sharp focus, "
+                "dramatic lighting\n"
+                "blurry, text, watermark, deformed hands, extra fingers"
             )
 
         system_msg = (
-            f"TAG BUDGET: {tag_limit} tags. You MUST use FEWER than {tag_limit}. "
-            "Anything beyond this is silently discarded by SD CLIP.\n\n"
+            f"TAG BUDGET: {tag_limit} tags maximum. Target {tag_target} tags. "
+            "Anything beyond the budget is silently discarded by SD CLIP.\n\n"
             "You are a Stable Diffusion prompt distiller. The brief below is "
-            "REFERENCE MATERIAL, not a checklist. Most of it must be discarded. "
-            "Your job is to extract only the visually essential elements.\n\n"
+            "REFERENCE MATERIAL, not a checklist. Extract the visually essential "
+            "elements — enough to compose a clear scene, not just an abstract "
+            "impression.\n\n"
             "PRIORITY TIERS (spend your tag budget here):\n"
             "1. Subject — what is in the image (5-8 tags)\n"
-            "2. Key entities — most important 1-2 characters/objects (3-5 tags)\n"
-            "3. Composition — ONE camera/framing tag only (1 tag)\n"
-            "4. Style/medium — art style and medium (2-4 tags)\n"
-            "5. Mood/palette — only if budget remains (1-3 tags)\n"
-            "6. Quality boosters — masterpiece, best quality (1-2 tags)\n\n"
-            "DROP EVERYTHING ELSE. No backstory. No lighting details beyond one "
-            "word. No spatial relationships. No abstract concepts.\n\n"
+            "2. Key entities — most important 1-2 characters/objects, "
+            "include distinguishing visual details (4-6 tags)\n"
+            "3. Composition + camera — framing, angle, depth (2-3 tags)\n"
+            "4. Lighting + mood — key light, atmosphere (2-3 tags)\n"
+            "5. Style/medium — art style and medium (3-5 tags)\n"
+            "6. Palette — dominant colors (2-3 tags)\n"
+            "7. Quality boosters — masterpiece, best quality (2-3 tags)\n\n"
+            "DROP: backstory, abstract concepts, narrative, prose descriptions. "
+            "KEEP: concrete visual details that a painter would need.\n\n"
             "RULES:\n"
             "- Each tag is 1-4 words, comma-separated.\n"
             "- No prose, no articles, no prepositions, no sentences.\n"
@@ -242,8 +251,8 @@ class A1111ImageProvider:
             "- No labels, no explanation, no commentary.\n"
             f"- {format_instruction}\n\n"
             f"{example}\n\n"
-            f"REMINDER: {tag_limit} tag budget. Count before you answer. "
-            "Shorter is better. Aim for 60-70% of budget, not 100%."
+            f"REMINDER: Target {tag_target} tags. Do NOT go under 15 or over "
+            f"{tag_limit}."
         )
 
         from langchain_core.messages import HumanMessage, SystemMessage
