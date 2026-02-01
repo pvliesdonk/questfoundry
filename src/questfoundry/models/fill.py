@@ -127,9 +127,13 @@ class ReviewFlag(BaseModel):
 
 
 class FillPhase0Output(BaseModel):
-    """Phase 0 structured output: voice determination."""
+    """Phase 0 structured output: voice determination and story title."""
 
     voice: VoiceDocument
+    story_title: str = Field(
+        min_length=1,
+        description="A compelling title for the story (2-8 words)",
+    )
 
 
 class FillPhase1Output(BaseModel):

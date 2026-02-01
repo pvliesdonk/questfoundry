@@ -40,8 +40,18 @@ system: |
   - Consider the scene type distribution — a story heavy on micro_beats needs a
     register that works for brevity
 
+  ## Story Title
+
+  Also propose a **story_title** — a compelling title for this interactive fiction story.
+
+  - 2–8 words, evocative and genre-appropriate
+  - Reflect the central tension, setting, or theme — not generic
+  - Good: "The Hollow Crown", "Beneath the Crimson Tide", "Whispers at Dawnbreak"
+  - Bad: "Adventure Story", "The Quest", "A Dark Tale"
+
   ## Output Format
-  Return a JSON object with a "voice" field containing the voice document.
+  Return a JSON object with a "voice" field containing the voice document
+  and a "story_title" field with the title string.
 
 user: |
   Based on the creative vision and story structure above, propose a voice document.
@@ -52,6 +62,7 @@ user: |
   - tone_words must be distilled from DREAM themes, not generic filler
   - avoid_words and avoid_patterns should target the genre's common pitfalls
   - Consider scene type distribution — micro_beat-heavy stories need a register that works for brevity
+  - story_title must be evocative and genre-appropriate (2-8 words), NOT generic
   - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
 
 components: []

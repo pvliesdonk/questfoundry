@@ -262,8 +262,20 @@ class TestFillPhase0Output:
             sentence_rhythm="varied",
             tone_words=["atmospheric"],
         )
-        output = FillPhase0Output(voice=voice)
+        output = FillPhase0Output(voice=voice, story_title="The Hollow Crown")
         assert output.voice.pov == "third_limited"
+        assert output.story_title == "The Hollow Crown"
+
+    def test_empty_title_rejected(self) -> None:
+        voice = VoiceDocument(
+            pov="first",
+            tense="past",
+            voice_register="sparse",
+            sentence_rhythm="punchy",
+            tone_words=["terse"],
+        )
+        with pytest.raises(ValidationError):
+            FillPhase0Output(voice=voice, story_title="")
 
 
 class TestFillPhase1Output:

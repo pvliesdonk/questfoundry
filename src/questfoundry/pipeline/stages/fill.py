@@ -496,11 +496,16 @@ class FillStage:
             **output.voice.model_dump(),
         }
         graph.create_node("voice::voice", voice_data)
+
+        # Store generated title on the vision node (story-level identity metadata)
+        graph.upsert_node("vision::main", {"story_title": output.story_title})
+
         log.info(
             "voice_document_created",
             pov=output.voice.pov,
             tense=output.voice.tense,
             register=output.voice.voice_register,
+            story_title=output.story_title,
         )
 
         return FillPhaseResult(
