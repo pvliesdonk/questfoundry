@@ -314,7 +314,8 @@ class TestA1111Presets:
             await provider.generate("test")
 
         payload = mock_post.call_args.kwargs["json"]
-        assert payload["sampler_name"] == "DPM++ 2M Karras"
+        assert payload["sampler_name"] == "DPM++ 2M"
+        assert payload["scheduler"] == "karras"
         assert payload["steps"] == 35
         assert payload["cfg_scale"] == 7.5
 
@@ -327,7 +328,8 @@ class TestA1111Presets:
             await provider.generate("test")
 
         payload = mock_post.call_args.kwargs["json"]
-        assert payload["sampler_name"] == "DPM++ 2M Karras"
+        assert payload["sampler_name"] == "DPM++ 2M"
+        assert payload["scheduler"] == "karras"
         assert payload["steps"] == 30
         assert payload["cfg_scale"] == 7.0
 
