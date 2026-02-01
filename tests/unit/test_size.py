@@ -190,9 +190,11 @@ class TestResolveSizeFromGraph:
 class TestScopeStorySize:
     """Tests for story_size field on the DREAM Scope model."""
 
-    def test_default_story_size_is_standard(self) -> None:
-        scope = Scope(estimated_passages=30, target_word_count=15000)
-        assert scope.story_size == "standard"
+    def test_story_size_is_required(self) -> None:
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            Scope()  # type: ignore[call-arg]
 
     def test_explicit_story_size(self) -> None:
         scope = Scope(story_size="vignette", estimated_passages=10, target_word_count=3000)
@@ -213,10 +215,12 @@ class TestScopeStorySize:
         )
         assert scope.story_size == "long"
 
-    def test_story_size_absent_defaults_to_standard(self) -> None:
-        """Backward compatibility: old artifacts without story_size still validate."""
-        scope = Scope.model_validate({"estimated_passages": 30, "target_word_count": 15000})
-        assert scope.story_size == "standard"
+    def test_story_size_absent_raises_error(self) -> None:
+        """story_size is required — omitting it raises a validation error."""
+        from pydantic import ValidationError
+
+        with pytest.raises(ValidationError):
+            Scope.model_validate({"estimated_passages": 30, "target_word_count": 15000})
 
 
 class TestSizeTemplateVars:
