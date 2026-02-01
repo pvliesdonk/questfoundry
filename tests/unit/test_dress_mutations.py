@@ -446,6 +446,35 @@ class TestApplyDressIllustration:
                 category="scene",
             )
 
+    def test_cover_brief_targets_vision(self, dress_graph: Graph) -> None:
+        """Cover brief targets vision::main, not a passage."""
+        from questfoundry.graph.dress_mutations import apply_dress_illustration
+
+        dress_graph.create_node("vision::main", {"type": "vision", "genre": "cyberpunk"})
+        dress_graph.create_node(
+            "illustration_brief::cover",
+            {"type": "illustration_brief", "subject": "Cover image"},
+        )
+        dress_graph.add_edge("targets", "illustration_brief::cover", "vision::main")
+
+        illust_id = apply_dress_illustration(
+            dress_graph,
+            brief_id="illustration_brief::cover",
+            asset_path="assets/cover.png",
+            caption="",
+            category="vista",
+        )
+
+        assert illust_id == "illustration::main"
+        node = dress_graph.get_node(illust_id)
+        assert node is not None
+        assert node["asset"] == "assets/cover.png"
+
+        # Depicts edge should point to vision::main
+        depicts = dress_graph.get_edges(from_id=illust_id, edge_type="Depicts")
+        assert len(depicts) == 1
+        assert depicts[0]["to"] == "vision::main"
+
 
 # ---------------------------------------------------------------------------
 # Validation
