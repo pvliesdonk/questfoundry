@@ -329,6 +329,8 @@ class FillStage:
         context: dict[str, Any],
         output_schema: type[T],
         max_retries: int = 3,
+        *,
+        creative: bool = False,
     ) -> tuple[T, int, int]:
         """Call LLM with structured output and retry on validation failure.
 
@@ -336,11 +338,14 @@ class FillStage:
         validates with Pydantic, retries with error feedback on failure.
 
         Args:
-            model: LangChain chat model.
+            model: LangChain chat model (discuss-phase, creative temperature).
             template_name: Name of the prompt template (without .yaml).
             context: Variables to inject into the prompt template.
             output_schema: Pydantic model class for structured output.
             max_retries: Maximum retry attempts on validation failure.
+            creative: Use the discuss-phase model (creative temperature) instead
+                of the serialize model. Enable for prose generation where lexical
+                diversity matters.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -357,8 +362,15 @@ class FillStage:
         system_text = template.system.format(**context) if context else template.system
         user_text = template.user.format(**context) if template.user else None
 
-        effective_model = self._serialize_model or model
-        effective_provider = self._serialize_provider_name or self._provider_name
+        if creative:
+            # Use discuss-phase model for creative output (prose generation).
+            # The serialize model has DETERMINISTIC temperature (0.0) which
+            # causes severe self-plagiarism and lexical collapse in prose.
+            effective_model = model
+            effective_provider = self._provider_name
+        else:
+            effective_model = self._serialize_model or model
+            effective_provider = self._serialize_provider_name or self._provider_name
         structured_model = with_structured_output(
             effective_model, output_schema, provider_name=effective_provider
         )
@@ -587,6 +599,7 @@ class FillStage:
                 "fill_phase1_prose",
                 context,
                 FillPhase1Output,
+                creative=True,
             )
             total_llm_calls += llm_calls
             total_tokens += tokens
@@ -785,6 +798,7 @@ class FillStage:
                     "fill_phase3_revision",
                     context,
                     FillPhase1Output,  # Reuse — same passage output format
+                    creative=True,
                 )
                 total_llm_calls += llm_calls
                 total_tokens += tokens

@@ -470,15 +470,20 @@ class DressStage:
         context: dict[str, Any],
         output_schema: type[T],
         max_retries: int = 3,
+        *,
+        creative: bool = False,
     ) -> tuple[T, int, int]:
         """Call LLM with structured output and retry on validation failure.
 
         Args:
-            model: LangChain chat model.
+            model: LangChain chat model (discuss-phase, creative temperature).
             template_name: Prompt template name (without .yaml).
             context: Variables to inject into the prompt template.
             output_schema: Pydantic model class for structured output.
             max_retries: Maximum retry attempts.
+            creative: Use the discuss-phase model (creative temperature) instead
+                of the serialize model. Enable for illustration briefs where
+                mood/caption diversity matters.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -495,8 +500,15 @@ class DressStage:
         system_text = template.system.format(**context) if context else template.system
         user_text = template.user.format(**context) if template.user else None
 
-        effective_model = self._serialize_model or model
-        effective_provider = self._serialize_provider_name or self._provider_name
+        if creative:
+            # Use discuss-phase model for creative output (briefs, captions).
+            # The serialize model has DETERMINISTIC temperature (0.0) which
+            # causes monotonous compositions, moods, and self-plagiarized captions.
+            effective_model = model
+            effective_provider = self._provider_name
+        else:
+            effective_model = self._serialize_model or model
+            effective_provider = self._serialize_provider_name or self._provider_name
         structured_model = with_structured_output(
             effective_model, output_schema, provider_name=effective_provider
         )
@@ -606,7 +618,7 @@ class DressStage:
             }
 
             output, llm_calls, tokens = await self._dress_llm_call(
-                model, "dress_brief", context, DressPhase1Output
+                model, "dress_brief", context, DressPhase1Output, creative=True
             )
             total_llm_calls += llm_calls
             total_tokens += tokens

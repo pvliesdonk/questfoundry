@@ -43,6 +43,23 @@ system: |
   - Use entity visual references for consistent depiction
   - The caption should be diegetic — written in the story's voice, not meta-commentary
   - Consider what makes a compelling still image from the scene
+  - COMPOSITION VARIETY: Do NOT use the same camera angle and framing for every
+    brief. The art direction composition_notes are defaults, not mandates. Vary
+    between: low-angle, high-angle, eye-level, bird's-eye, close-up, medium shot,
+    wide establishing shot, over-the-shoulder, Dutch angle. Match the angle to
+    the scene's emotion — not every scene needs a low-angle diagonal cut.
+  - MOOD VARIETY: Use the full emotional spectrum. Not every scene is "haunting".
+    Consider: wonder, dread, fury, tenderness, humor, triumph, melancholy, awe,
+    confusion, serenity, panic, relief. Match the mood to what actually happens
+    in the passage.
+  - CAPTION UNIQUENESS: Each caption must use different imagery and phrasing.
+    Never reuse metaphors or sentence patterns across briefs.
+  - NEGATIVE FIELD: Only list negatives SPECIFIC to this brief that go beyond
+    the global negative_defaults. If no brief-specific negatives apply, use an
+    empty string.
+  - ENTITIES: List the entity IDs of characters, locations, or items that appear
+    in the image. Use the raw entity IDs (e.g., "kael_vex", not "entity_visual::kael_vex").
+    Do NOT leave this empty if characters are depicted.
   - Return ONLY valid JSON. No prose before or after.
 
 user: |

@@ -463,6 +463,7 @@ class TestPhase1Generate:
             context: dict,
             output_schema: type,  # noqa: ARG001
             max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             nonlocal call_count
             call_count += 1
@@ -493,6 +494,7 @@ class TestPhase1Generate:
             context: dict,
             output_schema: type,  # noqa: ARG001
             max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             pid = context["passage_id"]
             if pid == "p1":
@@ -534,6 +536,7 @@ class TestPhase1Generate:
             context: dict,
             output_schema: type,  # noqa: ARG001
             max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             pid = context["passage_id"]
             if pid == "p1":
@@ -651,6 +654,7 @@ class TestPhase2Review:
             context: dict,  # noqa: ARG001
             output_schema: type,  # noqa: ARG001
             max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             return (
                 FillPhase2Output(
@@ -697,6 +701,7 @@ class TestPhase2Review:
             context: dict,  # noqa: ARG001
             output_schema: type,  # noqa: ARG001
             max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             return FillPhase2Output(flags=[]), 1, 200
 
@@ -726,6 +731,7 @@ class TestPhase3Revision:
             context: dict,  # noqa: ARG001
             output_schema: type,  # noqa: ARG001
             max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             return (
                 FillPhase1Output(
@@ -779,6 +785,7 @@ class TestPhase3Revision:
             context: dict,
             output_schema: type,  # noqa: ARG001
             max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             nonlocal call_count
             call_count += 1
@@ -836,6 +843,7 @@ class TestPhase3Revision:
             context: dict,
             output_schema: type,  # noqa: ARG001
             max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             nonlocal call_count
             call_count += 1

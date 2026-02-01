@@ -22,10 +22,11 @@ system: |
   ## Scene Type Guidance
   - **scene**: Full dramatic structure (goal, obstacle, outcome). 3+ paragraphs.
     Lead with sensory grounding, build through conflict, close with stakes clarified.
+    Include at least one line of dialogue or direct action per paragraph.
   - **sequel**: Reactive processing (reaction, dilemma, decision). 2-3 paragraphs.
-    Breathing room after intensity.
+    Breathing room after intensity. Ground reactions in physical sensation or gesture.
   - **micro_beat**: Brief transition. 1 paragraph. Functional prose that moves
-    the story forward without dwelling.
+    the story forward without dwelling. Prefer a single concrete action or image.
 
   ## Narrative Function Guidance
   - **introduce**: Ground the reader. Establish new elements through sensory detail
@@ -73,6 +74,12 @@ system: |
   8. Build toward the exit mood through imagery and rhythm — do not state it directly
   9. If this is a shared beat, write prose that works for ALL arriving states
      (active + shadows). Use ambiguous phrasing when states diverge.
+  10. DO NOT repeat phrases, metaphors, or sentence structures from the sliding
+      window. Each passage must use fresh imagery and vocabulary. If the previous
+      passages used a metaphor (e.g., "like a wound"), find a different one.
+  11. Every scene and sequel MUST contain at least one line of dialogue or one
+      concrete physical action (a character doing something with their body, not
+      just thinking or feeling).
 
   ## Poly-State Examples (CRITICAL for shared beats)
   GOOD: "The stranger's expression was unreadable" (works for trust or betrayal)
