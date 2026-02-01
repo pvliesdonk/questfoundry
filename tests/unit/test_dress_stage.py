@@ -1192,13 +1192,12 @@ class TestRunGenerateOnly:
         mock_provider.generate = AsyncMock(return_value=mock_result)
 
         stage = DressStage(image_provider="placeholder")
-        stage._image_budget = 1
 
         with patch(
             "questfoundry.pipeline.stages.dress.create_image_provider",
             return_value=mock_provider,
         ):
-            result = await stage.run_generate_only(tmp_path)
+            result = await stage.run_generate_only(tmp_path, image_budget=1)
 
         assert "1 images generated" in result.detail
 
