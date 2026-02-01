@@ -1480,6 +1480,20 @@ def run(
         bool,
         typer.Option("--init", help="Create project if it doesn't exist."),
     ] = False,
+    image_provider: Annotated[
+        str | None,
+        typer.Option(
+            "--image-provider",
+            help="Image provider for DRESS stage (e.g., a1111, openai/gpt-image-1).",
+        ),
+    ] = None,
+    image_budget: Annotated[
+        int,
+        typer.Option(
+            "--image-budget",
+            help="Max images to generate in DRESS stage (0=all selected briefs).",
+        ),
+    ] = 0,
 ) -> None:
     """Run multiple pipeline stages sequentially.
 
@@ -1580,6 +1594,8 @@ def run(
                 provider_discuss=provider_discuss,
                 provider_summarize=provider_summarize,
                 provider_serialize=provider_serialize,
+                image_provider=image_provider,
+                image_budget=image_budget,
             )
 
             # SEED-specific message
@@ -1687,6 +1703,7 @@ def _check_configuration() -> bool:
         ("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY")),
         ("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY")),
         ("LANGSMITH_API_KEY", os.getenv("LANGSMITH_API_KEY")),
+        ("A1111_HOST", os.getenv("A1111_HOST")),
     ]
 
     any_provider = False
@@ -1731,6 +1748,12 @@ async def _check_providers() -> bool:
         all_ok &= await _check_anthropic()
     else:
         console.print("  [dim]○[/dim] anthropic: Skipped (not configured)")
+
+    # Check A1111
+    if os.getenv("A1111_HOST"):
+        all_ok &= await _check_a1111()
+    else:
+        console.print("  [dim]○[/dim] a1111: Skipped (A1111_HOST not set)")
 
     console.print()
     return all_ok
@@ -1819,6 +1842,35 @@ async def _check_anthropic() -> bool:
         console.print("  [yellow]![/yellow] anthropic: Unusual key format")
         return False
     return False
+
+
+async def _check_a1111() -> bool:
+    """Check A1111 (Stable Diffusion WebUI) connectivity and active checkpoint."""
+    import os
+
+    import httpx
+
+    host = os.getenv("A1111_HOST", "").rstrip("/")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(f"{host}/sdapi/v1/options")
+            if response.status_code == 200:
+                data = response.json()
+                checkpoint = data.get("sd_model_checkpoint", "unknown")
+                console.print(f"  [green]✓[/green] a1111: Connected (checkpoint: {checkpoint})")
+                return True
+            else:
+                console.print(f"  [red]✗[/red] a1111: HTTP {response.status_code}")
+                return False
+    except httpx.ConnectError:
+        console.print(f"  [red]✗[/red] a1111: Connection refused ({host})")
+        return False
+    except httpx.TimeoutException:
+        console.print(f"  [red]✗[/red] a1111: Connection timeout ({host})")
+        return False
+    except httpx.RequestError as e:
+        console.print(f"  [red]✗[/red] a1111: Request error - {e}")
+        return False
 
 
 def _check_project(project_path: Path) -> bool:
