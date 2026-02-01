@@ -48,6 +48,7 @@ class ProvidersConfig:
     discuss: str | None = None
     summarize: str | None = None
     serialize: str | None = None
+    image: str | None = None
     settings: dict[str, PhaseSettings] = field(default_factory=dict)
 
     def get_phase_settings(self, phase: str) -> PhaseSettings:
@@ -90,6 +91,15 @@ class ProvidersConfig:
         """
         return self.serialize or self.default
 
+    def get_image_provider(self) -> str | None:
+        """Get the config-level image provider.
+
+        Returns image provider string if set, otherwise None.
+        Image generation is opt-in — there is no default.
+        Environment variables are resolved by the orchestrator.
+        """
+        return self.image
+
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProvidersConfig:
         """Create config from dictionary.
@@ -120,6 +130,7 @@ class ProvidersConfig:
             discuss=data.get("discuss"),
             summarize=data.get("summarize"),
             serialize=data.get("serialize"),
+            image=data.get("image"),
             settings=settings,
         )
 

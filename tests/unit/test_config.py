@@ -133,6 +133,34 @@ class TestProvidersConfig:
         with patch.dict("os.environ", {"QF_PROVIDER_SERIALIZE": "openai/o3-mini"}):
             assert config.get_serialize_provider() == "openai/o1-mini"
 
+    def test_from_dict_with_image_provider(self) -> None:
+        """Parse config with image provider set."""
+        data = {
+            "default": "ollama/qwen3:4b-instruct-32k",
+            "image": "openai/gpt-image-1",
+        }
+        config = ProvidersConfig.from_dict(data)
+
+        assert config.image == "openai/gpt-image-1"
+        assert config.get_image_provider() == "openai/gpt-image-1"
+
+    def test_from_dict_without_image_provider(self) -> None:
+        """Image provider defaults to None (opt-in)."""
+        config = ProvidersConfig.from_dict({"default": "ollama/qwen3:4b-instruct-32k"})
+
+        assert config.image is None
+        assert config.get_image_provider() is None
+
+    def test_get_image_provider_ignores_env(self) -> None:
+        """ProvidersConfig returns config value, not env var (SRP: orchestrator handles env)."""
+        config = ProvidersConfig(
+            default="ollama/qwen3:4b-instruct-32k",
+            image="openai/gpt-image-1",
+        )
+
+        with patch.dict("os.environ", {"QF_IMAGE_PROVIDER": "placeholder"}):
+            assert config.get_image_provider() == "openai/gpt-image-1"
+
 
 # --- Tests for ProjectConfig with hybrid providers ---
 

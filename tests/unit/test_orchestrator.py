@@ -744,3 +744,74 @@ providers:
                 os.environ["QF_PROVIDER_SERIALIZE"] = orig
 
     # Level 5 & 6: Config (tested in test_config.py)
+
+
+# --- Tests for image provider precedence ---
+
+
+def test_orchestrator_image_provider_cli_override(tmp_path: Path) -> None:
+    """CLI --image-provider flag takes highest precedence."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: img_test
+providers:
+  default: ollama/qwen3:4b-instruct-32k
+  image: openai/gpt-image-1
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(
+        tmp_path,
+        image_provider_override="placeholder",
+    )
+
+    with patch.dict("os.environ", {"QF_IMAGE_PROVIDER": "a1111"}):
+        assert orchestrator._get_resolved_image_provider() == "placeholder"
+
+
+def test_orchestrator_image_provider_env_precedence(tmp_path: Path) -> None:
+    """QF_IMAGE_PROVIDER env var takes precedence over config."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: img_test
+providers:
+  default: ollama/qwen3:4b-instruct-32k
+  image: openai/gpt-image-1
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    with patch.dict("os.environ", {"QF_IMAGE_PROVIDER": "placeholder"}):
+        assert orchestrator._get_resolved_image_provider() == "placeholder"
+
+
+def test_orchestrator_image_provider_config_fallback(tmp_path: Path) -> None:
+    """Falls back to providers.image from project config."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: img_test
+providers:
+  default: ollama/qwen3:4b-instruct-32k
+  image: openai/gpt-image-1
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    with patch.dict("os.environ", {}, clear=True):
+        assert orchestrator._get_resolved_image_provider() == "openai/gpt-image-1"
+
+
+def test_orchestrator_image_provider_none_by_default(tmp_path: Path) -> None:
+    """Returns None when no image provider configured at any level."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text("name: img_test\n")
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    with patch.dict("os.environ", {}, clear=True):
+        assert orchestrator._get_resolved_image_provider() is None
