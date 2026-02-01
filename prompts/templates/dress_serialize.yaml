@@ -26,7 +26,7 @@ system: |
   - description: Prose description of appearance
   - distinguishing_features: List of key visual identifiers
   - color_associations: Colors tied to this entity (can be empty)
-  - reference_prompt_fragment: Concise image prompt snippet for this entity
+  - reference_prompt_fragment: Visual appearance tags only (clothing, colors, build, distinguishing features — NO camera angles, framing, poses, or actions)
 
   ## Rules
   - Every entity_id MUST be from the valid entity IDs list — do not invent IDs
