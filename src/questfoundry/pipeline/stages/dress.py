@@ -955,23 +955,20 @@ class DressStage:
 
         # Skip briefs that already have illustrations (unless --force)
         if not getattr(self, "_force_regenerate", False):
-            from questfoundry.graph.context import strip_scope_prefix
-
-            already_generated = []
+            already_generated: list[str] = []
             for bid in selected_ids:
-                targets = graph.get_edges(from_id=bid, edge_type="targets")
-                if targets:
-                    passage_id = targets[0]["to"]
-                    illust_id = f"illustration::{strip_scope_prefix(passage_id)}"
-                    if graph.has_node(illust_id):
-                        already_generated.append(bid)
+                # Check for from_brief edges pointing to this brief
+                incoming = graph.get_edges(to_id=bid, edge_type="from_brief")
+                if any(e["from"].startswith("illustration::") for e in incoming):
+                    already_generated.append(bid)
             if already_generated:
+                skip_set = set(already_generated)
                 log.info(
                     "skipped_existing_illustrations",
-                    count=len(already_generated),
+                    count=len(skip_set),
                     total=len(selected_ids),
                 )
-                selected_ids = [b for b in selected_ids if b not in already_generated]
+                selected_ids = [b for b in selected_ids if b not in skip_set]
             if not selected_ids:
                 return DressPhaseResult(
                     phase="generate",
