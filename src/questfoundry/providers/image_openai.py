@@ -1,6 +1,15 @@
 """OpenAI image generation provider.
 
-Supports gpt-image-1 and dall-e-3 via the OpenAI Images API.
+Supports gpt-image-1 (and legacy dall-e-3) via the OpenAI Images API.
+
+gpt-image-1 and dall-e-3 differ in supported parameters:
+
+* **gpt-image-1**: ``output_format`` (no ``response_format``),
+  sizes ``1024x1024 / 1536x1024 / 1024x1536 / auto``,
+  quality ``low / medium / high``.
+* **dall-e-3** (deprecated May 2026): ``response_format`` (``b64_json``),
+  sizes ``1024x1024 / 1792x1024 / 1024x1792``,
+  quality ``standard / hd``.
 """
 
 from __future__ import annotations
@@ -23,14 +32,26 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
-# Aspect ratio → OpenAI size mapping
-_ASPECT_RATIO_TO_SIZE: dict[str, str] = {
+# -- Model-specific size mappings -------------------------------------------
+
+_GPT_IMAGE_SIZES: dict[str, str] = {
     "1:1": "1024x1024",
-    "16:9": "1792x1024",
-    "9:16": "1024x1792",
+    "16:9": "1536x1024",
+    "9:16": "1024x1536",
     "3:2": "1536x1024",
     "2:3": "1024x1536",
 }
+
+_DALLE3_SIZES: dict[str, str] = {
+    "1:1": "1024x1024",
+    "16:9": "1792x1024",
+    "9:16": "1024x1792",
+    "3:2": "1792x1024",
+    "2:3": "1024x1792",
+}
+
+# Kept for backward-compat with tests that import the name directly.
+_ASPECT_RATIO_TO_SIZE = _GPT_IMAGE_SIZES
 
 # Output format → MIME type mapping
 _FORMAT_TO_CONTENT_TYPE: dict[str, str] = {
@@ -38,6 +59,11 @@ _FORMAT_TO_CONTENT_TYPE: dict[str, str] = {
     "jpeg": "image/jpeg",
     "webp": "image/webp",
 }
+
+
+def _is_gpt_image_model(model: str) -> bool:
+    """Return True for gpt-image-* models (not dall-e)."""
+    return model.startswith("gpt-image")
 
 
 class OpenAIImageProvider:
@@ -71,6 +97,8 @@ class OpenAIImageProvider:
             raise ImageProviderError("openai", msg)
 
         self._content_type = _FORMAT_TO_CONTENT_TYPE[output_format]
+        self._is_gpt_image = _is_gpt_image_model(model)
+        self._sizes = _GPT_IMAGE_SIZES if self._is_gpt_image else _DALLE3_SIZES
 
         # Create client once, reuse across calls
         self._client: AsyncOpenAI = self._create_client()
@@ -126,7 +154,7 @@ class OpenAIImageProvider:
         *,
         negative_prompt: str | None = None,
         aspect_ratio: str = "1:1",
-        quality: str = "standard",
+        quality: str = "standard",  # mapped to "high" for gpt-image models
     ) -> ImageResult:
         """Generate an image via OpenAI Images API.
 
@@ -138,7 +166,8 @@ class OpenAIImageProvider:
             negative_prompt: Appended as "Avoid: ..." to the prompt.
             aspect_ratio: Maps to OpenAI size parameter. Must be a supported
                 ratio (1:1, 16:9, 9:16, 3:2, 2:3).
-            quality: Passed directly to API (``standard``, ``hd``).
+            quality: Passed directly to API. gpt-image-1 accepts
+                ``low``/``medium``/``high``; dall-e-3 accepts ``standard``/``hd``.
 
         Returns:
             ImageResult with generated image.
@@ -153,10 +182,14 @@ class OpenAIImageProvider:
         if negative_prompt:
             effective_prompt = f"{prompt}\n\nAvoid: {negative_prompt}"
 
+        # Map quality values between model families
+        if self._is_gpt_image:
+            quality = {"standard": "high", "hd": "high"}.get(quality, quality)
+
         # Map aspect ratio to size — reject unknown ratios
-        size = _ASPECT_RATIO_TO_SIZE.get(aspect_ratio)
+        size = self._sizes.get(aspect_ratio)
         if size is None:
-            supported = ", ".join(sorted(_ASPECT_RATIO_TO_SIZE))
+            supported = ", ".join(sorted(self._sizes))
             msg = f"Unsupported aspect_ratio '{aspect_ratio}'. Supported: {supported}"
             raise ImageProviderError("openai", msg)
 
@@ -169,17 +202,19 @@ class OpenAIImageProvider:
         )
 
         try:
-            # Build kwargs — use Any to avoid Literal type mismatches
-            # from dynamic values (size comes from dict lookup, quality from caller)
             api_kwargs: dict[str, Any] = {
                 "model": self._model,
                 "prompt": effective_prompt,
                 "n": 1,
                 "size": size,
                 "quality": quality,
-                "response_format": "b64_json",
-                "output_format": self._output_format,
             }
+            if self._is_gpt_image:
+                # gpt-image-1: output_format instead of response_format
+                api_kwargs["output_format"] = self._output_format
+            else:
+                # dall-e-3: response_format required for base64
+                api_kwargs["response_format"] = "b64_json"
             response = await self._client.images.generate(**api_kwargs)
         except ImageProviderError:
             raise

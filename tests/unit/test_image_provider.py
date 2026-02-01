@@ -145,19 +145,22 @@ class TestOpenAIImageProvider:
             "A watercolor landscape",
             negative_prompt="photorealistic",
             aspect_ratio="16:9",
-            quality="hd",
+            quality="high",
         )
 
         assert result.image_data == b"fake_png_data"
         assert result.content_type == "image/png"
         assert result.provider_metadata["model"] == "gpt-image-1"
         assert result.provider_metadata["revised_prompt"] == "A beautiful scene"
-        assert result.provider_metadata["size"] == "1792x1024"
+        assert result.provider_metadata["size"] == "1536x1024"
 
         # Verify API was called with correct params
         call_kwargs = provider._client.images.generate.call_args
         assert "Avoid: photorealistic" in call_kwargs.kwargs["prompt"]
-        assert call_kwargs.kwargs["size"] == "1792x1024"
+        assert call_kwargs.kwargs["size"] == "1536x1024"
+        # gpt-image-1 uses output_format, not response_format
+        assert "response_format" not in call_kwargs.kwargs
+        assert call_kwargs.kwargs["output_format"] == "png"
 
     @pytest.mark.asyncio()
     async def test_generate_content_policy_error(self) -> None:
@@ -258,12 +261,19 @@ class TestCreateImageProvider:
         with pytest.raises(ImageProviderError, match="Unknown image provider"):
             create_image_provider("midjourney/v6")
 
-    def test_aspect_ratio_mapping(self) -> None:
-        from questfoundry.providers.image_openai import _ASPECT_RATIO_TO_SIZE
+    def test_aspect_ratio_mapping_gpt_image(self) -> None:
+        from questfoundry.providers.image_openai import _GPT_IMAGE_SIZES
 
-        assert _ASPECT_RATIO_TO_SIZE["1:1"] == "1024x1024"
-        assert _ASPECT_RATIO_TO_SIZE["16:9"] == "1792x1024"
-        assert _ASPECT_RATIO_TO_SIZE["9:16"] == "1024x1792"
+        assert _GPT_IMAGE_SIZES["1:1"] == "1024x1024"
+        assert _GPT_IMAGE_SIZES["16:9"] == "1536x1024"
+        assert _GPT_IMAGE_SIZES["9:16"] == "1024x1536"
+
+    def test_aspect_ratio_mapping_dalle3(self) -> None:
+        from questfoundry.providers.image_openai import _DALLE3_SIZES
+
+        assert _DALLE3_SIZES["1:1"] == "1024x1024"
+        assert _DALLE3_SIZES["16:9"] == "1792x1024"
+        assert _DALLE3_SIZES["9:16"] == "1024x1792"
 
 
 # ---------------------------------------------------------------------------
