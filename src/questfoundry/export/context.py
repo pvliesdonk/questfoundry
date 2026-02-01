@@ -17,12 +17,9 @@ from questfoundry.export.base import (
     ExportIllustration,
     ExportPassage,
 )
-from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
-
-log = get_logger(__name__)
 
 
 def build_export_context(graph: Graph, project_name: str) -> ExportContext:
@@ -38,8 +35,6 @@ def build_export_context(graph: Graph, project_name: str) -> ExportContext:
     Raises:
         ValueError: If no passages exist in the graph.
     """
-    log.info("export_context_start", project=project_name)
-
     passages = _extract_passages(graph)
     if not passages:
         msg = "Graph contains no passages — nothing to export"
@@ -48,71 +43,43 @@ def build_export_context(graph: Graph, project_name: str) -> ExportContext:
     choices = _extract_choices(graph)
     _mark_start_and_endings(passages, choices)
 
-    entities = _extract_entities(graph)
-    codewords = _extract_codewords(graph)
-    illustrations = _extract_illustrations(graph)
-    codex_entries = _extract_codex_entries(graph)
-    art_direction = _extract_art_direction(graph)
-
-    log.info(
-        "export_context_complete",
-        passages=len(passages),
-        choices=len(choices),
-        entities=len(entities),
-        codewords=len(codewords),
-        illustrations=len(illustrations),
-        codex_entries=len(codex_entries),
-        has_art_direction=art_direction is not None,
-    )
-
     return ExportContext(
         title=project_name,
         passages=passages,
         choices=choices,
-        entities=entities,
-        codewords=codewords,
-        illustrations=illustrations,
-        codex_entries=codex_entries,
-        art_direction=art_direction,
+        entities=_extract_entities(graph),
+        codewords=_extract_codewords(graph),
+        illustrations=_extract_illustrations(graph),
+        codex_entries=_extract_codex_entries(graph),
+        art_direction=_extract_art_direction(graph),
     )
 
 
 def _extract_passages(graph: Graph) -> list[ExportPassage]:
     """Extract passage nodes with prose."""
     nodes = graph.get_nodes_by_type("passage")
-    passages: list[ExportPassage] = []
-    for node_id, data in sorted(nodes.items()):
-        prose = data.get("prose", "")
-        if not prose:
-            log.warning("passage_missing_prose", passage_id=node_id)
-        passages.append(ExportPassage(id=node_id, prose=prose))
-    return passages
+    return [
+        ExportPassage(
+            id=node_id,
+            prose=data.get("prose", ""),
+        )
+        for node_id, data in sorted(nodes.items())
+    ]
 
 
 def _extract_choices(graph: Graph) -> list[ExportChoice]:
-    """Extract choice nodes (navigation links between passages).
-
-    Raises:
-        ValueError: If a choice node is missing required from_passage or to_passage.
-    """
+    """Extract choice nodes (navigation links between passages)."""
     nodes = graph.get_nodes_by_type("choice")
-    choices: list[ExportChoice] = []
-    for node_id, data in sorted(nodes.items()):
-        from_passage = data.get("from_passage")
-        to_passage = data.get("to_passage")
-        if not from_passage or not to_passage:
-            msg = f"Choice node '{node_id}' missing required 'from_passage' or 'to_passage'"
-            raise ValueError(msg)
-        choices.append(
-            ExportChoice(
-                from_passage=from_passage,
-                to_passage=to_passage,
-                label=data.get("label", "continue"),
-                requires=data.get("requires") or [],
-                grants=data.get("grants") or [],
-            )
+    return [
+        ExportChoice(
+            from_passage=data["from_passage"],
+            to_passage=data["to_passage"],
+            label=data.get("label", "continue"),
+            requires=data.get("requires", []),
+            grants=data.get("grants", []),
         )
-    return choices
+        for _node_id, data in sorted(nodes.items())
+    ]
 
 
 def _mark_start_and_endings(
@@ -137,40 +104,28 @@ def _mark_start_and_endings(
 def _extract_entities(graph: Graph) -> list[ExportEntity]:
     """Extract entity nodes."""
     nodes = graph.get_nodes_by_type("entity")
-    entities: list[ExportEntity] = []
-    for node_id, data in sorted(nodes.items()):
-        entity_type = data.get("entity_type")
-        if not entity_type:
-            log.warning("entity_missing_type", entity_id=node_id)
-            entity_type = "unknown"
-        entities.append(
-            ExportEntity(
-                id=node_id,
-                entity_type=entity_type,
-                concept=data.get("concept", ""),
-                overlays=data.get("overlays") or [],
-            )
+    return [
+        ExportEntity(
+            id=node_id,
+            entity_type=data.get("entity_type", "unknown"),
+            concept=data.get("concept", ""),
+            overlays=data.get("overlays", []),
         )
-    return entities
+        for node_id, data in sorted(nodes.items())
+    ]
 
 
 def _extract_codewords(graph: Graph) -> list[ExportCodeword]:
     """Extract codeword nodes."""
     nodes = graph.get_nodes_by_type("codeword")
-    codewords: list[ExportCodeword] = []
-    for node_id, data in sorted(nodes.items()):
-        cw_type = data.get("codeword_type")
-        if not cw_type:
-            log.warning("codeword_missing_type", codeword_id=node_id)
-            cw_type = "granted"
-        codewords.append(
-            ExportCodeword(
-                id=node_id,
-                codeword_type=cw_type,
-                tracks=data.get("tracks"),
-            )
+    return [
+        ExportCodeword(
+            id=node_id,
+            codeword_type=data.get("codeword_type", "granted"),
+            tracks=data.get("tracks"),
         )
-    return codewords
+        for node_id, data in sorted(nodes.items())
+    ]
 
 
 def _extract_illustrations(graph: Graph) -> list[ExportIllustration]:
