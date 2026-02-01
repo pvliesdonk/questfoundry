@@ -316,7 +316,8 @@ def _make_voice_output() -> FillPhase0Output:
             tone_words=["atmospheric", "tense"],
             avoid_words=["suddenly"],
             avoid_patterns=["adverb-heavy dialogue tags"],
-        )
+        ),
+        story_title="The Hollow Crown",
     )
 
 

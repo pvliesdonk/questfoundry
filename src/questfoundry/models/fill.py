@@ -12,9 +12,9 @@ See docs/design/procedures/fill.md for algorithm details.
 
 from __future__ import annotations
 
-from typing import Literal
+from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from questfoundry.models.pipeline import PhaseResult
 
@@ -127,9 +127,22 @@ class ReviewFlag(BaseModel):
 
 
 class FillPhase0Output(BaseModel):
-    """Phase 0 structured output: voice determination."""
+    """Phase 0 structured output: voice determination and story title."""
 
     voice: VoiceDocument
+    story_title: str = Field(
+        min_length=1,
+        description="A compelling title for the story (2-8 words)",
+        json_schema_extra={"strip_whitespace": True},
+    )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _strip_title_whitespace(cls, data: Any) -> Any:
+        """Strip whitespace from story_title before min_length check."""
+        if isinstance(data, dict) and isinstance(data.get("story_title"), str):
+            data["story_title"] = data["story_title"].strip()
+        return data
 
 
 class FillPhase1Output(BaseModel):

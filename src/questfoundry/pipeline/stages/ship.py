@@ -88,15 +88,18 @@ class ShipStage:
                 f"Run FILL stage first. Examples: {missing_prose[:3]}"
             )
 
-        # Get project name for title
-        try:
-            config = load_project_config(self._project_path)
-            project_name = config.name
-        except (ProjectConfigError, FileNotFoundError, KeyError):
-            project_name = self._project_path.name
+        # Get story title: graph (from FILL) → project config → directory name
+        vision = graph.get_node("vision::main")
+        story_title = (vision or {}).get("story_title") or ""
+        if not story_title:
+            try:
+                config = load_project_config(self._project_path)
+                story_title = config.name
+            except (ProjectConfigError, FileNotFoundError, KeyError):
+                story_title = self._project_path.name
 
         # Build export context
-        context = build_export_context(graph, project_name)
+        context = build_export_context(graph, story_title)
 
         log.info(
             "ship_context_built",
