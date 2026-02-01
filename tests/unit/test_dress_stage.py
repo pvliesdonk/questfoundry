@@ -24,6 +24,7 @@ from questfoundry.models.dress import (
 from questfoundry.pipeline.stages.dress import (
     DressStage,
     DressStageError,
+    _apply_image_budget,
     assemble_image_prompt,
     compute_structural_score,
     create_dress_stage,
@@ -920,3 +921,92 @@ class TestAssembleImagePrompt:
 
         assert "A simple scene" in positive
         assert negative is None
+
+
+# ---------------------------------------------------------------------------
+# Budget Control
+# ---------------------------------------------------------------------------
+
+
+class TestApplyImageBudget:
+    def _make_graph_with_briefs(self, priorities: dict[str, int]) -> Graph:
+        """Create a graph with briefs at given priorities."""
+        g = Graph()
+        for bid, priority in priorities.items():
+            g.create_node(bid, {"type": "illustration_brief", "priority": priority})
+        return g
+
+    def test_budget_selects_highest_priority(self) -> None:
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::a": 2,
+                "illustration_brief::b": 1,
+                "illustration_brief::c": 3,
+            }
+        )
+        result = _apply_image_budget(
+            g,
+            ["illustration_brief::a", "illustration_brief::b", "illustration_brief::c"],
+            budget=1,
+        )
+        assert result == ["illustration_brief::b"]
+
+    def test_budget_two_from_mixed(self) -> None:
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::a": 3,
+                "illustration_brief::b": 1,
+                "illustration_brief::c": 2,
+            }
+        )
+        result = _apply_image_budget(
+            g,
+            ["illustration_brief::a", "illustration_brief::b", "illustration_brief::c"],
+            budget=2,
+        )
+        assert result == ["illustration_brief::b", "illustration_brief::c"]
+
+    def test_budget_exceeds_total(self) -> None:
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::a": 1,
+                "illustration_brief::b": 2,
+            }
+        )
+        result = _apply_image_budget(
+            g,
+            ["illustration_brief::a", "illustration_brief::b"],
+            budget=10,
+        )
+        assert len(result) == 2
+
+    def test_budget_stable_ordering(self) -> None:
+        """Same priority briefs are ordered by ID for stability."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::z": 1,
+                "illustration_brief::a": 1,
+                "illustration_brief::m": 1,
+            }
+        )
+        result = _apply_image_budget(
+            g,
+            ["illustration_brief::z", "illustration_brief::a", "illustration_brief::m"],
+            budget=2,
+        )
+        # Should be alphabetical by ID since priorities are equal
+        assert result == ["illustration_brief::a", "illustration_brief::m"]
+
+    def test_missing_brief_defaults_to_low_priority(self) -> None:
+        """Briefs not found in graph are treated as priority 3."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::real": 1,
+            }
+        )
+        result = _apply_image_budget(
+            g,
+            ["illustration_brief::real", "illustration_brief::missing"],
+            budget=1,
+        )
+        assert result == ["illustration_brief::real"]

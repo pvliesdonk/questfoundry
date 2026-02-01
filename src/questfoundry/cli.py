@@ -455,6 +455,7 @@ def _run_stage_command(
     provider_serialize: str | None = None,
     resume_from: str | None = None,
     image_provider: str | None = None,
+    image_budget: int = 0,
 ) -> None:
     """Common logic for running a stage command.
 
@@ -504,6 +505,8 @@ def _run_stage_command(
         context["resume_from"] = resume_from
     if image_provider:
         context["image_provider"] = image_provider
+    if image_budget > 0:
+        context["image_budget"] = image_budget
 
     # Add phase progress callback (used by GROW, and optionally by other stages)
     def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
@@ -1268,6 +1271,10 @@ def dress(
         str | None,
         typer.Option("--image-provider", help="Image provider (e.g., openai/gpt-image-1)"),
     ] = None,
+    image_budget: Annotated[
+        int,
+        typer.Option("--image-budget", help="Max images to generate (0=all selected briefs)"),
+    ] = 0,
     resume_from: Annotated[
         str | None,
         typer.Option("--resume-from", help="Resume from named phase (skips earlier phases)"),
@@ -1300,6 +1307,7 @@ def dress(
         provider_serialize=provider_serialize,
         resume_from=resume_from,
         image_provider=image_provider,
+        image_budget=image_budget,
     )
 
 
