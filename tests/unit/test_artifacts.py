@@ -417,9 +417,7 @@ def test_roundtrip_preserves_data(tmp_path: Path) -> None:
 
 def test_scope_requires_story_size() -> None:
     """Scope model requires story_size (no default)."""
-    import pytest
-
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(ValidationError):
         Scope()  # type: ignore[call-arg]
 
     scope = Scope(story_size="vignette")
@@ -431,9 +429,7 @@ def test_scope_requires_story_size() -> None:
 
 def test_scope_required_on_dream_artifact() -> None:
     """DreamArtifact requires scope (no default)."""
-    import pytest
-
-    with pytest.raises(Exception):  # noqa: B017
+    with pytest.raises(ValidationError):
         DreamArtifact(
             genre="mystery",
             tone=["dark"],
