@@ -8,6 +8,12 @@ system: |
   ## Voice Document
   {voice_document}
 
+  ## Story Identity
+  {story_identity}
+
+  This is the genre and thematic compass. Let it influence word choice, imagery
+  selection, and emotional register without overriding the voice document's specifics.
+
   ## Current Passage
   **Passage ID:** {passage_id}
   **Beat Summary:** {beat_summary}

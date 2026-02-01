@@ -121,6 +121,14 @@ def format_passage_for_brief(graph: Graph, passage_id: str) -> str:
         scene_type = beat.get("scene_type", "scene")
         lines.append(f"**Scene type:** {scene_type}")
 
+        narrative_function = beat.get("narrative_function", "")
+        if narrative_function:
+            lines.append(f"**Narrative function:** {narrative_function}")
+
+        exit_mood = beat.get("exit_mood", "")
+        if exit_mood:
+            lines.append(f"**Exit mood:** {exit_mood}")
+
         summary = beat.get("summary", "")
         if summary:
             lines.append(f"**Summary:** {summary}")
@@ -147,6 +155,24 @@ def format_passage_for_brief(graph: Graph, passage_id: str) -> str:
     if choices:
         lines.append("")
         lines.append(f"**Divergence point:** {len(choices)} choices")
+
+    # Path undertone (low-salience context to subtly tint illustrations)
+    if beat_id:
+        all_arcs = graph.get_nodes_by_type("arc")
+        path_themes: list[str] = []
+        for _aid, adata in all_arcs.items():
+            if beat_id in adata.get("sequence", []):
+                for path_id in adata.get("paths", []):
+                    path_node = graph.get_node(path_id)
+                    if path_node:
+                        theme = path_node.get("path_theme", "")
+                        mood = path_node.get("path_mood", "")
+                        if theme or mood:
+                            combined = f"{mood} ({theme})" if theme and mood else (theme or mood)
+                            path_themes.append(combined)
+        if path_themes:
+            lines.append("")
+            lines.append(f"**Path undertone:** {'; '.join(path_themes)}")
 
     return "\n".join(lines).strip()
 

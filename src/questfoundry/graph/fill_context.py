@@ -69,6 +69,42 @@ def get_arc_passage_order(graph: Graph, arc_id: str) -> list[str]:
     return passages
 
 
+def format_story_identity(graph: Graph) -> str:
+    """Format minimal DREAM vision context for prose generation.
+
+    Provides genre, tone, and themes as a thematic anchor without
+    duplicating voice document content.
+
+    Args:
+        graph: Graph containing the vision node from DREAM stage.
+
+    Returns:
+        Formatted identity context, or empty string if not found.
+    """
+    vision_nodes = graph.get_nodes_by_type("vision")
+    if not vision_nodes:
+        return ""
+
+    vision_data = next(iter(vision_nodes.values()))
+    lines: list[str] = []
+
+    genre = vision_data.get("genre", "")
+    subgenre = vision_data.get("subgenre", "")
+    if genre:
+        genre_text = f"{genre} / {subgenre}" if subgenre else genre
+        lines.append(f"**Genre:** {genre_text}")
+
+    tone = vision_data.get("tone", [])
+    if tone:
+        lines.append(f"**Tone:** {', '.join(str(t) for t in tone)}")
+
+    themes = vision_data.get("themes", [])
+    if themes:
+        lines.append(f"**Themes:** {', '.join(str(t) for t in themes)}")
+
+    return "\n".join(lines)
+
+
 def format_voice_context(graph: Graph) -> str:
     """Format the voice document node as a YAML string for LLM context.
 

@@ -38,6 +38,7 @@ from questfoundry.graph.fill_context import (
     format_scene_types_summary,
     format_shadow_states,
     format_sliding_window,
+    format_story_identity,
     format_voice_context,
     get_arc_passage_order,
     get_spine_arc_id,
@@ -553,6 +554,7 @@ class FillStage:
             )
 
         voice_context = format_voice_context(graph)
+        story_identity_context = format_story_identity(graph)
         total_llm_calls = 0
         total_tokens = 0
         passages_filled = 0
@@ -580,6 +582,7 @@ class FillStage:
 
             context = {
                 "voice_document": voice_context,
+                "story_identity": story_identity_context,
                 "passage_id": passage.get("raw_id", passage_id),
                 "beat_summary": beat_summary,
                 "scene_type": scene_type,
