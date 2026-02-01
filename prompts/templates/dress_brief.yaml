@@ -17,6 +17,23 @@ system: |
   ## Structural Priority Context
   {priority_context}
 
+  ## Composition and Mood Mapping
+  Use the passage's **narrative function** and **exit mood** to drive visual choices:
+  - introduce -> wide/establishing shot, open framing, environmental detail
+  - develop -> medium shot, character focus, layered composition
+  - complicate -> off-balance framing, Dutch angle, cropped elements, visual tension
+  - confront -> tight close-up or claustrophobic framing, direct eye contact, minimal negative space
+  - resolve -> balanced composition, breathing room, symmetry or stillness
+
+  The **exit mood** IS the brief's mood. Do not default to "haunting" — use the exit
+  mood directly or a close synonym. If exit mood says "tense anticipation", the brief
+  mood should reflect anticipation, not generic dread.
+
+  These are starting points, not rigid rules. Deviate when the passage content demands it.
+
+  ## Recent Compositions (Anti-Repetition)
+  {composition_log}
+
   ## Output Schema
   Return a JSON object with:
 
@@ -43,6 +60,25 @@ system: |
   - Use entity visual references for consistent depiction
   - The caption should be diegetic — written in the story's voice, not meta-commentary
   - Consider what makes a compelling still image from the scene
+  - COMPOSITION VARIETY: Do NOT use the same camera angle and framing for every
+    brief. The art direction composition_notes are defaults, not mandates. Vary
+    between: low-angle, high-angle, eye-level, bird's-eye, close-up, medium shot,
+    wide establishing shot, over-the-shoulder, Dutch angle. Match the angle to
+    the scene's emotion — not every scene needs a low-angle diagonal cut.
+  - MOOD VARIETY: Use the full emotional spectrum. Not every scene is "haunting".
+    Consider: wonder, dread, fury, tenderness, humor, triumph, melancholy, awe,
+    confusion, serenity, panic, relief. Match the mood to what actually happens
+    in the passage.
+  - CAPTION UNIQUENESS: Each caption must use different imagery and phrasing.
+    Never reuse metaphors or sentence patterns across briefs.
+  - NEGATIVE FIELD: Only list negatives SPECIFIC to this brief that go beyond
+    the global negative_defaults. If no brief-specific negatives apply, use an
+    empty string.
+  - PATH UNDERTONE: If present, let the path's emotional undertone subtly tint the
+    image — a color choice, a shadow direction, an expression — not dominate the subject.
+  - ENTITIES: List the entity IDs of characters, locations, or items that appear
+    in the image. Use the raw entity IDs (e.g., "kael_vex", not "entity_visual::kael_vex").
+    Do NOT leave this empty if characters are depicted.
   - Return ONLY valid JSON. No prose before or after.
 
 user: |

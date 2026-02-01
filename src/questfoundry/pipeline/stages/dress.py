@@ -310,7 +310,7 @@ class DressStage:
         art_dir = graph.get_node("art_direction::main")
         entity_visuals = graph.get_nodes_by_type("entity_visual")
         briefs = graph.get_nodes_by_type("illustration_brief")
-        codex_entries = graph.get_nodes_by_type("codex")
+        codex_entries = graph.get_nodes_by_type("codex_entry")
         illustrations = graph.get_nodes_by_type("illustration")
 
         return {
@@ -470,15 +470,20 @@ class DressStage:
         context: dict[str, Any],
         output_schema: type[T],
         max_retries: int = 3,
+        *,
+        creative: bool = False,
     ) -> tuple[T, int, int]:
         """Call LLM with structured output and retry on validation failure.
 
         Args:
-            model: LangChain chat model.
+            model: LangChain chat model (discuss-phase, creative temperature).
             template_name: Prompt template name (without .yaml).
             context: Variables to inject into the prompt template.
             output_schema: Pydantic model class for structured output.
             max_retries: Maximum retry attempts.
+            creative: Use the discuss-phase model (creative temperature) instead
+                of the serialize model. Enable for illustration briefs where
+                mood/caption diversity matters.
 
         Returns:
             Tuple of (validated_result, llm_calls, tokens_used).
@@ -495,8 +500,15 @@ class DressStage:
         system_text = template.system.format(**context) if context else template.system
         user_text = template.user.format(**context) if template.user else None
 
-        effective_model = self._serialize_model or model
-        effective_provider = self._serialize_provider_name or self._provider_name
+        if creative:
+            # Use discuss-phase model for creative output (briefs, captions).
+            # The serialize model has DETERMINISTIC temperature (0.0) which
+            # causes monotonous compositions, moods, and self-plagiarized captions.
+            effective_model = model
+            effective_provider = self._provider_name
+        else:
+            effective_model = self._serialize_model or model
+            effective_provider = self._serialize_provider_name or self._provider_name
         structured_model = with_structured_output(
             effective_model, output_schema, provider_name=effective_provider
         )
@@ -584,6 +596,10 @@ class DressStage:
         briefs_created = 0
         briefs_skipped = 0
 
+        # Composition log: accumulate recent compositions/moods to inject
+        # as anti-repetition signal into subsequent brief prompts.
+        recent_compositions: list[str] = []
+
         for passage_id, passage_data in passages.items():
             # Skip passages without prose
             if not passage_data.get("prose"):
@@ -598,15 +614,23 @@ class DressStage:
             entity_visuals_ctx = format_entity_visuals_for_passage(graph, passage_id)
             priority_ctx = describe_priority_context(graph, passage_id, base_score)
 
+            # Format composition log (last 5 entries)
+            if recent_compositions:
+                comp_log = "Recent briefs used these compositions — DO NOT repeat:\n"
+                comp_log += "\n".join(f"- {c}" for c in recent_compositions[-5:])
+            else:
+                comp_log = ""
+
             context = {
                 "art_direction": art_direction_ctx,
                 "passage_context": passage_ctx,
                 "entity_visuals": entity_visuals_ctx or "No entity visual profiles available.",
                 "priority_context": priority_ctx,
+                "composition_log": comp_log,
             }
 
             output, llm_calls, tokens = await self._dress_llm_call(
-                model, "dress_brief", context, DressPhase1Output
+                model, "dress_brief", context, DressPhase1Output, creative=True
             )
             total_llm_calls += llm_calls
             total_tokens += tokens
@@ -628,6 +652,13 @@ class DressStage:
             brief_dict["priority"] = final_priority
             apply_dress_brief(graph, passage_id, brief_dict, final_priority)
             briefs_created += 1
+
+            # Log composition for anti-repetition in subsequent briefs
+            comp = brief_dict.get("composition", "")
+            mood = brief_dict.get("mood", "")
+            category = brief_dict.get("category", "")
+            if comp or mood:
+                recent_compositions.append(f"{category}: {comp} | mood: {mood}")
 
         log.info(
             "briefs_phase_complete",
