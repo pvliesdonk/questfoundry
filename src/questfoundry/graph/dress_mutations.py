@@ -164,6 +164,10 @@ def apply_dress_illustration(
 ) -> str:
     """Create an Illustration node with Depicts and from_brief edges.
 
+    The brief's ``targets`` edge determines the depicted node, which may
+    be a passage (normal illustrations) or another node type such as
+    ``vision::main`` (cover illustration).
+
     Args:
         graph: Story graph to mutate.
         brief_id: IllustrationBrief node ID that was rendered.
@@ -176,17 +180,17 @@ def apply_dress_illustration(
         The created illustration node ID.
 
     Raises:
-        NodeNotFoundError: If the brief doesn't exist.
+        ValueError: If the brief has no targets edge.
     """
-    # Derive passage ID from brief's targets edge
+    # Derive target node from brief's targets edge
     targets_edges = graph.get_edges(from_id=brief_id, edge_type="targets")
     if not targets_edges:
-        msg = f"Brief {brief_id} has no targets edge to a passage"
+        msg = f"Brief {brief_id} has no targets edge"
         raise ValueError(msg)
 
-    passage_id = targets_edges[0]["to"]
-    raw_passage_id = strip_scope_prefix(passage_id)
-    node_id = f"illustration::{raw_passage_id}"
+    target_id = targets_edges[0]["to"]
+    raw_target_id = strip_scope_prefix(target_id)
+    node_id = f"illustration::{raw_target_id}"
 
     illust_data = {
         "type": "illustration",
@@ -197,9 +201,9 @@ def apply_dress_illustration(
     }
     graph.upsert_node(node_id, illust_data)
 
-    # Edge: illustration → passage
+    # Edge: illustration → target node (passage, vision, etc.)
     _remove_edges(graph, from_id=node_id, edge_type="Depicts")
-    graph.add_edge("Depicts", node_id, passage_id)
+    graph.add_edge("Depicts", node_id, target_id)
 
     # Edge: illustration → brief (traceability)
     _remove_edges(graph, from_id=node_id, edge_type="from_brief")
