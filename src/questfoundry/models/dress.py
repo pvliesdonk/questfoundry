@@ -66,7 +66,7 @@ class Illustration(BaseModel):
     category: IllustrationCategory = Field(
         description="Image category",
     )
-    quality: str = Field(
+    quality: Literal["placeholder", "low", "high"] = Field(
         default="high",
         description="Image quality tier: placeholder, low, or high",
     )
