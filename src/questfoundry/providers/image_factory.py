@@ -14,6 +14,8 @@ from questfoundry.providers.image import ImageProvider, ImageProviderError
 
 def create_image_provider(
     provider_spec: str,
+    *,
+    llm: Any | None = None,
     **kwargs: Any,
 ) -> ImageProvider:
     """Create an image provider from a spec string.
@@ -21,6 +23,8 @@ def create_image_provider(
     Args:
         provider_spec: Format ``provider/model`` (e.g., ``openai/gpt-image-1``).
             If no model is specified, a provider-specific default is used.
+        llm: Optional LLM model for providers that do prompt distillation
+            (currently A1111 only).
         **kwargs: Additional provider options forwarded to the constructor.
 
     Returns:
@@ -52,6 +56,6 @@ def create_image_provider(
     if provider_lower == "a1111":
         from questfoundry.providers.image_a1111 import A1111ImageProvider
 
-        return A1111ImageProvider(model=model, **kwargs)
+        return A1111ImageProvider(model=model, llm=llm, **kwargs)
 
     raise ImageProviderError(provider_lower, f"Unknown image provider: {provider_lower}")

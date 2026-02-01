@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import json
 import os
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -24,6 +24,9 @@ from questfoundry.providers.image import (
     ImageProviderError,
     ImageResult,
 )
+
+if TYPE_CHECKING:
+    from questfoundry.providers.image_brief import ImageBrief
 
 log = get_logger(__name__)
 
@@ -52,6 +55,8 @@ class A1111ImageProvider:
         self,
         model: str | None = None,
         host: str | None = None,
+        *,
+        llm: Any | None = None,
     ) -> None:
         self._host = host or os.environ.get("A1111_HOST")
         if not self._host:
@@ -63,11 +68,112 @@ class A1111ImageProvider:
         # Strip trailing slash for consistent URL construction
         self._host = self._host.rstrip("/")
         self._model = model
+        self._llm = llm
         self._client = httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT)
 
     async def aclose(self) -> None:
         """Close the underlying HTTP client."""
         await self._client.aclose()
+
+    # -- PromptDistiller implementation ------------------------------------
+
+    async def distill_prompt(self, brief: ImageBrief) -> tuple[str, str | None]:
+        """Transform a structured brief into SD-optimised prompts.
+
+        Uses LLM distillation when an ``llm`` was provided at construction,
+        otherwise falls back to rule-based tag extraction.
+        """
+        if self._llm is not None:
+            return await self._distill_with_llm(brief)
+        return self._distill_rule_based(brief)
+
+    @staticmethod
+    def _distill_rule_based(brief: ImageBrief) -> tuple[str, str | None]:
+        """Extract SD-optimised tags ordered by CLIP priority.
+
+        CLIP processes tokens left-to-right with a ~77-token window for
+        SD 1.5 (SDXL extends to ~150). Tags near the front matter most.
+
+        Priority order:
+            1. Style / medium  (anchors the look)
+            2. Entity fragments  (character consistency)
+            3. Subject  (what the image depicts)
+            4. Mood  (emotional tone)
+            5. Style overrides
+            6. Composition  (camera / framing — often truncated)
+            7. Palette
+        """
+        parts: list[str] = []
+
+        # Style anchors first — these define the visual language
+        if brief.art_style:
+            parts.append(brief.art_style)
+        if brief.art_medium:
+            parts.append(brief.art_medium)
+        if brief.style_overrides:
+            parts.append(brief.style_overrides)
+
+        # Entity consistency fragments
+        parts.extend(brief.entity_fragments)
+
+        # Core content
+        parts.append(brief.subject)
+        if brief.mood:
+            parts.append(brief.mood)
+
+        # Lower priority — likely to be truncated on SD 1.5
+        if brief.composition:
+            parts.append(brief.composition)
+        if brief.palette:
+            parts.append(", ".join(brief.palette))
+
+        positive = ", ".join(p for p in parts if p)
+
+        # Truncate to ~60 words (~75 CLIP tokens)
+        words = positive.split()
+        if len(words) > 60:
+            positive = " ".join(words[:60])
+
+        # Negative prompt
+        negative_parts = [brief.negative or "", brief.negative_defaults or ""]
+        negative = ", ".join(n for n in negative_parts if n)
+        return positive, negative or None
+
+    async def _distill_with_llm(self, brief: ImageBrief) -> tuple[str, str | None]:
+        """Use an LLM to condense the brief into SD-optimised tags."""
+        assert self._llm is not None  # guaranteed by caller
+        brief_text = (
+            f"Style: {brief.art_style or 'not specified'}\n"
+            f"Medium: {brief.art_medium or 'not specified'}\n"
+            f"Subject: {brief.subject}\n"
+            f"Composition: {brief.composition}\n"
+            f"Mood: {brief.mood}\n"
+            f"Entities: {'; '.join(brief.entity_fragments) if brief.entity_fragments else 'none'}\n"
+            f"Palette: {', '.join(brief.palette) if brief.palette else 'not specified'}\n"
+        )
+        if brief.style_overrides:
+            brief_text += f"Style overrides: {brief.style_overrides}\n"
+
+        system_msg = (
+            "You are a Stable Diffusion prompt engineer. Condense the "
+            "following image brief into comma-separated SD tags. "
+            "Output ONLY the tags, no explanation. Maximum 60 words. "
+            "Put style/medium first, then subject, then details."
+        )
+
+        from langchain_core.messages import HumanMessage, SystemMessage
+
+        response = await self._llm.ainvoke(
+            [SystemMessage(content=system_msg), HumanMessage(content=brief_text)]
+        )
+        positive = (
+            response.content.strip() if hasattr(response, "content") else str(response).strip()
+        )
+
+        # Negative prompt — pass through as-is (SD native)
+        negative_parts = [brief.negative or "", brief.negative_defaults or ""]
+        negative = ", ".join(n for n in negative_parts if n)
+        return positive, negative or None
 
     async def generate(
         self,
