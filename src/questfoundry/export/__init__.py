@@ -13,16 +13,18 @@ from questfoundry.export.base import (
     ExportPassage,
 )
 from questfoundry.export.context import build_export_context
+from questfoundry.export.html_exporter import HtmlExporter
 from questfoundry.export.json_exporter import JsonExporter
 from questfoundry.export.twee_exporter import TweeExporter
 
-_EXPORTERS: dict[str, type[JsonExporter | TweeExporter]] = {
+_EXPORTERS: dict[str, type[JsonExporter | TweeExporter | HtmlExporter]] = {
     "json": JsonExporter,
     "twee": TweeExporter,
+    "html": HtmlExporter,
 }
 
 
-def get_exporter(format_name: str) -> JsonExporter | TweeExporter:
+def get_exporter(format_name: str) -> JsonExporter | TweeExporter | HtmlExporter:
     """Get an exporter instance by format name.
 
     Args:
@@ -51,6 +53,7 @@ __all__ = [
     "ExportIllustration",
     "ExportPassage",
     "Exporter",
+    "HtmlExporter",
     "JsonExporter",
     "TweeExporter",
     "build_export_context",
