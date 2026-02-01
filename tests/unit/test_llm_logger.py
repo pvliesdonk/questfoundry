@@ -92,8 +92,32 @@ def test_create_entry_with_defaults() -> None:
 
     assert entry.temperature == 0.7
     assert entry.max_tokens == 4096
+    assert entry.input_tokens == 0
+    assert entry.output_tokens == 0
+    assert entry.phase == ""
     assert entry.error is None
     assert entry.metadata == {}
+
+
+def test_create_entry_with_granular_tokens() -> None:
+    """create_entry accepts input_tokens, output_tokens, and phase."""
+    entry = LLMLogger.create_entry(
+        stage="seed",
+        model="qwen3:4b-instruct-32k",
+        messages=[],
+        content="",
+        tokens_used=150,
+        finish_reason="stop",
+        duration_seconds=1.0,
+        input_tokens=100,
+        output_tokens=50,
+        phase="serialize",
+    )
+
+    assert entry.input_tokens == 100
+    assert entry.output_tokens == 50
+    assert entry.phase == "serialize"
+    assert entry.tokens_used == 150
 
 
 def test_create_entry_with_metadata() -> None:
@@ -218,6 +242,59 @@ def test_log_preserves_full_content(temp_project: Path) -> None:
     entries = logger.read_entries()
     assert len(entries[0].content) == 10000
     assert entries[0].messages[0]["content"] == long_content
+
+
+def test_read_entries_roundtrip_with_granular_tokens(temp_project: Path) -> None:
+    """Granular token fields survive write/read roundtrip."""
+    logger = LLMLogger(temp_project)
+    entry = LLMLogger.create_entry(
+        stage="seed",
+        model="qwen3:4b-instruct-32k",
+        messages=[{"role": "user", "content": "test"}],
+        content="response",
+        tokens_used=150,
+        finish_reason="stop",
+        duration_seconds=1.0,
+        input_tokens=100,
+        output_tokens=50,
+        phase="serialize",
+    )
+
+    logger.log(entry)
+    entries = logger.read_entries()
+
+    assert len(entries) == 1
+    assert entries[0].input_tokens == 100
+    assert entries[0].output_tokens == 50
+    assert entries[0].phase == "serialize"
+
+
+def test_read_entries_backward_compatible(temp_project: Path) -> None:
+    """Old JSONL entries without new fields can still be read."""
+    import json
+
+    logger = LLMLogger(temp_project)
+    # Write an entry missing the new fields (simulates old format)
+    old_entry = {
+        "timestamp": "2026-01-30T00:00:00+00:00",
+        "stage": "dream",
+        "model": "test",
+        "messages": [],
+        "temperature": 0.7,
+        "max_tokens": 4096,
+        "content": "",
+        "tokens_used": 0,
+        "finish_reason": "stop",
+        "duration_seconds": 0.0,
+    }
+    with logger.log_path.open("w") as f:
+        f.write(json.dumps(old_entry) + "\n")
+
+    entries = logger.read_entries()
+    assert len(entries) == 1
+    assert entries[0].input_tokens == 0
+    assert entries[0].output_tokens == 0
+    assert entries[0].phase == ""
 
 
 def test_log_entry_with_error(temp_project: Path) -> None:

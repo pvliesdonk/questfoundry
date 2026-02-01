@@ -11,6 +11,8 @@ import pytest
 from questfoundry.observability import LLMLogger
 from questfoundry.observability.langchain_callbacks import (
     LLMLoggingCallback,
+    _extract_message_tokens,
+    _parse_temperature_from_repr,
     create_logging_callbacks,
 )
 
@@ -465,6 +467,208 @@ class TestLLMLoggingCallback:
 
         # Should not raise
         callback.on_agent_finish(finish=mock_finish, run_id=run_id)
+
+    def test_on_llm_end_extracts_granular_tokens_from_usage_metadata(
+        self, callback: LLMLoggingCallback, tmp_path: Path
+    ) -> None:
+        """on_llm_end extracts input_tokens and output_tokens from message usage_metadata."""
+        import json
+
+        run_id = uuid4()
+        callback._pending_calls[run_id] = {
+            "model": "ollama-qwen",
+            "messages": [],
+            "start_time": 0.0,
+        }
+
+        mock_msg = MagicMock()
+        mock_msg.tool_calls = []
+        mock_msg.usage_metadata = {
+            "input_tokens": 200,
+            "output_tokens": 50,
+            "total_tokens": 250,
+        }
+        mock_msg.response_metadata = {}
+
+        mock_gen = MagicMock()
+        mock_gen.text = "Response"
+        mock_gen.message = mock_msg
+
+        mock_response = MagicMock()
+        mock_response.generations = [[mock_gen]]
+        mock_response.llm_output = {}
+
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+        log_file = tmp_path / "logs" / "llm_calls.jsonl"
+        entry = json.loads(log_file.read_text().strip())
+        assert entry["tokens_used"] == 250
+        assert entry["input_tokens"] == 200
+        assert entry["output_tokens"] == 50
+
+    def test_on_llm_end_extracts_phase_from_metadata(
+        self, callback: LLMLoggingCallback, tmp_path: Path
+    ) -> None:
+        """on_llm_end logs phase from run metadata."""
+        import json
+
+        run_id = uuid4()
+        callback._pending_calls[run_id] = {
+            "model": "gpt-4",
+            "messages": [],
+            "start_time": 0.0,
+        }
+        callback._run_metadata[run_id] = {"stage": "seed", "phase": "serialize"}
+
+        mock_gen = MagicMock()
+        mock_gen.text = "Response"
+
+        mock_response = MagicMock()
+        mock_response.generations = [[mock_gen]]
+        mock_response.llm_output = {}
+
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+        log_file = tmp_path / "logs" / "llm_calls.jsonl"
+        entry = json.loads(log_file.read_text().strip())
+        assert entry["phase"] == "serialize"
+
+    def test_on_llm_end_fixes_model_name_from_response_metadata(
+        self, callback: LLMLoggingCallback, tmp_path: Path
+    ) -> None:
+        """on_llm_end replaces class name with actual model from response_metadata."""
+        import json
+
+        run_id = uuid4()
+        callback._pending_calls[run_id] = {
+            "model": "ChatOllama",  # Class name, not actual model
+            "messages": [],
+            "start_time": 0.0,
+        }
+
+        mock_msg = MagicMock()
+        mock_msg.tool_calls = []
+        mock_msg.usage_metadata = {"total_tokens": 10, "input_tokens": 5, "output_tokens": 5}
+        mock_msg.response_metadata = {"model": "qwen3:4b-instruct-32k"}
+
+        mock_gen = MagicMock()
+        mock_gen.text = "Response"
+        mock_gen.message = mock_msg
+
+        mock_response = MagicMock()
+        mock_response.generations = [[mock_gen]]
+        mock_response.llm_output = {}
+
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+        log_file = tmp_path / "logs" / "llm_calls.jsonl"
+        entry = json.loads(log_file.read_text().strip())
+        assert entry["model"] == "qwen3:4b-instruct-32k"
+
+    def test_on_llm_end_keeps_real_model_name(
+        self, callback: LLMLoggingCallback, tmp_path: Path
+    ) -> None:
+        """on_llm_end does not override a real model name with response_metadata."""
+        import json
+
+        run_id = uuid4()
+        callback._pending_calls[run_id] = {
+            "model": "gpt-4o",  # Already a real model name
+            "messages": [],
+            "start_time": 0.0,
+        }
+
+        mock_msg = MagicMock()
+        mock_msg.tool_calls = []
+        mock_msg.usage_metadata = {}
+        mock_msg.response_metadata = {"model": "gpt-4o-2024-08-06"}
+
+        mock_gen = MagicMock()
+        mock_gen.text = "Response"
+        mock_gen.message = mock_msg
+
+        mock_response = MagicMock()
+        mock_response.generations = [[mock_gen]]
+        mock_response.llm_output = {}
+
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+        log_file = tmp_path / "logs" / "llm_calls.jsonl"
+        entry = json.loads(log_file.read_text().strip())
+        assert entry["model"] == "gpt-4o"  # Not overridden
+
+    def test_on_llm_end_extracts_openai_granular_tokens(
+        self, callback: LLMLoggingCallback, tmp_path: Path
+    ) -> None:
+        """on_llm_end extracts prompt_tokens/completion_tokens from OpenAI token_usage."""
+        import json
+
+        run_id = uuid4()
+        callback._pending_calls[run_id] = {
+            "model": "gpt-4o",
+            "messages": [],
+            "start_time": 0.0,
+        }
+
+        mock_gen = MagicMock()
+        mock_gen.text = "Response"
+
+        mock_response = MagicMock()
+        mock_response.generations = [[mock_gen]]
+        mock_response.llm_output = {
+            "token_usage": {
+                "prompt_tokens": 300,
+                "completion_tokens": 100,
+                "total_tokens": 400,
+            }
+        }
+
+        callback.on_llm_end(response=mock_response, run_id=run_id)
+
+        log_file = tmp_path / "logs" / "llm_calls.jsonl"
+        entry = json.loads(log_file.read_text().strip())
+        assert entry["tokens_used"] == 400
+        assert entry["input_tokens"] == 300
+        assert entry["output_tokens"] == 100
+
+
+class TestHelperFunctions:
+    """Tests for module-level helper functions."""
+
+    def test_parse_temperature_from_repr(self) -> None:
+        """Extracts temperature from ChatOllama repr string."""
+        repr_str = "ChatOllama(model='qwen3:4b', num_ctx=32768, temperature=0.7, base_url='...')"
+        assert _parse_temperature_from_repr(repr_str) == 0.7
+
+    def test_parse_temperature_from_repr_missing(self) -> None:
+        """Returns None when repr lacks temperature."""
+        assert _parse_temperature_from_repr("ChatOllama(model='qwen3:4b')") is None
+
+    def test_parse_temperature_from_repr_empty(self) -> None:
+        """Returns None for empty repr."""
+        assert _parse_temperature_from_repr("") is None
+
+    def test_extract_message_tokens_dict(self) -> None:
+        """Extracts tokens from dict-style usage_metadata."""
+        msg = MagicMock()
+        msg.usage_metadata = {"total_tokens": 100, "input_tokens": 80, "output_tokens": 20}
+        assert _extract_message_tokens(msg) == (100, 80, 20)
+
+    def test_extract_message_tokens_object(self) -> None:
+        """Extracts tokens from object-style usage_metadata."""
+        usage = MagicMock()
+        usage.total_tokens = 100
+        usage.input_tokens = 80
+        usage.output_tokens = 20
+
+        msg = MagicMock()
+        msg.usage_metadata = usage
+        assert _extract_message_tokens(msg) == (100, 80, 20)
+
+    def test_extract_message_tokens_none(self) -> None:
+        """Returns zeros when usage_metadata is None."""
+        msg = MagicMock(spec=[])  # No attributes
+        assert _extract_message_tokens(msg) == (0, 0, 0)
 
 
 class TestCreateLoggingCallbacks:

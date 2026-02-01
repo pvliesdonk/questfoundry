@@ -36,6 +36,13 @@ class LLMLogEntry:
     finish_reason: str
     duration_seconds: float
 
+    # Granular token breakdown (0 if provider doesn't report)
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    # Pipeline phase (discuss/summarize/serialize)
+    phase: str = ""
+
     # Optional fields
     error: str | None = None
     tool_calls: list[dict[str, Any]] | None = None
@@ -88,6 +95,9 @@ class LLMLogger:
         duration_seconds: float,
         temperature: float = 0.7,
         max_tokens: int = 4096,
+        input_tokens: int = 0,
+        output_tokens: int = 0,
+        phase: str = "",
         error: str | None = None,
         tool_calls: list[dict[str, Any]] | None = None,
         **metadata: Any,
@@ -104,6 +114,9 @@ class LLMLogger:
             duration_seconds: Time taken for call.
             temperature: Sampling temperature.
             max_tokens: Maximum tokens allowed.
+            input_tokens: Input/prompt tokens (0 if not reported).
+            output_tokens: Output/completion tokens (0 if not reported).
+            phase: Pipeline phase (discuss/summarize/serialize).
             error: Error message if call failed.
             tool_calls: List of tool calls from response (if any).
             **metadata: Additional metadata.
@@ -120,6 +133,9 @@ class LLMLogger:
             max_tokens=max_tokens,
             content=content,
             tokens_used=tokens_used,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            phase=phase,
             finish_reason=finish_reason,
             duration_seconds=duration_seconds,
             error=error,
