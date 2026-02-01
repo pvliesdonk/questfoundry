@@ -160,6 +160,7 @@ def apply_dress_illustration(
     asset_path: str,
     caption: str,
     category: str,
+    quality: str = "high",
 ) -> str:
     """Create an Illustration node with Depicts and from_brief edges.
 
@@ -169,6 +170,7 @@ def apply_dress_illustration(
         asset_path: Relative path to the image file.
         caption: Diegetic caption from the brief.
         category: Image category (scene, portrait, vista, item_detail).
+        quality: Image quality tier (placeholder, low, high).
 
     Returns:
         The created illustration node ID.
@@ -191,6 +193,7 @@ def apply_dress_illustration(
         "asset": asset_path,
         "caption": caption,
         "category": category,
+        "quality": quality,
     }
     graph.upsert_node(node_id, illust_data)
 

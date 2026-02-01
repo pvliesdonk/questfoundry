@@ -884,12 +884,14 @@ class DressStage:
                 )
                 asset_path = asset_mgr.store(result.image_data, result.content_type)
 
+                quality = result.provider_metadata.get("quality", "high")
                 apply_dress_illustration(
                     graph,
                     brief_id=brief_id,
                     asset_path=asset_path,
                     caption=brief_data.get("caption", ""),
                     category=brief_data.get("category", "scene"),
+                    quality=quality,
                 )
                 generated += 1
 

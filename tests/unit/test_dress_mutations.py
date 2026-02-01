@@ -380,6 +380,59 @@ class TestApplyDressIllustration:
         assert len(from_brief) == 1
         assert from_brief[0]["to"] == brief_id
 
+    def test_quality_defaults_to_high(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_mutations import apply_dress_brief, apply_dress_illustration
+
+        brief_id = apply_dress_brief(
+            dress_graph,
+            passage_id="opening",
+            brief={
+                "category": "scene",
+                "subject": "s",
+                "composition": "c",
+                "mood": "m",
+                "caption": "c",
+            },
+            priority=1,
+        )
+        illust_id = apply_dress_illustration(
+            dress_graph,
+            brief_id=brief_id,
+            asset_path="assets/abc.png",
+            caption="cap",
+            category="scene",
+        )
+        node = dress_graph.get_node(illust_id)
+        assert node is not None
+        assert node["quality"] == "high"
+
+    def test_quality_placeholder(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_mutations import apply_dress_brief, apply_dress_illustration
+
+        brief_id = apply_dress_brief(
+            dress_graph,
+            passage_id="opening",
+            brief={
+                "category": "scene",
+                "subject": "s",
+                "composition": "c",
+                "mood": "m",
+                "caption": "c",
+            },
+            priority=1,
+        )
+        illust_id = apply_dress_illustration(
+            dress_graph,
+            brief_id=brief_id,
+            asset_path="assets/abc.png",
+            caption="cap",
+            category="scene",
+            quality="placeholder",
+        )
+        node = dress_graph.get_node(illust_id)
+        assert node is not None
+        assert node["quality"] == "placeholder"
+
     def test_brief_without_targets_raises(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_mutations import apply_dress_illustration
 

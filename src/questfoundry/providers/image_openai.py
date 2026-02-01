@@ -162,7 +162,8 @@ class OpenAIImageProvider:
         metadata: dict[str, Any] = {
             "model": self._model,
             "size": size,
-            "quality": quality,
+            "quality": "high",
+            "api_quality": quality,
         }
         revised_prompt = getattr(image_item, "revised_prompt", None)
         if revised_prompt:
