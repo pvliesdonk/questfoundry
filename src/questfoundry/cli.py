@@ -89,7 +89,7 @@ DEFAULT_FILL_PROMPT = (
 DEFAULT_DRESS_PROMPT = "Establish art direction, generate illustration briefs and codex entries."
 
 # Pipeline stage order and configuration
-STAGE_ORDER = ["dream", "brainstorm", "seed", "grow", "fill", "dress"]
+STAGE_ORDER = ["dream", "brainstorm", "seed", "grow", "fill", "dress", "ship"]
 
 # Stage prompt configuration for the run command
 # Maps stage name to (default_interactive_prompt, default_noninteractive_prompt)
@@ -117,6 +117,10 @@ STAGE_PROMPTS: dict[str, tuple[str, str | None]] = {
     "dress": (
         DEFAULT_DRESS_PROMPT,
         DEFAULT_DRESS_PROMPT,  # Same for both modes
+    ),
+    "ship": (
+        "Export to playable format.",
+        "Export to playable format.",  # SHIP is deterministic, prompt unused
     ),
 }
 
@@ -1311,6 +1315,91 @@ def dress(
     )
 
 
+def _run_ship(
+    project_path: Path,
+    export_format: str = "twee",
+    output_dir: Path | None = None,
+) -> Path:
+    """Run SHIP stage and return the output file path.
+
+    Args:
+        project_path: Path to the project directory.
+        export_format: Export format name (json, twee, html).
+        output_dir: Custom output directory.
+
+    Returns:
+        Path to the exported file.
+
+    Raises:
+        typer.Exit: On ShipStageError.
+    """
+    from questfoundry.pipeline.stages.ship import ShipStage, ShipStageError
+
+    console.print()
+    console.print(f"[dim]Exporting story as {export_format}...[/dim]")
+
+    try:
+        stage = ShipStage(project_path)
+        output_file = stage.execute(export_format=export_format, output_dir=output_dir)
+    except ShipStageError as e:
+        console.print(f"\n[red]Error:[/red] {e}")
+        raise typer.Exit(1) from None
+
+    console.print()
+    console.print(f"[green]✓[/green] SHIP stage completed ({export_format})")
+    console.print(f"  Output: [cyan]{output_file}[/cyan]")
+    return output_file
+
+
+@app.command()
+def ship(
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    export_format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Export format: json, twee, html.",
+        ),
+    ] = "twee",
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Custom output directory (default: PROJECT/exports/FORMAT/).",
+        ),
+    ] = None,
+) -> None:
+    """Run SHIP stage - export story to playable format.
+
+    Exports the completed story graph to a playable format.
+    SHIP is deterministic and does not use an LLM.
+
+    Supported formats:
+      - twee: SugarCube 2 Twee source (default)
+      - html: Standalone playable HTML file
+      - json: Structured JSON data
+
+    Requires FILL stage to have completed first (all passages need prose).
+    """
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+    _configure_project_logging(project_path)
+
+    log = get_logger(__name__)
+    log.info("ship_cli_start", format=export_format)
+
+    _run_ship(project_path, export_format=export_format, output_dir=output)
+
+
 @app.command("generate-images")
 def generate_images(
     project: Annotated[
@@ -1567,6 +1656,16 @@ def run(
 
     # Run each stage
     for stage_name in stages_to_run:
+        # SHIP is deterministic (no LLM) — handle separately
+        if stage_name == "ship":
+            try:
+                _run_ship(project_path, export_format="twee")
+            except typer.Exit:
+                console.print()
+                console.print("[red]Pipeline stopped at SHIP stage.[/red]")
+                raise
+            continue
+
         default_interactive_prompt, default_noninteractive_prompt = STAGE_PROMPTS[stage_name]
 
         # Use provided prompt only for DREAM, defaults for others
