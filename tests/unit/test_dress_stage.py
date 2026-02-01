@@ -509,11 +509,30 @@ class TestExtractArtifact:
         assert artifact["art_direction"]["style"] == "ink"
         assert "entity_visual::hero" in artifact["entity_visuals"]
 
+    def test_extracts_codex_entries(self) -> None:
+        g = Graph()
+        g.create_node(
+            "codex::hero_rank1",
+            {"type": "codex_entry", "rank": 1, "content": "A tall warrior"},
+        )
+        g.create_node(
+            "codex::hero_rank2",
+            {"type": "codex_entry", "rank": 2, "content": "Scarred from battle"},
+        )
+
+        stage = DressStage()
+        artifact = stage._extract_artifact(g)
+
+        assert len(artifact["codex_entries"]) == 2
+        assert "codex::hero_rank1" in artifact["codex_entries"]
+        assert artifact["codex_entries"]["codex::hero_rank1"]["content"] == "A tall warrior"
+
     def test_empty_graph(self) -> None:
         stage = DressStage()
         artifact = stage._extract_artifact(Graph())
         assert artifact["art_direction"] == {}
         assert artifact["entity_visuals"] == {}
+        assert artifact["codex_entries"] == {}
 
 
 # ---------------------------------------------------------------------------

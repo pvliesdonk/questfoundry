@@ -310,7 +310,7 @@ class DressStage:
         art_dir = graph.get_node("art_direction::main")
         entity_visuals = graph.get_nodes_by_type("entity_visual")
         briefs = graph.get_nodes_by_type("illustration_brief")
-        codex_entries = graph.get_nodes_by_type("codex")
+        codex_entries = graph.get_nodes_by_type("codex_entry")
         illustrations = graph.get_nodes_by_type("illustration")
 
         return {
