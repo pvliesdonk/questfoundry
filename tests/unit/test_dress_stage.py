@@ -25,6 +25,7 @@ from questfoundry.pipeline.stages.dress import (
     DressStage,
     DressStageError,
     _apply_image_budget,
+    _create_cover_brief,
     assemble_image_prompt,
     compute_structural_score,
     create_dress_stage,
@@ -1010,3 +1011,68 @@ class TestApplyImageBudget:
             budget=1,
         )
         assert result == ["illustration_brief::real"]
+
+
+# ---------------------------------------------------------------------------
+# Cover Brief
+# ---------------------------------------------------------------------------
+
+
+class TestCreateCoverBrief:
+    def test_creates_cover_brief_from_vision(self) -> None:
+        g = Graph()
+        g.create_node(
+            "vision",
+            {"type": "vision", "genre": "space opera", "tone": ["urgent"], "themes": ["fate"]},
+        )
+        g.create_node(
+            "art_direction::main",
+            {"type": "art_direction", "style": "watercolor", "medium": "digital painting"},
+        )
+
+        result = _create_cover_brief(g)
+
+        assert result is True
+        brief = g.get_node("illustration_brief::cover")
+        assert brief is not None
+        assert brief["priority"] == 1
+        assert brief["category"] == "vista"
+        assert "space opera" in brief["subject"]
+        assert "fate" in brief["subject"]
+
+    def test_creates_synthetic_passage_node(self) -> None:
+        g = Graph()
+        g.create_node("vision", {"type": "vision", "genre": "mystery"})
+
+        _create_cover_brief(g)
+
+        passage = g.get_node("passage::cover")
+        assert passage is not None
+        assert passage.get("synthetic") is True
+
+    def test_targets_edge_to_passage_cover(self) -> None:
+        g = Graph()
+        g.create_node("vision", {"type": "vision", "genre": "fantasy"})
+
+        _create_cover_brief(g)
+
+        edges = g.get_edges(from_id="illustration_brief::cover", edge_type="targets")
+        assert len(edges) == 1
+        assert edges[0]["to"] == "passage::cover"
+
+    def test_returns_false_without_vision(self) -> None:
+        g = Graph()
+        result = _create_cover_brief(g)
+        assert result is False
+        assert g.get_node("illustration_brief::cover") is None
+
+    def test_works_without_art_direction(self) -> None:
+        g = Graph()
+        g.create_node("vision", {"type": "vision", "genre": "thriller", "tone": ["tense"]})
+
+        result = _create_cover_brief(g)
+
+        assert result is True
+        brief = g.get_node("illustration_brief::cover")
+        assert brief is not None
+        assert "thriller" in brief["subject"]

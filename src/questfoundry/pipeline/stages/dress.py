@@ -676,10 +676,16 @@ class DressStage:
             if comp or mood:
                 recent_compositions.append(f"{category}: {comp} | mood: {mood}")
 
+        # Create cover brief from vision data
+        cover_created = _create_cover_brief(graph)
+        if cover_created:
+            briefs_created += 1
+
         log.info(
             "briefs_phase_complete",
             created=briefs_created,
             skipped=briefs_skipped,
+            cover=cover_created,
         )
 
         return DressPhaseResult(
@@ -922,6 +928,76 @@ class DressStage:
             status="completed",
             detail=f"{generated} images generated, {failed} failed",
         )
+
+
+# -------------------------------------------------------------------------
+# Cover brief helper
+# -------------------------------------------------------------------------
+
+
+def _create_cover_brief(graph: Graph) -> bool:
+    """Create a cover illustration brief from vision and art direction.
+
+    Synthesizes a cover image brief from the story's genre, tone,
+    themes, and art direction. The cover gets priority 1 (must-have)
+    and category "vista".
+
+    Args:
+        graph: Story graph with vision and art_direction nodes.
+
+    Returns:
+        True if cover brief was created, False if insufficient data.
+    """
+    vision = graph.get_node("vision")
+    if not vision:
+        log.debug("cover_skipped", reason="no vision node")
+        return False
+
+    art_dir = graph.get_node("art_direction::main")
+
+    # Synthesize subject from vision
+    genre = vision.get("genre", "story")
+    tone = vision.get("tone", [])
+    themes = vision.get("themes", [])
+    tone_str = ", ".join(tone) if isinstance(tone, list) else str(tone)
+    themes_str = ", ".join(themes) if isinstance(themes, list) else str(themes)
+
+    subject = f"Cover image for a {genre} story. Tone: {tone_str}. Themes: {themes_str}."
+
+    # Build mood from art direction or vision
+    mood = tone_str if tone_str else "evocative"
+
+    # Build composition for a cover/title card
+    composition = (
+        "Establishing wide shot suitable for a title card. "
+        "Negative space in upper third for title text overlay. "
+        "Atmospheric, iconic framing that captures the story's essence."
+    )
+
+    # Style overrides from art direction
+    style_overrides = ""
+    if art_dir:
+        style = art_dir.get("style", "")
+        medium = art_dir.get("medium", "")
+        if style or medium:
+            style_overrides = f"Style: {style}. Medium: {medium}."
+
+    brief_data = {
+        "category": "vista",
+        "subject": subject,
+        "composition": composition,
+        "mood": mood,
+        "caption": "",
+        "style_overrides": style_overrides,
+    }
+
+    # Ensure passage::cover exists as a synthetic anchor for the cover brief
+    if not graph.has_node("passage::cover"):
+        graph.create_node("passage::cover", {"type": "passage", "synthetic": True})
+
+    apply_dress_brief(graph, "cover", brief_data, priority=1)
+    log.info("cover_brief_created")
+    return True
 
 
 # -------------------------------------------------------------------------
