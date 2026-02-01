@@ -10,6 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from questfoundry.export import build_export_context, get_exporter
+from questfoundry.export.assets import bundle_assets
 from questfoundry.graph.graph import Graph
 from questfoundry.observability.logging import get_logger
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
@@ -117,6 +118,10 @@ class ShipStage:
         # Export
         target_dir = output_dir or (self._project_path / "exports" / export_format)
         output_file = exporter.export(context, target_dir)
+
+        # Bundle illustration assets
+        if context.illustrations:
+            bundle_assets(context.illustrations, self._project_path, target_dir)
 
         log.info(
             "ship_complete",

@@ -10,7 +10,7 @@ SugarCube: https://www.motoslave.net/sugarcube/2/docs/
 from __future__ import annotations
 
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.observability.logging import get_logger
 
@@ -19,6 +19,7 @@ if TYPE_CHECKING:
 
     from questfoundry.export.base import (
         ExportChoice,
+        ExportCodexEntry,
         ExportContext,
         ExportIllustration,
         ExportPassage,
@@ -82,6 +83,16 @@ class TweeExporter:
             )
             lines.append("")
 
+        # Codex passage (if DRESS produced codex entries)
+        if context.codex_entries:
+            lines.extend(_render_codex_passage(context.codex_entries))
+            lines.append("")
+
+        # Art direction metadata passage (if DRESS produced art direction)
+        if context.art_direction:
+            lines.extend(_render_art_direction_passage(context.art_direction))
+            lines.append("")
+
         content = "\n".join(lines)
         output_file.write_text(content, encoding="utf-8")
 
@@ -89,6 +100,8 @@ class TweeExporter:
             "twee_export_complete",
             passages=len(context.passages),
             choices=len(context.choices),
+            codex_entries=len(context.codex_entries),
+            has_art_direction=context.art_direction is not None,
             output=str(output_file),
         )
 
@@ -186,3 +199,37 @@ def _render_choice(choice: ExportChoice) -> str:
         conditions = " and ".join(_codeword_var(cw) for cw in choice.requires)
         return f"<<if {conditions}>>{link}<</if>>"
     return link
+
+
+def _render_codex_passage(codex_entries: list[ExportCodexEntry]) -> list[str]:
+    """Render a Codex passage with conditionally visible entries.
+
+    Entries are sorted by rank. Each entry is wrapped in an ``<<if>>``
+    block if it has ``visible_when`` codewords.
+    """
+    lines = [":: Codex"]
+
+    sorted_entries = sorted(codex_entries, key=lambda e: e.rank)
+    for entry in sorted_entries:
+        entry_lines = [f"!! {entry.entity_id}", entry.content, ""]
+        if entry.visible_when:
+            conditions = " and ".join(_codeword_var(cw) for cw in entry.visible_when)
+            lines.append(f"<<if {conditions}>>")
+            lines.extend(entry_lines)
+            lines.append("<</if>>")
+        else:
+            lines.extend(entry_lines)
+
+    return lines
+
+
+def _render_art_direction_passage(art_direction: dict[str, Any]) -> list[str]:
+    """Render art direction as a metadata-only passage.
+
+    The passage is not linked from any other passage. SugarCube
+    ignores unlinked passages, making this safe metadata storage.
+    """
+    lines = [':: StoryArtDirection {"position":"0,0","size":"100,100"}']
+    for key, value in sorted(art_direction.items()):
+        lines.append(f"{key}: {value}")
+    return lines
