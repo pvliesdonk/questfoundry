@@ -17,13 +17,14 @@ def _fake_response(
     image_b64: str = "",
     seed: int = 42,
     status_code: int = 200,
+    sd_model_name: str = "Dreamshaper",
 ) -> httpx.Response:
     """Build a fake httpx.Response mimicking A1111 txt2img output."""
     if not image_b64:
         image_b64 = base64.b64encode(b"fake_png_data").decode()
     body = {
         "images": [image_b64],
-        "info": json.dumps({"seed": seed}),
+        "info": json.dumps({"seed": seed, "sd_model_name": sd_model_name}),
     }
     return httpx.Response(status_code, json=body)
 
@@ -216,6 +217,34 @@ class TestA1111Provider:
             result = await provider.generate("test")
 
         assert result.provider_metadata["seed"] == 12345
+
+    @pytest.mark.asyncio()
+    async def test_active_model_captured_when_no_override(self) -> None:
+        provider = A1111ImageProvider(host="http://localhost:7860")
+
+        with patch.object(
+            provider._client,
+            "post",
+            new_callable=AsyncMock,
+            return_value=_fake_response(sd_model_name="Dreamshaper"),
+        ):
+            result = await provider.generate("test")
+
+        assert result.provider_metadata["model"] == "Dreamshaper"
+
+    @pytest.mark.asyncio()
+    async def test_explicit_model_not_overridden_by_response(self) -> None:
+        provider = A1111ImageProvider(model="my_checkpoint", host="http://localhost:7860")
+
+        with patch.object(
+            provider._client,
+            "post",
+            new_callable=AsyncMock,
+            return_value=_fake_response(sd_model_name="Dreamshaper"),
+        ):
+            result = await provider.generate("test")
+
+        assert result.provider_metadata["model"] == "my_checkpoint"
 
     @pytest.mark.asyncio()
     async def test_aclose(self) -> None:

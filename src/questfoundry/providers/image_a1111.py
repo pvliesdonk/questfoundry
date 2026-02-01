@@ -151,13 +151,18 @@ class A1111ImageProvider:
                 "A1111 response missing 'images' field or returned empty list",
             )
 
-        # Extract seed from response info if available
+        # Extract seed and model name from response info if available
         seed = None
+        active_model = self._model
         info_str = data.get("info")
         if info_str:
             try:
                 info = json.loads(info_str) if isinstance(info_str, str) else info_str
                 seed = info.get("seed")
+                # When no checkpoint override was requested, capture the
+                # active model from the response so metadata is accurate.
+                if not self._model:
+                    active_model = info.get("sd_model_name")
             except (json.JSONDecodeError, TypeError, AttributeError) as e:
                 log.warning(
                     "a1111_info_parse_failed",
@@ -167,7 +172,7 @@ class A1111ImageProvider:
 
         metadata: dict[str, Any] = {
             "quality": "low",
-            "model": self._model,
+            "model": active_model,
             "size": f"{width}x{height}",
             "steps": 25,
         }
@@ -176,7 +181,7 @@ class A1111ImageProvider:
 
         log.info(
             "a1111_generate_complete",
-            model=self._model,
+            model=active_model,
             size=f"{width}x{height}",
             seed=seed,
         )
