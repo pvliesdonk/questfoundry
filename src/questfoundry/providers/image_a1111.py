@@ -195,7 +195,7 @@ class A1111ImageProvider:
         across two chunks separated by BREAK).
         """
         assert self._llm is not None  # guaranteed by caller
-        is_xl = self._preset is _SDXL_PRESET
+        is_xl = self._preset in (_SDXL_PRESET, _SDXL_LIGHTNING_PRESET)
         entity_cap = 3 if is_xl else 2
         capped_entities = brief.entity_fragments[:entity_cap]
 
@@ -250,13 +250,23 @@ class A1111ImageProvider:
                 "blurry, text, watermark, deformed hands, extra fingers"
             )
 
+        checkpoint_hint = ""
+        if self._model:
+            checkpoint_hint = (
+                f"\nTARGET CHECKPOINT: {self._model}\n"
+                "Adapt your tag style to this checkpoint. For example, anime/"
+                "illustration models (Animagine, NovelAI, etc.) expect Danbooru-"
+                "style tags (1girl, blue_hair, masterpiece). Photorealistic "
+                "models prefer natural descriptive tags.\n"
+            )
+
         system_msg = (
             f"TAG BUDGET: {tag_limit} tags maximum. Target {tag_target} tags. "
             "Anything beyond the budget is silently discarded by SD CLIP.\n\n"
             "You are a Stable Diffusion prompt distiller. The brief below is "
             "REFERENCE MATERIAL, not a checklist. Extract the visually essential "
             "elements — enough to compose a clear scene, not just an abstract "
-            "impression.\n\n"
+            f"impression.\n{checkpoint_hint}\n"
             "PRIORITY TIERS (spend your tag budget here):\n"
             "1. Subject — what is in the image (5-8 tags)\n"
             "2. Key entities — most important 1-2 characters/objects, "
