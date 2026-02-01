@@ -15,12 +15,12 @@ from questfoundry.export.base import (
 from questfoundry.export.context import build_export_context
 from questfoundry.export.json_exporter import JsonExporter
 
-_EXPORTERS: dict[str, type[JsonExporter]] = {
+_EXPORTERS: dict[str, type[Exporter]] = {
     "json": JsonExporter,
 }
 
 
-def get_exporter(format_name: str) -> JsonExporter:
+def get_exporter(format_name: str) -> Exporter:
     """Get an exporter instance by format name.
 
     Args:
