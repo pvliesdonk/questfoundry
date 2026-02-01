@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
@@ -100,74 +99,19 @@ def _resolve_preset(model: str | None) -> _A1111Preset:
     return _SD15_PRESET
 
 
-_STRIP_WORDS = frozenset(
-    [
-        "a",
-        "an",
-        "the",
-        "in",
-        "on",
-        "at",
-        "with",
-        "from",
-        "into",
-        "by",
-        "for",
-        "of",
-        "to",
-        "and",
-        "or",
-        "but",
-        "as",
-        "while",
-        "going",
-        "being",
-        "that",
-        "this",
-        "these",
-        "those",
-        "is",
-        "are",
-        "was",
-        "were",
-    ]
-)
-
-_PUNCT_SPLIT = re.compile(r"[;.]+")
-
-
-def _condense_to_tags(text: str) -> str:
-    """Strip articles, prepositions and filler from prose, return comma-tags.
-
-    Normalises semicolons/periods to commas, then removes filler words
-    and collapses whitespace within each tag.
-    """
-    if not text or not text.strip():
-        return ""
-    # Normalise all separators to commas, then process each tag
-    normalised = _PUNCT_SPLIT.sub(",", text)
-    tags = (
-        " ".join(w for w in tag.strip().split() if w.lower() not in _STRIP_WORDS)
-        for tag in normalised.split(",")
-    )
-    return ", ".join(filter(None, tags))
-
-
-def _truncate_words(text: str, limit: int) -> str:
-    """Truncate text to at most *limit* words."""
-    words = text.split()
-    if len(words) <= limit:
-        return text
-    return " ".join(words[:limit])
-
-
 class A1111ImageProvider:
     """Image provider using Automatic1111 Stable Diffusion WebUI.
+
+    Requires an LLM for prompt distillation — structured briefs contain
+    prose-heavy descriptions that must be condensed into SD-optimised tags.
 
     Args:
         model: Optional SD checkpoint name (e.g., ``dreamshaper_8``).
             When set, the request includes ``override_settings.sd_model_checkpoint``.
         host: WebUI base URL. Falls back to ``A1111_HOST`` env var.
+        llm: LangChain chat model for prompt distillation. Required for
+            the ``PromptDistiller`` protocol; without it, ``distill_prompt``
+            raises ``ImageProviderError``.
     """
 
     def __init__(
@@ -198,114 +142,18 @@ class A1111ImageProvider:
     # -- PromptDistiller implementation ------------------------------------
 
     async def distill_prompt(self, brief: ImageBrief) -> tuple[str, str | None]:
-        """Transform a structured brief into SD-optimised prompts.
+        """Transform a structured brief into SD-optimised prompts via LLM.
 
-        Uses LLM distillation when an ``llm`` was provided at construction,
-        otherwise falls back to rule-based tag extraction.
+        Raises:
+            ImageProviderError: If no LLM was provided at construction.
         """
-        if self._llm is not None:
-            return await self._distill_with_llm(brief)
-        return self._distill_rule_based(brief)
-
-    def _distill_rule_based(self, brief: ImageBrief) -> tuple[str, str | None]:
-        """Extract SD-optimised tags ordered by CLIP priority.
-
-        CLIP processes tokens left-to-right with a ~77-token window for
-        SD 1.5 (SDXL extends to ~150 via dual encoder with BREAK).
-        Tags near the front matter most, so subject goes first.
-
-        SD 1.5 (~60 words, flat):
-            subject → entities → composition → style → mood → palette
-
-        SDXL (~110 words, BREAK-separated):
-            Chunk 1 (scene): subject → entities → composition → mood
-            BREAK
-            Chunk 2 (style): art_style → art_medium → overrides → palette → quality
-        """
-        is_xl = self._preset is _SDXL_PRESET
-        entity_cap = 3 if is_xl else 2
-        entities = [_condense_to_tags(e) for e in brief.entity_fragments[:entity_cap]]
-        entities = [e for e in entities if e]
-
-        if is_xl:
-            positive = self._build_sdxl_prompt(brief, entities)
-        else:
-            positive = self._build_sd15_prompt(brief, entities)
-
-        # Negative prompt — pass through as-is
-        negative_parts = [brief.negative or "", brief.negative_defaults or ""]
-        negative = ", ".join(n for n in negative_parts if n)
-        return positive, negative or None
-
-    @staticmethod
-    def _build_sd15_prompt(brief: ImageBrief, entities: list[str]) -> str:
-        """Build a flat SD 1.5 prompt (~60 words), subject-first.
-
-        SD 1.5 CLIP has a 77-token window; ~1.25 tokens per word gives
-        ~60 words.  SDXL uses 55 words per chunk (2 x 77-token encoders).
-        """
-        parts: list[str] = []
-
-        # Subject first — most important for CLIP
-        parts.append(_condense_to_tags(brief.subject))
-
-        # Entity fragments (max 2, already capped)
-        parts.extend(entities)
-
-        # Composition
-        if brief.composition:
-            parts.append(_condense_to_tags(brief.composition))
-
-        # Style / medium
-        if brief.art_style:
-            parts.append(brief.art_style)
-        if brief.art_medium:
-            parts.append(_condense_to_tags(brief.art_medium))
-
-        # Mood
-        if brief.mood:
-            parts.append(brief.mood)
-
-        # Style overrides
-        if brief.style_overrides:
-            parts.append(brief.style_overrides)
-
-        # Palette
-        if brief.palette:
-            parts.append(", ".join(brief.palette))
-
-        positive = ", ".join(p for p in parts if p)
-        return _truncate_words(positive, 60)
-
-    @staticmethod
-    def _build_sdxl_prompt(brief: ImageBrief, entities: list[str]) -> str:
-        """Build a BREAK-separated SDXL prompt (~110 words)."""
-        # Chunk 1: scene content
-        scene_parts: list[str] = []
-        scene_parts.append(_condense_to_tags(brief.subject))
-        scene_parts.extend(entities)
-        if brief.composition:
-            scene_parts.append(_condense_to_tags(brief.composition))
-        if brief.mood:
-            scene_parts.append(brief.mood)
-        scene = ", ".join(p for p in scene_parts if p)
-        scene = _truncate_words(scene, 55)
-
-        # Chunk 2: style + quality
-        style_parts: list[str] = []
-        if brief.art_style:
-            style_parts.append(brief.art_style)
-        if brief.art_medium:
-            style_parts.append(_condense_to_tags(brief.art_medium))
-        if brief.style_overrides:
-            style_parts.append(brief.style_overrides)
-        if brief.palette:
-            style_parts.append(", ".join(brief.palette))
-        style_parts.append("masterpiece, best quality, highly detailed")
-        style = ", ".join(p for p in style_parts if p)
-        style = _truncate_words(style, 55)
-
-        return f"{scene} BREAK {style}"
+        if self._llm is None:
+            raise ImageProviderError(
+                "a1111",
+                "A1111 prompt distillation requires an LLM. "
+                "Pass --provider to generate-images or set QF_PROVIDER.",
+            )
+        return await self._distill_with_llm(brief)
 
     async def _distill_with_llm(self, brief: ImageBrief) -> tuple[str, str | None]:
         """Use an LLM to condense the brief into SD-optimised tags."""
