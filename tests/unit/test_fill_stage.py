@@ -331,11 +331,19 @@ class TestPhase0Voice:
         )
         stage = FillStage()
 
-        with patch.object(
-            stage,
-            "_fill_llm_call",
-            new_callable=AsyncMock,
-            return_value=(_make_voice_output(), 1, 500),
+        with (
+            patch.object(
+                stage,
+                "_phase_0a_voice_research",
+                new_callable=AsyncMock,
+                return_value=("", 0, 0),
+            ),
+            patch.object(
+                stage,
+                "_fill_llm_call",
+                new_callable=AsyncMock,
+                return_value=(_make_voice_output(), 1, 500),
+            ),
         ):
             result = await stage._phase_0_voice(graph, MagicMock())
 
@@ -369,7 +377,15 @@ class TestPhase0Voice:
         stage = FillStage()
 
         mock_llm_call = AsyncMock(return_value=(_make_voice_output(), 1, 500))
-        with patch.object(stage, "_fill_llm_call", mock_llm_call):
+        with (
+            patch.object(
+                stage,
+                "_phase_0a_voice_research",
+                new_callable=AsyncMock,
+                return_value=("Use third_limited past for fantasy.", 2, 300),
+            ),
+            patch.object(stage, "_fill_llm_call", mock_llm_call),
+        ):
             await stage._phase_0_voice(graph, MagicMock())
 
         # Verify context was passed with expected keys
@@ -378,6 +394,67 @@ class TestPhase0Voice:
         assert "dream_vision" in context
         assert "grow_summary" in context
         assert "scene_types_summary" in context
+        assert "research_notes" in context
+        assert "Use third_limited past for fantasy." in context["research_notes"]
+
+    @pytest.mark.asyncio
+    async def test_includes_research_metrics(self) -> None:
+        """Voice phase includes research LLM calls and tokens in totals."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dream::vision",
+            {"type": "dream", "raw_id": "vision", "genre": "dark fantasy"},
+        )
+        stage = FillStage()
+
+        with (
+            patch.object(
+                stage,
+                "_phase_0a_voice_research",
+                new_callable=AsyncMock,
+                return_value=("Research notes here.", 3, 800),
+            ),
+            patch.object(
+                stage,
+                "_fill_llm_call",
+                new_callable=AsyncMock,
+                return_value=(_make_voice_output(), 1, 500),
+            ),
+        ):
+            result = await stage._phase_0_voice(graph, MagicMock())
+
+        assert result.llm_calls == 4  # 3 research + 1 voice
+        assert result.tokens_used == 1300  # 800 research + 500 voice
+
+    @pytest.mark.asyncio
+    async def test_research_failure_graceful(self) -> None:
+        """Voice phase continues when research fails."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dream::vision",
+            {"type": "dream", "raw_id": "vision", "genre": "dark fantasy"},
+        )
+        stage = FillStage()
+
+        with (
+            patch.object(
+                stage,
+                "_phase_0a_voice_research",
+                new_callable=AsyncMock,
+                side_effect=RuntimeError("Corpus unavailable"),
+            ),
+            patch.object(
+                stage,
+                "_fill_llm_call",
+                new_callable=AsyncMock,
+                return_value=(_make_voice_output(), 1, 500),
+            ),
+        ):
+            result = await stage._phase_0_voice(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert result.tokens_used == 500
 
     @pytest.mark.asyncio
     async def test_llm_failure_raises(self) -> None:
@@ -387,6 +464,12 @@ class TestPhase0Voice:
         with (
             patch.object(
                 stage,
+                "_phase_0a_voice_research",
+                new_callable=AsyncMock,
+                return_value=("", 0, 0),
+            ),
+            patch.object(
+                stage,
                 "_fill_llm_call",
                 new_callable=AsyncMock,
                 side_effect=FillStageError("LLM call failed"),
@@ -394,6 +477,61 @@ class TestPhase0Voice:
             pytest.raises(FillStageError, match="LLM call failed"),
         ):
             await stage._phase_0_voice(graph, MagicMock())
+
+
+class TestPhase0aVoiceResearch:
+    """Tests for the voice research sub-phase."""
+
+    @pytest.mark.asyncio
+    async def test_returns_summary_when_tools_available(self) -> None:
+        """Research returns brief from discuss + summarize when corpus tools exist."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dream::vision",
+            {"type": "dream", "raw_id": "vision", "genre": "dark fantasy"},
+        )
+        stage = FillStage()
+
+        mock_tools = [MagicMock(), MagicMock()]
+        mock_messages = [MagicMock()]
+
+        with (
+            patch(
+                "questfoundry.tools.langchain_tools.get_corpus_tools",
+                return_value=mock_tools,
+            ),
+            patch(
+                "questfoundry.agents.run_discuss_phase",
+                new_callable=AsyncMock,
+                return_value=(mock_messages, 3, 600),
+            ),
+            patch(
+                "questfoundry.agents.summarize_discussion",
+                new_callable=AsyncMock,
+                return_value=("Use third_limited past for dark fantasy.", 200),
+            ),
+        ):
+            brief, calls, tokens = await stage._phase_0a_voice_research(graph, MagicMock())
+
+        assert brief == "Use third_limited past for dark fantasy."
+        assert calls == 4  # 3 discuss + 1 summarize
+        assert tokens == 800  # 600 + 200
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_tools(self) -> None:
+        """Research returns empty string when corpus tools unavailable."""
+        graph = Graph.empty()
+        stage = FillStage()
+
+        with patch(
+            "questfoundry.tools.langchain_tools.get_corpus_tools",
+            return_value=[],
+        ):
+            brief, calls, tokens = await stage._phase_0a_voice_research(graph, MagicMock())
+
+        assert brief == ""
+        assert calls == 0
+        assert tokens == 0
 
 
 def _make_prose_graph() -> Graph:
