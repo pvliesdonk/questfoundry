@@ -1417,6 +1417,13 @@ def generate_images(
             help="Image provider (e.g., openai/gpt-image-1, placeholder).",
         ),
     ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option(
+            "--provider",
+            help="LLM provider for prompt distillation (e.g., openai/gpt-4o).",
+        ),
+    ] = None,
     image_budget: Annotated[
         int,
         typer.Option("--image-budget", help="Max images to generate (0=all selected briefs)."),
@@ -1436,9 +1443,12 @@ def generate_images(
     The image provider is resolved in order: --image-provider flag,
     QF_IMAGE_PROVIDER env var, providers.image in project.yaml.
 
+    The LLM provider (for prompt distillation) is resolved in order:
+    --provider flag, QF_PROVIDER env var, providers.default in project.yaml.
+
     Examples:
         qf generate-images --project my-story --image-provider placeholder
-        qf generate-images -p my-story --image-provider openai/gpt-image-1 --image-budget 3
+        qf generate-images -p my-story --image-provider a1111/sdxl_base --provider openai/gpt-4o
     """
     import os
 
@@ -1450,12 +1460,13 @@ def generate_images(
     _configure_project_logging(project_path)
 
     log = get_logger(__name__)
+    config = load_project_config(project_path)
 
     # Resolve image provider: CLI flag → env var → project.yaml
     resolved_provider = (
         image_provider
         or os.environ.get("QF_IMAGE_PROVIDER")
-        or load_project_config(project_path).providers.get_image_provider()
+        or config.providers.get_image_provider()
     )
 
     if not resolved_provider:
@@ -1466,10 +1477,41 @@ def generate_images(
         )
         raise typer.Exit(1)
 
+    # Resolve LLM provider for prompt distillation (only A1111 needs this
+    # for condensing prose briefs into SD tags): CLI flag → env var → project.yaml
+    llm_provider_spec = provider or os.environ.get("QF_PROVIDER") or config.providers.default
+
+    llm_model = None
+    if llm_provider_spec and resolved_provider.startswith("a1111"):
+        from questfoundry.providers.factory import create_chat_model, get_default_model
+
+        if "/" in llm_provider_spec:
+            prov_name, model_name = llm_provider_spec.split("/", 1)
+            if not prov_name or not model_name:
+                console.print(
+                    f"[red]Error:[/red] Invalid provider spec: '{llm_provider_spec}'. "
+                    "Expected format 'provider/model'."
+                )
+                raise typer.Exit(1)
+        else:
+            prov_name = llm_provider_spec
+            default_model = get_default_model(prov_name)
+            if not default_model:
+                console.print(
+                    f"[red]Error:[/red] Provider '{prov_name}' requires an explicit model. "
+                    f"Use --provider {prov_name}/<model>."
+                )
+                raise typer.Exit(1)
+            model_name = default_model
+
+        llm_model = create_chat_model(prov_name, model_name)
+        log.info("distiller_llm_created", provider=prov_name, model=model_name)
+
     log.info(
         "generate_images_start",
         provider=resolved_provider,
         budget=image_budget,
+        distiller_llm=llm_provider_spec,
     )
 
     stage = DressStage(
@@ -1492,6 +1534,7 @@ def generate_images(
                 image_budget=image_budget,
                 force=force,
                 on_phase_progress=_on_phase_progress,
+                model=llm_model,
             )
         )
     except DressStageError as e:

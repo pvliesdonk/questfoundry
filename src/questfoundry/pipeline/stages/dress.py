@@ -855,6 +855,7 @@ class DressStage:
         image_budget: int = 0,
         force: bool = False,
         on_phase_progress: PhaseProgressFn | None = None,
+        model: BaseChatModel | None = None,
     ) -> DressPhaseResult:
         """Run Phase 4 (image generation) only on an existing project.
 
@@ -866,6 +867,8 @@ class DressStage:
             image_budget: Maximum number of images to generate (0 = unlimited).
             force: If True, regenerate images even if illustrations already exist.
             on_phase_progress: Optional progress callback.
+            model: Optional LLM for prompt distillation. Required for A1111
+                provider; passed through to ``create_image_provider(llm=...)``.
 
         Returns:
             DressPhaseResult from Phase 4.
@@ -892,7 +895,7 @@ class DressStage:
         self._image_budget = image_budget
         self._force_regenerate = force
 
-        result = await self._phase_4_generate(graph)
+        result = await self._phase_4_generate(graph, model=model)
 
         if result.status != "failed":
             graph.save(project_path / "graph.json")
@@ -1014,8 +1017,9 @@ class DressStage:
             log.debug(
                 "image_prompt_distilled",
                 brief_id=brief_id,
-                positive_len=len(positive),
-                negative_len=len(negative or ""),
+                positive_prompt=positive,
+                negative_prompt=negative or "",
+                positive_words=len(positive.split()),
                 distilled=distiller is not None,
             )
             prepared.append((brief_id, positive, negative, brief_data))

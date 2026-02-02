@@ -96,7 +96,7 @@ class TestPlaceholderImageProvider:
         provider = PlaceholderImageProvider()
         result = await provider.generate("A long prompt about a watercolor landscape")
 
-        assert "watercolor" in result.provider_metadata["prompt_preview"]
+        assert "watercolor" in result.provider_metadata["prompt"]
 
 
 class TestFactoryPlaceholder:

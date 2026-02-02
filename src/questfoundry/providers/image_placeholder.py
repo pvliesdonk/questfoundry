@@ -131,6 +131,6 @@ class PlaceholderImageProvider:
                 "quality": "placeholder",
                 "size": f"{width}x{height}",
                 "color": f"#{r:02x}{g:02x}{b:02x}",
-                "prompt_preview": prompt[:80],
+                "prompt": prompt,
             },
         )

@@ -12,9 +12,9 @@ import pytest
 from questfoundry.providers.image import ImageProviderConnectionError, ImageProviderError
 from questfoundry.providers.image_a1111 import (
     _SD15_PRESET,
+    _SDXL_LIGHTNING_PRESET,
     _SDXL_PRESET,
     A1111ImageProvider,
-    _condense_to_tags,
     _resolve_preset,
 )
 from questfoundry.providers.image_brief import ImageBrief
@@ -304,7 +304,32 @@ class TestA1111Presets:
         assert _resolve_preset("realvisxl_v40") is _SDXL_PRESET
 
     def test_sdxl_preset_case_insensitive(self) -> None:
-        assert _resolve_preset("SDXL_turbo") is _SDXL_PRESET
+        assert _resolve_preset("SDXL_base_v2") is _SDXL_PRESET
+
+    def test_sdxl_lightning_preset(self) -> None:
+        assert _resolve_preset("dreamshaperXL_lightningDPMSDE") is _SDXL_LIGHTNING_PRESET
+
+    def test_sdxl_turbo_preset(self) -> None:
+        assert _resolve_preset("sdxl_turbo_v3") is _SDXL_LIGHTNING_PRESET
+
+    def test_sdxl_lightning_case_insensitive(self) -> None:
+        assert _resolve_preset("SDXL_Lightning_v2") is _SDXL_LIGHTNING_PRESET
+
+    @pytest.mark.asyncio()
+    async def test_sdxl_lightning_sampler_in_payload(self) -> None:
+        provider = A1111ImageProvider(
+            model="dreamshaperXL_lightningDPMSDE", host="http://localhost:7860"
+        )
+        mock_post = AsyncMock(return_value=_fake_response())
+
+        with patch.object(provider._client, "post", mock_post):
+            await provider.generate("test")
+
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["sampler_name"] == "DPM++ SDE"
+        assert payload["scheduler"] == "karras"
+        assert payload["steps"] == 6
+        assert payload["cfg_scale"] == 2.0
 
     @pytest.mark.asyncio()
     async def test_sdxl_sampler_in_payload(self) -> None:
@@ -335,52 +360,6 @@ class TestA1111Presets:
         assert payload["cfg_scale"] == 7.0
 
 
-class TestCondenseToTags:
-    """Tests for prose-to-tag condensation helper."""
-
-    def test_strips_articles_prepositions(self) -> None:
-        text = "a tall warrior with a scarred face in the courtyard"
-        result = _condense_to_tags(text)
-        assert "a " not in f" {result} ".replace(",", " ")
-        assert "tall warrior" in result
-        assert "scarred face" in result
-        assert "courtyard" in result
-
-    def test_splits_on_semicolons(self) -> None:
-        text = "clean vector shapes; halftone textures; prismatic lens flares"
-        result = _condense_to_tags(text)
-        assert "clean vector shapes" in result
-        assert "halftone textures" in result
-        assert "prismatic lens flares" in result
-
-    def test_preserves_commas_as_tags(self) -> None:
-        text = "chrome highlights, neon bloom, light film grain"
-        result = _condense_to_tags(text)
-        assert "chrome highlights" in result
-        assert "neon bloom" in result
-        assert "light film grain" in result
-
-    def test_empty_input(self) -> None:
-        assert _condense_to_tags("") == ""
-        assert _condense_to_tags("   ") == ""
-
-    def test_prose_heavy_example(self) -> None:
-        text = (
-            "clean vector shapes with confident black linework, "
-            "chrome highlights, neon bloom, light film grain; "
-            "occasional halftone textures, speedlines, "
-            "and prismatic lens flares for mythic objects"
-        )
-        result = _condense_to_tags(text)
-        # Filler words stripped (case-insensitive check for all)
-        lower_tags = result.lower().split(", ")
-        assert "with" not in lower_tags
-        assert "occasional" not in lower_tags
-        # Content preserved
-        assert "clean vector shapes" in result
-        assert "chrome highlights" in result
-
-
 class TestA1111DistillPrompt:
     """Tests for PromptDistiller implementation."""
 
@@ -406,115 +385,16 @@ class TestA1111DistillPrompt:
         assert isinstance(provider, PromptDistiller)
 
     @pytest.mark.asyncio()
-    async def test_sd15_subject_first(self) -> None:
-        """Subject should come before style in SD 1.5 prompts."""
+    async def test_no_llm_raises(self) -> None:
+        """distill_prompt raises when no LLM is provided."""
         provider = A1111ImageProvider(host="http://localhost:7860")
         brief = self._make_brief()
-        positive, negative = await provider.distill_prompt(brief)
-
-        subject_pos = positive.find("Battle scene")
-        style_pos = positive.find("watercolor")
-        assert subject_pos < style_pos, "Subject should precede style"
-
-        assert negative is not None
-        assert "modern elements" in negative
-        assert "photorealism" in negative
+        with pytest.raises(ImageProviderError, match="requires an LLM"):
+            await provider.distill_prompt(brief)
 
     @pytest.mark.asyncio()
-    async def test_sd15_entity_cap(self) -> None:
-        """SD 1.5 should include at most 2 entity fragments."""
-        provider = A1111ImageProvider(host="http://localhost:7860")
-        brief = self._make_brief(
-            entity_fragments=[
-                "tall warrior, scarred face",
-                "old mage, white beard",
-                "young thief, hooded cloak",
-            ]
-        )
-        positive, _ = await provider.distill_prompt(brief)
-
-        # Third entity should not appear
-        assert "hooded cloak" not in positive
-        # First two should be present (condensed)
-        assert "tall warrior" in positive
-        assert "old mage" in positive
-
-    @pytest.mark.asyncio()
-    async def test_sd15_truncation(self) -> None:
-        """SD 1.5 prompts should not exceed 60 words."""
-        long_composition = " ".join(f"word{i}" for i in range(80))
-        provider = A1111ImageProvider(host="http://localhost:7860")
-        brief = self._make_brief(composition=long_composition)
-        positive, _ = await provider.distill_prompt(brief)
-
-        word_count = len(positive.split())
-        assert word_count <= 60
-
-    @pytest.mark.asyncio()
-    async def test_sdxl_break_separated(self) -> None:
-        """SDXL prompts should use BREAK to separate scene from style."""
-        provider = A1111ImageProvider(model="sdxl_base", host="http://localhost:7860")
-        brief = self._make_brief()
-        positive, _ = await provider.distill_prompt(brief)
-
-        assert " BREAK " in positive
-        scene, style = positive.split(" BREAK ")
-        # Subject in scene chunk
-        assert "Battle scene" in scene
-        # Style in style chunk
-        assert "watercolor" in style
-
-    @pytest.mark.asyncio()
-    async def test_sdxl_entity_cap(self) -> None:
-        """SDXL should include at most 3 entity fragments."""
-        provider = A1111ImageProvider(model="sdxl_base", host="http://localhost:7860")
-        brief = self._make_brief(
-            entity_fragments=[
-                "tall warrior, scarred face",
-                "old mage, white beard",
-                "young thief, hooded cloak",
-                "dark knight, obsidian armor",
-            ]
-        )
-        positive, _ = await provider.distill_prompt(brief)
-
-        # Fourth entity should not appear
-        assert "obsidian armor" not in positive
-        # First three should be present
-        assert "tall warrior" in positive
-        assert "old mage" in positive
-        assert "hooded cloak" in positive
-
-    @pytest.mark.asyncio()
-    async def test_sdxl_quality_boosters(self) -> None:
-        """SDXL style chunk should include quality boosters."""
-        provider = A1111ImageProvider(model="sdxl_base", host="http://localhost:7860")
-        brief = self._make_brief()
-        positive, _ = await provider.distill_prompt(brief)
-
-        _, style = positive.split(" BREAK ")
-        assert "masterpiece" in style
-        assert "best quality" in style
-
-    @pytest.mark.asyncio()
-    async def test_rule_based_no_art_direction(self) -> None:
-        provider = A1111ImageProvider(host="http://localhost:7860")
-        brief = self._make_brief(art_style=None, art_medium=None, palette=[])
-        positive, _ = await provider.distill_prompt(brief)
-
-        assert "Battle scene" in positive
-        assert "watercolor" not in positive
-
-    @pytest.mark.asyncio()
-    async def test_rule_based_includes_style_overrides(self) -> None:
-        provider = A1111ImageProvider(host="http://localhost:7860")
-        brief = self._make_brief(style_overrides="darker palette")
-        positive, _ = await provider.distill_prompt(brief)
-        assert "darker palette" in positive
-
-    @pytest.mark.asyncio()
-    async def test_llm_system_prompt_subject_first(self) -> None:
-        """LLM distiller should instruct subject-first ordering."""
+    async def test_llm_system_prompt_tag_limit(self) -> None:
+        """SD 1.5 distiller should enforce 40-tag limit."""
         mock_llm = AsyncMock()
         mock_response = AsyncMock()
         mock_response.content = "warrior battle, courtyard, epic, watercolor"
@@ -524,18 +404,18 @@ class TestA1111DistillPrompt:
         brief = self._make_brief()
         await provider.distill_prompt(brief)
 
-        # Check the system message content
         call_args = mock_llm.ainvoke.call_args[0][0]
         system_msg = call_args[0].content
-        assert "subject first" in system_msg.lower()
-        assert "style/medium goes last" in system_msg.lower()
+        assert "40" in system_msg
+        assert "TAG BUDGET" in system_msg
+        assert "subject" in system_msg.lower()
 
     @pytest.mark.asyncio()
     async def test_llm_sdxl_break_instruction(self) -> None:
-        """SDXL LLM distiller should mention BREAK."""
+        """SDXL LLM distiller should mention BREAK and 75-tag limit."""
         mock_llm = AsyncMock()
         mock_response = AsyncMock()
-        mock_response.content = "scene BREAK style"
+        mock_response.content = "scene tags BREAK style tags"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
         provider = A1111ImageProvider(model="sdxl_base", host="http://localhost:7860", llm=mock_llm)
@@ -545,7 +425,7 @@ class TestA1111DistillPrompt:
         call_args = mock_llm.ainvoke.call_args[0][0]
         system_msg = call_args[0].content
         assert "BREAK" in system_msg
-        assert "110" in system_msg
+        assert "75 tags" in system_msg
 
     @pytest.mark.asyncio()
     async def test_llm_entity_cap(self) -> None:
@@ -566,10 +446,14 @@ class TestA1111DistillPrompt:
         assert "frag4" not in human_msg
 
     @pytest.mark.asyncio()
-    async def test_llm_distillation(self) -> None:
+    async def test_llm_distillation_two_line_output(self) -> None:
+        """LLM returns positive on line 1, negative on line 2."""
         mock_llm = AsyncMock()
         mock_response = AsyncMock()
-        mock_response.content = "warrior battle, courtyard, epic, watercolor, golden hour"
+        mock_response.content = (
+            "warrior battle, courtyard, epic, watercolor, golden hour\n"
+            "photorealism, modern elements, text"
+        )
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
 
         provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
@@ -577,21 +461,56 @@ class TestA1111DistillPrompt:
         positive, negative = await provider.distill_prompt(brief)
 
         assert positive == "warrior battle, courtyard, epic, watercolor, golden hour"
+        assert negative == "photorealism, modern elements, text"
         mock_llm.ainvoke.assert_called_once()
 
-        # Negative still passed through directly
-        assert negative is not None
-        assert "modern elements" in negative
+    @pytest.mark.asyncio()
+    async def test_llm_distillation_single_line_output(self) -> None:
+        """LLM returns only positive — negative is None."""
+        mock_llm = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.content = "warrior battle, courtyard, epic, watercolor"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+
+        provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
+        brief = self._make_brief()
+        positive, negative = await provider.distill_prompt(brief)
+
+        assert positive == "warrior battle, courtyard, epic, watercolor"
+        assert negative is None
 
     @pytest.mark.asyncio()
-    async def test_no_llm_falls_back_to_rule_based(self) -> None:
-        provider = A1111ImageProvider(host="http://localhost:7860")
-        assert provider._llm is None
+    async def test_llm_strips_labels(self) -> None:
+        """LLM output with 'Positive:' / 'Negative:' labels gets stripped."""
+        mock_llm = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.content = (
+            "Positive: warrior, courtyard, watercolor\nNegative: photorealism, text"
+        )
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+
+        provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
         brief = self._make_brief()
-        positive, _ = await provider.distill_prompt(brief)
-        # Should still produce valid output via rule-based path
-        assert "watercolor" in positive
-        assert "Battle scene" in positive
+        positive, negative = await provider.distill_prompt(brief)
+
+        assert positive == "warrior, courtyard, watercolor"
+        assert negative == "photorealism, text"
+
+    @pytest.mark.asyncio()
+    async def test_llm_receives_negative_in_brief(self) -> None:
+        """Negative prompt text is included in the brief sent to the LLM."""
+        mock_llm = AsyncMock()
+        mock_response = AsyncMock()
+        mock_response.content = "tags\nbad things"
+        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+
+        provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
+        brief = self._make_brief(negative="blurry", negative_defaults="text, watermark")
+        await provider.distill_prompt(brief)
+
+        human_msg = mock_llm.ainvoke.call_args[0][0][1].content
+        assert "blurry" in human_msg
+        assert "text, watermark" in human_msg
 
     def test_factory_passes_llm(self) -> None:
         from questfoundry.providers.image_factory import create_image_provider
