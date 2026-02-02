@@ -1477,16 +1477,22 @@ def generate_images(
         )
         raise typer.Exit(1)
 
-    # Resolve LLM provider for prompt distillation (only needed for A1111,
-    # not placeholder): CLI flag → env var → project.yaml
+    # Resolve LLM provider for prompt distillation (only A1111 needs this
+    # for condensing prose briefs into SD tags): CLI flag → env var → project.yaml
     llm_provider_spec = provider or os.environ.get("QF_PROVIDER") or config.providers.default
 
     llm_model = None
-    if llm_provider_spec and resolved_provider != "placeholder":
+    if llm_provider_spec and resolved_provider.startswith("a1111"):
         from questfoundry.providers.factory import create_chat_model, get_default_model
 
         if "/" in llm_provider_spec:
             prov_name, model_name = llm_provider_spec.split("/", 1)
+            if not prov_name or not model_name:
+                console.print(
+                    f"[red]Error:[/red] Invalid provider spec: '{llm_provider_spec}'. "
+                    "Expected format 'provider/model'."
+                )
+                raise typer.Exit(1)
         else:
             prov_name = llm_provider_spec
             default_model = get_default_model(prov_name)
