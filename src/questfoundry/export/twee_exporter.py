@@ -120,7 +120,8 @@ def _story_header(title: str, cover: ExportIllustration | None = None) -> list[s
     ]
     if cover and cover.asset_path:
         header.append("")
-        header.append(f":: StoryInit\n[img[{cover.asset_path}]]")
+        alt = cover.caption or "Cover illustration"
+        header.append(f":: StoryInit\n[img[{alt}|{cover.asset_path}]]")
     return header
 
 

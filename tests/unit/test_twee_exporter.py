@@ -314,7 +314,7 @@ class TestTweeExporter:
         content = result.read_text()
 
         assert ":: StoryInit" in content
-        assert "[img[assets/cover.png]]" in content
+        assert "[img[Cover illustration|assets/cover.png]]" in content
 
     def test_no_story_init_without_cover(self, tmp_path: Path) -> None:
         exporter = TweeExporter()
