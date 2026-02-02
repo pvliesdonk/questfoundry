@@ -49,6 +49,8 @@ system: |
   - Good: "The Hollow Crown", "Beneath the Crimson Tide", "Whispers at Dawnbreak"
   - Bad: "Adventure Story", "The Quest", "A Dark Tale"
 
+  {output_language_instruction}
+
   ## Output Format
   Return a JSON object with a "voice" field containing the voice document
   and a "story_title" field with the title string.

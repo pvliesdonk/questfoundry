@@ -24,6 +24,7 @@ from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
+from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph.fill_context import (
     compute_lexical_diversity,
     format_atmospheric_detail,
@@ -140,6 +141,7 @@ class FillStage:
         self._serialize_provider_name: str | None = None
         self._size_profile: SizeProfile | None = None
         self._max_concurrency: int = 2
+        self._lang_instruction: str = ""
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -250,6 +252,7 @@ class FillStage:
         self._serialize_provider_name = serialize_provider_name
         self._size_profile = kwargs.get("size_profile")
         self._max_concurrency = kwargs.get("max_concurrency", 2)
+        self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
         log.info("stage_start", stage="fill")
 
         phases = self._phase_order()
@@ -486,6 +489,7 @@ class FillStage:
             "dream_vision": format_dream_vision(graph),
             "grow_summary": format_grow_summary(graph),
             "scene_types_summary": format_scene_types_summary(graph),
+            "output_language_instruction": self._lang_instruction,
             **size_template_vars(self._size_profile),
         }
 
@@ -630,6 +634,7 @@ class FillStage:
                 "shadow_states": format_shadow_states(graph, passage_id, arc_id),
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
                 "vocabulary_note": vocabulary_note,
+                "output_language_instruction": self._lang_instruction,
             }
 
             output, llm_calls, tokens = await self._fill_llm_call(
@@ -856,6 +861,7 @@ class FillStage:
                         if arc_id
                         else ""
                     ),
+                    "output_language_instruction": self._lang_instruction,
                 }
 
                 output, llm_calls, tokens = await self._fill_llm_call(

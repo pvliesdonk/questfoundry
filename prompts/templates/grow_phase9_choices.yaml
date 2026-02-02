@@ -27,6 +27,8 @@ system: |
   ## Divergence Points to Label
   {divergence_context}
 
+  {output_language_instruction}
+
   ## Label Design Rules
   1. Each label should be 3-8 words, written as an action phrase
   2. Labels at the same divergence point must be clearly distinct

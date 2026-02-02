@@ -23,6 +23,8 @@ system: |
   - visible_when: List of codeword IDs that must be unlocked to see this entry (empty for rank 1)
   - content: Diegetic text — written in the story's voice, not meta-commentary
 
+  {output_language_instruction}
+
   ## Rules
   - Rank 1 entry MUST have empty visible_when (always visible to player)
   - Higher rank entries should require relevant codewords

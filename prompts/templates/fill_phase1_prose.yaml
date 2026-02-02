@@ -70,6 +70,8 @@ system: |
   ## Vocabulary Note
   {vocabulary_note}
 
+  {output_language_instruction}
+
   ## Rules
 
   1. Follow the voice document for POV, tense, register, rhythm, and tone
