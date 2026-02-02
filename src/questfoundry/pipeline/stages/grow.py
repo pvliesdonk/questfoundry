@@ -409,9 +409,13 @@ class GrowStage:
         loader = PromptLoader(_get_prompts_path())
         template = loader.load(template_name)
 
+        from questfoundry.prompts.compiler import safe_format
+
         # Build system message from template with context injection
-        system_text = template.system.format(**context) if context else template.system
-        user_text = template.user.format(**context) if template.user else None
+        system_text = safe_format(template.system, context) if context else template.system
+        user_text = (
+            safe_format(template.user, context) if template.user and context else template.user
+        )
 
         effective_model = self._serialize_model or model
         effective_provider = self._serialize_provider_name or self._provider_name

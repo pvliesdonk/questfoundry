@@ -535,8 +535,12 @@ class DressStage:
         loader = PromptLoader(_get_prompts_path())
         template = loader.load(template_name)
 
-        system_text = template.system.format(**context) if context else template.system
-        user_text = template.user.format(**context) if template.user else None
+        from questfoundry.prompts.compiler import safe_format
+
+        system_text = safe_format(template.system, context) if context else template.system
+        user_text = (
+            safe_format(template.user, context) if template.user and context else template.user
+        )
 
         if creative:
             # Use discuss-phase model for creative output (briefs, captions).
