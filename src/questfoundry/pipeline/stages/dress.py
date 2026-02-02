@@ -65,6 +65,7 @@ from questfoundry.providers.image_brief import ImageBrief, flatten_brief_to_prom
 from questfoundry.providers.image_factory import create_image_provider
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
+    unwrap_structured_result,
     with_structured_output,
 )
 from questfoundry.tools.langchain_tools import (
@@ -571,11 +572,7 @@ class DressStage:
                 llm_calls += 1
                 total_tokens += extract_tokens(raw_result)
 
-                result = (
-                    raw_result["parsed"]
-                    if isinstance(raw_result, dict) and "parsed" in raw_result
-                    else raw_result
-                )
+                result = unwrap_structured_result(raw_result)
                 validated = (
                     result
                     if isinstance(result, output_schema)

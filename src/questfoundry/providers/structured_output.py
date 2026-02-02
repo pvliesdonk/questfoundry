@@ -94,3 +94,16 @@ def with_structured_output(
 
     method = "function_calling" if strategy == StructuredOutputStrategy.TOOL else "json_schema"
     return model.with_structured_output(schema, method=method, include_raw=True)
+
+
+def unwrap_structured_result(raw_result: Any) -> Any:
+    """Unwrap parsed value from ``include_raw=True`` dict.
+
+    When ``with_structured_output(include_raw=True)`` is used, ``ainvoke()``
+    returns ``{"raw": AIMessage, "parsed": PydanticModel, "parsing_error": ...}``.
+    This extracts the ``parsed`` value, falling back to the raw result for
+    backward compatibility with mocks or providers that return models directly.
+    """
+    if isinstance(raw_result, dict) and "parsed" in raw_result:
+        return raw_result["parsed"]
+    return raw_result

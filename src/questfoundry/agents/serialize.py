@@ -40,6 +40,7 @@ from questfoundry.observability.tracing import (
 )
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
+    unwrap_structured_result,
     with_structured_output,
 )
 
@@ -283,12 +284,7 @@ async def serialize_to_artifact(
                 tokens = extract_tokens(raw_result)
                 total_tokens += tokens
 
-                # Unwrap parsed value from include_raw=True dict
-                result = (
-                    raw_result["parsed"]
-                    if isinstance(raw_result, dict) and "parsed" in raw_result
-                    else raw_result
-                )
+                result = unwrap_structured_result(raw_result)
 
                 # If result is already a Pydantic model, validate succeeded
                 if isinstance(result, schema):

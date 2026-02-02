@@ -36,7 +36,10 @@ from questfoundry.models.grow import GrowPhaseResult, GrowResult
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
-from questfoundry.providers.structured_output import with_structured_output
+from questfoundry.providers.structured_output import (
+    unwrap_structured_result,
+    with_structured_output,
+)
 
 if TYPE_CHECKING:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -438,12 +441,7 @@ class GrowStage:
                 llm_calls += 1
                 total_tokens += extract_tokens(raw_result)
 
-                # Unwrap parsed value from include_raw=True dict
-                result = (
-                    raw_result["parsed"]
-                    if isinstance(raw_result, dict) and "parsed" in raw_result
-                    else raw_result
-                )
+                result = unwrap_structured_result(raw_result)
                 # Defensive fallback for providers that return dicts instead.
                 validated = (
                     result
