@@ -147,7 +147,7 @@ class TestBuildImageBrief:
 
         assert isinstance(result, ImageBrief)
         assert result.subject == "Battle scene"
-        assert result.entity_fragments == ["tall warrior, scarred face"]
+        assert result.entity_fragments == ["hero: tall warrior, scarred face"]
         assert result.art_style == "watercolor"
         assert result.palette == ["deep indigo", "gold"]
         assert result.negative_defaults == "photorealism"
@@ -179,7 +179,7 @@ class TestBuildImageBrief:
         brief_data = {"subject": "Fight", "entities": ["entity::hero"]}
         result = build_image_brief(g, brief_data)
 
-        assert result.entity_fragments == ["tall warrior"]
+        assert result.entity_fragments == ["hero: tall warrior"]
 
     def test_empty_strings_become_none(self) -> None:
         g = Graph()

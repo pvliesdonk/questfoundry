@@ -261,8 +261,10 @@ class A1111ImageProvider:
             )
 
         system_msg = (
-            f"TAG BUDGET: {tag_limit} tags maximum. Target {tag_target} tags. "
-            "Anything beyond the budget is silently discarded by SD CLIP.\n\n"
+            "CONTEXT: Stable Diffusion's CLIP encoder has a hard token window. "
+            "Anything beyond it is silently ignored. Your job is to distill a "
+            "prose brief into compact, comma-separated visual tags that fit.\n\n"
+            f"TAG BUDGET: {tag_limit} tags maximum. Target {tag_target} tags.\n\n"
             "You are a Stable Diffusion prompt distiller. The brief below is "
             "REFERENCE MATERIAL, not a checklist. Extract the visually essential "
             "elements — enough to compose a clear scene, not just an abstract "
@@ -279,6 +281,10 @@ class A1111ImageProvider:
             "DROP: backstory, abstract concepts, narrative, prose descriptions. "
             "KEEP: concrete visual details that a painter would need.\n\n"
             "RULES:\n"
+            "- ENTITY EXPANSION: SD does not know character names. Replace names "
+            '(e.g., "Eleanor") with their visual descriptions from the Entities '
+            'field (e.g., "eleanor: tall woman, dark coat" → use '
+            '"tall woman, dark coat").\n'
             "- Each tag is 1-4 words, comma-separated.\n"
             "- No prose, no articles, no prepositions, no sentences.\n"
             "- Output EXACTLY two lines. Line 1: positive. Line 2: negative.\n"

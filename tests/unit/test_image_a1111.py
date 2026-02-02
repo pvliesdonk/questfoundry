@@ -409,6 +409,8 @@ class TestA1111DistillPrompt:
         assert "40" in system_msg
         assert "TAG BUDGET" in system_msg
         assert "subject" in system_msg.lower()
+        assert "CLIP encoder" in system_msg
+        assert "ENTITY EXPANSION" in system_msg
 
     @pytest.mark.asyncio()
     async def test_llm_sdxl_break_instruction(self) -> None:
