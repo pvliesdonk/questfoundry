@@ -1826,7 +1826,12 @@ def doctor(
     all_ok &= _check_configuration()
 
     # Check provider connectivity
-    all_ok &= asyncio.run(_check_providers())
+    providers_ok, discovered_models = asyncio.run(_check_providers())
+    all_ok &= providers_ok
+
+    # Show available models if any providers connected
+    if discovered_models:
+        _show_available_models(discovered_models)
 
     # Check project (if specified or current dir has project.yaml)
     project_path = _resolve_project_path(project)
@@ -1872,29 +1877,44 @@ def _check_configuration() -> bool:
     return any_provider  # At least one provider configured
 
 
-async def _check_providers() -> bool:
-    """Check provider connectivity."""
+async def _check_providers() -> tuple[bool, dict[str, list[str]]]:
+    """Check provider connectivity and collect discovered models.
+
+    Returns:
+        Tuple of (all_ok, discovered_models) where discovered_models
+        maps provider name to list of model identifiers.
+    """
     import os
 
     console.print("[bold]Provider Connectivity[/bold]")
 
     all_ok = True
+    discovered: dict[str, list[str]] = {}
 
     # Check Ollama
     if os.getenv("OLLAMA_HOST"):
-        all_ok &= await _check_ollama()
+        ok, models = await _check_ollama()
+        all_ok &= ok
+        if models:
+            discovered["ollama"] = models
     else:
         console.print("  [dim]○[/dim] ollama: Skipped (OLLAMA_HOST not set)")
 
     # Check OpenAI
     if os.getenv("OPENAI_API_KEY"):
-        all_ok &= await _check_openai()
+        ok, models = await _check_openai()
+        all_ok &= ok
+        if models:
+            discovered["openai"] = models
     else:
         console.print("  [dim]○[/dim] openai: Skipped (not configured)")
 
     # Check Anthropic
     if os.getenv("ANTHROPIC_API_KEY"):
-        all_ok &= await _check_anthropic()
+        ok, models = await _check_anthropic()
+        all_ok &= ok
+        if models:
+            discovered["anthropic"] = models
     else:
         console.print("  [dim]○[/dim] anthropic: Skipped (not configured)")
 
@@ -1905,11 +1925,15 @@ async def _check_providers() -> bool:
         console.print("  [dim]○[/dim] a1111: Skipped (A1111_HOST not set)")
 
     console.print()
-    return all_ok
+    return all_ok, discovered
 
 
-async def _check_ollama() -> bool:
-    """Check Ollama connectivity and list models."""
+async def _check_ollama() -> tuple[bool, list[str]]:
+    """Check Ollama connectivity and list models.
+
+    Returns:
+        Tuple of (connected, model_names).
+    """
     import json
     import os
 
@@ -1929,26 +1953,30 @@ async def _check_ollama() -> bool:
                     console.print(f"  [green]✓[/green] ollama: Connected ({model_list})")
                 else:
                     console.print("  [yellow]![/yellow] ollama: Connected (no models pulled)")
-                return True
+                return True, models
             else:
                 console.print(f"  [red]✗[/red] ollama: HTTP {response.status_code}")
-                return False
+                return False, []
     except httpx.ConnectError:
         console.print(f"  [red]✗[/red] ollama: Connection refused ({host})")
-        return False
+        return False, []
     except httpx.TimeoutException:
         console.print(f"  [red]✗[/red] ollama: Connection timeout ({host})")
-        return False
+        return False, []
     except httpx.RequestError as e:
         console.print(f"  [red]✗[/red] ollama: Request error - {e}")
-        return False
+        return False, []
     except json.JSONDecodeError:
         console.print("  [red]✗[/red] ollama: Invalid JSON response")
-        return False
+        return False, []
 
 
-async def _check_openai() -> bool:
-    """Check OpenAI API key validity."""
+async def _check_openai() -> tuple[bool, list[str]]:
+    """Check OpenAI API key validity and discover models.
+
+    Returns:
+        Tuple of (connected, model_names).
+    """
     import os
 
     import httpx
@@ -1961,36 +1989,55 @@ async def _check_openai() -> bool:
                 headers={"Authorization": f"Bearer {api_key}"},
             )
             if response.status_code == 200:
-                console.print("  [green]✓[/green] openai: Connected (API key valid)")
-                return True
+                data = response.json()
+                # Filter to chat models (skip embeddings, fine-tunes, etc.)
+                all_models = [m.get("id", "") for m in data.get("data", [])]
+                chat_prefixes = ("gpt-", "o1", "o3", "o4")
+                models = sorted(m for m in all_models if m.startswith(chat_prefixes))
+                count = len(models)
+                console.print(
+                    f"  [green]✓[/green] openai: Connected "
+                    f"({count} chat model{'s' if count != 1 else ''} available)"
+                )
+                return True, models
             elif response.status_code == 401:
                 console.print("  [red]✗[/red] openai: Invalid API key")
-                return False
+                return False, []
             else:
                 console.print(f"  [red]✗[/red] openai: HTTP {response.status_code}")
-                return False
+                return False, []
     except httpx.TimeoutException:
         console.print("  [red]✗[/red] openai: Connection timeout")
-        return False
+        return False, []
     except httpx.RequestError as e:
         console.print(f"  [red]✗[/red] openai: Request error - {e}")
-        return False
+        return False, []
 
 
-async def _check_anthropic() -> bool:
-    """Check Anthropic API key validity."""
+async def _check_anthropic() -> tuple[bool, list[str]]:
+    """Check Anthropic API key validity and return known models.
+
+    Anthropic doesn't have a public models list endpoint, so we
+    return models from the KNOWN_MODELS registry when the key is valid.
+
+    Returns:
+        Tuple of (connected, model_names).
+    """
     import os
+
+    from questfoundry.providers.model_info import KNOWN_MODELS
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
     # Anthropic doesn't have a simple models endpoint,
     # so we just verify the key format
     if api_key and api_key.startswith("sk-ant-"):
         console.print("  [green]✓[/green] anthropic: API key configured")
-        return True
+        models = list(KNOWN_MODELS.get("anthropic", {}).keys())
+        return True, models
     elif api_key:
         console.print("  [yellow]![/yellow] anthropic: Unusual key format")
-        return False
-    return False
+        return False, []
+    return False, []
 
 
 async def _check_a1111() -> bool:
@@ -2020,6 +2067,62 @@ async def _check_a1111() -> bool:
     except httpx.RequestError as e:
         console.print(f"  [red]✗[/red] a1111: Request error - {e}")
         return False
+
+
+def _show_available_models(discovered: dict[str, list[str]]) -> None:
+    """Display discovered models with capabilities from KNOWN_MODELS registry.
+
+    Args:
+        discovered: Maps provider name to list of model identifiers.
+    """
+    from questfoundry.providers.model_info import KNOWN_MODELS
+
+    console.print("[bold]Available Models[/bold]")
+
+    table = Table(show_header=True, header_style="bold", pad_edge=False, box=None)
+    table.add_column("Provider", style="cyan", no_wrap=True)
+    table.add_column("Model", no_wrap=True)
+    table.add_column("Context", justify="right", style="dim")
+    table.add_column("Vision", justify="center")
+    table.add_column("Tools", justify="center")
+
+    for provider in sorted(discovered.keys()):
+        models = discovered[provider]
+        known = KNOWN_MODELS.get(provider, {})
+
+        for model_name in sorted(models):
+            props = known.get(model_name)
+            if props:
+                ctx = _format_context_window(props.context_window)
+                vision = "[green]✓[/green]" if props.supports_vision else "[dim]-[/dim]"
+                tools = "[green]✓[/green]" if props.supports_tools else "[dim]-[/dim]"
+            else:
+                ctx = "[dim]?[/dim]"
+                vision = "[dim]?[/dim]"
+                tools = "[dim]?[/dim]"
+
+            table.add_row(provider, model_name, ctx, vision, tools)
+
+    console.print(table)
+    console.print()
+
+
+def _format_context_window(tokens: int) -> str:
+    """Format token count as human-readable string.
+
+    Args:
+        tokens: Number of tokens.
+
+    Returns:
+        Formatted string (e.g., '32K', '128K', '1M').
+    """
+    if tokens >= 1_000_000:
+        value = tokens / 1_000_000
+        return f"{value:g}M"
+    if tokens >= 1_000:
+        value = tokens / 1_000
+        return f"{value:g}K"
+    return str(tokens)
 
 
 def _check_project(project_path: Path) -> bool:
