@@ -299,7 +299,7 @@ def test_doctor_shows_configuration() -> None:
     """Test qf doctor shows configuration section."""
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
-        patch("questfoundry.cli._check_providers", return_value=True),
+        patch("questfoundry.cli._check_providers", return_value=(True, {})),
     ):
         result = runner.invoke(app, ["doctor"])
 
@@ -310,7 +310,7 @@ def test_doctor_checks_ollama_host() -> None:
     """Test qf doctor checks OLLAMA_HOST."""
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}, clear=False),
-        patch("questfoundry.cli._check_providers", return_value=True),
+        patch("questfoundry.cli._check_providers", return_value=(True, {})),
     ):
         result = runner.invoke(app, ["doctor"])
 
@@ -326,7 +326,7 @@ def test_doctor_masks_api_keys() -> None:
             {"OPENAI_API_KEY": "sk-1234567890abcdef"},
             clear=False,
         ),
-        patch("questfoundry.cli._check_providers", return_value=True),
+        patch("questfoundry.cli._check_providers", return_value=(True, {})),
     ):
         result = runner.invoke(app, ["doctor"])
 
@@ -341,7 +341,7 @@ def test_doctor_shows_unconfigured() -> None:
     """Test qf doctor shows unconfigured providers."""
     with (
         patch.dict("os.environ", {}, clear=True),
-        patch("questfoundry.cli._check_providers", return_value=False),
+        patch("questfoundry.cli._check_providers", return_value=(False, {})),
     ):
         result = runner.invoke(app, ["doctor"])
 
@@ -356,7 +356,7 @@ def test_doctor_checks_project_when_present(tmp_path: Path) -> None:
 
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
-        patch("questfoundry.cli._check_providers", return_value=True),
+        patch("questfoundry.cli._check_providers", return_value=(True, {})),
     ):
         result = runner.invoke(app, ["doctor", "--project", str(project_path)])
 
@@ -368,7 +368,7 @@ def test_doctor_exit_code_on_failure() -> None:
     """Test qf doctor exits with code 1 on failure."""
     with (
         patch.dict("os.environ", {}, clear=True),
-        patch("questfoundry.cli._check_providers", return_value=False),
+        patch("questfoundry.cli._check_providers", return_value=(False, {})),
     ):
         result = runner.invoke(app, ["doctor"])
 
