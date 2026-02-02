@@ -38,6 +38,7 @@ def load_user_config(config_dir: Path | None = None) -> ProvidersConfig | None:
         return None
 
     from ruamel.yaml import YAML
+    from ruamel.yaml.error import YAMLError
 
     from questfoundry.pipeline.config import ProvidersConfig
 
@@ -45,17 +46,22 @@ def load_user_config(config_dir: Path | None = None) -> ProvidersConfig | None:
     try:
         with config_path.open("r", encoding="utf-8") as f:
             data = yaml.load(f)
-
-        if data is None:
-            return None
-
-        providers_data = dict(data).get("providers", {})
-        if not providers_data:
-            return None
-
-        config = ProvidersConfig.from_dict(providers_data)
-        log.debug("user_config_loaded", path=str(config_path))
-        return config
-    except (OSError, ValueError) as e:
+    except OSError as e:
         log.warning("user_config_load_failed", path=str(config_path), error=str(e))
         return None
+    except YAMLError as e:
+        log.warning("user_config_parse_failed", path=str(config_path), error=str(e))
+        return None
+
+    if data is None:
+        return None
+
+    providers_data = dict(data).get("providers", {})
+    if not providers_data:
+        return None
+
+    # Let ValueError / ValidationError propagate — invalid user config
+    # should surface clearly, not be silently swallowed.
+    config = ProvidersConfig.from_dict(providers_data)
+    log.debug("user_config_loaded", path=str(config_path))
+    return config
