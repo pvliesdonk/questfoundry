@@ -1371,3 +1371,60 @@ class TestRunGenerateOnly:
         assert len(progress_calls) == 1
         assert progress_calls[0][0] == "generate"
         assert progress_calls[0][1] == "completed"
+
+    @pytest.mark.asyncio()
+    async def test_progress_reports_distill_and_render(self, tmp_path: Path) -> None:
+        """run_generate_only emits in_progress for distilling and rendering."""
+        g = Graph()
+        g.set_last_stage("dress")
+        g.create_node("art_direction::main", {"type": "art_direction", "style": "ink"})
+        g.create_node(
+            "illustration_brief::opening",
+            {
+                "type": "illustration_brief",
+                "subject": "Opening scene",
+                "composition": "Wide",
+                "mood": "ominous",
+                "caption": "The wind howled.",
+                "category": "scene",
+                "entities": [],
+            },
+        )
+        g.create_node("passage::opening", {"type": "passage"})
+        g.add_edge("targets", "illustration_brief::opening", "passage::opening")
+        g.upsert_node(
+            "dress_meta::selection",
+            {
+                "type": "dress_meta",
+                "selected_briefs": ["illustration_brief::opening"],
+                "total_briefs": 1,
+            },
+        )
+        g.save(tmp_path / "graph.json")
+
+        mock_result = MagicMock()
+        mock_result.image_data = b"fake_png"
+        mock_result.content_type = "image/png"
+        mock_result.provider_metadata = {"quality": "placeholder"}
+
+        mock_provider = AsyncMock(spec=["generate"])
+        mock_provider.generate = AsyncMock(return_value=mock_result)
+
+        stage = DressStage(image_provider="placeholder")
+        progress_calls: list[tuple[str, str, str | None]] = []
+
+        def _on_progress(phase: str, status: str, detail: str | None) -> None:
+            progress_calls.append((phase, status, detail))
+
+        with patch(
+            "questfoundry.pipeline.stages.dress.create_image_provider",
+            return_value=mock_provider,
+        ):
+            await stage.run_generate_only(tmp_path, on_phase_progress=_on_progress)
+
+        # Should have: distill in_progress, render in_progress, final completed
+        in_progress = [c for c in progress_calls if c[1] == "in_progress"]
+        assert len(in_progress) == 2
+        assert "Distilling 1/1" in (in_progress[0][2] or "")
+        assert "Rendering 1/1" in (in_progress[1][2] or "")
+        assert progress_calls[-1][1] == "completed"

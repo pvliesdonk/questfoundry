@@ -250,6 +250,7 @@ class DressStage:
         self._on_assistant_message = on_assistant_message
         self._on_llm_start = on_llm_start
         self._on_llm_end = on_llm_end
+        self._on_phase_progress = on_phase_progress
         self._summarize_model = summarize_model
         self._user_prompt = user_prompt
         self._unload_after_discuss = kwargs.get("unload_after_discuss")
@@ -894,7 +895,9 @@ class DressStage:
         self._image_budget = image_budget
         self._force_regenerate = force
 
-        result = await self._phase_4_generate(graph, model=model)
+        result = await self._phase_4_generate(
+            graph, model=model, on_phase_progress=on_phase_progress
+        )
 
         if result.status != "failed":
             graph.save(project_path / "graph.json")
@@ -912,6 +915,7 @@ class DressStage:
         self,
         graph: Graph,
         model: BaseChatModel | None = None,
+        on_phase_progress: PhaseProgressFn | None = None,
     ) -> DressPhaseResult:
         """Phase 4: Generate images for selected illustration briefs.
 
@@ -919,6 +923,8 @@ class DressStage:
         an image, then stores via AssetManager and creates Illustration
         nodes in the graph.
         """
+        # Fall back to instance callback when called from execute() loop
+        on_phase_progress = on_phase_progress or getattr(self, "_on_phase_progress", None)
         from questfoundry.artifacts.assets import AssetManager
         from questfoundry.providers.image import ImageProviderError
 
@@ -998,8 +1004,14 @@ class DressStage:
         )
 
         # --- Pass 1: build briefs and distill prompts ----------------------
+        total_briefs = len(selected_ids)
         prepared: list[tuple[str, str, str | None, dict[str, Any]]] = []
-        for brief_id in selected_ids:
+        for i, brief_id in enumerate(selected_ids):
+            if on_phase_progress:
+                on_phase_progress(
+                    "generate", "in_progress", f"Distilling {i + 1}/{total_briefs} prompts"
+                )
+
             brief_data = graph.get_node(brief_id)
             if not brief_data:
                 log.warning("brief_not_found", brief_id=brief_id)
@@ -1033,7 +1045,13 @@ class DressStage:
             await unload_ollama_model(model)
 
         # --- Pass 2: generate images (GPU-only, LLM no longer needed) -----
-        for brief_id, positive, negative, brief_data in prepared:
+        total_render = len(prepared)
+        for render_idx, (brief_id, positive, negative, brief_data) in enumerate(prepared):
+            if on_phase_progress:
+                on_phase_progress(
+                    "generate", "in_progress", f"Rendering {render_idx + 1}/{total_render}"
+                )
+
             try:
                 result = await provider.generate(
                     positive,
