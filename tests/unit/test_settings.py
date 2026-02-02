@@ -34,6 +34,7 @@ class TestTemperatureMap:
         assert "openai" in TEMPERATURE_MAP
         assert "anthropic" in TEMPERATURE_MAP
         assert "ollama" in TEMPERATURE_MAP
+        assert "google" in TEMPERATURE_MAP
 
     def test_all_levels_mapped_for_each_provider(self) -> None:
         """Each provider has mappings for all creativity levels."""
@@ -84,6 +85,10 @@ class TestGetTemperatureForPhase:
             ("summarize", "openai", 0.7),
             ("summarize", "anthropic", 0.5),
             ("summarize", "ollama", 0.5),
+            # Google (same scale as OpenAI)
+            ("discuss", "google", 0.9),
+            ("summarize", "google", 0.7),
+            ("serialize", "google", 0.0),
             # Serialize phase (DETERMINISTIC)
             ("serialize", "openai", 0.0),
             ("serialize", "anthropic", 0.0),
@@ -124,6 +129,10 @@ class TestGetMaxTemperature:
     def test_ollama_max(self) -> None:
         """Ollama has max temperature of 2.0."""
         assert get_max_temperature("ollama") == 2.0
+
+    def test_google_max(self) -> None:
+        """Google has max temperature of 2.0."""
+        assert get_max_temperature("google") == 2.0
 
     def test_unknown_provider_defaults_to_1(self) -> None:
         """Unknown provider defaults to 1.0 max."""
@@ -257,6 +266,12 @@ class TestPhaseSettingsToModelKwargs:
         """Excludes seed from kwargs for Anthropic (not supported)."""
         settings = PhaseSettings(seed=42)
         kwargs = settings.to_model_kwargs("discuss", "anthropic")
+        assert "seed" not in kwargs
+
+    def test_excludes_seed_for_google(self) -> None:
+        """Excludes seed from kwargs for Google (not supported)."""
+        settings = PhaseSettings(seed=42)
+        kwargs = settings.to_model_kwargs("discuss", "google")
         assert "seed" not in kwargs
 
     def test_clamps_temperature_for_anthropic(self) -> None:
