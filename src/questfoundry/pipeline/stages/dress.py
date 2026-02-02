@@ -65,6 +65,7 @@ from questfoundry.providers.image_brief import ImageBrief, flatten_brief_to_prom
 from questfoundry.providers.image_factory import create_image_provider
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
+    unwrap_structured_result,
     with_structured_output,
 )
 from questfoundry.tools.langchain_tools import (
@@ -567,13 +568,11 @@ class DressStage:
             )
 
             try:
-                result = await structured_model.ainvoke(messages, config=config)
+                raw_result = await structured_model.ainvoke(messages, config=config)
                 llm_calls += 1
-                # Note: extract_tokens returns 0 for Pydantic model results
-                # from with_structured_output. Token counts for structured
-                # output calls are not tracked. This matches FILL stage behavior.
-                total_tokens += extract_tokens(result)
+                total_tokens += extract_tokens(raw_result)
 
+                result = unwrap_structured_result(raw_result)
                 validated = (
                     result
                     if isinstance(result, output_schema)

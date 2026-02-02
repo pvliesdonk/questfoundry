@@ -323,6 +323,21 @@ class TestHelperFunctions:
 
         assert extract_tokens(mock_result) == 0
 
+    def test_extract_tokens_unwraps_raw_dict(self) -> None:
+        """extract_tokens should unwrap include_raw=True dict to get AIMessage."""
+        mock_ai_message = MagicMock()
+        mock_ai_message.usage_metadata = {"total_tokens": 350}
+        raw_result = {"raw": mock_ai_message, "parsed": MagicMock(), "parsing_error": None}
+
+        assert extract_tokens(raw_result) == 350
+
+    def test_extract_tokens_raw_dict_no_metadata(self) -> None:
+        """extract_tokens returns 0 when raw AIMessage has no metadata."""
+        mock_ai_message = MagicMock(spec=[])
+        raw_result = {"raw": mock_ai_message, "parsed": MagicMock(), "parsing_error": None}
+
+        assert extract_tokens(raw_result) == 0
+
     def test_format_validation_errors_with_location(self) -> None:
         """_format_validation_errors should include field location."""
         try:

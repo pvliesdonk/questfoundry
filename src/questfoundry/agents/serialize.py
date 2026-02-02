@@ -40,6 +40,7 @@ from questfoundry.observability.tracing import (
 )
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
+    unwrap_structured_result,
     with_structured_output,
 )
 
@@ -277,11 +278,13 @@ async def serialize_to_artifact(
                 )
 
                 # Invoke structured output
-                result = await structured_model.ainvoke(messages, config=config)
+                raw_result = await structured_model.ainvoke(messages, config=config)
 
                 # Extract token usage from response if available
-                tokens = extract_tokens(result)
+                tokens = extract_tokens(raw_result)
                 total_tokens += tokens
+
+                result = unwrap_structured_result(raw_result)
 
                 # If result is already a Pydantic model, validate succeeded
                 if isinstance(result, schema):
@@ -405,12 +408,21 @@ def extract_tokens(result: object) -> int:
     - OpenAI: response_metadata["token_usage"]
     - Ollama: usage_metadata attribute on AIMessage
 
+    When ``include_raw=True`` is used with ``with_structured_output``,
+    the result is a dict ``{"raw": AIMessage, "parsed": ..., ...}``.
+    This function unwraps the raw AIMessage to access token metadata.
+
     Args:
-        result: Response from model invocation.
+        result: Response from model invocation (AIMessage, Pydantic model,
+            or raw dict from ``include_raw=True``).
 
     Returns:
         Total tokens used, or 0 if not available.
     """
+    # Unwrap raw dict from include_raw=True
+    if isinstance(result, dict) and "raw" in result:
+        result = result["raw"]
+
     # First check usage_metadata attribute (Ollama, newer providers)
     if hasattr(result, "usage_metadata"):
         usage = getattr(result, "usage_metadata", None)

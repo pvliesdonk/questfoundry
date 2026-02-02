@@ -80,6 +80,7 @@ class TestWithStructuredOutput:
         mock_model.with_structured_output.assert_called_once_with(
             SampleSchema,
             method="function_calling",
+            include_raw=True,
         )
         assert result is mock_model
 
@@ -97,6 +98,7 @@ class TestWithStructuredOutput:
         mock_model.with_structured_output.assert_called_once_with(
             SampleSchema,
             method="json_schema",
+            include_raw=True,
         )
         assert result is mock_model
 
@@ -115,6 +117,7 @@ class TestWithStructuredOutput:
         mock_model.with_structured_output.assert_called_with(
             SampleSchema,
             method="json_schema",
+            include_raw=True,
         )
 
         # Test OpenAI (TOOL - function_calling handles optional fields)
@@ -128,6 +131,7 @@ class TestWithStructuredOutput:
         mock_model.with_structured_output.assert_called_with(
             SampleSchema,
             method="function_calling",
+            include_raw=True,
         )
 
     def test_with_structured_output_none_strategy_defaults_to_tool(self) -> None:
@@ -145,6 +149,7 @@ class TestWithStructuredOutput:
         mock_model.with_structured_output.assert_called_once_with(
             SampleSchema,
             method="function_calling",
+            include_raw=True,
         )
 
     def test_with_structured_output_none_strategy_with_provider(self) -> None:
@@ -163,4 +168,5 @@ class TestWithStructuredOutput:
         mock_model.with_structured_output.assert_called_once_with(
             SampleSchema,
             method="json_schema",
+            include_raw=True,
         )

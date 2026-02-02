@@ -36,7 +36,10 @@ from questfoundry.models.grow import GrowPhaseResult, GrowResult
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
-from questfoundry.providers.structured_output import with_structured_output
+from questfoundry.providers.structured_output import (
+    unwrap_structured_result,
+    with_structured_output,
+)
 
 if TYPE_CHECKING:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -434,11 +437,11 @@ class GrowStage:
             )
 
             try:
-                result = await structured_model.ainvoke(messages, config=config)
+                raw_result = await structured_model.ainvoke(messages, config=config)
                 llm_calls += 1
-                total_tokens += extract_tokens(result)
+                total_tokens += extract_tokens(raw_result)
 
-                # with_structured_output returns validated Pydantic instance directly.
+                result = unwrap_structured_result(raw_result)
                 # Defensive fallback for providers that return dicts instead.
                 validated = (
                     result
