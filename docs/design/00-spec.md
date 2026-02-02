@@ -111,7 +111,7 @@ This is not a pipeline of files where each stage produces a new artifact. Rather
 | BRAINSTORM | Entity, Dilemma, Answer | — | Vision |
 | SEED | Path, Consequence, Beat | Entity (curate), Dilemma (explore) | Entity, Dilemma |
 | GROW | Arc, Passage, Choice, Codeword; new Beats | Beat (scene_type, intersection) | Path, Beat, Entity |
-| FILL | — | Passage (prose), Entity (details) | Passage, Entity, Path |
+| FILL | Voice | Passage (prose), Entity (details) | Passage, Entity, Path |
 | DRESS | ArtDirection, EntityVisual, IllustrationBrief, Illustration, CodexEntry | — | Passage, Entity, Vision, Codeword |
 | SHIP | — (export only) | — | Persistent nodes |
 
@@ -887,6 +887,9 @@ Before prose generation, establish the voice document. This synthesizes DREAM's 
 **Voice document schema:**
 ```yaml
 voice:
+  # Identity
+  story_title: string                # generated title for the story
+
   # Structural choices
   pov: first | second | third_limited | third_omniscient
   pov_character: entity_id | null    # whose perspective (for limited POVs)

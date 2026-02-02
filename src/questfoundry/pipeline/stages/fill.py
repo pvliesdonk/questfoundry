@@ -493,16 +493,14 @@ class FillStage:
             FillPhase0Output,
         )
 
-        # Store the voice document as a graph node
+        # Store the voice document as a graph node (includes story_title)
         voice_data: dict[str, Any] = {
             "type": "voice",
             "raw_id": "voice",
+            "story_title": output.story_title,
             **output.voice.model_dump(),
         }
         graph.create_node("voice::voice", voice_data)
-
-        # Store generated title on the vision node (story-level identity metadata)
-        graph.upsert_node("vision::main", {"story_title": output.story_title})
 
         log.info(
             "voice_document_created",

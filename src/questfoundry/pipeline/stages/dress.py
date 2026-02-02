@@ -1122,8 +1122,9 @@ def _create_cover_brief(graph: Graph) -> bool:
     tone_str = ", ".join(tone) if isinstance(tone, list) else str(tone)
     themes_str = ", ".join(themes) if isinstance(themes, list) else str(themes)
 
-    # Build subject from non-empty parts
-    story_title = vision.get("story_title") or ""
+    # Build subject from non-empty parts — title lives on voice node (FILL)
+    voice_node = graph.get_node("voice::voice")
+    story_title = (voice_node or {}).get("story_title") or ""
     title_desc = f'"{story_title}", ' if story_title else ""
     parts = [f"Cover image for {title_desc}a {genre} story"]
     if tone_str:
