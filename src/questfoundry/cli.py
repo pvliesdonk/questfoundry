@@ -1921,7 +1921,10 @@ async def _check_providers() -> tuple[bool, dict[str, list[str]]]:
 
     # Check Google
     if os.getenv("GOOGLE_API_KEY"):
-        all_ok &= await _check_google()
+        ok, models = await _check_google()
+        all_ok &= ok
+        if models:
+            discovered["google"] = models
     else:
         console.print("  [dim]○[/dim] google: Skipped (GOOGLE_API_KEY not set)")
 
@@ -2080,8 +2083,13 @@ async def _check_anthropic() -> tuple[bool, list[str]]:
         return False, []
 
 
-async def _check_google() -> bool:
-    """Check Google Gemini API key validity."""
+async def _check_google() -> tuple[bool, list[str]]:
+    """Check Google Gemini API key validity and discover models.
+
+    Returns:
+        Tuple of (connected, model_names).
+    """
+    import json
     import os
 
     import httpx
@@ -2095,28 +2103,32 @@ async def _check_google() -> bool:
             )
             if response.status_code == 200:
                 data = response.json()
-                models = [
+                models = sorted(
                     m.get("name", "").removeprefix("models/")
                     for m in data.get("models", [])
                     if "gemini" in m.get("name", "").lower()
-                ]
+                )
                 count = len(models)
                 console.print(
-                    f"  [green]✓[/green] google: Connected ({count} Gemini model{'s' if count != 1 else ''} available)"
+                    f"  [green]✓[/green] google: Connected "
+                    f"({count} Gemini model{'s' if count != 1 else ''} available)"
                 )
-                return True
+                return True, models
             elif response.status_code == 400:
                 console.print("  [red]✗[/red] google: Invalid API key")
-                return False
+                return False, []
             else:
                 console.print(f"  [red]✗[/red] google: HTTP {response.status_code}")
-                return False
+                return False, []
     except httpx.TimeoutException:
         console.print("  [red]✗[/red] google: Connection timeout")
-        return False
+        return False, []
     except httpx.RequestError as e:
         console.print(f"  [red]✗[/red] google: Request error - {e}")
-        return False
+        return False, []
+    except json.JSONDecodeError:
+        console.print("  [red]✗[/red] google: Invalid JSON response")
+        return False, []
 
 
 async def _check_a1111() -> bool:
