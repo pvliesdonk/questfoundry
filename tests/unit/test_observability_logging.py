@@ -160,3 +160,35 @@ def test_jsonl_file_handler_writes_structlog_context(tmp_path: Path) -> None:
                 break
 
     assert found, "Log entry with structlog context not found in JSONL"
+
+
+def test_jsonl_file_handler_includes_traceback(tmp_path: Path) -> None:
+    """JSONLFileHandler writes formatted traceback when exc_info=True."""
+    configure_logging(verbosity=2, log_to_file=True, project_path=tmp_path)
+
+    logger = get_logger("test.traceback")
+    try:
+        raise ValueError("deliberate test error")
+    except ValueError:
+        logger.error("stage_failed", error="deliberate test error", exc_info=True)
+
+    close_file_logging()
+
+    log_file = tmp_path / "logs" / "debug.jsonl"
+    assert log_file.exists()
+
+    found = False
+    with log_file.open() as f:
+        for line in f:
+            entry = json.loads(line)
+            if entry.get("message") == "stage_failed":
+                found = True
+                # exc_info should be formatted into an "exception" string, not a boolean
+                assert "exc_info" not in entry, "exc_info should be consumed by format_exc_info"
+                assert "exception" in entry, "Formatted traceback should be in 'exception' key"
+                assert "ValueError" in entry["exception"]
+                assert "deliberate test error" in entry["exception"]
+                assert "Traceback" in entry["exception"]
+                break
+
+    assert found, "Log entry with traceback not found in JSONL"
