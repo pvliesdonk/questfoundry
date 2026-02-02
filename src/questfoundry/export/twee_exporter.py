@@ -12,6 +12,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.export.i18n import get_ui_strings
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -84,8 +85,9 @@ class TweeExporter:
             lines.append("")
 
         # Codex passage (if DRESS produced codex entries)
+        ui = get_ui_strings(context.language)
         if context.codex_entries:
-            lines.extend(_render_codex_passage(context.codex_entries))
+            lines.extend(_render_codex_passage(context.codex_entries, ui=ui))
             lines.append("")
 
         # Art direction metadata passage (if DRESS produced art direction)
@@ -205,13 +207,18 @@ def _render_choice(choice: ExportChoice) -> str:
     return link
 
 
-def _render_codex_passage(codex_entries: list[ExportCodexEntry]) -> list[str]:
+def _render_codex_passage(
+    codex_entries: list[ExportCodexEntry],
+    *,
+    ui: dict[str, str] | None = None,
+) -> list[str]:
     """Render a Codex passage with conditionally visible entries.
 
     Entries are sorted by rank. Each entry is wrapped in an ``<<if>>``
     block if it has ``visible_when`` codewords.
     """
-    lines = [":: Codex"]
+    codex_label = (ui or {}).get("codex", "Codex")
+    lines = [f":: {codex_label}"]
 
     sorted_entries = sorted(codex_entries, key=lambda e: e.rank)
     for entry in sorted_entries:
