@@ -24,6 +24,7 @@ PROVIDER_DEFAULTS: dict[str, str | None] = {
     "ollama": None,  # Require explicit model due to distribution issues
     "openai": "gpt-5-mini",
     "anthropic": "claude-sonnet-4-20250514",
+    "google": "gemini-2.5-flash",
 }
 
 
@@ -33,7 +34,7 @@ def get_default_model(provider_name: str) -> str | None:
     Returns None for providers that require explicit model specification.
 
     Args:
-        provider_name: Provider identifier (ollama, openai, anthropic).
+        provider_name: Provider identifier (ollama, openai, anthropic, google).
 
     Returns:
         Default model name, or None if provider requires explicit model.
@@ -62,7 +63,7 @@ def create_chat_model(
     Raises:
         ProviderError: If provider unavailable or misconfigured.
     """
-    provider_name_lower = provider_name.lower()
+    provider_name_lower = _normalize_provider(provider_name)
 
     if provider_name_lower == "ollama":
         chat_model = _create_ollama_base_model(model, **kwargs)
@@ -70,6 +71,8 @@ def create_chat_model(
         chat_model = _create_openai_base_model(model, **kwargs)
     elif provider_name_lower == "anthropic":
         chat_model = _create_anthropic_base_model(model, **kwargs)
+    elif provider_name_lower == "google":
+        chat_model = _create_google_base_model(model, **kwargs)
     else:
         log.error("provider_unknown", provider=provider_name_lower)
         raise ProviderError(provider_name_lower, f"Unknown provider: {provider_name_lower}")
@@ -122,7 +125,7 @@ def create_model_for_structured_output(
         )
         ```
     """
-    provider_name_lower = provider_name.lower()
+    provider_name_lower = _normalize_provider(provider_name)
 
     # Resolve model name: use provided, then provider default, then convenience fallback
     resolved_model = model_name or get_default_model(provider_name_lower)
@@ -142,6 +145,8 @@ def create_model_for_structured_output(
         base_model = _create_openai_base_model(resolved_model, **kwargs)
     elif provider_name_lower == "anthropic":
         base_model = _create_anthropic_base_model(resolved_model, **kwargs)
+    elif provider_name_lower == "google":
+        base_model = _create_google_base_model(resolved_model, **kwargs)
     else:
         log.error("provider_unknown", provider=provider_name_lower)
         raise ProviderError(provider_name_lower, f"Unknown provider: {provider_name_lower}")
@@ -162,6 +167,21 @@ def create_model_for_structured_output(
         has_schema=schema is not None,
     )
     return base_model
+
+
+def _normalize_provider(provider_name: str) -> str:
+    """Normalize provider name, resolving aliases.
+
+    Args:
+        provider_name: Raw provider name (e.g., "gemini", "Google", "openai").
+
+    Returns:
+        Canonical lowercase provider name.
+    """
+    name = provider_name.lower()
+    if name == "gemini":
+        return "google"
+    return name
 
 
 def _query_ollama_num_ctx(host: str, model: str) -> int | None:
@@ -433,3 +453,57 @@ def _create_anthropic_base_model(model: str, **kwargs: Any) -> BaseChatModel:
     # Note: seed is not supported by Anthropic - filtered upstream
 
     return ChatAnthropic(**model_kwargs)
+
+
+def _create_google_base_model(model: str, **kwargs: Any) -> BaseChatModel:
+    """Create base Google Gemini chat model (unstructured).
+
+    Args:
+        model: Model name (e.g., "gemini-2.5-flash").
+        **kwargs: Model options including:
+            - api_key: Google API key (or use GOOGLE_API_KEY env var)
+            - temperature: Sampling temperature (optional)
+            - top_p: Nucleus sampling parameter
+
+    Note:
+        Google Gemini does not support the seed parameter. It is filtered
+        out by PhaseSettings.to_model_kwargs() before reaching this function.
+
+    Returns:
+        Configured ChatGoogleGenerativeAI model.
+
+    Raises:
+        ProviderError: If API key not configured or package missing.
+    """
+    try:
+        from langchain_google_genai import ChatGoogleGenerativeAI
+    except ImportError as e:
+        log.error("provider_import_error", provider="google", package="langchain-google-genai")
+        raise ProviderError(
+            "google",
+            "langchain-google-genai not installed. Run: uv add langchain-google-genai",
+        ) from e
+
+    api_key = kwargs.get("api_key") or os.getenv("GOOGLE_API_KEY")
+    if not api_key:
+        log.error("provider_config_error", provider="google", missing="GOOGLE_API_KEY")
+        raise ProviderError(
+            "google",
+            "API key required. Set GOOGLE_API_KEY environment variable.",
+        )
+
+    model_kwargs: dict[str, Any] = {
+        "model": model,
+        "google_api_key": api_key,
+    }
+
+    if "temperature" in kwargs:
+        model_kwargs["temperature"] = kwargs["temperature"]
+
+    if "top_p" in kwargs:
+        model_kwargs["top_p"] = kwargs["top_p"]
+
+    # Note: seed is not supported by Google Gemini - filtered upstream
+
+    chat_model: BaseChatModel = ChatGoogleGenerativeAI(**model_kwargs)
+    return chat_model

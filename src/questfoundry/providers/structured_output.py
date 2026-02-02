@@ -56,6 +56,10 @@ def get_default_strategy(provider_name: str) -> StructuredOutputStrategy:
     if provider_lower.startswith("ollama"):
         return StructuredOutputStrategy.JSON_MODE
 
+    # Google: JSON_MODE (native JSON schema support)
+    if provider_lower.startswith("google") or provider_lower.startswith("gemini"):
+        return StructuredOutputStrategy.JSON_MODE
+
     # Anthropic and others: JSON_MODE
     return StructuredOutputStrategy.JSON_MODE
 
