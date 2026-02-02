@@ -1977,6 +1977,7 @@ async def _check_openai() -> tuple[bool, list[str]]:
     Returns:
         Tuple of (connected, model_names).
     """
+    import json
     import os
 
     import httpx
@@ -2012,32 +2013,64 @@ async def _check_openai() -> tuple[bool, list[str]]:
     except httpx.RequestError as e:
         console.print(f"  [red]✗[/red] openai: Request error - {e}")
         return False, []
+    except json.JSONDecodeError:
+        console.print("  [red]✗[/red] openai: Invalid JSON response")
+        return False, []
 
 
 async def _check_anthropic() -> tuple[bool, list[str]]:
     """Check Anthropic API key validity and return known models.
 
-    Anthropic doesn't have a public models list endpoint, so we
-    return models from the KNOWN_MODELS registry when the key is valid.
+    Anthropic doesn't have a public models list endpoint, so we make a
+    cheap API call to validate the key, then return models from the
+    KNOWN_MODELS registry.
 
     Returns:
         Tuple of (connected, model_names).
     """
     import os
 
+    import httpx
+
     from questfoundry.providers.model_info import KNOWN_MODELS
 
     api_key = os.getenv("ANTHROPIC_API_KEY")
-    # Anthropic doesn't have a simple models endpoint,
-    # so we just verify the key format
-    if api_key and api_key.startswith("sk-ant-"):
-        console.print("  [green]✓[/green] anthropic: API key configured")
-        models = list(KNOWN_MODELS.get("anthropic", {}).keys())
-        return True, models
-    elif api_key:
-        console.print("  [yellow]![/yellow] anthropic: Unusual key format")
+    if not api_key:
         return False, []
-    return False, []
+
+    headers = {
+        "x-api-key": api_key,
+        "anthropic-version": "2023-06-01",
+        "content-type": "application/json",
+    }
+    # Intentionally malformed request (max_tokens=0) to validate the key.
+    # A 400 error confirms connectivity and valid auth.
+    data = {"model": "claude-3-haiku-20240307", "max_tokens": 0, "messages": []}
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.post(
+                "https://api.anthropic.com/v1/messages",
+                headers=headers,
+                json=data,
+            )
+
+        if response.status_code == 400:
+            console.print("  [green]✓[/green] anthropic: Connected (API key valid)")
+            models = list(KNOWN_MODELS.get("anthropic", {}).keys())
+            return True, models
+        elif response.status_code in (401, 403):
+            console.print("  [red]✗[/red] anthropic: Invalid API key")
+            return False, []
+        else:
+            console.print(f"  [red]✗[/red] anthropic: API error HTTP {response.status_code}")
+            return False, []
+    except httpx.TimeoutException:
+        console.print("  [red]✗[/red] anthropic: Connection timeout")
+        return False, []
+    except httpx.RequestError as e:
+        console.print(f"  [red]✗[/red] anthropic: Request error - {e}")
+        return False, []
 
 
 async def _check_a1111() -> bool:
@@ -2117,10 +2150,10 @@ def _format_context_window(tokens: int) -> str:
         Formatted string (e.g., '32K', '128K', '1M').
     """
     if tokens >= 1_000_000:
-        value = tokens / 1_000_000
+        value = tokens // 1_000_000
         return f"{value:g}M"
     if tokens >= 1_000:
-        value = tokens / 1_000
+        value = tokens // 1_000
         return f"{value:g}K"
     return str(tokens)
 
