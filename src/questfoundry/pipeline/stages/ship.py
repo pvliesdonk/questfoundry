@@ -92,14 +92,21 @@ class ShipStage:
         voice = graph.get_node("voice::voice")
         story_title = (voice or {}).get("story_title") or ""
         language = "en"
+        config_name: str | None = None
+
         try:
             config = load_project_config(self._project_path)
-            if not story_title:
-                story_title = config.name
             language = config.language
+            config_name = config.name
         except (ProjectConfigError, FileNotFoundError, KeyError):
-            if not story_title:
-                story_title = self._project_path.name
+            log.warning(
+                "project_config_load_failed",
+                path=str(self._project_path),
+                detail="Falling back to defaults for title and language.",
+            )
+
+        if not story_title:
+            story_title = config_name or self._project_path.name
 
         # Build export context
         context = build_export_context(graph, story_title, language=language)

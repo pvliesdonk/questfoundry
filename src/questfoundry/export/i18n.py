@@ -93,7 +93,7 @@ def get_ui_strings(language: str) -> dict[str, str]:
     Returns:
         Dictionary of UI string keys to localized values.
     """
-    return UI_STRINGS.get(language.lower(), UI_STRINGS["en"])
+    return {**UI_STRINGS["en"], **UI_STRINGS.get(language.lower(), {})}
 
 
 def get_output_language_instruction(language: str) -> str:
