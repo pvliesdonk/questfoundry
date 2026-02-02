@@ -59,6 +59,7 @@ from questfoundry.models.dress import (
 )
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
+from questfoundry.pipeline.batching import batch_llm_calls
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
 from questfoundry.providers.image import PromptDistiller
 from questfoundry.providers.image_brief import ImageBrief, flatten_brief_to_prompt
@@ -155,6 +156,7 @@ class DressStage:
         self._user_prompt: str = ""
         self._image_provider_spec: str | None = image_provider
         self._image_budget: int = 0
+        self._max_concurrency: int = 2
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -258,6 +260,7 @@ class DressStage:
         if image_provider is not None:
             self._image_provider_spec = image_provider
         self._image_budget = kwargs.get("image_budget", 0)
+        self._max_concurrency = kwargs.get("max_concurrency", 2)
 
         log.info("stage_start", stage="dress")
 
@@ -743,37 +746,42 @@ class DressStage:
             for cw_id, cw_data in codewords.items()
         )
 
-        total_llm_calls = 0
-        total_tokens = 0
         codex_created = 0
         validation_warnings = 0
 
-        for entity_id in entities:
-            entity_details_ctx = format_entity_for_codex(graph, entity_id)
+        entity_ids = list(entities.keys())
 
+        async def _codex_for_entity(
+            entity_id: str,
+        ) -> tuple[tuple[str, DressPhase2Output], int, int]:
+            entity_details_ctx = format_entity_for_codex(graph, entity_id)
             context = {
                 "vision_context": vision_ctx or "No creative vision available.",
                 "entity_details": entity_details_ctx,
                 "codewords": codeword_list or "No codewords defined.",
             }
-
             output, llm_calls, tokens = await self._dress_llm_call(
                 model, "dress_codex", context, DressPhase2Output
             )
-            total_llm_calls += llm_calls
-            total_tokens += tokens
+            return (entity_id, output), llm_calls, tokens
 
-            # Validate entries
+        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+            entity_ids, _codex_for_entity, self._max_concurrency
+        )
+
+        for item in results:
+            if item is None:
+                continue
+            entity_id, output = item
             entry_dicts = [e.model_dump() for e in output.entries]
-            errors = validate_dress_codex_entries(graph, entity_id, entry_dicts)
-            if errors:
+            errs = validate_dress_codex_entries(graph, entity_id, entry_dicts)
+            if errs:
                 validation_warnings += 1
                 log.warning(
                     "codex_validation_issues",
                     entity_id=entity_id,
-                    errors=errors,
+                    errors=errs,
                 )
-
             apply_dress_codex(graph, entity_id, entry_dicts)
             codex_created += len(entry_dicts)
 
@@ -1005,26 +1013,50 @@ class DressStage:
 
         # --- Pass 1: build briefs and distill prompts ----------------------
         total_briefs = len(selected_ids)
+        if on_phase_progress:
+            on_phase_progress("generate", "in_progress", f"Distilling {total_briefs} prompts")
+
         prepared: list[tuple[str, str, str | None, dict[str, Any]]] = []
-        for i, brief_id in enumerate(selected_ids):
-            if on_phase_progress:
-                on_phase_progress(
-                    "generate", "in_progress", f"Distilling {i + 1}/{total_briefs} prompts"
-                )
 
-            brief_data = graph.get_node(brief_id)
-            if not brief_data:
-                log.warning("brief_not_found", brief_id=brief_id)
-                failed += 1
-                continue
+        if distiller is not None:
+            # Batch distillation calls with bounded concurrency
+            distill_items: list[tuple[str, dict[str, Any]]] = []
+            for brief_id in selected_ids:
+                brief_data = graph.get_node(brief_id)
+                if not brief_data:
+                    log.warning("brief_not_found", brief_id=brief_id)
+                    failed += 1
+                    continue
+                distill_items.append((brief_id, brief_data))
 
-            image_brief = build_image_brief(graph, brief_data)
+            async def _distill_one(
+                item: tuple[str, dict[str, Any]],
+            ) -> tuple[tuple[str, str, str | None, dict[str, Any]], int, int]:
+                bid, bdata = item
+                ib = build_image_brief(graph, bdata)
+                pos, neg = await distiller.distill_prompt(ib)
+                return (bid, pos, neg, bdata), 1, 0
 
-            if distiller is not None:
-                positive, negative = await distiller.distill_prompt(image_brief)
-            else:
+            results, _, _, _errs = await batch_llm_calls(
+                distill_items, _distill_one, self._max_concurrency
+            )
+            for item in results:
+                if item is not None:
+                    prepared.append(item)
+            failed += len(_errs)
+        else:
+            # Non-LLM distillation — no concurrency needed
+            for brief_id in selected_ids:
+                brief_data = graph.get_node(brief_id)
+                if not brief_data:
+                    log.warning("brief_not_found", brief_id=brief_id)
+                    failed += 1
+                    continue
+                image_brief = build_image_brief(graph, brief_data)
                 positive, negative = flatten_brief_to_prompt(image_brief)
+                prepared.append((brief_id, positive, negative, brief_data))
 
+        for brief_id, positive, negative, _bdata in prepared:
             log.debug(
                 "image_prompt_distilled",
                 brief_id=brief_id,
@@ -1033,7 +1065,6 @@ class DressStage:
                 positive_words=len(positive.split()),
                 distilled=distiller is not None,
             )
-            prepared.append((brief_id, positive, negative, brief_data))
 
         # Free VRAM between LLM distillation and image generation.
         # Only unload when the provider actually used an LLM for distillation

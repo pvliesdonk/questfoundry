@@ -54,6 +54,7 @@ from questfoundry.models.fill import (
 )
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
+from questfoundry.pipeline.batching import batch_llm_calls
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
 from questfoundry.providers.structured_output import (
     unwrap_structured_result,
@@ -138,6 +139,7 @@ class FillStage:
         self._serialize_model: BaseChatModel | None = None
         self._serialize_provider_name: str | None = None
         self._size_profile: SizeProfile | None = None
+        self._max_concurrency: int = 2
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -247,6 +249,7 @@ class FillStage:
         self._serialize_model = serialize_model
         self._serialize_provider_name = serialize_provider_name
         self._size_profile = kwargs.get("size_profile")
+        self._max_concurrency = kwargs.get("max_concurrency", 2)
         log.info("stage_start", stage="fill")
 
         phases = self._phase_order()
@@ -722,23 +725,30 @@ class FillStage:
 
         voice_context = format_voice_context(graph)
         all_flags: list[dict[str, str]] = []
-        total_llm_calls = 0
-        total_tokens = 0
 
-        # Process in batches
+        # Build batches
+        batches: list[list[str]] = []
         for i in range(0, len(filled_ids), self.REVIEW_BATCH_SIZE):
-            batch_ids = filled_ids[i : i + self.REVIEW_BATCH_SIZE]
-            batch_context = format_passages_batch(graph, batch_ids)
+            batches.append(filled_ids[i : i + self.REVIEW_BATCH_SIZE])
 
-            output, llm_calls, tokens = await self._fill_llm_call(
+        async def _review_batch(
+            batch_ids: list[str],
+        ) -> tuple[FillPhase2Output, int, int]:
+            batch_context = format_passages_batch(graph, batch_ids)
+            return await self._fill_llm_call(
                 model,
                 "fill_phase2_review",
                 {"voice_document": voice_context, "passages_batch": batch_context},
                 FillPhase2Output,
             )
-            total_llm_calls += llm_calls
-            total_tokens += tokens
 
+        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+            batches, _review_batch, self._max_concurrency
+        )
+
+        for output in results:
+            if output is None:
+                continue
             for flag in output.flags:
                 all_flags.append(
                     {
@@ -796,32 +806,40 @@ class FillStage:
             )
 
         voice_context = format_voice_context(graph)
-        total_llm_calls = 0
-        total_tokens = 0
         total_flags = sum(len(f) for f in flagged_passages.values())
         revised_flags = 0
 
-        for passage_id, flags in flagged_passages.items():
-            passage = graph.get_node(passage_id)
-            if not passage:
-                continue
-
-            current_prose = passage.get("prose", "")
-            if not current_prose:
-                continue
-
-            # Find arc for extended window (once per passage)
+        # Pre-compute arc info for each passage (graph reads only)
+        passage_arc_info: dict[str, tuple[str | None, int]] = {}
+        for passage_id in flagged_passages:
             arc_id = self._find_arc_for_passage(graph, passage_id)
             current_idx = 0
             if arc_id:
                 order = get_arc_passage_order(graph, arc_id)
                 if passage_id in order:
                     current_idx = order.index(passage_id)
+            passage_arc_info[passage_id] = (arc_id, current_idx)
 
-            # Chain revisions: each uses output from previous.
-            # Track whether all flags got a non-empty response (= LLM engaged).
-            # Empty prose means the LLM failed to produce a revision — keep flag.
-            all_flags_addressed = True
+        # Each passage's revision chain is independent of other passages,
+        # but flags within one passage must be sequential (chained).
+        passage_items = list(flagged_passages.items())
+
+        async def _revise_passage(
+            item: tuple[str, list[dict[str, str]]],
+        ) -> tuple[tuple[str, str, bool, int, list[FillPhase1Output]], int, int]:
+            passage_id, flags = item
+            passage = graph.get_node(passage_id)
+            if not passage or not passage.get("prose", ""):
+                return (passage_id, "", False, 0, []), 0, 0
+
+            current_prose = passage.get("prose", "")
+            arc_id, current_idx = passage_arc_info[passage_id]
+            all_addressed = True
+            local_revised = 0
+            local_calls = 0
+            local_tokens = 0
+            outputs: list[FillPhase1Output] = []
+
             for flag_data in flags:
                 context = {
                     "voice_document": voice_context,
@@ -840,18 +858,45 @@ class FillStage:
                     model,
                     "fill_phase3_revision",
                     context,
-                    FillPhase1Output,  # Reuse — same passage output format
+                    FillPhase1Output,
                     creative=True,
                 )
-                total_llm_calls += llm_calls
-                total_tokens += tokens
+                local_calls += llm_calls
+                local_tokens += tokens
+                outputs.append(output)
 
                 if output.passage.prose:
                     current_prose = output.passage.prose
-                    revised_flags += 1
-                    log.debug("passage_revised_for_flag", passage_id=passage_id)
+                    local_revised += 1
+                else:
+                    all_addressed = False
 
-                    # Apply entity updates from revision
+            return (
+                (passage_id, current_prose, all_addressed, local_revised, outputs),
+                local_calls,
+                local_tokens,
+            )
+
+        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+            passage_items, _revise_passage, self._max_concurrency
+        )
+
+        # Apply results to graph (sequential — graph mutations not thread-safe)
+        for item in results:
+            if item is None:
+                continue
+            passage_id, final_prose, all_addressed, local_revised, outputs = item
+            if not passage_id:
+                continue
+
+            revised_flags += local_revised
+            passage = graph.get_node(passage_id)
+            if not passage:
+                continue
+
+            # Apply entity updates from all revision outputs
+            for output in outputs:
+                if output.passage.prose:
                     for update in output.passage.entity_updates:
                         entity_id = f"entity::{update.entity_id}"
                         if graph.has_node(entity_id):
@@ -863,21 +908,16 @@ class FillStage:
                                 reason="entity not found in graph",
                             )
                 else:
-                    all_flags_addressed = False
                     log.warning(
                         "revision_empty_prose",
                         passage_id=passage_id,
-                        issue_type=flag_data.get("issue_type", ""),
+                        issue_type="chained",
                     )
 
-            # Write final prose after all flags for this passage
-            if current_prose != passage.get("prose", ""):
-                graph.update_node(passage_id, prose=current_prose)
+            if final_prose and final_prose != passage.get("prose", ""):
+                graph.update_node(passage_id, prose=final_prose)
 
-            # Clear flags if LLM returned prose for every flag (even if identical
-            # to original — identical output means the LLM reviewed the issue and
-            # found the text acceptable). Keep flags if any revision returned empty.
-            if all_flags_addressed:
+            if all_addressed:
                 graph.update_node(passage_id, review_flags=[])
 
         return FillPhaseResult(
