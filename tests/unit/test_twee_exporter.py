@@ -300,3 +300,25 @@ class TestTweeExporter:
         content = result.read_text()
 
         assert "StoryArtDirection" not in content
+
+    def test_cover_rendered_in_story_init(self, tmp_path: Path) -> None:
+        ctx = _simple_context()
+        ctx.cover = ExportIllustration(
+            passage_id="",
+            asset_path="assets/cover.png",
+            caption="",
+            category="cover",
+        )
+        exporter = TweeExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert ":: StoryInit" in content
+        assert "[img[assets/cover.png]]" in content
+
+    def test_no_story_init_without_cover(self, tmp_path: Path) -> None:
+        exporter = TweeExporter()
+        result = exporter.export(_simple_context(), tmp_path / "out")
+        content = result.read_text()
+
+        assert ":: StoryInit" not in content
