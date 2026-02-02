@@ -43,13 +43,16 @@ def build_export_context(graph: Graph, project_name: str) -> ExportContext:
     choices = _extract_choices(graph)
     _mark_start_and_endings(passages, choices)
 
+    illustrations, cover = _extract_illustrations(graph)
+
     return ExportContext(
         title=project_name,
         passages=passages,
         choices=choices,
         entities=_extract_entities(graph),
         codewords=_extract_codewords(graph),
-        illustrations=_extract_illustrations(graph),
+        illustrations=illustrations,
+        cover=cover,
         codex_entries=_extract_codex_entries(graph),
         art_direction=_extract_art_direction(graph),
     )
@@ -128,11 +131,18 @@ def _extract_codewords(graph: Graph) -> list[ExportCodeword]:
     ]
 
 
-def _extract_illustrations(graph: Graph) -> list[ExportIllustration]:
-    """Extract illustrations linked to passages via Depicts edges."""
+def _extract_illustrations(
+    graph: Graph,
+) -> tuple[list[ExportIllustration], ExportIllustration | None]:
+    """Extract illustrations, separating cover from passage illustrations.
+
+    Returns:
+        Tuple of (passage_illustrations, cover_illustration).
+        Cover is identified by category="cover" and absence of a Depicts edge.
+    """
     illustration_nodes = graph.get_nodes_by_type("illustration")
     if not illustration_nodes:
-        return []
+        return [], None
 
     # Build illustration→passage mapping from Depicts edges
     depicts_edges = graph.get_edges(edge_type="Depicts")
@@ -140,19 +150,28 @@ def _extract_illustrations(graph: Graph) -> list[ExportIllustration]:
     for edge in depicts_edges:
         illust_to_passage[edge["from"]] = edge["to"]
 
-    result: list[ExportIllustration] = []
+    passage_illustrations: list[ExportIllustration] = []
+    cover: ExportIllustration | None = None
     for node_id, data in sorted(illustration_nodes.items()):
+        category = data.get("category", "scene")
         passage_id = illust_to_passage.get(node_id)
-        if passage_id:
-            result.append(
+        if category == "cover" and not passage_id:
+            cover = ExportIllustration(
+                passage_id="",
+                asset_path=data.get("asset", ""),
+                caption=data.get("caption", ""),
+                category="cover",
+            )
+        elif passage_id:
+            passage_illustrations.append(
                 ExportIllustration(
                     passage_id=passage_id,
                     asset_path=data.get("asset", ""),
                     caption=data.get("caption", ""),
-                    category=data.get("category", "scene"),
+                    category=category,
                 )
             )
-    return result
+    return passage_illustrations, cover
 
 
 def _extract_codex_entries(graph: Graph) -> list[ExportCodexEntry]:

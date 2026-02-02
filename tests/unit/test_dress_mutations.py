@@ -433,47 +433,37 @@ class TestApplyDressIllustration:
         assert node is not None
         assert node["quality"] == "placeholder"
 
-    def test_brief_without_targets_raises(self, dress_graph: Graph) -> None:
+    def test_standalone_cover_no_targets_edge(self, dress_graph: Graph) -> None:
+        """Cover brief without targets edge creates illustration from brief ID."""
         from questfoundry.graph.dress_mutations import apply_dress_illustration
 
-        dress_graph.create_node("illustration_brief::orphan", {"type": "illustration_brief"})
-        with pytest.raises(ValueError, match="no targets edge"):
-            apply_dress_illustration(
-                dress_graph,
-                brief_id="illustration_brief::orphan",
-                asset_path="assets/x.png",
-                caption="c",
-                category="scene",
-            )
-
-    def test_cover_brief_targets_vision(self, dress_graph: Graph) -> None:
-        """Cover brief targets vision::main, not a passage."""
-        from questfoundry.graph.dress_mutations import apply_dress_illustration
-
-        dress_graph.create_node("vision::main", {"type": "vision", "genre": "cyberpunk"})
         dress_graph.create_node(
             "illustration_brief::cover",
-            {"type": "illustration_brief", "subject": "Cover image"},
+            {"type": "illustration_brief", "category": "cover", "subject": "Cover image"},
         )
-        dress_graph.add_edge("targets", "illustration_brief::cover", "vision::main")
 
         illust_id = apply_dress_illustration(
             dress_graph,
             brief_id="illustration_brief::cover",
             asset_path="assets/cover.png",
             caption="",
-            category="vista",
+            category="cover",
         )
 
-        assert illust_id == "illustration::main"
+        assert illust_id == "illustration::cover"
         node = dress_graph.get_node(illust_id)
         assert node is not None
         assert node["asset"] == "assets/cover.png"
+        assert node["category"] == "cover"
 
-        # Depicts edge should point to vision::main
+        # No Depicts edge for standalone cover
         depicts = dress_graph.get_edges(from_id=illust_id, edge_type="Depicts")
-        assert len(depicts) == 1
-        assert depicts[0]["to"] == "vision::main"
+        assert len(depicts) == 0
+
+        # from_brief edge should still exist
+        from_brief = dress_graph.get_edges(from_id=illust_id, edge_type="from_brief")
+        assert len(from_brief) == 1
+        assert from_brief[0]["to"] == "illustration_brief::cover"
 
 
 # ---------------------------------------------------------------------------

@@ -76,6 +76,13 @@ class HtmlExporter:
         if context.art_direction:
             art_direction_meta = f'<meta name="art-direction" content="{html.escape(json.dumps(context.art_direction))}">'
 
+        # Build cover HTML
+        cover_html = ""
+        if context.cover and context.cover.asset_path:
+            cap = html.escape(context.cover.caption) if context.cover.caption else ""
+            caption_tag = f"\n  <figcaption>{cap}</figcaption>" if cap else ""
+            cover_html = f'<figure class="cover">\n  <img src="{html.escape(context.cover.asset_path)}" alt="Cover illustration">{caption_tag}\n</figure>'
+
         # Build the complete HTML document
         content = _build_html_document(
             title=context.title,
@@ -83,6 +90,7 @@ class HtmlExporter:
             start_id=_safe_id(start_id),
             codex_html=codex_html,
             art_direction_meta=art_direction_meta,
+            cover_html=cover_html,
         )
 
         output_file.write_text(content, encoding="utf-8")
@@ -177,6 +185,7 @@ def _build_html_document(
     start_id: str,
     codex_html: str = "",
     art_direction_meta: str = "",
+    cover_html: str = "",
 ) -> str:
     """Build the complete HTML document."""
     extra_meta = f"\n{art_direction_meta}" if art_direction_meta else ""
@@ -308,6 +317,7 @@ h1 {{
 </head>
 <body>
 <h1>{html.escape(title)}</h1>
+{cover_html}
 {codex_button}
 {passages_html}
 

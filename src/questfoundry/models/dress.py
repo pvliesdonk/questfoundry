@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from questfoundry.models.pipeline import PhaseResult
 
-IllustrationCategory = Literal["scene", "portrait", "vista", "item_detail"]
+IllustrationCategory = Literal["scene", "portrait", "vista", "item_detail", "cover"]
 
 # ---------------------------------------------------------------------------
 # Persistent nodes (exported by SHIP)

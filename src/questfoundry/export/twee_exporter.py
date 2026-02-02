@@ -47,7 +47,7 @@ class TweeExporter:
         output_file = output_dir / "story.twee"
 
         lines: list[str] = []
-        lines.extend(_story_header(context.title))
+        lines.extend(_story_header(context.title, context.cover))
         lines.append("")
 
         # Build lookup structures
@@ -108,14 +108,18 @@ class TweeExporter:
         return output_file
 
 
-def _story_header(title: str) -> list[str]:
+def _story_header(title: str, cover: ExportIllustration | None = None) -> list[str]:
     """Generate Twee 3 story header passages."""
     ifid = str(uuid.uuid4()).upper()
-    return [
+    header = [
         f":: StoryTitle\n{title}",
         "",
         f':: StoryData\n{{"ifid": "{ifid}", "format": "SugarCube", "format-version": "2.37.3"}}',
     ]
+    if cover and cover.asset_path:
+        header.append("")
+        header.append(f":: StoryInit\n[img[{cover.asset_path}]]")
+    return header
 
 
 def _passage_name(passage_id: str) -> str:

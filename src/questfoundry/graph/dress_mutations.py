@@ -162,35 +162,34 @@ def apply_dress_illustration(
     category: str,
     quality: str = "high",
 ) -> str:
-    """Create an Illustration node with Depicts and from_brief edges.
+    """Create an Illustration node with from_brief edge and optional Depicts.
 
-    The brief's ``targets`` edge determines the depicted node, which may
-    be a passage (normal illustrations) or another node type such as
-    ``vision::main`` (cover illustration).
+    For passage illustrations, the brief's ``targets`` edge determines the
+    depicted node, and a ``Depicts`` edge is created. For standalone
+    illustrations (e.g., cover), there is no targets edge — the illustration
+    ID is derived from the brief ID, and no ``Depicts`` edge is created.
 
     Args:
         graph: Story graph to mutate.
         brief_id: IllustrationBrief node ID that was rendered.
         asset_path: Relative path to the image file.
         caption: Diegetic caption from the brief.
-        category: Image category (scene, portrait, vista, item_detail).
+        category: Image category (scene, portrait, vista, item_detail, cover).
         quality: Image quality tier (placeholder, low, high).
 
     Returns:
         The created illustration node ID.
-
-    Raises:
-        ValueError: If the brief has no targets edge.
     """
-    # Derive target node from brief's targets edge
+    # Derive target node from brief's targets edge (if any)
     targets_edges = graph.get_edges(from_id=brief_id, edge_type="targets")
-    if not targets_edges:
-        msg = f"Brief {brief_id} has no targets edge"
-        raise ValueError(msg)
-
-    target_id = targets_edges[0]["to"]
-    raw_target_id = strip_scope_prefix(target_id)
-    node_id = f"illustration::{raw_target_id}"
+    if targets_edges:
+        target_id = targets_edges[0]["to"]
+        raw_target_id = strip_scope_prefix(target_id)
+        node_id = f"illustration::{raw_target_id}"
+    else:
+        # Standalone illustration (e.g., cover) — derive ID from brief
+        raw_brief_id = strip_scope_prefix(brief_id)
+        node_id = f"illustration::{raw_brief_id}"
 
     illust_data = {
         "type": "illustration",
@@ -201,9 +200,11 @@ def apply_dress_illustration(
     }
     graph.upsert_node(node_id, illust_data)
 
-    # Edge: illustration → target node (passage, vision, etc.)
-    _remove_edges(graph, from_id=node_id, edge_type="Depicts")
-    graph.add_edge("Depicts", node_id, target_id)
+    # Edge: illustration → target node (only for passage illustrations)
+    if targets_edges:
+        target_id = targets_edges[0]["to"]
+        _remove_edges(graph, from_id=node_id, edge_type="Depicts")
+        graph.add_edge("Depicts", node_id, target_id)
 
     # Edge: illustration → brief (traceability)
     _remove_edges(graph, from_id=node_id, edge_type="from_brief")
