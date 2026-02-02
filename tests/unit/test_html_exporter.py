@@ -249,3 +249,26 @@ class TestHtmlExporter:
         content = result.read_text()
 
         assert "art-direction" not in content
+
+    def test_cover_rendered_when_present(self, tmp_path: Path) -> None:
+        ctx = _simple_context()
+        ctx.cover = ExportIllustration(
+            passage_id="",
+            asset_path="assets/cover.png",
+            caption="Cover art",
+            category="cover",
+        )
+        exporter = HtmlExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert '<figure class="cover">' in content
+        assert "assets/cover.png" in content
+        assert "Cover art" in content
+
+    def test_no_cover_when_absent(self, tmp_path: Path) -> None:
+        exporter = HtmlExporter()
+        result = exporter.export(_simple_context(), tmp_path / "out")
+        content = result.read_text()
+
+        assert '<figure class="cover">' not in content

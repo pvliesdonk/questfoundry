@@ -1095,11 +1095,13 @@ class DressStage:
 
 
 def _create_cover_brief(graph: Graph) -> bool:
-    """Create a cover illustration brief from vision and art direction.
+    """Create a standalone cover illustration brief from vision and art direction.
 
     Synthesizes a cover image brief from the story's genre, tone,
     themes, and art direction. The cover gets priority 1 (must-have)
-    and category "vista".
+    and category "cover". Unlike passage briefs, the cover brief is
+    standalone — no targets edge, no synthetic passage node, no Depicts
+    edge when rendered.
 
     Args:
         graph: Story graph with vision and art_direction nodes.
@@ -1157,19 +1159,17 @@ def _create_cover_brief(graph: Graph) -> bool:
             style_overrides = ". ".join(style_parts) + "."
 
     brief_data = {
-        "category": "vista",
+        "type": "illustration_brief",
+        "category": "cover",
         "subject": subject,
         "composition": composition,
         "mood": mood,
         "caption": "",
         "style_overrides": style_overrides,
+        "priority": 1,
     }
 
-    # Ensure passage::cover exists as a synthetic anchor for the cover brief
-    if not graph.has_node("passage::cover"):
-        graph.create_node("passage::cover", {"type": "passage", "synthetic": True})
-
-    apply_dress_brief(graph, "cover", brief_data, priority=1)
+    graph.upsert_node("illustration_brief::cover", brief_data)
     log.info("cover_brief_created")
     return True
 

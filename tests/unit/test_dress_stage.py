@@ -1184,29 +1184,36 @@ class TestCreateCoverBrief:
         brief = g.get_node("illustration_brief::cover")
         assert brief is not None
         assert brief["priority"] == 1
-        assert brief["category"] == "vista"
+        assert brief["category"] == "cover"
         assert "space opera" in brief["subject"]
         assert "fate" in brief["subject"]
 
-    def test_creates_synthetic_passage_node(self) -> None:
+    def test_no_synthetic_passage_node(self) -> None:
         g = Graph()
         g.create_node("vision", {"type": "vision", "genre": "mystery"})
 
         _create_cover_brief(g)
 
-        passage = g.get_node("passage::cover")
-        assert passage is not None
-        assert passage.get("synthetic") is True
+        assert g.get_node("passage::cover") is None
 
-    def test_targets_edge_to_passage_cover(self) -> None:
+    def test_no_targets_edge(self) -> None:
         g = Graph()
         g.create_node("vision", {"type": "vision", "genre": "fantasy"})
 
         _create_cover_brief(g)
 
         edges = g.get_edges(from_id="illustration_brief::cover", edge_type="targets")
-        assert len(edges) == 1
-        assert edges[0]["to"] == "passage::cover"
+        assert len(edges) == 0
+
+    def test_cover_category(self) -> None:
+        g = Graph()
+        g.create_node("vision", {"type": "vision", "genre": "fantasy"})
+
+        _create_cover_brief(g)
+
+        brief = g.get_node("illustration_brief::cover")
+        assert brief is not None
+        assert brief["category"] == "cover"
 
     def test_returns_false_without_vision(self) -> None:
         g = Graph()

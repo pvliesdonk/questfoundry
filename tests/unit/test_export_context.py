@@ -213,3 +213,29 @@ class TestBuildExportContext:
 
         intro = next(p for p in ctx.passages if p.id == "passage::intro")
         assert intro.prose == "You stand at the gates."
+
+    def test_cover_illustration_separated(self) -> None:
+        g = _graph_with_dress(_minimal_graph())
+        # Add a standalone cover illustration (no Depicts edge)
+        g.create_node(
+            "illustration::cover",
+            {
+                "type": "illustration",
+                "asset": "assets/cover.png",
+                "caption": "Cover art",
+                "category": "cover",
+            },
+        )
+        ctx = build_export_context(g, "test")
+
+        assert ctx.cover is not None
+        assert ctx.cover.asset_path == "assets/cover.png"
+        assert ctx.cover.category == "cover"
+        # Cover should NOT appear in passage illustrations
+        assert all(ill.category != "cover" for ill in ctx.illustrations)
+
+    def test_no_cover_when_absent(self) -> None:
+        g = _minimal_graph()
+        ctx = build_export_context(g, "test")
+
+        assert ctx.cover is None

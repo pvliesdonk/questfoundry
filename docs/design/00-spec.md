@@ -579,7 +579,7 @@ Structured image prompt with priority scoring. One brief is generated per passag
 illustration_brief:
   id: string
   priority: integer                     # 1=must-have, 2=important, 3=nice-to-have
-  category: string                      # scene | portrait | vista | item_detail
+  category: string                      # scene | portrait | vista | item_detail | cover
   subject: string                       # what the image depicts
   entities: string[]                    # entity IDs present in scene
   composition: string                   # framing / camera notes

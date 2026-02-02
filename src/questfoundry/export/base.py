@@ -87,6 +87,7 @@ class ExportContext:
     entities: list[ExportEntity] = field(default_factory=list)
     codewords: list[ExportCodeword] = field(default_factory=list)
     illustrations: list[ExportIllustration] = field(default_factory=list)
+    cover: ExportIllustration | None = None
     codex_entries: list[ExportCodexEntry] = field(default_factory=list)
     art_direction: dict[str, Any] | None = None
 
