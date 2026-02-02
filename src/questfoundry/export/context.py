@@ -17,9 +17,12 @@ from questfoundry.export.base import (
     ExportIllustration,
     ExportPassage,
 )
+from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
+
+log = get_logger(__name__)
 
 
 def build_export_context(graph: Graph, project_name: str) -> ExportContext:
@@ -155,7 +158,13 @@ def _extract_illustrations(
     for node_id, data in sorted(illustration_nodes.items()):
         category = data.get("category", "scene")
         passage_id = illust_to_passage.get(node_id)
-        if category == "cover" and not passage_id:
+        if category == "cover":
+            if passage_id:
+                log.warning(
+                    "cover_has_depicts_edge",
+                    illustration_id=node_id,
+                    passage_id=passage_id,
+                )
             cover = ExportIllustration(
                 passage_id="",
                 asset_path=data.get("asset", ""),
