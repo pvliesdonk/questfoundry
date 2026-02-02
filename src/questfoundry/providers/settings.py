@@ -55,12 +55,17 @@ TEMPERATURE_MAP: dict[str, dict[CreativityLevel, float]] = {
     },
 }
 
-# Phase defaults (semantic level, not raw temperature)
+# Role defaults (semantic level, not raw temperature)
 # Based on agent prompt engineering best practices:
-# - discuss: high creativity for exploration
-# - summarize: balanced for coherent narratives
-# - serialize: deterministic for structured output
+# - creative: high creativity for exploration and prose generation
+# - balanced: balanced for coherent narratives and summarization
+# - structured: deterministic for structured output and serialization
 PHASE_CREATIVITY: dict[str, CreativityLevel] = {
+    # Role-based names (primary)
+    "creative": CreativityLevel.CREATIVE,
+    "balanced": CreativityLevel.BALANCED,
+    "structured": CreativityLevel.DETERMINISTIC,
+    # Legacy phase names (aliases)
     "discuss": CreativityLevel.CREATIVE,
     "summarize": CreativityLevel.BALANCED,
     "serialize": CreativityLevel.DETERMINISTIC,

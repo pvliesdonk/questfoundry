@@ -16,6 +16,14 @@ DEFAULT_PROVIDER = "ollama"
 DEFAULT_MODEL = "qwen3:4b-instruct-32k"
 DEFAULT_STAGES = ["dream", "brainstorm", "seed", "grow", "fill", "ship"]
 
+# Role-based provider names and their legacy aliases.
+# Maps legacy phase names to canonical role names.
+ROLE_ALIASES: dict[str, str] = {
+    "discuss": "creative",
+    "summarize": "balanced",
+    "serialize": "structured",
+}
+
 
 @dataclass
 class ProviderConfig:
@@ -27,69 +35,113 @@ class ProviderConfig:
 
 @dataclass
 class ProvidersConfig:
-    """Configuration for LLM providers with phase-specific overrides.
+    """Configuration for LLM providers with role-based overrides.
 
-    Supports hybrid model configurations where different phases use different
-    LLM providers. Each phase (discuss, summarize, serialize) can optionally
+    Supports hybrid model configurations where different roles use different
+    LLM providers. Each role (creative, balanced, structured) can optionally
     override the default provider.
+
+    Role-based names map to work types:
+    - creative: exploration, prose generation (high temperature)
+    - balanced: summarization, narrative refinement (medium temperature)
+    - structured: JSON/YAML serialization, briefs (deterministic)
+
+    Legacy phase names (discuss, summarize, serialize) are accepted as aliases.
 
     This class resolves only from project config. Environment variables and
     CLI flags are handled by the orchestrator's full precedence chain.
 
     Attributes:
         default: Default provider string (e.g., "ollama/qwen3:4b-instruct-32k"). Required.
-        discuss: Optional provider override for the discuss phase.
-        summarize: Optional provider override for the summarize phase.
-        serialize: Optional provider override for the serialize phase.
-        settings: Phase-specific model settings (temperature, top_p, seed).
+        creative: Optional provider override for creative role (alias: discuss).
+        balanced: Optional provider override for balanced role (alias: summarize).
+        structured: Optional provider override for structured role (alias: serialize).
+        image: Optional image generation provider (opt-in, no default).
+        settings: Role/phase-specific model settings (temperature, top_p, seed).
     """
 
     default: str
-    discuss: str | None = None
-    summarize: str | None = None
-    serialize: str | None = None
+    creative: str | None = None
+    balanced: str | None = None
+    structured: str | None = None
     image: str | None = None
     settings: dict[str, PhaseSettings] = field(default_factory=dict)
 
-    def get_phase_settings(self, phase: str) -> PhaseSettings:
-        """Get settings for a phase, with defaults.
+    # Legacy aliases — read-only properties for backwards compatibility
+    @property
+    def discuss(self) -> str | None:
+        """Legacy alias for creative."""
+        return self.creative
+
+    @property
+    def summarize(self) -> str | None:
+        """Legacy alias for balanced."""
+        return self.balanced
+
+    @property
+    def serialize(self) -> str | None:
+        """Legacy alias for structured."""
+        return self.structured
+
+    def get_role_settings(self, phase: str) -> PhaseSettings:
+        """Get settings for a role or phase, with defaults.
+
+        Accepts both role names (creative, balanced, structured) and
+        legacy phase names (discuss, summarize, serialize).
 
         Args:
-            phase: Pipeline phase (discuss, summarize, serialize).
+            phase: Role or phase name.
 
         Returns:
-            PhaseSettings for the phase. Returns configured settings if present,
-            otherwise returns default (empty) PhaseSettings. Note that actual
-            temperature values are computed dynamically in to_model_kwargs()
-            based on the phase and provider when not explicitly configured.
+            PhaseSettings for the role/phase. Returns configured settings if
+            present, otherwise returns default (empty) PhaseSettings.
         """
         from questfoundry.providers.settings import get_default_phase_settings
 
-        return self.settings.get(phase) or get_default_phase_settings(phase)
+        # Try exact name first, then try canonical role name
+        canonical = ROLE_ALIASES.get(phase, phase)
+        return (
+            self.settings.get(phase)
+            or self.settings.get(canonical)
+            or get_default_phase_settings(phase)
+        )
 
-    def get_discuss_provider(self) -> str:
-        """Get the config-level provider for the discuss phase.
+    def get_creative_provider(self) -> str:
+        """Get the config-level provider for the creative role.
 
-        Returns phase-specific config if set, otherwise default.
+        Returns role-specific config if set, otherwise default.
         Environment variables are resolved by the orchestrator.
         """
-        return self.discuss or self.default
+        return self.creative or self.default
+
+    def get_balanced_provider(self) -> str:
+        """Get the config-level provider for the balanced role.
+
+        Returns role-specific config if set, otherwise default.
+        Environment variables are resolved by the orchestrator.
+        """
+        return self.balanced or self.default
+
+    def get_structured_provider(self) -> str:
+        """Get the config-level provider for the structured role.
+
+        Returns role-specific config if set, otherwise default.
+        Environment variables are resolved by the orchestrator.
+        """
+        return self.structured or self.default
+
+    # Legacy aliases for backwards compatibility
+    def get_discuss_provider(self) -> str:
+        """Legacy alias for get_creative_provider."""
+        return self.get_creative_provider()
 
     def get_summarize_provider(self) -> str:
-        """Get the config-level provider for the summarize phase.
-
-        Returns phase-specific config if set, otherwise default.
-        Environment variables are resolved by the orchestrator.
-        """
-        return self.summarize or self.default
+        """Legacy alias for get_balanced_provider."""
+        return self.get_balanced_provider()
 
     def get_serialize_provider(self) -> str:
-        """Get the config-level provider for the serialize phase.
-
-        Returns phase-specific config if set, otherwise default.
-        Environment variables are resolved by the orchestrator.
-        """
-        return self.serialize or self.default
+        """Legacy alias for get_structured_provider."""
+        return self.get_structured_provider()
 
     def get_image_provider(self) -> str | None:
         """Get the config-level image provider.
@@ -104,13 +156,18 @@ class ProvidersConfig:
     def from_dict(cls, data: dict[str, Any]) -> ProvidersConfig:
         """Create config from dictionary.
 
+        Accepts both role names (creative, balanced, structured) and
+        legacy phase names (discuss, summarize, serialize). Role names
+        take precedence if both are specified.
+
         Args:
             data: Dictionary with provider configuration. Can have:
                 - default: Required default provider string
-                - discuss: Optional discuss phase provider
-                - summarize: Optional summarize phase provider
-                - serialize: Optional serialize phase provider
-                - settings: Optional dict of phase -> settings
+                - creative/discuss: Optional creative role provider
+                - balanced/summarize: Optional balanced role provider
+                - structured/serialize: Optional structured role provider
+                - image: Optional image provider
+                - settings: Optional dict of role/phase -> settings
 
         Returns:
             ProvidersConfig instance.
@@ -119,17 +176,22 @@ class ProvidersConfig:
 
         default = data.get("default", f"{DEFAULT_PROVIDER}/{DEFAULT_MODEL}")
 
-        # Parse phase-specific settings
+        # Parse role-specific settings
         settings_data = data.get("settings", {})
         settings: dict[str, PhaseSettings] = {}
         for phase_name, phase_settings_data in settings_data.items():
             settings[phase_name] = PhaseSettings.from_dict(phase_settings_data)
 
+        # Accept both role names and legacy phase names (role names take precedence)
+        creative = data.get("creative") or data.get("discuss")
+        balanced = data.get("balanced") or data.get("summarize")
+        structured = data.get("structured") or data.get("serialize")
+
         return cls(
             default=default,
-            discuss=data.get("discuss"),
-            summarize=data.get("summarize"),
-            serialize=data.get("serialize"),
+            creative=creative,
+            balanced=balanced,
+            structured=structured,
             image=data.get("image"),
             settings=settings,
         )

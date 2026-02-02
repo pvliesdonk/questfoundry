@@ -115,6 +115,9 @@ class PipelineOrchestrator:
         provider_discuss_override: str | None = None,
         provider_summarize_override: str | None = None,
         provider_serialize_override: str | None = None,
+        provider_creative_override: str | None = None,
+        provider_balanced_override: str | None = None,
+        provider_structured_override: str | None = None,
         image_provider_override: str | None = None,
         enable_llm_logging: bool = False,
     ) -> None:
@@ -125,10 +128,13 @@ class PipelineOrchestrator:
             gate: Optional gate hook for stage transitions.
                 Defaults to AutoApproveGate.
             provider_override: Optional provider string (e.g., "openai/gpt-5-mini")
-                to override the project config for all phases.
-            provider_discuss_override: Optional provider override for discuss phase.
-            provider_summarize_override: Optional provider override for summarize phase.
-            provider_serialize_override: Optional provider override for serialize phase.
+                to override the project config for all roles.
+            provider_discuss_override: Legacy alias for provider_creative_override.
+            provider_summarize_override: Legacy alias for provider_balanced_override.
+            provider_serialize_override: Legacy alias for provider_structured_override.
+            provider_creative_override: Optional provider override for creative role.
+            provider_balanced_override: Optional provider override for balanced role.
+            provider_structured_override: Optional provider override for structured role.
             image_provider_override: Optional image provider override
                 (e.g., "openai/gpt-image-1", "placeholder").
             enable_llm_logging: If True, log LLM calls to logs/llm_calls.jsonl.
@@ -137,14 +143,16 @@ class PipelineOrchestrator:
             ProjectConfigError: If project.yaml cannot be loaded.
 
         Note:
-            Phase-specific overrides take precedence over provider_override.
-            Resolution order for each phase:
-            1. Phase-specific CLI flag (e.g., --provider-discuss)
+            Role-specific overrides take precedence over provider_override.
+            Resolution order for each role (8-level chain):
+            1. Role-specific CLI flag (e.g., --provider-creative)
             2. General CLI flag (--provider)
-            3. Phase-specific env var (e.g., QF_PROVIDER_DISCUSS)
+            3. Role-specific env var (e.g., QF_PROVIDER_CREATIVE)
             4. General env var (QF_PROVIDER)
-            5. Phase-specific config (e.g., providers.discuss)
-            6. Default config (providers.default)
+            5. Role-specific project config (e.g., providers.creative)
+            6. Default project config (providers.default)
+            7. Role-specific user config (~/.config/questfoundry/config.yaml)
+            8. Default user config
 
             Image provider resolution (opt-in, no default):
             1. --image-provider CLI flag
@@ -154,9 +162,12 @@ class PipelineOrchestrator:
         self.project_path = project_path
         self._gate = gate or AutoApproveGate()
         self._provider_override = provider_override
-        self._provider_discuss_override = provider_discuss_override
-        self._provider_summarize_override = provider_summarize_override
-        self._provider_serialize_override = provider_serialize_override
+        # Role-based overrides (merge legacy + new, role names take precedence)
+        self._provider_creative_override = provider_creative_override or provider_discuss_override
+        self._provider_balanced_override = provider_balanced_override or provider_summarize_override
+        self._provider_structured_override = (
+            provider_structured_override or provider_serialize_override
+        )
         self._image_provider_override = image_provider_override
         self._enable_llm_logging = enable_llm_logging
 
@@ -169,23 +180,28 @@ class PipelineOrchestrator:
 
             self.config = create_default_config("unnamed")
 
+        # Load global user config (lowest priority)
+        from questfoundry.pipeline.user_config import load_user_config
+
+        self._user_config = load_user_config()
+
         # Initialize components
         self._reader = ArtifactReader(project_path)
         self._writer = ArtifactWriter(project_path)
         self._validator = ArtifactValidator()
 
-        # Chat models will be lazily initialized (one per phase for hybrid support)
-        self._chat_model: BaseChatModel | None = None  # Default/discuss model
-        self._summarize_model: BaseChatModel | None = None
-        self._serialize_model: BaseChatModel | None = None
+        # Chat models will be lazily initialized (one per role for hybrid support)
+        self._creative_model: BaseChatModel | None = None
+        self._balanced_model: BaseChatModel | None = None
+        self._structured_model: BaseChatModel | None = None
 
-        # Provider/model names for each phase
-        self._provider_name: str | None = None  # Discuss phase provider
-        self._model_name: str | None = None  # Discuss phase model
-        self._summarize_provider_name: str | None = None
-        self._summarize_model_name: str | None = None
-        self._serialize_provider_name: str | None = None
-        self._serialize_model_name: str | None = None
+        # Provider/model names for each role
+        self._provider_name: str | None = None  # Creative role provider
+        self._model_name: str | None = None  # Creative role model
+        self._balanced_provider_name: str | None = None
+        self._balanced_model_name: str | None = None
+        self._structured_provider_name: str | None = None
+        self._structured_model_name: str | None = None
 
         # Model info (set when model is created)
         self._model_info: ModelInfo | None = None
@@ -240,7 +256,7 @@ class PipelineOrchestrator:
         provider_name, model = self._parse_provider_string(provider_string)
 
         # Get phase-specific settings (temperature, top_p, seed)
-        settings = self.config.providers.get_phase_settings(phase or "discuss")
+        settings = self.config.providers.get_role_settings(phase or "discuss")
         kwargs = settings.to_model_kwargs(phase or "discuss", provider_name)
 
         chat_model = create_chat_model(provider_name, model, **kwargs)
@@ -272,91 +288,107 @@ class PipelineOrchestrator:
 
             self._callbacks = create_logging_callbacks(self._llm_logger)
 
-    def _get_resolved_discuss_provider(self) -> str:
-        """Get the final resolved provider string for discuss phase.
+    def _get_resolved_role_provider(self, role: str) -> str:
+        """Get the final resolved provider string for a role.
 
-        Applies full precedence chain:
-        1. --provider-discuss CLI flag
-        2. --provider CLI flag
-        3. QF_PROVIDER_DISCUSS env var
-        4. QF_PROVIDER env var
-        5. providers.discuss config
-        6. providers.default config
+        Applies full 8-level precedence chain:
+        1. Role-specific CLI flag (e.g., --provider-creative)
+        2. General CLI flag (--provider)
+        3. Role-specific env var (e.g., QF_PROVIDER_CREATIVE)
+        4. General env var (QF_PROVIDER)
+        5. Role-specific project config (e.g., providers.creative)
+        6. Default project config (providers.default)
+        7. Role-specific user config
+        8. Default user config
+
+        Also checks legacy env vars (QF_PROVIDER_DISCUSS, etc.) for
+        backwards compatibility.
+
+        Args:
+            role: Provider role ("creative", "balanced", "structured").
 
         Returns:
             The resolved provider string (e.g., "ollama/qwen3:4b-instruct-32k").
         """
-        return (
-            self._provider_discuss_override
-            or self._provider_override
-            or os.environ.get("QF_PROVIDER_DISCUSS")
-            or os.environ.get("QF_PROVIDER")
-            or self.config.providers.get_discuss_provider()
-        )
+        # Map roles to their CLI overrides and config methods
+        role_map = {
+            "creative": (
+                self._provider_creative_override,
+                self.config.providers.get_creative_provider,
+                "QF_PROVIDER_CREATIVE",
+                "QF_PROVIDER_DISCUSS",  # Legacy env var
+            ),
+            "balanced": (
+                self._provider_balanced_override,
+                self.config.providers.get_balanced_provider,
+                "QF_PROVIDER_BALANCED",
+                "QF_PROVIDER_SUMMARIZE",  # Legacy env var
+            ),
+            "structured": (
+                self._provider_structured_override,
+                self.config.providers.get_structured_provider,
+                "QF_PROVIDER_STRUCTURED",
+                "QF_PROVIDER_SERIALIZE",  # Legacy env var
+            ),
+        }
 
-    def _get_chat_model(self) -> BaseChatModel:
-        """Get or create the LangChain chat model for discuss phase.
+        cli_override, _config_getter, env_var, legacy_env_var = role_map[role]
 
-        Uses `_get_resolved_discuss_provider()` for provider resolution.
-        See that method for the full 6-level precedence chain.
-
-        Returns:
-            Configured BaseChatModel.
-        """
-        if self._chat_model is not None:
-            return self._chat_model
-
-        self._ensure_callbacks_initialized()
-
-        provider_string = self._get_resolved_discuss_provider()
-        chat_model, provider_name, model = self._create_model_for_provider(
-            provider_string, phase="discuss"
-        )
-
-        self._provider_name = provider_name
-        self._model_name = model
-
-        # Store model info for context budget awareness (discuss phase only)
-        # Note: summarize/serialize phases use fixed-size inputs where context
-        # budgeting is less critical
-        self._model_info = get_model_info(provider_name, model)
-
-        self._chat_model = chat_model
-        return self._chat_model
-
-    def _get_resolved_phase_provider(self, phase: Literal["summarize", "serialize"]) -> str:
-        """Get the final resolved provider string for a specific phase.
-
-        Applies full precedence chain:
-        1. Phase-specific CLI flag (e.g., --provider-summarize)
-        2. General CLI flag (--provider)
-        3. Phase-specific env var (e.g., QF_PROVIDER_SUMMARIZE)
-        4. General env var (QF_PROVIDER)
-        5. Phase-specific config (e.g., providers.summarize)
-        6. Default config (providers.default)
-
-        Args:
-            phase: The pipeline phase ("summarize" or "serialize").
-
-        Returns:
-            The resolved provider string (e.g., "openai/gpt-5-mini").
-        """
-        if phase == "summarize":
-            cli_override = self._provider_summarize_override
-            config_provider = self.config.providers.get_summarize_provider()
-            env_var = "QF_PROVIDER_SUMMARIZE"
-        else:  # serialize
-            cli_override = self._provider_serialize_override
-            config_provider = self.config.providers.get_serialize_provider()
-            env_var = "QF_PROVIDER_SERIALIZE"
+        # User config fallback (levels 7-8)
+        user_default = None
+        user_role = None
+        if self._user_config:
+            user_default = self._user_config.default
+            # Use raw attribute: None means not explicitly set
+            user_role = getattr(self._user_config, role, None)
 
         return (
             cli_override
             or self._provider_override
             or os.environ.get(env_var)
+            or os.environ.get(legacy_env_var)
             or os.environ.get("QF_PROVIDER")
-            or config_provider
+            or getattr(self.config.providers, role, None)  # Level 5: role-specific project config
+            or user_role  # Level 7: role-specific user config
+            or self.config.providers.default  # Level 6: default project config
+            or user_default  # Level 8: default user config
+            or self.config.providers.default  # Guaranteed non-None fallback
         )
+
+    # Legacy aliases
+    def _get_resolved_discuss_provider(self) -> str:
+        """Legacy alias for _get_resolved_role_provider('creative')."""
+        return self._get_resolved_role_provider("creative")
+
+    def _get_resolved_phase_provider(self, phase: Literal["summarize", "serialize"]) -> str:
+        """Legacy alias for role-based resolution."""
+        role = "balanced" if phase == "summarize" else "structured"
+        return self._get_resolved_role_provider(role)
+
+    def _get_chat_model(self) -> BaseChatModel:
+        """Get or create the LangChain chat model for creative role (discuss phase).
+
+        Returns:
+            Configured BaseChatModel.
+        """
+        if self._creative_model is not None:
+            return self._creative_model
+
+        self._ensure_callbacks_initialized()
+
+        provider_string = self._get_resolved_role_provider("creative")
+        chat_model, provider_name, model = self._create_model_for_provider(
+            provider_string, phase="creative"
+        )
+
+        self._provider_name = provider_name
+        self._model_name = model
+
+        # Store model info for context budget awareness
+        self._model_info = get_model_info(provider_name, model)
+
+        self._creative_model = chat_model
+        return self._creative_model
 
     def _get_resolved_image_provider(self) -> str | None:
         """Get the final resolved image provider string.
@@ -378,72 +410,65 @@ class PipelineOrchestrator:
             or self.config.providers.get_image_provider()
         )
 
-    def _get_phase_model(
+    def _get_role_model(
         self,
-        phase: Literal["summarize", "serialize"],
+        role: Literal["balanced", "structured"],
     ) -> BaseChatModel:
-        """Get or create the LangChain chat model for a specific phase.
+        """Get or create the LangChain chat model for a specific role.
 
-        Always creates a separate model instance for each phase since
-        model settings (temperature, top_p, seed) differ per phase.
-        Models are lazily created and cached per phase.
+        Always creates a separate model instance for each role since
+        model settings (temperature, top_p, seed) differ per role.
+        Models are lazily created and cached per role.
 
         Args:
-            phase: The pipeline phase ("summarize" or "serialize").
+            role: The provider role ("balanced" or "structured").
 
         Returns:
-            Configured BaseChatModel for the specified phase.
+            Configured BaseChatModel for the specified role.
         """
         # Check cached model first
-        cached_model = self._summarize_model if phase == "summarize" else self._serialize_model
+        cached_model = self._balanced_model if role == "balanced" else self._structured_model
 
         # Return cached model if available
         if cached_model is not None:
             return cached_model
 
-        # Get provider for this phase
-        phase_provider = self._get_resolved_phase_provider(phase)
+        # Get provider for this role
+        role_provider = self._get_resolved_role_provider(role)
 
-        # Create new model with phase-specific settings
-        # (always separate from discuss model since settings differ)
+        # Create new model with role-specific settings
         self._ensure_callbacks_initialized()
         chat_model, provider_name, model = self._create_model_for_provider(
-            phase_provider, phase=phase
+            role_provider, phase=role
         )
 
         # Cache the model and metadata
-        if phase == "summarize":
-            self._summarize_provider_name = provider_name
-            self._summarize_model_name = model
-            self._summarize_model = chat_model
-        else:  # serialize
-            self._serialize_provider_name = provider_name
-            self._serialize_model_name = model
-            self._serialize_model = chat_model
+        if role == "balanced":
+            self._balanced_provider_name = provider_name
+            self._balanced_model_name = model
+            self._balanced_model = chat_model
+        else:  # structured
+            self._structured_provider_name = provider_name
+            self._structured_model_name = model
+            self._structured_model = chat_model
 
         return chat_model
 
     def _get_summarize_model(self) -> BaseChatModel:
-        """Get or create the LangChain chat model for summarize phase.
-
-        Uses the summarize-specific provider if configured, otherwise falls
-        back to the discuss model.
+        """Get or create the LangChain chat model for balanced role (summarize phase).
 
         Returns:
-            Configured BaseChatModel for summarize phase.
+            Configured BaseChatModel for balanced role.
         """
-        return self._get_phase_model("summarize")
+        return self._get_role_model("balanced")
 
     def _get_serialize_model(self) -> BaseChatModel:
-        """Get or create the LangChain chat model for serialize phase.
-
-        Uses the serialize-specific provider if configured, otherwise falls
-        back to the discuss model.
+        """Get or create the LangChain chat model for structured role (serialize phase).
 
         Returns:
-            Configured BaseChatModel for serialize phase.
+            Configured BaseChatModel for structured role.
         """
-        return self._get_phase_model("serialize")
+        return self._get_role_model("structured")
 
     @property
     def model_info(self) -> ModelInfo | None:
@@ -522,9 +547,9 @@ class PipelineOrchestrator:
             # Build Ollama model-eviction hooks for phase transitions.
             # When switching from one Ollama model to a different one,
             # send keep_alive=0 to free VRAM before the new model loads.
-            discuss_provider = self._get_resolved_discuss_provider()
-            summarize_provider = self._get_resolved_phase_provider("summarize")
-            serialize_provider = self._get_resolved_phase_provider("serialize")
+            discuss_provider = self._get_resolved_role_provider("creative")
+            summarize_provider = self._get_resolved_role_provider("balanced")
+            serialize_provider = self._get_resolved_role_provider("structured")
 
             async def _noop() -> None:
                 pass
@@ -591,11 +616,11 @@ class PipelineOrchestrator:
                 on_llm_end=on_llm_end,
                 project_path=self.project_path,
                 callbacks=self._callbacks,
-                # Hybrid model support: pass phase-specific models
+                # Hybrid model support: pass role-specific models
                 summarize_model=summarize_model,
                 serialize_model=serialize_model,
-                summarize_provider_name=self._summarize_provider_name,
-                serialize_provider_name=self._serialize_provider_name,
+                summarize_provider_name=self._balanced_provider_name,
+                serialize_provider_name=self._structured_provider_name,
                 # Ollama model-eviction hooks (no-ops when same model across phases)
                 unload_after_discuss=unload_after_discuss,
                 unload_after_summarize=unload_after_summarize,
@@ -764,12 +789,12 @@ class PipelineOrchestrator:
 
     async def close(self) -> None:
         """Close the orchestrator and release resources."""
-        if self._chat_model is not None:
+        if self._creative_model is not None:
             # Some chat models may have async close methods
-            if hasattr(self._chat_model, "close"):
-                close_method = self._chat_model.close
+            if hasattr(self._creative_model, "close"):
+                close_method = self._creative_model.close
                 if callable(close_method):
                     result = close_method()
                     if hasattr(result, "__await__"):
                         await result
-            self._chat_model = None
+            self._creative_model = None

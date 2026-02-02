@@ -36,27 +36,27 @@ def mock_provider() -> MagicMock:
 
 
 def _inject_mock_models(orchestrator: PipelineOrchestrator) -> MagicMock:
-    """Inject mock models for all phases (discuss, summarize, serialize).
+    """Inject mock models for all roles (creative, balanced, structured).
 
-    This helper sets up mocks for the chat model and phase-specific models
+    This helper sets up mocks for the chat model and role-specific models
     that would otherwise require provider configuration (e.g., OLLAMA_HOST).
 
     Returns:
-        The mock model instance used for all phases.
+        The mock model instance used for all roles.
     """
     mock_model = MagicMock()
-    # Discuss phase model
-    orchestrator._chat_model = mock_model
+    # Creative role model
+    orchestrator._creative_model = mock_model
     orchestrator._provider_name = "mock"
     orchestrator._model_name = "mock-model"
-    # Summarize phase model
-    orchestrator._summarize_model = mock_model
-    orchestrator._summarize_provider_name = "mock"
-    orchestrator._summarize_model_name = "mock-model"
-    # Serialize phase model
-    orchestrator._serialize_model = mock_model
-    orchestrator._serialize_provider_name = "mock"
-    orchestrator._serialize_model_name = "mock-model"
+    # Balanced role model
+    orchestrator._balanced_model = mock_model
+    orchestrator._balanced_provider_name = "mock"
+    orchestrator._balanced_model_name = "mock-model"
+    # Structured role model
+    orchestrator._structured_model = mock_model
+    orchestrator._structured_provider_name = "mock"
+    orchestrator._structured_model_name = "mock-model"
     return mock_model
 
 
@@ -241,7 +241,7 @@ def test_orchestrator_model_info_after_model_creation(tmp_path: Path) -> None:
     orchestrator = PipelineOrchestrator(tmp_path)
     # Inject mock chat model and model info directly
     mock_model = MagicMock()
-    orchestrator._chat_model = mock_model
+    orchestrator._creative_model = mock_model
     orchestrator._provider_name = "openai"
     orchestrator._model_name = "gpt-5-mini"
 
@@ -375,12 +375,12 @@ async def test_orchestrator_close_sync(tmp_path: Path) -> None:
     # Inject mock chat model directly
     mock_model = MagicMock()
     mock_model.close = MagicMock(return_value=None)  # Sync close
-    orchestrator._chat_model = mock_model
+    orchestrator._creative_model = mock_model
 
     # Close orchestrator
     await orchestrator.close()
 
-    assert orchestrator._chat_model is None
+    assert orchestrator._creative_model is None
     mock_model.close.assert_called_once()
 
 
@@ -391,12 +391,12 @@ async def test_orchestrator_close_async(tmp_path: Path) -> None:
     # Inject mock chat model with async close
     mock_model = MagicMock()
     mock_model.close = AsyncMock(return_value=None)  # Async close
-    orchestrator._chat_model = mock_model
+    orchestrator._creative_model = mock_model
 
     # Close orchestrator
     await orchestrator.close()
 
-    assert orchestrator._chat_model is None
+    assert orchestrator._creative_model is None
     mock_model.close.assert_awaited_once()
 
 
@@ -606,9 +606,10 @@ def test_orchestrator_stores_phase_overrides(tmp_path: Path) -> None:
     )
 
     assert orchestrator._provider_override == "ollama/default"
-    assert orchestrator._provider_discuss_override == "ollama/discuss"
-    assert orchestrator._provider_summarize_override == "openai/gpt-5-mini"
-    assert orchestrator._provider_serialize_override == "openai/o1-mini"
+    # Legacy params are mapped to role-based attributes
+    assert orchestrator._provider_creative_override == "ollama/discuss"
+    assert orchestrator._provider_balanced_override == "openai/gpt-5-mini"
+    assert orchestrator._provider_structured_override == "openai/o1-mini"
 
 
 def test_orchestrator_discuss_override_precedence(tmp_path: Path) -> None:
@@ -744,6 +745,62 @@ providers:
                 os.environ["QF_PROVIDER_SERIALIZE"] = orig
 
     # Level 5 & 6: Config (tested in test_config.py)
+
+
+def test_orchestrator_legacy_env_var_alias(tmp_path: Path) -> None:
+    """Legacy env vars (QF_PROVIDER_DISCUSS) work as aliases."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text("name: legacy_env_test\n")
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    with patch.dict("os.environ", {"QF_PROVIDER_DISCUSS": "openai/legacy-discuss"}):
+        resolved = orchestrator._get_resolved_role_provider("creative")
+        assert resolved == "openai/legacy-discuss"
+
+
+def test_orchestrator_user_config_fallback(tmp_path: Path) -> None:
+    """User config provides fallback when project config has no role-specific setting."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text("name: user_config_test\n")
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    # Inject user config with creative role set
+    from questfoundry.pipeline.config import ProvidersConfig
+
+    orchestrator._user_config = ProvidersConfig(
+        default="openai/user-default",
+        creative="openai/user-creative",
+    )
+
+    resolved = orchestrator._get_resolved_role_provider("creative")
+    assert resolved == "openai/user-creative"
+
+
+def test_orchestrator_project_config_beats_user_config(tmp_path: Path) -> None:
+    """Role-specific project config takes precedence over user config."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: precedence_test
+providers:
+  default: ollama/proj-default
+  creative: ollama/proj-creative
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    from questfoundry.pipeline.config import ProvidersConfig
+
+    orchestrator._user_config = ProvidersConfig(
+        default="openai/user-default",
+        creative="openai/user-creative",
+    )
+
+    resolved = orchestrator._get_resolved_role_provider("creative")
+    assert resolved == "ollama/proj-creative"
 
 
 # --- Tests for image provider precedence ---
