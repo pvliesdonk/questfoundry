@@ -349,8 +349,8 @@ class PipelineOrchestrator:
             or os.environ.get(legacy_env_var)
             or os.environ.get("QF_PROVIDER")
             or getattr(self.config.providers, role, None)  # Level 5: role-specific project config
-            or user_role  # Level 7: role-specific user config
-            or self.config.providers.default  # Level 6: default project config
+            or user_role  # Level 6: role-specific user config
+            or self.config.providers.default  # Level 7: default project config
             or user_default  # Level 8: default user config
             or self.config.providers.default  # Guaranteed non-None fallback
         )
