@@ -47,7 +47,7 @@ async def batch_llm_calls(
     if not items:
         return [], 0, 0, []
 
-    semaphore = asyncio.Semaphore(max_concurrency)
+    semaphore = asyncio.Semaphore(max(1, max_concurrency))
     results: list[T | None] = [None] * len(items)
     llm_calls_list: list[int] = [0] * len(items)
     tokens_list: list[int] = [0] * len(items)
@@ -80,7 +80,8 @@ async def batch_llm_calls(
             await asyncio.gather(*tasks)
         except Exception:
             for t in tasks:
-                t.cancel()
+                if not t.done():
+                    t.cancel()
             await asyncio.gather(*tasks, return_exceptions=True)
     else:
         await asyncio.gather(*tasks, return_exceptions=True)

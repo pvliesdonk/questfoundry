@@ -114,7 +114,12 @@ def get_model_info(provider: str, model: str) -> ModelInfo:
     # Concurrency: env var override > provider default > fallback
     env_concurrency = os.environ.get("QF_MAX_CONCURRENCY")
     if env_concurrency is not None:
-        max_concurrency = int(env_concurrency)
+        try:
+            max_concurrency = int(env_concurrency)
+            if max_concurrency <= 0:
+                max_concurrency = 1
+        except ValueError:
+            max_concurrency = _PROVIDER_MAX_CONCURRENCY.get(provider_lower, 2)
     else:
         max_concurrency = _PROVIDER_MAX_CONCURRENCY.get(provider_lower, 2)
 

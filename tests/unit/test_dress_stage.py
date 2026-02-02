@@ -1445,6 +1445,6 @@ class TestRunGenerateOnly:
         # Should have: distill in_progress, render in_progress, final completed
         in_progress = [c for c in progress_calls if c[1] == "in_progress"]
         assert len(in_progress) == 2
-        assert "Distilling 1/1" in (in_progress[0][2] or "")
+        assert "Distilling 1 prompts" in (in_progress[0][2] or "")
         assert "Rendering 1/1" in (in_progress[1][2] or "")
         assert progress_calls[-1][1] == "completed"

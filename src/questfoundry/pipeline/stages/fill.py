@@ -809,8 +809,9 @@ class FillStage:
         total_flags = sum(len(f) for f in flagged_passages.values())
         revised_flags = 0
 
-        # Pre-compute arc info for each passage (graph reads only)
+        # Pre-compute arc info and passage data for each passage (graph reads only)
         passage_arc_info: dict[str, tuple[str | None, int]] = {}
+        passage_data: dict[str, dict[str, Any]] = {}
         for passage_id in flagged_passages:
             arc_id = self._find_arc_for_passage(graph, passage_id)
             current_idx = 0
@@ -819,6 +820,9 @@ class FillStage:
                 if passage_id in order:
                     current_idx = order.index(passage_id)
             passage_arc_info[passage_id] = (arc_id, current_idx)
+            node = graph.get_node(passage_id)
+            if node:
+                passage_data[passage_id] = node
 
         # Each passage's revision chain is independent of other passages,
         # but flags within one passage must be sequential (chained).
@@ -828,7 +832,7 @@ class FillStage:
             item: tuple[str, list[dict[str, str]]],
         ) -> tuple[tuple[str, str, bool, int, list[FillPhase1Output]], int, int]:
             passage_id, flags = item
-            passage = graph.get_node(passage_id)
+            passage = passage_data.get(passage_id)
             if not passage or not passage.get("prose", ""):
                 return (passage_id, "", False, 0, []), 0, 0
 
