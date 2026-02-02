@@ -71,6 +71,11 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
         "claude-3-opus-20240229": ModelProperties(context_window=200_000, supports_vision=True),
         "claude-3-haiku-20240307": ModelProperties(context_window=200_000, supports_vision=True),
     },
+    "google": {
+        "gemini-2.5-flash": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "gemini-2.5-pro": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "gemini-2.0-flash": ModelProperties(context_window=1_000_000, supports_vision=True),
+    },
 }
 
 # Default context window when model is not in known list.
@@ -85,6 +90,7 @@ _PROVIDER_MAX_CONCURRENCY: dict[str, int] = {
     "ollama": 2,
     "openai": 20,
     "anthropic": 10,
+    "google": 20,
 }
 
 

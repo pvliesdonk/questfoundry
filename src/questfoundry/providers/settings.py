@@ -53,6 +53,12 @@ TEMPERATURE_MAP: dict[str, dict[CreativityLevel, float]] = {
         CreativityLevel.BALANCED: 0.5,
         CreativityLevel.CREATIVE: 0.8,
     },
+    "google": {
+        CreativityLevel.DETERMINISTIC: 0.0,
+        CreativityLevel.FOCUSED: 0.3,
+        CreativityLevel.BALANCED: 0.7,
+        CreativityLevel.CREATIVE: 0.9,
+    },
 }
 
 # Role defaults (semantic level, not raw temperature)
@@ -101,6 +107,7 @@ def get_max_temperature(provider: str) -> float:
         "openai": 2.0,
         "anthropic": 1.0,
         "ollama": 2.0,  # Ollama allows > 1.0 though rarely useful
+        "google": 2.0,
     }
     return provider_limits.get(provider.lower(), 1.0)
 
@@ -154,12 +161,12 @@ class PhaseSettings:
             kwargs["top_p"] = self.top_p
 
         if self.seed is not None:
-            # Anthropic doesn't support seed - log warning and skip
-            if provider.lower() == "anthropic":
+            # Anthropic and Google don't support seed - log warning and skip
+            if provider.lower() in ("anthropic", "google"):
                 log.warning(
                     "seed_not_supported",
                     provider=provider,
-                    note="Anthropic does not support seed parameter, ignoring",
+                    note=f"{provider} does not support seed parameter, ignoring",
                 )
             else:
                 kwargs["seed"] = self.seed
