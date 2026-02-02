@@ -256,7 +256,7 @@ class PipelineOrchestrator:
         provider_name, model = self._parse_provider_string(provider_string)
 
         # Get phase-specific settings (temperature, top_p, seed)
-        settings = self.config.providers.get_phase_settings(phase or "discuss")
+        settings = self.config.providers.get_role_settings(phase or "discuss")
         kwargs = settings.to_model_kwargs(phase or "discuss", provider_name)
 
         chat_model = create_chat_model(provider_name, model, **kwargs)
@@ -332,19 +332,15 @@ class PipelineOrchestrator:
             ),
         }
 
-        cli_override, config_getter, env_var, legacy_env_var = role_map[role]
+        cli_override, _config_getter, env_var, legacy_env_var = role_map[role]
 
         # User config fallback (levels 7-8)
         user_default = None
         user_role = None
         if self._user_config:
             user_default = self._user_config.default
-            user_role_getter = getattr(self._user_config, f"get_{role}_provider", None)
-            if user_role_getter:
-                user_role_value = user_role_getter()
-                # Only use if different from user default (means it was explicitly set)
-                if user_role_value != self._user_config.default:
-                    user_role = user_role_value
+            # Use raw attribute: None means not explicitly set
+            user_role = getattr(self._user_config, role, None)
 
         return (
             cli_override
@@ -352,10 +348,11 @@ class PipelineOrchestrator:
             or os.environ.get(env_var)
             or os.environ.get(legacy_env_var)
             or os.environ.get("QF_PROVIDER")
-            or config_getter()  # Levels 5-6 (role config → default config)
-            or user_role  # Level 7
-            or user_default  # Level 8
-            or self.config.providers.default  # Final fallback
+            or getattr(self.config.providers, role, None)  # Level 5: role-specific project config
+            or user_role  # Level 7: role-specific user config
+            or self.config.providers.default  # Level 6: default project config
+            or user_default  # Level 8: default user config
+            or self.config.providers.default  # Guaranteed non-None fallback
         )
 
     # Legacy aliases

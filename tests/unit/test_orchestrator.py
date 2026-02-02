@@ -747,6 +747,62 @@ providers:
     # Level 5 & 6: Config (tested in test_config.py)
 
 
+def test_orchestrator_legacy_env_var_alias(tmp_path: Path) -> None:
+    """Legacy env vars (QF_PROVIDER_DISCUSS) work as aliases."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text("name: legacy_env_test\n")
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    with patch.dict("os.environ", {"QF_PROVIDER_DISCUSS": "openai/legacy-discuss"}):
+        resolved = orchestrator._get_resolved_role_provider("creative")
+        assert resolved == "openai/legacy-discuss"
+
+
+def test_orchestrator_user_config_fallback(tmp_path: Path) -> None:
+    """User config provides fallback when project config has no role-specific setting."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text("name: user_config_test\n")
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    # Inject user config with creative role set
+    from questfoundry.pipeline.config import ProvidersConfig
+
+    orchestrator._user_config = ProvidersConfig(
+        default="openai/user-default",
+        creative="openai/user-creative",
+    )
+
+    resolved = orchestrator._get_resolved_role_provider("creative")
+    assert resolved == "openai/user-creative"
+
+
+def test_orchestrator_project_config_beats_user_config(tmp_path: Path) -> None:
+    """Role-specific project config takes precedence over user config."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: precedence_test
+providers:
+  default: ollama/proj-default
+  creative: ollama/proj-creative
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    from questfoundry.pipeline.config import ProvidersConfig
+
+    orchestrator._user_config = ProvidersConfig(
+        default="openai/user-default",
+        creative="openai/user-creative",
+    )
+
+    resolved = orchestrator._get_resolved_role_provider("creative")
+    assert resolved == "ollama/proj-creative"
+
+
 # --- Tests for image provider precedence ---
 
 

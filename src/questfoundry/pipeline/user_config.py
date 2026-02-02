@@ -56,6 +56,6 @@ def load_user_config(config_dir: Path | None = None) -> ProvidersConfig | None:
         config = ProvidersConfig.from_dict(providers_data)
         log.debug("user_config_loaded", path=str(config_path))
         return config
-    except Exception as e:
+    except (OSError, ValueError) as e:
         log.warning("user_config_load_failed", path=str(config_path), error=str(e))
         return None

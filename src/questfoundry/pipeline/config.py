@@ -83,7 +83,7 @@ class ProvidersConfig:
         """Legacy alias for structured."""
         return self.structured
 
-    def get_phase_settings(self, phase: str) -> PhaseSettings:
+    def get_role_settings(self, phase: str) -> PhaseSettings:
         """Get settings for a role or phase, with defaults.
 
         Accepts both role names (creative, balanced, structured) and

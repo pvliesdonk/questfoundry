@@ -392,8 +392,8 @@ class TestProvidersConfigSettings:
 
         assert config.settings == {}
 
-    def test_get_phase_settings_returns_configured(self) -> None:
-        """get_phase_settings returns configured settings."""
+    def test_get_role_settings_returns_configured(self) -> None:
+        """get_role_settings returns configured settings."""
         from questfoundry.providers.settings import PhaseSettings
 
         config = ProvidersConfig(
@@ -401,19 +401,19 @@ class TestProvidersConfigSettings:
             settings={"discuss": PhaseSettings(temperature=0.95)},
         )
 
-        settings = config.get_phase_settings("discuss")
+        settings = config.get_role_settings("discuss")
         assert settings.temperature == 0.95
 
-    def test_get_phase_settings_returns_defaults_when_not_configured(self) -> None:
-        """get_phase_settings returns defaults when phase not in settings."""
+    def test_get_role_settings_returns_defaults_when_not_configured(self) -> None:
+        """get_role_settings returns defaults when phase not in settings."""
         config = ProvidersConfig(default="ollama/qwen3:4b-instruct-32k")
 
-        settings = config.get_phase_settings("discuss")
+        settings = config.get_role_settings("discuss")
         # Default settings have no explicit temperature (uses phase/provider default)
         assert settings.temperature is None
 
-    def test_get_phase_settings_merges_with_defaults(self) -> None:
-        """get_phase_settings merges configured with defaults."""
+    def test_get_role_settings_merges_with_defaults(self) -> None:
+        """get_role_settings merges configured with defaults."""
         from questfoundry.providers.settings import PhaseSettings
 
         # Configure only temperature, leave top_p as default
@@ -422,12 +422,12 @@ class TestProvidersConfigSettings:
             settings={"discuss": PhaseSettings(temperature=0.95)},
         )
 
-        settings = config.get_phase_settings("discuss")
+        settings = config.get_role_settings("discuss")
         assert settings.temperature == 0.95
         assert settings.top_p is None  # Not configured, uses default
 
-    def test_get_phase_settings_resolves_role_aliases(self) -> None:
-        """get_phase_settings resolves legacy phase names to role names in settings."""
+    def test_get_role_settings_resolves_role_aliases(self) -> None:
+        """get_role_settings resolves legacy phase names to role names in settings."""
         from questfoundry.providers.settings import PhaseSettings
 
         config = ProvidersConfig(
@@ -436,7 +436,7 @@ class TestProvidersConfigSettings:
         )
 
         # Looking up "discuss" should find "creative" settings via alias
-        settings = config.get_phase_settings("discuss")
+        settings = config.get_role_settings("discuss")
         assert settings.temperature == 0.95
 
 

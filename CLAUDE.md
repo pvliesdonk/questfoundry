@@ -641,17 +641,23 @@ Configuration follows a strict precedence order (highest to lowest):
 3. **Project config** - `project.yaml` providers.default
 4. **Defaults** - `ollama/qwen3:4b-instruct-32k`
 
-### Hybrid Provider Configuration (Phase-Specific)
+### Hybrid Provider Configuration (Role-Based)
 
-Different providers can be used for each pipeline phase (discuss, summarize, serialize). This allows using creative models for discussion and reasoning models for serialization.
+Different providers can be used for each LLM role (creative, balanced, structured). This allows using creative models for prose generation and reasoning models for structured output. Legacy phase names (discuss, summarize, serialize) are accepted as aliases.
 
-**6-level precedence chain** (per phase):
-1. Phase-specific CLI flag (`--provider-discuss`, `--provider-summarize`, `--provider-serialize`)
+**Roles**: `creative` (discuss), `balanced` (summarize), `structured` (serialize)
+
+**8-level precedence chain** (per role):
+1. Role-specific CLI flag (`--provider-creative`, `--provider-balanced`, `--provider-structured`)
 2. General CLI flag (`--provider`)
-3. Phase-specific env var (`QF_PROVIDER_DISCUSS`, `QF_PROVIDER_SUMMARIZE`, `QF_PROVIDER_SERIALIZE`)
+3. Role-specific env var (`QF_PROVIDER_CREATIVE`, `QF_PROVIDER_BALANCED`, `QF_PROVIDER_STRUCTURED`)
 4. General env var (`QF_PROVIDER`)
-5. Phase-specific config (`providers.discuss`, `providers.summarize`, `providers.serialize`)
-6. Default config (`providers.default`)
+5. Role-specific project config (`providers.creative`, `providers.balanced`, `providers.structured`)
+6. Role-specific user config (`~/.config/questfoundry/config.yaml`)
+7. Default project config (`providers.default`)
+8. Default user config
+
+Legacy CLI flags (`--provider-discuss`, etc.) and env vars (`QF_PROVIDER_DISCUSS`, etc.) are accepted as aliases.
 
 **Example project.yaml with hybrid providers:**
 ```yaml
