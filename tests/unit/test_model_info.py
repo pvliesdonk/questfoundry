@@ -25,6 +25,11 @@ class TestModelInfoDefaults:
         info = get_model_info("anthropic", "claude-sonnet-4-20250514")
         assert info.max_concurrency == 10
 
+    def test_google_concurrency(self) -> None:
+        """Google models get high concurrency (cloud API)."""
+        info = get_model_info("google", "gemini-2.5-flash")
+        assert info.max_concurrency == 20
+
     def test_unknown_provider_concurrency(self) -> None:
         """Unknown providers fall back to concurrency of 2."""
         info = get_model_info("unknown_provider", "some-model")

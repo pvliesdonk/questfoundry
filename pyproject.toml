@@ -52,10 +52,14 @@ openai = [
 anthropic = [
     "langchain-anthropic>=0.3",
 ]
+google = [
+    "langchain-google-genai>=2.0",
+]
 all-providers = [
     "langchain-ollama>=0.3",
     "langchain-openai>=0.3",
     "langchain-anthropic>=0.3",
+    "langchain-google-genai>=2.0",
 ]
 tracing = [
     "langsmith>=0.2",
@@ -152,6 +156,7 @@ module = [
     "langchain_ollama.*",
     "langchain_openai.*",
     "langchain_anthropic.*",
+    "langchain_google_genai.*",
     "ifcraftcorpus.*",
     "pvlwebtools.*",
 ]
