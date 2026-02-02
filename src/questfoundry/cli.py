@@ -300,9 +300,9 @@ def _get_orchestrator(
     Args:
         project_path: Path to the project directory.
         provider_override: Optional provider string (e.g., "openai/gpt-5-mini") to override config.
-        provider_discuss_override: Optional provider override for discuss phase.
-        provider_summarize_override: Optional provider override for summarize phase.
-        provider_serialize_override: Optional provider override for serialize phase.
+        provider_discuss_override: Optional provider override for discuss/creative phase.
+        provider_summarize_override: Optional provider override for summarize/balanced phase.
+        provider_serialize_override: Optional provider override for serialize/structured phase.
         image_provider_override: Optional image provider override
             (e.g., "openai/gpt-image-1", "placeholder").
 
@@ -311,6 +311,7 @@ def _get_orchestrator(
     """
     from questfoundry.pipeline import PipelineOrchestrator
 
+    # Pass legacy phase names — orchestrator maps them to role names internally
     return PipelineOrchestrator(
         project_path,
         provider_override=provider_override,

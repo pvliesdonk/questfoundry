@@ -380,9 +380,9 @@ class FillStage:
         user_text = template.user.format(**context) if template.user else None
 
         if creative:
-            # Use discuss-phase model for creative output (prose generation).
-            # The serialize model has DETERMINISTIC temperature (0.0) which
-            # causes severe self-plagiarism and lexical collapse in prose.
+            # Use creative-role model for prose generation.
+            # The structured-role model has DETERMINISTIC temperature (0.0)
+            # which causes severe self-plagiarism and lexical collapse.
             effective_model = model
             effective_provider = self._provider_name
         else:
