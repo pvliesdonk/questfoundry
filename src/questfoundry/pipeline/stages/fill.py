@@ -473,6 +473,65 @@ class FillStage:
     # Phase implementations (skeleton — all return skipped)
     # -------------------------------------------------------------------------
 
+    async def _phase_0a_voice_research(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+    ) -> tuple[str, int, int]:
+        """Phase 0a: Research voice guidance using corpus tools.
+
+        Runs a non-interactive discuss phase with corpus-only tools to
+        gather craft advice on POV, tense, register, and genre pitfalls.
+        Results are summarized for injection into the voice template.
+
+        Returns:
+            Tuple of (research_summary, llm_calls, tokens_used).
+        """
+        from questfoundry.agents import run_discuss_phase, summarize_discussion
+        from questfoundry.prompts.loader import PromptLoader
+        from questfoundry.tools.langchain_tools import get_corpus_tools
+
+        loader = PromptLoader(_get_prompts_path())
+        template = loader.load("fill_phase0_discuss")
+
+        system_prompt = template.system.format(
+            dream_vision=format_dream_vision(graph),
+            grow_summary=format_grow_summary(graph),
+        )
+
+        tools = get_corpus_tools()
+        if not tools:
+            log.info("voice_research_skipped", reason="no corpus tools available")
+            return "", 0, 0
+
+        messages, discuss_calls, discuss_tokens = await run_discuss_phase(
+            model=model,
+            tools=tools,
+            user_prompt="Research voice and style guidance for this story.",
+            max_iterations=8,
+            interactive=False,
+            system_prompt=system_prompt,
+            stage_name="fill",
+            callbacks=self._callbacks,
+        )
+
+        brief, summarize_tokens = await summarize_discussion(
+            model=model,
+            messages=messages,
+            stage_name="fill",
+            callbacks=self._callbacks,
+        )
+
+        total_tokens = discuss_tokens + summarize_tokens
+        log.info(
+            "voice_research_complete",
+            llm_calls=discuss_calls + 1,
+            tokens=total_tokens,
+            brief_length=len(brief),
+        )
+
+        return brief, discuss_calls + 1, total_tokens
+
     async def _phase_0_voice(
         self,
         graph: Graph,
@@ -480,15 +539,31 @@ class FillStage:
     ) -> FillPhaseResult:
         """Phase 0: Voice determination.
 
-        Reads DREAM vision and GROW structure, calls LLM to produce a
-        VoiceDocument, and stores it as a ``voice`` node in the graph.
+        Reads DREAM vision and GROW structure, optionally researches
+        voice guidance via corpus tools, then calls LLM to produce a
+        VoiceDocument and stores it as a ``voice`` node in the graph.
         """
         from questfoundry.pipeline.size import size_template_vars
+
+        total_llm_calls = 0
+        total_tokens = 0
+
+        # Phase 0a: Research voice guidance (graceful degradation on failure)
+        research_notes = ""
+        try:
+            research_notes, research_calls, research_tokens = await self._phase_0a_voice_research(
+                graph, model
+            )
+            total_llm_calls += research_calls
+            total_tokens += research_tokens
+        except Exception:
+            log.warning("voice_research_failed", exc_info=True)
 
         context = {
             "dream_vision": format_dream_vision(graph),
             "grow_summary": format_grow_summary(graph),
             "scene_types_summary": format_scene_types_summary(graph),
+            "research_notes": research_notes or "No research notes available.",
             "output_language_instruction": self._lang_instruction,
             **size_template_vars(self._size_profile),
         }
@@ -499,6 +574,8 @@ class FillStage:
             context,
             FillPhase0Output,
         )
+        total_llm_calls += llm_calls
+        total_tokens += tokens
 
         # Store the voice document as a graph node (includes story_title)
         voice_data: dict[str, Any] = {
@@ -521,8 +598,8 @@ class FillStage:
             phase="voice",
             status="completed",
             detail=f"pov={output.voice.pov}, tense={output.voice.tense}, register={output.voice.voice_register}",
-            llm_calls=llm_calls,
-            tokens_used=tokens,
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
         )
 
     def _get_generation_order(self, graph: Graph) -> list[tuple[str, str]]:

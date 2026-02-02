@@ -15,6 +15,9 @@ system: |
   ## Scene Type Distribution
   {scene_types_summary}
 
+  ## Research Notes
+  {research_notes}
+
   ## Voice Document Fields
 
   Create a voice document with these fields:
