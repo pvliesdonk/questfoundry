@@ -1364,7 +1364,7 @@ def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
         if ev:
             frag = ev.get("reference_prompt_fragment", "")
             if frag:
-                entity_fragments.append(frag)
+                entity_fragments.append(f"{raw_eid}: {frag}")
 
     return ImageBrief(
         subject=brief.get("subject", ""),
