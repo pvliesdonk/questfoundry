@@ -170,7 +170,7 @@ def test_jsonl_file_handler_includes_traceback(tmp_path: Path) -> None:
     try:
         raise ValueError("deliberate test error")
     except ValueError:
-        logger.error("stage_failed", error="deliberate test error", exc_info=True)
+        logger.error("stage_failed", exc_info=True)
 
     close_file_logging()
 
