@@ -207,15 +207,15 @@ class TestShipStage:
         assert data["title"] == "my-fallback-story"
 
     def test_graph_title_takes_priority(self, tmp_path: Path) -> None:
-        """Story title from graph (FILL) takes priority over project config name."""
+        """Story title from voice node (FILL) takes priority over project config name."""
         project = tmp_path / "my-story"
         _create_project_with_graph(project)
 
-        # Add a vision node with a generated story title
+        # Add a voice node with a generated story title
         g = Graph.load(project)
         g.create_node(
-            "vision::main",
-            {"type": "vision", "genre": "fantasy", "story_title": "The Hollow Crown"},
+            "voice::voice",
+            {"type": "voice", "raw_id": "voice", "story_title": "The Hollow Crown"},
         )
         g.save(project / "graph.json")
 
@@ -228,13 +228,13 @@ class TestShipStage:
         assert data["title"] == "The Hollow Crown"
 
     def test_graph_title_fallback_to_config(self, tmp_path: Path) -> None:
-        """Falls back to config name when vision node has no story_title."""
+        """Falls back to config name when voice node has no story_title."""
         project = tmp_path / "my-story"
         _create_project_with_graph(project)
 
-        # Vision node exists but without story_title
+        # Voice node exists but without story_title
         g = Graph.load(project)
-        g.create_node("vision::main", {"type": "vision", "genre": "fantasy"})
+        g.create_node("voice::voice", {"type": "voice", "raw_id": "voice"})
         g.save(project / "graph.json")
 
         stage = ShipStage(project)
@@ -251,7 +251,7 @@ class TestShipStage:
         _create_project_with_graph(project)
 
         g = Graph.load(project)
-        g.create_node("vision::main", {"type": "vision", "genre": "fantasy", "story_title": None})
+        g.create_node("voice::voice", {"type": "voice", "raw_id": "voice", "story_title": None})
         g.save(project / "graph.json")
 
         stage = ShipStage(project)

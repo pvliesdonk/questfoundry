@@ -88,9 +88,9 @@ class ShipStage:
                 f"Run FILL stage first. Examples: {missing_prose[:3]}"
             )
 
-        # Get story title: graph (from FILL) → project config → directory name
-        vision = graph.get_node("vision::main")
-        story_title = (vision or {}).get("story_title") or ""
+        # Get story title: voice node (from FILL) → project config → directory name
+        voice = graph.get_node("voice::voice")
+        story_title = (voice or {}).get("story_title") or ""
         if not story_title:
             try:
                 config = load_project_config(self._project_path)

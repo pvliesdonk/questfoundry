@@ -1225,6 +1225,19 @@ class TestCreateCoverBrief:
         assert brief is not None
         assert "thriller" in brief["subject"]
 
+    def test_reads_story_title_from_voice_node(self) -> None:
+        g = Graph()
+        g.create_node("vision", {"type": "vision", "genre": "fantasy", "tone": ["epic"]})
+        g.create_node(
+            "voice::voice", {"type": "voice", "raw_id": "voice", "story_title": "The Hollow Crown"}
+        )
+
+        _create_cover_brief(g)
+
+        brief = g.get_node("illustration_brief::cover")
+        assert brief is not None
+        assert "The Hollow Crown" in brief["subject"]
+
 
 # ---------------------------------------------------------------------------
 # Standalone generate-images (run_generate_only)

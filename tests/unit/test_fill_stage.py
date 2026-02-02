@@ -344,12 +344,16 @@ class TestPhase0Voice:
         assert result.llm_calls == 1
         assert result.tokens_used == 500
 
-        # Voice node should be created in graph
+        # Voice node should be created in graph with story_title
         voice_node = graph.get_node("voice::voice")
         assert voice_node is not None
         assert voice_node["pov"] == "third_limited"
         assert voice_node["tense"] == "past"
         assert voice_node["voice_register"] == "literary"
+        assert voice_node["story_title"] == "The Hollow Crown"
+
+        # No phantom vision::main node should exist
+        assert graph.get_node("vision::main") is None
 
     @pytest.mark.asyncio
     async def test_passes_context_to_llm(self) -> None:
