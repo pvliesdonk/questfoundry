@@ -1040,8 +1040,8 @@ class DressStage:
                 bid, bdata = item
                 ib = build_image_brief(graph, bdata)
                 pos, neg = await distiller.distill_prompt(ib)
-                # Distiller makes 1 LLM call per brief; token count not tracked
-                # by the distiller API (returns text only, not metrics).
+                # A1111 distiller uses 1 LLM call; OpenAI distiller is pure
+                # formatting. Token count not available from distiller API.
                 return (bid, pos, neg, bdata), 1, 0
 
             results, _, _, _errs = await batch_llm_calls(
