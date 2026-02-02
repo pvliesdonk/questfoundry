@@ -283,7 +283,7 @@ class A1111ImageProvider:
             "RULES:\n"
             "- ENTITY EXPANSION: SD does not know character names. Replace names "
             '(e.g., "Eleanor") with their visual descriptions from the Entities '
-            'field (e.g., "elara: tall woman, dark coat" → use '
+            'field (e.g., "eleanor: tall woman, dark coat" → use '
             '"tall woman, dark coat").\n'
             "- Each tag is 1-4 words, comma-separated.\n"
             "- No prose, no articles, no prepositions, no sentences.\n"
