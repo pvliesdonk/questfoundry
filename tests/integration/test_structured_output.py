@@ -64,8 +64,11 @@ class TestStructuredOutputBasic:
             provider_name="ollama",
         )
 
-        result = await structured_model.ainvoke("Generate a title and count for a book")
+        raw_result = await structured_model.ainvoke("Generate a title and count for a book")
 
+        assert isinstance(raw_result, dict)
+        assert "parsed" in raw_result
+        result = raw_result["parsed"]
         assert isinstance(result, SimpleSchema)
         assert len(result.title) > 0
         assert result.count >= 1
@@ -86,8 +89,10 @@ class TestStructuredOutputBasic:
             provider_name="openai",
         )
 
-        result = await structured_model.ainvoke("Generate a title and count for a book")
+        raw_result = await structured_model.ainvoke("Generate a title and count for a book")
 
+        assert isinstance(raw_result, dict)
+        result = raw_result["parsed"]
         assert isinstance(result, SimpleSchema)
         assert len(result.title) > 0
         assert result.count >= 1
@@ -103,8 +108,10 @@ class TestStructuredOutputBasic:
             provider_name="test",
         )
 
-        result = await structured_model.ainvoke("Generate a title and count for an article")
+        raw_result = await structured_model.ainvoke("Generate a title and count for an article")
 
+        assert isinstance(raw_result, dict)
+        result = raw_result["parsed"]
         assert isinstance(result, SimpleSchema)
         assert len(result.title) > 0
         assert result.count >= 1
@@ -126,10 +133,11 @@ class TestStructuredOutputNested:
             provider_name="ollama",
         )
 
-        result = await structured_model.ainvoke(
+        raw_result = await structured_model.ainvoke(
             "Generate a shopping list with outer_name 'Groceries' and at least 2 items"
         )
 
+        result = raw_result["parsed"]
         assert isinstance(result, NestedSchema)
         assert len(result.outer_name) > 0
         assert len(result.items) >= 1
@@ -153,10 +161,11 @@ class TestStructuredOutputNested:
             provider_name="openai",
         )
 
-        result = await structured_model.ainvoke(
+        raw_result = await structured_model.ainvoke(
             "Generate a task list with outer_name 'Project Tasks' and 2-3 items"
         )
 
+        result = raw_result["parsed"]
         assert isinstance(result, NestedSchema)
         assert len(result.outer_name) > 0
         assert len(result.items) >= 1
@@ -178,10 +187,11 @@ class TestStructuredOutputOptionals:
             provider_name="ollama",
         )
 
-        result = await structured_model.ainvoke(
+        raw_result = await structured_model.ainvoke(
             "Generate an entry with required_field='test' and provide all optional fields too"
         )
 
+        result = raw_result["parsed"]
         assert isinstance(result, OptionalFieldsSchema)
         assert len(result.required_field) > 0
 
@@ -197,10 +207,11 @@ class TestStructuredOutputOptionals:
             provider_name="ollama",
         )
 
-        result = await structured_model.ainvoke(
+        raw_result = await structured_model.ainvoke(
             "Generate a minimal entry with only the required field set"
         )
 
+        result = raw_result["parsed"]
         assert isinstance(result, OptionalFieldsSchema)
         assert len(result.required_field) > 0
         # Optional fields may or may not be present
@@ -227,7 +238,7 @@ class TestStructuredOutputDreamArtifact:
             provider_name="ollama",
         )
 
-        result = await structured_model.ainvoke(
+        raw_result = await structured_model.ainvoke(
             """Create a DreamArtifact for a cozy mystery story:
             - Genre: Cozy Mystery
             - Audience: Adults
@@ -235,6 +246,7 @@ class TestStructuredOutputDreamArtifact:
             - Tone: Warm, witty"""
         )
 
+        result = raw_result["parsed"]
         assert isinstance(result, DreamArtifact)
         assert result.type == "dream"
         assert len(result.genre) > 0
@@ -258,7 +270,7 @@ class TestStructuredOutputDreamArtifact:
             provider_name="openai",
         )
 
-        result = await structured_model.ainvoke(
+        raw_result = await structured_model.ainvoke(
             """Create a DreamArtifact for a sci-fi story:
             - Genre: Science Fiction
             - Audience: Young Adults
@@ -266,6 +278,7 @@ class TestStructuredOutputDreamArtifact:
             - Tone: Adventurous, hopeful"""
         )
 
+        result = raw_result["parsed"]
         assert isinstance(result, DreamArtifact)
         assert result.type == "dream"
 

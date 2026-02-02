@@ -412,10 +412,15 @@ class FillStage:
             )
 
             try:
-                result = await structured_model.ainvoke(messages, config=config)
+                raw_result = await structured_model.ainvoke(messages, config=config)
                 llm_calls += 1
-                total_tokens += extract_tokens(result)
+                total_tokens += extract_tokens(raw_result)
 
+                result = (
+                    raw_result["parsed"]
+                    if isinstance(raw_result, dict) and "parsed" in raw_result
+                    else raw_result
+                )
                 validated = (
                     result
                     if isinstance(result, output_schema)

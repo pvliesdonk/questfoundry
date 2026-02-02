@@ -93,4 +93,4 @@ def with_structured_output(
             strategy = get_default_strategy(provider_name)
 
     method = "function_calling" if strategy == StructuredOutputStrategy.TOOL else "json_schema"
-    return model.with_structured_output(schema, method=method)
+    return model.with_structured_output(schema, method=method, include_raw=True)
