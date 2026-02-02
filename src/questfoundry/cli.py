@@ -1851,6 +1851,7 @@ def _check_configuration() -> bool:
         ("OLLAMA_HOST", os.getenv("OLLAMA_HOST")),
         ("OPENAI_API_KEY", os.getenv("OPENAI_API_KEY")),
         ("ANTHROPIC_API_KEY", os.getenv("ANTHROPIC_API_KEY")),
+        ("GOOGLE_API_KEY", os.getenv("GOOGLE_API_KEY")),
         ("LANGSMITH_API_KEY", os.getenv("LANGSMITH_API_KEY")),
         ("A1111_HOST", os.getenv("A1111_HOST")),
     ]
@@ -1897,6 +1898,12 @@ async def _check_providers() -> bool:
         all_ok &= await _check_anthropic()
     else:
         console.print("  [dim]○[/dim] anthropic: Skipped (not configured)")
+
+    # Check Google
+    if os.getenv("GOOGLE_API_KEY"):
+        all_ok &= await _check_google()
+    else:
+        console.print("  [dim]○[/dim] google: Skipped (GOOGLE_API_KEY not set)")
 
     # Check A1111
     if os.getenv("A1111_HOST"):
@@ -1991,6 +1998,45 @@ async def _check_anthropic() -> bool:
         console.print("  [yellow]![/yellow] anthropic: Unusual key format")
         return False
     return False
+
+
+async def _check_google() -> bool:
+    """Check Google Gemini API key validity."""
+    import os
+
+    import httpx
+
+    api_key = os.getenv("GOOGLE_API_KEY")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            response = await client.get(
+                "https://generativelanguage.googleapis.com/v1beta/models",
+                params={"key": api_key},
+            )
+            if response.status_code == 200:
+                data = response.json()
+                models = [
+                    m.get("name", "").removeprefix("models/")
+                    for m in data.get("models", [])
+                    if "gemini" in m.get("name", "").lower()
+                ]
+                count = len(models)
+                console.print(
+                    f"  [green]✓[/green] google: Connected ({count} Gemini model{'s' if count != 1 else ''} available)"
+                )
+                return True
+            elif response.status_code == 400:
+                console.print("  [red]✗[/red] google: Invalid API key")
+                return False
+            else:
+                console.print(f"  [red]✗[/red] google: HTTP {response.status_code}")
+                return False
+    except httpx.TimeoutException:
+        console.print("  [red]✗[/red] google: Connection timeout")
+        return False
+    except httpx.RequestError as e:
+        console.print(f"  [red]✗[/red] google: Request error - {e}")
+        return False
 
 
 async def _check_a1111() -> bool:
