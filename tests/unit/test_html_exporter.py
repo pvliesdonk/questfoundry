@@ -272,3 +272,49 @@ class TestHtmlExporter:
         content = result.read_text()
 
         assert '<figure class="cover">' not in content
+
+    def test_dutch_language_export(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Mijn Verhaal",
+            language="nl",
+            passages=[
+                ExportPassage(id="p1", prose="Je staat bij de poort.", is_start=True),
+                ExportPassage(id="p2", prose="Je betreedt het kasteel.", is_ending=True),
+            ],
+            choices=[
+                ExportChoice(from_passage="p1", to_passage="p2", label="Betreed het kasteel"),
+            ],
+            codex_entries=[
+                ExportCodexEntry(entity_id="Zwaard", rank=1, content="Een legendarisch zwaard."),
+            ],
+        )
+        exporter = HtmlExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert 'lang="nl"' in content
+        assert "Einde" in content  # Dutch "The End"
+        assert "Codex" in content  # Same in Dutch
+
+    def test_german_language_ending(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Test",
+            language="de",
+            passages=[
+                ExportPassage(id="p1", prose="Start.", is_start=True, is_ending=True),
+            ],
+            choices=[],
+        )
+        exporter = HtmlExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        assert 'lang="de"' in content
+        assert "Ende" in content  # German "The End"
+
+    def test_default_language_is_english(self, tmp_path: Path) -> None:
+        exporter = HtmlExporter()
+        result = exporter.export(_simple_context(), tmp_path / "out")
+        content = result.read_text()
+
+        assert 'lang="en"' in content

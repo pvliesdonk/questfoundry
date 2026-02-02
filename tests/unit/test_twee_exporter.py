@@ -322,3 +322,41 @@ class TestTweeExporter:
         content = result.read_text()
 
         assert ":: StoryInit" not in content
+
+    def test_dutch_codex_passage_name(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Test",
+            language="nl",
+            passages=[
+                ExportPassage(id="p1", prose="Start.", is_start=True),
+            ],
+            choices=[],
+            codex_entries=[
+                ExportCodexEntry(entity_id="Held", rank=1, content="De held."),
+            ],
+        )
+        exporter = TweeExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        # Dutch uses "Codex" (same as English for nl)
+        assert ":: Codex" in content
+
+    def test_german_codex_passage_name(self, tmp_path: Path) -> None:
+        ctx = ExportContext(
+            title="Test",
+            language="de",
+            passages=[
+                ExportPassage(id="p1", prose="Start.", is_start=True),
+            ],
+            choices=[],
+            codex_entries=[
+                ExportCodexEntry(entity_id="Held", rank=1, content="Der Held."),
+            ],
+        )
+        exporter = TweeExporter()
+        result = exporter.export(ctx, tmp_path / "out")
+        content = result.read_text()
+
+        # German uses "Kodex"
+        assert ":: Kodex" in content
