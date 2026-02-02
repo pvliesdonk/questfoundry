@@ -13,6 +13,38 @@ from questfoundry.prompts.loader import PromptLoader, TemplateNotFoundError
 
 log = get_logger(__name__)
 
+# Pattern for {variable_name} — matches simple identifiers only,
+# not nested expressions like {foo.bar} or {0}.
+_SINGLE_VAR_PATTERN = re.compile(r"\{(\w+)\}")
+
+
+def safe_format(template: str, context: dict[str, Any]) -> str:
+    """Substitute ``{variable}`` placeholders without interpreting braces in values.
+
+    Unlike ``str.format()``, this ignores curly braces inside substituted
+    values.  LLM-generated content (e.g. research notes, prose) routinely
+    contains ``{...}`` in JSON, code, or formatting instructions that would
+    cause ``KeyError`` / ``IndexError`` with ``str.format()``.
+
+    Unmatched placeholders are left as-is so that templates can contain
+    ``{placeholders}`` that are not yet provided in the context dict.
+
+    Args:
+        template: Template string with ``{variable}`` placeholders.
+        context: Mapping of variable names to values.
+
+    Returns:
+        Template with matched placeholders replaced by their string values.
+    """
+
+    def _replace(match: re.Match[str]) -> str:
+        key = match.group(1)
+        if key in context:
+            return str(context[key])
+        return match.group(0)  # Leave unmatched as-is
+
+    return _SINGLE_VAR_PATTERN.sub(_replace, template)
+
 
 @dataclass
 class CompiledPrompt:

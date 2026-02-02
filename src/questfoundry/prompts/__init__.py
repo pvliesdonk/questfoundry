@@ -5,6 +5,7 @@ from questfoundry.prompts.compiler import (
     CompiledPrompt,
     PromptCompileError,
     PromptCompiler,
+    safe_format,
 )
 from questfoundry.prompts.loader import (
     PromptLoader,
@@ -22,4 +23,5 @@ __all__ = [
     "PromptTemplate",
     "TemplateNotFoundError",
     "TemplateParseError",
+    "safe_format",
 ]
