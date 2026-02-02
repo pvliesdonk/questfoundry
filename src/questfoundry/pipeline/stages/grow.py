@@ -29,6 +29,7 @@ from pydantic import BaseModel, ValidationError
 
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
+from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
@@ -111,6 +112,7 @@ class GrowStage:
         self._serialize_provider_name: str | None = None
         self._size_profile: SizeProfile | None = None
         self._max_concurrency: int = 2
+        self._lang_instruction: str = ""
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -248,6 +250,7 @@ class GrowStage:
         self._serialize_provider_name = serialize_provider_name
         self._size_profile = kwargs.get("size_profile")
         self._max_concurrency = kwargs.get("max_concurrency", 2)
+        self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
         log.info("stage_start", stage="grow")
 
         phases = self._phase_order()
@@ -1969,6 +1972,7 @@ class GrowStage:
                 "divergence_context": "\n".join(divergence_lines),
                 "valid_from_ids": ", ".join(valid_from_ids),
                 "valid_to_ids": ", ".join(valid_to_ids),
+                "output_language_instruction": self._lang_instruction,
             }
 
             from questfoundry.graph.grow_validators import validate_phase9_output

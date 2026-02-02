@@ -239,3 +239,15 @@ class TestBuildExportContext:
         ctx = build_export_context(g, "test")
 
         assert ctx.cover is None
+
+    def test_language_default_english(self) -> None:
+        g = _minimal_graph()
+        ctx = build_export_context(g, "test")
+
+        assert ctx.language == "en"
+
+    def test_language_passthrough(self) -> None:
+        g = _minimal_graph()
+        ctx = build_export_context(g, "test", language="nl")
+
+        assert ctx.language == "nl"

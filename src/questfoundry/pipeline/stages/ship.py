@@ -88,18 +88,28 @@ class ShipStage:
                 f"Run FILL stage first. Examples: {missing_prose[:3]}"
             )
 
-        # Get story title: voice node (from FILL) → project config → directory name
+        # Get story title and language from config
         voice = graph.get_node("voice::voice")
         story_title = (voice or {}).get("story_title") or ""
+        language = "en"
+        config_name: str | None = None
+
+        try:
+            config = load_project_config(self._project_path)
+            language = config.language
+            config_name = config.name
+        except (ProjectConfigError, FileNotFoundError, KeyError):
+            log.warning(
+                "project_config_load_failed",
+                path=str(self._project_path),
+                detail="Falling back to defaults for title and language.",
+            )
+
         if not story_title:
-            try:
-                config = load_project_config(self._project_path)
-                story_title = config.name
-            except (ProjectConfigError, FileNotFoundError, KeyError):
-                story_title = self._project_path.name
+            story_title = config_name or self._project_path.name
 
         # Build export context
-        context = build_export_context(graph, story_title)
+        context = build_export_context(graph, story_title, language=language)
 
         log.info(
             "ship_context_built",

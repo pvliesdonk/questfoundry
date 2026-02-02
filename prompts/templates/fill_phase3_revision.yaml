@@ -36,6 +36,8 @@ system: |
   - **flat_prose**: Add sensory detail, emotional interiority, and dilemma
     tension. Show, don't tell. Ground the reader in the moment.
 
+  {output_language_instruction}
+
   ## Rules
 
   1. Fix the flagged issue specifically — don't rewrite from scratch unless necessary

@@ -11,6 +11,7 @@ import html
 import json
 from typing import TYPE_CHECKING
 
+from questfoundry.export.i18n import get_ui_strings
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -58,16 +59,18 @@ class HtmlExporter:
 
         illustrations_by_passage = {ill.passage_id: ill for ill in context.illustrations}
 
+        ui = get_ui_strings(context.language)
+
         passages_html = []
         for passage in context.passages:
             choices = choices_by_passage.get(passage.id, [])
             illustration = illustrations_by_passage.get(passage.id)
-            passages_html.append(_render_passage_div(passage, choices, illustration))
+            passages_html.append(_render_passage_div(passage, choices, illustration, ui=ui))
 
         # Build codex HTML
         codex_html = ""
         if context.codex_entries:
-            codex_html = _render_codex_panel(context.codex_entries)
+            codex_html = _render_codex_panel(context.codex_entries, ui=ui)
 
         # Build art direction meta tag.
         # json.dumps() serializes to JSON, then html.escape() escapes any
@@ -81,7 +84,7 @@ class HtmlExporter:
         if context.cover and context.cover.asset_path:
             cap = html.escape(context.cover.caption) if context.cover.caption else ""
             caption_tag = f"\n  <figcaption>{cap}</figcaption>" if cap else ""
-            cover_html = f'<figure class="cover">\n  <img src="{html.escape(context.cover.asset_path)}" alt="Cover illustration">{caption_tag}\n</figure>'
+            cover_html = f'<figure class="cover">\n  <img src="{html.escape(context.cover.asset_path)}" alt="{html.escape(ui["cover_alt"])}">{caption_tag}\n</figure>'
 
         # Build the complete HTML document
         content = _build_html_document(
@@ -91,6 +94,8 @@ class HtmlExporter:
             codex_html=codex_html,
             art_direction_meta=art_direction_meta,
             cover_html=cover_html,
+            language=context.language,
+            ui=ui,
         )
 
         output_file.write_text(content, encoding="utf-8")
@@ -116,6 +121,8 @@ def _render_passage_div(
     passage: ExportPassage,
     choices: list[ExportChoice],
     illustration: ExportIllustration | None = None,
+    *,
+    ui: dict[str, str] | None = None,
 ) -> str:
     """Render a passage as an HTML div element."""
     pid = _safe_id(passage.id)
@@ -154,17 +161,23 @@ def _render_passage_div(
 
     # Ending marker
     if passage.is_ending:
-        parts.append('  <div class="ending">The End</div>')
+        the_end = (ui or {}).get("the_end", "The End")
+        parts.append(f'  <div class="ending">{html.escape(the_end)}</div>')
 
     parts.append("</div>")
     return "\n".join(parts)
 
 
-def _render_codex_panel(codex_entries: list[ExportCodexEntry]) -> str:
+def _render_codex_panel(
+    codex_entries: list[ExportCodexEntry],
+    *,
+    ui: dict[str, str] | None = None,
+) -> str:
     """Render a toggleable codex panel with conditionally visible entries."""
+    codex_label = html.escape((ui or {}).get("codex", "Codex"))
     sorted_entries = sorted(codex_entries, key=lambda e: e.rank)
     parts = ['<div id="codex" class="codex-panel">']
-    parts.append("  <h2>Codex</h2>")
+    parts.append(f"  <h2>{codex_label}</h2>")
     for entry in sorted_entries:
         # json.dumps() handles quoting/escaping of codeword values,
         # html.escape() makes the JSON safe inside an HTML attribute.
@@ -186,14 +199,19 @@ def _build_html_document(
     codex_html: str = "",
     art_direction_meta: str = "",
     cover_html: str = "",
+    language: str = "en",
+    ui: dict[str, str] | None = None,
 ) -> str:
     """Build the complete HTML document."""
     extra_meta = f"\n{art_direction_meta}" if art_direction_meta else ""
+    codex_label = html.escape((ui or {}).get("codex", "Codex"))
     codex_button = (
-        '<button class="codex-toggle" id="codex-toggle">Codex</button>' if codex_html else ""
+        f'<button class="codex-toggle" id="codex-toggle">{codex_label}</button>'
+        if codex_html
+        else ""
     )
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="{html.escape(language)}">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">{extra_meta}

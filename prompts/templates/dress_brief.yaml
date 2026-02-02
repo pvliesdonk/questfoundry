@@ -55,6 +55,8 @@ system: |
     - -1: Less visually interesting than structure suggests
     - -2: Mostly dialogue/internal, poor illustration candidate
 
+  {output_language_instruction}
+
   ## Guidelines
   - Match the global art direction style and palette
   - Use entity visual references for consistent depiction

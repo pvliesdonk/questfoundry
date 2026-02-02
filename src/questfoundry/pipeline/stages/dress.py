@@ -35,6 +35,7 @@ from questfoundry.agents import (
 )
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
+from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph.dress_context import (
     format_art_direction_context,
     format_entity_for_codex,
@@ -157,6 +158,7 @@ class DressStage:
         self._image_provider_spec: str | None = image_provider
         self._image_budget: int = 0
         self._max_concurrency: int = 2
+        self._lang_instruction: str = ""
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -261,6 +263,7 @@ class DressStage:
             self._image_provider_spec = image_provider
         self._image_budget = kwargs.get("image_budget", 0)
         self._max_concurrency = kwargs.get("max_concurrency", 2)
+        self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
 
         log.info("stage_start", stage="dress")
 
@@ -663,6 +666,7 @@ class DressStage:
                 "entity_visuals": entity_visuals_ctx or "No entity visual profiles available.",
                 "priority_context": priority_ctx,
                 "composition_log": comp_log,
+                "output_language_instruction": self._lang_instruction,
             }
 
             output, llm_calls, tokens = await self._dress_llm_call(
@@ -759,6 +763,7 @@ class DressStage:
                 "vision_context": vision_ctx or "No creative vision available.",
                 "entity_details": entity_details_ctx,
                 "codewords": codeword_list or "No codewords defined.",
+                "output_language_instruction": self._lang_instruction,
             }
             output, llm_calls, tokens = await self._dress_llm_call(
                 model, "dress_codex", context, DressPhase2Output

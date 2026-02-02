@@ -25,12 +25,13 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
-def build_export_context(graph: Graph, project_name: str) -> ExportContext:
+def build_export_context(graph: Graph, project_name: str, *, language: str = "en") -> ExportContext:
     """Extract player-facing data from the story graph.
 
     Args:
         graph: Loaded story graph.
         project_name: Project name used as story title.
+        language: ISO 639-1 language code for UI strings.
 
     Returns:
         ExportContext containing all data needed by exporters.
@@ -58,6 +59,7 @@ def build_export_context(graph: Graph, project_name: str) -> ExportContext:
         cover=cover,
         codex_entries=_extract_codex_entries(graph),
         art_direction=_extract_art_direction(graph),
+        language=language,
     )
 
 

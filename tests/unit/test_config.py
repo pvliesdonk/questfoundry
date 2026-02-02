@@ -532,3 +532,33 @@ class TestUserConfig:
 
         result = load_user_config(config_dir=config_dir)
         assert result is None
+
+
+class TestProjectConfigLanguage:
+    """Tests for ProjectConfig language field."""
+
+    def test_default_language_is_english(self) -> None:
+        data = {
+            "name": "test",
+            "providers": {"default": "ollama/qwen3:4b-instruct-32k"},
+        }
+        config = ProjectConfig.from_dict(data)
+        assert config.language == "en"
+
+    def test_language_from_dict(self) -> None:
+        data = {
+            "name": "test",
+            "language": "nl",
+            "providers": {"default": "ollama/qwen3:4b-instruct-32k"},
+        }
+        config = ProjectConfig.from_dict(data)
+        assert config.language == "nl"
+
+    def test_language_german(self) -> None:
+        data = {
+            "name": "test",
+            "language": "de",
+            "providers": {"default": "ollama/qwen3:4b-instruct-32k"},
+        }
+        config = ProjectConfig.from_dict(data)
+        assert config.language == "de"
