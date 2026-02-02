@@ -259,6 +259,7 @@ class ProjectConfig:
     stages: list[str] = field(default_factory=lambda: list(DEFAULT_STAGES))
     gates: list[GateConfig] = field(default_factory=list)
     research_tools: ResearchToolsConfig = field(default_factory=ResearchToolsConfig)
+    language: str = "en"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ProjectConfig:
@@ -309,6 +310,7 @@ class ProjectConfig:
             stages=stages,
             gates=gates,
             research_tools=research_tools,
+            language=data.get("language", "en"),
         )
 
 

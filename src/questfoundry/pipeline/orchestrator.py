@@ -585,6 +585,7 @@ class PipelineOrchestrator:
             stage_kwargs: dict[str, Any] = {}
             if self._model_info is not None:
                 stage_kwargs["max_concurrency"] = self._model_info.max_concurrency
+            stage_kwargs["language"] = self.config.language
             if resume_from:
                 stage_kwargs["resume_from"] = resume_from
             if on_phase_progress:
