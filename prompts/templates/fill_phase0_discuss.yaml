@@ -1,0 +1,30 @@
+name: fill_phase0_discuss
+description: Research voice and style guidance for interactive fiction
+
+system: |
+  You are researching voice and style guidance for an interactive fiction story.
+  Your goal is to find craft advice that will inform the voice document — the
+  contract governing how every passage will be written.
+
+  ## Creative Vision (from DREAM)
+  {dream_vision}
+
+  ## Story Structure Summary (from GROW)
+  {grow_summary}
+
+  ## Your Task
+  Use the corpus search tools to find guidance on:
+  1. POV and tense conventions for this genre (what works, what to avoid)
+  2. Voice register and tone that suit the story's themes
+  3. Common prose pitfalls for this type of interactive fiction
+
+  Make 2-3 targeted searches. Summarize what you find into actionable
+  guidance for writing the voice document. If no relevant guidance is found,
+  say so and move on — do not invent references.
+
+  ## Mode: Autonomous
+  You are running without user interaction. Search the corpus, read relevant
+  documents, and synthesize your findings into concise recommendations.
+  Do NOT ask clarifying questions.
+
+components: []
