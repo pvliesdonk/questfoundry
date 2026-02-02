@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import pytest
 from typer.testing import CliRunner
 
 from questfoundry import __version__
@@ -24,8 +25,6 @@ from questfoundry.cli import (
 
 if TYPE_CHECKING:
     from pathlib import Path
-
-    import pytest
 
 runner = CliRunner()
 
@@ -374,6 +373,87 @@ def test_doctor_exit_code_on_failure() -> None:
 
     # No providers configured should result in failure
     assert result.exit_code == 1
+
+
+# --- _check_google Tests ---
+
+
+class TestCheckGoogle:
+    """Tests for _check_google() provider connectivity check."""
+
+    @pytest.mark.asyncio
+    async def test_success_returns_models(self) -> None:
+        """Successful API call returns True and filtered Gemini model list."""
+        from questfoundry.cli import _check_google
+
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            "models": [
+                {"name": "models/gemini-2.5-flash"},
+                {"name": "models/gemini-2.0-flash"},
+                {"name": "models/text-embedding-004"},  # Non-Gemini, filtered out
+            ]
+        }
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("httpx.AsyncClient", return_value=mock_client),
+            patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        ):
+            ok, models = await _check_google()
+
+        assert ok is True
+        assert "gemini-2.0-flash" in models
+        assert "gemini-2.5-flash" in models
+        assert "text-embedding-004" not in models
+
+    @pytest.mark.asyncio
+    async def test_invalid_key_returns_false(self) -> None:
+        """HTTP 400 returns False with empty model list."""
+        from questfoundry.cli import _check_google
+
+        mock_response = MagicMock()
+        mock_response.status_code = 400
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(return_value=mock_response)
+
+        with (
+            patch("httpx.AsyncClient", return_value=mock_client),
+            patch.dict("os.environ", {"GOOGLE_API_KEY": "bad-key"}),
+        ):
+            ok, models = await _check_google()
+
+        assert ok is False
+        assert models == []
+
+    @pytest.mark.asyncio
+    async def test_timeout_returns_false(self) -> None:
+        """Connection timeout returns False with empty model list."""
+        import httpx
+
+        from questfoundry.cli import _check_google
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.get = AsyncMock(side_effect=httpx.TimeoutException("timeout"))
+
+        with (
+            patch("httpx.AsyncClient", return_value=mock_client),
+            patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
+        ):
+            ok, models = await _check_google()
+
+        assert ok is False
+        assert models == []
 
 
 # --- _resolve_project_path Tests ---
