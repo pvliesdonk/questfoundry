@@ -35,6 +35,7 @@ from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
+from questfoundry.pipeline.batching import batch_llm_calls
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
 from questfoundry.providers.structured_output import (
     unwrap_structured_result,
@@ -109,6 +110,7 @@ class GrowStage:
         self._serialize_model: BaseChatModel | None = None
         self._serialize_provider_name: str | None = None
         self._size_profile: SizeProfile | None = None
+        self._max_concurrency: int = 2
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -245,6 +247,7 @@ class GrowStage:
         self._serialize_model = serialize_model
         self._serialize_provider_name = serialize_provider_name
         self._size_profile = kwargs.get("size_profile")
+        self._max_concurrency = kwargs.get("max_concurrency", 2)
         log.info("stage_start", stage="grow")
 
         phases = self._phase_order()
@@ -1287,17 +1290,16 @@ class GrowStage:
                 detail="No paths to annotate",
             )
 
-        total_llm_calls = 0
-        total_tokens = 0
         applied = 0
 
+        # Pre-compute context for each path (graph reads are not async)
+        path_items: list[tuple[str, dict[str, str]]] = []
         for pid in sorted(path_nodes.keys()):
             pdata = path_nodes[pid]
             dilemma_id = pdata.get("dilemma_id", "")
             dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
             dilemma_question = dilemma_node.get("question", "") if dilemma_node else ""
 
-            # Get ordered beat sequence for this path
             try:
                 beat_ids = get_path_beat_sequence(graph, pid)
             except ValueError:
@@ -1308,7 +1310,6 @@ class GrowStage:
                 log.warning("phase4e_no_beats_for_path", path_id=pid)
                 continue
 
-            # Build beat sequence description
             beat_lines: list[str] = []
             for i, bid in enumerate(beat_ids, 1):
                 bdata = graph.get_node(bid)
@@ -1326,27 +1327,39 @@ class GrowStage:
                 "dilemma_question": dilemma_question or "(no dilemma question)",
                 "beat_sequence": "\n".join(beat_lines) if beat_lines else "(no beats)",
             }
+            path_items.append((pid, context))
 
-            try:
-                result, llm_calls, tokens = await self._grow_llm_call(
-                    model=model,
-                    template_name="grow_phase4e_path_arcs",
-                    context=context,
-                    output_schema=PathMiniArc,
-                )
-            except GrowStageError as e:
-                log.warning("phase4e_llm_failed", path_id=pid, error=str(e))
+        async def _arc_for_path(
+            item: tuple[str, dict[str, str]],
+        ) -> tuple[tuple[str, PathMiniArc], int, int]:
+            pid, ctx = item
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model=model,
+                template_name="grow_phase4e_path_arcs",
+                context=ctx,
+                output_schema=PathMiniArc,
+            )
+            return (pid, result), llm_calls, tokens
+
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
+            path_items, _arc_for_path, self._max_concurrency
+        )
+
+        for item in results:
+            if item is None:
                 continue
-
-            total_llm_calls += llm_calls
-            total_tokens += tokens
-
+            pid, result = item
             graph.update_node(
                 pid,
                 path_theme=result.path_theme,
                 path_mood=result.path_mood,
             )
             applied += 1
+
+        if errors:
+            for idx, e in errors:
+                pid = path_items[idx][0]
+                log.warning("phase4e_llm_failed", path_id=pid, error=str(e))
 
         return GrowPhaseResult(
             phase="path_arcs",

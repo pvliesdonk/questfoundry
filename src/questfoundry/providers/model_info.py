@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 
 
@@ -14,12 +15,14 @@ class ModelInfo:
         supports_tools: Whether the model supports tool/function calling.
         supports_vision: Whether the model can process images.
         max_output_tokens: Maximum tokens in model response (None if unknown).
+        max_concurrency: Maximum concurrent LLM calls for batching.
     """
 
     context_window: int
     supports_tools: bool = True
     supports_vision: bool = False
     max_output_tokens: int | None = None
+    max_concurrency: int = 2
 
 
 @dataclass(frozen=True)
@@ -75,6 +78,16 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
 DEFAULT_CONTEXT_WINDOW = 32_768
 
 
+# Default max concurrency per provider.
+# Ollama: local GPU, limited parallelism.
+# OpenAI/Anthropic: cloud APIs with higher rate limits.
+_PROVIDER_MAX_CONCURRENCY: dict[str, int] = {
+    "ollama": 2,
+    "openai": 20,
+    "anthropic": 10,
+}
+
+
 def get_model_info(provider: str, model: str) -> ModelInfo:
     """Get model information from known values or defaults.
 
@@ -98,8 +111,21 @@ def get_model_info(provider: str, model: str) -> ModelInfo:
         supports_vision = False
         supports_tools = True  # Default to True for unknown models
 
+    # Concurrency: env var override > provider default > fallback
+    env_concurrency = os.environ.get("QF_MAX_CONCURRENCY")
+    if env_concurrency is not None:
+        try:
+            max_concurrency = int(env_concurrency)
+            if max_concurrency <= 0:
+                max_concurrency = 1
+        except ValueError:
+            max_concurrency = _PROVIDER_MAX_CONCURRENCY.get(provider_lower, 2)
+    else:
+        max_concurrency = _PROVIDER_MAX_CONCURRENCY.get(provider_lower, 2)
+
     return ModelInfo(
         context_window=context_window,
         supports_tools=supports_tools,
         supports_vision=supports_vision,
+        max_concurrency=max_concurrency,
     )
