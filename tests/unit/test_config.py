@@ -2,7 +2,11 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import patch
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 from questfoundry.pipeline.config import (
     DEFAULT_MODEL,
@@ -24,12 +28,27 @@ class TestProvidersConfig:
         config = ProvidersConfig.from_dict(data)
 
         assert config.default == "ollama/qwen3:4b-instruct-32k"
-        assert config.discuss is None
-        assert config.summarize is None
-        assert config.serialize is None
+        assert config.creative is None
+        assert config.balanced is None
+        assert config.structured is None
 
-    def test_from_dict_with_phase_overrides(self) -> None:
-        """Parse config with phase-specific overrides."""
+    def test_from_dict_with_role_overrides(self) -> None:
+        """Parse config with role-specific overrides."""
+        data = {
+            "default": "ollama/qwen3:4b-instruct-32k",
+            "creative": "ollama/qwen3:4b-instruct-32k",
+            "balanced": "openai/gpt-5-mini",
+            "structured": "openai/o1-mini",
+        }
+        config = ProvidersConfig.from_dict(data)
+
+        assert config.default == "ollama/qwen3:4b-instruct-32k"
+        assert config.creative == "ollama/qwen3:4b-instruct-32k"
+        assert config.balanced == "openai/gpt-5-mini"
+        assert config.structured == "openai/o1-mini"
+
+    def test_from_dict_with_legacy_phase_names(self) -> None:
+        """Parse config with legacy phase names (backwards compatibility)."""
         data = {
             "default": "ollama/qwen3:4b-instruct-32k",
             "discuss": "ollama/qwen3:4b-instruct-32k",
@@ -38,100 +57,141 @@ class TestProvidersConfig:
         }
         config = ProvidersConfig.from_dict(data)
 
-        assert config.default == "ollama/qwen3:4b-instruct-32k"
+        # Legacy names map to role names
+        assert config.creative == "ollama/qwen3:4b-instruct-32k"
+        assert config.balanced == "openai/gpt-5-mini"
+        assert config.structured == "openai/o1-mini"
+        # Legacy aliases still work
         assert config.discuss == "ollama/qwen3:4b-instruct-32k"
         assert config.summarize == "openai/gpt-5-mini"
         assert config.serialize == "openai/o1-mini"
+
+    def test_from_dict_role_names_override_legacy(self) -> None:
+        """Role names take precedence when both are specified."""
+        data = {
+            "default": "ollama/qwen3:4b-instruct-32k",
+            "discuss": "openai/old",
+            "creative": "openai/new",
+        }
+        config = ProvidersConfig.from_dict(data)
+
+        assert config.creative == "openai/new"
 
     def test_from_dict_empty_uses_defaults(self) -> None:
         """Empty dict uses system defaults."""
         config = ProvidersConfig.from_dict({})
 
         assert config.default == f"{DEFAULT_PROVIDER}/{DEFAULT_MODEL}"
-        assert config.discuss is None
-        assert config.summarize is None
-        assert config.serialize is None
+        assert config.creative is None
+        assert config.balanced is None
+        assert config.structured is None
 
-    def test_get_discuss_provider_from_config(self) -> None:
-        """get_discuss_provider returns config value when set."""
+    def test_get_creative_provider_from_config(self) -> None:
+        """get_creative_provider returns config value when set."""
         config = ProvidersConfig(
             default="ollama/qwen3:4b-instruct-32k",
-            discuss="openai/gpt-5-mini",
+            creative="openai/gpt-5-mini",
         )
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_discuss_provider() == "openai/gpt-5-mini"
+            assert config.get_creative_provider() == "openai/gpt-5-mini"
 
-    def test_get_discuss_provider_fallback_to_default(self) -> None:
-        """get_discuss_provider falls back to default when not set."""
+    def test_get_creative_provider_fallback_to_default(self) -> None:
+        """get_creative_provider falls back to default when not set."""
         config = ProvidersConfig(default="ollama/qwen3:4b-instruct-32k")
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_discuss_provider() == "ollama/qwen3:4b-instruct-32k"
+            assert config.get_creative_provider() == "ollama/qwen3:4b-instruct-32k"
 
-    def test_get_discuss_provider_ignores_env(self) -> None:
+    def test_get_creative_provider_ignores_env(self) -> None:
         """ProvidersConfig returns config value, not env var (SRP: orchestrator handles env)."""
         config = ProvidersConfig(
             default="ollama/qwen3:4b-instruct-32k",
-            discuss="openai/gpt-5-mini",
+            creative="openai/gpt-5-mini",
         )
 
-        with patch.dict("os.environ", {"QF_PROVIDER_DISCUSS": "anthropic/claude-3"}):
-            assert config.get_discuss_provider() == "openai/gpt-5-mini"
+        with patch.dict("os.environ", {"QF_PROVIDER_CREATIVE": "anthropic/claude-3"}):
+            assert config.get_creative_provider() == "openai/gpt-5-mini"
 
-    def test_get_summarize_provider_from_config(self) -> None:
-        """get_summarize_provider returns config value when set."""
+    def test_get_balanced_provider_from_config(self) -> None:
+        """get_balanced_provider returns config value when set."""
         config = ProvidersConfig(
             default="ollama/qwen3:4b-instruct-32k",
-            summarize="openai/gpt-5-mini",
+            balanced="openai/gpt-5-mini",
         )
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_summarize_provider() == "openai/gpt-5-mini"
+            assert config.get_balanced_provider() == "openai/gpt-5-mini"
 
-    def test_get_summarize_provider_fallback_to_default(self) -> None:
-        """get_summarize_provider falls back to default when not set."""
+    def test_get_balanced_provider_fallback_to_default(self) -> None:
+        """get_balanced_provider falls back to default when not set."""
         config = ProvidersConfig(default="ollama/qwen3:4b-instruct-32k")
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_summarize_provider() == "ollama/qwen3:4b-instruct-32k"
+            assert config.get_balanced_provider() == "ollama/qwen3:4b-instruct-32k"
 
-    def test_get_summarize_provider_ignores_env(self) -> None:
+    def test_get_balanced_provider_ignores_env(self) -> None:
         """ProvidersConfig returns config value, not env var (SRP: orchestrator handles env)."""
         config = ProvidersConfig(
             default="ollama/qwen3:4b-instruct-32k",
-            summarize="openai/gpt-5-mini",
+            balanced="openai/gpt-5-mini",
         )
 
-        with patch.dict("os.environ", {"QF_PROVIDER_SUMMARIZE": "anthropic/claude-3"}):
-            assert config.get_summarize_provider() == "openai/gpt-5-mini"
+        with patch.dict("os.environ", {"QF_PROVIDER_BALANCED": "anthropic/claude-3"}):
+            assert config.get_balanced_provider() == "openai/gpt-5-mini"
 
-    def test_get_serialize_provider_from_config(self) -> None:
-        """get_serialize_provider returns config value when set."""
+    def test_get_structured_provider_from_config(self) -> None:
+        """get_structured_provider returns config value when set."""
         config = ProvidersConfig(
             default="ollama/qwen3:4b-instruct-32k",
-            serialize="openai/o1-mini",
+            structured="openai/o1-mini",
         )
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_serialize_provider() == "openai/o1-mini"
+            assert config.get_structured_provider() == "openai/o1-mini"
 
-    def test_get_serialize_provider_fallback_to_default(self) -> None:
-        """get_serialize_provider falls back to default when not set."""
+    def test_get_structured_provider_fallback_to_default(self) -> None:
+        """get_structured_provider falls back to default when not set."""
         config = ProvidersConfig(default="ollama/qwen3:4b-instruct-32k")
 
         with patch.dict("os.environ", {}, clear=True):
-            assert config.get_serialize_provider() == "ollama/qwen3:4b-instruct-32k"
+            assert config.get_structured_provider() == "ollama/qwen3:4b-instruct-32k"
 
-    def test_get_serialize_provider_ignores_env(self) -> None:
+    def test_get_structured_provider_ignores_env(self) -> None:
         """ProvidersConfig returns config value, not env var (SRP: orchestrator handles env)."""
         config = ProvidersConfig(
             default="ollama/qwen3:4b-instruct-32k",
-            serialize="openai/o1-mini",
+            structured="openai/o1-mini",
         )
 
-        with patch.dict("os.environ", {"QF_PROVIDER_SERIALIZE": "openai/o3-mini"}):
-            assert config.get_serialize_provider() == "openai/o1-mini"
+        with patch.dict("os.environ", {"QF_PROVIDER_STRUCTURED": "openai/o3-mini"}):
+            assert config.get_structured_provider() == "openai/o1-mini"
+
+    def test_legacy_aliases_work(self) -> None:
+        """Legacy property aliases (discuss, summarize, serialize) return role values."""
+        config = ProvidersConfig(
+            default="ollama/qwen3:4b-instruct-32k",
+            creative="openai/creative",
+            balanced="openai/balanced",
+            structured="openai/structured",
+        )
+
+        assert config.discuss == "openai/creative"
+        assert config.summarize == "openai/balanced"
+        assert config.serialize == "openai/structured"
+
+    def test_legacy_getter_aliases_work(self) -> None:
+        """Legacy getter methods delegate to role-based methods."""
+        config = ProvidersConfig(
+            default="ollama/qwen3:4b-instruct-32k",
+            creative="openai/creative",
+            balanced="openai/balanced",
+            structured="openai/structured",
+        )
+
+        assert config.get_discuss_provider() == "openai/creative"
+        assert config.get_summarize_provider() == "openai/balanced"
+        assert config.get_serialize_provider() == "openai/structured"
 
     def test_from_dict_with_image_provider(self) -> None:
         """Parse config with image provider set."""
@@ -184,11 +244,11 @@ class TestProjectConfigHybridProviders:
 
         # New field also populated
         assert config.providers.default == "ollama/qwen3:4b-instruct-32k"
-        assert config.providers.discuss is None
-        assert config.providers.serialize is None
+        assert config.providers.creative is None
+        assert config.providers.structured is None
 
-    def test_from_dict_with_hybrid_providers(self) -> None:
-        """Parsing new format with phase-specific providers."""
+    def test_from_dict_with_legacy_phase_names(self) -> None:
+        """Parsing config with legacy phase names still works."""
         data = {
             "name": "hybrid-project",
             "providers": {
@@ -204,11 +264,31 @@ class TestProjectConfigHybridProviders:
         assert config.provider.name == "ollama"
         assert config.provider.model == "qwen3:4b-instruct-32k"
 
-        # New field has all values
-        assert config.providers.default == "ollama/qwen3:4b-instruct-32k"
+        # Mapped to role names
+        assert config.providers.creative == "ollama/qwen3:4b-instruct-32k"
+        assert config.providers.balanced == "openai/gpt-5-mini"
+        assert config.providers.structured == "openai/o1-mini"
+        # Legacy aliases still work
         assert config.providers.discuss == "ollama/qwen3:4b-instruct-32k"
         assert config.providers.summarize == "openai/gpt-5-mini"
         assert config.providers.serialize == "openai/o1-mini"
+
+    def test_from_dict_with_role_names(self) -> None:
+        """Parsing config with role-based names."""
+        data = {
+            "name": "role-project",
+            "providers": {
+                "default": "ollama/qwen3:4b-instruct-32k",
+                "creative": "openai/gpt-5-mini",
+                "balanced": "openai/gpt-5-mini",
+                "structured": "openai/o3-mini",
+            },
+        }
+        config = ProjectConfig.from_dict(data)
+
+        assert config.providers.creative == "openai/gpt-5-mini"
+        assert config.providers.balanced == "openai/gpt-5-mini"
+        assert config.providers.structured == "openai/o3-mini"
 
     def test_from_dict_provider_without_model(self) -> None:
         """Provider string without model uses provider-specific default model."""
@@ -346,6 +426,19 @@ class TestProvidersConfigSettings:
         assert settings.temperature == 0.95
         assert settings.top_p is None  # Not configured, uses default
 
+    def test_get_phase_settings_resolves_role_aliases(self) -> None:
+        """get_phase_settings resolves legacy phase names to role names in settings."""
+        from questfoundry.providers.settings import PhaseSettings
+
+        config = ProvidersConfig(
+            default="ollama/qwen3:4b-instruct-32k",
+            settings={"creative": PhaseSettings(temperature=0.95)},
+        )
+
+        # Looking up "discuss" should find "creative" settings via alias
+        settings = config.get_phase_settings("discuss")
+        assert settings.temperature == 0.95
+
 
 class TestProjectConfigWithSettings:
     """Tests for ProjectConfig with phase settings support."""
@@ -369,3 +462,73 @@ class TestProjectConfigWithSettings:
         assert config.providers.settings["summarize"].temperature == 0.5
         assert config.providers.settings["serialize"].temperature == 0.0
         assert config.providers.settings["serialize"].seed == 42
+
+
+# --- Tests for user config loading ---
+
+
+class TestUserConfig:
+    """Tests for global user config loading."""
+
+    def test_load_user_config_missing_file(self, tmp_path: Path) -> None:
+        """Returns None when config file doesn't exist."""
+
+        from questfoundry.pipeline.user_config import load_user_config
+
+        result = load_user_config(config_dir=tmp_path / "nonexistent")
+        assert result is None
+
+    def test_load_user_config_valid(self, tmp_path: Path) -> None:
+        """Loads valid user config."""
+
+        from ruamel.yaml import YAML
+
+        from questfoundry.pipeline.user_config import load_user_config
+
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        config_path = config_dir / "config.yaml"
+        yaml = YAML()
+        yaml.dump(
+            {
+                "providers": {
+                    "default": "openai/gpt-5-mini",
+                    "creative": "openai/gpt-5-mini",
+                    "structured": "openai/o3-mini",
+                }
+            },
+            config_path,
+        )
+
+        result = load_user_config(config_dir=config_dir)
+        assert result is not None
+        assert result.default == "openai/gpt-5-mini"
+        assert result.creative == "openai/gpt-5-mini"
+        assert result.structured == "openai/o3-mini"
+
+    def test_load_user_config_empty_file(self, tmp_path: Path) -> None:
+        """Returns None for empty config file."""
+
+        from questfoundry.pipeline.user_config import load_user_config
+
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        (config_dir / "config.yaml").write_text("")
+
+        result = load_user_config(config_dir=config_dir)
+        assert result is None
+
+    def test_load_user_config_no_providers(self, tmp_path: Path) -> None:
+        """Returns None when config has no providers section."""
+
+        from ruamel.yaml import YAML
+
+        from questfoundry.pipeline.user_config import load_user_config
+
+        config_dir = tmp_path / "config"
+        config_dir.mkdir()
+        yaml = YAML()
+        yaml.dump({"other_setting": "value"}, config_dir / "config.yaml")
+
+        result = load_user_config(config_dir=config_dir)
+        assert result is None
