@@ -57,6 +57,7 @@ from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.batching import batch_llm_calls
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
+from questfoundry.prompts.compiler import safe_format
 from questfoundry.providers.structured_output import (
     unwrap_structured_result,
     with_structured_output,
@@ -381,8 +382,6 @@ class FillStage:
 
         loader = PromptLoader(_get_prompts_path())
         template = loader.load(template_name)
-
-        from questfoundry.prompts.compiler import safe_format
 
         system_text = safe_format(template.system, context) if context else template.system
         user_text = (
