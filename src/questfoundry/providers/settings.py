@@ -166,7 +166,7 @@ class PhaseSettings:
                 log.warning(
                     "seed_not_supported",
                     provider=provider,
-                    note=f"{provider} does not support seed parameter, ignoring",
+                    note=f"{provider.lower()} does not support seed parameter, ignoring",
                 )
             else:
                 kwargs["seed"] = self.seed

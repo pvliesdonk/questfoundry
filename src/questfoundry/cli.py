@@ -2006,7 +2006,7 @@ async def _check_google() -> bool:
 
     import httpx
 
-    api_key = os.getenv("GOOGLE_API_KEY")
+    api_key: str | None = os.getenv("GOOGLE_API_KEY")
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             response = await client.get(

@@ -484,7 +484,7 @@ def _create_google_base_model(model: str, **kwargs: Any) -> BaseChatModel:
             "langchain-google-genai not installed. Run: uv add langchain-google-genai",
         ) from e
 
-    api_key = kwargs.get("api_key") or os.getenv("GOOGLE_API_KEY")
+    api_key = kwargs.get("google_api_key") or kwargs.get("api_key") or os.getenv("GOOGLE_API_KEY")
     if not api_key:
         log.error("provider_config_error", provider="google", missing="GOOGLE_API_KEY")
         raise ProviderError(
