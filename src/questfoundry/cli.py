@@ -901,6 +901,7 @@ def init(
 
     console.print(f"[green]✓[/green] Created project: [bold]{name}[/bold]")
     console.print(f"  Location: {project_path.absolute()}")
+    console.print(f"  Provider: {provider or 'default'}")
     console.print()
     console.print("Next steps:")
     console.print(f"  cd {name}")
@@ -924,17 +925,35 @@ def dream(
             "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
         ),
     ] = None,
+    provider_creative: Annotated[
+        str | None,
+        typer.Option("--provider-creative", help="LLM provider for creative/discuss role"),
+    ] = None,
+    provider_balanced: Annotated[
+        str | None,
+        typer.Option("--provider-balanced", help="LLM provider for balanced/summarize role"),
+    ] = None,
+    provider_structured: Annotated[
+        str | None,
+        typer.Option("--provider-structured", help="LLM provider for structured/serialize role"),
+    ] = None,
     provider_discuss: Annotated[
         str | None,
-        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+        typer.Option(
+            "--provider-discuss", help="LLM provider for discuss phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_summarize: Annotated[
         str | None,
-        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+        typer.Option(
+            "--provider-summarize", help="LLM provider for summarize phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_serialize: Annotated[
         str | None,
-        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
+        typer.Option(
+            "--provider-serialize", help="LLM provider for serialize phase (legacy)", hidden=True
+        ),
     ] = None,
     interactive: Annotated[
         bool | None,
@@ -968,9 +987,9 @@ def dream(
         default_noninteractive_prompt=None,  # DREAM requires explicit prompt
         preview_fn=_preview_dream_artifact,
         next_step_hint="qf brainstorm",
-        provider_discuss=provider_discuss,
-        provider_summarize=provider_summarize,
-        provider_serialize=provider_serialize,
+        provider_discuss=provider_creative or provider_discuss,
+        provider_summarize=provider_balanced or provider_summarize,
+        provider_serialize=provider_structured or provider_serialize,
     )
 
 
@@ -991,17 +1010,35 @@ def brainstorm(
             "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
         ),
     ] = None,
+    provider_creative: Annotated[
+        str | None,
+        typer.Option("--provider-creative", help="LLM provider for creative/discuss role"),
+    ] = None,
+    provider_balanced: Annotated[
+        str | None,
+        typer.Option("--provider-balanced", help="LLM provider for balanced/summarize role"),
+    ] = None,
+    provider_structured: Annotated[
+        str | None,
+        typer.Option("--provider-structured", help="LLM provider for structured/serialize role"),
+    ] = None,
     provider_discuss: Annotated[
         str | None,
-        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+        typer.Option(
+            "--provider-discuss", help="LLM provider for discuss phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_summarize: Annotated[
         str | None,
-        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+        typer.Option(
+            "--provider-summarize", help="LLM provider for summarize phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_serialize: Annotated[
         str | None,
-        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
+        typer.Option(
+            "--provider-serialize", help="LLM provider for serialize phase (legacy)", hidden=True
+        ),
     ] = None,
     interactive: Annotated[
         bool | None,
@@ -1038,9 +1075,9 @@ def brainstorm(
         default_noninteractive_prompt=DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT,
         preview_fn=_preview_brainstorm_artifact,
         next_step_hint="qf seed",
-        provider_discuss=provider_discuss,
-        provider_summarize=provider_summarize,
-        provider_serialize=provider_serialize,
+        provider_discuss=provider_creative or provider_discuss,
+        provider_summarize=provider_balanced or provider_summarize,
+        provider_serialize=provider_structured or provider_serialize,
     )
 
 
@@ -1061,17 +1098,35 @@ def seed(
             "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
         ),
     ] = None,
+    provider_creative: Annotated[
+        str | None,
+        typer.Option("--provider-creative", help="LLM provider for creative/discuss role"),
+    ] = None,
+    provider_balanced: Annotated[
+        str | None,
+        typer.Option("--provider-balanced", help="LLM provider for balanced/summarize role"),
+    ] = None,
+    provider_structured: Annotated[
+        str | None,
+        typer.Option("--provider-structured", help="LLM provider for structured/serialize role"),
+    ] = None,
     provider_discuss: Annotated[
         str | None,
-        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+        typer.Option(
+            "--provider-discuss", help="LLM provider for discuss phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_summarize: Annotated[
         str | None,
-        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+        typer.Option(
+            "--provider-summarize", help="LLM provider for summarize phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_serialize: Annotated[
         str | None,
-        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
+        typer.Option(
+            "--provider-serialize", help="LLM provider for serialize phase (legacy)", hidden=True
+        ),
     ] = None,
     interactive: Annotated[
         bool | None,
@@ -1109,9 +1164,9 @@ def seed(
         default_interactive_prompt=DEFAULT_INTERACTIVE_SEED_PROMPT,
         default_noninteractive_prompt=DEFAULT_NONINTERACTIVE_SEED_PROMPT,
         preview_fn=_preview_seed_artifact,
-        provider_discuss=provider_discuss,
-        provider_summarize=provider_summarize,
-        provider_serialize=provider_serialize,
+        provider_discuss=provider_creative or provider_discuss,
+        provider_summarize=provider_balanced or provider_summarize,
+        provider_serialize=provider_structured or provider_serialize,
     )
 
     # SEED-specific message about path freeze
@@ -1134,17 +1189,35 @@ def grow(
             "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
         ),
     ] = None,
+    provider_creative: Annotated[
+        str | None,
+        typer.Option("--provider-creative", help="LLM provider for creative/discuss role"),
+    ] = None,
+    provider_balanced: Annotated[
+        str | None,
+        typer.Option("--provider-balanced", help="LLM provider for balanced/summarize role"),
+    ] = None,
+    provider_structured: Annotated[
+        str | None,
+        typer.Option("--provider-structured", help="LLM provider for structured/serialize role"),
+    ] = None,
     provider_discuss: Annotated[
         str | None,
-        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+        typer.Option(
+            "--provider-discuss", help="LLM provider for discuss phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_summarize: Annotated[
         str | None,
-        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+        typer.Option(
+            "--provider-summarize", help="LLM provider for summarize phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_serialize: Annotated[
         str | None,
-        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
+        typer.Option(
+            "--provider-serialize", help="LLM provider for serialize phase (legacy)", hidden=True
+        ),
     ] = None,
     resume_from: Annotated[
         str | None,
@@ -1176,9 +1249,9 @@ def grow(
         default_noninteractive_prompt=DEFAULT_GROW_PROMPT,
         preview_fn=_preview_grow_artifact,
         next_step_hint="qf fill",
-        provider_discuss=provider_discuss,
-        provider_summarize=provider_summarize,
-        provider_serialize=provider_serialize,
+        provider_discuss=provider_creative or provider_discuss,
+        provider_summarize=provider_balanced or provider_summarize,
+        provider_serialize=provider_structured or provider_serialize,
         resume_from=resume_from,
     )
 
@@ -1199,17 +1272,35 @@ def fill(
             "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
         ),
     ] = None,
+    provider_creative: Annotated[
+        str | None,
+        typer.Option("--provider-creative", help="LLM provider for creative/discuss role"),
+    ] = None,
+    provider_balanced: Annotated[
+        str | None,
+        typer.Option("--provider-balanced", help="LLM provider for balanced/summarize role"),
+    ] = None,
+    provider_structured: Annotated[
+        str | None,
+        typer.Option("--provider-structured", help="LLM provider for structured/serialize role"),
+    ] = None,
     provider_discuss: Annotated[
         str | None,
-        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+        typer.Option(
+            "--provider-discuss", help="LLM provider for discuss phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_summarize: Annotated[
         str | None,
-        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+        typer.Option(
+            "--provider-summarize", help="LLM provider for summarize phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_serialize: Annotated[
         str | None,
-        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
+        typer.Option(
+            "--provider-serialize", help="LLM provider for serialize phase (legacy)", hidden=True
+        ),
     ] = None,
     resume_from: Annotated[
         str | None,
@@ -1249,9 +1340,9 @@ def fill(
         default_noninteractive_prompt=DEFAULT_FILL_PROMPT,
         preview_fn=_preview_fill_artifact,
         next_step_hint="qf dress",
-        provider_discuss=provider_discuss,
-        provider_summarize=provider_summarize,
-        provider_serialize=provider_serialize,
+        provider_discuss=provider_creative or provider_discuss,
+        provider_summarize=provider_balanced or provider_summarize,
+        provider_serialize=provider_structured or provider_serialize,
         resume_from=resume_from,
         two_step=two_step,
     )
@@ -1273,17 +1364,35 @@ def dress(
             "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
         ),
     ] = None,
+    provider_creative: Annotated[
+        str | None,
+        typer.Option("--provider-creative", help="LLM provider for creative/discuss role"),
+    ] = None,
+    provider_balanced: Annotated[
+        str | None,
+        typer.Option("--provider-balanced", help="LLM provider for balanced/summarize role"),
+    ] = None,
+    provider_structured: Annotated[
+        str | None,
+        typer.Option("--provider-structured", help="LLM provider for structured/serialize role"),
+    ] = None,
     provider_discuss: Annotated[
         str | None,
-        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+        typer.Option(
+            "--provider-discuss", help="LLM provider for discuss phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_summarize: Annotated[
         str | None,
-        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+        typer.Option(
+            "--provider-summarize", help="LLM provider for summarize phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_serialize: Annotated[
         str | None,
-        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
+        typer.Option(
+            "--provider-serialize", help="LLM provider for serialize phase (legacy)", hidden=True
+        ),
     ] = None,
     image_provider: Annotated[
         str | None,
@@ -1320,9 +1429,9 @@ def dress(
         default_noninteractive_prompt=DEFAULT_DRESS_PROMPT,
         preview_fn=_preview_dress_artifact,
         next_step_hint="qf ship",
-        provider_discuss=provider_discuss,
-        provider_summarize=provider_summarize,
-        provider_serialize=provider_serialize,
+        provider_discuss=provider_creative or provider_discuss,
+        provider_summarize=provider_balanced or provider_summarize,
+        provider_serialize=provider_structured or provider_serialize,
         resume_from=resume_from,
         image_provider=image_provider,
         image_budget=image_budget,
@@ -1604,17 +1713,35 @@ def run(
             "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
         ),
     ] = None,
+    provider_creative: Annotated[
+        str | None,
+        typer.Option("--provider-creative", help="LLM provider for creative/discuss role"),
+    ] = None,
+    provider_balanced: Annotated[
+        str | None,
+        typer.Option("--provider-balanced", help="LLM provider for balanced/summarize role"),
+    ] = None,
+    provider_structured: Annotated[
+        str | None,
+        typer.Option("--provider-structured", help="LLM provider for structured/serialize role"),
+    ] = None,
     provider_discuss: Annotated[
         str | None,
-        typer.Option("--provider-discuss", help="LLM provider for discuss phase"),
+        typer.Option(
+            "--provider-discuss", help="LLM provider for discuss phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_summarize: Annotated[
         str | None,
-        typer.Option("--provider-summarize", help="LLM provider for summarize phase"),
+        typer.Option(
+            "--provider-summarize", help="LLM provider for summarize phase (legacy)", hidden=True
+        ),
     ] = None,
     provider_serialize: Annotated[
         str | None,
-        typer.Option("--provider-serialize", help="LLM provider for serialize phase"),
+        typer.Option(
+            "--provider-serialize", help="LLM provider for serialize phase (legacy)", hidden=True
+        ),
     ] = None,
     interactive: Annotated[
         bool | None,
@@ -1760,9 +1887,9 @@ def run(
                 default_noninteractive_prompt=default_noninteractive_prompt,
                 preview_fn=STAGE_PREVIEW_FNS.get(stage_name),
                 next_step_hint=next_step_hint,
-                provider_discuss=provider_discuss,
-                provider_summarize=provider_summarize,
-                provider_serialize=provider_serialize,
+                provider_discuss=provider_creative or provider_discuss,
+                provider_summarize=provider_balanced or provider_summarize,
+                provider_serialize=provider_structured or provider_serialize,
                 image_provider=image_provider,
                 image_budget=image_budget,
                 two_step=two_step,

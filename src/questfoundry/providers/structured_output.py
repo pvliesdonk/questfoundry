@@ -1,4 +1,29 @@
-"""Structured output strategies for different providers."""
+"""Structured output strategies for different providers.
+
+Strategy Selection History and Rationale
+-----------------------------------------
+All providers now use per-provider defaults selected by ``get_default_strategy()``:
+
+- **OpenAI**: ``TOOL`` (function_calling) — OpenAI's ``json_schema`` strict mode
+  requires all properties in ``required``, which breaks schemas with optional
+  fields (e.g., ``Field(default_factory=dict)``).
+- **Ollama**: ``JSON_MODE`` (json_schema) — the ``TOOL`` strategy returns ``None``
+  for complex nested schemas like ``BrainstormOutput`` and ``SeedOutput``.
+- **Anthropic / Google / others**: ``JSON_MODE`` (json_schema) — native JSON mode
+  works reliably for complex schemas.
+
+The two available strategies:
+
+- ``method="json_schema"`` (``JSON_MODE``): Uses the provider's native JSON mode
+  to constrain output to the schema. Efficient and consistent.
+- ``method="function_calling"`` (``TOOL``): Creates a synthetic tool whose
+  parameters match the schema, then forces the model to call it. Useful when
+  native JSON mode has compatibility issues (e.g., OpenAI strict mode).
+
+Earlier iterations tried a single global strategy for all providers, but
+provider-specific quirks made per-provider defaults necessary. See PR #480
+and PR #494 for the investigation history.
+"""
 
 from __future__ import annotations
 
