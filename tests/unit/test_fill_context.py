@@ -6,12 +6,14 @@ import pytest
 
 from questfoundry.graph.fill_context import (
     _extract_top_bigrams,
+    compute_is_ending,
     compute_lexical_diversity,
     compute_open_questions,
     derive_pacing,
     format_atmospheric_detail,
     format_dramatic_questions,
     format_dream_vision,
+    format_ending_guidance,
     format_entity_states,
     format_entry_states,
     format_grow_summary,
@@ -1049,6 +1051,42 @@ class TestLexicalDiversity:
         note = format_vocabulary_note(0.3, recent_prose=prose)
         assert "VOCABULARY ALERT" in note
         assert "seek fresh" in note
+
+
+# ---------------------------------------------------------------------------
+# Ending detection and guidance
+# ---------------------------------------------------------------------------
+
+
+class TestIsEnding:
+    """Tests for compute_is_ending."""
+
+    def test_passage_with_outgoing_choice_is_not_ending(self, fill_graph: Graph) -> None:
+        # Add a choice_from edge: passage::p_opening has an outgoing choice
+        fill_graph.create_node(
+            "choice::opening_to_explanation",
+            {"type": "choice", "raw_id": "opening_to_explanation"},
+        )
+        fill_graph.add_edge("choice_from", "choice::opening_to_explanation", "passage::p_opening")
+        assert compute_is_ending(fill_graph, "passage::p_opening") is False
+
+    def test_passage_without_outgoing_choice_is_ending(self, fill_graph: Graph) -> None:
+        # p_aftermath has no choice_from edges pointing to it
+        assert compute_is_ending(fill_graph, "passage::p_aftermath") is True
+
+
+class TestEndingGuidance:
+    """Tests for format_ending_guidance."""
+
+    def test_ending_returns_guidance(self) -> None:
+        guidance = format_ending_guidance(True)
+        assert "FINAL PASSAGE" in guidance
+        assert "Close the emotional arc" in guidance
+        assert "No new threads" in guidance
+        assert "Do NOT write 'The End'" in guidance
+
+    def test_non_ending_returns_empty(self) -> None:
+        assert format_ending_guidance(False) == ""
 
 
 # ---------------------------------------------------------------------------

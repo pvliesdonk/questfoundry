@@ -26,10 +26,12 @@ from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph.fill_context import (
+    compute_is_ending,
     compute_lexical_diversity,
     format_atmospheric_detail,
     format_dramatic_questions,
     format_dream_vision,
+    format_ending_guidance,
     format_entity_states,
     format_entry_states,
     format_grow_summary,
@@ -698,6 +700,7 @@ class FillStage:
             narrative_function = beat.get("narrative_function", "develop") if beat else "develop"
             window_size = _SLIDING_WINDOW_SIZES.get(narrative_function, 3)
 
+            is_ending = compute_is_ending(graph, passage_id)
             context = {
                 "voice_document": voice_context,
                 "story_identity": story_identity_context,
@@ -714,6 +717,7 @@ class FillStage:
                 "shadow_states": format_shadow_states(graph, passage_id, arc_id),
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
                 "vocabulary_note": vocabulary_note,
+                "ending_guidance": format_ending_guidance(is_ending),
                 "output_language_instruction": self._lang_instruction,
             }
 
