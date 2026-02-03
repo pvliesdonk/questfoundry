@@ -751,8 +751,9 @@ class FillStage:
                 # Track prose for lexical diversity monitoring
                 recent_prose.append(passage_output.prose)
                 if len(recent_prose) % _DIVERSITY_CHECK_INTERVAL == 0:
-                    ratio = compute_lexical_diversity(recent_prose[-_DIVERSITY_CHECK_INTERVAL:])
-                    vocabulary_note = format_vocabulary_note(ratio)
+                    window = recent_prose[-_DIVERSITY_CHECK_INTERVAL:]
+                    ratio = compute_lexical_diversity(window)
+                    vocabulary_note = format_vocabulary_note(ratio, recent_prose=window)
                     if vocabulary_note:
                         log.info("lexical_diversity_low", ratio=f"{ratio:.2f}")
 
