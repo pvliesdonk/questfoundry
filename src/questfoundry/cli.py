@@ -461,6 +461,7 @@ def _run_stage_command(
     resume_from: str | None = None,
     image_provider: str | None = None,
     image_budget: int = 0,
+    two_step: bool = True,
 ) -> None:
     """Common logic for running a stage command.
 
@@ -483,6 +484,7 @@ def _run_stage_command(
         provider_serialize: Optional provider override for serialize phase.
         resume_from: Phase name to resume execution from.
         image_provider: Image provider spec for DRESS stage (e.g., ``openai/gpt-image-1``).
+        two_step: Whether to use two-step prose generation in FILL stage.
     """
     log = get_logger(__name__)
 
@@ -512,6 +514,8 @@ def _run_stage_command(
         context["image_provider"] = image_provider
     if image_budget > 0:
         context["image_budget"] = image_budget
+    if stage_name == "fill":
+        context["two_step"] = two_step
 
     # Add phase progress callback (used by GROW, and optionally by other stages)
     def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
@@ -1211,6 +1215,14 @@ def fill(
         str | None,
         typer.Option("--resume-from", help="Resume from named phase (skips earlier phases)"),
     ] = None,
+    two_step: Annotated[
+        bool,
+        typer.Option(
+            "--two-step/--no-two-step",
+            help="Two-step prose generation: write prose first, then extract entities. "
+            "Improves quality by removing JSON constraints from creative output.",
+        ),
+    ] = True,
 ) -> None:
     """Run FILL stage - generate prose for all passages.
 
@@ -1241,6 +1253,7 @@ def fill(
         provider_summarize=provider_summarize,
         provider_serialize=provider_serialize,
         resume_from=resume_from,
+        two_step=two_step,
     )
 
 
@@ -1633,6 +1646,13 @@ def run(
             help="Max images to generate in DRESS stage (0=all selected briefs).",
         ),
     ] = 0,
+    two_step: Annotated[
+        bool,
+        typer.Option(
+            "--two-step/--no-two-step",
+            help="Two-step FILL prose generation (default: enabled).",
+        ),
+    ] = True,
 ) -> None:
     """Run multiple pipeline stages sequentially.
 
@@ -1745,6 +1765,7 @@ def run(
                 provider_serialize=provider_serialize,
                 image_provider=image_provider,
                 image_budget=image_budget,
+                two_step=two_step,
             )
 
             # SEED-specific message

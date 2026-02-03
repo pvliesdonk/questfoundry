@@ -301,7 +301,7 @@ class FillStage:
         self._size_profile = kwargs.get("size_profile")
         self._max_concurrency = kwargs.get("max_concurrency", 2)
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
-        self._two_step = kwargs.get("two_step", False)
+        self._two_step = kwargs.get("two_step", True)
         log.info("stage_start", stage="fill")
 
         phases = self._phase_order()
