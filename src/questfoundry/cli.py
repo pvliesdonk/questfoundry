@@ -2528,5 +2528,126 @@ def _check_project(project_path: Path) -> bool:
     return all_ok
 
 
+@app.command()
+def inspect(
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    json_output: Annotated[
+        bool,
+        typer.Option("--json", help="Output as JSON instead of Rich tables."),
+    ] = False,
+) -> None:
+    """Inspect project quality: prose, branching, coverage, and validation."""
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+
+    from questfoundry.inspection import inspect_project
+
+    report = inspect_project(project_path)
+
+    if json_output:
+        import dataclasses
+        import json
+
+        console.print(json.dumps(dataclasses.asdict(report), indent=2))
+        return
+
+    _render_inspection_report(report)
+
+
+def _render_inspection_report(report: Any) -> None:
+    """Render an InspectionReport using Rich tables and panels."""
+    s = report.summary
+    console.print()
+    console.print(f"[bold]Project Inspection: {s.project_name}[/bold]")
+    console.print(f"  Last stage: [cyan]{s.last_stage or 'none'}[/cyan]")
+    console.print(f"  Nodes: [bold]{s.total_nodes}[/bold]  Edges: [bold]{s.total_edges}[/bold]")
+    console.print()
+
+    # Node counts table
+    if s.node_counts:
+        table = Table(title="Node Counts")
+        table.add_column("Type", style="cyan")
+        table.add_column("Count", style="bold", justify="right")
+        for ntype, count in s.node_counts.items():
+            table.add_row(ntype, str(count))
+        console.print(table)
+        console.print()
+
+    # Prose stats
+    if report.prose:
+        p = report.prose
+        console.print("[bold]Prose Quality[/bold]")
+        console.print(
+            f"  Passages: [bold]{p.passages_with_prose}[/bold]/{p.total_passages} with prose"
+        )
+        if p.passages_with_prose:
+            console.print(
+                f"  Words: [bold]{p.total_words}[/bold] total, "
+                f"avg {p.avg_words:.0f}, range {p.min_words}-{p.max_words}"
+            )
+        if p.lexical_diversity is not None:
+            console.print(f"  Lexical diversity: [bold]{p.lexical_diversity:.3f}[/bold]")
+        if p.flagged_passages:
+            for fp in p.flagged_passages:
+                flag = fp.get("flag", "no prose")
+                console.print(f"  [yellow]![/yellow] {fp['id']}: {flag}")
+        console.print()
+
+    # Branching stats
+    if report.branching:
+        b = report.branching
+        console.print("[bold]Branching Structure[/bold]")
+        console.print(
+            f"  Choices: [bold]{b.total_choices}[/bold] "
+            f"({b.meaningful_choices} meaningful, {b.continue_choices} continue)"
+        )
+        console.print(
+            f"  Dilemmas: [bold]{b.total_dilemmas}[/bold] "
+            f"({b.fully_explored} fully explored, {b.partially_explored} partial)"
+        )
+        console.print(f"  Start passages: {b.start_passages}  Endings: {b.ending_passages}")
+        console.print()
+
+    # Coverage stats
+    c = report.coverage
+    if c.entity_count:
+        console.print("[bold]Coverage[/bold]")
+        entity_types_str = ", ".join(f"{t}: {n}" for t, n in c.entity_types.items())
+        console.print(f"  Entities: [bold]{c.entity_count}[/bold] ({entity_types_str})")
+        console.print(
+            f"  Codex: [bold]{c.codex_entries}[/bold] entries "
+            f"across {c.entities_with_codex} entities"
+        )
+        console.print(
+            f"  Illustrations: [bold]{c.illustration_briefs}[/bold] briefs, "
+            f"{c.illustration_nodes} rendered, {c.asset_files} asset files"
+        )
+        console.print()
+
+    # Validation checks
+    if report.validation_checks:
+        severity_icons = {
+            "pass": "[green]✓[/green]",
+            "warn": "[yellow]![/yellow]",
+            "fail": "[red]✗[/red]",
+        }
+        table = Table(title="Validation Checks")
+        table.add_column("Check", style="cyan")
+        table.add_column("", width=3)
+        table.add_column("Message")
+        for check in report.validation_checks:
+            icon = severity_icons.get(check["severity"], "?")
+            table.add_row(check["name"], icon, check.get("message", ""))
+        console.print(table)
+        console.print()
+
+
 if __name__ == "__main__":
     app()
