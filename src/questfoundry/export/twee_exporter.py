@@ -228,7 +228,7 @@ def _render_codex_passage(
 
     sorted_entries = sorted(codex_entries, key=lambda e: e.rank)
     for entry in sorted_entries:
-        entry_lines = [f"!! {entry.entity_id}", entry.content, ""]
+        entry_lines = [f"!! {entry.title}", entry.content, ""]
         if entry.visible_when:
             conditions = " and ".join(_codeword_var(cw) for cw in entry.visible_when)
             lines.append(f"<<if {conditions}>>")

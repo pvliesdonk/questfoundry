@@ -158,6 +158,7 @@ class DressStage:
         self._user_prompt: str = ""
         self._image_provider_spec: str | None = image_provider
         self._image_budget: int = 0
+        self._min_priority: int = 3
         self._max_concurrency: int = 2
         self._lang_instruction: str = ""
 
@@ -263,6 +264,7 @@ class DressStage:
         if image_provider is not None:
             self._image_provider_spec = image_provider
         self._image_budget = kwargs.get("image_budget", 0)
+        self._min_priority = kwargs.get("min_priority", 3)
         self._max_concurrency = kwargs.get("max_concurrency", 2)
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
 
@@ -870,6 +872,7 @@ class DressStage:
         project_path: Path,
         *,
         image_budget: int = 0,
+        min_priority: int = 3,
         force: bool = False,
         on_phase_progress: PhaseProgressFn | None = None,
         model: BaseChatModel | None = None,
@@ -882,6 +885,8 @@ class DressStage:
         Args:
             project_path: Path to the project directory.
             image_budget: Maximum number of images to generate (0 = unlimited).
+            min_priority: Only generate briefs with this priority or higher
+                (1=must-have, 2=important, 3=all). Default 3 = no filtering.
             force: If True, regenerate images even if illustrations already exist.
             on_phase_progress: Optional progress callback.
             model: Optional LLM for prompt distillation. Required for A1111
@@ -910,6 +915,7 @@ class DressStage:
 
         self.project_path = project_path
         self._image_budget = image_budget
+        self._min_priority = min_priority
         self._force_regenerate = force
 
         result = await self._phase_4_generate(
@@ -967,6 +973,17 @@ class DressStage:
                 phase="generate",
                 status="completed",
                 detail="no briefs selected",
+            )
+
+        # Filter by priority threshold (1=must-have, 2=important, 3=all)
+        if self._min_priority < 3:
+            before = len(selected_ids)
+            selected_ids = _filter_by_priority(graph, selected_ids, self._min_priority)
+            log.info(
+                "priority_filter_applied",
+                min_priority=self._min_priority,
+                before=before,
+                after=len(selected_ids),
             )
 
         # Apply budget: select top N briefs by priority (1 first, then 2, then 3)
@@ -1221,6 +1238,40 @@ def _create_cover_brief(graph: Graph) -> bool:
 # -------------------------------------------------------------------------
 
 
+def _filter_by_priority(
+    graph: Graph,
+    brief_ids: list[str],
+    priority_threshold: int,
+) -> list[str]:
+    """Keep only briefs with priority <= priority_threshold.
+
+    Priority uses an inverted scale: lower numbers are more important
+    (1=must-have, 2=important, 3=nice-to-have). A threshold of 2 keeps
+    priority 1 and 2, excluding 3.
+
+    Briefs missing from the graph default to priority 3.
+
+    Args:
+        graph: Story graph containing brief nodes.
+        brief_ids: All selected brief IDs.
+        priority_threshold: Maximum priority value to include (1-3).
+
+    Returns:
+        Filtered list of brief IDs.
+
+    Raises:
+        ValueError: If priority_threshold is not in [1, 3].
+    """
+    if not 1 <= priority_threshold <= 3:
+        msg = f"priority_threshold must be 1-3, got {priority_threshold}"
+        raise ValueError(msg)
+    return [
+        bid
+        for bid in brief_ids
+        if (graph.get_node(bid) or {}).get("priority", 3) <= priority_threshold
+    ]
+
+
 def _apply_image_budget(
     graph: Graph,
     brief_ids: list[str],
@@ -1425,7 +1476,19 @@ def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
         if ev:
             frag = ev.get("reference_prompt_fragment", "")
             if frag:
-                entity_fragments.append(f"{raw_eid}: {frag}")
+                # Include the display name so the distiller can match
+                # "Bailey" in the subject to "Bailey (ch_bailey): ..."
+                entity_node = graph.get_node(f"entity::{raw_eid}")
+                name = ""
+                if entity_node:
+                    concept = entity_node.get("concept", "")
+                    # Name is the first part before " —" or " -"
+                    for sep in (" \u2014 ", " - ", " \u2013 "):
+                        if sep in concept:
+                            name = concept.split(sep, 1)[0].strip()
+                            break
+                label = name if name else raw_eid
+                entity_fragments.append(f"{label}: {frag}")
 
     return ImageBrief(
         subject=brief.get("subject", ""),

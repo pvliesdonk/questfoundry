@@ -39,6 +39,17 @@ if TYPE_CHECKING:
 # Type alias for artifact preview functions
 PreviewFn = Callable[[dict[str, Any]], None]
 
+# Shared CLI option types (used across multiple commands)
+MinPriorityOption = Annotated[
+    int,
+    typer.Option(
+        "--min-priority",
+        min=1,
+        max=3,
+        help="Only generate images with this priority or higher (1=must-have, 2=important, 3=all).",
+    ),
+]
+
 app = typer.Typer(
     name="qf",
     help="QuestFoundry: Pipeline-driven interactive fiction generation.",
@@ -461,6 +472,7 @@ def _run_stage_command(
     resume_from: str | None = None,
     image_provider: str | None = None,
     image_budget: int = 0,
+    min_priority: int = 3,
     two_step: bool | None = None,
     language: str | None = None,
 ) -> None:
@@ -485,6 +497,7 @@ def _run_stage_command(
         provider_serialize: Optional provider override for serialize phase.
         resume_from: Phase name to resume execution from.
         image_provider: Image provider spec for DRESS stage (e.g., ``openai/gpt-image-1``).
+        min_priority: Only generate briefs with this priority or higher (1-3).
         two_step: Whether to use two-step prose generation in FILL stage.
         language: ISO 639-1 language code override (e.g., "nl", "ja").
     """
@@ -516,6 +529,8 @@ def _run_stage_command(
         context["image_provider"] = image_provider
     if image_budget > 0:
         context["image_budget"] = image_budget
+    if min_priority < 3:
+        context["min_priority"] = min_priority
     if stage_name == "fill" and two_step is not None:
         context["two_step"] = two_step
     if language:
@@ -1586,6 +1601,7 @@ def generate_images(
         int,
         typer.Option("--image-budget", help="Max images to generate (0=all selected briefs)."),
     ] = 0,
+    min_priority: MinPriorityOption = 3,
     force: Annotated[
         bool,
         typer.Option("--force", help="Regenerate images even if illustrations already exist."),
@@ -1669,6 +1685,7 @@ def generate_images(
         "generate_images_start",
         provider=resolved_provider,
         budget=image_budget,
+        min_priority=min_priority,
         distiller_llm=llm_provider_spec,
     )
 
@@ -1679,7 +1696,12 @@ def generate_images(
 
     def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
         detail_str = f" ({detail})" if detail else ""
-        status_icon = "[green]✓[/green]" if status == "completed" else "[red]✗[/red]"
+        if status == "completed":
+            status_icon = "[green]✓[/green]"
+        elif status == "failed":
+            status_icon = "[red]✗[/red]"
+        else:
+            status_icon = "[yellow]○[/yellow]"
         console.print(f"  {status_icon} {phase}{detail_str}")
 
     console.print()
@@ -1690,6 +1712,7 @@ def generate_images(
             stage.run_generate_only(
                 project_path,
                 image_budget=image_budget,
+                min_priority=min_priority,
                 force=force,
                 on_phase_progress=_on_phase_progress,
                 model=llm_model,
@@ -1808,6 +1831,7 @@ def run(
             help="Max images to generate in DRESS stage (0=all selected briefs).",
         ),
     ] = 0,
+    min_priority: MinPriorityOption = 3,
     two_step: Annotated[
         bool | None,
         typer.Option(
@@ -1931,6 +1955,7 @@ def run(
                 provider_serialize=provider_structured or provider_serialize,
                 image_provider=image_provider,
                 image_budget=image_budget,
+                min_priority=min_priority,
                 two_step=two_step,
                 language=language,
             )

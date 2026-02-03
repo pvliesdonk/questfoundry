@@ -26,6 +26,7 @@ from questfoundry.pipeline.stages.dress import (
     DressStageError,
     _apply_image_budget,
     _create_cover_brief,
+    _filter_by_priority,
     assemble_image_prompt,
     compute_structural_score,
     create_dress_stage,
@@ -206,7 +207,9 @@ class TestPhase0ArtDirection:
             llm_adjustment=0,
         )
         mock_codex_out = DressPhase2Output(
-            entries=[CodexEntry(rank=1, visible_when=[], content="Base knowledge.")]
+            entries=[
+                CodexEntry(title="Test Entity", rank=1, visible_when=[], content="Base knowledge.")
+            ]
         )
 
         with (
@@ -904,8 +907,14 @@ class TestPhase1Briefs:
 def mock_codex_output() -> DressPhase2Output:
     return DressPhase2Output(
         entries=[
-            CodexEntry(rank=1, visible_when=[], content="A young scholar of the old academy."),
             CodexEntry(
+                title="Aldric",
+                rank=1,
+                visible_when=[],
+                content="A young scholar of the old academy.",
+            ),
+            CodexEntry(
+                title="Aldric's Secret",
                 rank=2,
                 visible_when=["met_aldric"],
                 content="The scholar secretly studies forbidden texts.",
@@ -1159,6 +1168,91 @@ class TestApplyImageBudget:
             budget=1,
         )
         assert result == ["illustration_brief::real"]
+
+
+class TestFilterByPriority:
+    """Tests for _filter_by_priority helper."""
+
+    def _make_graph_with_briefs(self, priorities: dict[str, int]) -> Graph:
+        """Create a graph with briefs at given priorities."""
+        g = Graph()
+        for bid, priority in priorities.items():
+            g.create_node(bid, {"type": "illustration_brief", "priority": priority})
+        return g
+
+    def test_keeps_high_priority(self) -> None:
+        """priority_threshold=2 keeps priority 1 and 2, excludes 3."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::a": 1,
+                "illustration_brief::b": 2,
+                "illustration_brief::c": 3,
+            }
+        )
+        result = _filter_by_priority(
+            g,
+            ["illustration_brief::a", "illustration_brief::b", "illustration_brief::c"],
+            priority_threshold=2,
+        )
+        assert result == ["illustration_brief::a", "illustration_brief::b"]
+
+    def test_must_have_only(self) -> None:
+        """priority_threshold=1 keeps only priority 1."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::a": 1,
+                "illustration_brief::b": 2,
+                "illustration_brief::c": 1,
+            }
+        )
+        result = _filter_by_priority(
+            g,
+            ["illustration_brief::a", "illustration_brief::b", "illustration_brief::c"],
+            priority_threshold=1,
+        )
+        assert result == ["illustration_brief::a", "illustration_brief::c"]
+
+    def test_all_priorities(self) -> None:
+        """priority_threshold=3 keeps everything (no filtering)."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::a": 1,
+                "illustration_brief::b": 3,
+            }
+        )
+        all_ids = ["illustration_brief::a", "illustration_brief::b"]
+        result = _filter_by_priority(g, all_ids, priority_threshold=3)
+        assert result == all_ids
+
+    def test_missing_node_defaults_to_low_priority(self) -> None:
+        """Briefs not in graph default to priority 3 (excluded at priority_threshold=2)."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::real": 1,
+            }
+        )
+        result = _filter_by_priority(
+            g,
+            ["illustration_brief::real", "illustration_brief::missing"],
+            priority_threshold=2,
+        )
+        assert result == ["illustration_brief::real"]
+
+    def test_preserves_input_order(self) -> None:
+        """Filtered list preserves original ordering."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::z": 1,
+                "illustration_brief::a": 2,
+                "illustration_brief::m": 1,
+            }
+        )
+        result = _filter_by_priority(
+            g,
+            ["illustration_brief::z", "illustration_brief::a", "illustration_brief::m"],
+            priority_threshold=1,
+        )
+        assert result == ["illustration_brief::z", "illustration_brief::m"]
 
 
 # ---------------------------------------------------------------------------

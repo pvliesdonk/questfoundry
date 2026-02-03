@@ -19,6 +19,7 @@ system: |
   Return a JSON object with:
 
   **entries** (list of objects):
+  - title: Short display title for this entry (e.g., character name, location name, faction name)
   - rank: Display order (1 = base knowledge, higher = deeper revelation)
   - visible_when: List of codeword IDs that must be unlocked to see this entry (empty for rank 1)
   - content: Diegetic text — written in the story's voice, not meta-commentary

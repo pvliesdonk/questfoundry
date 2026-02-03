@@ -110,12 +110,14 @@ class TestIllustration:
 
 class TestCodexEntry:
     def test_valid_base_entry(self) -> None:
-        entry = CodexEntry(rank=1, content="A traveling scholar.")
+        entry = CodexEntry(title="Aldric", rank=1, content="A traveling scholar.")
         assert entry.visible_when == []
         assert entry.rank == 1
+        assert entry.title == "Aldric"
 
     def test_gated_entry(self) -> None:
         entry = CodexEntry(
+            title="Aldric",
             rank=2,
             visible_when=["met_aldric"],
             content="Claims to be a former court advisor.",
@@ -124,15 +126,15 @@ class TestCodexEntry:
 
     def test_rank_zero_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            CodexEntry(rank=0, content="content")
+            CodexEntry(title="Test", rank=0, content="content")
 
     def test_negative_rank_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            CodexEntry(rank=-1, content="content")
+            CodexEntry(title="Test", rank=-1, content="content")
 
     def test_empty_content_rejected(self) -> None:
         with pytest.raises(ValidationError):
-            CodexEntry(rank=1, content="")
+            CodexEntry(title="Test", rank=1, content="")
 
 
 # ---------------------------------------------------------------------------
@@ -369,8 +371,13 @@ class TestDressPhase2Output:
     def test_valid_phase2(self) -> None:
         output = DressPhase2Output(
             entries=[
-                CodexEntry(rank=1, content="A traveling scholar."),
-                CodexEntry(rank=2, visible_when=["met_aldric"], content="Former court advisor."),
+                CodexEntry(title="Aldric", rank=1, content="A traveling scholar."),
+                CodexEntry(
+                    title="Aldric's Past",
+                    rank=2,
+                    visible_when=["met_aldric"],
+                    content="Former court advisor.",
+                ),
             ],
         )
         assert len(output.entries) == 2
@@ -430,7 +437,9 @@ class TestRoundtrip:
         assert restored == ad
 
     def test_codex_entry_roundtrip(self) -> None:
-        entry = CodexEntry(rank=2, visible_when=["met_aldric"], content="Former court advisor.")
+        entry = CodexEntry(
+            title="Aldric", rank=2, visible_when=["met_aldric"], content="Former court advisor."
+        )
         data = entry.model_dump()
         restored = CodexEntry.model_validate(data)
         assert restored == entry

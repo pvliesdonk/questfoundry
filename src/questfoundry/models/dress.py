@@ -79,6 +79,10 @@ class CodexEntry(BaseModel):
     more as they unlock codewords. Linked to entity via HasEntry edge.
     """
 
+    title: str = Field(
+        min_length=1,
+        description="Short display title for this entry (e.g., character name, location name)",
+    )
     rank: int = Field(ge=1, description="Display order (1 = base knowledge, higher = deeper)")
     visible_when: list[str] = Field(
         default_factory=list,

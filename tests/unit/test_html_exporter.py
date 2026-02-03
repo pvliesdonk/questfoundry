@@ -184,6 +184,7 @@ class TestHtmlExporter:
             codex_entries=[
                 ExportCodexEntry(
                     entity_id="Ancient Sword",
+                    title="Ancient Sword",
                     rank=1,
                     visible_when=["codeword::sword_found"],
                     content="A legendary blade.",
@@ -209,7 +210,7 @@ class TestHtmlExporter:
             ],
             choices=[],
             codex_entries=[
-                ExportCodexEntry(entity_id="Lore", rank=1, content="Some lore."),
+                ExportCodexEntry(entity_id="Lore", title="Lore", rank=1, content="Some lore."),
             ],
         )
         exporter = HtmlExporter()
@@ -285,7 +286,9 @@ class TestHtmlExporter:
                 ExportChoice(from_passage="p1", to_passage="p2", label="Betreed het kasteel"),
             ],
             codex_entries=[
-                ExportCodexEntry(entity_id="Zwaard", rank=1, content="Een legendarisch zwaard."),
+                ExportCodexEntry(
+                    entity_id="Zwaard", title="Zwaard", rank=1, content="Een legendarisch zwaard."
+                ),
             ],
         )
         exporter = HtmlExporter()

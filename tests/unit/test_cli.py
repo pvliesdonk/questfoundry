@@ -1190,8 +1190,10 @@ def test_dream_help_shows_role_provider_flags() -> None:
     assert "--provider-discuss" not in output
 
 
-def test_run_help_shows_role_provider_flags() -> None:
+def test_run_help_shows_role_provider_flags(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test run --help shows role-based provider flags (not legacy)."""
+    # Run command has many options; Rich truncates help at narrow widths
+    monkeypatch.setenv("COLUMNS", "200")
     result = runner.invoke(app, ["run", "--help"])
     output = _strip_ansi(result.stdout)
 
