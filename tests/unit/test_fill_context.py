@@ -436,6 +436,53 @@ class TestFormatShadowStates:
         assert "branch_b" not in result
         assert "branch_ab" not in result
 
+    def test_empty_agnostic_for_returns_empty(self) -> None:
+        """Beat with path_agnostic_for: [] should not show shadow arcs."""
+        g = Graph.empty()
+        g.create_node("dilemma::d_a", {"type": "dilemma", "raw_id": "d_a"})
+        g.create_node(
+            "path::a1",
+            {"type": "path", "raw_id": "a1", "dilemma_id": "d_a", "is_canonical": True},
+        )
+        g.create_node(
+            "path::a2",
+            {"type": "path", "raw_id": "a2", "dilemma_id": "d_a", "is_canonical": False},
+        )
+        g.create_node(
+            "beat::not_shared",
+            {
+                "type": "beat",
+                "raw_id": "not_shared",
+                "summary": "Not shared",
+                "path_agnostic_for": [],
+            },
+        )
+        g.create_node(
+            "passage::p_not_shared",
+            {"type": "passage", "raw_id": "p_not_shared", "from_beat": "beat::not_shared"},
+        )
+        g.add_edge("passage_from", "passage::p_not_shared", "beat::not_shared")
+        g.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "paths": ["a1"],
+                "sequence": ["beat::not_shared"],
+            },
+        )
+        g.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "paths": ["a2"],
+                "sequence": ["beat::not_shared"],
+            },
+        )
+        result = format_shadow_states(g, "passage::p_not_shared", "arc::spine")
+        assert result == ""
+
     def test_multi_dilemma_agnostic(self) -> None:
         """Beat agnostic for both dilemmas should see all shadow arcs."""
         g = Graph.empty()
