@@ -294,3 +294,168 @@ class TestRunDiscussPhase:
 
         assert calls == 1
         assert tokens == 200
+
+
+class TestInteractiveMode:
+    """Tests for interactive multi-turn conversation mode."""
+
+    @pytest.mark.asyncio
+    @patch("questfoundry.agents.discuss.create_discuss_agent")
+    async def test_interactive_multi_turn_conversation(self, mock_create: MagicMock) -> None:
+        """Interactive mode processes multiple turns before /done."""
+        mock_agent = AsyncMock()
+        # Each turn returns the AI response
+        mock_agent.ainvoke.return_value = {"messages": [AIMessage(content="Turn response")]}
+        mock_create.return_value = mock_agent
+
+        # User provides two messages then exits
+        inputs = iter(["follow-up 1", "follow-up 2", "/done"])
+        user_input_fn = AsyncMock(side_effect=lambda: next(inputs))
+        on_assistant = MagicMock()
+
+        _messages, calls, _tokens = await run_discuss_phase(
+            model=MagicMock(),
+            tools=[],
+            user_prompt="Initial idea",
+            interactive=True,
+            user_input_fn=user_input_fn,
+            on_assistant_message=on_assistant,
+        )
+
+        # 3 turns: initial + 2 follow-ups (third input is /done, exits before invoke)
+        assert mock_agent.ainvoke.call_count == 3
+        assert calls == 3  # One AIMessage per turn
+
+    @pytest.mark.asyncio
+    @patch("questfoundry.agents.discuss.create_discuss_agent")
+    async def test_interactive_exit_on_done_command(self, mock_create: MagicMock) -> None:
+        """Interactive mode exits on /done, /quit, /exit commands."""
+        for exit_cmd in ["/done", "/quit", "/exit"]:
+            mock_agent = AsyncMock()
+            mock_agent.ainvoke.return_value = {"messages": [AIMessage(content="Response")]}
+            mock_create.return_value = mock_agent
+
+            user_input_fn = AsyncMock(return_value=exit_cmd)
+            on_assistant = MagicMock()
+
+            await run_discuss_phase(
+                model=MagicMock(),
+                tools=[],
+                user_prompt="Test",
+                interactive=True,
+                user_input_fn=user_input_fn,
+                on_assistant_message=on_assistant,
+            )
+
+            # Only 1 turn (initial) — exit command prevents second invoke
+            assert mock_agent.ainvoke.call_count == 1, f"Failed for {exit_cmd}"
+
+    @pytest.mark.asyncio
+    @patch("questfoundry.agents.discuss.create_discuss_agent")
+    async def test_interactive_exit_on_empty_input(self, mock_create: MagicMock) -> None:
+        """Interactive mode exits on empty input or None."""
+        for empty_input in ["", "  ", None]:
+            mock_agent = AsyncMock()
+            mock_agent.ainvoke.return_value = {"messages": [AIMessage(content="Response")]}
+            mock_create.return_value = mock_agent
+
+            user_input_fn = AsyncMock(return_value=empty_input)
+            on_assistant = MagicMock()
+
+            await run_discuss_phase(
+                model=MagicMock(),
+                tools=[],
+                user_prompt="Test",
+                interactive=True,
+                user_input_fn=user_input_fn,
+                on_assistant_message=on_assistant,
+            )
+
+            assert mock_agent.ainvoke.call_count == 1, f"Failed for {empty_input!r}"
+
+    @pytest.mark.asyncio
+    async def test_interactive_without_input_fn_raises(self) -> None:
+        """Interactive mode without user_input_fn raises ValueError."""
+        with pytest.raises(ValueError, match="user_input_fn"):
+            await run_discuss_phase(
+                model=MagicMock(),
+                tools=[],
+                user_prompt="Test",
+                interactive=True,
+                user_input_fn=None,
+                on_assistant_message=MagicMock(),
+            )
+
+    @pytest.mark.asyncio
+    async def test_interactive_without_assistant_callback_raises(self) -> None:
+        """Interactive mode without on_assistant_message raises ValueError."""
+        with pytest.raises(ValueError, match="on_assistant_message"):
+            await run_discuss_phase(
+                model=MagicMock(),
+                tools=[],
+                user_prompt="Test",
+                interactive=True,
+                user_input_fn=AsyncMock(return_value="/done"),
+                on_assistant_message=None,
+            )
+
+    @pytest.mark.asyncio
+    @patch("questfoundry.agents.discuss.create_discuss_agent")
+    async def test_interactive_callbacks_invoked(self, mock_create: MagicMock) -> None:
+        """on_assistant_message, on_llm_start, on_llm_end are called each turn."""
+        mock_agent = AsyncMock()
+        mock_agent.ainvoke.return_value = {"messages": [AIMessage(content="Hello!")]}
+        mock_create.return_value = mock_agent
+
+        user_input_fn = AsyncMock(return_value="/done")
+        on_assistant = MagicMock()
+        on_start = MagicMock()
+        on_end = MagicMock()
+
+        await run_discuss_phase(
+            model=MagicMock(),
+            tools=[],
+            user_prompt="Test",
+            interactive=True,
+            user_input_fn=user_input_fn,
+            on_assistant_message=on_assistant,
+            on_llm_start=on_start,
+            on_llm_end=on_end,
+        )
+
+        # All callbacks invoked once for the single turn
+        on_assistant.assert_called_once_with("Hello!")
+        on_start.assert_called_once_with("discuss")
+        on_end.assert_called_once_with("discuss")
+
+    @pytest.mark.asyncio
+    @patch("questfoundry.agents.discuss.create_discuss_agent")
+    async def test_interactive_metrics_across_turns(self, mock_create: MagicMock) -> None:
+        """Token and call counts aggregate correctly across turns."""
+        ai_msg_1 = AIMessage(content="Turn 1")
+        ai_msg_1.usage_metadata = {"total_tokens": 100}
+        ai_msg_2 = AIMessage(content="Turn 2")
+        ai_msg_2.usage_metadata = {"total_tokens": 150}
+
+        mock_agent = AsyncMock()
+        mock_agent.ainvoke.side_effect = [
+            {"messages": [ai_msg_1]},
+            {"messages": [ai_msg_2]},
+        ]
+        mock_create.return_value = mock_agent
+
+        inputs = iter(["continue", "/done"])
+        user_input_fn = AsyncMock(side_effect=lambda: next(inputs))
+        on_assistant = MagicMock()
+
+        _messages, calls, tokens = await run_discuss_phase(
+            model=MagicMock(),
+            tools=[],
+            user_prompt="Test",
+            interactive=True,
+            user_input_fn=user_input_fn,
+            on_assistant_message=on_assistant,
+        )
+
+        assert calls == 2
+        assert tokens == 250
