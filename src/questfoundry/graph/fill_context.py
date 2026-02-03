@@ -1095,7 +1095,13 @@ def format_introduction_guidance(entity_names: list[str]) -> str:
     """
     if not entity_names:
         return ""
-    names_list = ", ".join(f"**{name}**" for name in entity_names)
+    bold_names = [f"**{name}**" for name in entity_names]
+    if len(bold_names) == 1:
+        names_list = bold_names[0]
+    elif len(bold_names) == 2:
+        names_list = f"{bold_names[0]} and {bold_names[1]}"
+    else:
+        names_list = ", ".join(bold_names[:-1]) + f", and {bold_names[-1]}"
     return (
         f"## Character Introduction — First Appearance\n\n"
         f"This passage introduces {names_list} for the first time. "

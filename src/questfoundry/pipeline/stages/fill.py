@@ -25,6 +25,7 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
+from questfoundry.graph.context import strip_scope_prefix
 from questfoundry.graph.fill_context import (
     compute_first_appearances,
     compute_is_ending,
@@ -880,7 +881,10 @@ class FillStage:
             # Compute first-appearance entity names for introduction guidance
             arc_order = arc_passage_orders.get(arc_id, [])
             first_eids = compute_first_appearances(graph, passage_id, arc_order)
-            first_names = [(graph.get_node(eid) or {}).get("raw_id", eid) for eid in first_eids]
+            first_names = [
+                (graph.get_node(eid) or {}).get("raw_id", strip_scope_prefix(eid))
+                for eid in first_eids
+            ]
             context = {
                 "voice_document": voice_context,
                 "story_identity": story_identity_context,

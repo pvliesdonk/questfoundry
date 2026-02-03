@@ -1217,7 +1217,10 @@ class TestIntroductionGuidance:
         assert "**butler**" in result
         assert "sensory detail" in result
 
-    def test_multiple_names_listed(self) -> None:
+    def test_two_names_uses_and(self) -> None:
         result = format_introduction_guidance(["butler", "detective"])
-        assert "**butler**" in result
-        assert "**detective**" in result
+        assert "**butler** and **detective**" in result
+
+    def test_three_names_uses_oxford_comma(self) -> None:
+        result = format_introduction_guidance(["butler", "detective", "maid"])
+        assert "**butler**, **detective**, and **maid**" in result
