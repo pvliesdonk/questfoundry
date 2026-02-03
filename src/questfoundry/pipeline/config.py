@@ -247,6 +247,33 @@ class ResearchToolsConfig:
 
 
 @dataclass
+class FillConfig:
+    """Configuration for FILL stage behaviour.
+
+    Attributes:
+        two_step: Use two-step prose generation (write prose first, then
+            extract entities). Improves quality by removing JSON constraints
+            from creative output.
+    """
+
+    two_step: bool = True
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> FillConfig:
+        """Create config from dictionary.
+
+        Args:
+            data: Dictionary with fill configuration fields.
+
+        Returns:
+            FillConfig instance.
+        """
+        return cls(
+            two_step=data.get("two_step", True),
+        )
+
+
+@dataclass
 class ProjectConfig:
     """Configuration for a QuestFoundry project."""
 
@@ -259,6 +286,7 @@ class ProjectConfig:
     stages: list[str] = field(default_factory=lambda: list(DEFAULT_STAGES))
     gates: list[GateConfig] = field(default_factory=list)
     research_tools: ResearchToolsConfig = field(default_factory=ResearchToolsConfig)
+    fill: FillConfig = field(default_factory=FillConfig)
     language: str = "en"
 
     @classmethod
@@ -302,6 +330,10 @@ class ProjectConfig:
         research_tools_data = data.get("research_tools", {})
         research_tools = ResearchToolsConfig.from_dict(research_tools_data)
 
+        # Parse fill stage config
+        fill_data = data.get("fill", {})
+        fill_config = FillConfig.from_dict(fill_data)
+
         return cls(
             name=data.get("name", "unnamed"),
             version=data.get("version", 1),
@@ -310,6 +342,7 @@ class ProjectConfig:
             stages=stages,
             gates=gates,
             research_tools=research_tools,
+            fill=fill_config,
             language=data.get("language", "en"),
         )
 
