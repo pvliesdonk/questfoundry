@@ -613,25 +613,30 @@ class FillStage:
         prose_text: str,
         passage_id: str,
         entity_states: str,
+        valid_entity_ids: list[str] | None = None,
     ) -> tuple[FillExtractOutput, int, int]:
         """Extract entity updates from generated prose.
 
-        Uses the serialize-role model at low temperature with structured
-        output for reliable extraction of entity micro-details.
+        Uses ``creative=False`` to route through the serialize-role provider
+        at low temperature, producing reliable structured output.
 
         Args:
-            model: Fallback model (used when serialize_model is not set).
+            model: Chat model for the extraction call.
             prose_text: The generated prose to analyze.
             passage_id: Passage ID for the context.
             entity_states: Formatted entity states for the prompt.
+            valid_entity_ids: Explicit list of valid entity IDs to prevent
+                phantom ID errors.
 
         Returns:
             Tuple of (FillExtractOutput, llm_calls, tokens_used).
         """
+        ids_text = ", ".join(valid_entity_ids) if valid_entity_ids else "(none)"
         context = {
             "passage_id": passage_id,
             "prose_text": prose_text,
             "entity_states": entity_states,
+            "valid_entity_ids": ids_text,
         }
         return await self._fill_llm_call(
             model,
@@ -943,17 +948,24 @@ class FillStage:
                 if self._two_step:
                     # Skip extraction for micro_beats (unlikely to have entity details)
                     if scene_type != "micro_beat":
+                        # Build valid entity ID list for phantom-ID prevention
+                        entity_ids = [
+                            (graph.get_node(eid) or {}).get("raw_id", eid)
+                            for eid in passage.get("entities", [])
+                            if graph.has_node(eid)
+                        ]
                         try:
                             extract_out, ex_calls, ex_tokens = await self._fill_extract_call(
                                 model,
                                 prose,
                                 passage.get("raw_id", passage_id),
                                 format_entity_states(graph, passage_id),
+                                valid_entity_ids=entity_ids,
                             )
                             total_llm_calls += ex_calls
                             total_tokens += ex_tokens
                             entity_updates = extract_out.entity_updates
-                        except Exception:
+                        except (ValidationError, ValueError, RuntimeError):
                             log.warning(
                                 "entity_extract_failed",
                                 passage_id=passage_id,

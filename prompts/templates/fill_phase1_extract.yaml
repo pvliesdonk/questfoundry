@@ -9,8 +9,11 @@ system: |
   ## Entity Reference
   {entity_states}
 
+  ### Valid Entity IDs
+  {valid_entity_ids}
+
   ## Rules
-  - Only reference EXISTING entity IDs from the list above
+  - Only use entity IDs from the Valid Entity IDs list above — do NOT invent new IDs
   - Only extract details that are NEW — not restating what is already known
   - Focus on concrete, observable details: physical appearance, habits, voice
     qualities, distinctive objects, sensory markers

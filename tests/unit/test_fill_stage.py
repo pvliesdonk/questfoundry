@@ -1224,6 +1224,7 @@ class TestTwoStepFill:
             prose_text: str,  # noqa: ARG001
             passage_id: str,  # noqa: ARG001
             entity_states: str,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             return (
                 FillExtractOutput(
@@ -1311,6 +1312,7 @@ class TestTwoStepFill:
             prose_text: str,  # noqa: ARG001
             passage_id: str,  # noqa: ARG001
             entity_states: str,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             nonlocal extract_called
             extract_called = True
@@ -1371,6 +1373,7 @@ class TestTwoStepFill:
             prose_text: str,  # noqa: ARG001
             passage_id: str,  # noqa: ARG001
             entity_states: str,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
         ) -> tuple:
             raise RuntimeError("Extract LLM call failed")
 
@@ -1383,3 +1386,25 @@ class TestTwoStepFill:
         p1 = graph.get_node("passage::p1")
         assert p1 is not None
         assert p1["prose"] == "Prose for p1."
+
+    @pytest.mark.asyncio
+    async def test_sentinel_mid_prose_not_detected(self) -> None:
+        """Sentinel appearing mid-response is NOT treated as incompatible."""
+        stage = FillStage()
+        stage._two_step = True
+
+        mock_result = MagicMock()
+        mock_result.content = "The sign read INCOMPATIBLE_STATES: a warning from a forgotten era."
+        mock_result.response_metadata = {}
+        mock_result.usage_metadata = None
+
+        model = AsyncMock()
+        model.ainvoke = AsyncMock(return_value=mock_result)
+
+        prose, flag, _reason, _calls, _tokens = await stage._fill_prose_call(
+            model, {"passage_id": "p1"}
+        )
+
+        # startswith() correctly ignores sentinel appearing mid-text
+        assert flag == "ok"
+        assert "INCOMPATIBLE_STATES" in prose
