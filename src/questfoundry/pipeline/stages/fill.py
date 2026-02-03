@@ -690,7 +690,7 @@ class FillStage:
             model=model,
             tools=tools,
             user_prompt="Research voice and style guidance for this story.",
-            max_iterations=8,
+            max_iterations=25,
             interactive=False,
             system_prompt=system_prompt,
             stage_name="fill",
