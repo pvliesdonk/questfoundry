@@ -283,9 +283,9 @@ class A1111ImageProvider:
             "RULES:\n"
             "- ENTITY EXPANSION: SD does not know character names. Replace names "
             "in the Subject with their visual descriptions from the Entities "
-            'field. Each entity is listed as "Name (id): visual description". '
+            'field. Each entity is listed as "Name: visual description". '
             "Match names in the Subject to entity names, then use the visual "
-            'tags (e.g., "Bailey slides..." + "Bailey (ch_bailey): club owner, '
+            'tags (e.g., "Bailey slides..." + "Bailey: club owner, '
             'gray pinstripe suit" → "club owner, gray pinstripe suit, '
             'sliding tab").\n'
             "- Each tag is 1-4 words, comma-separated.\n"

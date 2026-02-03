@@ -1476,7 +1476,7 @@ def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
                         if sep in concept:
                             name = concept.split(sep, 1)[0].strip()
                             break
-                label = f"{name} ({raw_eid})" if name else raw_eid
+                label = name if name else raw_eid
                 entity_fragments.append(f"{label}: {frag}")
 
     return ImageBrief(
