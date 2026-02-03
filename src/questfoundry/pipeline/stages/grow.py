@@ -182,6 +182,7 @@ class GrowStage:
             (self._phase_8b_codewords, "codewords"),
             (self._phase_8c_overlays, "overlays"),
             (self._phase_9_choices, "choices"),
+            (self._phase_9b_fork_beats, "fork_beats"),
             (self._phase_10_validation, "validation"),
             (self._phase_11_prune, "prune"),
         ]
@@ -2252,6 +2253,238 @@ class GrowStage:
             detail=f"Created {choice_count} choices ({len(multi_successors)} divergence points){prologue_note}",
             llm_calls=single_llm_calls + llm_calls,
             tokens_used=single_tokens + tokens,
+        )
+
+    async def _phase_9b_fork_beats(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 9b: Insert reconvergent forks at linear stretches.
+
+        Detects linear stretches (3+ consecutive single-outgoing passages)
+        and asks the LLM to propose forks where the player chooses between
+        two approaches that reconverge at a later passage.
+
+        For each accepted fork:
+        - Remove the existing choice from fork_at to its successor
+        - Create 2 synthetic passages (option A and option B)
+        - Create 4 choice nodes wiring fork_at → options → reconverge_at
+        """
+        from questfoundry.models.grow import Phase9bOutput
+
+        passages = graph.get_nodes_by_type("passage")
+        choices = graph.get_nodes_by_type("choice")
+        if not passages or not choices:
+            return GrowPhaseResult(
+                phase="fork_beats",
+                status="completed",
+                detail="No passages or choices to analyze",
+            )
+
+        # Build outgoing count and adjacency from choices
+        choice_from_edges = graph.get_edges(edge_type="choice_from")
+        outgoing_count: dict[str, int] = {}
+        for edge in choice_from_edges:
+            source = edge["to"]
+            outgoing_count[source] = outgoing_count.get(source, 0) + 1
+
+        adjacency: dict[str, list[str]] = {}
+        choice_lookup: dict[tuple[str, str], str] = {}  # (from, to) → choice_id
+        for cid, cdata in choices.items():
+            from_p = cdata.get("from_passage", "")
+            to_p = cdata.get("to_passage", "")
+            if from_p and to_p:
+                adjacency.setdefault(from_p, []).append(to_p)
+                choice_lookup[(from_p, to_p)] = cid
+
+        # Find start passages
+        choice_to_edges = graph.get_edges(edge_type="choice_to")
+        has_incoming = {e["to"] for e in choice_to_edges}
+        starts = [pid for pid in passages if pid not in has_incoming]
+
+        # Walk graph to find linear stretches (3+ consecutive single-outgoing)
+        stretches: list[list[str]] = []
+        visited: set[str] = set()
+
+        for start in starts:
+            current: str | None = start
+            while current is not None and current not in visited:
+                visited.add(current)
+                if outgoing_count.get(current, 0) != 1:
+                    successors = adjacency.get(current, [])
+                    current = successors[0] if len(successors) == 1 else None
+                    continue
+
+                # Start a potential linear stretch
+                stretch = [current]
+                succs = adjacency.get(current, [])
+                nxt: str | None = succs[0] if succs else None
+                while nxt is not None and nxt not in visited and outgoing_count.get(nxt, 0) == 1:
+                    visited.add(nxt)
+                    stretch.append(nxt)
+                    successors = adjacency.get(nxt, [])
+                    nxt = successors[0] if successors else None
+                # Include the final passage (may have 0 outgoing or multi)
+                if nxt is not None and nxt not in visited:
+                    stretch.append(nxt)
+                    visited.add(nxt)
+
+                if len(stretch) >= 3:
+                    stretches.append(stretch)
+
+                current = nxt
+
+        if not stretches:
+            return GrowPhaseResult(
+                phase="fork_beats",
+                status="completed",
+                detail="No linear stretches found (3+ consecutive)",
+            )
+
+        # Build context for LLM
+        stretch_lines: list[str] = []
+        all_passage_ids: list[str] = []
+        for i, stretch in enumerate(stretches[:10]):  # Cap context at 10 stretches
+            stretch_lines.append(f"\nStretch {i + 1} ({len(stretch)} passages):")
+            for pid in stretch:
+                summary = passages.get(pid, {}).get("summary", "")
+                stretch_lines.append(f'  - {pid}: "{summary}"')
+                all_passage_ids.append(pid)
+
+        context = {
+            "stretch_context": "\n".join(stretch_lines),
+            "valid_passage_ids": ", ".join(sorted(set(all_passage_ids))),
+            "output_language_instruction": self._lang_instruction,
+        }
+
+        from questfoundry.graph.grow_validators import validate_phase9b_output
+
+        validator = partial(
+            validate_phase9b_output,
+            valid_passage_ids=set(all_passage_ids),
+        )
+
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model,
+                "grow_phase9b_fork_beats",
+                context,
+                Phase9bOutput,
+                semantic_validator=validator,
+            )
+        except GrowStageError:
+            log.warning("phase9b_fork_beats_failed", fallback="no forks")
+            return GrowPhaseResult(
+                phase="fork_beats",
+                status="completed",
+                detail="LLM call failed, no forks inserted",
+            )
+
+        # Cap at 5 proposals
+        proposals = result.proposals[:5]
+        forks_inserted = 0
+
+        for proposal in proposals:
+            fork_at = proposal.fork_at
+            reconverge_at = proposal.reconverge_at
+
+            # Validate IDs exist
+            if fork_at not in passages or reconverge_at not in passages:
+                log.warning(
+                    "phase9b_invalid_ids",
+                    fork_at=fork_at,
+                    reconverge_at=reconverge_at,
+                )
+                continue
+
+            # Find the existing choice from fork_at to its next passage
+            fork_successors = adjacency.get(fork_at, [])
+            if len(fork_successors) != 1:
+                log.warning("phase9b_not_single_outgoing", passage=fork_at)
+                continue
+
+            next_passage = fork_successors[0]
+            old_choice_id = choice_lookup.get((fork_at, next_passage))
+            if not old_choice_id:
+                log.warning("phase9b_no_choice_found", from_p=fork_at, to_p=next_passage)
+                continue
+
+            # Remove old choice node and its edges
+            graph.delete_node(old_choice_id, cascade=True)
+
+            # Create synthetic passages for option A and option B
+            raw_id = fork_at.removeprefix("passage::")
+            opt_a_id = f"passage::fork_{raw_id}_a"
+            opt_b_id = f"passage::fork_{raw_id}_b"
+
+            graph.create_node(
+                opt_a_id,
+                {
+                    "type": "passage",
+                    "raw_id": f"fork_{raw_id}_a",
+                    "is_synthetic": True,
+                    "summary": proposal.option_a_summary,
+                },
+            )
+            graph.create_node(
+                opt_b_id,
+                {
+                    "type": "passage",
+                    "raw_id": f"fork_{raw_id}_b",
+                    "is_synthetic": True,
+                    "summary": proposal.option_b_summary,
+                },
+            )
+
+            # Create 4 choice nodes
+            for opt_id, label, suffix in [
+                (opt_a_id, proposal.label_a, "fork_a"),
+                (opt_b_id, proposal.label_b, "fork_b"),
+            ]:
+                choice_id = f"choice::{raw_id}__{suffix}"
+                graph.create_node(
+                    choice_id,
+                    {
+                        "type": "choice",
+                        "from_passage": fork_at,
+                        "to_passage": opt_id,
+                        "label": label,
+                        "requires": [],
+                        "grants": [],
+                    },
+                )
+                graph.add_edge("choice_from", choice_id, fork_at)
+                graph.add_edge("choice_to", choice_id, opt_id)
+
+            for opt_id, suffix in [
+                (opt_a_id, "fork_a_reconverge"),
+                (opt_b_id, "fork_b_reconverge"),
+            ]:
+                choice_id = f"choice::{raw_id}__{suffix}"
+                graph.create_node(
+                    choice_id,
+                    {
+                        "type": "choice",
+                        "from_passage": opt_id,
+                        "to_passage": reconverge_at,
+                        "label": "continue",
+                        "requires": [],
+                        "grants": [],
+                    },
+                )
+                graph.add_edge("choice_from", choice_id, opt_id)
+                graph.add_edge("choice_to", choice_id, reconverge_at)
+
+            forks_inserted += 1
+            log.info(
+                "phase9b_fork_inserted",
+                fork_at=fork_at,
+                reconverge_at=reconverge_at,
+            )
+
+        return GrowPhaseResult(
+            phase="fork_beats",
+            status="completed",
+            detail=f"Inserted {forks_inserted} fork(s) from {len(proposals)} proposal(s)",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
         )
 
     async def _phase_10_validation(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002

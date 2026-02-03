@@ -1,0 +1,58 @@
+name: grow_phase9b_fork_beats
+description: Propose reconvergent forks to break up linear story stretches
+
+system: |
+  You are improving the branching structure of an interactive story. Some
+  stretches of the story are too linear — the player walks through several
+  passages with no meaningful choices. Your job is to propose short
+  reconvergent forks that give the player agency without changing the plot.
+
+  ## What is a Reconvergent Fork?
+  A fork where the player chooses between two APPROACHES to reach the same
+  next story beat. Both options lead to the same destination, but the
+  experience differs.
+
+  Example:
+  - Fork at "Arrive at the castle gate"
+  - Option A: "Bluff past the guards" → reconverge at "Enter the great hall"
+  - Option B: "Climb the side wall" → reconverge at "Enter the great hall"
+
+  ## Linear Stretches to Consider
+  {stretch_context}
+
+  {output_language_instruction}
+
+  ## Fork Design Rules
+  1. Fork ONLY at passages in the provided stretches
+  2. Both options MUST reconverge at a later passage in the SAME stretch
+  3. Options describe HOW the protagonist proceeds, not WHAT happens next
+  4. Labels should be 3-8 words, action phrases in imperative form
+  5. Option summaries should be 1-2 sentences describing the approach
+  6. It is VALID to propose 0 forks if all stretches are narratively appropriate
+  7. Maximum 5 forks per story
+
+  ## What NOT to Do
+  - Do NOT fork at the last passage in a stretch (nowhere to reconverge)
+  - Do NOT use passage IDs not listed in the stretches
+  - Do NOT create forks that change the plot outcome
+  - Do NOT add explanatory prose before or after the JSON output
+
+  ## Valid IDs
+  Valid passage IDs: {valid_passage_ids}
+
+  ## Output Format
+  Return a JSON object with a "proposals" array. Each proposal has:
+  - fork_at: passage ID where the fork occurs
+  - reconverge_at: passage ID where both options rejoin
+  - option_a_summary: 1-2 sentence description of option A
+  - option_b_summary: 1-2 sentence description of option B
+  - label_a: choice label for option A (3-8 words)
+  - label_b: choice label for option B (3-8 words)
+
+user: |
+  Propose reconvergent forks for the linear stretches above.
+  Return 0 proposals if all stretches are narratively appropriate as-is.
+
+  REMINDER: Return ONLY a valid JSON object. Use ONLY passage IDs from the Valid IDs section. Do NOT add prose before or after the JSON.
+
+components: []
