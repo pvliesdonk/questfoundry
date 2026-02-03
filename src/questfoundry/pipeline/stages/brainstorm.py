@@ -297,6 +297,7 @@ class BrainstormStage:
             callbacks=callbacks,
             semantic_validator=validate_brainstorm_mutations,
             semantic_error_class=BrainstormMutationError,
+            stage="brainstorm",
         )
         total_llm_calls += 1
         total_tokens += serialize_tokens

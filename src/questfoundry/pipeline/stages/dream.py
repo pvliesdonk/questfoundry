@@ -173,6 +173,7 @@ class DreamStage:
             schema=DreamArtifact,
             provider_name=serialize_provider_name or provider_name,
             callbacks=callbacks,
+            stage="dream",
         )
         if on_phase_progress is not None:
             on_phase_progress("serialize", "completed", None)

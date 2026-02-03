@@ -196,6 +196,7 @@ async def serialize_to_artifact(
     callbacks: list[BaseCallbackHandler] | None = None,
     semantic_validator: SemanticValidator | None = None,
     semantic_error_class: type[SemanticErrorFormatter] | None = None,
+    stage: str = "unknown",
 ) -> tuple[T, int]:
     """Serialize a brief into a structured artifact.
 
@@ -217,6 +218,7 @@ async def serialize_to_artifact(
         semantic_error_class: Error class implementing SemanticErrorFormatter protocol
             for formatting semantic validation errors. Required if semantic_validator
             is provided.
+        stage: Pipeline stage name for tracing metadata (e.g., "dream", "seed").
 
     Returns:
         Tuple of (validated_artifact, tokens_used).
@@ -255,9 +257,9 @@ async def serialize_to_artifact(
         with trace_context(
             name=f"Serialize Attempt {attempt}",
             run_type="llm",
-            tags=["dream", "serialize", "attempt"],
+            tags=[stage, "serialize", "attempt"],
             metadata={
-                "stage": "dream",
+                "stage": stage,
                 "phase": "serialize",
                 "attempt": attempt,
                 "max_retries": max_retries,
@@ -268,9 +270,9 @@ async def serialize_to_artifact(
                 # Build config for structured output invocation
                 config = build_runnable_config(
                     run_name=f"Structured Output Attempt {attempt}",
-                    tags=["dream", "serialize", "structured_output"],
+                    tags=[stage, "serialize", "structured_output"],
                     metadata={
-                        "stage": "dream",
+                        "stage": stage,
                         "phase": "serialize",
                         "attempt": attempt,
                     },
@@ -641,6 +643,7 @@ async def _serialize_path_beats(
         max_retries=max_retries,
         system_prompt=prompt,
         callbacks=callbacks,
+        stage="seed",
     )
 
     beats = result.model_dump().get("initial_beats", [])
@@ -854,6 +857,7 @@ async def serialize_seed_iteratively(
             max_retries=max_retries,
             system_prompt=section_prompt,
             callbacks=callbacks,
+            stage="seed",
         )
         total_tokens += section_tokens
 
@@ -935,6 +939,7 @@ async def serialize_seed_iteratively(
                     max_retries=max_retries,
                     system_prompt=section_prompt,
                     callbacks=callbacks,
+                    stage="seed",
                 )
                 total_tokens += section_tokens
 
@@ -1277,6 +1282,7 @@ async def serialize_seed_as_function(
             max_retries=max_retries,
             system_prompt=section_prompt,
             callbacks=callbacks,
+            stage="seed",
         )
         total_tokens += section_tokens
 
@@ -1417,6 +1423,7 @@ async def serialize_seed_as_function(
                         max_retries=max_retries,
                         system_prompt=corrected_prompt,
                         callbacks=callbacks,
+                        stage="seed",
                     )
                     total_tokens += section_tokens
                     section_data = section_result.model_dump()
