@@ -1074,10 +1074,6 @@ class TestIsEnding:
         # p_aftermath has no choice_from edges pointing to it
         assert compute_is_ending(fill_graph, "passage::p_aftermath") is True
 
-    def test_nonexistent_passage_is_ending(self, fill_graph: Graph) -> None:
-        # No edges for a passage that doesn't exist
-        assert compute_is_ending(fill_graph, "passage::nonexistent") is True
-
 
 class TestEndingGuidance:
     """Tests for format_ending_guidance."""

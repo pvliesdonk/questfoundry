@@ -988,8 +988,12 @@ def format_path_arc_context(graph: Graph, passage_id: str, arc_id: str) -> str:
 def compute_is_ending(graph: Graph, passage_id: str) -> bool:
     """Determine if a passage is a story ending (no outgoing choices).
 
-    A passage is an ending if no choice node has a ``choice_from`` edge
-    pointing to it, meaning the reader has no further navigation options.
+    A passage is an ending if no ``choice_from`` edge has this passage
+    as its target (``to_id``). The ``choice_from`` edge convention is
+    FROM choice TO originating passage, so ``to_id=passage_id`` finds
+    choices that originate from this passage.
+
+    See ``grow_validation.py:212`` for the edge direction reference.
 
     Args:
         graph: Graph containing passage and choice nodes.
