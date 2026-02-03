@@ -90,6 +90,30 @@ dilemmas_prompt: |
   WRONG: `explored: ["opt_a"]` but path uses `answer_id: "opt_b"`
   RIGHT: `explored: ["opt_a", "opt_b"]` and paths use those exact IDs
 
+  ## Tension Balance: How Many Answers to Explore
+
+  Exploring more answers creates more paths, more branching, and a larger story.
+  Leaving answers unexplored creates dramatic shadows — tensions that are felt
+  but never resolved, adding subtext and replayability.
+
+  GOOD tension balance:
+  - Dilemma with 2 answers: explore BOTH (2 paths). This is the default —
+    binary dilemmas are designed to create two-path branching.
+  - Dilemma with 3+ answers: explore 2, leave 1 unexplored. The unexplored
+    answer becomes an intriguing "road not taken" that enriches the narrative.
+
+  BAD tension balance:
+  - Exploring ALL answers of every dilemma: creates too many paths, dilutes
+    each path's narrative weight. The story becomes wide but shallow.
+  - Exploring only 1 answer per dilemma: eliminates meaningful branching.
+    Players have no real choice, defeating the purpose of the dilemma.
+  - Leaving ALL answers unexplored: no paths are created. The dilemma has
+    no gameplay impact.
+
+  GUIDELINE: Aim for 2-4 total paths. For a vignette scope, 2 paths is
+  ideal. For a full story, 3-4 paths provide rich branching without
+  overwhelming the GROW stage.
+
   ## What NOT to Do
   - Do NOT skip dilemmas because they aren't mentioned in the brief
   - Do NOT invent dilemmas not in the manifest
