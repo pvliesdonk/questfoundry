@@ -1001,18 +1001,59 @@ def compute_lexical_diversity(prose_texts: list[str]) -> float:
     return len(set(words)) / len(words)
 
 
-def format_vocabulary_note(diversity_ratio: float, threshold: float = 0.4) -> str:
+def _extract_top_bigrams(texts: list[str], n: int = 5, min_count: int = 2) -> list[str]:
+    """Extract the most repeated bigrams from prose texts.
+
+    Args:
+        texts: List of prose strings to analyze.
+        n: Maximum number of bigrams to return.
+        min_count: Minimum occurrence count to include a bigram.
+
+    Returns:
+        List of bigram strings (e.g. ["stale air", "whiskey burn"]),
+        ordered by frequency descending.
+    """
+    from collections import Counter
+
+    bigrams: list[str] = []
+    for text in texts:
+        words = text.lower().split()
+        bigrams.extend(f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1))
+    counts = Counter(bigrams)
+    return [bigram for bigram, count in counts.most_common(n) if count >= min_count]
+
+
+def format_vocabulary_note(
+    diversity_ratio: float,
+    threshold: float = 0.4,
+    recent_prose: list[str] | None = None,
+) -> str:
     """Format a vocabulary refresh instruction if diversity is low.
+
+    When prose texts are provided and diversity is low, extracts the most
+    repeated bigrams and lists them as explicit prohibitions.
 
     Args:
         diversity_ratio: Type-token ratio from compute_lexical_diversity.
         threshold: Below this ratio, inject a refresh instruction.
+        recent_prose: Optional list of recent prose strings for bigram extraction.
 
     Returns:
         Instruction string, or empty string if diversity is acceptable.
     """
     if diversity_ratio >= threshold:
         return ""
+    overused = _extract_top_bigrams(recent_prose or [])
+    if overused:
+        phrase_list = "\n".join(f'- "{phrase}"' for phrase in overused)
+        return (
+            "**VOCABULARY ALERT:** Recent passages show repetitive phrasing "
+            f"(diversity ratio: {diversity_ratio:.2f}). "
+            "The following phrases have appeared multiple times and MUST NOT "
+            "appear in this passage:\n"
+            f"{phrase_list}\n\n"
+            "Find fresh sensory anchors. Use a sense you haven't used recently."
+        )
     return (
         "**VOCABULARY ALERT:** Recent passages show repetitive word choices "
         f"(diversity ratio: {diversity_ratio:.2f}). For this passage, actively "

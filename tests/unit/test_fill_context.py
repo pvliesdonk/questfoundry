@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from questfoundry.graph.fill_context import (
+    _extract_top_bigrams,
     compute_lexical_diversity,
     compute_open_questions,
     derive_pacing,
@@ -961,6 +962,42 @@ class TestFormatPathArcContext:
 # ---------------------------------------------------------------------------
 
 
+class TestExtractTopBigrams:
+    """Tests for _extract_top_bigrams helper."""
+
+    def test_empty_input(self) -> None:
+        assert _extract_top_bigrams([]) == []
+        assert _extract_top_bigrams([""]) == []
+
+    def test_no_repeated_bigrams(self) -> None:
+        texts = ["The quick brown fox jumps over a lazy dog"]
+        assert _extract_top_bigrams(texts) == []
+
+    def test_extracts_repeated_bigrams(self) -> None:
+        texts = [
+            "stale air filled the room with stale air",
+            "the stale air was thick",
+        ]
+        result = _extract_top_bigrams(texts)
+        assert "stale air" in result
+
+    def test_respects_min_count(self) -> None:
+        texts = ["one two one two one two"]
+        assert _extract_top_bigrams(texts, min_count=3) == ["one two"]
+        assert _extract_top_bigrams(texts, min_count=4) == []
+
+    def test_limits_to_n(self) -> None:
+        # Repeat many different bigrams
+        texts = ["a b a b c d c d e f e f g h g h"]
+        result = _extract_top_bigrams(texts, n=2)
+        assert len(result) <= 2
+
+    def test_ordered_by_frequency(self) -> None:
+        texts = ["x y x y x y a b a b"]
+        result = _extract_top_bigrams(texts, n=2)
+        assert result[0] == "x y"
+
+
 class TestLexicalDiversity:
     """Tests for compute_lexical_diversity and format_vocabulary_note."""
 
@@ -990,6 +1027,28 @@ class TestLexicalDiversity:
     def test_vocabulary_note_custom_threshold(self) -> None:
         assert format_vocabulary_note(0.5, threshold=0.6) != ""
         assert format_vocabulary_note(0.5, threshold=0.4) == ""
+
+    def test_vocabulary_note_with_prose_shows_specific_phrases(self) -> None:
+        prose = [
+            "stale air filled the room with stale air",
+            "the stale air was thick and stale air hung low",
+        ]
+        note = format_vocabulary_note(0.3, recent_prose=prose)
+        assert "VOCABULARY ALERT" in note
+        assert "stale air" in note
+        assert "MUST NOT" in note
+
+    def test_vocabulary_note_without_prose_shows_generic(self) -> None:
+        note = format_vocabulary_note(0.3)
+        assert "VOCABULARY ALERT" in note
+        assert "MUST NOT" not in note
+        assert "seek fresh" in note
+
+    def test_vocabulary_note_with_prose_no_repeats_shows_generic(self) -> None:
+        prose = ["every word here is unique and different"]
+        note = format_vocabulary_note(0.3, recent_prose=prose)
+        assert "VOCABULARY ALERT" in note
+        assert "seek fresh" in note
 
 
 # ---------------------------------------------------------------------------
