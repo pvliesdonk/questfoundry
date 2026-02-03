@@ -105,7 +105,7 @@ _STRUCTURAL_ERROR_TYPES = frozenset(
 # Poly-state prompt sections, injected only when the beat is shared (has
 # shadow states or entry states).  Kept out of non-shared beat prompts to
 # prevent the LLM from false-positive flagging INCOMPATIBLE_STATES.
-_POLY_STATE_PROSE_ONLY = """\
+_POLY_STATE_BASE = """\
 ## Shared-Beat Rule
 If this is a shared beat, write prose that works for ALL arriving states \
 (active + shadows). Use ambiguous phrasing when states diverge.
@@ -124,31 +124,18 @@ If you CANNOT write prose compatible with all shadow states because:
 - Dialogue would reveal path-specific information
 - Emotional register is fundamentally different (rage vs warmth)
 
-Then output EXACTLY the following line and nothing else:
-INCOMPATIBLE_STATES: <your explanation of why states are incompatible>
-Do NOT attempt to write prose. Just output that line."""
+"""
 
-_POLY_STATE_JSON = """\
-## Shared-Beat Rule
-If this is a shared beat, write prose that works for ALL arriving states \
-(active + shadows). Use ambiguous phrasing when states diverge.
+_POLY_STATE_PROSE_ONLY = (
+    _POLY_STATE_BASE + "Then output EXACTLY the following line and nothing else:\n"
+    "INCOMPATIBLE_STATES: <your explanation of why states are incompatible>\n"
+    "Do NOT attempt to write prose. Just output that line."
+)
 
-## Poly-State Examples (CRITICAL for shared beats)
-GOOD: "The stranger's expression was unreadable" (works for trust or betrayal)
-GOOD: "Something had shifted between them" (ambiguous emotional change)
-BAD: "Kay trusted the mentor completely" (only works for one path state)
-BAD: "The betrayal still burned in Kay's mind" (reveals path-specific knowledge)
-
-## Poly-State Failure
-
-If you CANNOT write prose compatible with all shadow states because:
-- Internal monologue requires contradictory knowledge
-- Body language only makes sense for one state
-- Dialogue would reveal path-specific information
-- Emotional register is fundamentally different (rage vs warmth)
-
-Then set flag to "incompatible_states" and explain in flag_reason.
-Leave prose empty."""
+_POLY_STATE_JSON = (
+    _POLY_STATE_BASE + 'Then set flag to "incompatible_states" and explain in flag_reason.\n'
+    "Leave prose empty."
+)
 
 
 def _classify_validation_error(

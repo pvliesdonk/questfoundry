@@ -390,17 +390,19 @@ def format_shadow_states(
             continue
         shadow_paths = set(adata.get("paths", []))
 
-        # Only include if arc differs from active on agnostic dilemmas only
-        differs_on_non_agnostic = False
+        # Skip arcs that differ from active on a non-agnostic dilemma
+        has_non_agnostic_difference = False
         for sp in shadow_paths:
             sd = path_to_dilemma.get(sp)
             if sd and sd not in agnostic_dilemmas:
                 active_p = active_path_per_dilemma.get(sd)
                 if active_p and active_p != sp:
-                    differs_on_non_agnostic = True
+                    has_non_agnostic_difference = True
                     break
-        if not differs_on_non_agnostic:
-            shadow_arcs.append((aid, adata, shadow_paths))
+        if has_non_agnostic_difference:
+            continue
+
+        shadow_arcs.append((aid, adata, shadow_paths))
 
     if shadow_arcs:
         lines.append("")
