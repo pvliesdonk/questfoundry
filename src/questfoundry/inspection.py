@@ -55,6 +55,7 @@ class BranchingStats:
     meaningful_choices: int = 0
     contextual_choices: int = 0
     continue_choices: int = 0
+    max_consecutive_linear: int = 0
     total_dilemmas: int = 0
     fully_explored: int = 0
     partially_explored: int = 0
@@ -245,6 +246,31 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
         elif any(answer_results):
             partially_explored += 1
 
+    # Compute max consecutive linear: walk adjacency to find longest single-outgoing run
+    adjacency: dict[str, list[str]] = {}
+    for _cid, cdata in choices.items():
+        from_p = cdata.get("from_passage", "")
+        to_p = cdata.get("to_passage", "")
+        if from_p and to_p:
+            adjacency.setdefault(from_p, []).append(to_p)
+
+    max_linear = 0
+    linear_visited: set[str] = set()
+    for pid in passages:
+        if pid in linear_visited or outgoing_per_passage.get(pid, 0) != 1:
+            continue
+        # Walk forward through single-outgoing passages
+        run_len = 0
+        current: str | None = pid
+        while current is not None and outgoing_per_passage.get(current, 0) == 1:
+            if current in linear_visited:
+                break
+            linear_visited.add(current)
+            run_len += 1
+            successors = adjacency.get(current, [])
+            current = successors[0] if successors else None
+        max_linear = max(max_linear, run_len)
+
     # Start and ending passages
     # choice_to edges: choice → destination passage (incoming)
     # choice_from edges: choice → source passage (outgoing)
@@ -261,6 +287,7 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
         meaningful_choices=meaningful,
         contextual_choices=contextual,
         continue_choices=continue_count,
+        max_consecutive_linear=max_linear,
         total_dilemmas=len(dilemmas),
         fully_explored=fully_explored,
         partially_explored=partially_explored,

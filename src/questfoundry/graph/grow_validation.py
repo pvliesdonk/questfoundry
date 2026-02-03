@@ -578,6 +578,112 @@ def check_spine_arc_exists(graph: Graph) -> ValidationCheck:
     )
 
 
+def check_max_consecutive_linear(graph: Graph, max_run: int = 2) -> ValidationCheck:
+    """Warn when too many consecutive single-outgoing passages form a linear stretch.
+
+    Long linear stretches create a passive reading experience. This check walks
+    the passage graph and flags any path with more than ``max_run`` consecutive
+    passages that each have exactly one outgoing choice.
+
+    Passages whose beat has ``narrative_function`` in {"confront", "resolve"} are
+    exempt, since linearity is narratively appropriate for climax/resolution.
+
+    Args:
+        graph: The story graph to validate.
+        max_run: Maximum allowed consecutive single-outgoing passages.
+
+    Returns:
+        A ValidationCheck with severity "warn" if a violation is found, "pass" otherwise.
+    """
+    passages = graph.get_nodes_by_type("passage")
+    if not passages:
+        return ValidationCheck(
+            name="max_consecutive_linear",
+            severity="pass",
+            message="No passages to check",
+        )
+
+    # Build outgoing count per passage from choice edges
+    choice_from_edges = graph.get_edges(edge_type="choice_from")
+    outgoing_count: dict[str, int] = {}
+    for edge in choice_from_edges:
+        source = edge["to"]  # choice_from: choice → source passage
+        outgoing_count[source] = outgoing_count.get(source, 0) + 1
+
+    # Build adjacency: passage → list of successor passages via choices
+    choices = graph.get_nodes_by_type("choice")
+    adjacency: dict[str, list[str]] = {}
+    for _cid, cdata in choices.items():
+        from_p = cdata.get("from_passage", "")
+        to_p = cdata.get("to_passage", "")
+        if from_p and to_p:
+            adjacency.setdefault(from_p, []).append(to_p)
+
+    # Build exempt set: passages from confront/resolve beats
+    beats = graph.get_nodes_by_type("beat")
+    exempt_beats: set[str] = set()
+    for bid, bdata in beats.items():
+        if bdata.get("narrative_function") in {"confront", "resolve"}:
+            exempt_beats.add(bid)
+
+    exempt_passages: set[str] = set()
+    for pid, pdata in passages.items():
+        if pdata.get("from_beat") in exempt_beats:
+            exempt_passages.add(pid)
+
+    # Find start passages (no incoming choice edges)
+    choice_to_edges = graph.get_edges(edge_type="choice_to")
+    has_incoming = {e["to"] for e in choice_to_edges}
+    starts = [pid for pid in passages if pid not in has_incoming]
+
+    # BFS: track consecutive single-outgoing count per path
+    violations: list[list[str]] = []
+    visited: set[str] = set()
+
+    for start in starts:
+        queue: deque[tuple[str, list[str]]] = deque()
+        # Initialize run: if start is single-outgoing and not exempt, start a run
+        is_linear = outgoing_count.get(start, 0) == 1 and start not in exempt_passages
+        initial_run = [start] if is_linear else []
+        queue.append((start, initial_run))
+
+        while queue:
+            current, run = queue.popleft()
+            if current in visited:
+                continue
+            visited.add(current)
+
+            for successor in adjacency.get(current, []):
+                is_succ_linear = (
+                    outgoing_count.get(successor, 0) == 1 and successor not in exempt_passages
+                )
+                if is_succ_linear:
+                    new_run = [*run, successor]
+                    if len(new_run) > max_run:
+                        violations.append(new_run)
+                    queue.append((successor, new_run))
+                else:
+                    queue.append((successor, []))
+
+    if violations:
+        longest = max(violations, key=len)
+        return ValidationCheck(
+            name="max_consecutive_linear",
+            severity="warn",
+            message=(
+                f"Found {len(violations)} linear stretch(es) exceeding {max_run} "
+                f"consecutive single-outgoing passages. Longest: {len(longest)} "
+                f"passages ({', '.join(longest[:5])}{'...' if len(longest) > 5 else ''})"
+            ),
+        )
+
+    return ValidationCheck(
+        name="max_consecutive_linear",
+        severity="pass",
+        message=f"No linear stretches exceed {max_run} consecutive passages",
+    )
+
+
 def run_all_checks(graph: Graph) -> ValidationReport:
     """Run all Phase 10 validation checks and aggregate results.
 
@@ -591,6 +697,7 @@ def run_all_checks(graph: Graph) -> ValidationReport:
         check_dilemmas_resolved(graph),
         check_gate_satisfiability(graph),
         check_passage_dag_cycles(graph),
+        check_max_consecutive_linear(graph),
     ]
     checks.extend(check_commits_timing(graph))
     return ValidationReport(checks=checks)
