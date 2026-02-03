@@ -985,6 +985,57 @@ def format_path_arc_context(graph: Graph, passage_id: str, arc_id: str) -> str:
     )
 
 
+def compute_is_ending(graph: Graph, passage_id: str) -> bool:
+    """Determine if a passage is a story ending (no outgoing choices).
+
+    A passage is an ending if no choice node has a ``choice_from`` edge
+    pointing to it, meaning the reader has no further navigation options.
+
+    Args:
+        graph: Graph containing passage and choice nodes.
+        passage_id: Full node ID of the passage (e.g. ``passage::intro``).
+
+    Returns:
+        True if the passage has no outgoing choices.
+    """
+    choice_from_edges = graph.get_edges(to_id=passage_id, edge_type="choice_from")
+    return len(choice_from_edges) == 0
+
+
+def format_ending_guidance(is_ending: bool) -> str:
+    """Format ending-specific prose guidance.
+
+    When a passage is a story ending, returns craft instructions for
+    writing conclusive prose. Returns empty string for non-endings.
+
+    Args:
+        is_ending: Whether this passage is a story ending.
+
+    Returns:
+        Ending guidance string, or empty string.
+    """
+    if not is_ending:
+        return ""
+    return (
+        "## Ending Passage (THIS IS A FINAL PASSAGE)\n\n"
+        "This passage ends the reader's journey on this path. "
+        "It must feel like an ending, not a chapter break or a pause.\n\n"
+        "- **Close the emotional arc.** The protagonist's internal question "
+        "must land here — not necessarily answered, but confronted.\n"
+        "- **Final sensory image.** End on a concrete image, not an abstraction. "
+        "The reader should see, hear, or feel something specific.\n"
+        "- **No new threads.** Do not introduce questions, characters, or tensions "
+        "that won't be resolved. Every sentence should close, not open.\n"
+        "- **Tonal finality.** The rhythm should slow. Shorter final sentences. "
+        "A sense of weight or stillness.\n"
+        "- **Do NOT write 'The End'** or equivalent. The UI handles that.\n\n"
+        'BAD: "And so the journey continued..." (open-ended, chapter break)\n'
+        'BAD: "Kay wondered what would happen next." (raises a question)\n'
+        "GOOD: A final gesture or physical action that echoes the path's theme\n"
+        "GOOD: A line of dialogue that lands with double meaning"
+    )
+
+
 def compute_lexical_diversity(prose_texts: list[str]) -> float:
     """Compute type-token ratio across recent prose passages.
 
