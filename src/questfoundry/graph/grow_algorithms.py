@@ -1453,6 +1453,9 @@ def select_entities_for_arc(
         if entity_node is None:
             continue
         entity_type = entity_node.get("entity_type", "")
+        if not entity_type:
+            log.warning("entity_missing_type", entity_id=eid)
+            continue
         if entity_type in ("object", "location"):
             # Objects/locations always eligible with 1+ appearance
             eligible.add(eid)

@@ -1501,7 +1501,10 @@ class GrowStage:
             entity_arcs: list[dict[str, str]] = []
             for arc in result.arcs:
                 edata = graph.get_node(arc.entity_id)
-                etype = edata.get("entity_type", "character") if edata else "character"
+                if edata is None:
+                    log.error("phase4f_missing_entity", entity_id=arc.entity_id, path_id=pid)
+                    continue
+                etype = edata.get("entity_type", "character")
                 arc_type = ARC_TYPE_BY_ENTITY_TYPE.get(etype, "transformation")
 
                 # Warn if pivot is on a shared beat

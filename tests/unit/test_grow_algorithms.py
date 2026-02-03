@@ -2507,6 +2507,25 @@ class TestSelectEntitiesForArc:
         result = select_entities_for_arc(graph, "path::trust__yes", [])
         assert result == []
 
+    def test_entity_missing_type_skipped(self) -> None:
+        from questfoundry.graph.grow_algorithms import select_entities_for_arc
+
+        graph = self._make_graph()
+        # Add entity with empty entity_type
+        graph.create_node(
+            "entity::mystery",
+            {"type": "entity", "raw_id": "mystery", "entity_type": ""},
+        )
+        graph.update_node(
+            "beat::b1", entities=["entity::mentor", "entity::mystery", "entity::tavern"]
+        )
+        graph.update_node(
+            "beat::b2", entities=["entity::mentor", "entity::mystery", "entity::letter"]
+        )
+        result = select_entities_for_arc(graph, "path::trust__yes", ["beat::b1", "beat::b2"])
+        # mystery has 2 appearances but empty type — should be skipped
+        assert "entity::mystery" not in result
+
     def test_result_is_sorted(self) -> None:
         from questfoundry.graph.grow_algorithms import select_entities_for_arc
 

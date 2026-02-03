@@ -152,12 +152,12 @@ def pipeline_result(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 
 
 class TestGrowFullPipeline:
-    """E2E tests running all 17 GROW phases on the fixture graph."""
+    """E2E tests running all 18 GROW phases on the fixture graph."""
 
     def test_all_phases_complete(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify all 17 phases complete with no failures."""
+        """Verify all 18 phases complete with no failures."""
         phases = pipeline_result["result_dict"]["phases_completed"]
-        assert len(phases) == 17
+        assert len(phases) == 18
         for phase in phases:
             assert phase["status"] in ("completed", "skipped"), (
                 f"Phase {phase['phase']} has unexpected status: {phase['status']}"
