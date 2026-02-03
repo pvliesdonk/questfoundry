@@ -9,6 +9,7 @@ Algorithm summary:
 - topological_sort_beats: Stable topological sort with alphabetical tie-breaking
 - enumerate_arcs: Cartesian product of paths across dilemmas
 - compute_divergence_points: Find where arcs diverge from the spine
+- select_entities_for_arc: Deterministic entity selection for Phase 4f
 """
 
 from __future__ import annotations
@@ -1389,3 +1390,74 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
             )
 
     return successors
+
+
+# ---------------------------------------------------------------------------
+# Phase 4f: Entity arc selection
+# ---------------------------------------------------------------------------
+
+ARC_TYPE_BY_ENTITY_TYPE: dict[str, str] = {
+    "character": "transformation",
+    "location": "atmosphere",
+    "object": "significance",
+    "faction": "relationship",
+}
+"""Deterministic arc-type mapping. Character arcs describe internal change,
+object arcs describe meaning shifts, location arcs describe atmosphere shifts,
+faction arcs describe relationship changes."""
+
+
+def select_entities_for_arc(
+    graph: Graph,
+    path_id: str,
+    beat_sequence: list[str],
+) -> list[str]:
+    """Select entities eligible for arc generation on a path.
+
+    Selection rules:
+    - Characters/factions with 2+ appearances on this path's beats
+    - Characters/factions listed in the path's dilemma ``involves`` field
+    - Objects/locations with 1+ appearance (they can carry thematic weight
+      even in a single scene)
+
+    Args:
+        graph: Graph with entity and beat nodes.
+        path_id: Prefixed path ID.
+        beat_sequence: Ordered beat IDs for this path.
+
+    Returns:
+        Sorted list of entity IDs eligible for arc generation.
+    """
+    from collections import Counter
+
+    appearance_count: Counter[str] = Counter()
+    for beat_id in beat_sequence:
+        beat = graph.get_node(beat_id)
+        if beat is None:
+            continue
+        for eid in beat.get("entities", []):
+            appearance_count[eid] += 1
+
+    # Collect dilemma-involved entities for this path
+    path_node = graph.get_node(path_id)
+    dilemma_involved: set[str] = set()
+    if path_node:
+        dilemma_id = path_node.get("dilemma_id", "")
+        dilemma_node = graph.get_node(dilemma_id)
+        if dilemma_node:
+            dilemma_involved = set(dilemma_node.get("involves", []))
+
+    eligible: set[str] = set()
+    for eid, count in appearance_count.items():
+        entity_node = graph.get_node(eid)
+        if entity_node is None:
+            continue
+        entity_type = entity_node.get("entity_type", "")
+        if entity_type in ("object", "location"):
+            # Objects/locations always eligible with 1+ appearance
+            eligible.add(eid)
+        elif count >= 2 or eid in dilemma_involved:
+            # Characters/factions need 2+ appearances or dilemma involvement
+            eligible.add(eid)
+
+    return sorted(eligible)
