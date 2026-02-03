@@ -34,6 +34,7 @@ load_dotenv()
 if TYPE_CHECKING:
     from prompt_toolkit.key_binding.key_processor import KeyPressEvent
 
+    from questfoundry.inspection import InspectionReport
     from questfoundry.pipeline import PipelineOrchestrator, StageResult
 
 # Type alias for artifact preview functions
@@ -2561,7 +2562,7 @@ def inspect(
     _render_inspection_report(report)
 
 
-def _render_inspection_report(report: Any) -> None:
+def _render_inspection_report(report: InspectionReport) -> None:
     """Render an InspectionReport using Rich tables and panels."""
     s = report.summary
     console.print()

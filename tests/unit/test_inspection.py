@@ -206,6 +206,20 @@ class TestCoverageStats:
         assert stats.codex_entries == 1
         assert stats.entities_with_codex == 1
 
+    def test_entities_with_codex_counts_unique_entities(self, tmp_path: Path) -> None:
+        """Multiple codex entries per entity should count the entity once."""
+        graph = _make_full_graph()
+        # Add a second codex entry for the same entity (hero)
+        graph.create_node(
+            "codex_entry::hero_2",
+            {"type": "codex_entry", "title": "Hero Backstory", "rank": 2, "content": "More lore."},
+        )
+        graph.add_edge("HasEntry", "codex_entry::hero_2", "entity::hero")
+
+        stats = _coverage_stats(graph, tmp_path)
+        assert stats.codex_entries == 2  # Two entries total
+        assert stats.entities_with_codex == 1  # But only one unique entity
+
     def test_illustration_brief_count(self, tmp_path: Path) -> None:
         graph = _make_full_graph()
         stats = _coverage_stats(graph, tmp_path)

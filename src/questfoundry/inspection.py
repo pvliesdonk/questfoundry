@@ -286,7 +286,7 @@ def _coverage_stats(graph: Graph, project_path: Path) -> CoverageStats:
 
     codex_entries = graph.get_nodes_by_type("codex_entry")
     has_entry_edges = graph.get_edges(edge_type="HasEntry")
-    entities_with_codex = len({e["from"] for e in has_entry_edges})
+    entities_with_codex = len({e["to"] for e in has_entry_edges})
 
     briefs = graph.get_nodes_by_type("illustration_brief")
     illustrations = graph.get_nodes_by_type("illustration")
