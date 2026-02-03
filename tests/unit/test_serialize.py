@@ -1649,3 +1649,48 @@ class TestSerializeBeatsPerPathConcurrency:
         assert tokens == 600
         # Semaphore should cap concurrency at 2
         assert peak_concurrent <= 2
+
+
+class TestSerializeStageParam:
+    """Test that stage parameter is threaded through tracing metadata."""
+
+    @pytest.mark.asyncio
+    async def test_stage_param_in_trace_tags(self) -> None:
+        """Stage name should appear in trace context tags, not hardcoded 'dream'."""
+        mock_model = MagicMock()
+        expected = SimpleSchema(title="Test", count=5)
+        mock_model.with_structured_output.return_value.ainvoke = AsyncMock(return_value=expected)
+
+        captured_tags: list[list[str]] = []
+
+        with patch("questfoundry.agents.serialize.trace_context") as mock_trace:
+            mock_trace.return_value.__enter__ = MagicMock(return_value=None)
+            mock_trace.return_value.__exit__ = MagicMock(return_value=False)
+
+            await serialize_to_artifact(mock_model, "A test brief", SimpleSchema, stage="seed")
+
+            call_kwargs = mock_trace.call_args
+            captured_tags = call_kwargs.kwargs.get("tags", [])
+            captured_metadata = call_kwargs.kwargs.get("metadata", {})
+
+        assert "seed" in captured_tags
+        assert "dream" not in captured_tags
+        assert captured_metadata["stage"] == "seed"
+
+    @pytest.mark.asyncio
+    async def test_default_stage_is_unknown(self) -> None:
+        """Without explicit stage param, default should be 'unknown'."""
+        mock_model = MagicMock()
+        expected = SimpleSchema(title="Test", count=5)
+        mock_model.with_structured_output.return_value.ainvoke = AsyncMock(return_value=expected)
+
+        with patch("questfoundry.agents.serialize.trace_context") as mock_trace:
+            mock_trace.return_value.__enter__ = MagicMock(return_value=None)
+            mock_trace.return_value.__exit__ = MagicMock(return_value=False)
+
+            await serialize_to_artifact(mock_model, "A test brief", SimpleSchema)
+
+            call_kwargs = mock_trace.call_args
+            captured_tags = call_kwargs.kwargs.get("tags", [])
+
+        assert "unknown" in captured_tags

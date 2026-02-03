@@ -471,6 +471,7 @@ class DressStage:
             provider_name=self._serialize_provider_name or self._provider_name,
             system_prompt=serialize_prompt,
             callbacks=self._callbacks,
+            stage="dress",
         )
         total_llm_calls += 1
         total_tokens += serialize_tokens
