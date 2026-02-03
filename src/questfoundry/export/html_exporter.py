@@ -84,7 +84,9 @@ class HtmlExporter:
         if context.cover and context.cover.asset_path:
             cap = html.escape(context.cover.caption) if context.cover.caption else ""
             caption_tag = f"\n  <figcaption>{cap}</figcaption>" if cap else ""
-            cover_html = f'<figure class="cover">\n  <img src="{html.escape(context.cover.asset_path)}" alt="{html.escape(ui["cover_alt"])}">{caption_tag}\n</figure>'
+            # When figcaption is present, use empty alt to avoid screen reader redundancy
+            alt_attr = "" if cap else html.escape(ui["cover_alt"])
+            cover_html = f'<figure class="cover">\n  <img src="{html.escape(context.cover.asset_path)}" alt="{alt_attr}">{caption_tag}\n</figure>'
 
         # Build the complete HTML document
         content = _build_html_document(

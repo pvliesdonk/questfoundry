@@ -803,6 +803,31 @@ providers:
     assert resolved == "ollama/proj-creative"
 
 
+def test_orchestrator_user_role_beats_project_default(tmp_path: Path) -> None:
+    """User role-specific config takes precedence over project default (no project role)."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: precedence_test
+providers:
+  default: ollama/proj-default
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    from questfoundry.pipeline.config import ProvidersConfig
+
+    orchestrator._user_config = ProvidersConfig(
+        default="openai/user-default",
+        creative="openai/user-creative",
+    )
+
+    # User role-specific (level 6) should beat project default (level 7)
+    resolved = orchestrator._get_resolved_role_provider("creative")
+    assert resolved == "openai/user-creative"
+
+
 # --- Tests for image provider precedence ---
 
 
