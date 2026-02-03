@@ -1040,6 +1040,86 @@ def format_ending_guidance(is_ending: bool) -> str:
     )
 
 
+def compute_first_appearances(
+    graph: Graph, passage_id: str, arc_passage_ids: list[str]
+) -> list[str]:
+    """Find entity IDs appearing in this passage for the first time in the arc.
+
+    Iterates arc passages up to the current one, collecting entity IDs
+    referenced in each passage. Returns entities present in the current
+    passage but absent from all earlier arc passages.
+
+    Args:
+        graph: Graph containing passage and entity nodes.
+        passage_id: The passage being generated.
+        arc_passage_ids: Ordered list of passage IDs in the arc.
+
+    Returns:
+        List of entity IDs appearing for the first time.
+    """
+    # Find this passage's index in the arc
+    try:
+        current_idx = arc_passage_ids.index(passage_id)
+    except ValueError:
+        return []
+
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return []
+    current_entities = set(passage.get("entities", []))
+    if not current_entities:
+        return []
+
+    # Collect entities seen in earlier passages
+    seen_entities: set[str] = set()
+    for prior_id in arc_passage_ids[:current_idx]:
+        prior = graph.get_node(prior_id)
+        if prior:
+            seen_entities.update(prior.get("entities", []))
+
+    return sorted(current_entities - seen_entities)
+
+
+def format_introduction_guidance(entity_names: list[str]) -> str:
+    """Format craft guidance for passages introducing characters for the first time.
+
+    When a passage contains entities not seen in any earlier arc passage,
+    returns prose guidance for introducing them effectively. Returns empty
+    string when no new entities are introduced.
+
+    Args:
+        entity_names: Display names of entities being introduced.
+
+    Returns:
+        Introduction guidance string, or empty string.
+    """
+    if not entity_names:
+        return ""
+    bold_names = [f"**{name}**" for name in entity_names]
+    if len(bold_names) == 1:
+        names_list = bold_names[0]
+    elif len(bold_names) == 2:
+        names_list = f"{bold_names[0]} and {bold_names[1]}"
+    else:
+        names_list = ", ".join(bold_names[:-1]) + f", and {bold_names[-1]}"
+    return (
+        f"## Character Introduction — First Appearance\n\n"
+        f"This passage introduces {names_list} for the first time. "
+        f"The reader has never encountered them before.\n\n"
+        "- **Ground in concrete sensory detail.** Give the reader something "
+        "physical to anchor: a gesture, a texture, a sound. "
+        "Avoid abstract descriptions of personality.\n"
+        "- **Reveal through action, not exposition.** Show the character doing "
+        "something that implies who they are. Don't summarise their backstory.\n"
+        "- **Establish one distinctive trait immediately.** A verbal tic, a "
+        "physical feature, a habit — something the reader can attach identity to.\n"
+        "- **Earn the name.** Introduce the character in context before naming them. "
+        "Let the reader see them first, then learn what to call them.\n\n"
+        'BAD: "Marcus was a tall, brooding man who had spent years in the military."\n'
+        "GOOD: A hand — scarred, steady — turned the glass without drinking."
+    )
+
+
 def compute_lexical_diversity(prose_texts: list[str]) -> float:
     """Compute type-token ratio across recent prose passages.
 

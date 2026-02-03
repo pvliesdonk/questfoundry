@@ -6,6 +6,7 @@ import pytest
 
 from questfoundry.graph.fill_context import (
     _extract_top_bigrams,
+    compute_first_appearances,
     compute_is_ending,
     compute_lexical_diversity,
     compute_open_questions,
@@ -17,6 +18,7 @@ from questfoundry.graph.fill_context import (
     format_entity_states,
     format_entry_states,
     format_grow_summary,
+    format_introduction_guidance,
     format_lookahead_context,
     format_narrative_context,
     format_passage_context,
@@ -1160,3 +1162,65 @@ class TestEchoPrompt:
 
         result = format_lookahead_context(g, "passage::p2", "arc::spine")
         assert "Thematic Echo" not in result
+
+
+class TestFirstAppearances:
+    """Tests for compute_first_appearances."""
+
+    def test_first_passage_all_new(self) -> None:
+        """All entities in the first passage are first appearances."""
+        g = Graph.empty()
+        g.create_node("passage::p1", {"type": "passage", "entities": ["entity::a", "entity::b"]})
+        g.create_node("passage::p2", {"type": "passage", "entities": ["entity::c"]})
+        result = compute_first_appearances(g, "passage::p1", ["passage::p1", "passage::p2"])
+        assert result == ["entity::a", "entity::b"]
+
+    def test_already_seen_excluded(self) -> None:
+        """Entities seen in earlier passages are not first appearances."""
+        g = Graph.empty()
+        g.create_node("passage::p1", {"type": "passage", "entities": ["entity::a", "entity::b"]})
+        g.create_node("passage::p2", {"type": "passage", "entities": ["entity::a", "entity::c"]})
+        result = compute_first_appearances(g, "passage::p2", ["passage::p1", "passage::p2"])
+        assert result == ["entity::c"]
+
+    def test_no_entities_returns_empty(self) -> None:
+        """Passage with no entities returns empty list."""
+        g = Graph.empty()
+        g.create_node("passage::p1", {"type": "passage", "entities": []})
+        result = compute_first_appearances(g, "passage::p1", ["passage::p1"])
+        assert result == []
+
+    def test_passage_not_in_arc_returns_empty(self) -> None:
+        """Passage not in the arc list returns empty."""
+        g = Graph.empty()
+        g.create_node("passage::p1", {"type": "passage", "entities": ["entity::a"]})
+        result = compute_first_appearances(g, "passage::p1", ["passage::other"])
+        assert result == []
+
+    def test_missing_passage_node_returns_empty(self) -> None:
+        """Non-existent passage returns empty."""
+        g = Graph.empty()
+        result = compute_first_appearances(g, "passage::missing", ["passage::missing"])
+        assert result == []
+
+
+class TestIntroductionGuidance:
+    """Tests for format_introduction_guidance."""
+
+    def test_empty_names_returns_empty(self) -> None:
+        result = format_introduction_guidance([])
+        assert result == ""
+
+    def test_single_name_returns_guidance(self) -> None:
+        result = format_introduction_guidance(["butler"])
+        assert "Character Introduction" in result
+        assert "**butler**" in result
+        assert "sensory detail" in result
+
+    def test_two_names_uses_and(self) -> None:
+        result = format_introduction_guidance(["butler", "detective"])
+        assert "**butler** and **detective**" in result
+
+    def test_three_names_uses_oxford_comma(self) -> None:
+        result = format_introduction_guidance(["butler", "detective", "maid"])
+        assert "**butler**, **detective**, and **maid**" in result
