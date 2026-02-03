@@ -6,6 +6,7 @@ import pytest
 
 from questfoundry.graph.fill_context import (
     _extract_top_bigrams,
+    compute_arc_hints,
     compute_first_appearances,
     compute_is_ending,
     compute_lexical_diversity,
@@ -15,6 +16,7 @@ from questfoundry.graph.fill_context import (
     format_dramatic_questions,
     format_dream_vision,
     format_ending_guidance,
+    format_entity_arc_context,
     format_entity_states,
     format_entry_states,
     format_grow_summary,
@@ -1224,3 +1226,296 @@ class TestIntroductionGuidance:
     def test_three_names_uses_oxford_comma(self) -> None:
         result = format_introduction_guidance(["butler", "detective", "maid"])
         assert "**butler**, **detective**, and **maid**" in result
+
+    def test_arc_hints_adds_arc_framing(self) -> None:
+        result = format_introduction_guidance(
+            ["butler"],
+            arc_hints={"butler": "revelation"},
+        )
+        assert "Arc-aware introduction" in result
+        assert "facade" in result
+
+    def test_arc_hints_transformation(self) -> None:
+        result = format_introduction_guidance(
+            ["mentor"],
+            arc_hints={"mentor": "transformation"},
+        )
+        assert "starting state" in result
+
+    def test_arc_hints_significance(self) -> None:
+        result = format_introduction_guidance(
+            ["letter"],
+            arc_hints={"letter": "significance"},
+        )
+        assert "ordinary" in result
+
+    def test_arc_hints_none_no_change(self) -> None:
+        without = format_introduction_guidance(["butler"])
+        with_none = format_introduction_guidance(["butler"], arc_hints=None)
+        assert without == with_none
+
+    def test_arc_hints_empty_dict_no_change(self) -> None:
+        without = format_introduction_guidance(["butler"])
+        with_empty = format_introduction_guidance(["butler"], arc_hints={})
+        assert without == with_empty
+
+
+# ---------------------------------------------------------------------------
+# format_entity_arc_context
+# ---------------------------------------------------------------------------
+
+
+class TestFormatEntityArcContext:
+    def _make_graph(self) -> Graph:
+        """Build a minimal graph with entity arcs on a path node."""
+        g = Graph.empty()
+
+        # Entities
+        g.create_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "entity_type": "character"},
+        )
+        g.create_node(
+            "entity::letter",
+            {"type": "entity", "raw_id": "letter", "entity_type": "object"},
+        )
+
+        # Dilemma (needed for get_path_beat_sequence)
+        g.create_node(
+            "dilemma::trust",
+            {"type": "dilemma", "raw_id": "trust", "question": "Can you trust?"},
+        )
+
+        # Path with entity_arcs
+        g.create_node(
+            "path::trust__yes",
+            {
+                "type": "path",
+                "raw_id": "trust__yes",
+                "dilemma_id": "dilemma::trust",
+                "entity_arcs": [
+                    {
+                        "entity_id": "entity::mentor",
+                        "arc_line": "trusted ally → doubts → revealed as spy",
+                        "pivot_beat": "beat::b2",
+                        "arc_type": "transformation",
+                    },
+                    {
+                        "entity_id": "entity::letter",
+                        "arc_line": "mundane note → proof of betrayal",
+                        "pivot_beat": "beat::b2",
+                        "arc_type": "significance",
+                    },
+                ],
+            },
+        )
+
+        # Beats
+        g.create_node(
+            "beat::b1",
+            {
+                "type": "beat",
+                "raw_id": "b1",
+                "summary": "Meet mentor",
+                "paths": ["path::trust__yes"],
+                "entities": ["entity::mentor"],
+            },
+        )
+        g.create_node(
+            "beat::b2",
+            {
+                "type": "beat",
+                "raw_id": "b2",
+                "summary": "Doubts surface",
+                "paths": ["path::trust__yes"],
+                "requires": ["beat::b1"],
+                "entities": ["entity::mentor", "entity::letter"],
+            },
+        )
+        g.create_node(
+            "beat::b3",
+            {
+                "type": "beat",
+                "raw_id": "b3",
+                "summary": "Revelation",
+                "paths": ["path::trust__yes"],
+                "requires": ["beat::b2"],
+                "entities": ["entity::mentor"],
+            },
+        )
+
+        # belongs_to edges (beat → path)
+        g.add_edge("belongs_to", "beat::b1", "path::trust__yes")
+        g.add_edge("belongs_to", "beat::b2", "path::trust__yes")
+        g.add_edge("belongs_to", "beat::b3", "path::trust__yes")
+
+        # Passages
+        g.create_node(
+            "passage::p1",
+            {
+                "type": "passage",
+                "raw_id": "p1",
+                "from_beat": "beat::b1",
+                "entities": ["entity::mentor"],
+            },
+        )
+        g.create_node(
+            "passage::p2",
+            {
+                "type": "passage",
+                "raw_id": "p2",
+                "from_beat": "beat::b2",
+                "entities": ["entity::mentor", "entity::letter"],
+            },
+        )
+        g.create_node(
+            "passage::p3",
+            {
+                "type": "passage",
+                "raw_id": "p3",
+                "from_beat": "beat::b3",
+                "entities": ["entity::mentor"],
+            },
+        )
+
+        # Arc
+        g.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["path::trust__yes"],
+                "sequence": ["beat::b1", "beat::b2", "beat::b3"],
+            },
+        )
+
+        return g
+
+    def test_pre_pivot_position(self) -> None:
+        g = self._make_graph()
+        result = format_entity_arc_context(g, "passage::p1", "arc::spine")
+        assert "Entity Arc Context" in result
+        assert "mentor" in result
+        assert "transformation" in result
+        assert "before pivot" in result
+
+    def test_at_pivot_position(self) -> None:
+        g = self._make_graph()
+        result = format_entity_arc_context(g, "passage::p2", "arc::spine")
+        assert "AT PIVOT" in result
+        # Both mentor and letter should appear (both in passage::p2 entities)
+        assert "mentor" in result
+        assert "letter" in result
+
+    def test_post_pivot_position(self) -> None:
+        g = self._make_graph()
+        result = format_entity_arc_context(g, "passage::p3", "arc::spine")
+        assert "past pivot" in result
+        assert "mentor" in result
+        # letter not in passage::p3 entities, so should not appear
+        assert "letter" not in result
+
+    def test_no_arcs_returns_empty(self) -> None:
+        g = self._make_graph()
+        # Remove entity_arcs from path
+        g.update_node("path::trust__yes", entity_arcs=[])
+        result = format_entity_arc_context(g, "passage::p1", "arc::spine")
+        assert result == ""
+
+    def test_no_passage_returns_empty(self) -> None:
+        g = self._make_graph()
+        result = format_entity_arc_context(g, "passage::nonexistent", "arc::spine")
+        assert result == ""
+
+    def test_entity_not_in_passage_filtered(self) -> None:
+        """Entity with arc but not present in passage should be excluded."""
+        g = self._make_graph()
+        # passage::p1 only has entity::mentor, not entity::letter
+        result = format_entity_arc_context(g, "passage::p1", "arc::spine")
+        assert "letter" not in result
+        assert "mentor" in result
+
+
+# ---------------------------------------------------------------------------
+# compute_arc_hints
+# ---------------------------------------------------------------------------
+
+
+class TestComputeArcHints:
+    def test_returns_hints_for_entities_with_arcs(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "entity_type": "character"},
+        )
+        g.create_node(
+            "path::trust__yes",
+            {
+                "type": "path",
+                "raw_id": "trust__yes",
+                "entity_arcs": [
+                    {"entity_id": "entity::mentor", "arc_type": "transformation"},
+                ],
+            },
+        )
+        g.create_node(
+            "arc::spine",
+            {"type": "arc", "raw_id": "spine", "paths": ["path::trust__yes"]},
+        )
+        hints = compute_arc_hints(g, ["entity::mentor"], "arc::spine")
+        assert hints == {"mentor": "transformation"}
+
+    def test_returns_empty_for_no_arcs(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "entity_type": "character"},
+        )
+        g.create_node(
+            "path::trust__yes",
+            {"type": "path", "raw_id": "trust__yes"},
+        )
+        g.create_node(
+            "arc::spine",
+            {"type": "arc", "raw_id": "spine", "paths": ["path::trust__yes"]},
+        )
+        hints = compute_arc_hints(g, ["entity::mentor"], "arc::spine")
+        assert hints == {}
+
+    def test_empty_entity_ids_returns_empty(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "arc::spine",
+            {"type": "arc", "raw_id": "spine", "paths": ["path::trust__yes"]},
+        )
+        hints = compute_arc_hints(g, [], "arc::spine")
+        assert hints == {}
+
+    def test_entity_without_arc_not_in_hints(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "entity_type": "character"},
+        )
+        g.create_node(
+            "entity::bystander",
+            {"type": "entity", "raw_id": "bystander", "entity_type": "character"},
+        )
+        g.create_node(
+            "path::trust__yes",
+            {
+                "type": "path",
+                "raw_id": "trust__yes",
+                "entity_arcs": [
+                    {"entity_id": "entity::mentor", "arc_type": "transformation"},
+                ],
+            },
+        )
+        g.create_node(
+            "arc::spine",
+            {"type": "arc", "raw_id": "spine", "paths": ["path::trust__yes"]},
+        )
+        hints = compute_arc_hints(g, ["entity::mentor", "entity::bystander"], "arc::spine")
+        assert "mentor" in hints
+        assert "bystander" not in hints
