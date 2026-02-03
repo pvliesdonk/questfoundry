@@ -403,12 +403,23 @@ For PRs > 300 lines, add a **Review Guide** section with suggested file/commit o
 
 ### Review Handling
 
-**Take ALL review comments seriously:**
+**Take ALL review comments seriously. No exceptions. No excuses.**
 
-- Address every comment before requesting re-review
-- If you disagree, explain your reasoning - don't ignore
-- **Never defer work without creating an issue** - if something is out of scope, create a GitHub issue and link it
+- Address **every** comment before requesting re-review
+- If you disagree, explain your reasoning **as a reply on the comment** — don't silently ignore
 - When a reviewer finds issues, fix them in the same PR before merging
+- **NEVER dismiss a concern** with "this is pre-existing", "this was not my fault", "this is not critical", or "out of scope for this PR". If the concern is valid, fix it. If it's genuinely invalid, reply explaining why. If it's valid but you don't want to fix it now, create an issue and link it.
+
+**Respect reviewer merge advice:**
+
+| Reviewer Says | What It Means | What You Do |
+|---------------|---------------|-------------|
+| **LGTM** / **Approve** | Ready to merge | Merge when CI is green |
+| **Approve with minor fixes** | Small changes needed, no re-review | Fix the items, push, merge when CI green |
+| **Changes requested** | Substantive issues found | Fix all items, push, **wait for another review round** before merging |
+| **Comments only** (no verdict) | Reviewer raised concerns | Address all comments, then request re-review |
+
+**NEVER merge a PR with "changes requested" status** without getting re-approval after addressing the feedback.
 
 ### Commit Discipline
 
@@ -483,6 +494,24 @@ Merge bottom-up: PR 1, retarget PR 2 to main, merge PR 2, etc.
 - If you discover additional work during implementation, do NOT include it
 - Only include changes necessary for the PR's stated goal
 - **Never leave review suggestions dangling** - if a reviewer suggests follow-up work ("you could also...", "consider adding..."), create a GitHub issue immediately and link it in your response
+
+### Deferred Work MUST Have Issues
+
+**NEVER silently skip, postpone, or defer work without creating a GitHub issue.**
+
+This applies to:
+- Work identified during implementation that is out of scope for the current PR
+- Review comments suggesting improvements you choose not to fix now
+- Known limitations, TODOs, or follow-up tasks mentioned in PR descriptions
+- Findings from code review sweeps or audits
+
+Every "Not Included / Future PRs" item in a PR description MUST have a corresponding GitHub issue linked. If you write "this will be addressed later" anywhere, there must be an issue tracking it.
+
+**Common violations to avoid:**
+- Mentioning deferred work in a PR description without creating issues
+- Deciding something is "not critical" and silently dropping it
+- Noting a finding during a sweep but not tracking it
+- Promising follow-up in a review reply but never creating the issue
 
 ### Documentation
 
