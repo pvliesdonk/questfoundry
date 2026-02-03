@@ -462,6 +462,7 @@ def _run_stage_command(
     image_provider: str | None = None,
     image_budget: int = 0,
     two_step: bool = True,
+    language: str | None = None,
 ) -> None:
     """Common logic for running a stage command.
 
@@ -485,6 +486,7 @@ def _run_stage_command(
         resume_from: Phase name to resume execution from.
         image_provider: Image provider spec for DRESS stage (e.g., ``openai/gpt-image-1``).
         two_step: Whether to use two-step prose generation in FILL stage.
+        language: ISO 639-1 language code override (e.g., "nl", "ja").
     """
     log = get_logger(__name__)
 
@@ -516,6 +518,8 @@ def _run_stage_command(
         context["image_budget"] = image_budget
     if stage_name == "fill":
         context["two_step"] = two_step
+    if language:
+        context["language"] = language
 
     # Add phase progress callback (used by GROW, and optionally by other stages)
     def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
@@ -963,6 +967,10 @@ def dream(
             help="Enable/disable interactive conversation mode. Defaults to auto-detect based on TTY.",
         ),
     ] = None,
+    language: Annotated[
+        str | None,
+        typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
+    ] = None,
 ) -> None:
     """Run DREAM stage - establish creative vision.
 
@@ -990,6 +998,7 @@ def dream(
         provider_discuss=provider_creative or provider_discuss,
         provider_summarize=provider_balanced or provider_summarize,
         provider_serialize=provider_structured or provider_serialize,
+        language=language,
     )
 
 
@@ -1048,6 +1057,10 @@ def brainstorm(
             help="Enable/disable interactive conversation mode. Defaults to auto-detect based on TTY.",
         ),
     ] = None,
+    language: Annotated[
+        str | None,
+        typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
+    ] = None,
 ) -> None:
     """Run BRAINSTORM stage - generate entities and dilemmas.
 
@@ -1078,6 +1091,7 @@ def brainstorm(
         provider_discuss=provider_creative or provider_discuss,
         provider_summarize=provider_balanced or provider_summarize,
         provider_serialize=provider_structured or provider_serialize,
+        language=language,
     )
 
 
@@ -1136,6 +1150,10 @@ def seed(
             help="Enable/disable interactive conversation mode. Defaults to auto-detect based on TTY.",
         ),
     ] = None,
+    language: Annotated[
+        str | None,
+        typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
+    ] = None,
 ) -> None:
     """Run SEED stage - triage brainstorm into story structure.
 
@@ -1167,6 +1185,7 @@ def seed(
         provider_discuss=provider_creative or provider_discuss,
         provider_summarize=provider_balanced or provider_summarize,
         provider_serialize=provider_structured or provider_serialize,
+        language=language,
     )
 
     # SEED-specific message about path freeze
@@ -1223,6 +1242,10 @@ def grow(
         str | None,
         typer.Option("--resume-from", help="Resume from named phase (skips earlier phases)"),
     ] = None,
+    language: Annotated[
+        str | None,
+        typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
+    ] = None,
 ) -> None:
     """Run GROW stage - build complete branching structure.
 
@@ -1253,6 +1276,7 @@ def grow(
         provider_summarize=provider_balanced or provider_summarize,
         provider_serialize=provider_structured or provider_serialize,
         resume_from=resume_from,
+        language=language,
     )
 
 
@@ -1314,6 +1338,10 @@ def fill(
             "Improves quality by removing JSON constraints from creative output.",
         ),
     ] = True,
+    language: Annotated[
+        str | None,
+        typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
+    ] = None,
 ) -> None:
     """Run FILL stage - generate prose for all passages.
 
@@ -1345,6 +1373,7 @@ def fill(
         provider_serialize=provider_structured or provider_serialize,
         resume_from=resume_from,
         two_step=two_step,
+        language=language,
     )
 
 
@@ -1406,6 +1435,10 @@ def dress(
         str | None,
         typer.Option("--resume-from", help="Resume from named phase (skips earlier phases)"),
     ] = None,
+    language: Annotated[
+        str | None,
+        typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
+    ] = None,
 ) -> None:
     """Run DRESS stage - art direction, illustrations, and codex.
 
@@ -1435,6 +1468,7 @@ def dress(
         resume_from=resume_from,
         image_provider=image_provider,
         image_budget=image_budget,
+        language=language,
     )
 
 
@@ -1780,6 +1814,10 @@ def run(
             help="Two-step FILL prose generation (default: enabled).",
         ),
     ] = True,
+    language: Annotated[
+        str | None,
+        typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
+    ] = None,
 ) -> None:
     """Run multiple pipeline stages sequentially.
 
@@ -1893,6 +1931,7 @@ def run(
                 image_provider=image_provider,
                 image_budget=image_budget,
                 two_step=two_step,
+                language=language,
             )
 
             # SEED-specific message
