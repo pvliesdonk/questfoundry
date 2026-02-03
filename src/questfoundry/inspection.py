@@ -53,6 +53,7 @@ class BranchingStats:
 
     total_choices: int = 0
     meaningful_choices: int = 0
+    contextual_choices: int = 0
     continue_choices: int = 0
     total_dilemmas: int = 0
     fully_explored: int = 0
@@ -191,14 +192,23 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
         return None
 
     choices = graph.get_nodes_by_type("choice")
+
+    # Classify by graph structure: count outgoing choices per source passage
+    choice_from_edges_all = graph.get_edges(edge_type="choice_from")
+    outgoing_per_passage: dict[str, int] = Counter(e["to"] for e in choice_from_edges_all)
+
     meaningful = 0
+    contextual = 0
     continue_count = 0
     for _cid, cdata in choices.items():
-        label = cdata.get("label", "continue")
-        if label == "continue":
+        from_passage = cdata.get("from_passage", "")
+        outgoing = outgoing_per_passage.get(from_passage, 1)
+        if outgoing >= 2:
+            meaningful += 1
+        elif cdata.get("label", "continue") == "continue":
             continue_count += 1
         else:
-            meaningful += 1
+            contextual += 1
 
     # Dilemma exploration: check if both answers have prose passages
     dilemmas = graph.get_nodes_by_type("dilemma")
@@ -248,6 +258,7 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
     return BranchingStats(
         total_choices=len(choices),
         meaningful_choices=meaningful,
+        contextual_choices=contextual,
         continue_choices=continue_count,
         total_dilemmas=len(dilemmas),
         fully_explored=fully_explored,

@@ -167,14 +167,70 @@ class TestProseStats:
 
 
 class TestBranchingStats:
-    def test_meaningful_vs_continue(self) -> None:
+    def test_structural_classification(self) -> None:
+        """Choices classified by graph structure: meaningful (2+ outgoing), contextual, continue."""
         graph = _make_full_graph()
         stats = _branching_stats(graph)
 
         assert stats is not None
         assert stats.total_choices == 2
-        assert stats.meaningful_choices == 1
-        assert stats.continue_choices == 1
+        # Both choices originate from passage::p0 which has 2 outgoing → both meaningful
+        assert stats.meaningful_choices == 2
+        assert stats.contextual_choices == 0
+        assert stats.continue_choices == 0
+
+    def test_three_way_classification(self) -> None:
+        """Passages with 1 outgoing choice classified as contextual or continue by label."""
+        graph = Graph.empty()
+        # Create 3 passages
+        for i in range(3):
+            graph.create_node(
+                f"passage::p{i}",
+                {
+                    "type": "passage",
+                    "raw_id": f"p{i}",
+                    "from_beat": f"beat::p{i}",
+                    "summary": f"p{i}",
+                },
+            )
+
+        # p0 → p1: single outgoing, contextual label
+        graph.create_node(
+            "choice::p0__p1",
+            {
+                "type": "choice",
+                "from_passage": "passage::p0",
+                "to_passage": "passage::p1",
+                "label": "Search the room",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::p0__p1", "passage::p0")
+        graph.add_edge("choice_to", "choice::p0__p1", "passage::p1")
+
+        # p1 → p2: single outgoing, continue label
+        graph.create_node(
+            "choice::p1__p2",
+            {
+                "type": "choice",
+                "from_passage": "passage::p1",
+                "to_passage": "passage::p2",
+                "label": "continue",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::p1__p2", "passage::p1")
+        graph.add_edge("choice_to", "choice::p1__p2", "passage::p2")
+
+        stats = _branching_stats(graph)
+
+        assert stats is not None
+        assert stats.total_choices == 2
+        assert stats.meaningful_choices == 0  # no passage has 2+ outgoing
+        assert stats.contextual_choices == 1  # p0→p1 has non-continue label
+        assert stats.continue_choices == 1  # p1→p2 has "continue" label
 
     def test_no_passages_returns_none(self) -> None:
         graph = Graph.empty()

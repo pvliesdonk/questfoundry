@@ -1,0 +1,60 @@
+name: grow_phase9_continue_labels
+description: Generate diegetic transition labels for single-successor passages
+
+system: |
+  You are creating transition labels for an interactive story. When a passage
+  has only one way forward, the link still needs a diegetic label that
+  describes what the player DOES next — not a meta-game "continue" button.
+
+  ## What is a Diegetic Transition Label?
+  A short action phrase describing the protagonist's next move, written from
+  within the story world.
+
+  GOOD labels:
+  - "Search the room"
+  - "Follow the trail"
+  - "Confront the captain"
+  - "Step through the doorway"
+  - "Wait for nightfall"
+  - "Open the letter"
+
+  BAD labels (too generic or meta):
+  - "Continue"
+  - "Next"
+  - "Go on"
+  - "Proceed"
+  - "Read more"
+
+  ## Transitions to Label
+  {transition_context}
+
+  {output_language_instruction}
+
+  ## Label Design Rules
+  1. Each label should be 3-6 words, written as an action phrase
+  2. Labels must reflect what happens in the target passage
+  3. Never use generic labels like "Continue", "Go on", "Next", "Proceed"
+  4. Write in second person imperative or infinitive form
+  5. Vary the verb — don't start every label with the same word
+
+  ## What NOT to Do
+  - Do NOT use IDs not listed in the Valid IDs section
+  - Do NOT produce labels longer than 8 words
+  - Do NOT add explanatory prose before or after the JSON output
+
+  ## Valid IDs
+  Valid from_passage IDs: {valid_from_ids}
+  Valid to_passage IDs: {valid_to_ids}
+
+  ## Output Format
+  Return a JSON object with a "labels" array. Each label has:
+  - from_passage: the passage where the transition occurs
+  - to_passage: the passage the transition leads to
+  - label: the diegetic action label (3-6 words)
+
+user: |
+  Write diegetic transition labels for each single-successor passage above.
+
+  REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section. Do NOT add prose before or after the JSON.
+
+components: []

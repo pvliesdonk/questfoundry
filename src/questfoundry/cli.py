@@ -2607,7 +2607,8 @@ def _render_inspection_report(report: InspectionReport) -> None:
         console.print("[bold]Branching Structure[/bold]")
         console.print(
             f"  Choices: [bold]{b.total_choices}[/bold] "
-            f"({b.meaningful_choices} meaningful, {b.continue_choices} continue)"
+            f"({b.meaningful_choices} meaningful, {b.contextual_choices} contextual, "
+            f"{b.continue_choices} continue)"
         )
         console.print(
             f"  Dilemmas: [bold]{b.total_dilemmas}[/bold] "

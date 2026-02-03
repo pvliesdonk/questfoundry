@@ -2095,9 +2095,58 @@ class GrowStage:
 
         choice_count = 0
 
-        # Create implicit "continue" edges for single-successor passages
+        # Generate contextual labels for single-successor passages via LLM
+        single_label_lookup: dict[tuple[str, str], str] = {}
+        single_llm_calls = 0
+        single_tokens = 0
+
+        if single_successors:
+            transition_lines: list[str] = []
+            valid_from_ids: list[str] = []
+            valid_to_ids: list[str] = []
+
+            for p_id, succ_list in sorted(single_successors.items()):
+                succ = succ_list[0]
+                valid_from_ids.append(p_id)
+                valid_to_ids.append(succ.to_passage)
+                p_summary = passage_nodes.get(p_id, {}).get("summary", "")
+                succ_summary = passage_nodes.get(succ.to_passage, {}).get("summary", "")
+                transition_lines.append(
+                    f'- {p_id} ("{p_summary}") → {succ.to_passage} ("{succ_summary}")'
+                )
+
+            context = {
+                "transition_context": "\n".join(transition_lines),
+                "valid_from_ids": ", ".join(valid_from_ids),
+                "valid_to_ids": ", ".join(valid_to_ids),
+                "output_language_instruction": self._lang_instruction,
+            }
+
+            from questfoundry.graph.grow_validators import validate_phase9_output
+
+            validator = partial(
+                validate_phase9_output,
+                valid_passage_ids=set(valid_from_ids + valid_to_ids),
+            )
+            try:
+                result, single_llm_calls, single_tokens = await self._grow_llm_call(
+                    model,
+                    "grow_phase9_continue_labels",
+                    context,
+                    Phase9Output,
+                    semantic_validator=validator,
+                )
+                for label_item in result.labels:
+                    single_label_lookup[(label_item.from_passage, label_item.to_passage)] = (
+                        label_item.label
+                    )
+            except GrowStageError:
+                log.warning("phase9_continue_labels_failed", fallback="continue")
+
+        # Create choice edges for single-successor passages
         for p_id, succ_list in single_successors.items():
             succ = succ_list[0]
+            label = single_label_lookup.get((p_id, succ.to_passage), "continue")
             choice_id = f"choice::{p_id.removeprefix('passage::')}__{succ.to_passage.removeprefix('passage::')}"
             graph.create_node(
                 choice_id,
@@ -2105,7 +2154,7 @@ class GrowStage:
                     "type": "choice",
                     "from_passage": p_id,
                     "to_passage": succ.to_passage,
-                    "label": "continue",
+                    "label": label,
                     "requires": [],
                     "grants": succ.grants,
                 },
@@ -2121,23 +2170,23 @@ class GrowStage:
         if multi_successors:
             # Build context for LLM
             divergence_lines: list[str] = []
-            valid_from_ids: list[str] = []
-            valid_to_ids: list[str] = []
+            multi_from_ids: list[str] = []
+            multi_to_ids: list[str] = []
 
             for p_id, succ_list in sorted(multi_successors.items()):
-                valid_from_ids.append(p_id)
+                multi_from_ids.append(p_id)
                 p_summary = passage_nodes.get(p_id, {}).get("summary", "")
                 divergence_lines.append(f'\nDivergence at {p_id}: "{p_summary}"')
                 divergence_lines.append("  Successors:")
                 for succ in succ_list:
-                    valid_to_ids.append(succ.to_passage)
+                    multi_to_ids.append(succ.to_passage)
                     succ_summary = passage_nodes.get(succ.to_passage, {}).get("summary", "")
                     divergence_lines.append(f'  - {succ.to_passage}: "{succ_summary}"')
 
             context = {
                 "divergence_context": "\n".join(divergence_lines),
-                "valid_from_ids": ", ".join(valid_from_ids),
-                "valid_to_ids": ", ".join(valid_to_ids),
+                "valid_from_ids": ", ".join(multi_from_ids),
+                "valid_to_ids": ", ".join(multi_to_ids),
                 "output_language_instruction": self._lang_instruction,
             }
 
@@ -2145,7 +2194,7 @@ class GrowStage:
 
             validator = partial(
                 validate_phase9_output,
-                valid_passage_ids=set(valid_from_ids + valid_to_ids),
+                valid_passage_ids=set(multi_from_ids + multi_to_ids),
             )
             try:
                 result, llm_calls, tokens = await self._grow_llm_call(
@@ -2166,14 +2215,14 @@ class GrowStage:
             # Create choice edges for multi-successor passages
             for p_id, succ_list in multi_successors.items():
                 for succ in succ_list:
-                    label = label_lookup.get((p_id, succ.to_passage))
-                    if not label:
+                    multi_label = label_lookup.get((p_id, succ.to_passage))
+                    if not multi_label:
                         log.warning(
                             "phase9_fallback_label",
                             from_passage=p_id,
                             to_passage=succ.to_passage,
                         )
-                        label = "take this path"
+                        multi_label = "take this path"
                     choice_id = f"choice::{p_id.removeprefix('passage::')}__{succ.to_passage.removeprefix('passage::')}"
                     graph.create_node(
                         choice_id,
@@ -2181,7 +2230,7 @@ class GrowStage:
                             "type": "choice",
                             "from_passage": p_id,
                             "to_passage": succ.to_passage,
-                            "label": label,
+                            "label": multi_label,
                             "requires": [],
                             "grants": succ.grants,
                         },
@@ -2195,8 +2244,8 @@ class GrowStage:
             phase="choices",
             status="completed",
             detail=f"Created {choice_count} choices ({len(multi_successors)} divergence points){prologue_note}",
-            llm_calls=llm_calls,
-            tokens_used=tokens,
+            llm_calls=single_llm_calls + llm_calls,
+            tokens_used=single_tokens + tokens,
         )
 
     async def _phase_10_validation(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002
