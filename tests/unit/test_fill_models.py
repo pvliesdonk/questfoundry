@@ -7,6 +7,7 @@ from pydantic import ValidationError
 
 from questfoundry.models.fill import (
     EntityUpdate,
+    FillExtractOutput,
     FillPassageOutput,
     FillPhase0Output,
     FillPhase1Output,
@@ -340,6 +341,29 @@ class TestFillPhaseResult:
         )
         assert result.llm_calls == 45
         assert result.tokens_used == 90000
+
+
+class TestFillExtractOutput:
+    def test_empty_entity_updates(self) -> None:
+        output = FillExtractOutput()
+        assert output.entity_updates == []
+
+    def test_with_entity_updates(self) -> None:
+        output = FillExtractOutput(
+            entity_updates=[
+                EntityUpdate(entity_id="kay", field="appearance", value="scarred hands"),
+                EntityUpdate(entity_id="mentor", field="voice", value="raspy baritone"),
+            ]
+        )
+        assert len(output.entity_updates) == 2
+        assert output.entity_updates[0].entity_id == "kay"
+        assert output.entity_updates[1].field == "voice"
+
+    def test_invalid_entity_update_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            FillExtractOutput(
+                entity_updates=[{"entity_id": "", "field": "appearance", "value": "tall"}]
+            )
 
 
 class TestFillResult:

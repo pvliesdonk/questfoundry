@@ -42,6 +42,7 @@ from questfoundry.models.dress import (
 )
 from questfoundry.models.fill import (
     EntityUpdate,
+    FillExtractOutput,
     FillPassageOutput,
     FillPhase0Output,
     FillPhase1Output,
@@ -126,6 +127,7 @@ __all__ = [
     "EntityVisualWithId",
     "EntryMood",
     "EntryStateBeat",
+    "FillExtractOutput",
     "FillPassageOutput",
     "FillPhase0Output",
     "FillPhase1Output",

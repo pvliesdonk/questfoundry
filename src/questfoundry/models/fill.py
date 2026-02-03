@@ -101,6 +101,21 @@ class FillPassageOutput(BaseModel):
     )
 
 
+class FillExtractOutput(BaseModel):
+    """Analytical extraction of entity updates from generated prose.
+
+    Used in two-step FILL mode: after prose is generated as plain text,
+    a separate low-temperature call extracts entity micro-details. The
+    prose itself is already stored on the passage node; this schema
+    captures only the structured metadata.
+    """
+
+    entity_updates: list[EntityUpdate] = Field(
+        default_factory=list,
+        description="Micro-details discovered in the prose",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Review
 # ---------------------------------------------------------------------------
