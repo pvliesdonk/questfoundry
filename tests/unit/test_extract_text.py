@@ -48,8 +48,7 @@ class TestExtractText:
 
     def test_list_without_text_blocks_falls_back(self) -> None:
         content = [{"type": "image", "data": "..."}]
-        result = extract_text(content)
-        assert isinstance(result, str)
+        assert extract_text(content) == str(content)
 
     def test_unexpected_type_falls_back(self) -> None:
         result = extract_text(42)  # type: ignore[arg-type]
