@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
+from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -353,20 +354,52 @@ def format_shadow_states(
     if not active_paths:
         return ""
 
-    # Find shadow arcs (other arcs containing this beat)
+    # Build path → dilemma mapping for filtering
+    path_nodes = graph.get_nodes_by_type("path")
+    path_to_dilemma: dict[str, str] = {}
+    for pid, pdata in path_nodes.items():
+        did = pdata.get("dilemma_id")
+        if did:
+            raw_id = pdata.get("raw_id", pid)
+            path_to_dilemma[raw_id] = normalize_scoped_id(did, "dilemma")
+
+    # Active arc's path-per-dilemma
+    active_path_per_dilemma: dict[str, str] = {}
+    for p in active_paths:
+        d = path_to_dilemma.get(p)
+        if d:
+            active_path_per_dilemma[d] = p
+
+    # Normalize agnostic_for to prefixed dilemma IDs
+    agnostic_dilemmas = {normalize_scoped_id(d, "dilemma") for d in agnostic_for}
+
+    # Find shadow arcs (other arcs containing this beat),
+    # filtered to only arcs that differ on agnostic dilemmas
     lines: list[str] = []
     lines.append("**This is a shared beat.** Write prose compatible with ALL states below.")
     lines.append("")
     lines.append(f"**Active state** (arc being generated): paths {sorted(active_paths)}")
 
     all_arcs = graph.get_nodes_by_type("arc")
-    shadow_arcs = []
+    shadow_arcs: list[tuple[str, dict[str, object], set[str]]] = []
     for aid, adata in all_arcs.items():
         if aid == arc_id:
             continue
         arc_seq = adata.get("sequence", [])
-        if beat_id in arc_seq:
-            shadow_paths = set(adata.get("paths", []))
+        if beat_id not in arc_seq:
+            continue
+        shadow_paths = set(adata.get("paths", []))
+
+        # Only include if arc differs from active on agnostic dilemmas only
+        differs_on_non_agnostic = False
+        for sp in shadow_paths:
+            sd = path_to_dilemma.get(sp)
+            if sd and sd not in agnostic_dilemmas:
+                active_p = active_path_per_dilemma.get(sd)
+                if active_p and active_p != sp:
+                    differs_on_non_agnostic = True
+                    break
+        if not differs_on_non_agnostic:
             shadow_arcs.append((aid, adata, shadow_paths))
 
     if shadow_arcs:

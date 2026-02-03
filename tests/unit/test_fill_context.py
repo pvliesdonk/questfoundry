@@ -352,6 +352,156 @@ class TestFormatShadowStates:
         result = format_shadow_states(fill_graph, "passage::p_opening", "arc::spine_0_0")
         assert result == ""
 
+    def test_shadow_arcs_filtered_by_dilemma(self) -> None:
+        """Beat agnostic for dilemma_A should not see arcs differing on dilemma_B."""
+        g = Graph.empty()
+
+        # Two dilemmas with two paths each
+        g.create_node("dilemma::d_a", {"type": "dilemma", "raw_id": "d_a"})
+        g.create_node("dilemma::d_b", {"type": "dilemma", "raw_id": "d_b"})
+        g.create_node(
+            "path::a1",
+            {"type": "path", "raw_id": "a1", "dilemma_id": "d_a", "is_canonical": True},
+        )
+        g.create_node(
+            "path::a2",
+            {"type": "path", "raw_id": "a2", "dilemma_id": "d_a", "is_canonical": False},
+        )
+        g.create_node(
+            "path::b1",
+            {"type": "path", "raw_id": "b1", "dilemma_id": "d_b", "is_canonical": True},
+        )
+        g.create_node(
+            "path::b2",
+            {"type": "path", "raw_id": "b2", "dilemma_id": "d_b", "is_canonical": False},
+        )
+
+        # Shared beat: agnostic for d_a only
+        g.create_node(
+            "beat::shared",
+            {
+                "type": "beat",
+                "raw_id": "shared",
+                "summary": "A shared moment",
+                "path_agnostic_for": ["dilemma::d_a"],
+            },
+        )
+        g.create_node(
+            "passage::p_shared",
+            {"type": "passage", "raw_id": "p_shared", "from_beat": "beat::shared"},
+        )
+        g.add_edge("passage_from", "passage::p_shared", "beat::shared")
+
+        # Arcs: spine (a1+b1), branch_a (a2+b1), branch_b (a1+b2), branch_ab (a2+b2)
+        # All contain beat::shared
+        g.create_node(
+            "arc::spine",
+            {"type": "arc", "raw_id": "spine", "paths": ["a1", "b1"], "sequence": ["beat::shared"]},
+        )
+        g.create_node(
+            "arc::branch_a",
+            {
+                "type": "arc",
+                "raw_id": "branch_a",
+                "paths": ["a2", "b1"],
+                "sequence": ["beat::shared"],
+            },
+        )
+        g.create_node(
+            "arc::branch_b",
+            {
+                "type": "arc",
+                "raw_id": "branch_b",
+                "paths": ["a1", "b2"],
+                "sequence": ["beat::shared"],
+            },
+        )
+        g.create_node(
+            "arc::branch_ab",
+            {
+                "type": "arc",
+                "raw_id": "branch_ab",
+                "paths": ["a2", "b2"],
+                "sequence": ["beat::shared"],
+            },
+        )
+
+        # From spine (a1+b1), agnostic for d_a:
+        # branch_a (a2+b1) differs only on d_a → INCLUDE
+        # branch_b (a1+b2) differs only on d_b → EXCLUDE (not agnostic for d_b)
+        # branch_ab (a2+b2) differs on both → EXCLUDE (differs on d_b)
+        result = format_shadow_states(g, "passage::p_shared", "arc::spine")
+        assert "shared beat" in result
+        assert "branch_a" in result
+        assert "branch_b" not in result
+        assert "branch_ab" not in result
+
+    def test_multi_dilemma_agnostic(self) -> None:
+        """Beat agnostic for both dilemmas should see all shadow arcs."""
+        g = Graph.empty()
+
+        g.create_node("dilemma::d_a", {"type": "dilemma", "raw_id": "d_a"})
+        g.create_node("dilemma::d_b", {"type": "dilemma", "raw_id": "d_b"})
+        g.create_node(
+            "path::a1",
+            {"type": "path", "raw_id": "a1", "dilemma_id": "d_a", "is_canonical": True},
+        )
+        g.create_node(
+            "path::a2",
+            {"type": "path", "raw_id": "a2", "dilemma_id": "d_a", "is_canonical": False},
+        )
+        g.create_node(
+            "path::b1",
+            {"type": "path", "raw_id": "b1", "dilemma_id": "d_b", "is_canonical": True},
+        )
+        g.create_node(
+            "path::b2",
+            {"type": "path", "raw_id": "b2", "dilemma_id": "d_b", "is_canonical": False},
+        )
+
+        g.create_node(
+            "beat::shared",
+            {
+                "type": "beat",
+                "raw_id": "shared",
+                "summary": "Shared everywhere",
+                "path_agnostic_for": ["dilemma::d_a", "dilemma::d_b"],
+            },
+        )
+        g.create_node(
+            "passage::p_shared",
+            {"type": "passage", "raw_id": "p_shared", "from_beat": "beat::shared"},
+        )
+        g.add_edge("passage_from", "passage::p_shared", "beat::shared")
+
+        g.create_node(
+            "arc::spine",
+            {"type": "arc", "raw_id": "spine", "paths": ["a1", "b1"], "sequence": ["beat::shared"]},
+        )
+        g.create_node(
+            "arc::branch_a",
+            {
+                "type": "arc",
+                "raw_id": "branch_a",
+                "paths": ["a2", "b1"],
+                "sequence": ["beat::shared"],
+            },
+        )
+        g.create_node(
+            "arc::branch_b",
+            {
+                "type": "arc",
+                "raw_id": "branch_b",
+                "paths": ["a1", "b2"],
+                "sequence": ["beat::shared"],
+            },
+        )
+
+        # Agnostic for both → all shadow arcs included
+        result = format_shadow_states(g, "passage::p_shared", "arc::spine")
+        assert "branch_a" in result
+        assert "branch_b" in result
+
 
 # ---------------------------------------------------------------------------
 # format_entity_states
