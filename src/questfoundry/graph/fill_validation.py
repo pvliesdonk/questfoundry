@@ -235,6 +235,92 @@ def check_narrative_function_variety(graph: Graph, arc_id: str) -> ValidationChe
     )
 
 
+def path_has_prose(graph: Graph, path_id: str) -> bool:
+    """Check if a path has any passages with prose content.
+
+    Walks the beats belonging to the path and checks if any of their
+    corresponding passages have non-empty prose.
+
+    Args:
+        graph: Graph containing path, beat, and passage nodes.
+        path_id: The path node ID to check.
+
+    Returns:
+        True if at least one passage in the path has prose.
+    """
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beat_ids = {e["from"] for e in belongs_to_edges if e["to"] == path_id}
+
+    if not beat_ids:
+        return False
+
+    passages = graph.get_nodes_by_type("passage")
+    for _pid, pdata in passages.items():
+        from_beat = pdata.get("from_beat", "")
+        if from_beat in beat_ids:
+            prose = pdata.get("prose")
+            if prose and str(prose).strip():
+                return True
+    return False
+
+
+def check_dilemma_prose_coverage(graph: Graph) -> list[ValidationCheck]:
+    """Check that all dilemma paths have prose content.
+
+    For each dilemma, verifies that both answer paths have at least one
+    passage with prose. A dilemma where only one path has prose represents
+    wasted branching — the player sees a choice but one option leads nowhere.
+
+    Args:
+        graph: Graph containing dilemma, answer, path, and passage nodes.
+
+    Returns:
+        List of ValidationCheck results (one per dilemma with issues).
+    """
+    dilemmas = graph.get_nodes_by_type("dilemma")
+    if not dilemmas:
+        return []
+
+    has_answer_edges = graph.get_edges(edge_type="has_answer")
+    answers_by_dilemma: dict[str, list[str]] = {}
+    for edge in has_answer_edges:
+        answers_by_dilemma.setdefault(edge["from"], []).append(edge["to"])
+
+    explores_edges = graph.get_edges(edge_type="explores")
+    answer_to_path: dict[str, str] = {}
+    for edge in explores_edges:
+        answer_to_path[edge["to"]] = edge["from"]
+
+    checks: list[ValidationCheck] = []
+    for did in sorted(dilemmas):
+        answer_ids = answers_by_dilemma.get(did, [])
+        if len(answer_ids) < 2:
+            continue
+
+        paths_with_prose = 0
+        paths_without_prose: list[str] = []
+        for aid in answer_ids:
+            answer_path = answer_to_path.get(aid)
+            if answer_path and path_has_prose(graph, answer_path):
+                paths_with_prose += 1
+            elif answer_path:
+                paths_without_prose.append(answer_path)
+
+        if paths_without_prose:
+            checks.append(
+                ValidationCheck(
+                    name="dilemma_prose_coverage",
+                    severity="warn",
+                    message=(
+                        f"Dilemma {did}: {paths_with_prose}/{len(answer_ids)} paths have prose. "
+                        f"Missing: {', '.join(paths_without_prose)}"
+                    ),
+                )
+            )
+
+    return checks
+
+
 def run_arc_validation(graph: Graph) -> ValidationReport:
     """Run all arc-level validation checks across all arcs.
 
@@ -261,5 +347,7 @@ def run_arc_validation(graph: Graph) -> ValidationReport:
         report.checks.append(check_intensity_progression(graph, arc_id))
         report.checks.append(check_dramatic_questions_closed(graph, arc_id))
         report.checks.append(check_narrative_function_variety(graph, arc_id))
+
+    report.checks.extend(check_dilemma_prose_coverage(graph))
 
     return report

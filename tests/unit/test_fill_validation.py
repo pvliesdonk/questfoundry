@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from questfoundry.graph.fill_validation import (
+    check_dilemma_prose_coverage,
     check_dramatic_questions_closed,
     check_intensity_progression,
     check_narrative_function_variety,
+    path_has_prose,
     run_arc_validation,
 )
 from questfoundry.graph.graph import Graph
@@ -275,3 +277,89 @@ class TestRunArcValidation:
         assert "intensity_progression" in check_names
         assert "dramatic_questions_closed" in check_names
         assert "narrative_function_variety" in check_names
+
+
+def _make_dilemma_graph(path_a_prose: bool, path_b_prose: bool) -> Graph:
+    """Build a graph with a dilemma, two answers, two paths, and optional prose."""
+    graph = Graph.empty()
+
+    graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+    graph.create_node("answer::a1", {"type": "answer", "raw_id": "a1"})
+    graph.create_node("answer::a2", {"type": "answer", "raw_id": "a2"})
+    graph.add_edge("has_answer", "dilemma::d1", "answer::a1")
+    graph.add_edge("has_answer", "dilemma::d1", "answer::a2")
+
+    graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+    graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
+    graph.add_edge("explores", "path::p1", "answer::a1")
+    graph.add_edge("explores", "path::p2", "answer::a2")
+
+    # Beats and passages for path 1
+    graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+    graph.add_edge("belongs_to", "beat::b1", "path::p1")
+    graph.create_node(
+        "passage::b1",
+        {
+            "type": "passage",
+            "raw_id": "b1",
+            "from_beat": "beat::b1",
+            "prose": "Path one prose." if path_a_prose else None,
+        },
+    )
+
+    # Beats and passages for path 2
+    graph.create_node("beat::b2", {"type": "beat", "raw_id": "b2"})
+    graph.add_edge("belongs_to", "beat::b2", "path::p2")
+    graph.create_node(
+        "passage::b2",
+        {
+            "type": "passage",
+            "raw_id": "b2",
+            "from_beat": "beat::b2",
+            "prose": "Path two prose." if path_b_prose else None,
+        },
+    )
+
+    return graph
+
+
+class TestDilemmaProseCoverage:
+    def test_both_paths_have_prose(self) -> None:
+        graph = _make_dilemma_graph(path_a_prose=True, path_b_prose=True)
+        checks = check_dilemma_prose_coverage(graph)
+        assert len(checks) == 0
+
+    def test_one_path_missing_prose(self) -> None:
+        graph = _make_dilemma_graph(path_a_prose=True, path_b_prose=False)
+        checks = check_dilemma_prose_coverage(graph)
+        assert len(checks) == 1
+        assert checks[0].severity == "warn"
+        assert "path::p2" in checks[0].message
+
+    def test_no_dilemmas(self) -> None:
+        graph = Graph.empty()
+        checks = check_dilemma_prose_coverage(graph)
+        assert len(checks) == 0
+
+    def test_included_in_run_arc_validation(self) -> None:
+        """Dilemma prose coverage appears in run_arc_validation when dilemma has issues."""
+        graph = _make_dilemma_graph(path_a_prose=True, path_b_prose=False)
+        # Add a minimal arc so run_arc_validation doesn't short-circuit
+        graph.create_node("arc::spine", {"type": "arc", "sequence": []})
+        report = run_arc_validation(graph)
+        check_names = [c.name for c in report.checks]
+        assert "dilemma_prose_coverage" in check_names
+
+
+class TestPathHasProse:
+    def test_path_with_prose(self) -> None:
+        graph = _make_dilemma_graph(path_a_prose=True, path_b_prose=False)
+        assert path_has_prose(graph, "path::p1") is True
+
+    def test_path_without_prose(self) -> None:
+        graph = _make_dilemma_graph(path_a_prose=False, path_b_prose=True)
+        assert path_has_prose(graph, "path::p1") is False
+
+    def test_nonexistent_path(self) -> None:
+        graph = Graph.empty()
+        assert path_has_prose(graph, "path::nope") is False

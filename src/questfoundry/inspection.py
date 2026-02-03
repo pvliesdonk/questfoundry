@@ -11,6 +11,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from questfoundry.graph.fill_context import compute_lexical_diversity
+from questfoundry.graph.fill_validation import path_has_prose
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_validation import find_max_consecutive_linear, run_all_checks
 from questfoundry.observability.logging import get_logger
@@ -227,9 +228,9 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
 
     # Build path→has_prose lookup
     paths = graph.get_nodes_by_type("path")
-    path_has_prose: dict[str, bool] = {}
+    prose_by_path: dict[str, bool] = {}
     for path_id in paths:
-        path_has_prose[path_id] = _path_has_prose(graph, path_id)
+        prose_by_path[path_id] = path_has_prose(graph, path_id)
 
     fully_explored = 0
     partially_explored = 0
@@ -239,7 +240,7 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
         for aid in answer_ids:
             answer_path = answer_to_path.get(aid)
             if answer_path:
-                answer_results.append(path_has_prose.get(answer_path, False))
+                answer_results.append(prose_by_path.get(answer_path, False))
 
         if len(answer_results) >= 2 and all(answer_results):
             fully_explored += 1
@@ -272,26 +273,6 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
         start_passages=start_count,
         ending_passages=ending_count,
     )
-
-
-def _path_has_prose(graph: Graph, path_id: str) -> bool:
-    """Check if a path has any passages with prose content."""
-    # Beats belong directly to paths via belongs_to edges (beat → path)
-    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_ids = {e["from"] for e in belongs_to_edges if e["to"] == path_id}
-
-    if not beat_ids:
-        return False
-
-    # Find passages generated from those beats
-    passages = graph.get_nodes_by_type("passage")
-    for _pid, pdata in passages.items():
-        from_beat = pdata.get("from_beat", "")
-        if from_beat in beat_ids:
-            prose = pdata.get("prose")
-            if prose and str(prose).strip():
-                return True
-    return False
 
 
 def _coverage_stats(graph: Graph, project_path: Path) -> CoverageStats:
