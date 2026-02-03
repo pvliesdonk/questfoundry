@@ -80,6 +80,7 @@ class Choice(BaseModel):
     label: str = Field(min_length=1)
     requires: list[str] = Field(default_factory=list)
     grants: list[str] = Field(default_factory=list)
+    is_return: bool = Field(default=False, description="True for spoke→hub return links")
 
 
 class EntityOverlay(BaseModel):
@@ -325,6 +326,27 @@ class Phase9bOutput(BaseModel):
     """Wrapper for Phase 9b structured output (fork proposals)."""
 
     proposals: list[ForkProposal] = Field(default_factory=list)
+
+
+class SpokeProposal(BaseModel):
+    """A single spoke in a hub-and-spoke exploration node."""
+
+    summary: str = Field(min_length=1, description="Summary of the spoke passage")
+    label: str = Field(min_length=1, description="Choice label to enter the spoke")
+
+
+class HubProposal(BaseModel):
+    """Phase 9c: A hub passage with optional exploration spokes."""
+
+    passage_id: str = Field(min_length=1, description="Which passage becomes a hub")
+    spokes: list[SpokeProposal] = Field(min_length=2, max_length=4)
+    forward_label: str = Field(min_length=1, description="Label for the 'continue story' choice")
+
+
+class Phase9cOutput(BaseModel):
+    """Wrapper for Phase 9c structured output (hub proposals)."""
+
+    hubs: list[HubProposal] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------

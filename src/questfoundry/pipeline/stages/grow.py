@@ -183,6 +183,7 @@ class GrowStage:
             (self._phase_8c_overlays, "overlays"),
             (self._phase_9_choices, "choices"),
             (self._phase_9b_fork_beats, "fork_beats"),
+            (self._phase_9c_hub_spokes, "hub_spokes"),
             (self._phase_10_validation, "validation"),
             (self._phase_11_prune, "prune"),
         ]
@@ -2487,6 +2488,154 @@ class GrowStage:
             phase="fork_beats",
             status="completed",
             detail=f"Inserted {forks_inserted} fork(s) from {len(proposals)} proposal(s)",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    async def _phase_9c_hub_spokes(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 9c: Add hub-and-spoke exploration nodes.
+
+        Identifies passages suitable for optional exploration (location arrivals,
+        group encounters) and creates spoke passages that return to the hub.
+
+        Spoke→hub return choices use ``is_return=True`` so they are excluded
+        from DAG cycle detection.
+        """
+        from questfoundry.models.grow import Phase9cOutput
+
+        passages = graph.get_nodes_by_type("passage")
+        choices = graph.get_nodes_by_type("choice")
+        if not passages or not choices:
+            return GrowPhaseResult(
+                phase="hub_spokes",
+                status="completed",
+                detail="No passages or choices to analyze",
+            )
+
+        # Build outgoing info to identify which passages have forward choices
+        choice_from_edges = graph.get_edges(edge_type="choice_from")
+        has_outgoing = {e["to"] for e in choice_from_edges}
+
+        # Build passage context for LLM (non-ending passages only)
+        passage_lines: list[str] = []
+        valid_ids: list[str] = []
+        for pid in sorted(passages):
+            if pid not in has_outgoing:
+                continue  # Skip ending passages
+            summary = passages[pid].get("summary", "")
+            passage_lines.append(f'- {pid}: "{summary}"')
+            valid_ids.append(pid)
+
+        if not valid_ids:
+            return GrowPhaseResult(
+                phase="hub_spokes",
+                status="completed",
+                detail="No non-ending passages found",
+            )
+
+        context = {
+            "passage_context": "\n".join(passage_lines),
+            "valid_passage_ids": ", ".join(valid_ids),
+            "output_language_instruction": self._lang_instruction,
+        }
+
+        from questfoundry.graph.grow_validators import validate_phase9c_output
+
+        validator = partial(
+            validate_phase9c_output,
+            valid_passage_ids=set(valid_ids),
+        )
+
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model,
+                "grow_phase9c_hub_spokes",
+                context,
+                Phase9cOutput,
+                semantic_validator=validator,
+            )
+        except GrowStageError:
+            log.warning("phase9c_hub_spokes_failed", fallback="no hubs")
+            return GrowPhaseResult(
+                phase="hub_spokes",
+                status="completed",
+                detail="LLM call failed, no hubs inserted",
+            )
+
+        # Cap at 3 hubs
+        hubs = result.hubs[:3]
+        hubs_inserted = 0
+
+        for hub in hubs:
+            hub_id = hub.passage_id
+            if hub_id not in passages or hub_id not in has_outgoing:
+                log.warning("phase9c_invalid_hub", passage=hub_id)
+                continue
+
+            # Find existing forward choice(s) from hub and relabel the first one
+            hub_choices = [
+                (cid, cdata)
+                for cid, cdata in choices.items()
+                if cdata.get("from_passage") == hub_id
+            ]
+            if hub_choices:
+                first_choice_id, _ = hub_choices[0]
+                graph.update_node(first_choice_id, label=hub.forward_label)
+
+            # Create spoke passages and return choices
+            raw_id = hub_id.removeprefix("passage::")
+            for i, spoke in enumerate(hub.spokes):
+                spoke_pid = f"passage::spoke_{raw_id}_{i}"
+                graph.create_node(
+                    spoke_pid,
+                    {
+                        "type": "passage",
+                        "raw_id": f"spoke_{raw_id}_{i}",
+                        "is_synthetic": True,
+                        "summary": spoke.summary,
+                    },
+                )
+
+                # Choice: hub → spoke
+                to_spoke_cid = f"choice::{raw_id}__spoke_{i}"
+                graph.create_node(
+                    to_spoke_cid,
+                    {
+                        "type": "choice",
+                        "from_passage": hub_id,
+                        "to_passage": spoke_pid,
+                        "label": spoke.label,
+                        "requires": [],
+                        "grants": [],
+                    },
+                )
+                graph.add_edge("choice_from", to_spoke_cid, hub_id)
+                graph.add_edge("choice_to", to_spoke_cid, spoke_pid)
+
+                # Choice: spoke → hub (return link)
+                return_cid = f"choice::spoke_{raw_id}_{i}__return"
+                graph.create_node(
+                    return_cid,
+                    {
+                        "type": "choice",
+                        "from_passage": spoke_pid,
+                        "to_passage": hub_id,
+                        "label": "Return",
+                        "requires": [],
+                        "grants": [],
+                        "is_return": True,
+                    },
+                )
+                graph.add_edge("choice_from", return_cid, spoke_pid)
+                graph.add_edge("choice_to", return_cid, hub_id)
+
+            hubs_inserted += 1
+            log.info("phase9c_hub_inserted", hub=hub_id, spokes=len(hub.spokes))
+
+        return GrowPhaseResult(
+            phase="hub_spokes",
+            status="completed",
+            detail=f"Inserted {hubs_inserted} hub(s) with spokes",
             llm_calls=llm_calls,
             tokens_used=tokens,
         )

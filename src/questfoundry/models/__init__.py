@@ -66,6 +66,7 @@ from questfoundry.models.grow import (
     GapProposal,
     GrowPhaseResult,
     GrowResult,
+    HubProposal,
     IntersectionProposal,
     OverlayProposal,
     Passage,
@@ -80,8 +81,10 @@ from questfoundry.models.grow import (
     Phase4fOutput,
     Phase8cOutput,
     Phase9bOutput,
+    Phase9cOutput,
     Phase9Output,
     SceneTypeTag,
+    SpokeProposal,
 )
 from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.seed import (
@@ -143,6 +146,7 @@ __all__ = [
     "GapProposal",
     "GrowPhaseResult",
     "GrowResult",
+    "HubProposal",
     "Illustration",
     "IllustrationBrief",
     "IllustrationCategory",
@@ -164,10 +168,12 @@ __all__ = [
     "Phase8cOutput",
     "Phase9Output",
     "Phase9bOutput",
+    "Phase9cOutput",
     "PhaseResult",
     "ReviewFlag",
     "SceneTypeTag",
     "Scope",
     "SeedOutput",
+    "SpokeProposal",
     "VoiceDocument",
 ]
