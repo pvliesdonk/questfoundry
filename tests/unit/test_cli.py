@@ -1177,27 +1177,31 @@ def _strip_ansi(text: str) -> str:
     return re.sub(r"\x1b\[[0-9;]*m", "", text)
 
 
-def test_dream_help_shows_phase_provider_flags() -> None:
-    """Test dream --help shows all phase-specific provider flags."""
+def test_dream_help_shows_role_provider_flags() -> None:
+    """Test dream --help shows role-based provider flags (not legacy)."""
     result = runner.invoke(app, ["dream", "--help"])
     output = _strip_ansi(result.stdout)
 
     assert result.exit_code == 0
-    assert "--provider-discuss" in output
-    assert "--provider-summarize" in output
-    assert "--provider-serialize" in output
+    assert "--provider-creative" in output
+    assert "--provider-balanced" in output
+    assert "--provider-structured" in output
+    # Legacy flags should be hidden
+    assert "--provider-discuss" not in output
 
 
-def test_run_help_shows_phase_provider_flags() -> None:
-    """Test run --help shows all phase-specific provider flags."""
+def test_run_help_shows_role_provider_flags() -> None:
+    """Test run --help shows role-based provider flags (not legacy)."""
     result = runner.invoke(app, ["run", "--help"])
     output = _strip_ansi(result.stdout)
 
     assert result.exit_code == 0
-    assert "--provider-discuss" in output
-    # Rich may truncate long option names with ellipsis depending on column width
-    assert "--provider-summar" in output
-    assert "--provider-serial" in output
+    # Rich may truncate long option names with ellipsis (Unicode …) depending on column width
+    assert "--provider-creat" in output
+    assert "--provider-balan" in output
+    assert "--provider-struc" in output
+    # Legacy flags should be hidden
+    assert "--provider-discuss" not in output
 
 
 # --- Run --init Tests ---
