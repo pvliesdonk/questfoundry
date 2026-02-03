@@ -50,6 +50,7 @@ from questfoundry.graph.fill_context import (
 )
 from questfoundry.graph.graph import Graph
 from questfoundry.models.fill import (
+    FillExtractOutput,
     FillPhase0Output,
     FillPhase1Output,
     FillPhase2Output,
@@ -188,6 +189,7 @@ class FillStage:
         self._size_profile: SizeProfile | None = None
         self._max_concurrency: int = 2
         self._lang_instruction: str = ""
+        self._two_step: bool = False
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -299,6 +301,7 @@ class FillStage:
         self._size_profile = kwargs.get("size_profile")
         self._max_concurrency = kwargs.get("max_concurrency", 2)
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
+        self._two_step = kwargs.get("two_step", False)
         log.info("stage_start", stage="fill")
 
         phases = self._phase_order()
@@ -540,6 +543,103 @@ class FillStage:
             parts.append("\nPlease fix the errors and try again.")
 
         return "\n".join(parts)
+
+    # -------------------------------------------------------------------------
+    # Two-step prose generation
+    # -------------------------------------------------------------------------
+
+    _INCOMPATIBLE_SENTINEL = "INCOMPATIBLE_STATES:"
+
+    @traceable(name="FILL Prose Call", run_type="llm", tags=["stage:fill"])
+    async def _fill_prose_call(
+        self,
+        model: BaseChatModel,
+        context: dict[str, Any],
+    ) -> tuple[str, str, str, int, int]:
+        """Generate prose as plain text (no structured output).
+
+        Uses the creative-role model at high temperature without any JSON
+        grammar constraints.  Poly-state failures are detected via a
+        sentinel prefix in the response.
+
+        Args:
+            model: Creative-role chat model (high temperature).
+            context: Template context variables.
+
+        Returns:
+            Tuple of (prose, flag, flag_reason, llm_calls, tokens_used).
+            When the model outputs the INCOMPATIBLE_STATES sentinel, prose
+            is empty and flag is ``"incompatible_states"``.
+        """
+        from questfoundry.agents.serialize import extract_tokens
+        from questfoundry.observability.tracing import build_runnable_config
+        from questfoundry.prompts.loader import PromptLoader
+
+        loader = PromptLoader(_get_prompts_path())
+        template = loader.load("fill_phase1_prose_only")
+
+        system_text = safe_format(template.system, context) if context else template.system
+        user_text = (
+            safe_format(template.user, context) if template.user and context else template.user
+        )
+
+        messages: list[SystemMessage | HumanMessage] = [SystemMessage(content=system_text)]
+        if user_text:
+            messages.append(HumanMessage(content=user_text))
+
+        config = build_runnable_config(
+            run_name="fill_prose_only",
+            metadata={"stage": "fill", "phase": "phase1_prose_only"},
+            callbacks=self._callbacks,
+        )
+
+        raw_result = await model.ainvoke(messages, config=config)
+        tokens = extract_tokens(raw_result)
+        raw_content = raw_result.content if hasattr(raw_result, "content") else raw_result
+        content = raw_content if isinstance(raw_content, str) else str(raw_content)
+        prose = content.strip()
+
+        # Detect poly-state incompatibility sentinel
+        if prose.startswith(self._INCOMPATIBLE_SENTINEL):
+            reason = prose[len(self._INCOMPATIBLE_SENTINEL) :].strip()
+            return "", "incompatible_states", reason, 1, tokens
+
+        return prose, "ok", "", 1, tokens
+
+    @traceable(name="FILL Extract Call", run_type="llm", tags=["stage:fill"])
+    async def _fill_extract_call(
+        self,
+        model: BaseChatModel,
+        prose_text: str,
+        passage_id: str,
+        entity_states: str,
+    ) -> tuple[FillExtractOutput, int, int]:
+        """Extract entity updates from generated prose.
+
+        Uses the serialize-role model at low temperature with structured
+        output for reliable extraction of entity micro-details.
+
+        Args:
+            model: Fallback model (used when serialize_model is not set).
+            prose_text: The generated prose to analyze.
+            passage_id: Passage ID for the context.
+            entity_states: Formatted entity states for the prompt.
+
+        Returns:
+            Tuple of (FillExtractOutput, llm_calls, tokens_used).
+        """
+        context = {
+            "passage_id": passage_id,
+            "prose_text": prose_text,
+            "entity_states": entity_states,
+        }
+        return await self._fill_llm_call(
+            model,
+            "fill_phase1_extract",
+            context,
+            FillExtractOutput,
+            creative=False,
+        )
 
     # -------------------------------------------------------------------------
     # Phase implementations (skeleton — all return skipped)
@@ -788,39 +888,48 @@ class FillStage:
                 "output_language_instruction": self._lang_instruction,
             }
 
-            output, llm_calls, tokens = await self._fill_llm_call(
-                model,
-                "fill_phase1_prose",
-                context,
-                FillPhase1Output,
-                creative=True,
-            )
-            total_llm_calls += llm_calls
-            total_tokens += tokens
+            if self._two_step:
+                prose, flag, flag_reason, llm_calls, tokens = await self._fill_prose_call(
+                    model, context
+                )
+                total_llm_calls += llm_calls
+                total_tokens += tokens
+            else:
+                output, llm_calls, tokens = await self._fill_llm_call(
+                    model,
+                    "fill_phase1_prose",
+                    context,
+                    FillPhase1Output,
+                    creative=True,
+                )
+                total_llm_calls += llm_calls
+                total_tokens += tokens
+                passage_output = output.passage
+                prose = passage_output.prose
+                flag = passage_output.flag
+                flag_reason = passage_output.flag_reason
 
-            passage_output = output.passage
-
-            if passage_output.flag == "incompatible_states":
+            if flag == "incompatible_states":
                 graph.update_node(
                     passage_id,
                     flag="incompatible_states",
-                    flag_reason=passage_output.flag_reason,
+                    flag_reason=flag_reason,
                 )
                 passages_flagged += 1
                 log.info(
                     "passage_flagged",
                     passage_id=passage_id,
-                    reason=passage_output.flag_reason,
+                    reason=flag_reason,
                 )
             else:
-                graph.update_node(passage_id, prose=passage_output.prose)
-                if not passage_output.prose:
+                graph.update_node(passage_id, prose=prose)
+                if not prose:
                     log.warning("empty_prose_returned", passage_id=passage_id)
                     continue
                 passages_filled += 1
 
                 # Track prose for lexical diversity monitoring
-                recent_prose.append(passage_output.prose)
+                recent_prose.append(prose)
                 if len(recent_prose) % _DIVERSITY_CHECK_INTERVAL == 0:
                     window = recent_prose[-_DIVERSITY_CHECK_INTERVAL:]
                     ratio = compute_lexical_diversity(window)
@@ -828,8 +937,32 @@ class FillStage:
                     if vocabulary_note:
                         log.info("lexical_diversity_low", ratio=f"{ratio:.2f}")
 
-                # Apply entity updates
-                for update in passage_output.entity_updates:
+                # Entity updates: two-step extracts analytically,
+                # single-call gets them from the structured output.
+                entity_updates = []
+                if self._two_step:
+                    # Skip extraction for micro_beats (unlikely to have entity details)
+                    if scene_type != "micro_beat":
+                        try:
+                            extract_out, ex_calls, ex_tokens = await self._fill_extract_call(
+                                model,
+                                prose,
+                                passage.get("raw_id", passage_id),
+                                format_entity_states(graph, passage_id),
+                            )
+                            total_llm_calls += ex_calls
+                            total_tokens += ex_tokens
+                            entity_updates = extract_out.entity_updates
+                        except Exception:
+                            log.warning(
+                                "entity_extract_failed",
+                                passage_id=passage_id,
+                                exc_info=True,
+                            )
+                else:
+                    entity_updates = passage_output.entity_updates
+
+                for update in entity_updates:
                     entity_id = f"entity::{update.entity_id}"
                     if graph.has_node(entity_id):
                         graph.update_node(
@@ -846,7 +979,7 @@ class FillStage:
             log.debug(
                 "passage_generated",
                 passage_id=passage_id,
-                flag=passage_output.flag,
+                flag=flag,
             )
 
         return FillPhaseResult(
