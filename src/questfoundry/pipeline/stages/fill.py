@@ -102,6 +102,41 @@ _STRUCTURAL_ERROR_TYPES = frozenset(
     {"missing", "missing_argument", "type_error", "extra_forbidden"}
 )
 
+# Poly-state prompt sections, injected only when the beat is shared (has
+# shadow states or entry states).  Kept out of non-shared beat prompts to
+# prevent the LLM from false-positive flagging INCOMPATIBLE_STATES.
+_POLY_STATE_BASE = """\
+## Shared-Beat Rule
+If this is a shared beat, write prose that works for ALL arriving states \
+(active + shadows). Use ambiguous phrasing when states diverge.
+
+## Poly-State Examples (CRITICAL for shared beats)
+GOOD: "The stranger's expression was unreadable" (works for trust or betrayal)
+GOOD: "Something had shifted between them" (ambiguous emotional change)
+BAD: "Kay trusted the mentor completely" (only works for one path state)
+BAD: "The betrayal still burned in Kay's mind" (reveals path-specific knowledge)
+
+## Poly-State Failure
+
+If you CANNOT write prose compatible with all shadow states because:
+- Internal monologue requires contradictory knowledge
+- Body language only makes sense for one state
+- Dialogue would reveal path-specific information
+- Emotional register is fundamentally different (rage vs warmth)
+
+"""
+
+_POLY_STATE_PROSE_ONLY = (
+    _POLY_STATE_BASE + "Then output EXACTLY the following line and nothing else:\n"
+    "INCOMPATIBLE_STATES: <your explanation of why states are incompatible>\n"
+    "Do NOT attempt to write prose. Just output that line."
+)
+
+_POLY_STATE_JSON = (
+    _POLY_STATE_BASE + 'Then set flag to "incompatible_states" and explain in flag_reason.\n'
+    "Leave prose empty."
+)
+
 
 def _classify_validation_error(
     error: Exception,
@@ -887,6 +922,15 @@ class FillStage:
                 (graph.get_node(eid) or {}).get("raw_id", strip_scope_prefix(eid))
                 for eid in first_eids
             ]
+            entry_states_text = format_entry_states(graph, passage_id, arc_id)
+            shadow_states_text = format_shadow_states(graph, passage_id, arc_id)
+            is_shared = bool(shadow_states_text or entry_states_text)
+            poly_section = (
+                (_POLY_STATE_PROSE_ONLY if self._two_step else _POLY_STATE_JSON)
+                if is_shared
+                else ""
+            )
+
             context = {
                 "voice_document": voice_context,
                 "story_identity": story_identity_context,
@@ -896,12 +940,12 @@ class FillStage:
                 "dramatic_questions": format_dramatic_questions(graph, arc_id, beat_id),
                 "narrative_context": format_narrative_context(graph, passage_id),
                 "atmospheric_detail": format_atmospheric_detail(graph, passage_id),
-                "entry_states": format_entry_states(graph, passage_id, arc_id),
+                "entry_states": entry_states_text,
                 "entity_states": format_entity_states(graph, passage_id),
                 "entity_arc_context": format_entity_arc_context(graph, passage_id, arc_id),
                 "sliding_window": format_sliding_window(graph, arc_id, current_idx, window_size),
                 "lookahead": format_lookahead_context(graph, passage_id, arc_id),
-                "shadow_states": format_shadow_states(graph, passage_id, arc_id),
+                "shadow_states": shadow_states_text,
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
                 "vocabulary_note": vocabulary_note,
                 "ending_guidance": format_ending_guidance(is_ending),
@@ -910,6 +954,7 @@ class FillStage:
                     arc_hints=compute_arc_hints(graph, first_eids, arc_id),
                 ),
                 "output_language_instruction": self._lang_instruction,
+                "poly_state_section": poly_section,
             }
 
             if self._two_step:

@@ -86,19 +86,17 @@ system: |
   7. Let open dramatic questions create subtext — do not resolve them unless
      this beat commits to an answer
   8. Build toward the exit mood through imagery and rhythm — do not state it directly
-  9. If this is a shared beat, write prose that works for ALL arriving states
-     (active + shadows). Use ambiguous phrasing when states diverge.
-  10. DO NOT repeat phrases, metaphors, or sentence structures from the sliding
+  9. DO NOT repeat phrases, metaphors, or sentence structures from the sliding
       window. Each passage must use fresh imagery and vocabulary. If the previous
       passages used a metaphor (e.g., "like a wound"), find a different one.
-  11. Every scene and sequel MUST contain at least one line of dialogue or one
+  10. Every scene and sequel MUST contain at least one line of dialogue or one
       concrete physical action (a character doing something with their body, not
       just thinking or feeling).
-  12. Dialogue tags: prefer "said" or no tag. Use action beats instead of
+  11. Dialogue tags: prefer "said" or no tag. Use action beats instead of
       adverb-laden tags or said-bookisms.
       BAD: "she whispered softly", "he retorted angrily"
       GOOD: She leaned closer. "..." / He slammed the glass down. "..."
-  13. NEVER name the theme, mood, or emotion directly in prose. Show it through
+  12. NEVER name the theme, mood, or emotion directly in prose. Show it through
       what characters do, notice, or fail to notice.
       BAD: "A wave of grief washed over her." / "He felt angry."
       GOOD: "She picked up his coffee mug, still warm, and held it with both hands."
@@ -108,22 +106,7 @@ system: |
 
   {introduction_guidance}
 
-  ## Poly-State Examples (CRITICAL for shared beats)
-  GOOD: "The stranger's expression was unreadable" (works for trust or betrayal)
-  GOOD: "Something had shifted between them" (ambiguous emotional change)
-  BAD: "Kay trusted the mentor completely" (only works for one path state)
-  BAD: "The betrayal still burned in Kay's mind" (reveals path-specific knowledge)
-
-  ## Poly-State Failure
-
-  If you CANNOT write prose compatible with all shadow states because:
-  - Internal monologue requires contradictory knowledge
-  - Body language only makes sense for one state
-  - Dialogue would reveal path-specific information
-  - Emotional register is fundamentally different (rage vs warmth)
-
-  Then set flag to "incompatible_states" and explain in flag_reason.
-  Leave prose empty.
+  {poly_state_section}
 
   ## Entity Updates
 
@@ -147,7 +130,6 @@ user: |
   - Follow the voice document EXACTLY — POV, tense, register, rhythm, tone
   - Match scene type guidance for structure and length
   - Cover beat summary content — do NOT invent major plot points
-  - For shared beats, prose must work for ALL arriving states (active + shadows)
   - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
 
 components: []
