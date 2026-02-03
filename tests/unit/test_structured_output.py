@@ -9,6 +9,7 @@ from pydantic import BaseModel
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
     get_default_strategy,
+    unwrap_structured_result,
     with_structured_output,
 )
 
@@ -170,3 +171,42 @@ class TestWithStructuredOutput:
             method="json_schema",
             include_raw=True,
         )
+
+
+class TestUnwrapStructuredResult:
+    """Tests for unwrap_structured_result with null-stripping."""
+
+    def test_unwrap_pydantic_model_passthrough(self) -> None:
+        model = SampleSchema(name="test", value=42)
+        assert unwrap_structured_result(model) is model
+
+    def test_unwrap_parsed_dict_strips_nulls(self) -> None:
+        raw = {"raw": "msg", "parsed": {"name": "test", "value": None, "extra": None}}
+        result = unwrap_structured_result(raw)
+        assert result == {"name": "test"}
+
+    def test_unwrap_parsed_dict_preserves_non_null(self) -> None:
+        raw = {"raw": "msg", "parsed": {"name": "test", "value": 42}}
+        result = unwrap_structured_result(raw)
+        assert result == {"name": "test", "value": 42}
+
+    def test_unwrap_parsed_pydantic_no_stripping(self) -> None:
+        model = SampleSchema(name="test", value=42)
+        raw = {"raw": "msg", "parsed": model}
+        result = unwrap_structured_result(raw)
+        assert result is model
+
+    def test_unwrap_nested_nulls_stripped(self) -> None:
+        raw = {
+            "raw": "msg",
+            "parsed": {
+                "outer": {"inner": None, "keep": "yes"},
+                "top": None,
+            },
+        }
+        result = unwrap_structured_result(raw)
+        assert result == {"outer": {"keep": "yes"}}
+
+    def test_unwrap_non_dict_passthrough(self) -> None:
+        assert unwrap_structured_result("plain string") == "plain string"
+        assert unwrap_structured_result(42) == 42

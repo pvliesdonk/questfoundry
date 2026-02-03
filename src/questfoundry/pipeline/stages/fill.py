@@ -92,6 +92,49 @@ _SLIDING_WINDOW_SIZES: dict[str, int] = {
 }
 
 
+_STRUCTURAL_ERROR_TYPES = frozenset(
+    {"missing", "missing_argument", "type_error", "extra_forbidden"}
+)
+
+
+def _classify_validation_error(
+    error: Exception,
+) -> tuple[str, list[str], list[str]]:
+    """Classify a validation error as structural or content.
+
+    Structural errors are missing fields, wrong types, or extra fields —
+    issues with the JSON shape rather than the content. Content errors are
+    constraint violations like min_length or enum mismatch.
+
+    Args:
+        error: A ValidationError or TypeError from Pydantic validation.
+
+    Returns:
+        Tuple of (failure_type, missing_fields, invalid_fields) where
+        failure_type is ``"structural"``, ``"content"``, or ``"unknown"``.
+    """
+    if not isinstance(error, ValidationError):
+        return ("unknown", [], [])
+
+    missing: list[str] = []
+    invalid: list[str] = []
+    for err in error.errors():
+        field_path = ".".join(str(p) for p in err.get("loc", ()))
+        err_type = err.get("type", "")
+        if err_type in _STRUCTURAL_ERROR_TYPES or err_type.startswith("missing"):
+            missing.append(field_path)
+        else:
+            invalid.append(field_path)
+
+    # Structural errors take precedence: fix missing/wrong-type fields first
+    # since content validation cannot run on absent fields.
+    if missing:
+        return ("structural", missing, invalid)
+    if invalid:
+        return ("content", missing, invalid)
+    return ("unknown", missing, invalid)
+
+
 def _get_prompts_path() -> Path:
     """Get the prompts directory path.
 
@@ -440,15 +483,19 @@ class FillStage:
                 return validated, llm_calls, total_tokens
 
             except (ValidationError, TypeError) as e:
+                failure_type, missing, invalid = _classify_validation_error(e)
                 log.warning(
                     "fill_llm_validation_fail",
                     template=template_name,
                     attempt=attempt + 1,
                     error=str(e),
+                    failure_type=failure_type,
+                    fields_missing=missing,
+                    fields_invalid=invalid,
                 )
 
                 if attempt < max_retries - 1:
-                    error_msg = self._build_error_feedback(e, output_schema)
+                    error_msg = self._build_error_feedback(e, output_schema, failure_type)
                     messages = list(base_messages)
                     messages.append(HumanMessage(content=error_msg))
 
@@ -457,22 +504,42 @@ class FillStage:
             f"Could not produce valid {output_schema.__name__} output."
         )
 
-    def _build_error_feedback(self, error: Exception, output_schema: type[BaseModel]) -> str:
+    @staticmethod
+    def _build_error_feedback(
+        error: Exception,
+        output_schema: type[BaseModel],
+        failure_type: str = "unknown",
+    ) -> str:
         """Build structured error feedback for LLM retry.
+
+        When the failure is structural (missing fields, wrong types), the
+        feedback explicitly instructs the model to preserve its prose content
+        and fix only the structural issue. This prevents the model from
+        rewriting good prose into something safer/shorter during retries.
 
         Args:
             error: The validation error.
             output_schema: The expected schema.
+            failure_type: Classification from _classify_validation_error.
 
         Returns:
             Formatted error feedback string.
         """
         expected = get_all_field_paths(output_schema)
-        return (
-            f"Your response failed validation:\n{error}\n\n"
-            f"Expected fields: {', '.join(expected)}\n"
-            f"Please fix the errors and try again."
-        )
+        parts = [f"Your response failed validation:\n{error}"]
+        parts.append(f"\nExpected fields: {', '.join(expected)}")
+
+        if failure_type == "structural":
+            parts.append(
+                "\nIMPORTANT: Your prose content was fine — keep it exactly as "
+                "written. Fix ONLY the structural issue (missing fields, wrong "
+                "JSON nesting, or type errors). Do not rewrite, shorten, or "
+                "simplify your prose."
+            )
+        else:
+            parts.append("\nPlease fix the errors and try again.")
+
+        return "\n".join(parts)
 
     # -------------------------------------------------------------------------
     # Phase implementations (skeleton — all return skipped)
