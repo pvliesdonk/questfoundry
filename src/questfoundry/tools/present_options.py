@@ -192,15 +192,16 @@ class PresentOptionsTool:
             description = opt.get("description", "")
             recommended = opt.get("recommended", False)
 
-            # Build option line
+            # Build option line with blank line separator between options
             rec_marker = " *(Recommended)*" if recommended else ""
-            lines.append(f"  **[{i}]** {label}{rec_marker}")
+            lines.append(f"**[{i}]** {label}{rec_marker}")
 
             if description:
-                lines.append(f"      {description}")
+                lines.append(f"  {description}")
 
-        lines.append("")
-        lines.append("  **[0]** Something else...")
+            lines.append("")  # blank line between options
+
+        lines.append("**[0]** Something else...")
         lines.append("")
         lines.append("*Enter number or type your own response:*")
 

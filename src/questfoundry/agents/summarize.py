@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, System
 from questfoundry.agents.prompts import get_summarize_prompt
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import build_runnable_config, traceable
+from questfoundry.providers.content import extract_text
 
 if TYPE_CHECKING:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -77,7 +78,7 @@ async def summarize_discussion(
     response = await model.ainvoke(summarize_messages, config=config)
 
     # Extract the summary text
-    summary = str(response.content)
+    summary = extract_text(response.content)
 
     # Extract token usage
     # LangChain tracks token usage in different places:
@@ -122,12 +123,12 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
     formatted_parts = []
     for msg in messages:
         if isinstance(msg, HumanMessage):
-            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            content = extract_text(msg.content)
             formatted_parts.append(f"User: {content}")
         elif isinstance(msg, AIMessage):
             # Include text content if present and non-empty
             if msg.content:
-                content = msg.content if isinstance(msg.content, str) else str(msg.content)
+                content = extract_text(msg.content)
                 # Skip whitespace-only content to avoid noisy "Assistant:  " lines
                 if content.strip():
                     formatted_parts.append(f"Assistant: {content}")
@@ -143,7 +144,7 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
             # Include tool results (research findings) - extract just the useful content
             # to avoid prompt-stuffing with full JSON boilerplate
             tool_name = msg.name or "unknown_tool"
-            raw_content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            raw_content = extract_text(msg.content)
             useful_content = raw_content
             try:
                 data = json.loads(raw_content)
@@ -158,10 +159,10 @@ def _format_messages_for_summary(messages: list[BaseMessage]) -> str:
                 pass
             formatted_parts.append(f"[Research: {tool_name}]\n{useful_content}")
         elif isinstance(msg, SystemMessage):
-            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            content = extract_text(msg.content)
             formatted_parts.append(f"System: {content}")
         else:
-            content = msg.content if isinstance(msg.content, str) else str(msg.content)
+            content = extract_text(msg.content)
             formatted_parts.append(f"Message: {content}")
 
     return "\n\n".join(formatted_parts)
