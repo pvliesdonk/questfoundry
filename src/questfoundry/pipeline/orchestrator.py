@@ -150,8 +150,8 @@ class PipelineOrchestrator:
             3. Role-specific env var (e.g., QF_PROVIDER_CREATIVE)
             4. General env var (QF_PROVIDER)
             5. Role-specific project config (e.g., providers.creative)
-            6. Default project config (providers.default)
-            7. Role-specific user config (~/.config/questfoundry/config.yaml)
+            6. Role-specific user config (~/.config/questfoundry/config.yaml)
+            7. Default project config (providers.default)
             8. Default user config
 
             Image provider resolution (opt-in, no default):
@@ -297,8 +297,8 @@ class PipelineOrchestrator:
         3. Role-specific env var (e.g., QF_PROVIDER_CREATIVE)
         4. General env var (QF_PROVIDER)
         5. Role-specific project config (e.g., providers.creative)
-        6. Default project config (providers.default)
-        7. Role-specific user config
+        6. Role-specific user config
+        7. Default project config (providers.default)
         8. Default user config
 
         Also checks legacy env vars (QF_PROVIDER_DISCUSS, etc.) for
@@ -349,8 +349,8 @@ class PipelineOrchestrator:
             or os.environ.get(legacy_env_var)
             or os.environ.get("QF_PROVIDER")
             or getattr(self.config.providers, role, None)  # Level 5: role-specific project config
-            or user_role  # Level 7: role-specific user config
-            or self.config.providers.default  # Level 6: default project config
+            or user_role  # Level 6: role-specific user config
+            or self.config.providers.default  # Level 7: default project config
             or user_default  # Level 8: default user config
             or self.config.providers.default  # Guaranteed non-None fallback
         )
