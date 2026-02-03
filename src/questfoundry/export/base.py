@@ -68,6 +68,7 @@ class ExportCodexEntry:
     """A codex encyclopedia entry for an entity."""
 
     entity_id: str
+    title: str
     rank: int
     visible_when: list[str] = field(default_factory=list)
     content: str = ""

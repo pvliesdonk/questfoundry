@@ -206,6 +206,7 @@ class TestTweeExporter:
             codex_entries=[
                 ExportCodexEntry(
                     entity_id="Ancient Sword",
+                    title="Ancient Sword",
                     rank=1,
                     visible_when=["codeword::sword_found"],
                     content="A legendary blade.",
@@ -239,6 +240,7 @@ class TestTweeExporter:
             codex_entries=[
                 ExportCodexEntry(
                     entity_id="World Lore",
+                    title="World Lore",
                     rank=1,
                     visible_when=[],
                     content="Always visible lore.",
@@ -262,9 +264,9 @@ class TestTweeExporter:
             ],
             choices=[],
             codex_entries=[
-                ExportCodexEntry(entity_id="Zeta", rank=3, content="Third."),
-                ExportCodexEntry(entity_id="Alpha", rank=1, content="First."),
-                ExportCodexEntry(entity_id="Beta", rank=2, content="Second."),
+                ExportCodexEntry(entity_id="Zeta", title="Zeta", rank=3, content="Third."),
+                ExportCodexEntry(entity_id="Alpha", title="Alpha", rank=1, content="First."),
+                ExportCodexEntry(entity_id="Beta", title="Beta", rank=2, content="Second."),
             ],
         )
         exporter = TweeExporter()
@@ -332,7 +334,7 @@ class TestTweeExporter:
             ],
             choices=[],
             codex_entries=[
-                ExportCodexEntry(entity_id="Held", rank=1, content="De held."),
+                ExportCodexEntry(entity_id="Held", title="Held", rank=1, content="De held."),
             ],
         )
         exporter = TweeExporter()
@@ -351,7 +353,7 @@ class TestTweeExporter:
             ],
             choices=[],
             codex_entries=[
-                ExportCodexEntry(entity_id="Held", rank=1, content="Der Held."),
+                ExportCodexEntry(entity_id="Held", title="Held", rank=1, content="Der Held."),
             ],
         )
         exporter = TweeExporter()

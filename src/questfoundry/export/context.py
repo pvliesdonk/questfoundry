@@ -201,9 +201,22 @@ def _extract_codex_entries(graph: Graph) -> list[ExportCodexEntry]:
     for node_id, data in sorted(codex_nodes.items()):
         entity_id = codex_to_entity.get(node_id)
         if entity_id:
+            title = data.get("title", "")
+            if not title:
+                # Fallback: derive from entity concept ("Name — description")
+                entity_node = graph.get_node(entity_id)
+                if entity_node:
+                    concept = entity_node.get("concept", "")
+                    for sep in (" \u2014 ", " - ", " \u2013 "):
+                        if sep in concept:
+                            title = concept.split(sep, 1)[0].strip()
+                            break
+                if not title:
+                    title = entity_id
             result.append(
                 ExportCodexEntry(
                     entity_id=entity_id,
+                    title=title,
                     rank=data.get("rank", 0),
                     visible_when=data.get("visible_when", []),
                     content=data.get("content", ""),

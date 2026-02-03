@@ -187,7 +187,7 @@ def _render_codex_panel(
         if entry.visible_when:
             visible_attr = f' data-visible-when="{html.escape(json.dumps(entry.visible_when))}"'
         parts.append(f'  <div class="codex-entry"{visible_attr}>')
-        parts.append(f"    <h3>{html.escape(entry.entity_id)}</h3>")
+        parts.append(f"    <h3>{html.escape(entry.title)}</h3>")
         parts.append(f"    <p>{html.escape(entry.content)}</p>")
         parts.append("  </div>")
     parts.append("</div>")

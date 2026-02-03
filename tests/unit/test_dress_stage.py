@@ -207,7 +207,9 @@ class TestPhase0ArtDirection:
             llm_adjustment=0,
         )
         mock_codex_out = DressPhase2Output(
-            entries=[CodexEntry(rank=1, visible_when=[], content="Base knowledge.")]
+            entries=[
+                CodexEntry(title="Test Entity", rank=1, visible_when=[], content="Base knowledge.")
+            ]
         )
 
         with (
@@ -905,8 +907,14 @@ class TestPhase1Briefs:
 def mock_codex_output() -> DressPhase2Output:
     return DressPhase2Output(
         entries=[
-            CodexEntry(rank=1, visible_when=[], content="A young scholar of the old academy."),
             CodexEntry(
+                title="Aldric",
+                rank=1,
+                visible_when=[],
+                content="A young scholar of the old academy.",
+            ),
+            CodexEntry(
+                title="Aldric's Secret",
                 rank=2,
                 visible_when=["met_aldric"],
                 content="The scholar secretly studies forbidden texts.",
