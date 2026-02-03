@@ -107,7 +107,18 @@ def unwrap_structured_result(raw_result: Any) -> Any:
     returns ``{"raw": AIMessage, "parsed": PydanticModel, "parsing_error": ...}``.
     This extracts the ``parsed`` value, falling back to the raw result for
     backward compatibility with mocks or providers that return models directly.
+
+    When the parsed result is a dict, null values are stripped before
+    returning. LLMs (especially Gemini) often emit explicit ``null`` for
+    optional fields, which Pydantic rejects when the field type is ``str``
+    (not ``str | None``). Stripping nulls before validation treats them as
+    absent, matching the ontology's "optional means may be absent" semantics.
     """
     if isinstance(raw_result, dict) and "parsed" in raw_result:
-        return raw_result["parsed"]
+        parsed = raw_result["parsed"]
+        if isinstance(parsed, dict):
+            from questfoundry.artifacts.validator import strip_null_values
+
+            return strip_null_values(parsed)
+        return parsed
     return raw_result
