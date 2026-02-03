@@ -595,6 +595,8 @@ uv run pytest --cov                                # With coverage (USES LLM - e
 qf dream                       # Run DREAM stage
 qf run --to seed              # Run up to SEED
 qf status                     # Show pipeline state
+qf inspect -p <project>       # Inspect project quality (no LLM calls)
+qf inspect -p <project> --json # Machine-readable JSON output
 ```
 
 ## Key Files to Reference
