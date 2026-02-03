@@ -8,18 +8,21 @@ from questfoundry.graph.grow_validators import (
     validate_phase2_output,
     validate_phase3_output,
     validate_phase4a_output,
+    validate_phase4f_output,
     validate_phase8c_output,
     validate_phase9_output,
 )
 from questfoundry.graph.mutations import GrowValidationError
 from questfoundry.models.grow import (
     ChoiceLabel,
+    EntityArcDescriptor,
     IntersectionProposal,
     OverlayProposal,
     PathAgnosticAssessment,
     Phase2Output,
     Phase3Output,
     Phase4aOutput,
+    Phase4fOutput,
     Phase8cOutput,
     Phase9Output,
     SceneTypeTag,
@@ -321,6 +324,132 @@ class TestValidatePhase9Output:
         assert "passage::c" in errors[0].available
 
 
+class TestValidatePhase4fOutput:
+    def test_valid_output_no_errors(self) -> None:
+        result = Phase4fOutput(
+            arcs=[
+                EntityArcDescriptor(
+                    entity_id="entity::e1",
+                    arc_line="trusted ally → doubts surface → revealed as spy",
+                    pivot_beat="beat::b2",
+                ),
+            ]
+        )
+        errors = validate_phase4f_output(
+            result,
+            valid_entity_ids={"entity::e1"},
+            valid_beat_ids={"beat::b1", "beat::b2", "beat::b3"},
+        )
+        assert errors == []
+
+    def test_invalid_entity_id(self) -> None:
+        result = Phase4fOutput(
+            arcs=[
+                EntityArcDescriptor(
+                    entity_id="entity::phantom",
+                    arc_line="trusted ally → doubts surface → revealed as spy",
+                    pivot_beat="beat::b2",
+                ),
+            ]
+        )
+        errors = validate_phase4f_output(
+            result,
+            valid_entity_ids={"entity::e1", "entity::e2"},
+            valid_beat_ids={"beat::b1", "beat::b2"},
+        )
+        assert len(errors) == 1
+        assert errors[0].field_path == "arcs.0.entity_id"
+        assert "phantom" in errors[0].issue
+        assert errors[0].provided == "entity::phantom"
+
+    def test_invalid_pivot_beat(self) -> None:
+        result = Phase4fOutput(
+            arcs=[
+                EntityArcDescriptor(
+                    entity_id="entity::e1",
+                    arc_line="safe harbor → tension creeps in → site of confrontation",
+                    pivot_beat="beat::not_on_path",
+                ),
+            ]
+        )
+        errors = validate_phase4f_output(
+            result,
+            valid_entity_ids={"entity::e1"},
+            valid_beat_ids={"beat::b1", "beat::b2"},
+        )
+        assert len(errors) == 1
+        assert errors[0].field_path == "arcs.0.pivot_beat"
+        assert "not_on_path" in errors[0].issue
+
+    def test_both_invalid(self) -> None:
+        result = Phase4fOutput(
+            arcs=[
+                EntityArcDescriptor(
+                    entity_id="entity::bad",
+                    arc_line="mundane letter → imbued with dread → proof of betrayal",
+                    pivot_beat="beat::bad",
+                ),
+            ]
+        )
+        errors = validate_phase4f_output(
+            result,
+            valid_entity_ids={"entity::e1"},
+            valid_beat_ids={"beat::b1"},
+        )
+        assert len(errors) == 2
+
+    def test_multiple_arcs_mixed_validity(self) -> None:
+        result = Phase4fOutput(
+            arcs=[
+                EntityArcDescriptor(
+                    entity_id="entity::e1",
+                    arc_line="trusted ally → doubts surface → revealed as spy",
+                    pivot_beat="beat::b2",
+                ),
+                EntityArcDescriptor(
+                    entity_id="entity::phantom",
+                    arc_line="safe harbor → tension creeps in → site of confrontation",
+                    pivot_beat="beat::b2",
+                ),
+            ]
+        )
+        errors = validate_phase4f_output(
+            result,
+            valid_entity_ids={"entity::e1"},
+            valid_beat_ids={"beat::b1", "beat::b2"},
+        )
+        assert len(errors) == 1
+        assert errors[0].provided == "entity::phantom"
+
+    def test_available_ids_in_error(self) -> None:
+        result = Phase4fOutput(
+            arcs=[
+                EntityArcDescriptor(
+                    entity_id="entity::bad",
+                    arc_line="trusted ally → doubts surface → revealed as spy",
+                    pivot_beat="beat::b1",
+                ),
+            ]
+        )
+        errors = validate_phase4f_output(
+            result,
+            valid_entity_ids={"entity::e1", "entity::e2"},
+            valid_beat_ids={"beat::b1"},
+        )
+        assert len(errors) == 1
+        assert "entity::e1" in errors[0].available
+        assert "entity::e2" in errors[0].available
+
+    def test_empty_arcs(self) -> None:
+        result = Phase4fOutput(arcs=[])
+        errors = validate_phase4f_output(
+            result,
+            valid_entity_ids={"entity::e1"},
+            valid_beat_ids={"beat::b1"},
+        )
+        assert errors == []
+
+
 class TestFormatSemanticErrors:
     def test_basic_formatting(self) -> None:
         errors = [
@@ -411,6 +540,23 @@ class TestCountEntries:
     def test_counts_labels(self) -> None:
         result = Phase9Output(labels=[ChoiceLabel(from_passage="a", to_passage="b", label="go")])
         assert count_entries(result) == 1
+
+    def test_counts_arcs(self) -> None:
+        result = Phase4fOutput(
+            arcs=[
+                EntityArcDescriptor(
+                    entity_id="entity::e1",
+                    arc_line="trusted ally → doubts → revealed as spy",
+                    pivot_beat="b2",
+                ),
+                EntityArcDescriptor(
+                    entity_id="entity::e2",
+                    arc_line="safe harbor → tension → confrontation",
+                    pivot_beat="b3",
+                ),
+            ]
+        )
+        assert count_entries(result) == 2
 
     def test_fallback_for_unknown_object(self) -> None:
         assert count_entries(object()) == 1
