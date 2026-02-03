@@ -6,6 +6,8 @@ arcs) as context strings for FILL's prose generation and review phases.
 
 from __future__ import annotations
 
+import re
+from collections import Counter
 from typing import TYPE_CHECKING
 
 import yaml
@@ -1013,11 +1015,11 @@ def _extract_top_bigrams(texts: list[str], n: int = 5, min_count: int = 2) -> li
         List of bigram strings (e.g. ["stale air", "whiskey burn"]),
         ordered by frequency descending.
     """
-    from collections import Counter
-
     bigrams: list[str] = []
     for text in texts:
-        words = text.lower().split()
+        words = re.sub(r"[^\w\s]", "", text.lower()).split()
+        if len(words) < 2:
+            continue
         bigrams.extend(f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1))
     counts = Counter(bigrams)
     return [bigram for bigram, count in counts.most_common(n) if count >= min_count]
