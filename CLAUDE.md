@@ -228,6 +228,7 @@ If you can anticipate the feedback, fix it before pushing.
 - **Always fetch main before creating a branch** - run `git fetch origin main` before `git checkout -b feat/...` to avoid merge conflicts from stale base
 - **Branch per feature/issue** - create from `origin/main` (not local main)
 - **Document in issues and PRs** - link to related issues
+- **Close issues from PRs** - use `Closes #123` (or `Fixes #123`) in PR descriptions so GitHub auto-closes the issue on merge. Merely referencing `#123` does NOT close it.
 
 ### Pull Request Size Limits
 
