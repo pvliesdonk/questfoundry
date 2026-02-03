@@ -415,7 +415,7 @@ For PRs > 300 lines, add a **Review Guide** section with suggested file/commit o
 | Reviewer Says | What It Means | What You Do |
 |---------------|---------------|-------------|
 | **LGTM** / **Approve** | Ready to merge | Merge when CI is green |
-| **Approve with minor fixes** | Small changes needed, no re-review | Fix the items, push, merge when CI green |
+| **Approve with minor fixes** | Small changes needed, no re-review | Fix the items, reply to comments, push, merge when CI green |
 | **Changes requested** | Substantive issues found | Fix all items, push, **wait for another review round** before merging |
 | **Comments only** (no verdict) | Reviewer raised concerns | Address all comments, then request re-review |
 
