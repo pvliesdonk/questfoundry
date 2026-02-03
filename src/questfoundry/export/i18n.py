@@ -69,6 +69,54 @@ UI_STRINGS: dict[str, dict[str, str]] = {
         "cover_alt": "Ilustração de capa",
         "continue": "continuar",
     },
+    "ja": {
+        "the_end": "終わり",
+        "codex": "コデックス",
+        "cover_alt": "表紙イラスト",
+        "continue": "続ける",
+    },
+    "ko": {
+        "the_end": "끝",
+        "codex": "코덱스",
+        "cover_alt": "표지 삽화",
+        "continue": "계속",
+    },
+    "zh": {
+        "the_end": "终",
+        "codex": "法典",
+        "cover_alt": "封面插图",
+        "continue": "继续",
+    },
+    "ru": {
+        "the_end": "Конец",
+        "codex": "Кодекс",
+        "cover_alt": "Обложка",
+        "continue": "продолжить",
+    },
+    "pl": {
+        "the_end": "Koniec",
+        "codex": "Kodeks",
+        "cover_alt": "Ilustracja okładki",
+        "continue": "kontynuuj",
+    },
+    "sv": {
+        "the_end": "Slut",
+        "codex": "Kodex",
+        "cover_alt": "Omslagsbild",
+        "continue": "fortsätt",
+    },
+    "da": {
+        "the_end": "Slut",
+        "codex": "Kodeks",
+        "cover_alt": "Forsideillustration",
+        "continue": "fortsæt",
+    },
+    "no": {
+        "the_end": "Slutt",
+        "codex": "Kodeks",
+        "cover_alt": "Forsideillustrasjon",
+        "continue": "fortsett",
+    },
 }
 
 
