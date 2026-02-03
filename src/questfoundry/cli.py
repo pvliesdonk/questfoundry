@@ -1998,6 +1998,7 @@ def _check_configuration() -> bool:
     """Check environment configuration."""
     import os
 
+    log = get_logger(__name__)
     console.print("[bold]Configuration[/bold]")
 
     checks = [
@@ -2010,6 +2011,7 @@ def _check_configuration() -> bool:
     ]
 
     any_provider = False
+    configured = []
     for name, value in checks:
         if value:
             # Mask secrets
@@ -2019,9 +2021,11 @@ def _check_configuration() -> bool:
                 display = value
             console.print(f"  [green]✓[/green] {name}: {display}")
             any_provider = True
+            configured.append(name)
         else:
             console.print(f"  [dim]○[/dim] {name}: not configured")
 
+    log.info("doctor_configuration", configured=configured, any_provider=any_provider)
     console.print()
     return any_provider  # At least one provider configured
 
@@ -2035,10 +2039,12 @@ async def _check_providers() -> tuple[bool, dict[str, list[str]]]:
     """
     import os
 
+    log = get_logger(__name__)
     console.print("[bold]Provider Connectivity[/bold]")
 
     all_ok = True
     discovered: dict[str, list[str]] = {}
+    skipped: list[str] = []
 
     # Check Ollama
     if os.getenv("OLLAMA_HOST"):
@@ -2048,6 +2054,7 @@ async def _check_providers() -> tuple[bool, dict[str, list[str]]]:
             discovered["ollama"] = models
     else:
         console.print("  [dim]○[/dim] ollama: Skipped (OLLAMA_HOST not set)")
+        skipped.append("ollama")
 
     # Check OpenAI
     if os.getenv("OPENAI_API_KEY"):
@@ -2057,6 +2064,7 @@ async def _check_providers() -> tuple[bool, dict[str, list[str]]]:
             discovered["openai"] = models
     else:
         console.print("  [dim]○[/dim] openai: Skipped (not configured)")
+        skipped.append("openai")
 
     # Check Anthropic
     if os.getenv("ANTHROPIC_API_KEY"):
@@ -2066,6 +2074,7 @@ async def _check_providers() -> tuple[bool, dict[str, list[str]]]:
             discovered["anthropic"] = models
     else:
         console.print("  [dim]○[/dim] anthropic: Skipped (not configured)")
+        skipped.append("anthropic")
 
     # Check Google
     if os.getenv("GOOGLE_API_KEY"):
@@ -2075,13 +2084,21 @@ async def _check_providers() -> tuple[bool, dict[str, list[str]]]:
             discovered["google"] = models
     else:
         console.print("  [dim]○[/dim] google: Skipped (GOOGLE_API_KEY not set)")
+        skipped.append("google")
 
     # Check A1111
     if os.getenv("A1111_HOST"):
         all_ok &= await _check_a1111()
     else:
         console.print("  [dim]○[/dim] a1111: Skipped (A1111_HOST not set)")
+        skipped.append("a1111")
 
+    log.info(
+        "doctor_providers",
+        all_ok=all_ok,
+        discovered=list(discovered.keys()),
+        skipped=skipped,
+    )
     console.print()
     return all_ok, discovered
 
@@ -2097,6 +2114,7 @@ async def _check_ollama() -> tuple[bool, list[str]]:
 
     import httpx
 
+    log = get_logger(__name__)
     host = os.getenv("OLLAMA_HOST")
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -2109,23 +2127,30 @@ async def _check_ollama() -> tuple[bool, list[str]]:
                     if len(models) > 5:
                         model_list += f", +{len(models) - 5} more"
                     console.print(f"  [green]✓[/green] ollama: Connected ({model_list})")
+                    log.info("doctor_ollama", status="connected", models=len(models))
                 else:
                     console.print("  [yellow]![/yellow] ollama: Connected (no models pulled)")
+                    log.warning("doctor_ollama", status="connected", models=0)
                 return True, models
             else:
                 console.print(f"  [red]✗[/red] ollama: HTTP {response.status_code}")
+                log.error("doctor_ollama", status="http_error", code=response.status_code)
                 return False, []
     except httpx.ConnectError:
         console.print(f"  [red]✗[/red] ollama: Connection refused ({host})")
+        log.error("doctor_ollama", status="connection_refused", host=host)
         return False, []
     except httpx.TimeoutException:
         console.print(f"  [red]✗[/red] ollama: Connection timeout ({host})")
+        log.error("doctor_ollama", status="timeout", host=host)
         return False, []
     except httpx.RequestError as e:
         console.print(f"  [red]✗[/red] ollama: Request error - {e}")
+        log.error("doctor_ollama", status="request_error", error=str(e))
         return False, []
     except json.JSONDecodeError:
         console.print("  [red]✗[/red] ollama: Invalid JSON response")
+        log.error("doctor_ollama", status="invalid_json")
         return False, []
 
 
@@ -2140,6 +2165,7 @@ async def _check_openai() -> tuple[bool, list[str]]:
 
     import httpx
 
+    log = get_logger(__name__)
     api_key = os.getenv("OPENAI_API_KEY")
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -2158,21 +2184,27 @@ async def _check_openai() -> tuple[bool, list[str]]:
                     f"  [green]✓[/green] openai: Connected "
                     f"({count} chat model{'s' if count != 1 else ''} available)"
                 )
+                log.info("doctor_openai", status="connected", models=count)
                 return True, models
             elif response.status_code == 401:
                 console.print("  [red]✗[/red] openai: Invalid API key")
+                log.error("doctor_openai", status="invalid_key")
                 return False, []
             else:
                 console.print(f"  [red]✗[/red] openai: HTTP {response.status_code}")
+                log.error("doctor_openai", status="http_error", code=response.status_code)
                 return False, []
     except httpx.TimeoutException:
         console.print("  [red]✗[/red] openai: Connection timeout")
+        log.error("doctor_openai", status="timeout")
         return False, []
     except httpx.RequestError as e:
         console.print(f"  [red]✗[/red] openai: Request error - {e}")
+        log.error("doctor_openai", status="request_error", error=str(e))
         return False, []
     except json.JSONDecodeError:
         console.print("  [red]✗[/red] openai: Invalid JSON response")
+        log.error("doctor_openai", status="invalid_json")
         return False, []
 
 
@@ -2192,6 +2224,7 @@ async def _check_anthropic() -> tuple[bool, list[str]]:
 
     from questfoundry.providers.model_info import KNOWN_MODELS
 
+    log = get_logger(__name__)
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         return False, []
@@ -2216,18 +2249,23 @@ async def _check_anthropic() -> tuple[bool, list[str]]:
         if response.status_code == 400:
             console.print("  [green]✓[/green] anthropic: Connected (API key valid)")
             models = list(KNOWN_MODELS.get("anthropic", {}).keys())
+            log.info("doctor_anthropic", status="connected", models=len(models))
             return True, models
         elif response.status_code in (401, 403):
             console.print("  [red]✗[/red] anthropic: Invalid API key")
+            log.error("doctor_anthropic", status="invalid_key")
             return False, []
         else:
             console.print(f"  [red]✗[/red] anthropic: API error HTTP {response.status_code}")
+            log.error("doctor_anthropic", status="http_error", code=response.status_code)
             return False, []
     except httpx.TimeoutException:
         console.print("  [red]✗[/red] anthropic: Connection timeout")
+        log.error("doctor_anthropic", status="timeout")
         return False, []
     except httpx.RequestError as e:
         console.print(f"  [red]✗[/red] anthropic: Request error - {e}")
+        log.error("doctor_anthropic", status="request_error", error=str(e))
         return False, []
 
 
@@ -2242,6 +2280,7 @@ async def _check_google() -> tuple[bool, list[str]]:
 
     import httpx
 
+    log = get_logger(__name__)
     api_key: str | None = os.getenv("GOOGLE_API_KEY")
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -2261,21 +2300,27 @@ async def _check_google() -> tuple[bool, list[str]]:
                     f"  [green]✓[/green] google: Connected "
                     f"({count} Gemini model{'s' if count != 1 else ''} available)"
                 )
+                log.info("doctor_google", status="connected", models=count)
                 return True, models
             elif response.status_code == 400:
                 console.print("  [red]✗[/red] google: Invalid API key")
+                log.error("doctor_google", status="invalid_key")
                 return False, []
             else:
                 console.print(f"  [red]✗[/red] google: HTTP {response.status_code}")
+                log.error("doctor_google", status="http_error", code=response.status_code)
                 return False, []
     except httpx.TimeoutException:
         console.print("  [red]✗[/red] google: Connection timeout")
+        log.error("doctor_google", status="timeout")
         return False, []
     except httpx.RequestError as e:
         console.print(f"  [red]✗[/red] google: Request error - {e}")
+        log.error("doctor_google", status="request_error", error=str(e))
         return False, []
     except json.JSONDecodeError:
         console.print("  [red]✗[/red] google: Invalid JSON response")
+        log.error("doctor_google", status="invalid_json")
         return False, []
 
 
@@ -2285,6 +2330,7 @@ async def _check_a1111() -> bool:
 
     import httpx
 
+    log = get_logger(__name__)
     host = os.getenv("A1111_HOST", "").rstrip("/")
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
@@ -2293,18 +2339,23 @@ async def _check_a1111() -> bool:
                 data = response.json()
                 checkpoint = data.get("sd_model_checkpoint", "unknown")
                 console.print(f"  [green]✓[/green] a1111: Connected (checkpoint: {checkpoint})")
+                log.info("doctor_a1111", status="connected", checkpoint=checkpoint)
                 return True
             else:
                 console.print(f"  [red]✗[/red] a1111: HTTP {response.status_code}")
+                log.error("doctor_a1111", status="http_error", code=response.status_code)
                 return False
     except httpx.ConnectError:
         console.print(f"  [red]✗[/red] a1111: Connection refused ({host})")
+        log.error("doctor_a1111", status="connection_refused", host=host)
         return False
     except httpx.TimeoutException:
         console.print(f"  [red]✗[/red] a1111: Connection timeout ({host})")
+        log.error("doctor_a1111", status="timeout", host=host)
         return False
     except httpx.RequestError as e:
         console.print(f"  [red]✗[/red] a1111: Request error - {e}")
+        log.error("doctor_a1111", status="request_error", error=str(e))
         return False
 
 
@@ -2368,6 +2419,7 @@ def _check_project(project_path: Path) -> bool:
     """Check project configuration."""
     from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 
+    log = get_logger(__name__)
     console.print("[bold]Project[/bold]")
 
     all_ok = True
@@ -2384,17 +2436,26 @@ def _check_project(project_path: Path) -> bool:
             console.print(
                 f"  [green]✓[/green] Default provider: {config.provider.name}/{config.provider.model}"
             )
+            log.info(
+                "doctor_project",
+                status="valid",
+                name=config.name,
+                provider=f"{config.provider.name}/{config.provider.model}",
+            )
         except ProjectConfigError as e:
             console.print(f"  [red]✗[/red] Config error: {e}")
+            log.error("doctor_project", status="config_error", error=str(e))
             all_ok = False
     else:
         console.print("  [dim]○[/dim] project.yaml: Not found (not in a project)")
+        log.info("doctor_project", status="no_project")
 
     # Check artifacts directory
     artifacts_dir = project_path / "artifacts"
     if artifacts_dir.exists():
         artifact_count = len(list(artifacts_dir.glob("*.yaml")))
         console.print(f"  [green]✓[/green] Artifacts directory: {artifact_count} artifact(s)")
+        log.info("doctor_artifacts", count=artifact_count)
     else:
         console.print("  [dim]○[/dim] Artifacts directory: Not found")
 
