@@ -92,7 +92,9 @@ _SLIDING_WINDOW_SIZES: dict[str, int] = {
 }
 
 
-_STRUCTURAL_ERROR_TYPES = frozenset({"missing", "value_error", "type_error", "extra_forbidden"})
+_STRUCTURAL_ERROR_TYPES = frozenset(
+    {"missing", "missing_argument", "type_error", "extra_forbidden"}
+)
 
 
 def _classify_validation_error(
@@ -124,12 +126,12 @@ def _classify_validation_error(
         else:
             invalid.append(field_path)
 
-    if missing and not invalid:
+    # Structural errors take precedence: fix missing/wrong-type fields first
+    # since content validation cannot run on absent fields.
+    if missing:
         return ("structural", missing, invalid)
-    if invalid and not missing:
+    if invalid:
         return ("content", missing, invalid)
-    if missing and invalid:
-        return ("structural", missing, invalid)
     return ("unknown", missing, invalid)
 
 
@@ -502,8 +504,8 @@ class FillStage:
             f"Could not produce valid {output_schema.__name__} output."
         )
 
+    @staticmethod
     def _build_error_feedback(
-        self,
         error: Exception,
         output_schema: type[BaseModel],
         failure_type: str = "unknown",
