@@ -282,9 +282,12 @@ class A1111ImageProvider:
             "KEEP: concrete visual details that a painter would need.\n\n"
             "RULES:\n"
             "- ENTITY EXPANSION: SD does not know character names. Replace names "
-            '(e.g., "Eleanor") with their visual descriptions from the Entities '
-            'field (e.g., "eleanor: tall woman, dark coat" → use '
-            '"tall woman, dark coat").\n'
+            "in the Subject with their visual descriptions from the Entities "
+            'field. Each entity is listed as "Name (id): visual description". '
+            "Match names in the Subject to entity names, then use the visual "
+            'tags (e.g., "Bailey slides..." + "Bailey (ch_bailey): club owner, '
+            'gray pinstripe suit" → "club owner, gray pinstripe suit, '
+            'sliding tab").\n'
             "- Each tag is 1-4 words, comma-separated.\n"
             "- No prose, no articles, no prepositions, no sentences.\n"
             "- Output EXACTLY two lines. Line 1: positive. Line 2: negative.\n"

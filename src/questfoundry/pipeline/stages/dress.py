@@ -1465,7 +1465,19 @@ def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
         if ev:
             frag = ev.get("reference_prompt_fragment", "")
             if frag:
-                entity_fragments.append(f"{raw_eid}: {frag}")
+                # Include the display name so the distiller can match
+                # "Bailey" in the subject to "Bailey (ch_bailey): ..."
+                entity_node = graph.get_node(f"entity::{raw_eid}")
+                name = ""
+                if entity_node:
+                    concept = entity_node.get("concept", "")
+                    # Name is the first part before " —" or " -"
+                    for sep in (" \u2014 ", " - ", " \u2013 "):
+                        if sep in concept:
+                            name = concept.split(sep, 1)[0].strip()
+                            break
+                label = f"{name} ({raw_eid})" if name else raw_eid
+                entity_fragments.append(f"{label}: {frag}")
 
     return ImageBrief(
         subject=brief.get("subject", ""),
