@@ -12,6 +12,7 @@ from questfoundry.prompts import (
     PromptLoader,
     PromptTemplate,
     TemplateNotFoundError,
+    safe_format,
 )
 
 # --- PromptTemplate Tests ---
@@ -333,3 +334,43 @@ def test_compiled_prompt_total_tokens() -> None:
 
     assert prompt.total_tokens == 100
     assert prompt.total_tokens == prompt.token_count
+
+
+# --- safe_format Tests ---
+
+
+class TestSafeFormat:
+    """Tests for safe_format() template substitution."""
+
+    def test_basic_substitution(self) -> None:
+        result = safe_format("Hello {name}, your score is {score}.", {"name": "Alice", "score": 42})
+        assert result == "Hello Alice, your score is 42."
+
+    def test_unmatched_placeholder_left_as_is(self) -> None:
+        result = safe_format("Hello {name}, {missing} field.", {"name": "Bob"})
+        assert result == "Hello Bob, {missing} field."
+
+    def test_curly_braces_in_values_not_interpreted(self) -> None:
+        """LLM output with {braces} must not cause KeyError."""
+        context = {"research_notes": 'The model returned {"key": "value"} as JSON.'}
+        result = safe_format("Notes: {research_notes}", context)
+        assert result == 'Notes: The model returned {"key": "value"} as JSON.'
+
+    def test_nested_braces_in_values(self) -> None:
+        context = {"notes": "Use {variable} syntax for templates."}
+        result = safe_format("Research: {notes}", context)
+        assert result == "Research: Use {variable} syntax for templates."
+
+    def test_empty_context(self) -> None:
+        result = safe_format("No {substitutions} here.", {})
+        assert result == "No {substitutions} here."
+
+    def test_empty_template(self) -> None:
+        result = safe_format("", {"key": "value"})
+        assert result == ""
+
+    def test_value_with_format_specifier_like_braces(self) -> None:
+        """Values like {0} or {name!r} should pass through safely."""
+        context = {"data": "items: {0}, {1}, {name!r}"}
+        result = safe_format("Data: {data}", context)
+        assert result == "Data: items: {0}, {1}, {name!r}"
