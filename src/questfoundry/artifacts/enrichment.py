@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.graph.context import strip_scope_prefix
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -92,7 +93,7 @@ def _enrich_entities(graph: Graph, entity_decisions: list[dict[str, Any]]) -> li
     for decision in entity_decisions:
         entity_id = decision.get("entity_id", "")
         # Strip prefix if present (e.g., "entity::the_detective" -> "the_detective")
-        lookup_id = entity_id.split("::")[-1]
+        lookup_id = strip_scope_prefix(entity_id)
         node = entity_data.get(lookup_id, {}) if lookup_id else {}
 
         # Build enriched entity in consistent field order
@@ -138,7 +139,7 @@ def _enrich_dilemmas(graph: Graph, dilemma_decisions: list[dict[str, Any]]) -> l
     for decision in dilemma_decisions:
         dilemma_id = decision.get("dilemma_id", "")
         # Strip prefix if present (e.g., "dilemma::host_motivation" -> "host_motivation")
-        lookup_id = dilemma_id.split("::")[-1]
+        lookup_id = strip_scope_prefix(dilemma_id)
         node = dilemma_data.get(lookup_id, {}) if lookup_id else {}
 
         # Build enriched dilemma in consistent field order
@@ -153,7 +154,7 @@ def _enrich_dilemmas(graph: Graph, dilemma_decisions: list[dict[str, Any]]) -> l
 
         # Handle central_entity_ids with prefix stripping for readability
         if value := node.get("central_entity_ids"):
-            enriched["central_entity_ids"] = [eid.split("::")[-1] for eid in value]
+            enriched["central_entity_ids"] = [strip_scope_prefix(eid) for eid in value]
 
         # Add SEED decision fields (supports old 'considered' and 'implicit' field names)
         enriched["explored"] = decision.get("explored", decision.get("considered", []))

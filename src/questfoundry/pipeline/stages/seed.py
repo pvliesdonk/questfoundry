@@ -28,7 +28,11 @@ from questfoundry.agents import (
     summarize_discussion,
 )
 from questfoundry.graph import Graph
-from questfoundry.graph.context import format_summarize_manifest, get_expected_counts
+from questfoundry.graph.context import (
+    format_summarize_manifest,
+    get_expected_counts,
+    strip_scope_prefix,
+)
 from questfoundry.graph.mutations import format_semantic_errors_as_content
 from questfoundry.graph.seed_pruning import compute_arc_count, prune_to_arc_limit
 from questfoundry.observability.logging import get_logger
@@ -106,7 +110,7 @@ def _format_dilemma(dilemma_id: str, dilemma_data: dict[str, Any], graph: Graph)
             entities_display.append(ref[8:])  # Skip "entity::" prefix
         elif "::" in ref:
             # Fallback for other prefixed formats
-            entities_display.append(ref.split("::")[-1])
+            entities_display.append(strip_scope_prefix(ref))
         else:
             entities_display.append(ref)
 

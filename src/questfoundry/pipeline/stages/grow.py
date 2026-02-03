@@ -30,7 +30,7 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
-from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
@@ -1607,9 +1607,7 @@ class GrowStage:
 
         passage_count = 0
         for beat_id, beat_data in sorted(beat_nodes.items()):
-            raw_id = beat_data.get(
-                "raw_id", beat_id.split("::")[-1] if "::" in beat_id else beat_id
-            )
+            raw_id = beat_data.get("raw_id", strip_scope_prefix(beat_id))
             passage_id = f"passage::{raw_id}"
 
             graph.create_node(
@@ -1675,9 +1673,7 @@ class GrowStage:
 
         codeword_count = 0
         for cons_id, cons_data in sorted(consequence_nodes.items()):
-            cons_raw = cons_data.get(
-                "raw_id", cons_id.split("::")[-1] if "::" in cons_id else cons_id
-            )
+            cons_raw = cons_data.get("raw_id", strip_scope_prefix(cons_id))
             codeword_id = f"codeword::{cons_raw}_committed"
 
             graph.create_node(
