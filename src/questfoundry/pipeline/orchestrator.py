@@ -598,8 +598,8 @@ class PipelineOrchestrator:
             image_budget = context.get("image_budget", 0)
             if image_budget > 0:
                 stage_kwargs["image_budget"] = image_budget
-            if "two_step" in context:
-                stage_kwargs["two_step"] = context["two_step"]
+            if stage_name == "fill":
+                stage_kwargs["two_step"] = context.get("two_step", self.config.fill.two_step)
 
             # Resolve size profile from DREAM vision node (for post-DREAM stages)
             if stage_name != "dream":

@@ -461,7 +461,7 @@ def _run_stage_command(
     resume_from: str | None = None,
     image_provider: str | None = None,
     image_budget: int = 0,
-    two_step: bool = True,
+    two_step: bool | None = None,
     language: str | None = None,
 ) -> None:
     """Common logic for running a stage command.
@@ -516,7 +516,7 @@ def _run_stage_command(
         context["image_provider"] = image_provider
     if image_budget > 0:
         context["image_budget"] = image_budget
-    if stage_name == "fill":
+    if stage_name == "fill" and two_step is not None:
         context["two_step"] = two_step
     if language:
         context["language"] = language
@@ -1331,13 +1331,14 @@ def fill(
         typer.Option("--resume-from", help="Resume from named phase (skips earlier phases)"),
     ] = None,
     two_step: Annotated[
-        bool,
+        bool | None,
         typer.Option(
             "--two-step/--no-two-step",
             help="Two-step prose generation: write prose first, then extract entities. "
-            "Improves quality by removing JSON constraints from creative output.",
+            "Improves quality by removing JSON constraints from creative output. "
+            "Defaults to fill.two_step in project.yaml (true if unset).",
         ),
-    ] = True,
+    ] = None,
     language: Annotated[
         str | None,
         typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
@@ -1808,12 +1809,12 @@ def run(
         ),
     ] = 0,
     two_step: Annotated[
-        bool,
+        bool | None,
         typer.Option(
             "--two-step/--no-two-step",
-            help="Two-step FILL prose generation (default: enabled).",
+            help="Two-step FILL prose generation. Defaults to fill.two_step in project.yaml.",
         ),
-    ] = True,
+    ] = None,
     language: Annotated[
         str | None,
         typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 from questfoundry.pipeline.config import (
     DEFAULT_MODEL,
     DEFAULT_PROVIDER,
+    FillConfig,
     ProjectConfig,
     ProvidersConfig,
     create_default_config,
@@ -562,3 +563,55 @@ class TestProjectConfigLanguage:
         }
         config = ProjectConfig.from_dict(data)
         assert config.language == "de"
+
+
+class TestFillConfig:
+    """Tests for FillConfig parsing."""
+
+    def test_default_two_step_is_true(self) -> None:
+        """FillConfig defaults to two_step=True."""
+        config = FillConfig()
+        assert config.two_step is True
+
+    def test_from_dict_two_step_false(self) -> None:
+        """FillConfig.from_dict reads two_step."""
+        config = FillConfig.from_dict({"two_step": False})
+        assert config.two_step is False
+
+    def test_from_dict_empty(self) -> None:
+        """Empty dict uses defaults."""
+        config = FillConfig.from_dict({})
+        assert config.two_step is True
+
+
+class TestProjectConfigFill:
+    """Tests for ProjectConfig fill section."""
+
+    def test_default_fill_config(self) -> None:
+        """ProjectConfig defaults to FillConfig defaults."""
+        data = {
+            "name": "test",
+            "providers": {"default": "ollama/qwen3:4b-instruct-32k"},
+        }
+        config = ProjectConfig.from_dict(data)
+        assert config.fill.two_step is True
+
+    def test_fill_two_step_from_yaml(self) -> None:
+        """ProjectConfig parses fill.two_step from dict."""
+        data = {
+            "name": "test",
+            "providers": {"default": "ollama/qwen3:4b-instruct-32k"},
+            "fill": {"two_step": False},
+        }
+        config = ProjectConfig.from_dict(data)
+        assert config.fill.two_step is False
+
+    def test_fill_section_missing_uses_defaults(self) -> None:
+        """Missing fill section uses FillConfig defaults."""
+        data = {
+            "name": "test",
+            "providers": {"default": "ollama/qwen3:4b-instruct-32k"},
+        }
+        config = ProjectConfig.from_dict(data)
+        assert isinstance(config.fill, FillConfig)
+        assert config.fill.two_step is True
