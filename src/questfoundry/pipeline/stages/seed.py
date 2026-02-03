@@ -468,6 +468,21 @@ class SeedStage:
         path_count = len(artifact_data.get("paths", []))
         beat_count = len(artifact_data.get("initial_beats", []))
 
+        # Advisory warning: check beats-per-path ratio
+        if path_count > 0:
+            avg_beats = beat_count / path_count
+            if avg_beats < 3:
+                log.warning(
+                    "seed_low_beat_count",
+                    total_beats=beat_count,
+                    paths=path_count,
+                    avg_per_path=round(avg_beats, 1),
+                    message=(
+                        f"Average {avg_beats:.1f} beats/path (expected ~4). "
+                        f"Some models under-produce beats due to brevity optimization."
+                    ),
+                )
+
         # Warn if arc count is too low (linear story instead of IF)
         # This indicates the LLM didn't generate enough branching content
         min_arcs_warning = max(2, max_arcs // 4)

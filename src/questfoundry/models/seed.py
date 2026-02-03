@@ -342,6 +342,19 @@ class PathBeatsSection(BaseModel):
         description="2-4 initial beats for this specific path",
     )
 
+    @model_validator(mode="after")
+    def _check_beat_ids_unique(self) -> PathBeatsSection:
+        """Validate that beat IDs are unique within this path's beats."""
+        ids = [b.beat_id for b in self.initial_beats]
+        dupes = [bid for bid in ids if ids.count(bid) > 1]
+        if dupes:
+            msg = (
+                f"Duplicate beat IDs found: {sorted(set(dupes))}. "
+                f"Each beat must have a unique beat_id."
+            )
+            raise ValueError(msg)
+        return self
+
 
 class ConvergenceSection(BaseModel):
     """Wrapper for serializing convergence sketch separately."""
