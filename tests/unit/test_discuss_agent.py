@@ -327,51 +327,55 @@ class TestInteractiveMode:
         assert calls == 3  # One AIMessage per turn
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("exit_cmd", ["/done", "/quit", "/exit"])
     @patch("questfoundry.agents.discuss.create_discuss_agent")
-    async def test_interactive_exit_on_done_command(self, mock_create: MagicMock) -> None:
+    async def test_interactive_exit_on_done_command(
+        self, mock_create: MagicMock, exit_cmd: str
+    ) -> None:
         """Interactive mode exits on /done, /quit, /exit commands."""
-        for exit_cmd in ["/done", "/quit", "/exit"]:
-            mock_agent = AsyncMock()
-            mock_agent.ainvoke.return_value = {"messages": [AIMessage(content="Response")]}
-            mock_create.return_value = mock_agent
+        mock_agent = AsyncMock()
+        mock_agent.ainvoke.return_value = {"messages": [AIMessage(content="Response")]}
+        mock_create.return_value = mock_agent
 
-            user_input_fn = AsyncMock(return_value=exit_cmd)
-            on_assistant = MagicMock()
+        user_input_fn = AsyncMock(return_value=exit_cmd)
+        on_assistant = MagicMock()
 
-            await run_discuss_phase(
-                model=MagicMock(),
-                tools=[],
-                user_prompt="Test",
-                interactive=True,
-                user_input_fn=user_input_fn,
-                on_assistant_message=on_assistant,
-            )
+        await run_discuss_phase(
+            model=MagicMock(),
+            tools=[],
+            user_prompt="Test",
+            interactive=True,
+            user_input_fn=user_input_fn,
+            on_assistant_message=on_assistant,
+        )
 
-            # Only 1 turn (initial) — exit command prevents second invoke
-            assert mock_agent.ainvoke.call_count == 1, f"Failed for {exit_cmd}"
+        # Only 1 turn (initial) — exit command prevents second invoke
+        assert mock_agent.ainvoke.call_count == 1
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize("empty_input", ["", "  ", None])
     @patch("questfoundry.agents.discuss.create_discuss_agent")
-    async def test_interactive_exit_on_empty_input(self, mock_create: MagicMock) -> None:
+    async def test_interactive_exit_on_empty_input(
+        self, mock_create: MagicMock, empty_input: str | None
+    ) -> None:
         """Interactive mode exits on empty input or None."""
-        for empty_input in ["", "  ", None]:
-            mock_agent = AsyncMock()
-            mock_agent.ainvoke.return_value = {"messages": [AIMessage(content="Response")]}
-            mock_create.return_value = mock_agent
+        mock_agent = AsyncMock()
+        mock_agent.ainvoke.return_value = {"messages": [AIMessage(content="Response")]}
+        mock_create.return_value = mock_agent
 
-            user_input_fn = AsyncMock(return_value=empty_input)
-            on_assistant = MagicMock()
+        user_input_fn = AsyncMock(return_value=empty_input)
+        on_assistant = MagicMock()
 
-            await run_discuss_phase(
-                model=MagicMock(),
-                tools=[],
-                user_prompt="Test",
-                interactive=True,
-                user_input_fn=user_input_fn,
-                on_assistant_message=on_assistant,
-            )
+        await run_discuss_phase(
+            model=MagicMock(),
+            tools=[],
+            user_prompt="Test",
+            interactive=True,
+            user_input_fn=user_input_fn,
+            on_assistant_message=on_assistant,
+        )
 
-            assert mock_agent.ainvoke.call_count == 1, f"Failed for {empty_input!r}"
+        assert mock_agent.ainvoke.call_count == 1
 
     @pytest.mark.asyncio
     async def test_interactive_without_input_fn_raises(self) -> None:
