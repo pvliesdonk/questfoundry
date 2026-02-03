@@ -73,7 +73,9 @@ research_tools_section: |
   Use these tools when helpful, but don't overuse them - focus on the creative discussion.
 
   ## Structured Options (Interactive Mode)
-  You can use `present_options` to offer structured choices for clear decisions:
+  When offering the user a choice between distinct options, ALWAYS use the
+  `present_options` tool. NEVER write numbered lists in your message text —
+  the tool provides proper formatting and input handling.
   - Use for genre, tone, audience, or scope questions with 2-4 distinct options
   - The user can select by number or type a custom response
   - Mark your recommended option when you have a preference
