@@ -16,6 +16,7 @@ from langchain_core.callbacks import BaseCallbackHandler
 from langchain_core.messages import ToolMessage
 
 from questfoundry.observability.logging import get_logger
+from questfoundry.providers.content import extract_text
 
 if TYPE_CHECKING:
     from uuid import UUID
@@ -138,9 +139,7 @@ class LLMLoggingCallback(BaseCallbackHandler):
                 flat_messages.append(
                     {
                         "role": msg.type,  # human, ai, system, tool, etc.
-                        "content": msg.content
-                        if isinstance(msg.content, str)
-                        else str(msg.content),
+                        "content": extract_text(msg.content),
                     }
                 )
 

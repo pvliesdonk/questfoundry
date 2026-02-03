@@ -10,6 +10,7 @@ from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from questfoundry.agents.prompts import get_discuss_prompt
 from questfoundry.observability.logging import get_logger
 from questfoundry.observability.tracing import build_runnable_config, traceable
+from questfoundry.providers.content import extract_text
 from questfoundry.tools.interactive_context import (
     clear_interactive_callbacks,
     set_interactive_callbacks,
@@ -196,7 +197,7 @@ async def run_discuss_phase(
             for msg in new_messages:
                 if isinstance(msg, AIMessage):
                     total_llm_calls += 1
-                    last_ai_content = str(msg.content)
+                    last_ai_content = extract_text(msg.content)
                     # Extract tokens
                     if hasattr(msg, "usage_metadata") and msg.usage_metadata:
                         tokens = msg.usage_metadata.get("total_tokens")
