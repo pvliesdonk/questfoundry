@@ -26,6 +26,7 @@ from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph.fill_context import (
+    compute_first_appearances,
     compute_is_ending,
     compute_lexical_diversity,
     format_atmospheric_detail,
@@ -35,6 +36,7 @@ from questfoundry.graph.fill_context import (
     format_entity_states,
     format_entry_states,
     format_grow_summary,
+    format_introduction_guidance,
     format_lookahead_context,
     format_narrative_context,
     format_passages_batch,
@@ -849,9 +851,11 @@ class FillStage:
 
         # Build passage index within each arc for sliding window
         arc_passage_indices: dict[str, dict[str, int]] = {}
+        arc_passage_orders: dict[str, list[str]] = {}
         for _passage_id, arc_id in generation_order:
             if arc_id not in arc_passage_indices:
                 arc_order = get_arc_passage_order(graph, arc_id)
+                arc_passage_orders[arc_id] = arc_order
                 arc_passage_indices[arc_id] = {pid: i for i, pid in enumerate(arc_order)}
 
         for passage_id, arc_id in generation_order:
@@ -873,6 +877,10 @@ class FillStage:
             window_size = _SLIDING_WINDOW_SIZES.get(narrative_function, 3)
 
             is_ending = compute_is_ending(graph, passage_id)
+            # Compute first-appearance entity names for introduction guidance
+            arc_order = arc_passage_orders.get(arc_id, [])
+            first_eids = compute_first_appearances(graph, passage_id, arc_order)
+            first_names = [(graph.get_node(eid) or {}).get("raw_id", eid) for eid in first_eids]
             context = {
                 "voice_document": voice_context,
                 "story_identity": story_identity_context,
@@ -890,6 +898,7 @@ class FillStage:
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
                 "vocabulary_note": vocabulary_note,
                 "ending_guidance": format_ending_guidance(is_ending),
+                "introduction_guidance": format_introduction_guidance(first_names),
                 "output_language_instruction": self._lang_instruction,
             }
 

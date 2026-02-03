@@ -103,6 +103,8 @@ system: |
 
   {ending_guidance}
 
+  {introduction_guidance}
+
   ## Poly-State Examples (CRITICAL for shared beats)
   GOOD: "The stranger's expression was unreadable" (works for trust or betrayal)
   GOOD: "Something had shifted between them" (ambiguous emotional change)
