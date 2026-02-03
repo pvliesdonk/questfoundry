@@ -1693,7 +1693,12 @@ def generate_images(
 
     def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
         detail_str = f" ({detail})" if detail else ""
-        status_icon = "[green]✓[/green]" if status == "completed" else "[red]✗[/red]"
+        if status == "completed":
+            status_icon = "[green]✓[/green]"
+        elif status == "failed":
+            status_icon = "[red]✗[/red]"
+        else:
+            status_icon = "[yellow]○[/yellow]"
         console.print(f"  {status_icon} {phase}{detail_str}")
 
     console.print()
