@@ -91,6 +91,15 @@ system: |
   11. Every scene and sequel MUST contain at least one line of dialogue or one
       concrete physical action (a character doing something with their body, not
       just thinking or feeling).
+  12. Dialogue tags: prefer "said" or no tag. Use action beats instead of
+      adverb-laden tags or said-bookisms.
+      BAD: "she whispered softly", "he retorted angrily"
+      GOOD: She leaned closer. "..." / He slammed the glass down. "..."
+  13. NEVER name the theme, mood, or emotion directly in prose. Show it through
+      what characters do, notice, or fail to notice.
+      BAD: "A wave of grief washed over her." / "He felt angry."
+      GOOD: "She picked up his coffee mug, still warm, and held it with both hands."
+      GOOD: "His jaw tightened. He set down the glass without drinking."
 
   ## Poly-State Examples (CRITICAL for shared beats)
   GOOD: "The stranger's expression was unreadable" (works for trust or betrayal)
