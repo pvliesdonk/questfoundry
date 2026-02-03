@@ -762,3 +762,79 @@ async def test_outer_loop_success_on_first_try() -> None:
         assert mock_serialize.call_count == 1
         # Error formatting should not be called
         mock_format.assert_not_called()
+
+
+# --- PathBeatsSection Validation Tests ---
+
+
+class TestPathBeatsSectionValidation:
+    """Tests for PathBeatsSection beat count and uniqueness validation."""
+
+    def test_valid_four_beats(self) -> None:
+        """Four unique beats within range passes validation."""
+        from questfoundry.models.seed import InitialBeat, PathBeatsSection
+
+        beats = [
+            InitialBeat(
+                beat_id=f"beat_{i}",
+                summary=f"Beat {i}",
+                paths=["path_a"],
+            )
+            for i in range(4)
+        ]
+        section = PathBeatsSection(initial_beats=beats)
+        assert len(section.initial_beats) == 4
+
+    def test_valid_two_beats(self) -> None:
+        """Two beats (minimum) passes validation."""
+        from questfoundry.models.seed import InitialBeat, PathBeatsSection
+
+        beats = [
+            InitialBeat(beat_id="beat_0", summary="Start", paths=["path_a"]),
+            InitialBeat(beat_id="beat_1", summary="End", paths=["path_a"]),
+        ]
+        section = PathBeatsSection(initial_beats=beats)
+        assert len(section.initial_beats) == 2
+
+    def test_one_beat_rejected(self) -> None:
+        """Fewer than 2 beats is rejected by Pydantic min_length."""
+        from pydantic import ValidationError
+
+        from questfoundry.models.seed import InitialBeat, PathBeatsSection
+
+        with pytest.raises(ValidationError, match="initial_beats"):
+            PathBeatsSection(
+                initial_beats=[
+                    InitialBeat(beat_id="beat_0", summary="Only one", paths=["path_a"]),
+                ]
+            )
+
+    def test_five_beats_rejected(self) -> None:
+        """More than 4 beats is rejected by Pydantic max_length."""
+        from pydantic import ValidationError
+
+        from questfoundry.models.seed import InitialBeat, PathBeatsSection
+
+        beats = [
+            InitialBeat(
+                beat_id=f"beat_{i}",
+                summary=f"Beat {i}",
+                paths=["path_a"],
+            )
+            for i in range(5)
+        ]
+        with pytest.raises(ValidationError, match="initial_beats"):
+            PathBeatsSection(initial_beats=beats)
+
+    def test_duplicate_beat_ids_rejected(self) -> None:
+        """Duplicate beat IDs within a path section are rejected."""
+        from pydantic import ValidationError
+
+        from questfoundry.models.seed import InitialBeat, PathBeatsSection
+
+        beats = [
+            InitialBeat(beat_id="same_id", summary="First", paths=["path_a"]),
+            InitialBeat(beat_id="same_id", summary="Second", paths=["path_a"]),
+        ]
+        with pytest.raises(ValidationError, match="Duplicate beat IDs"):
+            PathBeatsSection(initial_beats=beats)
