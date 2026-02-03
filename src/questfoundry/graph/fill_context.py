@@ -1080,7 +1080,19 @@ def compute_first_appearances(
     return sorted(current_entities - seen_entities)
 
 
-def format_introduction_guidance(entity_names: list[str]) -> str:
+_ARC_INTRODUCTION_HINTS: dict[str, str] = {
+    "transformation": "Establish the starting state the character will grow from.",
+    "revelation": "Establish the facade that will later be peeled back.",
+    "significance": "Present as ordinary — the meaning shift comes later.",
+    "atmosphere": "Ground the reader in the location's initial feel.",
+    "relationship": "Show the faction's current stance — it will shift.",
+}
+
+
+def format_introduction_guidance(
+    entity_names: list[str],
+    arc_hints: dict[str, str] | None = None,
+) -> str:
     """Format craft guidance for passages introducing characters for the first time.
 
     When a passage contains entities not seen in any earlier arc passage,
@@ -1089,6 +1101,8 @@ def format_introduction_guidance(entity_names: list[str]) -> str:
 
     Args:
         entity_names: Display names of entities being introduced.
+        arc_hints: Optional mapping from entity name to arc_type for entities
+            that have arcs. Adds arc-specific introduction framing.
 
     Returns:
         Introduction guidance string, or empty string.
@@ -1102,7 +1116,7 @@ def format_introduction_guidance(entity_names: list[str]) -> str:
         names_list = f"{bold_names[0]} and {bold_names[1]}"
     else:
         names_list = ", ".join(bold_names[:-1]) + f", and {bold_names[-1]}"
-    return (
+    result = (
         f"## Character Introduction — First Appearance\n\n"
         f"This passage introduces {names_list} for the first time. "
         f"The reader has never encountered them before.\n\n"
@@ -1118,6 +1132,69 @@ def format_introduction_guidance(entity_names: list[str]) -> str:
         'BAD: "Marcus was a tall, brooding man who had spent years in the military."\n'
         "GOOD: A hand — scarred, steady — turned the glass without drinking."
     )
+
+    if arc_hints:
+        arc_lines: list[str] = []
+        for name, arc_type in arc_hints.items():
+            hint = _ARC_INTRODUCTION_HINTS.get(arc_type, "")
+            if hint:
+                arc_lines.append(f"- **{name}**: {hint}")
+        if arc_lines:
+            result += "\n\n**Arc-aware introduction:**\n" + "\n".join(arc_lines)
+
+    return result
+
+
+def compute_arc_hints(
+    graph: Graph,
+    entity_ids: list[str],
+    arc_id: str,
+) -> dict[str, str]:
+    """Compute arc type hints for first-appearance entities.
+
+    For each entity that has an arc on any active path in the arc,
+    returns a mapping from entity display name to arc_type.
+
+    Args:
+        graph: Graph containing arc, path, and entity nodes.
+        entity_ids: Entity IDs being introduced for the first time.
+        arc_id: The arc being traversed.
+
+    Returns:
+        Mapping from entity display name to arc_type string.
+        Empty dict if no entities have arcs.
+    """
+    if not entity_ids:
+        return {}
+
+    arc_node = graph.get_node(arc_id)
+    if not arc_node:
+        return {}
+
+    arc_paths = arc_node.get("paths", [])
+    if not arc_paths:
+        return {}
+
+    # Build entity_id -> arc_type from active paths
+    entity_arc_types: dict[str, str] = {}
+    for path_id in arc_paths:
+        path_node = graph.get_node(path_id)
+        if not path_node:
+            continue
+        for arc_entry in path_node.get("entity_arcs", []):
+            eid = arc_entry.get("entity_id", "")
+            atype = arc_entry.get("arc_type", "")
+            if eid and atype:
+                entity_arc_types[eid] = atype
+
+    hints: dict[str, str] = {}
+    for eid in entity_ids:
+        if eid in entity_arc_types:
+            enode = graph.get_node(eid)
+            name = enode.get("raw_id", eid) if enode else eid
+            hints[name] = entity_arc_types[eid]
+
+    return hints
 
 
 def compute_lexical_diversity(prose_texts: list[str]) -> float:
@@ -1197,6 +1274,107 @@ def format_vocabulary_note(
         "seek fresh verbs, adjectives, and metaphors. Avoid words that appeared "
         "frequently in the sliding window."
     )
+
+
+def format_entity_arc_context(
+    graph: Graph,
+    passage_id: str,
+    arc_id: str,
+) -> str:
+    """Format entity arc context for a passage's prose generation.
+
+    For each active path in the arc, reads entity_arcs from the path node
+    and computes positional context (pre-pivot / at-pivot / post-pivot)
+    relative to the current beat's ordinal in the path's beat sequence.
+
+    Args:
+        graph: Graph containing passage, arc, path, and beat nodes.
+        passage_id: The passage being generated.
+        arc_id: The arc being traversed.
+
+    Returns:
+        Formatted entity arc context, or empty string if no arcs.
+    """
+    from questfoundry.graph.grow_algorithms import get_path_beat_sequence
+
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return ""
+
+    beat_id = passage.get("from_beat", "")
+    if not beat_id:
+        return ""
+
+    arc_node = graph.get_node(arc_id)
+    if not arc_node:
+        return ""
+
+    arc_paths = arc_node.get("paths", [])
+    if not arc_paths:
+        return ""
+
+    lines: list[str] = []
+    for path_id in sorted(arc_paths):
+        path_node = graph.get_node(path_id)
+        if not path_node:
+            continue
+
+        entity_arcs = path_node.get("entity_arcs", [])
+        if not entity_arcs:
+            continue
+
+        # Get beat sequence for positional computation
+        try:
+            beat_sequence = get_path_beat_sequence(graph, path_id)
+        except ValueError:
+            continue
+
+        if beat_id not in beat_sequence:
+            continue
+
+        current_ordinal = beat_sequence.index(beat_id)
+        total_beats = len(beat_sequence)
+
+        for arc_entry in entity_arcs:
+            entity_id = arc_entry.get("entity_id", "")
+            arc_line = arc_entry.get("arc_line", "")
+            pivot_beat = arc_entry.get("pivot_beat", "")
+            arc_type = arc_entry.get("arc_type", "")
+
+            if not entity_id or not arc_line:
+                continue
+
+            # Check entity is present in this passage
+            passage_entities = passage.get("entities", [])
+            if entity_id not in passage_entities:
+                continue
+
+            # Get entity display name
+            enode = graph.get_node(entity_id)
+            entity_name = enode.get("raw_id", entity_id) if enode else entity_id
+
+            # Compute position relative to pivot
+            if pivot_beat in beat_sequence:
+                pivot_ordinal = beat_sequence.index(pivot_beat)
+                if current_ordinal < pivot_ordinal:
+                    beats_to_pivot = pivot_ordinal - current_ordinal
+                    position = f"Beat {current_ordinal + 1} of {total_beats} — {beats_to_pivot} before pivot. Build tension, plant seeds."
+                elif current_ordinal == pivot_ordinal:
+                    position = f"Beat {current_ordinal + 1} of {total_beats} — AT PIVOT. This is the turning point. Make the shift felt."
+                else:
+                    beats_past = current_ordinal - pivot_ordinal
+                    position = f"Beat {current_ordinal + 1} of {total_beats} — {beats_past} past pivot. Show consequences of the turn."
+            else:
+                position = f"Beat {current_ordinal + 1} of {total_beats}"
+
+            type_label = f" ({arc_type})" if arc_type else ""
+            lines.append(f"**{entity_name}**{type_label}: {arc_line}")
+            lines.append(f"  {position}")
+
+    if not lines:
+        return ""
+
+    return "## Entity Arc Context\n\n" + "\n".join(lines)
 
 
 def format_passages_batch(
