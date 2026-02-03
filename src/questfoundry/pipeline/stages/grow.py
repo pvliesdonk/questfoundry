@@ -174,6 +174,7 @@ class GrowStage:
             (self._phase_4d_atmospheric, "atmospheric"),
             (self._phase_4e_path_arcs, "path_arcs"),
             (self._phase_3_intersections, "intersections"),
+            (self._phase_4f_entity_arcs, "entity_arcs"),
             (self._phase_5_enumerate_arcs, "enumerate_arcs"),
             (self._phase_6_divergence, "divergence"),
             (self._phase_7_convergence, "convergence"),
@@ -1371,6 +1372,172 @@ class GrowStage:
             phase="path_arcs",
             status="completed",
             detail=f"Applied path arcs to {applied}/{len(path_nodes)} paths",
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
+        )
+
+    async def _phase_4f_entity_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 4f: Per-entity arc trajectories on each path.
+
+        Runs post-intersection so beat topology is final. For each path,
+        selects eligible entities (deterministic), then asks the LLM to
+        generate arc_line and pivot_beat per entity. The arc_type is
+        computed from entity category, not LLM output.
+
+        Results are stored as ``entity_arcs`` on path nodes.
+        """
+        from functools import partial
+
+        from questfoundry.graph.grow_algorithms import (
+            ARC_TYPE_BY_ENTITY_TYPE,
+            get_path_beat_sequence,
+            select_entities_for_arc,
+        )
+        from questfoundry.graph.grow_validators import validate_phase4f_output
+        from questfoundry.models.grow import Phase4fOutput
+
+        path_nodes = graph.get_nodes_by_type("path")
+        if not path_nodes:
+            return GrowPhaseResult(
+                phase="entity_arcs",
+                status="completed",
+                detail="No paths to annotate",
+            )
+
+        applied = 0
+
+        # Pre-compute context for each path
+        path_items: list[tuple[str, dict[str, str], set[str], set[str]]] = []
+        for pid in sorted(path_nodes.keys()):
+            pdata = path_nodes[pid]
+            dilemma_id = pdata.get("dilemma_id", "")
+            dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
+            dilemma_question = dilemma_node.get("question", "") if dilemma_node else ""
+
+            try:
+                beat_ids = get_path_beat_sequence(graph, pid)
+            except ValueError:
+                log.warning("phase4f_cycle_in_path", path_id=pid)
+                continue
+
+            if not beat_ids:
+                log.warning("phase4f_no_beats_for_path", path_id=pid)
+                continue
+
+            eligible = select_entities_for_arc(graph, pid, beat_ids)
+            if not eligible:
+                log.debug("phase4f_no_eligible_entities", path_id=pid)
+                continue
+
+            # Build beat sequence lines (same format as 4e)
+            beat_lines: list[str] = []
+            for i, bid in enumerate(beat_ids, 1):
+                bdata = graph.get_node(bid)
+                if not bdata:
+                    continue
+                summary = bdata.get("summary", "")
+                entities = bdata.get("entities", [])
+                beat_lines.append(f"{i}. {bid}: {summary} [entities={entities}]")
+
+            # Build entity list with concept for context
+            entity_lines: list[str] = []
+            for eid in eligible:
+                edata = graph.get_node(eid)
+                concept = edata.get("concept", "") if edata else ""
+                etype = edata.get("entity_type", "character") if edata else "character"
+                entity_lines.append(f"- {eid} ({etype}): {concept}")
+
+            # Valid IDs section
+            valid_ids = (
+                f"### Entity IDs (generate arc for EACH)\n"
+                f"{chr(10).join(f'- `{eid}`' for eid in eligible)}\n\n"
+                f"### Path ID\n"
+                f"This path: `{pid}`\n\n"
+                f"### Beat IDs on This Path (use ONLY these for pivot_beat)\n"
+                f"{chr(10).join(f'- `{bid}`' for bid in beat_ids)}\n"
+                f"Total beats: {len(beat_ids)}"
+            )
+
+            context = {
+                "path_id": pid,
+                "dilemma_question": dilemma_question or "(no dilemma question)",
+                "beat_sequence": "\n".join(beat_lines) if beat_lines else "(no beats)",
+                "entity_list": "\n".join(entity_lines),
+                "entity_count": str(len(eligible)),
+                "valid_ids_section": valid_ids,
+            }
+            valid_entity_set = set(eligible)
+            valid_beat_set = set(beat_ids)
+            path_items.append((pid, context, valid_entity_set, valid_beat_set))
+
+        async def _arcs_for_path(
+            item: tuple[str, dict[str, str], set[str], set[str]],
+        ) -> tuple[tuple[str, Phase4fOutput], int, int]:
+            pid, ctx, valid_eids, valid_bids = item
+            validator = partial(
+                validate_phase4f_output,
+                valid_entity_ids=valid_eids,
+                valid_beat_ids=valid_bids,
+            )
+            result, llm_calls, tokens = await self._grow_llm_call(
+                model=model,
+                template_name="grow_phase4f_entity_arcs",
+                context=ctx,
+                output_schema=Phase4fOutput,
+                semantic_validator=validator,
+            )
+            return (pid, result), llm_calls, tokens
+
+        results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
+            path_items, _arcs_for_path, self._max_concurrency
+        )
+
+        for item in results:
+            if item is None:
+                continue
+            pid, result = item
+
+            # Build entity_arcs with computed arc_type
+            entity_arcs: list[dict[str, str]] = []
+            for arc in result.arcs:
+                edata = graph.get_node(arc.entity_id)
+                if edata is None:
+                    log.error("phase4f_missing_entity", entity_id=arc.entity_id, path_id=pid)
+                    continue
+                etype = edata.get("entity_type", "character")
+                arc_type = ARC_TYPE_BY_ENTITY_TYPE.get(etype, "transformation")
+
+                # Warn if pivot is on a shared beat
+                pivot_data = graph.get_node(arc.pivot_beat)
+                if pivot_data and pivot_data.get("path_agnostic_for"):
+                    log.warning(
+                        "shared_pivot_beat",
+                        entity_id=arc.entity_id,
+                        pivot_beat=arc.pivot_beat,
+                        path_id=pid,
+                    )
+
+                entity_arcs.append(
+                    {
+                        "entity_id": arc.entity_id,
+                        "arc_type": arc_type,
+                        "arc_line": arc.arc_line,
+                        "pivot_beat": arc.pivot_beat,
+                    }
+                )
+
+            graph.update_node(pid, entity_arcs=entity_arcs)
+            applied += 1
+
+        if errors:
+            for idx, e in errors:
+                pid = path_items[idx][0]
+                log.warning("phase4f_llm_failed", path_id=pid, error=str(e))
+
+        return GrowPhaseResult(
+            phase="entity_arcs",
+            status="completed",
+            detail=f"Applied entity arcs to {applied}/{len(path_nodes)} paths",
             llm_calls=total_llm_calls,
             tokens_used=total_tokens,
         )

@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         Phase2Output,
         Phase3Output,
         Phase4aOutput,
+        Phase4fOutput,
         Phase8cOutput,
         Phase9Output,
     )
@@ -203,6 +204,40 @@ def format_semantic_errors(errors: list[GrowValidationError]) -> str:
     return "\n".join(lines)
 
 
+def validate_phase4f_output(
+    result: Phase4fOutput,
+    valid_entity_ids: set[str],
+    valid_beat_ids: set[str],
+) -> list[GrowValidationError]:
+    """Validate Phase 4f entity arc descriptors.
+
+    Checks:
+    - entity_id exists in valid set
+    - pivot_beat exists in valid set (path-scoped beat IDs)
+    """
+    errors: list[GrowValidationError] = []
+    for i, arc in enumerate(result.arcs):
+        if arc.entity_id not in valid_entity_ids:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"arcs.{i}.entity_id",
+                    issue=f"Entity ID not found: {arc.entity_id}",
+                    provided=arc.entity_id,
+                    available=sorted(valid_entity_ids)[:10],
+                )
+            )
+        if arc.pivot_beat not in valid_beat_ids:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"arcs.{i}.pivot_beat",
+                    issue=f"Beat ID not on this path: {arc.pivot_beat}",
+                    provided=arc.pivot_beat,
+                    available=sorted(valid_beat_ids)[:10],
+                )
+            )
+    return errors
+
+
 def count_entries(result: object) -> int:
     """Count the number of entries in a phase output for threshold calculation.
 
@@ -210,7 +245,7 @@ def count_entries(result: object) -> int:
     overlays, labels). If adding a new phase output type, ensure its entries
     attribute is listed here, otherwise the fallback of 1 is used.
     """
-    for attr in ("assessments", "intersections", "tags", "gaps", "overlays", "labels"):
+    for attr in ("assessments", "intersections", "tags", "gaps", "overlays", "labels", "arcs"):
         entries = getattr(result, attr, None)
         if entries is not None:
             return len(entries)

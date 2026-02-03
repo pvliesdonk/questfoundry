@@ -57,7 +57,7 @@ class TestGrowStageExecute:
         assert tokens == 0
         # All phases run to completion (empty graph = no work to do)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 17
+        assert len(phases) == 18
         for phase in phases:
             assert phase["status"] == "completed"
 
@@ -123,10 +123,10 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_seventeen_phases(self) -> None:
+    def test_phase_order_returns_eighteen_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 17
+        assert len(phases) == 18
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -140,6 +140,7 @@ class TestGrowStagePhaseOrder:
             "atmospheric",
             "path_arcs",
             "intersections",
+            "entity_arcs",
             "enumerate_arcs",
             "divergence",
             "convergence",

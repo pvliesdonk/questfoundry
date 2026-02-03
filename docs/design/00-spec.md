@@ -473,6 +473,11 @@ path:
   tier: major | minor
   description: string
   consequences: consequence_id[]    # narrative meaning of this path
+  entity_arcs:                      # per-entity arc descriptors (working, set in GROW Phase 4f)
+    - entity_id: entity_id
+      arc_line: string              # trajectory in "A → B → C" format (10-200 chars)
+      pivot_beat: beat_id           # beat where the arc turns (path-scoped)
+      arc_type: string              # computed from entity category (transformation|atmosphere|significance|relationship)
 ```
 
 **Hierarchical ID format:** Path IDs encode their parent dilemma using `__` separator:

@@ -11,6 +11,7 @@ from questfoundry.models.grow import (
     Choice,
     ChoiceLabel,
     Codeword,
+    EntityArcDescriptor,
     EntityOverlay,
     EntryMood,
     EntryStateBeat,
@@ -24,6 +25,7 @@ from questfoundry.models.grow import (
     PathMiniArc,
     Phase4dOutput,
     Phase4eOutput,
+    Phase4fOutput,
     SceneTypeTag,
 )
 
@@ -596,6 +598,81 @@ class TestPhase4eOutput:
                     ),
                     PathMiniArc(
                         path_id="p1", path_theme="Different theme entirely here", path_mood="cold"
+                    ),
+                ],
+            )
+
+
+class TestEntityArcDescriptor:
+    def test_valid_descriptor(self) -> None:
+        arc = EntityArcDescriptor(
+            entity_id="entity::mentor",
+            arc_line="trusted guide → facade cracks → exposed as manipulator",
+            pivot_beat="beat::confrontation",
+        )
+        assert arc.entity_id == "entity::mentor"
+        assert "facade" in arc.arc_line
+
+    def test_empty_entity_id_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="entity_id"):
+            EntityArcDescriptor(
+                entity_id="",
+                arc_line="trusted → betrayed",
+                pivot_beat="beat::x",
+            )
+
+    def test_too_short_arc_line_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="arc_line"):
+            EntityArcDescriptor(
+                entity_id="entity::x",
+                arc_line="short",
+                pivot_beat="beat::x",
+            )
+
+    def test_empty_pivot_beat_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="pivot_beat"):
+            EntityArcDescriptor(
+                entity_id="entity::x",
+                arc_line="trusted guide → exposed manipulator",
+                pivot_beat="",
+            )
+
+
+class TestPhase4fOutput:
+    def test_default_empty(self) -> None:
+        out = Phase4fOutput()
+        assert out.arcs == []
+
+    def test_with_arcs(self) -> None:
+        out = Phase4fOutput(
+            arcs=[
+                EntityArcDescriptor(
+                    entity_id="entity::mentor",
+                    arc_line="trusted guide → exposed manipulator",
+                    pivot_beat="beat::reveal",
+                ),
+                EntityArcDescriptor(
+                    entity_id="entity::letter",
+                    arc_line="mundane keepsake → proof of conspiracy",
+                    pivot_beat="beat::discovery",
+                ),
+            ],
+        )
+        assert len(out.arcs) == 2
+
+    def test_duplicate_entity_ids_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"entity_id.*unique"):
+            Phase4fOutput(
+                arcs=[
+                    EntityArcDescriptor(
+                        entity_id="entity::mentor",
+                        arc_line="trusted guide → exposed manipulator",
+                        pivot_beat="beat::reveal",
+                    ),
+                    EntityArcDescriptor(
+                        entity_id="entity::mentor",
+                        arc_line="different arc line entirely here",
+                        pivot_beat="beat::other",
                     ),
                 ],
             )

@@ -1493,6 +1493,7 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         Phase4aOutput,
         Phase4bOutput,
         Phase4dOutput,
+        Phase4fOutput,
         Phase8cOutput,
         Phase9Output,
         SceneTypeTag,
@@ -1575,6 +1576,9 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         path_mood="quiet tension",
     )
 
+    # Phase 4f: empty arcs (no eligible entities in test graph)
+    phase4f_output = Phase4fOutput(arcs=[])
+
     # Map schema -> output
     output_by_schema: dict[type, object] = {
         Phase2Output: phase2_output,
@@ -1583,6 +1587,7 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         Phase4bOutput: phase4b_output,
         Phase4dOutput: phase4d_output,
         PathMiniArc: phase4e_output,
+        Phase4fOutput: phase4f_output,
         Phase8cOutput: phase8c_output,
         Phase9Output: phase9_output,
     }
@@ -1612,9 +1617,9 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All 17 phases should run (completed or skipped)
+        # All 18 phases should run (completed or skipped)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 17
+        assert len(phases) == 18
         for phase in phases:
             assert phase["status"] in ("completed", "skipped")
 
@@ -2391,3 +2396,139 @@ class TestConditionalPrerequisiteInvariant:
         variant_data = graph.get_node("beat::mentor_meet_split_gap_1")
         assert variant_data is not None
         assert variant_data.get("split_from") == "beat::mentor_meet"
+
+
+# ---------------------------------------------------------------------------
+# select_entities_for_arc
+# ---------------------------------------------------------------------------
+
+
+class TestSelectEntitiesForArc:
+    """Tests for Phase 4f entity selection."""
+
+    def _make_graph(self) -> Graph:
+        """Build a minimal graph with paths, beats, entities, and dilemma."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::trust",
+            {"type": "dilemma", "raw_id": "trust", "involves": ["entity::mentor"]},
+        )
+        graph.create_node(
+            "path::trust__yes",
+            {"type": "path", "raw_id": "trust__yes", "dilemma_id": "dilemma::trust"},
+        )
+        # Character with 2+ appearances
+        graph.create_node(
+            "entity::mentor",
+            {"type": "entity", "raw_id": "mentor", "entity_type": "character"},
+        )
+        # Character with 1 appearance (not in dilemma involves)
+        graph.create_node(
+            "entity::bystander",
+            {"type": "entity", "raw_id": "bystander", "entity_type": "character"},
+        )
+        # Object with 1 appearance
+        graph.create_node(
+            "entity::letter",
+            {"type": "entity", "raw_id": "letter", "entity_type": "object"},
+        )
+        # Location with 1 appearance
+        graph.create_node(
+            "entity::tavern",
+            {"type": "entity", "raw_id": "tavern", "entity_type": "location"},
+        )
+        # Beats
+        graph.create_node(
+            "beat::b1",
+            {
+                "type": "beat",
+                "raw_id": "b1",
+                "summary": "Meet mentor",
+                "entities": ["entity::mentor", "entity::bystander", "entity::tavern"],
+            },
+        )
+        graph.create_node(
+            "beat::b2",
+            {
+                "type": "beat",
+                "raw_id": "b2",
+                "summary": "Mentor reveals truth",
+                "entities": ["entity::mentor", "entity::letter"],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::b1", "path::trust__yes")
+        graph.add_edge("belongs_to", "beat::b2", "path::trust__yes")
+        return graph
+
+    def test_character_with_two_appearances(self) -> None:
+        from questfoundry.graph.grow_algorithms import select_entities_for_arc
+
+        graph = self._make_graph()
+        result = select_entities_for_arc(graph, "path::trust__yes", ["beat::b1", "beat::b2"])
+        assert "entity::mentor" in result
+
+    def test_character_with_one_appearance_excluded(self) -> None:
+        from questfoundry.graph.grow_algorithms import select_entities_for_arc
+
+        graph = self._make_graph()
+        result = select_entities_for_arc(graph, "path::trust__yes", ["beat::b1", "beat::b2"])
+        # bystander has 1 appearance and is NOT in dilemma involves
+        assert "entity::bystander" not in result
+
+    def test_object_with_one_appearance_included(self) -> None:
+        from questfoundry.graph.grow_algorithms import select_entities_for_arc
+
+        graph = self._make_graph()
+        result = select_entities_for_arc(graph, "path::trust__yes", ["beat::b1", "beat::b2"])
+        assert "entity::letter" in result
+
+    def test_location_with_one_appearance_included(self) -> None:
+        from questfoundry.graph.grow_algorithms import select_entities_for_arc
+
+        graph = self._make_graph()
+        result = select_entities_for_arc(graph, "path::trust__yes", ["beat::b1", "beat::b2"])
+        assert "entity::tavern" in result
+
+    def test_dilemma_involved_character_with_one_appearance(self) -> None:
+        """Character in dilemma involves is eligible even with 1 appearance."""
+        from questfoundry.graph.grow_algorithms import select_entities_for_arc
+
+        graph = self._make_graph()
+        # Remove mentor from beat::b2 so it only appears once
+        graph.update_node("beat::b2", entities=["entity::letter"])
+        result = select_entities_for_arc(graph, "path::trust__yes", ["beat::b1", "beat::b2"])
+        # mentor is in dilemma involves, so still eligible
+        assert "entity::mentor" in result
+
+    def test_empty_beats_returns_empty(self) -> None:
+        from questfoundry.graph.grow_algorithms import select_entities_for_arc
+
+        graph = self._make_graph()
+        result = select_entities_for_arc(graph, "path::trust__yes", [])
+        assert result == []
+
+    def test_entity_missing_type_skipped(self) -> None:
+        from questfoundry.graph.grow_algorithms import select_entities_for_arc
+
+        graph = self._make_graph()
+        # Add entity with empty entity_type
+        graph.create_node(
+            "entity::mystery",
+            {"type": "entity", "raw_id": "mystery", "entity_type": ""},
+        )
+        graph.update_node(
+            "beat::b1", entities=["entity::mentor", "entity::mystery", "entity::tavern"]
+        )
+        graph.update_node(
+            "beat::b2", entities=["entity::mentor", "entity::mystery", "entity::letter"]
+        )
+        result = select_entities_for_arc(graph, "path::trust__yes", ["beat::b1", "beat::b2"])
+        # mystery has 2 appearances but empty type — should be skipped
+        assert "entity::mystery" not in result
+
+    def test_result_is_sorted(self) -> None:
+        from questfoundry.graph.grow_algorithms import select_entities_for_arc
+
+        graph = self._make_graph()
+        result = select_entities_for_arc(graph, "path::trust__yes", ["beat::b1", "beat::b2"])
+        assert result == sorted(result)

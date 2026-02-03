@@ -234,6 +234,38 @@ class Phase4eOutput(BaseModel):
         return self
 
 
+class EntityArcDescriptor(BaseModel):
+    """Phase 4f: Per-entity arc trajectory on a single path.
+
+    Describes how an entity progresses through a path's beat sequence.
+    The arc_type is NOT stored here — it is computed deterministically
+    from the entity's category (character→transformation, object→significance,
+    location→atmosphere, faction→relationship).
+    """
+
+    entity_id: str = Field(min_length=1)
+    arc_line: str = Field(
+        min_length=10,
+        max_length=200,
+        description='Trajectory in "A → B → C" format',
+    )
+    pivot_beat: str = Field(min_length=1)
+
+
+class Phase4fOutput(BaseModel):
+    """Wrapper for Phase 4f structured output (entity arcs per path)."""
+
+    arcs: list[EntityArcDescriptor] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_unique_entity_ids(self) -> Phase4fOutput:
+        if self.arcs:
+            eids = [a.entity_id for a in self.arcs]
+            if len(eids) != len(set(eids)):
+                raise ValueError("entity_id in arcs list must be unique")
+        return self
+
+
 class GapProposal(BaseModel):
     """Phase 4b/4c: Proposes new beats to fill structural gaps."""
 
