@@ -55,6 +55,9 @@ system: |
   ## Entity States
   {entity_states}
 
+  ## Entity Arc Context
+  {entity_arc_context}
+
   ## Recent Passages (Sliding Window)
   {sliding_window}
 
