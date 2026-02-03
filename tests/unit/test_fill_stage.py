@@ -10,6 +10,7 @@ import pytest
 from questfoundry.graph.graph import Graph
 from questfoundry.models.fill import (
     EntityUpdate,
+    FillExtractOutput,
     FillPassageOutput,
     FillPhase0Output,
     FillPhase1Output,
@@ -1122,3 +1123,263 @@ class TestBuildErrorFeedback:
         feedback = FillStage._build_error_feedback(error, FillPhase1Output, "content")
         assert "fix the errors" in feedback.lower()
         assert "keep" not in feedback.lower() or "prose" not in feedback.lower()
+
+
+class TestTwoStepFill:
+    """Tests for two-step prose generation (plain text + entity extraction)."""
+
+    @pytest.mark.asyncio
+    async def test_prose_call_returns_plain_text(self) -> None:
+        """_fill_prose_call returns prose as plain text without JSON."""
+        stage = FillStage()
+        stage._two_step = True
+
+        mock_result = MagicMock()
+        mock_result.content = "The tower loomed above Kay."
+        mock_result.response_metadata = {}
+        mock_result.usage_metadata = None
+
+        model = AsyncMock()
+        model.ainvoke = AsyncMock(return_value=mock_result)
+
+        context = {"passage_id": "p1"}
+        prose, flag, flag_reason, calls, _tokens = await stage._fill_prose_call(model, context)
+
+        assert prose == "The tower loomed above Kay."
+        assert flag == "ok"
+        assert flag_reason == ""
+        assert calls == 1
+
+    @pytest.mark.asyncio
+    async def test_prose_call_detects_sentinel(self) -> None:
+        """_fill_prose_call detects INCOMPATIBLE_STATES sentinel."""
+        stage = FillStage()
+        stage._two_step = True
+
+        mock_result = MagicMock()
+        mock_result.content = (
+            "INCOMPATIBLE_STATES: Emotional register too divergent between trust and betrayal paths"
+        )
+        mock_result.response_metadata = {}
+        mock_result.usage_metadata = None
+
+        model = AsyncMock()
+        model.ainvoke = AsyncMock(return_value=mock_result)
+
+        prose, flag, flag_reason, _calls, _tokens = await stage._fill_prose_call(
+            model, {"passage_id": "p1"}
+        )
+
+        assert prose == ""
+        assert flag == "incompatible_states"
+        assert "divergent" in flag_reason
+
+    @pytest.mark.asyncio
+    async def test_extract_call_returns_entity_updates(self) -> None:
+        """_fill_extract_call returns structured entity updates."""
+        stage = FillStage()
+
+        extract_output = FillExtractOutput(
+            entity_updates=[
+                EntityUpdate(entity_id="kay", field="appearance", value="scarred hands"),
+            ]
+        )
+
+        with patch.object(
+            stage,
+            "_fill_llm_call",
+            new_callable=AsyncMock,
+            return_value=(extract_output, 1, 200),
+        ):
+            result, calls, tokens = await stage._fill_extract_call(
+                MagicMock(), "The tower loomed.", "p1", "entity states here"
+            )
+
+        assert len(result.entity_updates) == 1
+        assert result.entity_updates[0].entity_id == "kay"
+        assert calls == 1
+        assert tokens == 200
+
+    @pytest.mark.asyncio
+    async def test_two_step_generates_prose_and_extracts(self) -> None:
+        """Full two-step path: prose call + extract call."""
+        graph = _make_prose_graph()
+        graph.create_node(
+            "entity::kay",
+            {"type": "entity", "raw_id": "kay", "concept": "A wanderer"},
+        )
+        stage = FillStage()
+        stage._two_step = True
+
+        # Mock the prose call
+        async def mock_prose_call(
+            model: MagicMock,  # noqa: ARG001
+            context: dict,
+        ) -> tuple:
+            return f"Prose for {context['passage_id']}.", "ok", "", 1, 100
+
+        # Mock the extract call
+        async def mock_extract_call(
+            model: MagicMock,  # noqa: ARG001
+            prose_text: str,  # noqa: ARG001
+            passage_id: str,  # noqa: ARG001
+            entity_states: str,  # noqa: ARG001
+        ) -> tuple:
+            return (
+                FillExtractOutput(
+                    entity_updates=[
+                        EntityUpdate(entity_id="kay", field="appearance", value="scarred hands"),
+                    ]
+                ),
+                1,
+                50,
+            )
+
+        stage._fill_prose_call = mock_prose_call  # type: ignore[method-assign]
+        stage._fill_extract_call = mock_extract_call  # type: ignore[method-assign]
+        result = await stage._phase_1_generate(graph, MagicMock())
+
+        assert result.status == "completed"
+        # 2 passages * (1 prose + 1 extract) = 4 calls
+        assert result.llm_calls == 4
+
+        p1 = graph.get_node("passage::p1")
+        assert p1 is not None
+        assert p1["prose"] == "Prose for p1."
+
+        entity = graph.get_node("entity::kay")
+        assert entity is not None
+        assert entity.get("appearance") == "scarred hands"
+
+    @pytest.mark.asyncio
+    async def test_two_step_skips_extract_for_micro_beat(self) -> None:
+        """micro_beat passages skip the extract call."""
+        graph = Graph.empty()
+        graph.create_node(
+            "voice::voice",
+            {
+                "type": "voice",
+                "raw_id": "voice",
+                "pov": "third_limited",
+                "tense": "past",
+                "voice_register": "literary",
+            },
+        )
+        graph.create_node(
+            "beat::b1",
+            {
+                "type": "beat",
+                "raw_id": "b1",
+                "summary": "Quick transition",
+                "scene_type": "micro_beat",
+            },
+        )
+        graph.create_node(
+            "passage::p1",
+            {
+                "type": "passage",
+                "raw_id": "p1",
+                "from_beat": "beat::b1",
+                "summary": "Quick transition",
+            },
+        )
+        graph.add_edge("passage_from", "passage::p1", "beat::b1")
+        graph.create_node(
+            "arc::spine_0_0",
+            {
+                "type": "arc",
+                "raw_id": "spine_0_0",
+                "arc_type": "spine",
+                "paths": ["path::main"],
+                "sequence": ["beat::b1"],
+            },
+        )
+
+        stage = FillStage()
+        stage._two_step = True
+
+        extract_called = False
+
+        async def mock_prose_call(
+            model: MagicMock,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+        ) -> tuple:
+            return "A brief transition.", "ok", "", 1, 50
+
+        async def mock_extract_call(
+            model: MagicMock,  # noqa: ARG001
+            prose_text: str,  # noqa: ARG001
+            passage_id: str,  # noqa: ARG001
+            entity_states: str,  # noqa: ARG001
+        ) -> tuple:
+            nonlocal extract_called
+            extract_called = True
+            return FillExtractOutput(), 1, 50
+
+        stage._fill_prose_call = mock_prose_call  # type: ignore[method-assign]
+        stage._fill_extract_call = mock_extract_call  # type: ignore[method-assign]
+        result = await stage._phase_1_generate(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert not extract_called
+        # Only 1 prose call, no extract
+        assert result.llm_calls == 1
+
+    @pytest.mark.asyncio
+    async def test_two_step_flag_off_uses_single_call(self) -> None:
+        """When two_step=False, uses single-call path."""
+        graph = _make_prose_graph()
+        stage = FillStage()
+        assert not stage._two_step
+
+        call_count = 0
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            nonlocal call_count
+            call_count += 1
+            pid = context["passage_id"]
+            return _make_passage_output(pid, f"Prose for {pid}."), 1, 100
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        result = await stage._phase_1_generate(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert call_count == 2  # One per passage, single-call path
+
+    @pytest.mark.asyncio
+    async def test_extract_failure_preserves_prose(self) -> None:
+        """When extract call fails, prose is still stored."""
+        graph = _make_prose_graph()
+        stage = FillStage()
+        stage._two_step = True
+
+        async def mock_prose_call(
+            model: MagicMock,  # noqa: ARG001
+            context: dict,
+        ) -> tuple:
+            return f"Prose for {context['passage_id']}.", "ok", "", 1, 100
+
+        async def mock_extract_call(
+            model: MagicMock,  # noqa: ARG001
+            prose_text: str,  # noqa: ARG001
+            passage_id: str,  # noqa: ARG001
+            entity_states: str,  # noqa: ARG001
+        ) -> tuple:
+            raise RuntimeError("Extract LLM call failed")
+
+        stage._fill_prose_call = mock_prose_call  # type: ignore[method-assign]
+        stage._fill_extract_call = mock_extract_call  # type: ignore[method-assign]
+        result = await stage._phase_1_generate(graph, MagicMock())
+
+        assert result.status == "completed"
+        # Prose should still be stored despite extract failure
+        p1 = graph.get_node("passage::p1")
+        assert p1 is not None
+        assert p1["prose"] == "Prose for p1."
