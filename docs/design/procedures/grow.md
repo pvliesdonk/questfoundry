@@ -303,6 +303,47 @@ causes `passage_dag_cycles` failures in validation.
 
 ---
 
+### Phase 4f: Entity Arc Descriptors
+
+**Purpose:** Derive per-entity arc trajectories for each path.
+
+**Input:** Beat graph with intersections applied
+
+**Placement:** Runs after Phase 3 (intersections) because intersections change beat
+membership, which would invalidate pre-intersection pivot beats. Runs before Phase 5
+(arc enumeration) so arc data is available before passages are created.
+
+**Operations:**
+1. For each path:
+   - **Entity selection** (deterministic):
+     - Characters/factions: 2+ appearances on this path's beats, OR named in dilemma `involves`
+     - Objects/locations: 1+ appearance (single-appearance objects can carry weight)
+   - If no eligible entities, skip this path (no LLM call)
+2. LLM generates one `EntityArcDescriptor` per eligible entity:
+   - `entity_id`: which entity
+   - `arc_line`: concise "A → B → C" trajectory (10-200 chars)
+   - `pivot_beat`: the beat where the arc *turns* (the hinge, not the climax)
+3. **arc_type** is computed deterministically from entity category (not LLM-generated):
+   - character → `transformation`
+   - location → `atmosphere`
+   - object → `significance`
+   - faction → `relationship`
+4. Semantic validation:
+   - `entity_id` must exist in eligible entity set
+   - `pivot_beat` must exist in path-scoped beat set
+5. Results stored on path nodes: `entity_arcs: [{entity_id, arc_line, pivot_beat, arc_type}]`
+
+**Shared pivot policy:** If `pivot_beat` is path-agnostic (shared across paths), a
+warning is logged but no error raised. Path-specific pivot beats are preferred.
+
+**Output:** Path nodes annotated with `entity_arcs`
+
+**LLM involvement:** Yes (arc_line + pivot_beat generation per path)
+
+**Human Gate:** No (consumed programmatically by FILL)
+
+---
+
 ### Phase 5: Arc Enumeration
 
 **Purpose:** Enumerate all valid routes through the beat graph.
@@ -743,6 +784,7 @@ The complete beat graph is unwieldy for humans to navigate. The LLM's job is to 
 | Scene-type | "Beat X is a full scene, Beat Y is a sequel" | Approve/override tags |
 | Narrative gaps | "Path X needs a beat here, here's a draft" | Approve/edit/reject |
 | Pacing gaps | "Three scenes in a row—propose sequel here" | Approve/reject |
+| Entity arcs | "Entity X transforms A → B → C, pivoting at beat Y" | N/A (consumed by FILL) |
 | Spine | "Here are the 4 possible arcs, ranked by canonical coverage" | Select one |
 | Convergence | "Arcs A and B could rejoin here after commits" | Approve/reject |
 | Validation | "These 3 issues found, with suggested fixes" | Apply fix or override |
@@ -774,6 +816,7 @@ GROW is 11 phases (Phases 4 and 8 have sub-phases):
 | 4a | Scene-type tagging | Yes | Yes |
 | 4b | Narrative gap detection | Yes | Yes |
 | 4c | Pacing gap detection | Yes | Yes |
+| 4f | Entity arc descriptors | Yes (arc_line, pivot) | No |
 | 5 | Arc enumeration | No | Yes (spine) |
 | 6 | Divergence identification | No | No |
 | 7 | Convergence identification | No | Yes |
