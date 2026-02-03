@@ -26,6 +26,7 @@ from questfoundry.pipeline.stages.dress import (
     DressStageError,
     _apply_image_budget,
     _create_cover_brief,
+    _filter_by_priority,
     assemble_image_prompt,
     compute_structural_score,
     create_dress_stage,
@@ -1159,6 +1160,91 @@ class TestApplyImageBudget:
             budget=1,
         )
         assert result == ["illustration_brief::real"]
+
+
+class TestFilterByPriority:
+    """Tests for _filter_by_priority helper."""
+
+    def _make_graph_with_briefs(self, priorities: dict[str, int]) -> Graph:
+        """Create a graph with briefs at given priorities."""
+        g = Graph()
+        for bid, priority in priorities.items():
+            g.create_node(bid, {"type": "illustration_brief", "priority": priority})
+        return g
+
+    def test_keeps_high_priority(self) -> None:
+        """min_priority=2 keeps priority 1 and 2, excludes 3."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::a": 1,
+                "illustration_brief::b": 2,
+                "illustration_brief::c": 3,
+            }
+        )
+        result = _filter_by_priority(
+            g,
+            ["illustration_brief::a", "illustration_brief::b", "illustration_brief::c"],
+            max_priority=2,
+        )
+        assert result == ["illustration_brief::a", "illustration_brief::b"]
+
+    def test_must_have_only(self) -> None:
+        """min_priority=1 keeps only priority 1."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::a": 1,
+                "illustration_brief::b": 2,
+                "illustration_brief::c": 1,
+            }
+        )
+        result = _filter_by_priority(
+            g,
+            ["illustration_brief::a", "illustration_brief::b", "illustration_brief::c"],
+            max_priority=1,
+        )
+        assert result == ["illustration_brief::a", "illustration_brief::c"]
+
+    def test_all_priorities(self) -> None:
+        """min_priority=3 keeps everything (no filtering)."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::a": 1,
+                "illustration_brief::b": 3,
+            }
+        )
+        all_ids = ["illustration_brief::a", "illustration_brief::b"]
+        result = _filter_by_priority(g, all_ids, max_priority=3)
+        assert result == all_ids
+
+    def test_missing_node_defaults_to_low_priority(self) -> None:
+        """Briefs not in graph default to priority 3 (excluded at min_priority=2)."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::real": 1,
+            }
+        )
+        result = _filter_by_priority(
+            g,
+            ["illustration_brief::real", "illustration_brief::missing"],
+            max_priority=2,
+        )
+        assert result == ["illustration_brief::real"]
+
+    def test_preserves_input_order(self) -> None:
+        """Filtered list preserves original ordering."""
+        g = self._make_graph_with_briefs(
+            {
+                "illustration_brief::z": 1,
+                "illustration_brief::a": 2,
+                "illustration_brief::m": 1,
+            }
+        )
+        result = _filter_by_priority(
+            g,
+            ["illustration_brief::z", "illustration_brief::a", "illustration_brief::m"],
+            max_priority=1,
+        )
+        assert result == ["illustration_brief::z", "illustration_brief::m"]
 
 
 # ---------------------------------------------------------------------------

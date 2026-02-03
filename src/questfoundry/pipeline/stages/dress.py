@@ -158,6 +158,7 @@ class DressStage:
         self._user_prompt: str = ""
         self._image_provider_spec: str | None = image_provider
         self._image_budget: int = 0
+        self._min_priority: int = 3
         self._max_concurrency: int = 2
         self._lang_instruction: str = ""
 
@@ -263,6 +264,7 @@ class DressStage:
         if image_provider is not None:
             self._image_provider_spec = image_provider
         self._image_budget = kwargs.get("image_budget", 0)
+        self._min_priority = kwargs.get("min_priority", 3)
         self._max_concurrency = kwargs.get("max_concurrency", 2)
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
 
@@ -870,6 +872,7 @@ class DressStage:
         project_path: Path,
         *,
         image_budget: int = 0,
+        min_priority: int = 3,
         force: bool = False,
         on_phase_progress: PhaseProgressFn | None = None,
         model: BaseChatModel | None = None,
@@ -882,6 +885,8 @@ class DressStage:
         Args:
             project_path: Path to the project directory.
             image_budget: Maximum number of images to generate (0 = unlimited).
+            min_priority: Only generate briefs with this priority or higher
+                (1=must-have, 2=important, 3=all). Default 3 = no filtering.
             force: If True, regenerate images even if illustrations already exist.
             on_phase_progress: Optional progress callback.
             model: Optional LLM for prompt distillation. Required for A1111
@@ -910,6 +915,7 @@ class DressStage:
 
         self.project_path = project_path
         self._image_budget = image_budget
+        self._min_priority = min_priority
         self._force_regenerate = force
 
         result = await self._phase_4_generate(
@@ -967,6 +973,17 @@ class DressStage:
                 phase="generate",
                 status="completed",
                 detail="no briefs selected",
+            )
+
+        # Filter by priority threshold (1=must-have, 2=important, 3=all)
+        if self._min_priority < 3:
+            before = len(selected_ids)
+            selected_ids = _filter_by_priority(graph, selected_ids, self._min_priority)
+            log.info(
+                "priority_filter_applied",
+                min_priority=self._min_priority,
+                before=before,
+                after=len(selected_ids),
             )
 
         # Apply budget: select top N briefs by priority (1 first, then 2, then 3)
@@ -1219,6 +1236,29 @@ def _create_cover_brief(graph: Graph) -> bool:
 # -------------------------------------------------------------------------
 # Budget helpers
 # -------------------------------------------------------------------------
+
+
+def _filter_by_priority(
+    graph: Graph,
+    brief_ids: list[str],
+    max_priority: int,
+) -> list[str]:
+    """Keep only briefs with priority <= max_priority.
+
+    Lower priority numbers are more important (1=must-have, 3=nice-to-have).
+    Briefs missing from the graph default to priority 3.
+
+    Args:
+        graph: Story graph containing brief nodes.
+        brief_ids: All selected brief IDs.
+        max_priority: Maximum priority value to include (1-3).
+
+    Returns:
+        Filtered list of brief IDs.
+    """
+    return [
+        bid for bid in brief_ids if (graph.get_node(bid) or {}).get("priority", 3) <= max_priority
+    ]
 
 
 def _apply_image_budget(
