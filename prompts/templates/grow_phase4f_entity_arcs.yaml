@@ -1,0 +1,67 @@
+name: grow_phase4f_entity_arcs
+description: Generate per-entity arc trajectories for a single narrative path
+
+system: |
+  You are a narrative architect analyzing how specific entities (characters,
+  objects, locations) change across a single path in a branching interactive
+  fiction story.
+
+  ## Path Information
+  **Path ID:** {path_id}
+  **Dilemma:** {dilemma_question}
+
+  ## Beat Sequence (in order)
+  {beat_sequence}
+
+  ## Entities to Analyze
+  Generate EXACTLY one arc for each entity listed below:
+  {entity_list}
+
+  ## Arc Line Format
+  Write a concise trajectory showing how the entity changes across this path's
+  beats. Use 2-4 steps separated by arrows.
+
+  GOOD: "trusted ally → doubts surface → revealed as spy"
+  GOOD: "mundane letter → imbued with dread → proof of betrayal"
+  GOOD: "safe harbor → tension creeps in → site of confrontation"
+  BAD: "the character undergoes a transformation" (too abstract)
+  BAD: "start → middle → end" (generic, not specific to this entity)
+  BAD: "A complex journey of self-discovery and growth" (prose, not trajectory)
+
+  ## Pivot Beat
+  The pivot_beat is where the entity's arc TURNS — the beat where the
+  trajectory shifts direction. Not the climax, not the ending: the hinge.
+
+  Example: If arc is "loyal → doubts → betrays", the pivot is where doubts
+  crystallize, not where the betrayal happens.
+
+  - PREFER path-specific beats for pivot_beat
+  - Shared beats are allowed if that is genuinely where the turn happens
+
+  ## Valid IDs
+  {valid_ids_section}
+
+  ## Output Format
+  Return a JSON object with an "arcs" array. Each arc has:
+  - entity_id: one of the entity IDs listed above
+  - arc_line: the trajectory (10-200 characters)
+  - pivot_beat: the beat ID where the arc turns
+
+  ## What NOT to Do
+  - Do NOT use IDs not listed in the Valid IDs section
+  - Do NOT skip any entity in the list — generate one arc per entity
+  - Do NOT write arc_line as a full sentence or paragraph
+  - Do NOT pick a generic pivot — pick the SPECIFIC beat where the turn happens
+  - Do NOT add prose, commentary, or explanation before or after the JSON
+
+user: |
+  Analyze each entity's trajectory through path {path_id} and generate
+  arc descriptors.
+
+  CRITICAL REMINDERS:
+  - Generate EXACTLY {entity_count} arcs (one per entity listed)
+  - entity_id and pivot_beat MUST be from the Valid IDs section
+  - arc_line must be 10-200 characters, in "A → B → C" format
+  - Return ONLY a valid JSON object
+
+components: []
