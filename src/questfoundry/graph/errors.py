@@ -13,6 +13,8 @@ from dataclasses import dataclass, field
 from difflib import get_close_matches
 from typing import Any
 
+from questfoundry.graph.context import parse_scoped_id, strip_scope_prefix
+
 
 class GraphIntegrityError(Exception):
     """Base class for graph integrity violations.
@@ -60,12 +62,12 @@ class NodeNotFoundError(GraphIntegrityError):
     def _get_suggestions(self) -> list[str]:
         """Find similar IDs that might be typos."""
         # Extract raw_id from prefixed ID (e.g., "entity::kay" -> "kay")
-        raw_id = self.node_id.split("::")[-1] if "::" in self.node_id else self.node_id
-        raw_available = [a.split("::")[-1] for a in self.available]
+        raw_id = strip_scope_prefix(self.node_id)
+        raw_available = [strip_scope_prefix(a) for a in self.available]
         matches = get_close_matches(raw_id, raw_available, n=3, cutoff=0.6)
 
         # Reconstruct full IDs with prefix
-        prefix = self.node_id.split("::")[0] if "::" in self.node_id else ""
+        prefix, _ = parse_scoped_id(self.node_id)
         if prefix:
             return [f"{prefix}::{m}" for m in matches]
         return matches
