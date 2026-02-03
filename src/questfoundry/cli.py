@@ -39,6 +39,17 @@ if TYPE_CHECKING:
 # Type alias for artifact preview functions
 PreviewFn = Callable[[dict[str, Any]], None]
 
+# Shared CLI option types (used across multiple commands)
+MinPriorityOption = Annotated[
+    int,
+    typer.Option(
+        "--min-priority",
+        min=1,
+        max=3,
+        help="Only generate images with this priority or higher (1=must-have, 2=important, 3=all).",
+    ),
+]
+
 app = typer.Typer(
     name="qf",
     help="QuestFoundry: Pipeline-driven interactive fiction generation.",
@@ -1590,15 +1601,7 @@ def generate_images(
         int,
         typer.Option("--image-budget", help="Max images to generate (0=all selected briefs)."),
     ] = 0,
-    min_priority: Annotated[
-        int,
-        typer.Option(
-            "--min-priority",
-            min=1,
-            max=3,
-            help="Only generate images with this priority or higher (1=must-have, 2=important, 3=all).",
-        ),
-    ] = 3,
+    min_priority: MinPriorityOption = 3,
     force: Annotated[
         bool,
         typer.Option("--force", help="Regenerate images even if illustrations already exist."),
@@ -1828,15 +1831,7 @@ def run(
             help="Max images to generate in DRESS stage (0=all selected briefs).",
         ),
     ] = 0,
-    min_priority: Annotated[
-        int,
-        typer.Option(
-            "--min-priority",
-            min=1,
-            max=3,
-            help="Only generate images with this priority or higher (1=must-have, 2=important, 3=all).",
-        ),
-    ] = 3,
+    min_priority: MinPriorityOption = 3,
     two_step: Annotated[
         bool | None,
         typer.Option(

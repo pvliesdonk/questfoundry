@@ -1241,23 +1241,34 @@ def _create_cover_brief(graph: Graph) -> bool:
 def _filter_by_priority(
     graph: Graph,
     brief_ids: list[str],
-    max_priority: int,
+    priority_threshold: int,
 ) -> list[str]:
-    """Keep only briefs with priority <= max_priority.
+    """Keep only briefs with priority <= priority_threshold.
 
-    Lower priority numbers are more important (1=must-have, 3=nice-to-have).
+    Priority uses an inverted scale: lower numbers are more important
+    (1=must-have, 2=important, 3=nice-to-have). A threshold of 2 keeps
+    priority 1 and 2, excluding 3.
+
     Briefs missing from the graph default to priority 3.
 
     Args:
         graph: Story graph containing brief nodes.
         brief_ids: All selected brief IDs.
-        max_priority: Maximum priority value to include (1-3).
+        priority_threshold: Maximum priority value to include (1-3).
 
     Returns:
         Filtered list of brief IDs.
+
+    Raises:
+        ValueError: If priority_threshold is not in [1, 3].
     """
+    if not 1 <= priority_threshold <= 3:
+        msg = f"priority_threshold must be 1-3, got {priority_threshold}"
+        raise ValueError(msg)
     return [
-        bid for bid in brief_ids if (graph.get_node(bid) or {}).get("priority", 3) <= max_priority
+        bid
+        for bid in brief_ids
+        if (graph.get_node(bid) or {}).get("priority", 3) <= priority_threshold
     ]
 
 

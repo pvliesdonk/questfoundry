@@ -1181,7 +1181,7 @@ class TestFilterByPriority:
         return g
 
     def test_keeps_high_priority(self) -> None:
-        """min_priority=2 keeps priority 1 and 2, excludes 3."""
+        """priority_threshold=2 keeps priority 1 and 2, excludes 3."""
         g = self._make_graph_with_briefs(
             {
                 "illustration_brief::a": 1,
@@ -1192,12 +1192,12 @@ class TestFilterByPriority:
         result = _filter_by_priority(
             g,
             ["illustration_brief::a", "illustration_brief::b", "illustration_brief::c"],
-            max_priority=2,
+            priority_threshold=2,
         )
         assert result == ["illustration_brief::a", "illustration_brief::b"]
 
     def test_must_have_only(self) -> None:
-        """min_priority=1 keeps only priority 1."""
+        """priority_threshold=1 keeps only priority 1."""
         g = self._make_graph_with_briefs(
             {
                 "illustration_brief::a": 1,
@@ -1208,12 +1208,12 @@ class TestFilterByPriority:
         result = _filter_by_priority(
             g,
             ["illustration_brief::a", "illustration_brief::b", "illustration_brief::c"],
-            max_priority=1,
+            priority_threshold=1,
         )
         assert result == ["illustration_brief::a", "illustration_brief::c"]
 
     def test_all_priorities(self) -> None:
-        """min_priority=3 keeps everything (no filtering)."""
+        """priority_threshold=3 keeps everything (no filtering)."""
         g = self._make_graph_with_briefs(
             {
                 "illustration_brief::a": 1,
@@ -1221,11 +1221,11 @@ class TestFilterByPriority:
             }
         )
         all_ids = ["illustration_brief::a", "illustration_brief::b"]
-        result = _filter_by_priority(g, all_ids, max_priority=3)
+        result = _filter_by_priority(g, all_ids, priority_threshold=3)
         assert result == all_ids
 
     def test_missing_node_defaults_to_low_priority(self) -> None:
-        """Briefs not in graph default to priority 3 (excluded at min_priority=2)."""
+        """Briefs not in graph default to priority 3 (excluded at priority_threshold=2)."""
         g = self._make_graph_with_briefs(
             {
                 "illustration_brief::real": 1,
@@ -1234,7 +1234,7 @@ class TestFilterByPriority:
         result = _filter_by_priority(
             g,
             ["illustration_brief::real", "illustration_brief::missing"],
-            max_priority=2,
+            priority_threshold=2,
         )
         assert result == ["illustration_brief::real"]
 
@@ -1250,7 +1250,7 @@ class TestFilterByPriority:
         result = _filter_by_priority(
             g,
             ["illustration_brief::z", "illustration_brief::a", "illustration_brief::m"],
-            max_priority=1,
+            priority_threshold=1,
         )
         assert result == ["illustration_brief::z", "illustration_brief::m"]
 
