@@ -144,6 +144,27 @@ class TestGrowStageExecute:
             await stage.execute(model=mock_model, user_prompt="")
 
     @pytest.mark.asyncio
+    async def test_execute_rerun_from_fill_requires_seed_in_checkpoint(
+        self, tmp_path: Path, mock_model: MagicMock
+    ) -> None:
+        """Pre-GROW checkpoint must represent a SEED-completed graph."""
+        from questfoundry.graph.graph import Graph
+
+        current = Graph.empty()
+        current.set_last_stage("fill")
+        current.save(tmp_path / "graph.json")
+
+        bad_checkpoint = Graph.empty()
+        bad_checkpoint.set_last_stage("dream")
+        checkpoints_dir = tmp_path / "snapshots"
+        checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        bad_checkpoint.save(checkpoints_dir / "grow-pre-validate_dag.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        with pytest.raises(GrowStageError, match="Pre-GROW checkpoint"):
+            await stage.execute(model=mock_model, user_prompt="")
+
+    @pytest.mark.asyncio
     async def test_execute_saves_graph(self, tmp_project: Path, mock_model: MagicMock) -> None:
         stage = GrowStage(project_path=tmp_project)
         await stage.execute(model=mock_model, user_prompt="")
