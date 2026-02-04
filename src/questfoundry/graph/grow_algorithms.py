@@ -264,6 +264,183 @@ def topological_sort_beats(graph: Graph, beat_ids: list[str]) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
+# Phase 7b: Collapse linear beats
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CollapseResult:
+    """Summary of linear-beat collapsing."""
+
+    runs_collapsed: int
+    beats_removed: int
+
+
+def collapse_linear_beats(graph: Graph, *, min_run_length: int = 2) -> CollapseResult:
+    """Collapse mandatory linear beat runs into a single combined beat.
+
+    A beat is eligible for collapsing when it has exactly one predecessor and
+    one successor in the forward (requires) graph, belongs to a single path,
+    and is not an exempt narrative function (confront/resolve).
+
+    Args:
+        graph: Story graph with beat nodes.
+        min_run_length: Minimum length of an eligible run to collapse.
+
+    Returns:
+        CollapseResult with counts of collapsed runs and removed beats.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    if not beat_nodes:
+        return CollapseResult(runs_collapsed=0, beats_removed=0)
+
+    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="requires")
+    belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
+
+    forward_predecessors: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+    forward_successors: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+    for edge in requires_edges:
+        dependent = edge["from"]
+        prereq = edge["to"]
+        if dependent in beat_nodes and prereq in beat_nodes:
+            forward_predecessors[dependent].append(prereq)
+            forward_successors[prereq].append(dependent)
+
+    beat_paths: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        if beat_id in beat_nodes:
+            beat_paths.setdefault(beat_id, []).append(path_id)
+
+    def _is_exempt(beat_id: str) -> bool:
+        narrative_function = beat_nodes.get(beat_id, {}).get("narrative_function")
+        return narrative_function in {"confront", "resolve"}
+
+    def _is_eligible(beat_id: str) -> bool:
+        if _is_exempt(beat_id):
+            return False
+        if len(beat_paths.get(beat_id, [])) != 1:
+            return False
+        return (
+            len(forward_predecessors.get(beat_id, [])) == 1
+            and len(forward_successors.get(beat_id, [])) == 1
+        )
+
+    # Build path → beats mapping
+    path_beats: dict[str, list[str]] = {}
+    for edge in belongs_to_edges:
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        if beat_id in beat_nodes:
+            path_beats.setdefault(path_id, []).append(beat_id)
+
+    runs: list[list[str]] = []
+    for _path_id, beat_ids in sorted(path_beats.items()):
+        try:
+            ordered = topological_sort_beats(graph, beat_ids)
+        except ValueError:
+            ordered = sorted(beat_ids)
+
+        current: list[str] = []
+        for beat_id in ordered:
+            if _is_eligible(beat_id):
+                if not current:
+                    current = [beat_id]
+                else:
+                    prev = current[-1]
+                    if beat_id in forward_successors.get(
+                        prev, []
+                    ) and prev in forward_predecessors.get(beat_id, []):
+                        current.append(beat_id)
+                    else:
+                        if len(current) >= min_run_length:
+                            runs.append(current)
+                        current = [beat_id]
+            else:
+                if len(current) >= min_run_length:
+                    runs.append(current)
+                current = []
+        if len(current) >= min_run_length:
+            runs.append(current)
+
+    if not runs:
+        return CollapseResult(runs_collapsed=0, beats_removed=0)
+
+    removed_beats: set[str] = set()
+
+    def _merge_beat_data(keep_id: str, remove_ids: list[str]) -> None:
+        keep_data = beat_nodes.get(keep_id, {})
+        summaries: list[str] = []
+        if keep_data.get("summary"):
+            summaries.append(str(keep_data.get("summary")))
+        entities: list[str] = list(keep_data.get("entities", []))
+        impacts: list[dict[str, Any]] = list(keep_data.get("dilemma_impacts", []))
+
+        for rid in remove_ids:
+            data = beat_nodes.get(rid, {})
+            summary = data.get("summary")
+            if summary:
+                summaries.append(str(summary))
+            entities.extend(data.get("entities", []))
+            impacts.extend(data.get("dilemma_impacts", []))
+
+        updates: dict[str, Any] = {}
+        if summaries:
+            updates["summary"] = " / ".join(summaries)
+        if entities:
+            updates["entities"] = list(dict.fromkeys(entities))
+        if impacts:
+            updates["dilemma_impacts"] = impacts
+        if updates:
+            graph.update_node(keep_id, **updates)
+
+    def _ensure_edge(edge_type: str, from_id: str, to_id: str) -> None:
+        if not graph.get_edges(from_id=from_id, to_id=to_id, edge_type=edge_type):
+            graph.add_edge(edge_type, from_id, to_id)
+
+    def _transfer_edges(keep_id: str, remove_ids: list[str]) -> None:
+        for rid in remove_ids:
+            for edge in graph.get_edges(from_id=rid, to_id=None, edge_type="grants"):
+                _ensure_edge("grants", keep_id, edge["to"])
+            for edge in graph.get_edges(from_id=rid, to_id=None, edge_type="belongs_to"):
+                _ensure_edge("belongs_to", keep_id, edge["to"])
+
+    for run in runs:
+        keep_id = run[0]
+        remove_ids = run[1:]
+        if not remove_ids:
+            continue
+
+        _merge_beat_data(keep_id, remove_ids)
+        _transfer_edges(keep_id, remove_ids)
+
+        before_ids = [bid for bid in forward_predecessors.get(keep_id, []) if bid not in run]
+        after_ids = [bid for bid in forward_successors.get(run[-1], []) if bid not in run]
+
+        if before_ids:
+            _ensure_edge("requires", keep_id, before_ids[0])
+        if after_ids:
+            _ensure_edge("requires", after_ids[0], keep_id)
+
+        for rid in remove_ids:
+            removed_beats.add(rid)
+            graph.delete_node(rid, cascade=True)
+
+    if removed_beats:
+        arc_nodes = graph.get_nodes_by_type("arc")
+        for arc_id, arc_data in arc_nodes.items():
+            seq: list[str] = arc_data.get("sequence", [])
+            if not seq:
+                continue
+            new_seq = [bid for bid in seq if bid not in removed_beats]
+            if new_seq != seq:
+                graph.update_node(arc_id, sequence=new_seq)
+
+    return CollapseResult(runs_collapsed=len(runs), beats_removed=len(removed_beats))
+
+
+# ---------------------------------------------------------------------------
 # Phase 5: Arc Enumeration
 # ---------------------------------------------------------------------------
 

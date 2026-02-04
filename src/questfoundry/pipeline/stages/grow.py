@@ -178,6 +178,7 @@ class GrowStage:
             (self._phase_5_enumerate_arcs, "enumerate_arcs"),
             (self._phase_6_divergence, "divergence"),
             (self._phase_7_convergence, "convergence"),
+            (self._phase_7b_collapse_linear_beats, "collapse_linear_beats"),
             (self._phase_8a_passages, "passages"),
             (self._phase_8b_codewords, "codewords"),
             (self._phase_8c_overlays, "overlays"),
@@ -1822,6 +1823,30 @@ class GrowStage:
             phase="convergence",
             status="completed",
             detail=f"Found {convergence_count} convergence points",
+        )
+
+    async def _phase_7b_collapse_linear_beats(
+        self,
+        graph: Graph,
+        model: BaseChatModel,  # noqa: ARG002
+    ) -> GrowPhaseResult:
+        """Phase 7b: Collapse mandatory linear beat runs before passage creation."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_beats
+
+        result = collapse_linear_beats(graph, min_run_length=2)
+        if result.beats_removed == 0:
+            return GrowPhaseResult(
+                phase="collapse_linear_beats",
+                status="completed",
+                detail="No linear beat runs to collapse",
+            )
+
+        return GrowPhaseResult(
+            phase="collapse_linear_beats",
+            status="completed",
+            detail=(
+                f"Collapsed {result.beats_removed} beats across {result.runs_collapsed} run(s)"
+            ),
         )
 
     async def _phase_8a_passages(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002

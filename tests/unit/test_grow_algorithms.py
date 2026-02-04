@@ -1708,9 +1708,9 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All 20 phases should run (completed or skipped)
+        # All 21 phases should run (completed or skipped)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 20
+        assert len(phases) == 21
         for phase in phases:
             assert phase["status"] in ("completed", "skipped")
 
@@ -2306,6 +2306,123 @@ class TestFindPassageSuccessors:
         grants = result["passage::a"][0].grants
         assert "codeword::mid_cw" in grants
         assert "codeword::b_cw" in grants
+
+
+class TestCollapseLinearBeats:
+    def test_collapse_linear_chain(self) -> None:
+        """Collapses a consecutive linear run into a single beat."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_beats
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        for bid in ["b1", "b2", "b3", "b4"]:
+            graph.create_node(
+                f"beat::{bid}",
+                {"type": "beat", "raw_id": bid, "summary": f"{bid} summary"},
+            )
+            graph.add_edge("belongs_to", f"beat::{bid}", "path::p1")
+
+        graph.add_edge("requires", "beat::b2", "beat::b1")
+        graph.add_edge("requires", "beat::b3", "beat::b2")
+        graph.add_edge("requires", "beat::b4", "beat::b3")
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["path::p1"],
+                "sequence": ["beat::b1", "beat::b2", "beat::b3", "beat::b4"],
+            },
+        )
+
+        result = collapse_linear_beats(graph, min_run_length=2)
+        assert result.runs_collapsed == 1
+        assert result.beats_removed == 1
+        assert graph.get_node("beat::b3") is None
+        kept = graph.get_node("beat::b2")
+        assert kept is not None
+        assert "b2 summary" in kept.get("summary", "")
+        assert "b3 summary" in kept.get("summary", "")
+
+        arc_seq = graph.get_node("arc::spine")["sequence"]
+        assert arc_seq == ["beat::b1", "beat::b2", "beat::b4"]
+
+        requires_edges = graph.get_edges(from_id="beat::b4", to_id="beat::b2", edge_type="requires")
+        assert requires_edges
+
+    def test_exempt_confront_resolve(self) -> None:
+        """Confront/resolve beats are excluded from collapsing."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_beats
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node(
+            "beat::b1",
+            {"type": "beat", "raw_id": "b1", "summary": "start"},
+        )
+        graph.create_node(
+            "beat::b2",
+            {
+                "type": "beat",
+                "raw_id": "b2",
+                "summary": "climax",
+                "narrative_function": "confront",
+            },
+        )
+        graph.create_node(
+            "beat::b3",
+            {
+                "type": "beat",
+                "raw_id": "b3",
+                "summary": "resolve",
+                "narrative_function": "resolve",
+            },
+        )
+        graph.create_node(
+            "beat::b4",
+            {"type": "beat", "raw_id": "b4", "summary": "end"},
+        )
+
+        for bid in ["b1", "b2", "b3", "b4"]:
+            graph.add_edge("belongs_to", f"beat::{bid}", "path::p1")
+
+        graph.add_edge("requires", "beat::b2", "beat::b1")
+        graph.add_edge("requires", "beat::b3", "beat::b2")
+        graph.add_edge("requires", "beat::b4", "beat::b3")
+
+        result = collapse_linear_beats(graph, min_run_length=2)
+        assert result.beats_removed == 0
+        assert graph.get_node("beat::b2") is not None
+        assert graph.get_node("beat::b3") is not None
+
+    def test_branch_hub_prevents_collapse(self) -> None:
+        """Multiple successors should prevent collapse across a hub."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_beats
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
+
+        for bid in ["b1", "b2", "b3", "b4", "bx"]:
+            graph.create_node(
+                f"beat::{bid}",
+                {"type": "beat", "raw_id": bid, "summary": f"{bid} summary"},
+            )
+
+        for bid in ["b1", "b2", "b3", "b4"]:
+            graph.add_edge("belongs_to", f"beat::{bid}", "path::p1")
+        graph.add_edge("belongs_to", "beat::bx", "path::p2")
+
+        graph.add_edge("requires", "beat::b2", "beat::b1")
+        graph.add_edge("requires", "beat::b3", "beat::b2")
+        graph.add_edge("requires", "beat::b4", "beat::b3")
+        graph.add_edge("requires", "beat::bx", "beat::b2")
+
+        result = collapse_linear_beats(graph, min_run_length=2)
+        assert result.beats_removed == 0
+        assert graph.get_node("beat::b3") is not None
 
 
 class TestConditionalPrerequisiteInvariant:
