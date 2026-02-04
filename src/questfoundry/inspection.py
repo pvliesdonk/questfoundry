@@ -193,7 +193,8 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
 
     choices = graph.get_nodes_by_type("choice")
 
-    # Classify by graph structure: count outgoing choices per source passage
+    # Classify by graph structure: count outgoing choices per source passage.
+    # choice_from edges point choice→source_passage, so e["to"] = source passage.
     choice_from_edges_all = graph.get_edges(edge_type="choice_from")
     outgoing_per_passage: dict[str, int] = Counter(e["to"] for e in choice_from_edges_all)
 

@@ -39,7 +39,7 @@ system: |
 
   ## What NOT to Do
   - Do NOT use IDs not listed in the Valid IDs section
-  - Do NOT produce labels longer than 8 words
+  - Do NOT produce labels longer than 6 words
   - Do NOT add explanatory prose before or after the JSON output
 
   ## Valid IDs

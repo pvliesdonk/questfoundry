@@ -2140,6 +2140,12 @@ class GrowStage:
                     single_label_lookup[(label_item.from_passage, label_item.to_passage)] = (
                         label_item.label
                     )
+                if len(single_label_lookup) < len(single_successors):
+                    log.warning(
+                        "phase9_incomplete_labels",
+                        returned=len(single_label_lookup),
+                        expected=len(single_successors),
+                    )
             except GrowStageError:
                 log.warning("phase9_continue_labels_failed", fallback="continue")
 
