@@ -33,12 +33,33 @@ def extract_grow_artifact(graph: Graph) -> dict[str, Any]:
     Returns:
         Dict with arcs, beats, passages, choices, codewords lists.
     """
+    arcs = _extract_arcs(graph)
+    beats = _extract_beats(graph)
+    passages = _extract_passages(graph)
+    choices = _extract_choices(graph)
+    codewords = _extract_codewords(graph)
+
+    spine_arc_id = None
+    for arc in arcs:
+        if arc.get("arc_type") == "spine":
+            spine_arc_id = arc.get("arc_id")
+            break
+
+    entity_nodes = graph.get_nodes_by_type("entity")
+    overlay_count = sum(len(data.get("overlays", [])) for data in entity_nodes.values())
+
     return {
-        "arcs": _extract_arcs(graph),
-        "beats": _extract_beats(graph),
-        "passages": _extract_passages(graph),
-        "choices": _extract_choices(graph),
-        "codewords": _extract_codewords(graph),
+        "arc_count": len(arcs),
+        "passage_count": len(passages),
+        "choice_count": len(choices),
+        "codeword_count": len(codewords),
+        "overlay_count": overlay_count,
+        "spine_arc_id": spine_arc_id,
+        "arcs": arcs,
+        "beats": beats,
+        "passages": passages,
+        "choices": choices,
+        "codewords": codewords,
     }
 
 

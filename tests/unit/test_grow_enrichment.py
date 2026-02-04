@@ -129,3 +129,29 @@ def test_extract_grow_artifact_codeword_falls_back_to_edges() -> None:
     cw = artifact["codewords"][0]
     assert cw["tracks"] == "consequence::c1"
     assert cw["granted_by"] == ["beat::b"]
+
+
+def test_extract_grow_artifact_includes_counts_and_spine() -> None:
+    graph = Graph.empty()
+    graph.create_node(
+        "arc::spine",
+        {
+            "type": "arc",
+            "arc_type": "spine",
+            "paths": [],
+            "sequence": ["beat::a"],
+        },
+    )
+    graph.create_node("beat::a", {"type": "beat", "summary": "A"})
+    graph.create_node("passage::p1", {"type": "passage", "summary": "One"})
+    graph.create_node("choice::c1", {"type": "choice", "label": "Go"})
+    graph.create_node("codeword::cw1", {"type": "codeword", "value": "cw1"})
+    graph.create_node("entity::e1", {"type": "entity", "overlays": ["overlay::o1"]})
+
+    artifact = extract_grow_artifact(graph)
+    assert artifact["arc_count"] == 1
+    assert artifact["passage_count"] == 1
+    assert artifact["choice_count"] == 1
+    assert artifact["codeword_count"] == 1
+    assert artifact["overlay_count"] == 1
+    assert artifact["spine_arc_id"] == "arc::spine"
