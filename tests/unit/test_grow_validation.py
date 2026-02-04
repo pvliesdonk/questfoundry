@@ -661,6 +661,38 @@ class TestArcDivergence:
         assert result.severity == "warn"
         assert "No spine arc" in result.message
 
+    def test_spine_with_empty_sequence(self) -> None:
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["path::p1"],
+                "sequence": [],
+            },
+        )
+        result = check_arc_divergence(graph)
+        assert result.severity == "warn"
+        assert "no sequence" in result.message.lower()
+
+    def test_no_branch_arcs(self) -> None:
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["path::p1"],
+                "sequence": ["beat::a"],
+            },
+        )
+        result = check_arc_divergence(graph)
+        assert result.severity == "pass"
+        assert "No branch arcs" in result.message
+
     def test_low_divergence_warns(self) -> None:
         graph = Graph.empty()
         spine_seq = ["beat::a", "beat::b", "beat::c"]
