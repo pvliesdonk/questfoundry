@@ -2160,8 +2160,8 @@ class TestFindPassageSuccessors:
         # Only one successor recorded (deduplicated)
         assert len(result["passage::a"]) == 1
 
-    def test_collects_grants_from_successor_beats(self) -> None:
-        """Grants from beats after the successor are collected."""
+    def test_collects_grants_through_next_passage(self) -> None:
+        """Grants from beats up to the next passage beat are collected."""
         from questfoundry.graph.grow_algorithms import find_passage_successors
 
         graph = Graph.empty()
@@ -2190,6 +2190,42 @@ class TestFindPassageSuccessors:
 
         assert "passage::a" in result
         assert "codeword::cw1" in result["passage::a"][0].grants
+
+    def test_does_not_grant_future_beats(self) -> None:
+        """Choices should not grant codewords from beats beyond the next passage."""
+        from questfoundry.graph.grow_algorithms import find_passage_successors
+
+        graph = Graph.empty()
+        for bid in ["a", "b", "c"]:
+            graph.create_node(f"beat::{bid}", {"type": "beat", "raw_id": bid})
+
+        graph.create_node("codeword::cw_b", {"type": "codeword", "raw_id": "cw_b"})
+        graph.add_edge("grants", "beat::b", "codeword::cw_b")
+        graph.create_node("codeword::cw_c", {"type": "codeword", "raw_id": "cw_c"})
+        graph.add_edge("grants", "beat::c", "codeword::cw_c")
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["t1"],
+                "sequence": ["beat::a", "beat::b", "beat::c"],
+            },
+        )
+        for bid in ["a", "b", "c"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}"},
+            )
+
+        result = find_passage_successors(graph)
+
+        assert "passage::a" in result
+        grants = result["passage::a"][0].grants
+        assert "codeword::cw_b" in grants
+        assert "codeword::cw_c" not in grants
 
     def test_empty_graph_returns_empty(self) -> None:
         """Empty graph returns empty dict."""
@@ -2266,7 +2302,7 @@ class TestFindPassageSuccessors:
         assert result["passage::a"][0].to_passage == "passage::b"
 
         # Grants should include both beat::mid's and beat::b's codewords
-        # (all beats after beat::a in the arc sequence)
+        # (beats between beat::a and the next passage beat).
         grants = result["passage::a"][0].grants
         assert "codeword::mid_cw" in grants
         assert "codeword::b_cw" in grants

@@ -1414,7 +1414,7 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
 
         for i in range(len(passage_seq) - 1):
             p_id, beat_idx = passage_seq[i]
-            next_p, _ = passage_seq[i + 1]
+            next_p, next_beat_idx = passage_seq[i + 1]
 
             if p_id not in successors:
                 successors[p_id] = []
@@ -1425,11 +1425,12 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
                 continue
             seen_targets[p_id].add(next_p)
 
-            # Grants: codewords from beats AFTER this beat's position on this arc.
-            # Includes beats without passages - codewords are granted by beat
-            # traversal regardless of passage representation.
+            # Grants: codewords from beats between this passage's beat and the
+            # next passage's beat (inclusive). This reflects state changes that
+            # happen when the player takes this choice, without leaking future
+            # arc codewords.
             arc_grants: list[str] = []
-            for beat_id in sequence[beat_idx + 1 :]:
+            for beat_id in sequence[beat_idx + 1 : next_beat_idx + 1]:
                 arc_grants.extend(beat_grants.get(beat_id, []))
 
             successors[p_id].append(
