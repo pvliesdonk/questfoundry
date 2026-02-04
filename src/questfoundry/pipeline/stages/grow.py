@@ -276,13 +276,42 @@ class GrowStage:
         else:
             graph = Graph.load(resolved_path)
 
-        # Verify SEED has completed before running GROW
+        # Verify SEED has completed before running GROW.
+        #
+        # Pipeline invariant: stages always run in order, so if graph.meta.last_stage
+        # is *beyond* SEED (e.g., fill/dress), SEED must have completed. In that case,
+        # re-running GROW should restore the pre-GROW snapshot to avoid accumulating
+        # stale GROW/FILL/DRESS nodes.
         last_stage = graph.get_last_stage()
         if last_stage != "seed":
-            raise GrowStageError(
-                f"GROW requires completed SEED stage. Current last_stage: '{last_stage}'. "
-                f"Run SEED before GROW."
-            )
+            if last_stage in ("grow", "fill", "dress", "ship"):
+                try:
+                    graph = self._load_checkpoint(resolved_path, "validate_dag")
+                    log.info(
+                        "rerun_restored_checkpoint",
+                        stage="grow",
+                        from_last_stage=last_stage,
+                        checkpoint_phase="validate_dag",
+                    )
+                except GrowStageError as e:
+                    raise GrowStageError(
+                        "GROW can be re-run after later stages only if the pre-GROW checkpoint "
+                        "exists. Re-run from SEED or restore "
+                        f"{resolved_path / self.CHECKPOINT_DIR / 'grow-pre-validate_dag.json'}."
+                    ) from e
+
+                restored_last_stage = graph.get_last_stage()
+                if restored_last_stage != "seed":
+                    raise GrowStageError(
+                        "Pre-GROW checkpoint does not contain a SEED-completed graph. "
+                        f"Current last_stage: '{restored_last_stage}'. "
+                        "Re-run SEED before GROW."
+                    )
+            else:
+                raise GrowStageError(
+                    f"GROW requires completed SEED stage. Current last_stage: '{last_stage}'. "
+                    f"Run SEED before GROW."
+                )
 
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0

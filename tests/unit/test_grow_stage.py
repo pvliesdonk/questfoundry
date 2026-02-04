@@ -103,6 +103,47 @@ class TestGrowStageExecute:
             await stage.execute(model=mock_model, user_prompt="")
 
     @pytest.mark.asyncio
+    async def test_execute_rerun_from_fill_restores_pre_grow_checkpoint(
+        self, tmp_path: Path, mock_model: MagicMock
+    ) -> None:
+        """GROW can re-run from a later-stage graph by restoring the pre-GROW checkpoint."""
+        from questfoundry.graph.graph import Graph
+
+        # Current graph is at a later stage (e.g., after FILL)
+        current = Graph.empty()
+        current.set_last_stage("fill")
+        current.save(tmp_path / "graph.json")
+
+        # Pre-GROW checkpoint contains SEED-completed graph state
+        pre_grow = Graph.empty()
+        pre_grow.set_last_stage("seed")
+        checkpoints_dir = tmp_path / "snapshots"
+        checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        pre_grow.save(checkpoints_dir / "grow-pre-validate_dag.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
+        assert result_dict["arc_count"] == 0
+
+        graph = Graph.load(tmp_path)
+        assert graph.get_last_stage() == "grow"
+
+    @pytest.mark.asyncio
+    async def test_execute_rerun_from_fill_requires_checkpoint(
+        self, tmp_path: Path, mock_model: MagicMock
+    ) -> None:
+        """Without a pre-GROW checkpoint, reruns from later stages should fail loudly."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        graph.set_last_stage("fill")
+        graph.save(tmp_path / "graph.json")
+
+        stage = GrowStage(project_path=tmp_path)
+        with pytest.raises(GrowStageError, match="pre-GROW checkpoint"):
+            await stage.execute(model=mock_model, user_prompt="")
+
+    @pytest.mark.asyncio
     async def test_execute_saves_graph(self, tmp_project: Path, mock_model: MagicMock) -> None:
         stage = GrowStage(project_path=tmp_project)
         await stage.execute(model=mock_model, user_prompt="")
