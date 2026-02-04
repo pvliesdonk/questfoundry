@@ -22,6 +22,7 @@ from questfoundry.cli import (
     _resolve_project_path,
     app,
 )
+from questfoundry.graph.graph import Graph
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -42,6 +43,34 @@ def test_no_args_shows_help() -> None:
     # no_args_is_help=True returns exit code 2 (not 0 like --help)
     assert result.exit_code == 2
     assert "QuestFoundry" in result.stdout
+
+
+def test_inspect_json_emits_valid_json(tmp_path: Path) -> None:
+    """`qf inspect --json` should emit machine-readable JSON (no Rich wrapping)."""
+    import json
+
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    # Create a graph with a long start passage ID to force line-wrapping if enabled.
+    graph = Graph.empty()
+    long_raw_id = "x" * 160
+    passage_id = f"passage::{long_raw_id}"
+    graph.create_node(
+        passage_id,
+        {
+            "type": "passage",
+            "raw_id": long_raw_id,
+            "prose": "Hello.",
+            "summary": "start",
+        },
+    )
+    graph.save(project_path / "graph.json")
+
+    result = runner.invoke(app, ["inspect", "--project", str(project_path), "--json"])
+
+    assert result.exit_code == 0
+    json.loads(result.stdout)
 
 
 # --- Init Command Tests ---
