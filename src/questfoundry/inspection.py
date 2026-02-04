@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from questfoundry.graph.fill_context import compute_lexical_diversity
 from questfoundry.graph.graph import Graph
-from questfoundry.graph.grow_validation import run_all_checks
+from questfoundry.graph.grow_validation import find_max_consecutive_linear, run_all_checks
 from questfoundry.observability.logging import get_logger
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 
@@ -55,6 +55,7 @@ class BranchingStats:
     meaningful_choices: int = 0
     contextual_choices: int = 0
     continue_choices: int = 0
+    max_consecutive_linear: int = 0
     total_dilemmas: int = 0
     fully_explored: int = 0
     partially_explored: int = 0
@@ -245,6 +246,9 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
         elif any(answer_results):
             partially_explored += 1
 
+    # Compute max consecutive linear using shared BFS (with confront/resolve exemptions)
+    max_linear = find_max_consecutive_linear(graph)
+
     # Start and ending passages
     # choice_to edges: choice → destination passage (incoming)
     # choice_from edges: choice → source passage (outgoing)
@@ -261,6 +265,7 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
         meaningful_choices=meaningful,
         contextual_choices=contextual,
         continue_choices=continue_count,
+        max_consecutive_linear=max_linear,
         total_dilemmas=len(dilemmas),
         fully_explored=fully_explored,
         partially_explored=partially_explored,

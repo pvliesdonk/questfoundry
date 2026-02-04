@@ -578,6 +578,203 @@ def check_spine_arc_exists(graph: Graph) -> ValidationCheck:
     )
 
 
+def build_passage_adjacency(graph: Graph) -> dict[str, list[str]]:
+    """Build passage → successor passages adjacency list from choice nodes.
+
+    Args:
+        graph: The story graph.
+
+    Returns:
+        Dict mapping each passage ID to a list of successor passage IDs.
+    """
+    choices = graph.get_nodes_by_type("choice")
+    adjacency: dict[str, list[str]] = {}
+    for _cid, cdata in choices.items():
+        from_p = cdata.get("from_passage", "")
+        to_p = cdata.get("to_passage", "")
+        if from_p and to_p:
+            adjacency.setdefault(from_p, []).append(to_p)
+    return adjacency
+
+
+def build_outgoing_count(graph: Graph) -> dict[str, int]:
+    """Count outgoing choices per passage from choice_from edges.
+
+    Args:
+        graph: The story graph.
+
+    Returns:
+        Dict mapping passage ID to number of outgoing choices.
+    """
+    # choice_from edges point choice → source_passage, so e["to"] = source passage.
+    choice_from_edges = graph.get_edges(edge_type="choice_from")
+    outgoing_count: dict[str, int] = {}
+    for edge in choice_from_edges:
+        source = edge["to"]
+        outgoing_count[source] = outgoing_count.get(source, 0) + 1
+    return outgoing_count
+
+
+def find_max_consecutive_linear(graph: Graph) -> int:
+    """Compute the longest consecutive single-outgoing passage stretch.
+
+    Uses BFS from start passages, tracking per-path run lengths.
+    Passages whose beat has ``narrative_function`` in {"confront", "resolve"}
+    are exempt (linearity is narratively appropriate at climax/resolution).
+
+    Args:
+        graph: The story graph.
+
+    Returns:
+        Length of the longest linear stretch (0 if no passages or no linear runs).
+    """
+    passages = graph.get_nodes_by_type("passage")
+    if not passages:
+        return 0
+
+    outgoing_count = build_outgoing_count(graph)
+    adjacency = build_passage_adjacency(graph)
+    exempt_passages = _build_exempt_passages(graph, passages)
+    starts = _find_start_passages(graph, passages)
+
+    max_len = 0
+    for _violation in _walk_linear_stretches(
+        starts, adjacency, outgoing_count, exempt_passages, threshold=0
+    ):
+        max_len = max(max_len, len(_violation))
+    return max_len
+
+
+def _build_exempt_passages(graph: Graph, passages: dict[str, dict[str, object]]) -> set[str]:
+    """Build set of passages exempt from linearity checks (confront/resolve beats)."""
+    beats = graph.get_nodes_by_type("beat")
+    exempt_beats: set[str] = set()
+    for bid, bdata in beats.items():
+        if bdata.get("narrative_function") in {"confront", "resolve"}:
+            exempt_beats.add(bid)
+
+    exempt: set[str] = set()
+    for pid, pdata in passages.items():
+        if pdata.get("from_beat") in exempt_beats:
+            exempt.add(pid)
+    return exempt
+
+
+def _find_start_passages(graph: Graph, passages: dict[str, dict[str, object]]) -> list[str]:
+    """Find passages with no incoming choice edges."""
+    choice_to_edges = graph.get_edges(edge_type="choice_to")
+    has_incoming = {e["to"] for e in choice_to_edges}
+    return [pid for pid in passages if pid not in has_incoming]
+
+
+def _walk_linear_stretches(
+    starts: list[str],
+    adjacency: dict[str, list[str]],
+    outgoing_count: dict[str, int],
+    exempt_passages: set[str],
+    threshold: int,
+) -> list[list[str]]:
+    """BFS walk to find linear stretches exceeding threshold.
+
+    Tracks per-path run context so convergence points are evaluated
+    correctly from each incoming path.
+
+    Args:
+        starts: Start passage IDs for BFS.
+        adjacency: Passage → successors mapping.
+        outgoing_count: Passage → outgoing choice count.
+        exempt_passages: Passages exempt from linearity (confront/resolve).
+        threshold: Minimum run length to report. 0 = report all runs.
+
+    Returns:
+        List of passage ID lists, one per linear stretch exceeding threshold.
+    """
+    stretches: list[list[str]] = []
+    # Track best known run reaching each node to prune redundant BFS paths
+    best_run_at: dict[str, int] = {}
+
+    for start in starts:
+        queue: deque[tuple[str, list[str]]] = deque()
+        is_linear = outgoing_count.get(start, 0) == 1 and start not in exempt_passages
+        initial_run = [start] if is_linear else []
+        queue.append((start, initial_run))
+
+        while queue:
+            current, run = queue.popleft()
+
+            for successor in adjacency.get(current, []):
+                is_succ_linear = (
+                    outgoing_count.get(successor, 0) == 1 and successor not in exempt_passages
+                )
+                if is_succ_linear:
+                    new_run = [*run, successor]
+                    # Only continue if this path offers a longer run than previously seen
+                    if len(new_run) <= best_run_at.get(successor, 0):
+                        continue
+                    best_run_at[successor] = len(new_run)
+                    if (threshold > 0 and len(new_run) > threshold) or threshold == 0:
+                        stretches.append(new_run)
+                    queue.append((successor, new_run))
+                else:
+                    # Reset run at branching/exempt nodes; only visit if not yet seen
+                    if successor not in best_run_at:
+                        best_run_at[successor] = 0
+                        queue.append((successor, []))
+
+    return stretches
+
+
+def check_max_consecutive_linear(graph: Graph, max_run: int = 2) -> ValidationCheck:
+    """Warn when too many consecutive single-outgoing passages form a linear stretch.
+
+    Long linear stretches create a passive reading experience. This check walks
+    the passage graph and flags any path with more than ``max_run`` consecutive
+    passages that each have exactly one outgoing choice.
+
+    Passages whose beat has ``narrative_function`` in {"confront", "resolve"} are
+    exempt, since linearity is narratively appropriate for climax/resolution.
+
+    Args:
+        graph: The story graph to validate.
+        max_run: Maximum allowed consecutive single-outgoing passages.
+
+    Returns:
+        A ValidationCheck with severity "warn" if a violation is found, "pass" otherwise.
+    """
+    passages = graph.get_nodes_by_type("passage")
+    if not passages:
+        return ValidationCheck(
+            name="max_consecutive_linear",
+            severity="pass",
+            message="No passages to check",
+        )
+
+    outgoing_count = build_outgoing_count(graph)
+    adjacency = build_passage_adjacency(graph)
+    exempt_passages = _build_exempt_passages(graph, passages)
+    starts = _find_start_passages(graph, passages)
+
+    violations = _walk_linear_stretches(starts, adjacency, outgoing_count, exempt_passages, max_run)
+
+    if violations:
+        longest = max(violations, key=len)
+        return ValidationCheck(
+            name="max_consecutive_linear",
+            severity="warn",
+            message=(
+                f"Found {len(violations)} linear stretch(es) exceeding {max_run} "
+                f"consecutive single-outgoing passages. Longest: {len(longest)} "
+                f"passages ({', '.join(longest[:5])}{'...' if len(longest) > 5 else ''})"
+            ),
+        )
+
+    return ValidationCheck(
+        name="max_consecutive_linear",
+        severity="pass",
+        message=f"No linear stretches exceed {max_run} consecutive passages",
+    )
+
+
 def run_all_checks(graph: Graph) -> ValidationReport:
     """Run all Phase 10 validation checks and aggregate results.
 
@@ -591,6 +788,7 @@ def run_all_checks(graph: Graph) -> ValidationReport:
         check_dilemmas_resolved(graph),
         check_gate_satisfiability(graph),
         check_passage_dag_cycles(graph),
+        check_max_consecutive_linear(graph),
     ]
     checks.extend(check_commits_timing(graph))
     return ValidationReport(checks=checks)

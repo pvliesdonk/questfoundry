@@ -15,6 +15,7 @@ from questfoundry.graph.grow_validation import (
     check_commits_timing,
     check_dilemmas_resolved,
     check_gate_satisfiability,
+    check_max_consecutive_linear,
     check_passage_dag_cycles,
     check_single_start,
     check_spine_arc_exists,
@@ -755,3 +756,138 @@ class TestPhase10Integration:
         # Should pass but with warnings
         assert result.status == "completed"
         assert "warnings" in result.detail
+
+
+def _make_chain_graph(passage_ids: list[str], beat_data: dict[str, dict] | None = None) -> Graph:
+    """Build a linear chain of passages connected by single-outgoing choices."""
+    graph = Graph.empty()
+    for pid in passage_ids:
+        pdata: dict = {
+            "type": "passage",
+            "raw_id": pid,
+            "from_beat": f"beat::{pid}",
+            "summary": f"Passage {pid}",
+        }
+        graph.create_node(f"passage::{pid}", pdata)
+        bdata: dict = {"type": "beat", "raw_id": pid, "summary": f"Beat {pid}"}
+        if beat_data and pid in beat_data:
+            bdata.update(beat_data[pid])
+        graph.create_node(f"beat::{pid}", bdata)
+
+    for i in range(len(passage_ids) - 1):
+        from_p = passage_ids[i]
+        to_p = passage_ids[i + 1]
+        cid = f"choice::{from_p}__{to_p}"
+        graph.create_node(
+            cid,
+            {
+                "type": "choice",
+                "from_passage": f"passage::{from_p}",
+                "to_passage": f"passage::{to_p}",
+                "label": "continue",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", cid, f"passage::{from_p}")
+        graph.add_edge("choice_to", cid, f"passage::{to_p}")
+
+    return graph
+
+
+class TestMaxConsecutiveLinear:
+    def test_three_consecutive_warns(self) -> None:
+        """3+ consecutive single-outgoing passages trigger a warning."""
+        graph = _make_chain_graph(["a", "b", "c", "d"])
+        # a→b→c→d: 3 single-outgoing (a, b, c) — d has 0 outgoing
+        result = check_max_consecutive_linear(graph, max_run=2)
+        assert result.severity == "warn"
+        assert "linear stretch" in result.message
+
+    def test_two_consecutive_passes(self) -> None:
+        """2 consecutive single-outgoing passages are within the limit."""
+        graph = _make_chain_graph(["a", "b", "c"])
+        # a→b→c: 2 single-outgoing (a, b) — within max_run=2
+        result = check_max_consecutive_linear(graph, max_run=2)
+        assert result.severity == "pass"
+
+    def test_multi_outgoing_resets_counter(self) -> None:
+        """A multi-outgoing passage resets the consecutive counter."""
+        graph = _make_chain_graph(["a", "b", "c", "d", "e"])
+        # Add a second choice from passage::b to make it multi-outgoing
+        graph.create_node(
+            "passage::alt",
+            {"type": "passage", "raw_id": "alt", "from_beat": "beat::alt", "summary": "Alt"},
+        )
+        graph.create_node(
+            "choice::b__alt",
+            {
+                "type": "choice",
+                "from_passage": "passage::b",
+                "to_passage": "passage::alt",
+                "label": "Take alternative",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::b__alt", "passage::b")
+        graph.add_edge("choice_to", "choice::b__alt", "passage::alt")
+
+        # Now: a(1)→b(2)→c(1)→d(1)→e(0)
+        # b has 2 outgoing so it's not linear — resets counter
+        # Runs: [a] (len 1), [c, d] (len 2) — both ≤2
+        result = check_max_consecutive_linear(graph, max_run=2)
+        assert result.severity == "pass"
+
+    def test_confront_beat_exempt(self) -> None:
+        """Passages from confront/resolve beats are exempt from linearity check."""
+        beat_data = {
+            "b": {"narrative_function": "confront"},
+            "c": {"narrative_function": "resolve"},
+        }
+        graph = _make_chain_graph(["a", "b", "c", "d"], beat_data=beat_data)
+        # a→b→c→d: b and c are exempt, so runs are [a] (len 1) only
+        result = check_max_consecutive_linear(graph, max_run=2)
+        assert result.severity == "pass"
+
+    def test_no_passages(self) -> None:
+        """Empty graph passes."""
+        graph = Graph.empty()
+        result = check_max_consecutive_linear(graph)
+        assert result.severity == "pass"
+
+    def test_convergence_detects_longer_path(self) -> None:
+        """Linear stretch through convergence point is detected from longer path."""
+        # Graph: a→b→c→d and x→c→d (c is a convergence point)
+        # From x: run at c is [c] (len 1)
+        # From a: run is [a, b, c] (len 3) — should trigger warn at max_run=2
+        graph = _make_chain_graph(["a", "b", "c", "d"])
+        # Add a second start x→c
+        graph.create_node(
+            "passage::x",
+            {"type": "passage", "raw_id": "x", "from_beat": "beat::x", "summary": "X"},
+        )
+        graph.create_node("beat::x", {"type": "beat"})
+        graph.create_node(
+            "choice::x__c",
+            {
+                "type": "choice",
+                "from_passage": "passage::x",
+                "to_passage": "passage::c",
+                "label": "go",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::x__c", "passage::x")
+        graph.add_edge("choice_to", "choice::x__c", "passage::c")
+
+        result = check_max_consecutive_linear(graph, max_run=2)
+        assert result.severity == "warn"
+
+    def test_included_in_run_all_checks(self) -> None:
+        """check_max_consecutive_linear is included in run_all_checks."""
+        graph = _make_linear_passage_graph()
+        report = run_all_checks(graph)
+        check_names = [c.name for c in report.checks]
+        assert "max_consecutive_linear" in check_names
