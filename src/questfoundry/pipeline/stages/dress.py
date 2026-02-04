@@ -247,6 +247,11 @@ class DressStage:
                 "Provide it in constructor or execute() call."
             )
 
+        # Ensure downstream phases (especially Phase 4 image generation) can
+        # rely on a resolved project_path even when a singleton stage instance
+        # is executed with an override path.
+        self.project_path = resolved_path
+
         self._callbacks = callbacks
         self._provider_name = provider_name
         self._serialize_model = serialize_model
@@ -328,6 +333,10 @@ class DressStage:
 
             if on_phase_progress is not None:
                 on_phase_progress(phase_name, result.status, result.detail)
+
+            # Persist progress after each approved phase so expensive work
+            # (briefs/codex/review) isn't lost if later phases fail.
+            graph.save(resolved_path / "graph.json")
 
         if completed_normally:
             graph.set_last_stage("dress")
@@ -1119,7 +1128,11 @@ class DressStage:
                 )
                 asset_path = asset_mgr.store(result.image_data, result.content_type)
 
-                quality = result.provider_metadata.get("quality", "high")
+                provider_metadata = getattr(result, "provider_metadata", None)
+                if not isinstance(provider_metadata, dict):
+                    provider_metadata = {}
+                quality_raw = provider_metadata.get("quality", "high")
+                quality = quality_raw if isinstance(quality_raw, str) else str(quality_raw)
                 apply_dress_illustration(
                     graph,
                     brief_id=brief_id,
@@ -1128,6 +1141,7 @@ class DressStage:
                     category=brief_data.get("category", "scene"),
                     quality=quality,
                 )
+                graph.save(self.project_path / "graph.json")
                 generated += 1
 
             except ImageProviderError as e:

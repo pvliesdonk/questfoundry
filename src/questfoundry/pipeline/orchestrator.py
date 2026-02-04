@@ -598,6 +598,10 @@ class PipelineOrchestrator:
             image_budget = context.get("image_budget", 0)
             if image_budget > 0:
                 stage_kwargs["image_budget"] = image_budget
+            if stage_name == "dress":
+                min_priority = context.get("min_priority", 3)
+                if isinstance(min_priority, int) and min_priority < 3:
+                    stage_kwargs["min_priority"] = min_priority
             if stage_name == "fill":
                 stage_kwargs["two_step"] = context.get("two_step", self.config.fill.two_step)
 
