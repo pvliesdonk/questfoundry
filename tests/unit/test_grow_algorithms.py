@@ -1708,24 +1708,20 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All 21 phases should run (completed or skipped)
-        phases = result_dict["phases_completed"]
-        assert len(phases) == 21
-        for phase in phases:
-            assert phase["status"] in ("completed", "skipped")
+        assert set(result_dict.keys()) == {"arcs", "beats", "passages", "choices", "codewords"}
 
         # Should have created arcs
-        assert result_dict["arc_count"] == 4  # 2x2 = 4 arcs
-        assert result_dict["spine_arc_id"] is not None
+        assert len(result_dict["arcs"]) == 4  # 2x2 = 4 arcs
+        assert any(a.get("arc_type") == "spine" for a in result_dict["arcs"])
 
         # Should have passages (one per beat)
-        assert result_dict["passage_count"] == 8  # 8 beats in two-dilemma graph
+        assert len(result_dict["passages"]) == 8  # 8 beats in two-dilemma graph
 
         # Should have codewords (one per consequence)
-        assert result_dict["codeword_count"] == 4  # 4 consequences
+        assert len(result_dict["codewords"]) == 4  # 4 consequences
 
         # Should have choices (from Phase 9)
-        assert result_dict["choice_count"] > 0
+        assert len(result_dict["choices"]) > 0
 
     @pytest.mark.asyncio
     async def test_single_dilemma_full_run(self, tmp_path: Path) -> None:
@@ -1738,13 +1734,11 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        # All phases run (completed or skipped)
-        phases = result_dict["phases_completed"]
-        assert all(p["status"] in ("completed", "skipped") for p in phases)
+        assert set(result_dict.keys()) == {"arcs", "beats", "passages", "choices", "codewords"}
 
-        assert result_dict["arc_count"] == 2  # 1 dilemma x 2 paths = 2 arcs
-        assert result_dict["passage_count"] == 4  # 4 beats
-        assert result_dict["codeword_count"] == 2  # 2 consequences
+        assert len(result_dict["arcs"]) == 2  # 1 dilemma x 2 paths = 2 arcs
+        assert len(result_dict["passages"]) == 4  # 4 beats
+        assert len(result_dict["codewords"]) == 2  # 2 consequences
 
     @pytest.mark.asyncio
     async def test_final_graph_has_expected_nodes(self, tmp_path: Path) -> None:

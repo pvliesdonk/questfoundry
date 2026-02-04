@@ -253,7 +253,7 @@ def _extract_arcs(graph: Graph) -> list[dict[str, Any]]:
         entry: dict[str, Any] = {
             "arc_id": arc_id,
             "arc_type": data.get("arc_type", "branch"),
-            "paths": data.get("paths", []),
+            "paths": sorted(data.get("paths", []) or []),
             "sequence": beat_sequence,
         }
         arcs.append(entry)
@@ -279,11 +279,11 @@ def _extract_beats(graph: Graph) -> list[dict[str, Any]]:
         if location := data.get("location"):
             entry["location"] = location
         if intersection_group := data.get("intersection_group"):
-            entry["intersection_group"] = intersection_group
+            entry["intersection_group"] = sorted(intersection_group)
         if belongs_to:
             entry["belongs_to"] = belongs_to
         if entities := data.get("entities"):
-            entry["entities"] = entities
+            entry["entities"] = sorted(entities)
         beats.append(entry)
     return beats
 
@@ -302,7 +302,7 @@ def _extract_passages(graph: Graph) -> list[dict[str, Any]]:
         if data.get("is_synthetic") is True:
             entry["is_synthetic"] = True
         if entities := data.get("entities"):
-            entry["entities"] = entities
+            entry["entities"] = sorted(entities)
         passages.append(entry)
     return passages
 
@@ -340,9 +340,9 @@ def _extract_choices(graph: Graph) -> list[dict[str, Any]]:
         if to_passage:
             entry["to_passage"] = to_passage
         if requires := data.get("requires"):
-            entry["requires"] = list(requires)
+            entry["requires"] = sorted(requires)
         if grants := data.get("grants"):
-            entry["grants"] = list(grants)
+            entry["grants"] = sorted(grants)
         if data.get("is_return") is True:
             entry["is_return"] = True
         choices.append(entry)
@@ -377,6 +377,6 @@ def _extract_codewords(graph: Graph) -> list[dict[str, Any]]:
             if grants_edges:
                 granted_by = sorted(e["from"] for e in grants_edges)
         if granted_by:
-            entry["granted_by"] = list(granted_by)
+            entry["granted_by"] = sorted(granted_by)
         codewords.append(entry)
     return codewords
