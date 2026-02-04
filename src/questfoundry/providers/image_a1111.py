@@ -12,6 +12,7 @@ The provider spec string selects the SD checkpoint::
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
 from dataclasses import dataclass, field
@@ -32,6 +33,9 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 _DEFAULT_TIMEOUT = 180.0  # SDXL at high res can be slow on consumer GPUs
+_DISTILL_STOP_MARKER = "<QF_END>"
+_DISTILL_MAX_OUTPUT_TOKENS = 512
+_DISTILL_MAX_RETRIES = 2
 
 
 # -- Model-aware generation presets ----------------------------------------
@@ -187,6 +191,65 @@ class A1111ImageProvider:
             )
         return await self._distill_with_llm(brief)
 
+    def _bind_distill_limits(self, llm: Any, *, stop: list[str]) -> Any:
+        """Bind conservative generation limits for prompt distillation.
+
+        We rely on provider-side caps to prevent pathological runs where the
+        model ignores formatting instructions and generates extremely long output.
+        """
+        if not hasattr(llm, "bind"):
+            return llm
+
+        bind_kwargs: dict[str, Any] = {}
+
+        # Ollama (langchain-ollama ChatOllama) uses num_predict.
+        if hasattr(llm, "num_predict"):
+            bind_kwargs["num_predict"] = _DISTILL_MAX_OUTPUT_TOKENS
+        # Most hosted providers use max_tokens.
+        elif hasattr(llm, "max_tokens"):
+            bind_kwargs["max_tokens"] = _DISTILL_MAX_OUTPUT_TOKENS
+
+        if hasattr(llm, "stop"):
+            bind_kwargs["stop"] = stop
+
+        # Keep distillation deterministic-ish; if a provider doesn't support it,
+        # the attribute check keeps this a no-op.
+        if hasattr(llm, "temperature"):
+            bind_kwargs["temperature"] = 0.2
+
+        if not bind_kwargs:
+            return llm
+
+        return llm.bind(**bind_kwargs)
+
+    def _parse_distilled_output(self, raw: str) -> tuple[str, str | None]:
+        """Parse the LLM's output into (positive, negative).
+
+        Expected format is two lines: positive then negative. We tolerate extra
+        lines (ignored), and common label prefixes.
+        """
+        text = raw.replace(_DISTILL_STOP_MARKER, "").strip()
+        lines = [ln.strip() for ln in text.splitlines() if ln.strip()]
+        if not lines:
+            raise ValueError("empty distillation output")
+
+        positive = lines[0]
+        negative = lines[1] if len(lines) > 1 else None
+
+        for prefix in ("Positive:", "positive:", "Negative:", "negative:"):
+            if positive.startswith(prefix):
+                positive = positive[len(prefix) :].strip()
+            if negative and negative.startswith(prefix):
+                negative = negative[len(prefix) :].strip()
+
+        if not positive:
+            raise ValueError("missing positive prompt")
+
+        return positive, negative or None
+
+    def _tag_count(self, text: str) -> int:
+        return len([t.strip() for t in text.split(",") if t.strip()])
+
     async def _distill_with_llm(self, brief: ImageBrief) -> tuple[str, str | None]:
         """Use an LLM to condense the brief into SD-optimised tags.
 
@@ -293,6 +356,7 @@ class A1111ImageProvider:
             "- Output EXACTLY two lines. Line 1: positive. Line 2: negative.\n"
             "- No labels, no explanation, no commentary.\n"
             f"- {format_instruction}\n\n"
+            f"- End line 2 with the marker {_DISTILL_STOP_MARKER}.\n\n"
             f"{example}\n\n"
             f"REMINDER: Target {tag_target} tags. Do NOT go under 15 or over "
             f"{tag_limit}."
@@ -300,29 +364,74 @@ class A1111ImageProvider:
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        response = await self._llm.ainvoke(
-            [SystemMessage(content=system_msg), HumanMessage(content=brief_text)]
+        distill_llm = self._bind_distill_limits(self._llm, stop=[_DISTILL_STOP_MARKER])
+
+        last_error: str | None = None
+        for attempt in range(1, _DISTILL_MAX_RETRIES + 1):
+            try:
+                response = await distill_llm.ainvoke(
+                    [SystemMessage(content=system_msg), HumanMessage(content=brief_text)],
+                    config={
+                        "metadata": {
+                            "stage": "dress",
+                            "phase": "prompt_distill",
+                            "image_provider": "a1111",
+                        }
+                    },
+                )
+                raw = (
+                    response.content.strip()
+                    if hasattr(response, "content")
+                    else str(response).strip()
+                )
+                positive, negative = self._parse_distilled_output(raw)
+            except Exception as exc:
+                last_error = f"{type(exc).__name__}: {exc}"
+                log.warning(
+                    "image_prompt_distill_failed",
+                    attempt=attempt,
+                    max_attempts=_DISTILL_MAX_RETRIES,
+                    error=last_error,
+                    subject=brief.subject[:80],
+                    model=self._model,
+                )
+                if attempt < _DISTILL_MAX_RETRIES:
+                    await asyncio.sleep(1.0 * attempt)
+                    continue
+                raise ImageProviderError(
+                    "a1111",
+                    f"Prompt distillation failed after retries. Last error: {last_error}",
+                ) from exc
+
+            positive_tags = self._tag_count(positive)
+            if positive_tags < 8:
+                log.warning(
+                    "image_prompt_distill_short_output",
+                    attempt=attempt,
+                    subject=brief.subject[:80],
+                    model=self._model,
+                    positive_tags=positive_tags,
+                )
+
+            # Hard-truncate to CLIP token limits — LLMs routinely overshoot.
+            positive = _truncate_tags(positive, tag_limit)
+            if negative:
+                negative = _truncate_tags(negative, 30)
+
+            log.info(
+                "image_prompt_distilled",
+                subject=brief.subject[:80],
+                model=self._model,
+                is_xl=is_xl,
+                positive_tags=self._tag_count(positive),
+                negative_tags=self._tag_count(negative) if negative else 0,
+            )
+            return positive, negative or None
+
+        raise ImageProviderError(
+            "a1111",
+            f"Prompt distillation failed unexpectedly. Last error: {last_error or 'unknown'}",
         )
-        raw = response.content.strip() if hasattr(response, "content") else str(response).strip()
-
-        # Parse two-line output: line 1 = positive, line 2 = negative
-        lines = [ln.strip() for ln in raw.splitlines() if ln.strip()]
-        positive = lines[0] if lines else raw
-        negative = lines[1] if len(lines) > 1 else None
-
-        # Strip any accidental labels the LLM may prepend
-        for prefix in ("Positive:", "positive:", "Negative:", "negative:"):
-            if positive.startswith(prefix):
-                positive = positive[len(prefix) :].strip()
-            if negative and negative.startswith(prefix):
-                negative = negative[len(prefix) :].strip()
-
-        # Hard-truncate to CLIP token limits — LLMs routinely overshoot.
-        positive = _truncate_tags(positive, tag_limit)
-        if negative:
-            negative = _truncate_tags(negative, 30)
-
-        return positive, negative or None
 
     async def generate(
         self,
