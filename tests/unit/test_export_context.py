@@ -149,6 +149,50 @@ class TestBuildExportContext:
         assert len(start_passages) == 1
         assert start_passages[0].id == "passage::intro"
 
+    def test_start_passage_ignores_return_links(self) -> None:
+        """Return links (spoke→hub) should not prevent start passage detection."""
+        g = _minimal_graph()
+        g.create_node(
+            "passage::spoke_0",
+            {
+                "type": "passage",
+                "raw_id": "spoke_0",
+                "prose": "You look around.",
+            },
+        )
+        g.create_node(
+            "choice::intro_to_spoke_0",
+            {
+                "type": "choice",
+                "from_passage": "passage::intro",
+                "to_passage": "passage::spoke_0",
+                "label": "Look around",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        g.add_edge("choice_from", "choice::intro_to_spoke_0", "passage::intro")
+        g.add_edge("choice_to", "choice::intro_to_spoke_0", "passage::spoke_0")
+        g.create_node(
+            "choice::spoke_0_return",
+            {
+                "type": "choice",
+                "from_passage": "passage::spoke_0",
+                "to_passage": "passage::intro",
+                "label": "Return",
+                "is_return": True,
+                "requires": [],
+                "grants": [],
+            },
+        )
+        g.add_edge("choice_from", "choice::spoke_0_return", "passage::spoke_0")
+        g.add_edge("choice_to", "choice::spoke_0_return", "passage::intro")
+
+        ctx = build_export_context(g, "test")
+        start_passages = [p for p in ctx.passages if p.is_start]
+        assert len(start_passages) == 1
+        assert start_passages[0].id == "passage::intro"
+
     def test_ending_passages_detected(self) -> None:
         g = _minimal_graph()
         ctx = build_export_context(g, "test")

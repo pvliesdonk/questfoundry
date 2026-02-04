@@ -251,12 +251,19 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
     max_linear = find_max_consecutive_linear(graph)
 
     # Start and ending passages
-    # choice_to edges: choice → destination passage (incoming)
-    # choice_from edges: choice → source passage (outgoing)
-    choice_to_edges = graph.get_edges(edge_type="choice_to")
-    has_incoming = {e["to"] for e in choice_to_edges}
-    choice_from_edges = graph.get_edges(edge_type="choice_from")
-    has_outgoing = {e["to"] for e in choice_from_edges}
+    # A passage is a "start" when it has no *forward* incoming choices.
+    # Exclude hub-spoke return links (spoke→hub with is_return=True), otherwise
+    # hubs can incorrectly appear to have incoming edges and start_count becomes 0.
+    choice_nodes = graph.get_nodes_by_type("choice")
+    has_incoming: set[str] = set()
+    has_outgoing: set[str] = set()
+    for choice_data in choice_nodes.values():
+        from_passage = choice_data.get("from_passage")
+        to_passage = choice_data.get("to_passage")
+        if from_passage:
+            has_outgoing.add(from_passage)
+        if to_passage and not choice_data.get("is_return"):
+            has_incoming.add(to_passage)
 
     start_count = sum(1 for pid in passages if pid not in has_incoming)
     ending_count = sum(1 for pid in passages if pid not in has_outgoing)

@@ -2556,7 +2556,14 @@ def inspect(
         import dataclasses
         import json
 
-        console.print(json.dumps(dataclasses.asdict(report), indent=2))
+        # Emit machine-readable JSON. Rich will otherwise wrap long lines at the
+        # terminal width (80), which can split string values and break JSON.
+        console.print(
+            json.dumps(dataclasses.asdict(report), indent=2),
+            soft_wrap=True,
+            markup=False,
+            highlight=False,
+        )
         return
 
     _render_inspection_report(report)

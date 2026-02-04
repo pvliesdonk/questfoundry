@@ -100,7 +100,10 @@ def _mark_start_and_endings(
     has_outgoing: set[str] = set()
 
     for choice in choices:
-        has_incoming.add(choice.to_passage)
+        # Return links (spoke→hub) should not prevent hubs from being recognised
+        # as the unique start passage.
+        if not choice.is_return:
+            has_incoming.add(choice.to_passage)
         has_outgoing.add(choice.from_passage)
 
     for passage in passages:

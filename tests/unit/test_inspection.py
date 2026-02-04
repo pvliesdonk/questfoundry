@@ -245,6 +245,73 @@ class TestBranchingStats:
         assert stats.start_passages >= 1
         assert stats.ending_passages >= 1
 
+    def test_start_passages_ignore_return_links(self) -> None:
+        """Return links (spoke→hub) should not count as incoming for start detection."""
+        graph = Graph.empty()
+        graph.create_node(
+            "passage::p0",
+            {"type": "passage", "raw_id": "p0", "from_beat": "beat::p0", "summary": "p0"},
+        )
+        graph.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::p1", "summary": "p1"},
+        )
+        graph.create_node(
+            "passage::spoke_0",
+            {
+                "type": "passage",
+                "raw_id": "spoke_0",
+                "from_beat": "beat::spoke_0",
+                "summary": "spoke_0",
+            },
+        )
+
+        # Ensure p0 has 2 outgoing (hub), then add a return link spoke→p0.
+        graph.create_node(
+            "choice::p0__p1",
+            {
+                "type": "choice",
+                "from_passage": "passage::p0",
+                "to_passage": "passage::p1",
+                "label": "continue",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::p0__p1", "passage::p0")
+        graph.add_edge("choice_to", "choice::p0__p1", "passage::p1")
+        graph.create_node(
+            "choice::p0__spoke_0",
+            {
+                "type": "choice",
+                "from_passage": "passage::p0",
+                "to_passage": "passage::spoke_0",
+                "label": "Look around",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::p0__spoke_0", "passage::p0")
+        graph.add_edge("choice_to", "choice::p0__spoke_0", "passage::spoke_0")
+        graph.create_node(
+            "choice::spoke_0_return",
+            {
+                "type": "choice",
+                "from_passage": "passage::spoke_0",
+                "to_passage": "passage::p0",
+                "label": "Return",
+                "is_return": True,
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::spoke_0_return", "passage::spoke_0")
+        graph.add_edge("choice_to", "choice::spoke_0_return", "passage::p0")
+
+        stats = _branching_stats(graph)
+        assert stats is not None
+        assert stats.start_passages == 1
+
 
 class TestCoverageStats:
     def test_entity_counts(self, tmp_path: Path) -> None:
