@@ -134,6 +134,33 @@ class TestShipStage:
         exported_asset = result.parent / "assets" / "scene.png"
         assert not exported_asset.exists()
 
+    def test_export_json_with_embed_assets_still_bundles(self, tmp_path: Path) -> None:
+        project = tmp_path / "my-story"
+        _create_project_with_graph(project)
+
+        asset_path = project / "assets" / "scene.png"
+        _write_test_png(asset_path)
+
+        g = Graph.load(project)
+        g.create_node(
+            "illustration::intro",
+            {
+                "type": "illustration",
+                "raw_id": "intro",
+                "asset": "assets/scene.png",
+                "caption": "A scene",
+                "category": "scene",
+            },
+        )
+        g.add_edge("Depicts", "illustration::intro", "passage::intro")
+        g.save(project / "graph.json")
+
+        stage = ShipStage(project)
+        result = stage.execute(export_format="json", embed_assets=True)
+
+        exported_asset = result.parent / "assets" / "scene.png"
+        assert exported_asset.exists()
+
     def test_custom_output_dir(self, tmp_path: Path) -> None:
         project = tmp_path / "my-story"
         _create_project_with_graph(project)
