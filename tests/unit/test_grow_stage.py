@@ -1475,9 +1475,10 @@ class TestPhase8cOverlays:
 
 class TestPhase9Choices:
     @pytest.mark.asyncio
-    async def test_phase_9_single_successor_creates_continue_edges(self) -> None:
-        """Phase 9 creates implicit 'continue' choice edges for single-successor passages."""
+    async def test_phase_9_single_successor_generates_contextual_labels(self) -> None:
+        """Phase 9 calls LLM to generate contextual labels for single-successor passages."""
         from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import ChoiceLabel, Phase9Output
 
         graph = Graph.empty()
         # Create a simple linear arc: a → b → c
@@ -1511,25 +1512,95 @@ class TestPhase9Choices:
             graph.add_edge("passage_from", f"passage::{bid}", f"beat::{bid}")
 
         stage = GrowStage()
+
+        # Mock LLM returns contextual labels for single-successor passages
+        phase9_output = Phase9Output(
+            labels=[
+                ChoiceLabel(
+                    from_passage="passage::a",
+                    to_passage="passage::b",
+                    label="Press onward carefully",
+                ),
+                ChoiceLabel(
+                    from_passage="passage::b",
+                    to_passage="passage::c",
+                    label="Face the final challenge",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase9_output)
         mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
         result = await stage._phase_9_choices(graph, mock_model)
 
         assert result.status == "completed"
-        assert result.llm_calls == 0  # No LLM needed for single-successor
+        assert result.llm_calls == 1  # One batched LLM call for single-successors
 
         # Should have 2 choice nodes (a→b, b→c)
         choice_nodes = graph.get_nodes_by_type("choice")
         assert len(choice_nodes) == 2
 
-        # All labels should be "continue"
-        for _cid, cdata in choice_nodes.items():
-            assert cdata["label"] == "continue"
+        # Labels should be contextual (from LLM), not "continue"
+        labels = sorted(cdata["label"] for cdata in choice_nodes.values())
+        assert "Face the final challenge" in labels
+        assert "Press onward carefully" in labels
 
         # Verify choice edges exist
         choice_from_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_from")
         choice_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_to")
         assert len(choice_from_edges) == 2
         assert len(choice_to_edges) == 2
+
+    @pytest.mark.asyncio
+    async def test_phase_9_single_successor_falls_back_to_continue(self) -> None:
+        """Phase 9 falls back to 'continue' when LLM call fails for single-successors."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+        from questfoundry.pipeline.stages.grow import GrowStageError
+
+        graph = Graph.empty()
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "End"})
+        graph.add_edge("requires", "beat::b", "beat::a")
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["t1"],
+                "sequence": ["beat::a", "beat::b"],
+            },
+        )
+        graph.add_edge("arc_contains", "arc::spine", "beat::a")
+        graph.add_edge("arc_contains", "arc::spine", "beat::b")
+
+        for bid in ["a", "b"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}", "summary": bid},
+            )
+            graph.add_edge("passage_from", f"passage::{bid}", f"beat::{bid}")
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+
+        # Patch _grow_llm_call to raise GrowStageError
+        with patch.object(stage, "_grow_llm_call", side_effect=GrowStageError("LLM unavailable")):
+            result = await stage._phase_9_choices(graph, mock_model)
+
+        assert result.status == "completed"
+
+        choice_nodes = graph.get_nodes_by_type("choice")
+        assert len(choice_nodes) == 1
+        # Should fall back to "continue"
+        for _cid, cdata in choice_nodes.items():
+            assert cdata["label"] == "continue"
 
     @pytest.mark.asyncio
     async def test_phase_9_multi_successor_calls_llm(self) -> None:
