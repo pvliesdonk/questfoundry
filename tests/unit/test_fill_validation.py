@@ -336,6 +336,12 @@ class TestDilemmaProseCoverage:
         assert checks[0].severity == "warn"
         assert "path::p2" in checks[0].message
 
+    def test_both_paths_missing_prose(self) -> None:
+        graph = _make_dilemma_graph(path_a_prose=False, path_b_prose=False)
+        checks = check_dilemma_prose_coverage(graph)
+        assert len(checks) == 1
+        assert checks[0].severity == "warn"
+
     def test_no_dilemmas(self) -> None:
         graph = Graph.empty()
         checks = check_dilemma_prose_coverage(graph)

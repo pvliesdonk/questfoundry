@@ -248,8 +248,8 @@ def path_has_prose(graph: Graph, path_id: str) -> bool:
     Returns:
         True if at least one passage in the path has prose.
     """
-    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
-    beat_ids = {e["from"] for e in belongs_to_edges if e["to"] == path_id}
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to", to_id=path_id)
+    beat_ids = {e["from"] for e in belongs_to_edges}
 
     if not beat_ids:
         return False
