@@ -57,7 +57,7 @@ class TestGrowStageExecute:
         assert tokens == 0
         # All phases run to completion (empty graph = no work to do)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 19
+        assert len(phases) == 20
         for phase in phases:
             assert phase["status"] == "completed"
 
@@ -126,7 +126,7 @@ class TestGrowStagePhaseOrder:
     def test_phase_order_returns_eighteen_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 19
+        assert len(phases) == 20
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -149,6 +149,7 @@ class TestGrowStagePhaseOrder:
             "overlays",
             "choices",
             "fork_beats",
+            "hub_spokes",
             "validation",
             "prune",
         ]
@@ -2835,3 +2836,171 @@ class TestPhase9bForkBeats:
         # No graph changes
         choices = graph.get_nodes_by_type("choice")
         assert len(choices) == 3  # Original 3 choices unchanged
+
+
+class TestPhase9cHubSpokes:
+    """Tests for Phase 9c hub-and-spoke insertion."""
+
+    @pytest.mark.asyncio
+    async def test_hub_creates_spokes_and_return_links(self) -> None:
+        """Phase 9c creates spoke passages and return choices with is_return flag."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import HubProposal, Phase9cOutput, SpokeProposal
+
+        graph = Graph.empty()
+        # Hub passage with one forward choice
+        graph.create_node(
+            "passage::market",
+            {"type": "passage", "raw_id": "market", "summary": "The bustling marketplace"},
+        )
+        graph.create_node(
+            "passage::palace",
+            {"type": "passage", "raw_id": "palace", "summary": "The palace gates"},
+        )
+        graph.create_node(
+            "choice::market__palace",
+            {
+                "type": "choice",
+                "from_passage": "passage::market",
+                "to_passage": "passage::palace",
+                "label": "continue",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::market__palace", "passage::market")
+        graph.add_edge("choice_to", "choice::market__palace", "passage::palace")
+
+        stage = GrowStage()
+
+        hub_output = Phase9cOutput(
+            hubs=[
+                HubProposal(
+                    passage_id="passage::market",
+                    spokes=[
+                        SpokeProposal(summary="Exotic merchant wares", label="Browse the wares"),
+                        SpokeProposal(summary="Street musician plays", label="Listen to the music"),
+                    ],
+                    forward_label="Head to the palace",
+                ),
+            ]
+        )
+
+        with patch.object(
+            stage,
+            "_grow_llm_call",
+            return_value=(hub_output, 1, 100),
+        ):
+            result = await stage._phase_9c_hub_spokes(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert "1 hub" in result.detail
+
+        # 2 synthetic spoke passages
+        passages = graph.get_nodes_by_type("passage")
+        synthetic = {pid: p for pid, p in passages.items() if p.get("is_synthetic")}
+        assert len(synthetic) == 2
+
+        # Forward choice relabeled
+        fwd_choice = graph.get_node("choice::market__palace")
+        assert fwd_choice is not None
+        assert fwd_choice["label"] == "Head to the palace"
+
+        # 2 spoke choices + 2 return choices + 1 forward = 5 total
+        choices = graph.get_nodes_by_type("choice")
+        assert len(choices) == 5
+
+        # Return choices have is_return=True
+        return_choices = [c for c in choices.values() if c.get("is_return")]
+        assert len(return_choices) == 2
+
+    @pytest.mark.asyncio
+    async def test_return_links_excluded_from_cycle_check(self) -> None:
+        """is_return choices are excluded from DAG cycle detection."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.graph.grow_validation import check_passage_dag_cycles
+
+        graph = Graph.empty()
+        graph.create_node(
+            "passage::hub",
+            {"type": "passage", "raw_id": "hub", "summary": "Hub"},
+        )
+        graph.create_node(
+            "passage::spoke",
+            {"type": "passage", "raw_id": "spoke", "summary": "Spoke"},
+        )
+
+        # hub → spoke (normal)
+        graph.create_node(
+            "choice::hub__spoke",
+            {
+                "type": "choice",
+                "from_passage": "passage::hub",
+                "to_passage": "passage::spoke",
+                "label": "Explore",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::hub__spoke", "passage::hub")
+        graph.add_edge("choice_to", "choice::hub__spoke", "passage::spoke")
+
+        # spoke → hub (return)
+        graph.create_node(
+            "choice::spoke__return",
+            {
+                "type": "choice",
+                "from_passage": "passage::spoke",
+                "to_passage": "passage::hub",
+                "label": "Return",
+                "requires": [],
+                "grants": [],
+                "is_return": True,
+            },
+        )
+        graph.add_edge("choice_from", "choice::spoke__return", "passage::spoke")
+        graph.add_edge("choice_to", "choice::spoke__return", "passage::hub")
+
+        result = check_passage_dag_cycles(graph)
+        # Should pass because is_return edges are excluded
+        assert result.severity == "pass"
+
+    @pytest.mark.asyncio
+    async def test_empty_hubs_noop(self) -> None:
+        """Phase 9c is a noop when LLM returns 0 hubs."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import Phase9cOutput
+
+        graph = Graph.empty()
+        graph.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "summary": "Passage 1"},
+        )
+        graph.create_node(
+            "choice::p1__p2",
+            {
+                "type": "choice",
+                "from_passage": "passage::p1",
+                "to_passage": "passage::p2",
+                "label": "continue",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::p1__p2", "passage::p1")
+
+        stage = GrowStage()
+
+        with patch.object(
+            stage,
+            "_grow_llm_call",
+            return_value=(Phase9cOutput(hubs=[]), 1, 50),
+        ):
+            result = await stage._phase_9c_hub_spokes(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert "0 hub" in result.detail

@@ -32,6 +32,7 @@ class ExportChoice:
     label: str
     requires: list[str] = field(default_factory=list)
     grants: list[str] = field(default_factory=list)
+    is_return: bool = False
 
 
 @dataclass

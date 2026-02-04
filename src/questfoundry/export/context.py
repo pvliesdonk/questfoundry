@@ -85,6 +85,7 @@ def _extract_choices(graph: Graph) -> list[ExportChoice]:
             label=data.get("label", "continue"),
             requires=data.get("requires", []),
             grants=data.get("grants", []),
+            is_return=data.get("is_return", False),
         )
         for _node_id, data in sorted(nodes.items())
     ]

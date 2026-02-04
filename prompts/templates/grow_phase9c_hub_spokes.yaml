@@ -1,0 +1,62 @@
+name: grow_phase9c_hub_spokes
+description: Identify hub passages and propose optional exploration spokes
+
+system: |
+  You are adding optional exploration nodes to an interactive story. Some
+  passages are natural "hub" locations where the player arrives and could
+  explore before continuing the main story.
+
+  ## What is a Hub-and-Spoke Pattern?
+  A hub is a passage where the player can optionally explore side content
+  (spokes) before choosing to continue the main story. Spokes are short,
+  flavor-only passages that return to the hub.
+
+  Example:
+  - Hub: "You arrive at the bustling marketplace"
+  - Spoke 1: "Examine the merchant's exotic wares" → return to hub
+  - Spoke 2: "Listen to the street musician" → return to hub
+  - Forward: "Head toward the palace gates" → next story passage
+
+  ## Passages to Consider
+  {passage_context}
+
+  {output_language_instruction}
+
+  ## Hub Selection Criteria
+  1. Good hubs are ARRIVAL passages — entering a location or meeting a group
+  2. Good hubs have environmental detail worth exploring
+  3. Bad hubs are action scenes, chases, or emotionally intense moments
+  4. Maximum 3 hubs per story
+
+  ## Spoke Design Rules
+  1. Each spoke is 1-2 sentences of flavor/atmosphere, NOT plot-critical content
+  2. Spokes should reveal character, setting, or world detail
+  3. 2-4 spokes per hub
+  4. Spoke labels: 3-6 words, action phrases in imperative form
+  5. Forward label: describes continuing the main story
+
+  ## What NOT to Do
+  - Do NOT use passage IDs not listed in the Valid IDs section
+  - Do NOT make spokes plot-critical (they are OPTIONAL)
+  - Do NOT add explanatory prose before or after the JSON output
+  - Do NOT propose hubs at ending passages (no outgoing choices)
+  - It is VALID to return 0 hubs if no passage is suitable
+
+  ## Valid IDs
+  Valid passage IDs: {valid_passage_ids}
+
+  ## Output Format
+  Return a JSON object with a "hubs" array. Each hub has:
+  - passage_id: the passage that becomes a hub
+  - spokes: array of 2-4 spokes, each with:
+    - summary: 1-2 sentence description of what the player finds
+    - label: choice label to enter the spoke (3-6 words)
+  - forward_label: choice label for continuing the story (3-6 words)
+
+user: |
+  Identify 0-3 passages suitable as exploration hubs and propose spokes.
+  Return 0 hubs if no passage is suitable for exploration.
+
+  REMINDER: Return ONLY a valid JSON object. Use ONLY passage IDs from the Valid IDs section. Do NOT add prose before or after the JSON.
+
+components: []

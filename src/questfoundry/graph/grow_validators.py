@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         Phase4fOutput,
         Phase8cOutput,
         Phase9bOutput,
+        Phase9cOutput,
         Phase9Output,
     )
 
@@ -228,6 +229,30 @@ def validate_phase9b_output(
     return errors
 
 
+def validate_phase9c_output(
+    result: Phase9cOutput,
+    valid_passage_ids: set[str],
+) -> list[GrowValidationError]:
+    """Validate Phase 9c hub-spoke proposals.
+
+    Checks:
+    - passage_id exists in valid passage IDs (which excludes ending passages,
+      ensuring hubs have outgoing choices)
+    """
+    errors: list[GrowValidationError] = []
+    for i, hub in enumerate(result.hubs):
+        if hub.passage_id not in valid_passage_ids:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"hubs.{i}.passage_id",
+                    issue=f"Passage ID not found: {hub.passage_id}",
+                    provided=hub.passage_id,
+                    available=sorted(valid_passage_ids)[:10],
+                )
+            )
+    return errors
+
+
 def format_semantic_errors(errors: list[GrowValidationError]) -> str:
     """Format semantic validation errors as LLM feedback.
 
@@ -296,6 +321,7 @@ def count_entries(result: object) -> int:
         "labels",
         "arcs",
         "proposals",
+        "hubs",
     ):
         entries = getattr(result, attr, None)
         if entries is not None:

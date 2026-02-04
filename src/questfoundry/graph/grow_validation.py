@@ -388,6 +388,9 @@ def check_passage_dag_cycles(graph: Graph) -> ValidationCheck:
     successors: dict[str, list[str]] = {pid: [] for pid in passage_nodes}
 
     for choice_data in choice_nodes.values():
+        # Skip is_return edges (spoke→hub back-links) — they are intentional cycles
+        if choice_data.get("is_return"):
+            continue
         from_p = choice_data.get("from_passage")
         to_p = choice_data.get("to_passage")
         if from_p and to_p and from_p in passage_nodes and to_p in passage_nodes:
