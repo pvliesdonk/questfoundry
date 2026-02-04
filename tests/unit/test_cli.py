@@ -711,6 +711,22 @@ def test_stage_order_constant() -> None:
     assert STAGE_ORDER == ["dream", "brainstorm", "seed", "grow", "fill", "dress", "ship"]
 
 
+def test_ship_command_passes_embed_flag(tmp_path: Path) -> None:
+    """Test qf ship passes --embed through to _run_ship."""
+    runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
+    project_path = tmp_path / "test"
+
+    with patch("questfoundry.cli._run_ship") as mock_run:
+        result = runner.invoke(
+            app,
+            ["ship", "--project", str(project_path), "--format", "html", "--embed"],
+        )
+
+    assert result.exit_code == 0
+    mock_run.assert_called_once()
+    assert mock_run.call_args.kwargs["embed_assets"] is True
+
+
 def test_stage_prompts_has_all_stages() -> None:
     """Test STAGE_PROMPTS has entry for each stage in STAGE_ORDER."""
     for stage in STAGE_ORDER:

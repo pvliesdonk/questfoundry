@@ -59,6 +59,16 @@ def _create_project_with_graph(project_path: Path, *, with_prose: bool = True) -
     g.save(project_path / "graph.json")
 
 
+def _write_test_png(path: Path) -> None:
+    data = (
+        b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
+        b"\x08\x06\x00\x00\x00\x1f\x15\xc4\x89\x00\x00\x00\x0cIDATx\x9cc\xf8"
+        b"\xff\xff?\x00\x05\xfe\x02\xfeA\xe2!\xbc\x00\x00\x00\x00IEND\xaeB`\x82"
+    )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(data)
+
+
 class TestShipStage:
     def test_export_twee(self, tmp_path: Path) -> None:
         project = tmp_path / "my-story"
@@ -93,6 +103,63 @@ class TestShipStage:
         assert result.name == "story.html"
         content = result.read_text()
         assert "<!DOCTYPE html>" in content
+
+    def test_export_html_with_embedded_assets(self, tmp_path: Path) -> None:
+        project = tmp_path / "my-story"
+        _create_project_with_graph(project)
+
+        asset_path = project / "assets" / "scene.png"
+        _write_test_png(asset_path)
+
+        g = Graph.load(project)
+        g.create_node(
+            "illustration::intro",
+            {
+                "type": "illustration",
+                "raw_id": "intro",
+                "asset": "assets/scene.png",
+                "caption": "A scene",
+                "category": "scene",
+            },
+        )
+        g.add_edge("Depicts", "illustration::intro", "passage::intro")
+        g.save(project / "graph.json")
+
+        stage = ShipStage(project)
+        result = stage.execute(export_format="html", embed_assets=True)
+
+        content = result.read_text()
+        assert "data:image/png;base64," in content
+
+        exported_asset = result.parent / "assets" / "scene.png"
+        assert not exported_asset.exists()
+
+    def test_export_json_with_embed_assets_still_bundles(self, tmp_path: Path) -> None:
+        project = tmp_path / "my-story"
+        _create_project_with_graph(project)
+
+        asset_path = project / "assets" / "scene.png"
+        _write_test_png(asset_path)
+
+        g = Graph.load(project)
+        g.create_node(
+            "illustration::intro",
+            {
+                "type": "illustration",
+                "raw_id": "intro",
+                "asset": "assets/scene.png",
+                "caption": "A scene",
+                "category": "scene",
+            },
+        )
+        g.add_edge("Depicts", "illustration::intro", "passage::intro")
+        g.save(project / "graph.json")
+
+        stage = ShipStage(project)
+        result = stage.execute(export_format="json", embed_assets=True)
+
+        exported_asset = result.parent / "assets" / "scene.png"
+        assert exported_asset.exists()
 
     def test_custom_output_dir(self, tmp_path: Path) -> None:
         project = tmp_path / "my-story"
