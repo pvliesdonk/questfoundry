@@ -2267,6 +2267,10 @@ class GrowStage:
         - Create 2 synthetic passages (option A and option B)
         - Create 4 choice nodes wiring fork_at → options → reconverge_at
         """
+        from questfoundry.graph.grow_validation import (
+            build_outgoing_count,
+            build_passage_adjacency,
+        )
         from questfoundry.models.grow import Phase9bOutput
 
         passages = graph.get_nodes_by_type("passage")
@@ -2278,58 +2282,50 @@ class GrowStage:
                 detail="No passages or choices to analyze",
             )
 
-        # Build outgoing count and adjacency from choices
-        choice_from_edges = graph.get_edges(edge_type="choice_from")
-        outgoing_count: dict[str, int] = {}
-        for edge in choice_from_edges:
-            source = edge["to"]
-            outgoing_count[source] = outgoing_count.get(source, 0) + 1
+        outgoing_count = build_outgoing_count(graph)
+        adjacency = build_passage_adjacency(graph)
 
-        adjacency: dict[str, list[str]] = {}
-        choice_lookup: dict[tuple[str, str], str] = {}  # (from, to) → choice_id
+        # Build choice_lookup: (from_passage, to_passage) → choice_id
+        choice_lookup: dict[tuple[str, str], str] = {}
         for cid, cdata in choices.items():
             from_p = cdata.get("from_passage", "")
             to_p = cdata.get("to_passage", "")
             if from_p and to_p:
-                adjacency.setdefault(from_p, []).append(to_p)
                 choice_lookup[(from_p, to_p)] = cid
 
-        # Find start passages
+        # Find linear stretches via BFS from start passages
         choice_to_edges = graph.get_edges(edge_type="choice_to")
         has_incoming = {e["to"] for e in choice_to_edges}
         starts = [pid for pid in passages if pid not in has_incoming]
 
-        # Walk graph to find linear stretches (3+ consecutive single-outgoing)
+        # BFS: collect maximal linear stretches (3+ single-outgoing passages)
         stretches: list[list[str]] = []
-        visited: set[str] = set()
+        best_run_at: dict[str, int] = {}
 
         for start in starts:
-            current: str | None = start
-            while current is not None and current not in visited:
-                visited.add(current)
-                if outgoing_count.get(current, 0) != 1:
-                    successors = adjacency.get(current, [])
-                    current = successors[0] if len(successors) == 1 else None
-                    continue
+            queue: list[tuple[str, list[str]]] = []
+            is_linear = outgoing_count.get(start, 0) == 1
+            queue.append((start, [start] if is_linear else []))
 
-                # Start a potential linear stretch
-                stretch = [current]
-                succs = adjacency.get(current, [])
-                nxt: str | None = succs[0] if succs else None
-                while nxt is not None and nxt not in visited and outgoing_count.get(nxt, 0) == 1:
-                    visited.add(nxt)
-                    stretch.append(nxt)
-                    successors = adjacency.get(nxt, [])
-                    nxt = successors[0] if successors else None
-                # Include the final passage (may have 0 outgoing or multi)
-                if nxt is not None and nxt not in visited:
-                    stretch.append(nxt)
-                    visited.add(nxt)
-
-                if len(stretch) >= 3:
-                    stretches.append(stretch)
-
-                current = nxt
+            while queue:
+                current, run = queue.pop(0)
+                for successor in adjacency.get(current, []):
+                    is_succ_linear = outgoing_count.get(successor, 0) == 1
+                    if is_succ_linear:
+                        new_run = [*run, successor]
+                        if len(new_run) <= best_run_at.get(successor, 0):
+                            continue
+                        best_run_at[successor] = len(new_run)
+                        queue.append((successor, new_run))
+                    else:
+                        # End of stretch: include the non-linear successor as endpoint
+                        if len(run) >= 2:
+                            full_stretch = [*run, successor]
+                            if len(full_stretch) >= 3:
+                                stretches.append(full_stretch)
+                        if successor not in best_run_at:
+                            best_run_at[successor] = 0
+                            queue.append((successor, []))
 
         if not stretches:
             return GrowPhaseResult(
@@ -2381,6 +2377,8 @@ class GrowStage:
         proposals = result.proposals[:5]
         forks_inserted = 0
 
+        forked_passages: set[str] = set()  # Track already-forked to avoid stale data
+
         for proposal in proposals:
             fork_at = proposal.fork_at
             reconverge_at = proposal.reconverge_at
@@ -2392,6 +2390,11 @@ class GrowStage:
                     fork_at=fork_at,
                     reconverge_at=reconverge_at,
                 )
+                continue
+
+            # Skip if fork_at was already modified by a prior proposal
+            if fork_at in forked_passages:
+                log.warning("phase9b_already_forked", passage=fork_at)
                 continue
 
             # Find the existing choice from fork_at to its next passage
@@ -2408,9 +2411,10 @@ class GrowStage:
 
             # Remove old choice node and its edges
             graph.delete_node(old_choice_id, cascade=True)
+            forked_passages.add(fork_at)
 
             # Create synthetic passages for option A and option B
-            raw_id = fork_at.removeprefix("passage::")
+            raw_id = strip_scope_prefix(fork_at)
             opt_a_id = f"passage::fork_{raw_id}_a"
             opt_b_id = f"passage::fork_{raw_id}_b"
 

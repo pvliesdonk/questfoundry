@@ -194,8 +194,8 @@ def validate_phase9b_output(
     """Validate Phase 9b fork proposals.
 
     Checks:
-    - fork_at exists in valid passage IDs
-    - reconverge_at exists in valid passage IDs
+    - fork_at and reconverge_at exist in valid passage IDs
+    - fork_at ≠ reconverge_at
     """
     errors: list[GrowValidationError] = []
     for i, proposal in enumerate(result.proposals):
@@ -215,6 +215,14 @@ def validate_phase9b_output(
                     issue=f"Passage ID not found: {proposal.reconverge_at}",
                     provided=proposal.reconverge_at,
                     available=sorted(valid_passage_ids)[:10],
+                )
+            )
+        if proposal.fork_at == proposal.reconverge_at:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"proposals.{i}.reconverge_at",
+                    issue="fork_at and reconverge_at must be different passages",
+                    provided=proposal.reconverge_at,
                 )
             )
     return errors

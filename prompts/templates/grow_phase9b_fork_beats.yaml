@@ -34,6 +34,9 @@ system: |
   ## What NOT to Do
   - Do NOT fork at the last passage in a stretch (nowhere to reconverge)
   - Do NOT use passage IDs not listed in the stretches
+  - Do NOT use the same passage for both fork_at and reconverge_at
+  - Do NOT place reconverge_at BEFORE fork_at in the stretch order
+  - fork_at and reconverge_at MUST be in the SAME stretch
   - Do NOT create forks that change the plot outcome
   - Do NOT add explanatory prose before or after the JSON output
 
