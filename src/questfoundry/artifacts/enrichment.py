@@ -236,18 +236,25 @@ def _extract_filled_passages(graph: Graph) -> list[dict[str, Any]]:
 
 
 def _extract_arcs(graph: Graph) -> list[dict[str, Any]]:
-    """Extract arc nodes with their beat sequences from arc_contains edges."""
+    """Extract arc nodes with their ordered beat sequences.
+
+    Prefer the arc node's `sequence` field (the narrative order). Fall back to
+    arc_contains edges if needed.
+    """
     arc_nodes = graph.get_nodes_by_type("arc")
     arcs = []
     for arc_id in sorted(arc_nodes):
         data = arc_nodes[arc_id]
-        # Collect beats in this arc via arc_contains edges
-        contains_edges = graph.get_edges(from_id=arc_id, edge_type="arc_contains")
-        beat_sequence = sorted(e["to"] for e in contains_edges)
+        beat_sequence = list(data.get("sequence") or [])
+        if not beat_sequence:
+            # Collect beats in this arc via arc_contains edges (unordered)
+            contains_edges = graph.get_edges(from_id=arc_id, edge_type="arc_contains")
+            beat_sequence = [e["to"] for e in contains_edges]
         entry: dict[str, Any] = {
             "arc_id": arc_id,
             "arc_type": data.get("arc_type", "branch"),
-            "beat_sequence": beat_sequence,
+            "paths": data.get("paths", []),
+            "sequence": beat_sequence,
         }
         arcs.append(entry)
     return arcs
@@ -267,6 +274,12 @@ def _extract_beats(graph: Graph) -> list[dict[str, Any]]:
         }
         if scene_type := data.get("scene_type"):
             entry["scene_type"] = scene_type
+        if narrative_fn := data.get("narrative_function"):
+            entry["narrative_function"] = narrative_fn
+        if location := data.get("location"):
+            entry["location"] = location
+        if intersection_group := data.get("intersection_group"):
+            entry["intersection_group"] = intersection_group
         if belongs_to:
             entry["belongs_to"] = belongs_to
         if entities := data.get("entities"):
@@ -286,6 +299,8 @@ def _extract_passages(graph: Graph) -> list[dict[str, Any]]:
             "from_beat": data.get("from_beat", ""),
             "summary": data.get("summary", ""),
         }
+        if data.get("is_synthetic") is True:
+            entry["is_synthetic"] = True
         if entities := data.get("entities"):
             entry["entities"] = entities
         passages.append(entry)
@@ -298,25 +313,38 @@ def _extract_choices(graph: Graph) -> list[dict[str, Any]]:
     choices = []
     for choice_id in sorted(choice_nodes):
         data = choice_nodes[choice_id]
-        from_edges = graph.get_edges(from_id=choice_id, edge_type="choice_from")
-        to_edges = graph.get_edges(from_id=choice_id, edge_type="choice_to")
-        requires_edges = graph.get_edges(from_id=choice_id, edge_type="requires")
         entry: dict[str, Any] = {
             "choice_id": choice_id,
             "label": data.get("label", ""),
         }
-        if from_edges:
-            if len(from_edges) > 1:
-                log.warning(
-                    "multiple_choice_from_edges", choice_id=choice_id, count=len(from_edges)
-                )
-            entry["from_passage"] = from_edges[0]["to"]
-        if to_edges:
-            if len(to_edges) > 1:
-                log.warning("multiple_choice_to_edges", choice_id=choice_id, count=len(to_edges))
-            entry["to_passage"] = to_edges[0]["to"]
-        if requires_edges:
-            entry["requires"] = sorted(e["to"] for e in requires_edges)
+        from_passage = data.get("from_passage")
+        to_passage = data.get("to_passage")
+        if not from_passage:
+            from_edges = graph.get_edges(from_id=choice_id, edge_type="choice_from")
+            if from_edges:
+                if len(from_edges) > 1:
+                    log.warning(
+                        "multiple_choice_from_edges", choice_id=choice_id, count=len(from_edges)
+                    )
+                from_passage = from_edges[0]["to"]
+        if not to_passage:
+            to_edges = graph.get_edges(from_id=choice_id, edge_type="choice_to")
+            if to_edges:
+                if len(to_edges) > 1:
+                    log.warning(
+                        "multiple_choice_to_edges", choice_id=choice_id, count=len(to_edges)
+                    )
+                to_passage = to_edges[0]["to"]
+        if from_passage:
+            entry["from_passage"] = from_passage
+        if to_passage:
+            entry["to_passage"] = to_passage
+        if requires := data.get("requires"):
+            entry["requires"] = list(requires)
+        if grants := data.get("grants"):
+            entry["grants"] = list(grants)
+        if data.get("is_return") is True:
+            entry["is_return"] = True
         choices.append(entry)
     return choices
 
@@ -327,18 +355,28 @@ def _extract_codewords(graph: Graph) -> list[dict[str, Any]]:
     codewords = []
     for cw_id in sorted(codeword_nodes):
         data = codeword_nodes[cw_id]
-        tracks_edges = graph.get_edges(from_id=cw_id, edge_type="tracks")
-        grants_edges = graph.get_edges(to_id=cw_id, edge_type="grants")
         entry: dict[str, Any] = {
             "codeword_id": cw_id,
         }
-        if tracks_edges:
-            if len(tracks_edges) > 1:
-                log.warning("multiple_tracks_edges", codeword_id=cw_id, count=len(tracks_edges))
-            entry["tracks"] = tracks_edges[0]["to"]
-        if grants_edges:
-            entry["granted_by"] = sorted(e["from"] for e in grants_edges)
         if raw_id := data.get("raw_id"):
             entry["raw_id"] = raw_id
+        tracks = data.get("tracks")
+        if not tracks:
+            tracks_edges = graph.get_edges(from_id=cw_id, edge_type="tracks")
+            if tracks_edges:
+                if len(tracks_edges) > 1:
+                    log.warning("multiple_tracks_edges", codeword_id=cw_id, count=len(tracks_edges))
+                tracks = tracks_edges[0]["to"]
+        if tracks:
+            entry["tracks"] = tracks
+        if cw_type := data.get("codeword_type"):
+            entry["codeword_type"] = cw_type
+        granted_by = data.get("granted_by")
+        if not granted_by:
+            grants_edges = graph.get_edges(to_id=cw_id, edge_type="grants")
+            if grants_edges:
+                granted_by = sorted(e["from"] for e in grants_edges)
+        if granted_by:
+            entry["granted_by"] = list(granted_by)
         codewords.append(entry)
     return codewords
