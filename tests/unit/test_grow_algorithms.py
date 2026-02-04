@@ -1318,6 +1318,34 @@ class TestCheckKnotCompatibility:
         )
         assert errors == []
 
+    def test_rejects_beat_mapping_to_multiple_dilemmas(self) -> None:
+        """Each beat in an intersection must map to exactly one dilemma."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+
+        graph = Graph.empty()
+        graph.create_node("dilemma::a", {"type": "dilemma", "raw_id": "a"})
+        graph.create_node("dilemma::b", {"type": "dilemma", "raw_id": "b"})
+        graph.create_node(
+            "path::a1",
+            {"type": "path", "raw_id": "a1", "dilemma_id": "dilemma::a", "is_canonical": True},
+        )
+        graph.create_node(
+            "path::b1",
+            {"type": "path", "raw_id": "b1", "dilemma_id": "dilemma::b", "is_canonical": True},
+        )
+
+        graph.create_node("beat::x", {"type": "beat", "raw_id": "x"})
+        graph.create_node("beat::y", {"type": "beat", "raw_id": "y"})
+
+        # beat::x incorrectly belongs to two dilemmas
+        graph.add_edge("belongs_to", "beat::x", "path::a1")
+        graph.add_edge("belongs_to", "beat::x", "path::b1")
+        graph.add_edge("belongs_to", "beat::y", "path::b1")
+
+        errors = check_intersection_compatibility(graph, ["beat::x", "beat::y"])
+        assert len(errors) == 1
+        assert "maps to 2 dilemmas" in errors[0].issue
+
     def test_rejects_intersection_larger_than_cap(self) -> None:
         """Intersections are capped to prevent path-infection clusters."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility

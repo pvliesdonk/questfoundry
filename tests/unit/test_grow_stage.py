@@ -582,6 +582,38 @@ class TestPhase3Knots:
         assert artifact_beat["location"] == "market"
 
     @pytest.mark.asyncio
+    async def test_phase_3_resolves_location_when_missing(self) -> None:
+        """Phase 3 resolves location when LLM leaves it null."""
+        from questfoundry.models.grow import IntersectionProposal, Phase3Output
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        stage = GrowStage()
+
+        phase3_output = Phase3Output(
+            intersections=[
+                IntersectionProposal(
+                    beat_ids=["beat::mentor_meet", "beat::artifact_discover"],
+                    resolved_location=None,
+                    rationale="Let the algorithm resolve the shared location",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase3_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_3_intersections(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "1 applied" in result.detail
+
+        mentor_beat = graph.get_node("beat::mentor_meet")
+        assert mentor_beat["location"] == "market"
+
+    @pytest.mark.asyncio
     async def test_phase_3_skips_no_candidates(self) -> None:
         """Phase 3 skips when no intersection candidates found."""
         from questfoundry.graph.graph import Graph
@@ -593,6 +625,37 @@ class TestPhase3Knots:
 
         assert result.status == "completed"
         assert "No intersection candidates" in result.detail
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_phase_3_skips_when_all_candidates_invalid(self) -> None:
+        """Phase 3 skips when all candidate beats span multiple dilemmas."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        graph.create_node("dilemma::a", {"type": "dilemma", "raw_id": "a"})
+        graph.create_node("dilemma::b", {"type": "dilemma", "raw_id": "b"})
+        graph.create_node(
+            "path::a1",
+            {"type": "path", "raw_id": "a1", "dilemma_id": "dilemma::a", "is_canonical": True},
+        )
+        graph.create_node(
+            "path::b1",
+            {"type": "path", "raw_id": "b1", "dilemma_id": "dilemma::b", "is_canonical": True},
+        )
+        # Two beats at the same location, both belonging to BOTH dilemmas.
+        for bid in ("beat::x", "beat::y"):
+            graph.create_node(
+                bid, {"type": "beat", "raw_id": bid.split("::", 1)[1], "location": "market"}
+            )
+            graph.add_edge("belongs_to", bid, "path::a1")
+            graph.add_edge("belongs_to", bid, "path::b1")
+
+        stage = GrowStage()
+        result = await stage._phase_3_intersections(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert "No intersection candidates found" in result.detail
         assert result.llm_calls == 0
 
     @pytest.mark.asyncio
