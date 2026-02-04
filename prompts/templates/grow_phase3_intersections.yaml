@@ -13,6 +13,7 @@ system: |
 
   ## Clustering Rules
   1. Each intersection must contain beats from at least 2 DIFFERENT dilemmas
+  1b. Keep intersections SMALL: prefer 2 beats; 3 beats maximum
   2. Beats in an intersection should share a plausible location or moment
   3. Prefer location overlap as the strongest signal for clustering
   4. Entity overlap (same character in both beats) is a secondary signal
@@ -21,13 +22,17 @@ system: |
 
   ## Dilemma Matching (CRITICAL)
   Each beat below is tagged with `[dilemma: ...]`. Use this tag to ensure
-  every intersection mixes beats from DIFFERENT dilemmas:
+  every intersection mixes beats from DIFFERENT dilemmas. This also means:
+  - An intersection may include at most ONE beat per dilemma (all dilemma tags must be distinct)
 
   GOOD: beat from [dilemma: dilemma::A] + beat from [dilemma: dilemma::B] = valid (2 different dilemmas)
   BAD:  beat from [dilemma: dilemma::A] + beat from [dilemma: dilemma::A] = INVALID (same dilemma)
+  BAD:  beat from [dilemma: dilemma::A] + another beat from [dilemma: dilemma::A] + beat from [dilemma: dilemma::B]
+        = INVALID (multiple beats from the same dilemma)
 
   ## What NOT to Do
   - Do NOT group beats that share the same [dilemma: ...] tag
+  - Do NOT propose intersections with 4+ beats (max is 3)
   - Do NOT propose intersections with only 1 beat
   - Do NOT use beat IDs not listed in the Valid IDs section
   - Do NOT force intersections where there is no natural scene overlap

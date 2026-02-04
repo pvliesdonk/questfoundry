@@ -1318,6 +1318,88 @@ class TestCheckKnotCompatibility:
         )
         assert errors == []
 
+    def test_rejects_beat_mapping_to_multiple_dilemmas(self) -> None:
+        """Each beat in an intersection must map to exactly one dilemma."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+
+        graph = Graph.empty()
+        graph.create_node("dilemma::a", {"type": "dilemma", "raw_id": "a"})
+        graph.create_node("dilemma::b", {"type": "dilemma", "raw_id": "b"})
+        graph.create_node(
+            "path::a1",
+            {"type": "path", "raw_id": "a1", "dilemma_id": "dilemma::a", "is_canonical": True},
+        )
+        graph.create_node(
+            "path::b1",
+            {"type": "path", "raw_id": "b1", "dilemma_id": "dilemma::b", "is_canonical": True},
+        )
+
+        graph.create_node("beat::x", {"type": "beat", "raw_id": "x"})
+        graph.create_node("beat::y", {"type": "beat", "raw_id": "y"})
+
+        # beat::x incorrectly belongs to two dilemmas
+        graph.add_edge("belongs_to", "beat::x", "path::a1")
+        graph.add_edge("belongs_to", "beat::x", "path::b1")
+        graph.add_edge("belongs_to", "beat::y", "path::b1")
+
+        errors = check_intersection_compatibility(graph, ["beat::x", "beat::y"])
+        assert len(errors) == 1
+        assert "maps to 2 dilemmas" in errors[0].issue
+
+    def test_rejects_intersection_larger_than_cap(self) -> None:
+        """Intersections are capped to prevent path-infection clusters."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_two_dilemma_graph
+
+        graph = make_two_dilemma_graph()
+        errors = check_intersection_compatibility(
+            graph,
+            [
+                "beat::mentor_meet",
+                "beat::artifact_discover",
+                "beat::mentor_commits_canonical",
+                "beat::artifact_commits_canonical",
+            ],
+            max_intersection_size=3,
+        )
+        assert len(errors) == 1
+        assert "maximum allowed is 3" in errors[0].issue
+
+    def test_rejects_multiple_beats_from_same_dilemma(self) -> None:
+        """Intersections must include at most 1 beat per dilemma."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+
+        graph = Graph.empty()
+        graph.create_node("dilemma::a", {"type": "dilemma", "raw_id": "a"})
+        graph.create_node("dilemma::b", {"type": "dilemma", "raw_id": "b"})
+        graph.create_node(
+            "path::a1",
+            {
+                "type": "path",
+                "raw_id": "a1",
+                "dilemma_id": "dilemma::a",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::b1",
+            {
+                "type": "path",
+                "raw_id": "b1",
+                "dilemma_id": "dilemma::b",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node("beat::a_1", {"type": "beat", "raw_id": "a_1"})
+        graph.create_node("beat::a_2", {"type": "beat", "raw_id": "a_2"})
+        graph.create_node("beat::b_1", {"type": "beat", "raw_id": "b_1"})
+        graph.add_edge("belongs_to", "beat::a_1", "path::a1")
+        graph.add_edge("belongs_to", "beat::a_2", "path::a1")
+        graph.add_edge("belongs_to", "beat::b_1", "path::b1")
+
+        errors = check_intersection_compatibility(graph, ["beat::a_1", "beat::a_2", "beat::b_1"])
+        assert any("multiple beats from the same dilemma" in e.issue for e in errors)
+
     def test_incompatible_same_dilemma(self) -> None:
         """Beats from same dilemma are incompatible."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
@@ -1333,9 +1415,18 @@ class TestCheckKnotCompatibility:
         """Beats with requires edge are incompatible."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
 
-        graph = make_two_dilemma_graph()
-        # mentor_meet requires opening, and both are in the graph
-        errors = check_intersection_compatibility(graph, ["beat::opening", "beat::mentor_meet"])
+        graph = Graph.empty()
+        graph.create_node("dilemma::a", {"type": "dilemma", "raw_id": "a"})
+        graph.create_node("dilemma::b", {"type": "dilemma", "raw_id": "b"})
+        graph.create_node("path::a1", {"type": "path", "raw_id": "a1", "dilemma_id": "dilemma::a"})
+        graph.create_node("path::b1", {"type": "path", "raw_id": "b1", "dilemma_id": "dilemma::b"})
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        graph.add_edge("belongs_to", "beat::a", "path::a1")
+        graph.add_edge("belongs_to", "beat::b", "path::b1")
+        graph.add_edge("requires", "beat::a", "beat::b")
+
+        errors = check_intersection_compatibility(graph, ["beat::a", "beat::b"])
         assert len(errors) > 0
         assert any("requires" in e.issue for e in errors)
 
@@ -2186,10 +2277,27 @@ class TestConditionalPrerequisiteInvariant:
 
     When a proposed intersection beat has a ``requires`` edge to a beat
     outside the intersection whose paths do NOT cover the full union of
-    intersection beat paths, ``check_intersection_compatibility`` attempts
-    recovery via lift (widen prerequisite) or split (create path-specific
-    variant) before rejecting. See GitHub #360 and #361.
+    intersection beat paths, ``check_intersection_compatibility`` rejects the
+    intersection by default. Optional recovery via lift (widen prerequisite)
+    and split (create path-specific variant) can be enabled explicitly.
     """
+
+    def test_rejects_conditional_prerequisite_by_default(self) -> None:
+        """Conditional prerequisites are rejected unless recovery is enabled."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+        from tests.fixtures.grow_fixtures import make_conditional_prerequisite_graph
+
+        graph = make_conditional_prerequisite_graph()
+        errors = check_intersection_compatibility(
+            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+        )
+        assert len(errors) > 0
+        assert any("Conditional prerequisites are not allowed" in e.issue for e in errors)
+
+        # Ensure the default path does not mutate the graph.
+        gap_edges = graph.get_edges(from_id="beat::gap_1", to_id=None, edge_type="belongs_to")
+        gap_paths = {e["to"] for e in gap_edges}
+        assert gap_paths == {"path::mentor_trust_canonical"}
 
     def test_lifts_conditional_prerequisite(self) -> None:
         """Prerequisite spanning fewer paths is lifted to cover intersection."""
@@ -2198,7 +2306,9 @@ class TestConditionalPrerequisiteInvariant:
 
         graph = make_conditional_prerequisite_graph()
         errors = check_intersection_compatibility(
-            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            allow_prerequisite_recovery=True,
         )
         # Lift succeeds — gap_1 gets widened to all 4 paths
         assert errors == []
@@ -2266,7 +2376,9 @@ class TestConditionalPrerequisiteInvariant:
         graph.add_edge("requires", "beat::mentor_meet", "beat::orphan_prereq")
 
         errors = check_intersection_compatibility(
-            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            allow_prerequisite_recovery=True,
         )
         # Lift succeeds — orphan gets widened to all paths
         assert errors == []
@@ -2297,7 +2409,9 @@ class TestConditionalPrerequisiteInvariant:
         graph.add_edge("requires", "beat::artifact_discover", "beat::gap_2")
 
         errors = check_intersection_compatibility(
-            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            allow_prerequisite_recovery=True,
         )
         # Both lifts succeed
         assert errors == []
@@ -2317,7 +2431,9 @@ class TestConditionalPrerequisiteInvariant:
         graph.add_edge("requires", "beat::gap_1", "beat::gap_0")
 
         errors = check_intersection_compatibility(
-            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            allow_prerequisite_recovery=True,
         )
         # Both gap_0 and gap_1 lifted transitively
         assert errors == []
@@ -2359,7 +2475,9 @@ class TestConditionalPrerequisiteInvariant:
         )
 
         errors = check_intersection_compatibility(
-            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            allow_prerequisite_recovery=True,
         )
         assert len(errors) > 0
         assert any("conditional_prerequisite" in e.field_path for e in errors)
@@ -2387,7 +2505,9 @@ class TestConditionalPrerequisiteInvariant:
             prev = deep_id
 
         errors = check_intersection_compatibility(
-            graph, ["beat::mentor_meet", "beat::artifact_discover"]
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            allow_prerequisite_recovery=True,
         )
         # Lift fails but split succeeds — no errors
         assert errors == []
