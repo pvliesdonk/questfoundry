@@ -2404,6 +2404,11 @@ class GrowStage:
                 log.warning("phase9b_not_single_outgoing", passage=fork_at)
                 continue
 
+            # next_passage is the immediate successor of fork_at.
+            # The fork inserts two synthetic options BETWEEN fork_at and next_passage,
+            # preserving the rest of the chain from next_passage onward.
+            # Graph surgery: fork_at → opt_a → next_passage
+            #                fork_at → opt_b → next_passage
             next_passage = fork_successors[0]
             old_choice_id = choice_lookup.get((fork_at, next_passage))
             if not old_choice_id:
@@ -2438,7 +2443,8 @@ class GrowStage:
                 },
             )
 
-            # Create 4 choice nodes
+            # Create 4 choice nodes: fork_at→opt_a, fork_at→opt_b,
+            # opt_a→next_passage, opt_b→next_passage
             for opt_id, label, suffix in [
                 (opt_a_id, proposal.label_a, "fork_a"),
                 (opt_b_id, proposal.label_b, "fork_b"),
@@ -2468,14 +2474,14 @@ class GrowStage:
                     {
                         "type": "choice",
                         "from_passage": opt_id,
-                        "to_passage": reconverge_at,
+                        "to_passage": next_passage,
                         "label": "continue",
                         "requires": [],
                         "grants": [],
                     },
                 )
                 graph.add_edge("choice_from", choice_id, opt_id)
-                graph.add_edge("choice_to", choice_id, reconverge_at)
+                graph.add_edge("choice_to", choice_id, next_passage)
 
             forks_inserted += 1
             log.info(

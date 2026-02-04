@@ -2770,6 +2770,12 @@ class TestPhase9bForkBeats:
         # 4 new choices + 2 remaining original (p2→p3, p3→p4) = 6 total
         assert len(choices) == 6
 
+        # Synthetic options should reconverge at p2 (immediate next), not p3 (LLM-proposed)
+        reconverge_choices = [(cid, cdata) for cid, cdata in choices.items() if "reconverge" in cid]
+        assert len(reconverge_choices) == 2
+        for _cid, cdata in reconverge_choices:
+            assert cdata["to_passage"] == "passage::p2"
+
     @pytest.mark.asyncio
     async def test_no_linear_stretches_skips(self) -> None:
         """Phase 9b does nothing when no linear stretches exist."""
