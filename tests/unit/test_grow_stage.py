@@ -57,7 +57,7 @@ class TestGrowStageExecute:
         assert tokens == 0
         # All phases run to completion (empty graph = no work to do)
         phases = result_dict["phases_completed"]
-        assert len(phases) == 18
+        assert len(phases) == 19
         for phase in phases:
             assert phase["status"] == "completed"
 
@@ -126,7 +126,7 @@ class TestGrowStagePhaseOrder:
     def test_phase_order_returns_eighteen_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 18
+        assert len(phases) == 19
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -148,6 +148,7 @@ class TestGrowStagePhaseOrder:
             "codewords",
             "overlays",
             "choices",
+            "fork_beats",
             "validation",
             "prune",
         ]
@@ -2692,3 +2693,145 @@ class TestGrowCheckpoints:
         # Checkpoint should exist for the phase
         checkpoint_path = tmp_project / "snapshots" / "grow-pre-validate_dag.json"
         assert checkpoint_path.exists()
+
+
+class TestPhase9bForkBeats:
+    """Tests for Phase 9b fork beat insertion."""
+
+    @pytest.mark.asyncio
+    async def test_fork_inserts_correct_graph_structure(self) -> None:
+        """Phase 9b inserts 2 synthetic passages and 4 choices per fork."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import ForkProposal, Phase9bOutput
+
+        # Build a linear chain: p1 → p2 → p3 → p4
+        graph = Graph.empty()
+        pids = ["p1", "p2", "p3", "p4"]
+        for pid in pids:
+            graph.create_node(
+                f"passage::{pid}",
+                {"type": "passage", "raw_id": pid, "summary": f"Passage {pid}"},
+            )
+
+        for i in range(len(pids) - 1):
+            cid = f"choice::{pids[i]}__{pids[i + 1]}"
+            graph.create_node(
+                cid,
+                {
+                    "type": "choice",
+                    "from_passage": f"passage::{pids[i]}",
+                    "to_passage": f"passage::{pids[i + 1]}",
+                    "label": "continue",
+                    "requires": [],
+                    "grants": [],
+                },
+            )
+            graph.add_edge("choice_from", cid, f"passage::{pids[i]}")
+            graph.add_edge("choice_to", cid, f"passage::{pids[i + 1]}")
+
+        stage = GrowStage()
+
+        fork_output = Phase9bOutput(
+            proposals=[
+                ForkProposal(
+                    fork_at="passage::p1",
+                    reconverge_at="passage::p3",
+                    option_a_summary="Sneak past the guard",
+                    option_b_summary="Confront the guard",
+                    label_a="Sneak past quietly",
+                    label_b="Confront head-on",
+                ),
+            ]
+        )
+
+        with patch.object(
+            stage,
+            "_grow_llm_call",
+            return_value=(fork_output, 1, 100),
+        ):
+            result = await stage._phase_9b_fork_beats(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert "1 fork" in result.detail
+
+        # Old choice p1→p2 should be removed
+        choices = graph.get_nodes_by_type("choice")
+        old_choice = [c for c in choices if "p1__p2" in c and "fork" not in c]
+        assert len(old_choice) == 0
+
+        # 2 synthetic passages should exist
+        passages = graph.get_nodes_by_type("passage")
+        synthetic = {pid: p for pid, p in passages.items() if p.get("is_synthetic")}
+        assert len(synthetic) == 2
+
+        # 4 new choices + 2 remaining original (p2→p3, p3→p4) = 6 total
+        assert len(choices) == 6
+
+    @pytest.mark.asyncio
+    async def test_no_linear_stretches_skips(self) -> None:
+        """Phase 9b does nothing when no linear stretches exist."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        # Single passage with no choices
+        graph.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "summary": "Only passage"},
+        )
+
+        stage = GrowStage()
+        result = await stage._phase_9b_fork_beats(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_empty_proposals_noop(self) -> None:
+        """Phase 9b is a noop when LLM returns 0 proposals."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import Phase9bOutput
+
+        # Build a linear chain: p1 → p2 → p3 → p4
+        graph = Graph.empty()
+        pids = ["p1", "p2", "p3", "p4"]
+        for pid in pids:
+            graph.create_node(
+                f"passage::{pid}",
+                {"type": "passage", "raw_id": pid, "summary": f"Passage {pid}"},
+            )
+
+        for i in range(len(pids) - 1):
+            cid = f"choice::{pids[i]}__{pids[i + 1]}"
+            graph.create_node(
+                cid,
+                {
+                    "type": "choice",
+                    "from_passage": f"passage::{pids[i]}",
+                    "to_passage": f"passage::{pids[i + 1]}",
+                    "label": "continue",
+                    "requires": [],
+                    "grants": [],
+                },
+            )
+            graph.add_edge("choice_from", cid, f"passage::{pids[i]}")
+            graph.add_edge("choice_to", cid, f"passage::{pids[i + 1]}")
+
+        stage = GrowStage()
+
+        with patch.object(
+            stage,
+            "_grow_llm_call",
+            return_value=(Phase9bOutput(proposals=[]), 1, 50),
+        ):
+            result = await stage._phase_9b_fork_beats(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert "0 fork" in result.detail
+
+        # No graph changes
+        choices = graph.get_nodes_by_type("choice")
+        assert len(choices) == 3  # Original 3 choices unchanged

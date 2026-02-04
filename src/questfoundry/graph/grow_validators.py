@@ -21,6 +21,7 @@ if TYPE_CHECKING:
         Phase4aOutput,
         Phase4fOutput,
         Phase8cOutput,
+        Phase9bOutput,
         Phase9Output,
     )
 
@@ -186,6 +187,47 @@ def validate_phase9_output(
     return errors
 
 
+def validate_phase9b_output(
+    result: Phase9bOutput,
+    valid_passage_ids: set[str],
+) -> list[GrowValidationError]:
+    """Validate Phase 9b fork proposals.
+
+    Checks:
+    - fork_at and reconverge_at exist in valid passage IDs
+    - fork_at ≠ reconverge_at
+    """
+    errors: list[GrowValidationError] = []
+    for i, proposal in enumerate(result.proposals):
+        if proposal.fork_at not in valid_passage_ids:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"proposals.{i}.fork_at",
+                    issue=f"Passage ID not found: {proposal.fork_at}",
+                    provided=proposal.fork_at,
+                    available=sorted(valid_passage_ids)[:10],
+                )
+            )
+        if proposal.reconverge_at not in valid_passage_ids:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"proposals.{i}.reconverge_at",
+                    issue=f"Passage ID not found: {proposal.reconverge_at}",
+                    provided=proposal.reconverge_at,
+                    available=sorted(valid_passage_ids)[:10],
+                )
+            )
+        if proposal.fork_at == proposal.reconverge_at:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"proposals.{i}.reconverge_at",
+                    issue="fork_at and reconverge_at must be different passages",
+                    provided=proposal.reconverge_at,
+                )
+            )
+    return errors
+
+
 def format_semantic_errors(errors: list[GrowValidationError]) -> str:
     """Format semantic validation errors as LLM feedback.
 
@@ -245,7 +287,16 @@ def count_entries(result: object) -> int:
     overlays, labels). If adding a new phase output type, ensure its entries
     attribute is listed here, otherwise the fallback of 1 is used.
     """
-    for attr in ("assessments", "intersections", "tags", "gaps", "overlays", "labels", "arcs"):
+    for attr in (
+        "assessments",
+        "intersections",
+        "tags",
+        "gaps",
+        "overlays",
+        "labels",
+        "arcs",
+        "proposals",
+    ):
         entries = getattr(result, attr, None)
         if entries is not None:
             return len(entries)

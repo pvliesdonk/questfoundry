@@ -310,6 +310,23 @@ class Phase9Output(BaseModel):
     labels: list[ChoiceLabel] = Field(default_factory=list)
 
 
+class ForkProposal(BaseModel):
+    """Phase 9b: A proposed fork at a linear stretch that reconverges."""
+
+    fork_at: str = Field(min_length=1, description="Passage ID where the fork occurs")
+    reconverge_at: str = Field(min_length=1, description="Passage ID where both options rejoin")
+    option_a_summary: str = Field(min_length=1, description="Summary of option A")
+    option_b_summary: str = Field(min_length=1, description="Summary of option B")
+    label_a: str = Field(min_length=1, description="Choice label for option A")
+    label_b: str = Field(min_length=1, description="Choice label for option B")
+
+
+class Phase9bOutput(BaseModel):
+    """Wrapper for Phase 9b structured output (fork proposals)."""
+
+    proposals: list[ForkProposal] = Field(default_factory=list)
+
+
 # ---------------------------------------------------------------------------
 # Stage result
 # ---------------------------------------------------------------------------

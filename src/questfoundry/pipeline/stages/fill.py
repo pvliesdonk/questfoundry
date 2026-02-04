@@ -855,6 +855,13 @@ class FillStage:
                 seen.add(pid)
                 order.append((pid, arc_id))
 
+        # Collect synthetic passages (fork-beats, hub-spokes) not in any arc sequence
+        all_passages = graph.get_nodes_by_type("passage")
+        for pid, pdata in all_passages.items():
+            if pid not in seen and not pdata.get("prose"):
+                seen.add(pid)
+                order.append((pid, spine_id or ""))
+
         return order
 
     async def _phase_1_generate(
