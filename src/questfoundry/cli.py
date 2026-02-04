@@ -1493,6 +1493,8 @@ def _run_ship(
     project_path: Path,
     export_format: str = "twee",
     output_dir: Path | None = None,
+    *,
+    embed_assets: bool = False,
 ) -> Path:
     """Run SHIP stage and return the output file path.
 
@@ -1514,7 +1516,11 @@ def _run_ship(
 
     try:
         stage = ShipStage(project_path)
-        output_file = stage.execute(export_format=export_format, output_dir=output_dir)
+        output_file = stage.execute(
+            export_format=export_format,
+            output_dir=output_dir,
+            embed_assets=embed_assets,
+        )
     except ShipStageError as e:
         console.print(f"\n[red]Error:[/red] {e}")
         raise typer.Exit(1) from None
@@ -1551,6 +1557,13 @@ def ship(
             help="Custom output directory (default: PROJECT/exports/FORMAT/).",
         ),
     ] = None,
+    embed: Annotated[
+        bool,
+        typer.Option(
+            "--embed",
+            help="Embed image assets as base64 data URLs in HTML output.",
+        ),
+    ] = False,
 ) -> None:
     """Run SHIP stage - export story to playable format.
 
@@ -1571,7 +1584,12 @@ def ship(
     log = get_logger(__name__)
     log.info("ship_cli_start", format=export_format)
 
-    _run_ship(project_path, export_format=export_format, output_dir=output)
+    _run_ship(
+        project_path,
+        export_format=export_format,
+        output_dir=output,
+        embed_assets=embed,
+    )
 
 
 @app.command("generate-images")

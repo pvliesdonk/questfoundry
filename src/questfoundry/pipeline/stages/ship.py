@@ -7,10 +7,12 @@ delegates to a format-specific exporter (JSON, Twee, HTML).
 
 from __future__ import annotations
 
+from dataclasses import replace
 from typing import TYPE_CHECKING
 
 from questfoundry.export import build_export_context, get_exporter
 from questfoundry.export.assets import bundle_assets
+from questfoundry.export.assets import embed_assets as embed_assets_data_urls
 from questfoundry.graph.graph import Graph
 from questfoundry.observability.logging import get_logger
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
@@ -42,6 +44,8 @@ class ShipStage:
         self,
         export_format: str = "twee",
         output_dir: Path | None = None,
+        *,
+        embed_assets: bool = False,
     ) -> Path:
         """Export the story graph to a playable format.
 
@@ -49,6 +53,8 @@ class ShipStage:
             export_format: Export format name (json, twee, html).
             output_dir: Custom output directory. Defaults to
                 ``{project}/exports/{format}/``.
+            embed_assets: Embed illustration assets as base64 data URLs
+                in HTML output. Ignored for non-HTML formats.
 
         Returns:
             Path to the main output file.
@@ -128,12 +134,28 @@ class ShipStage:
         except ValueError as e:
             raise ShipStageError(str(e)) from e
 
+        # Optionally embed assets for HTML exports
+        if embed_assets and export_format != "html":
+            log.warning("ship_embed_ignored", format=export_format)
+
+        if embed_assets and export_format == "html" and (context.illustrations or context.cover):
+            embedded_illustrations, embedded_cover = embed_assets_data_urls(
+                context.illustrations,
+                context.cover,
+                self._project_path,
+            )
+            context = replace(
+                context,
+                illustrations=embedded_illustrations,
+                cover=embedded_cover,
+            )
+
         # Export
         target_dir = output_dir or (self._project_path / "exports" / export_format)
         output_file = exporter.export(context, target_dir)
 
         # Bundle illustration assets (non-fatal — export is valid without them)
-        if context.illustrations:
+        if context.illustrations and not (embed_assets and export_format == "html"):
             try:
                 bundle_assets(context.illustrations, self._project_path, target_dir)
             except OSError as e:
