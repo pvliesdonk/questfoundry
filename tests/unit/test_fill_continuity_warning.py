@@ -63,6 +63,29 @@ def test_continuity_warning_suppressed_with_shared_entity() -> None:
     assert format_continuity_warning(graph, arc_id, 1) == ""
 
 
+def test_continuity_warning_suppressed_with_shared_location() -> None:
+    graph, arc_id = _make_two_passages_graph(shared_entity=False)
+    graph.update_node("beat::b", location="entity::loc1")
+    assert format_continuity_warning(graph, arc_id, 1) == ""
+
+
+def test_continuity_warning_suppressed_for_micro_beat() -> None:
+    graph, arc_id = _make_two_passages_graph(shared_entity=False)
+    graph.update_node("beat::b", scene_type="micro_beat")
+    assert format_continuity_warning(graph, arc_id, 1) == ""
+
+
+def test_continuity_warning_suppressed_for_intersection_hint() -> None:
+    graph, arc_id = _make_two_passages_graph(shared_entity=False)
+    graph.update_node("beat::a", intersection_group=["beat::b"])
+    assert format_continuity_warning(graph, arc_id, 1) == ""
+
+
+def test_continuity_warning_empty_for_out_of_bounds_index() -> None:
+    graph, arc_id = _make_two_passages_graph(shared_entity=False)
+    assert format_continuity_warning(graph, arc_id, 999) == ""
+
+
 def test_continuity_warning_suppressed_for_synthetic_passage() -> None:
     graph, arc_id = _make_two_passages_graph(shared_entity=False)
     graph.update_node("passage::b", is_synthetic=True)
