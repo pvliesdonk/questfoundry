@@ -137,6 +137,53 @@ class TestSingleStart:
         assert result.severity == "fail"
         assert "No start passage" in result.message
 
+    def test_single_start_ignores_return_links(self) -> None:
+        """Return links (spoke→hub) should not count as incoming for start detection."""
+        graph = _make_linear_passage_graph()  # p1 is start, p1→p2→p3
+        # Add a spoke passage with a return link back to p1 (the start)
+        graph.create_node(
+            "passage::spoke_0",
+            {
+                "type": "passage",
+                "raw_id": "spoke_0",
+                "from_beat": None,
+                "summary": "Look around",
+                "is_synthetic": True,
+            },
+        )
+        graph.create_node(
+            "choice::p1_spoke_0",
+            {
+                "type": "choice",
+                "from_passage": "passage::p1",
+                "to_passage": "passage::spoke_0",
+                "label": "Look around",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::p1_spoke_0", "passage::p1")
+        graph.add_edge("choice_to", "choice::p1_spoke_0", "passage::spoke_0")
+        # Return link: spoke→p1 with is_return=True
+        graph.create_node(
+            "choice::spoke_0_return",
+            {
+                "type": "choice",
+                "from_passage": "passage::spoke_0",
+                "to_passage": "passage::p1",
+                "label": "Return",
+                "is_return": True,
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::spoke_0_return", "passage::spoke_0")
+        graph.add_edge("choice_to", "choice::spoke_0_return", "passage::p1")
+
+        result = check_single_start(graph)
+        assert result.severity == "pass"
+        assert "passage::p1" in result.message
+
 
 class TestReachability:
     def test_reachability_pass(self) -> None:

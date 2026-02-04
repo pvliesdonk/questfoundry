@@ -79,17 +79,34 @@ class ValidationReport:
         return ", ".join(parts)
 
 
+def _passages_with_forward_incoming(graph: Graph) -> set[str]:
+    """Return passage IDs that have at least one non-return incoming choice.
+
+    Excludes ``is_return`` choices (spoke→hub back-links) so that hub
+    passages are still recognised as start passages when they have no
+    other incoming edges.
+    """
+    choice_nodes = graph.get_nodes_by_type("choice")
+    has_incoming: set[str] = set()
+    for choice_data in choice_nodes.values():
+        if choice_data.get("is_return"):
+            continue
+        to_p = choice_data.get("to_passage")
+        if to_p:
+            has_incoming.add(to_p)
+    return has_incoming
+
+
 def _find_start_passage(graph: Graph) -> str | None:
-    """Find the unique start passage (no incoming choice_to edges).
+    """Find the unique start passage (no forward incoming choice edges).
 
     Returns the passage ID if exactly one start exists, None otherwise.
+    Excludes ``is_return`` edges from spoke→hub back-links.
     """
     passage_nodes = graph.get_nodes_by_type("passage")
     if not passage_nodes:
         return None
-    # choice_to edges point TO destination passages
-    choice_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_to")
-    passages_with_incoming: set[str] = {edge["to"] for edge in choice_to_edges}
+    passages_with_incoming = _passages_with_forward_incoming(graph)
     start_passages = [pid for pid in passage_nodes if pid not in passages_with_incoming]
     return start_passages[0] if len(start_passages) == 1 else None
 
@@ -137,11 +154,9 @@ def check_single_start(graph: Graph) -> ValidationCheck:
             message="No passages to check",
         )
 
-    # Find passages with incoming choice_to edges
-    choice_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_to")
-    passages_with_incoming: set[str] = {edge["to"] for edge in choice_to_edges}
-
-    # Start passages = passages without incoming choice_to edges
+    # Start passages = passages without forward incoming choice edges
+    # (excludes is_return spoke→hub back-links)
+    passages_with_incoming = _passages_with_forward_incoming(graph)
     start_passages = [pid for pid in passage_nodes if pid not in passages_with_incoming]
 
     if len(start_passages) == 1:
@@ -664,9 +679,11 @@ def _build_exempt_passages(graph: Graph, passages: dict[str, dict[str, object]])
 
 
 def _find_start_passages(graph: Graph, passages: dict[str, dict[str, object]]) -> list[str]:
-    """Find passages with no incoming choice edges."""
-    choice_to_edges = graph.get_edges(edge_type="choice_to")
-    has_incoming = {e["to"] for e in choice_to_edges}
+    """Find passages with no forward incoming choice edges.
+
+    Excludes ``is_return`` spoke→hub back-links.
+    """
+    has_incoming = _passages_with_forward_incoming(graph)
     return [pid for pid in passages if pid not in has_incoming]
 
 
