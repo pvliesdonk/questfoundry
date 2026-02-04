@@ -20,6 +20,7 @@ context from graph state → single LLM call → validate → retry (max 3).
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -1003,6 +1004,27 @@ class GrowStage:
             tokens_used=tokens,
         )
 
+    @dataclass
+    class GapInsertionReport:
+        """Summary of gap insertion validation and results."""
+
+        inserted: int = 0
+        invalid_path_id: int = 0
+        invalid_after_beat: int = 0
+        invalid_before_beat: int = 0
+        invalid_beat_order: int = 0
+        beat_not_in_sequence: int = 0
+
+        @property
+        def total_invalid(self) -> int:
+            return (
+                self.invalid_path_id
+                + self.invalid_after_beat
+                + self.invalid_before_beat
+                + self.invalid_beat_order
+                + self.beat_not_in_sequence
+            )
+
     def _validate_and_insert_gaps(
         self,
         graph: Graph,
@@ -1010,7 +1032,7 @@ class GrowStage:
         valid_path_ids: set[str] | dict[str, Any],
         valid_beat_ids: set[str] | dict[str, Any],
         phase_name: str,
-    ) -> int:
+    ) -> GapInsertionReport:
         """Validate gap proposals and insert valid ones into the graph.
 
         Checks path_id prefixing, beat ID existence, and ordering
@@ -1031,7 +1053,7 @@ class GrowStage:
             insert_gap_beat,
         )
 
-        inserted = 0
+        report = self.GapInsertionReport()
         for gap in gaps:
             prefixed_pid = (
                 gap.path_id if gap.path_id.startswith("path::") else f"path::{gap.path_id}"
@@ -1044,12 +1066,15 @@ class GrowStage:
                 )
             if prefixed_pid not in valid_path_ids:
                 log.warning(f"{phase_name}_invalid_path_id", path_id=gap.path_id)
+                report.invalid_path_id += 1
                 continue
             if gap.after_beat and gap.after_beat not in valid_beat_ids:
                 log.warning(f"{phase_name}_invalid_after_beat", beat_id=gap.after_beat)
+                report.invalid_after_beat += 1
                 continue
             if gap.before_beat and gap.before_beat not in valid_beat_ids:
                 log.warning(f"{phase_name}_invalid_before_beat", beat_id=gap.before_beat)
+                report.invalid_before_beat += 1
                 continue
             # Validate ordering: after_beat must come before before_beat
             if gap.after_beat and gap.before_beat:
@@ -1063,9 +1088,11 @@ class GrowStage:
                             after_beat=gap.after_beat,
                             before_beat=gap.before_beat,
                         )
+                        report.invalid_beat_order += 1
                         continue
                 except ValueError:
                     log.warning(f"{phase_name}_beat_not_in_sequence", path_id=gap.path_id)
+                    report.beat_not_in_sequence += 1
                     continue
 
             insert_gap_beat(
@@ -1076,8 +1103,8 @@ class GrowStage:
                 summary=gap.summary,
                 scene_type=gap.scene_type,
             )
-            inserted += 1
-        return inserted
+            report.inserted += 1
+        return report
 
     async def _phase_4b_narrative_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4b: Detect narrative gaps in path beat sequences.
@@ -1143,14 +1170,14 @@ class GrowStage:
             )
 
         # Validate and insert gap beats
-        inserted = self._validate_and_insert_gaps(
+        report = self._validate_and_insert_gaps(
             graph, result.gaps, path_nodes, valid_beat_ids, "phase4b"
         )
 
         return GrowPhaseResult(
             phase="narrative_gaps",
             status="completed",
-            detail=f"Inserted {inserted} gap beats from {len(result.gaps)} proposals",
+            detail=f"Inserted {report.inserted} gap beats from {len(result.gaps)} proposals",
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
@@ -1227,14 +1254,27 @@ class GrowStage:
             )
 
         # Insert correction beats
-        inserted = self._validate_and_insert_gaps(
+        report = self._validate_and_insert_gaps(
             graph, result.gaps, path_nodes, beat_nodes, "phase4c"
         )
+        if report.invalid_before_beat > 0:
+            return GrowPhaseResult(
+                phase="pacing_gaps",
+                status="failed",
+                detail=(
+                    f"Invalid before_beat in pacing gaps ({report.invalid_before_beat}). "
+                    "Aborting to prevent structural corruption."
+                ),
+                llm_calls=llm_calls,
+                tokens_used=tokens,
+            )
 
         return GrowPhaseResult(
             phase="pacing_gaps",
             status="completed",
-            detail=(f"Found {len(issues)} pacing issues, inserted {inserted} correction beats"),
+            detail=(
+                f"Found {len(issues)} pacing issues, inserted {report.inserted} correction beats"
+            ),
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
@@ -2184,6 +2224,7 @@ class GrowStage:
                 multi_successors[p_id] = succ_list
 
         choice_count = 0
+        fallback_count = 0
 
         # Generate contextual labels for single-successor passages via LLM
         single_label_lookup: dict[tuple[str, str], str] = {}
@@ -2242,7 +2283,10 @@ class GrowStage:
         # Create choice edges for single-successor passages
         for p_id, succ_list in single_successors.items():
             succ = succ_list[0]
-            label = single_label_lookup.get((p_id, succ.to_passage), "continue")
+            label = single_label_lookup.get((p_id, succ.to_passage))
+            if not label:
+                label = "continue"
+                fallback_count += 1
             choice_id = f"choice::{p_id.removeprefix('passage::')}__{succ.to_passage.removeprefix('passage::')}"
             graph.create_node(
                 choice_id,
@@ -2319,6 +2363,7 @@ class GrowStage:
                             to_passage=succ.to_passage,
                         )
                         multi_label = "take this path"
+                        fallback_count += 1
                     choice_id = f"choice::{p_id.removeprefix('passage::')}__{succ.to_passage.removeprefix('passage::')}"
                     graph.create_node(
                         choice_id,
@@ -2334,6 +2379,20 @@ class GrowStage:
                     graph.add_edge("choice_from", choice_id, p_id)
                     graph.add_edge("choice_to", choice_id, succ.to_passage)
                     choice_count += 1
+
+        if choice_count > 0:
+            fallback_ratio = fallback_count / choice_count
+            if fallback_ratio > 0.3:
+                return GrowPhaseResult(
+                    phase="choices",
+                    status="failed",
+                    detail=(
+                        f"Fallback labels too high ({fallback_count}/{choice_count}, "
+                        f"{fallback_ratio:.0%}). Aborting to preserve choice quality."
+                    ),
+                    llm_calls=single_llm_calls + llm_calls,
+                    tokens_used=single_tokens + tokens,
+                )
 
         prologue_note = " (with synthetic prologue)" if prologue_created else ""
         return GrowPhaseResult(

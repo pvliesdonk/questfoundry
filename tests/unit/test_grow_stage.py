@@ -945,9 +945,9 @@ class TestValidateAndInsertGaps:
         path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_canonical"}
 
-        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
+        report = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
 
-        assert inserted == 1
+        assert report.inserted == 1
         # Verify the beat was inserted
         beat_nodes = graph.get_nodes_by_type("beat")
         gap_beats = [bid for bid in beat_nodes if "gap" in bid]
@@ -973,8 +973,8 @@ class TestValidateAndInsertGaps:
         path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet"}
 
-        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
-        assert inserted == 0
+        report = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
+        assert report.inserted == 0
 
     def test_invalid_beat_order_skipped(self) -> None:
         """Helper skips gaps where after_beat comes after before_beat."""
@@ -996,8 +996,8 @@ class TestValidateAndInsertGaps:
         path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_canonical"}
 
-        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
-        assert inserted == 0
+        report = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
+        assert report.inserted == 0
 
     def test_invalid_after_beat_skipped(self) -> None:
         """Helper skips gaps with after_beat not in valid IDs."""
@@ -1019,8 +1019,8 @@ class TestValidateAndInsertGaps:
         path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet"}
 
-        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
-        assert inserted == 0
+        report = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
+        assert report.inserted == 0
 
     def test_invalid_before_beat_skipped(self) -> None:
         """Helper skips gaps with before_beat not in valid IDs."""
@@ -1042,8 +1042,8 @@ class TestValidateAndInsertGaps:
         path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet"}
 
-        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
-        assert inserted == 0
+        report = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
+        assert report.inserted == 0
 
     def test_beat_in_valid_ids_but_not_in_sequence_skipped(self) -> None:
         """Helper skips gaps where beat is valid but not in the path's sequence."""
@@ -1067,8 +1067,8 @@ class TestValidateAndInsertGaps:
         path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_alt"}
 
-        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
-        assert inserted == 0
+        report = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
+        assert report.inserted == 0
 
     def test_gap_with_only_after_beat_inserted(self) -> None:
         """Helper inserts gap when only after_beat is set (no ordering check)."""
@@ -1090,8 +1090,8 @@ class TestValidateAndInsertGaps:
         path_nodes = graph.get_nodes_by_type("path")
         beat_ids = {"beat::opening", "beat::mentor_meet", "beat::mentor_commits_canonical"}
 
-        inserted = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
-        assert inserted == 1
+        report = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
+        assert report.inserted == 1
         # Verify gap beat was created
         beat_nodes = graph.get_nodes_by_type("beat")
         gap_beats = [bid for bid in beat_nodes if "gap" in bid]
@@ -1251,6 +1251,53 @@ class TestPhase4cPacingGaps:
         assert result.status == "completed"
         assert result.llm_calls == 1
         assert "1" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_4c_fails_on_invalid_before_beat(self) -> None:
+        """Phase 4c fails when gap proposals use invalid before_beat."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import GapProposal, Phase4bOutput
+
+        graph = Graph.empty()
+        graph.create_node("path::main", {"type": "path", "raw_id": "main"})
+        graph.create_node(
+            "beat::b1", {"type": "beat", "summary": "Action 1", "scene_type": "scene"}
+        )
+        graph.create_node(
+            "beat::b2", {"type": "beat", "summary": "Action 2", "scene_type": "scene"}
+        )
+        graph.create_node(
+            "beat::b3", {"type": "beat", "summary": "Action 3", "scene_type": "scene"}
+        )
+        graph.add_edge("belongs_to", "beat::b1", "path::main")
+        graph.add_edge("belongs_to", "beat::b2", "path::main")
+        graph.add_edge("belongs_to", "beat::b3", "path::main")
+        graph.add_edge("requires", "beat::b2", "beat::b1")
+        graph.add_edge("requires", "beat::b3", "beat::b2")
+
+        stage = GrowStage()
+
+        phase4c_output = Phase4bOutput(
+            gaps=[
+                GapProposal(
+                    path_id="path::main",
+                    after_beat="beat::b1",
+                    before_beat="beat::phantom",
+                    summary="Invalid before beat",
+                    scene_type="sequel",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase4c_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_4c_pacing_gaps(graph, mock_model)
+
+        assert result.status == "failed"
+        assert "Invalid before_beat" in result.detail
 
     @pytest.mark.asyncio
     async def test_phase_4c_no_pacing_issues(self) -> None:
@@ -1722,13 +1769,62 @@ class TestPhase9Choices:
         with patch.object(stage, "_grow_llm_call", side_effect=GrowStageError("LLM unavailable")):
             result = await stage._phase_9_choices(graph, mock_model)
 
-        assert result.status == "completed"
+        assert result.status == "failed"
 
         choice_nodes = graph.get_nodes_by_type("choice")
         assert len(choice_nodes) == 1
         # Should fall back to "continue"
         for _cid, cdata in choice_nodes.items():
             assert cdata["label"] == "continue"
+
+    @pytest.mark.asyncio
+    async def test_phase_9_fallback_below_threshold_passes(self) -> None:
+        """Phase 9 allows a small fallback ratio without failing."""
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import ChoiceLabel, Phase9Output
+
+        graph = Graph.empty()
+        for bid in ["a", "b", "c", "d", "e"]:
+            graph.create_node(f"beat::{bid}", {"type": "beat", "raw_id": bid, "summary": bid})
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["t1"],
+                "sequence": ["beat::a", "beat::b", "beat::c", "beat::d", "beat::e"],
+            },
+        )
+
+        for bid in ["a", "b", "c", "d", "e"]:
+            graph.create_node(
+                f"passage::{bid}",
+                {"type": "passage", "raw_id": bid, "from_beat": f"beat::{bid}", "summary": bid},
+            )
+
+        stage = GrowStage()
+
+        phase9_output = Phase9Output(
+            labels=[
+                ChoiceLabel(from_passage="passage::a", to_passage="passage::b", label="Go on"),
+                ChoiceLabel(from_passage="passage::b", to_passage="passage::c", label="Continue"),
+                ChoiceLabel(from_passage="passage::c", to_passage="passage::d", label="Proceed"),
+            ]
+        )
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase9_output)
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_9_choices(graph, mock_model)
+
+        assert result.status == "completed"
+        choice_nodes = graph.get_nodes_by_type("choice")
+        assert len(choice_nodes) == 4
+        labels = {cdata["label"] for cdata in choice_nodes.values()}
+        assert "continue" in {label.lower() for label in labels}
 
     @pytest.mark.asyncio
     async def test_phase_9_multi_successor_calls_llm(self) -> None:
@@ -1847,7 +1943,7 @@ class TestPhase9Choices:
 
     @pytest.mark.asyncio
     async def test_phase_9_fallback_label_for_missing_llm_labels(self) -> None:
-        """Phase 9 uses fallback label when LLM doesn't provide one for a successor."""
+        """Phase 9 fails when fallback labels exceed threshold."""
         from questfoundry.graph.graph import Graph
         from questfoundry.models.grow import Phase9Output
 
@@ -1895,7 +1991,7 @@ class TestPhase9Choices:
 
         result = await stage._phase_9_choices(graph, mock_model)
 
-        assert result.status == "completed"
+        assert result.status == "failed"
 
         # Both choices should use fallback label
         choice_nodes = graph.get_nodes_by_type("choice")
@@ -1907,6 +2003,7 @@ class TestPhase9Choices:
     async def test_phase_9_grants_codewords_on_choice(self) -> None:
         """Phase 9 attaches grants from arc beats to choice nodes."""
         from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import ChoiceLabel, Phase9Output
 
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
@@ -1938,7 +2035,16 @@ class TestPhase9Choices:
             )
 
         stage = GrowStage()
+
+        phase9_output = Phase9Output(
+            labels=[
+                ChoiceLabel(from_passage="passage::a", to_passage="passage::b", label="Continue"),
+            ]
+        )
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(return_value=phase9_output)
         mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
 
         result = await stage._phase_9_choices(graph, mock_model)
 
@@ -2015,8 +2121,21 @@ class TestPhase9Choices:
 
         stage = GrowStage()
 
-        # Mock LLM for the prologue divergence labels
-        phase9_output = Phase9Output(
+        continue_output = Phase9Output(
+            labels=[
+                ChoiceLabel(
+                    from_passage="passage::path1_start",
+                    to_passage="passage::path1_end",
+                    label="Continue path 1",
+                ),
+                ChoiceLabel(
+                    from_passage="passage::path2_start",
+                    to_passage="passage::path2_end",
+                    label="Continue path 2",
+                ),
+            ]
+        )
+        prologue_output = Phase9Output(
             labels=[
                 ChoiceLabel(
                     from_passage="passage::prologue",
@@ -2030,10 +2149,16 @@ class TestPhase9Choices:
                 ),
             ]
         )
-        mock_structured = AsyncMock()
-        mock_structured.ainvoke = AsyncMock(return_value=phase9_output)
+
+        async def _mock_grow_llm_call(_model, template_name, _context, _schema, **_kwargs):
+            if template_name == "grow_phase9_continue_labels":
+                return continue_output, 1, 0
+            if template_name == "grow_phase9_choices":
+                return prologue_output, 1, 0
+            raise AssertionError(f"Unexpected template: {template_name}")
+
         mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+        stage._grow_llm_call = AsyncMock(side_effect=_mock_grow_llm_call)
 
         result = await stage._phase_9_choices(graph, mock_model)
 
