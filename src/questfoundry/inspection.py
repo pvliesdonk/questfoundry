@@ -255,15 +255,14 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
     # Exclude hub-spoke return links (spoke→hub with is_return=True), otherwise
     # hubs can incorrectly appear to have incoming edges and start_count becomes 0.
     choice_nodes = graph.get_nodes_by_type("choice")
-    has_incoming: set[str] = set()
-    has_outgoing: set[str] = set()
-    for choice_data in choice_nodes.values():
-        from_passage = choice_data.get("from_passage")
-        to_passage = choice_data.get("to_passage")
-        if from_passage:
-            has_outgoing.add(from_passage)
-        if to_passage and not choice_data.get("is_return"):
-            has_incoming.add(to_passage)
+    has_incoming: set[str] = {
+        data["to_passage"]
+        for data in choice_nodes.values()
+        if data.get("to_passage") and not data.get("is_return")
+    }
+    # For outgoing, it's more direct to use the `choice_from` edges.
+    choice_from_edges = graph.get_edges(edge_type="choice_from")
+    has_outgoing = {e["to"] for e in choice_from_edges}
 
     start_count = sum(1 for pid in passages if pid not in has_incoming)
     ending_count = sum(1 for pid in passages if pid not in has_outgoing)
