@@ -1253,8 +1253,8 @@ class TestPhase4cPacingGaps:
         assert "1" in result.detail
 
     @pytest.mark.asyncio
-    async def test_phase_4c_fails_on_invalid_before_beat(self) -> None:
-        """Phase 4c fails when gap proposals use invalid before_beat."""
+    async def test_phase_4c_skips_invalid_before_beat(self) -> None:
+        """Phase 4c skips invalid before_beat proposals instead of failing."""
         from questfoundry.graph.graph import Graph
         from questfoundry.models.grow import GapProposal, Phase4bOutput
 
@@ -1296,8 +1296,8 @@ class TestPhase4cPacingGaps:
 
         result = await stage._phase_4c_pacing_gaps(graph, mock_model)
 
-        assert result.status == "failed"
-        assert "Invalid before_beat" in result.detail
+        assert result.status == "completed"
+        assert "Found 1 pacing issues" in result.detail
 
     @pytest.mark.asyncio
     async def test_phase_4c_no_pacing_issues(self) -> None:
@@ -1731,7 +1731,7 @@ class TestPhase9Choices:
 
     @pytest.mark.asyncio
     async def test_phase_9_single_successor_falls_back_to_continue(self) -> None:
-        """Phase 9 falls back to 'continue' when LLM call fails for single-successors."""
+        """Phase 9 uses deterministic labels when LLM call fails for single-successors."""
         from unittest.mock import patch
 
         from questfoundry.graph.graph import Graph
@@ -1769,13 +1769,13 @@ class TestPhase9Choices:
         with patch.object(stage, "_grow_llm_call", side_effect=GrowStageError("LLM unavailable")):
             result = await stage._phase_9_choices(graph, mock_model)
 
-        assert result.status == "failed"
+        assert result.status == "completed"
 
         choice_nodes = graph.get_nodes_by_type("choice")
         assert len(choice_nodes) == 1
-        # Should fall back to "continue"
+        # Should fall back to deterministic label from summary
         for _cid, cdata in choice_nodes.items():
-            assert cdata["label"] == "continue"
+            assert cdata["label"] == "b"
 
     @pytest.mark.asyncio
     async def test_phase_9_fallback_below_threshold_passes(self) -> None:
@@ -1824,7 +1824,7 @@ class TestPhase9Choices:
         choice_nodes = graph.get_nodes_by_type("choice")
         assert len(choice_nodes) == 4
         labels = {cdata["label"] for cdata in choice_nodes.values()}
-        assert "continue" in {label.lower() for label in labels}
+        assert "e" in {label.lower() for label in labels}
 
     @pytest.mark.asyncio
     async def test_phase_9_multi_successor_calls_llm(self) -> None:
@@ -1943,7 +1943,7 @@ class TestPhase9Choices:
 
     @pytest.mark.asyncio
     async def test_phase_9_fallback_label_for_missing_llm_labels(self) -> None:
-        """Phase 9 fails when fallback labels exceed threshold."""
+        """Phase 9 fills missing labels deterministically when LLM misses them."""
         from questfoundry.graph.graph import Graph
         from questfoundry.models.grow import Phase9Output
 
@@ -1991,13 +1991,13 @@ class TestPhase9Choices:
 
         result = await stage._phase_9_choices(graph, mock_model)
 
-        assert result.status == "failed"
+        assert result.status == "completed"
 
         # Both choices should use fallback label
         choice_nodes = graph.get_nodes_by_type("choice")
         assert len(choice_nodes) == 2
-        for cdata in choice_nodes.values():
-            assert cdata["label"] == "take this path"
+        labels = {cdata["label"] for cdata in choice_nodes.values()}
+        assert labels == {"b", "c"}
 
     @pytest.mark.asyncio
     async def test_phase_9_grants_codewords_on_choice(self) -> None:
