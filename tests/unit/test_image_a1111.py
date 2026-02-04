@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import base64
 import json
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import httpx
 import pytest
@@ -396,6 +396,7 @@ class TestA1111DistillPrompt:
     async def test_llm_system_prompt_tag_limit(self) -> None:
         """SD 1.5 distiller should enforce 40-tag limit."""
         mock_llm = AsyncMock()
+        mock_llm.bind = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = "warrior battle, courtyard, epic, watercolor"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -404,18 +405,22 @@ class TestA1111DistillPrompt:
         brief = self._make_brief()
         await provider.distill_prompt(brief)
 
-        call_args = mock_llm.ainvoke.call_args[0][0]
-        system_msg = call_args[0].content
+        call = mock_llm.ainvoke.call_args
+        messages = call.args[0]
+        system_msg = messages[0].content
         assert "40" in system_msg
         assert "TAG BUDGET" in system_msg
         assert "subject" in system_msg.lower()
         assert "CLIP encoder" in system_msg
         assert "ENTITY EXPANSION" in system_msg
+        assert mock_llm.bind.call_args.kwargs["num_predict"] > 0
+        assert mock_llm.bind.call_args.kwargs["stop"]
 
     @pytest.mark.asyncio()
     async def test_llm_sdxl_break_instruction(self) -> None:
         """SDXL LLM distiller should mention BREAK and 75-tag limit."""
         mock_llm = AsyncMock()
+        mock_llm.bind = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = "scene tags BREAK style tags"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -424,8 +429,9 @@ class TestA1111DistillPrompt:
         brief = self._make_brief()
         await provider.distill_prompt(brief)
 
-        call_args = mock_llm.ainvoke.call_args[0][0]
-        system_msg = call_args[0].content
+        call = mock_llm.ainvoke.call_args
+        messages = call.args[0]
+        system_msg = messages[0].content
         assert "BREAK" in system_msg
         assert "75 tags" in system_msg
 
@@ -433,6 +439,7 @@ class TestA1111DistillPrompt:
     async def test_llm_entity_cap(self) -> None:
         """LLM distiller should also cap entities."""
         mock_llm = AsyncMock()
+        mock_llm.bind = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = "test prompt"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -441,8 +448,9 @@ class TestA1111DistillPrompt:
         brief = self._make_brief(entity_fragments=["frag1", "frag2", "frag3", "frag4"])
         await provider.distill_prompt(brief)
 
-        call_args = mock_llm.ainvoke.call_args[0][0]
-        human_msg = call_args[1].content
+        call = mock_llm.ainvoke.call_args
+        messages = call.args[0]
+        human_msg = messages[1].content
         # SD 1.5: max 2 entities
         assert "frag3" not in human_msg
         assert "frag4" not in human_msg
@@ -451,6 +459,7 @@ class TestA1111DistillPrompt:
     async def test_llm_distillation_two_line_output(self) -> None:
         """LLM returns positive on line 1, negative on line 2."""
         mock_llm = AsyncMock()
+        mock_llm.bind = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = (
             "warrior battle, courtyard, epic, watercolor, golden hour\n"
@@ -464,12 +473,14 @@ class TestA1111DistillPrompt:
 
         assert positive == "warrior battle, courtyard, epic, watercolor, golden hour"
         assert negative == "photorealism, modern elements, text"
+        assert mock_llm.ainvoke.call_args.kwargs["config"]["metadata"]["stage"] == "dress"
         mock_llm.ainvoke.assert_called_once()
 
     @pytest.mark.asyncio()
     async def test_llm_distillation_single_line_output(self) -> None:
         """LLM returns only positive — negative is None."""
         mock_llm = AsyncMock()
+        mock_llm.bind = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = "warrior battle, courtyard, epic, watercolor"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -485,6 +496,7 @@ class TestA1111DistillPrompt:
     async def test_llm_strips_labels(self) -> None:
         """LLM output with 'Positive:' / 'Negative:' labels gets stripped."""
         mock_llm = AsyncMock()
+        mock_llm.bind = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = (
             "Positive: warrior, courtyard, watercolor\nNegative: photorealism, text"
@@ -502,6 +514,7 @@ class TestA1111DistillPrompt:
     async def test_llm_receives_negative_in_brief(self) -> None:
         """Negative prompt text is included in the brief sent to the LLM."""
         mock_llm = AsyncMock()
+        mock_llm.bind = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = "tags\nbad things"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -510,7 +523,9 @@ class TestA1111DistillPrompt:
         brief = self._make_brief(negative="blurry", negative_defaults="text, watermark")
         await provider.distill_prompt(brief)
 
-        human_msg = mock_llm.ainvoke.call_args[0][0][1].content
+        call = mock_llm.ainvoke.call_args
+        messages = call.args[0]
+        human_msg = messages[1].content
         assert "blurry" in human_msg
         assert "text, watermark" in human_msg
 
