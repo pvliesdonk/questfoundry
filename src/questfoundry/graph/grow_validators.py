@@ -236,7 +236,8 @@ def validate_phase9c_output(
     """Validate Phase 9c hub-spoke proposals.
 
     Checks:
-    - passage_id exists in valid passage IDs
+    - passage_id exists in valid passage IDs (which excludes ending passages,
+      ensuring hubs have outgoing choices)
     """
     errors: list[GrowValidationError] = []
     for i, hub in enumerate(result.hubs):

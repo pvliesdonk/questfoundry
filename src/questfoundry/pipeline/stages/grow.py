@@ -2512,7 +2512,8 @@ class GrowStage:
                 detail="No passages or choices to analyze",
             )
 
-        # Build outgoing info to identify which passages have forward choices
+        # Build outgoing info to identify which passages have forward choices.
+        # choice_from edges point choice→source_passage, so e["to"] = source passage.
         choice_from_edges = graph.get_edges(edge_type="choice_from")
         has_outgoing = {e["to"] for e in choice_from_edges}
 
@@ -2554,8 +2555,8 @@ class GrowStage:
                 Phase9cOutput,
                 semantic_validator=validator,
             )
-        except GrowStageError:
-            log.warning("phase9c_hub_spokes_failed", fallback="no hubs")
+        except GrowStageError as exc:
+            log.warning("phase9c_hub_spokes_failed", fallback="no hubs", error=str(exc))
             return GrowPhaseResult(
                 phase="hub_spokes",
                 status="completed",
@@ -2573,17 +2574,21 @@ class GrowStage:
                 continue
 
             # Find existing forward choice(s) from hub and relabel the first one
-            hub_choices = [
-                (cid, cdata)
-                for cid, cdata in choices.items()
-                if cdata.get("from_passage") == hub_id
-            ]
+            # Sort by choice ID for deterministic selection
+            hub_choices = sorted(
+                [
+                    (cid, cdata)
+                    for cid, cdata in choices.items()
+                    if cdata.get("from_passage") == hub_id
+                ],
+                key=lambda x: x[0],
+            )
             if hub_choices:
                 first_choice_id, _ = hub_choices[0]
                 graph.update_node(first_choice_id, label=hub.forward_label)
 
             # Create spoke passages and return choices
-            raw_id = hub_id.removeprefix("passage::")
+            raw_id = strip_scope_prefix(hub_id)
             for i, spoke in enumerate(hub.spokes):
                 spoke_pid = f"passage::spoke_{raw_id}_{i}"
                 graph.create_node(
