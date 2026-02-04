@@ -856,6 +856,35 @@ class TestMaxConsecutiveLinear:
         result = check_max_consecutive_linear(graph)
         assert result.severity == "pass"
 
+    def test_convergence_detects_longer_path(self) -> None:
+        """Linear stretch through convergence point is detected from longer path."""
+        # Graph: a→b→c→d and x→c→d (c is a convergence point)
+        # From x: run at c is [c] (len 1)
+        # From a: run is [a, b, c] (len 3) — should trigger warn at max_run=2
+        graph = _make_chain_graph(["a", "b", "c", "d"])
+        # Add a second start x→c
+        graph.create_node(
+            "passage::x",
+            {"type": "passage", "raw_id": "x", "from_beat": "beat::x", "summary": "X"},
+        )
+        graph.create_node("beat::x", {"type": "beat"})
+        graph.create_node(
+            "choice::x__c",
+            {
+                "type": "choice",
+                "from_passage": "passage::x",
+                "to_passage": "passage::c",
+                "label": "go",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::x__c", "passage::x")
+        graph.add_edge("choice_to", "choice::x__c", "passage::c")
+
+        result = check_max_consecutive_linear(graph, max_run=2)
+        assert result.severity == "warn"
+
     def test_included_in_run_all_checks(self) -> None:
         """check_max_consecutive_linear is included in run_all_checks."""
         graph = _make_linear_passage_graph()

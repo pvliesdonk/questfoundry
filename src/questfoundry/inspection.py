@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 from questfoundry.graph.fill_context import compute_lexical_diversity
 from questfoundry.graph.graph import Graph
-from questfoundry.graph.grow_validation import run_all_checks
+from questfoundry.graph.grow_validation import find_max_consecutive_linear, run_all_checks
 from questfoundry.observability.logging import get_logger
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 
@@ -246,30 +246,8 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
         elif any(answer_results):
             partially_explored += 1
 
-    # Compute max consecutive linear: walk adjacency to find longest single-outgoing run
-    adjacency: dict[str, list[str]] = {}
-    for _cid, cdata in choices.items():
-        from_p = cdata.get("from_passage", "")
-        to_p = cdata.get("to_passage", "")
-        if from_p and to_p:
-            adjacency.setdefault(from_p, []).append(to_p)
-
-    max_linear = 0
-    linear_visited: set[str] = set()
-    for pid in passages:
-        if pid in linear_visited or outgoing_per_passage.get(pid, 0) != 1:
-            continue
-        # Walk forward through single-outgoing passages
-        run_len = 0
-        current: str | None = pid
-        while current is not None and outgoing_per_passage.get(current, 0) == 1:
-            if current in linear_visited:
-                break
-            linear_visited.add(current)
-            run_len += 1
-            successors = adjacency.get(current, [])
-            current = successors[0] if successors else None
-        max_linear = max(max_linear, run_len)
+    # Compute max consecutive linear using shared BFS (with confront/resolve exemptions)
+    max_linear = find_max_consecutive_linear(graph)
 
     # Start and ending passages
     # choice_to edges: choice → destination passage (incoming)
