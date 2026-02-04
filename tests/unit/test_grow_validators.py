@@ -112,6 +112,23 @@ class TestValidatePhase3Output:
         )
         assert errors == []
 
+    def test_rejects_oversized_intersection(self) -> None:
+        result = Phase3Output(
+            intersections=[
+                IntersectionProposal(
+                    beat_ids=["beat::b1", "beat::b2", "beat::b3", "beat::b4"],
+                    rationale="too big",
+                )
+            ]
+        )
+        errors = validate_phase3_output(
+            result,
+            valid_beat_ids={"beat::b1", "beat::b2", "beat::b3", "beat::b4"},
+            max_intersection_size=3,
+        )
+        assert len(errors) == 1
+        assert "maximum allowed is 3" in errors[0].issue
+
     def test_invalid_beat_id(self) -> None:
         result = Phase3Output(
             intersections=[
