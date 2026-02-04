@@ -732,28 +732,41 @@ class GrowStage:
 
         # Build context for LLM
         beat_nodes = graph.get_nodes_by_type("beat")
+        path_nodes = graph.get_nodes_by_type("path")
         beat_summaries: list[str] = []
-        valid_beat_ids: set[str] = set()
 
         beat_info: dict[str, str] = {}
+        from collections import defaultdict
+
+        from questfoundry.graph.context import normalize_scoped_id
+
+        # Build beat -> dilemma mapping via belongs_to -> path.dilemma_id
+        beat_dilemmas: dict[str, set[str]] = defaultdict(set)
+        belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
+        for edge in belongs_to_edges:
+            beat_id = edge["from"]
+            path_id = edge["to"]
+            path_data = path_nodes.get(path_id)
+            if not path_data:
+                continue
+            dilemma_id = path_data.get("dilemma_id")
+            if dilemma_id:
+                beat_dilemmas[beat_id].add(normalize_scoped_id(dilemma_id, "dilemma"))
+
         for candidate in candidates:
             for bid in candidate.beat_ids:
-                valid_beat_ids.add(bid)
                 if bid in beat_info:
                     continue
+                dilemma_ids = sorted(beat_dilemmas.get(bid, set()))
+                if len(dilemma_ids) != 1:
+                    continue
+
                 data = beat_nodes.get(bid, {})
                 location = data.get("location", "unspecified")
                 alternatives = data.get("location_alternatives", [])
                 summary = data.get("summary", "")
                 entities = data.get("entities", [])
-                dilemma_ids = sorted(
-                    {
-                        impact["dilemma_id"]
-                        for impact in data.get("dilemma_impacts", [])
-                        if "dilemma_id" in impact
-                    }
-                )
-                dilemma_tag = dilemma_ids[0] if dilemma_ids else "unknown"
+                dilemma_tag = dilemma_ids[0]
                 beat_info[bid] = (
                     f"- {bid} [dilemma: {dilemma_tag}]: "
                     f'summary="{summary}", '
@@ -762,6 +775,17 @@ class GrowStage:
                     f"entities={entities}"
                 )
         beat_summaries = list(beat_info.values())
+
+        valid_beat_ids = set(beat_info.keys())
+        if not valid_beat_ids:
+            return GrowPhaseResult(
+                phase="intersections",
+                status="completed",
+                detail=(
+                    "No intersection candidates found "
+                    "(all candidate beats span multiple dilemmas or lack dilemma mapping)"
+                ),
+            )
 
         valid_beat_ids_list = sorted(valid_beat_ids)
 
@@ -793,10 +817,12 @@ class GrowStage:
         # Validate and apply intersections
         applied_count = 0
         skipped_count = 0
+        pre_intersection_graph = Graph.from_dict(graph.to_dict())
+        accepted: list[tuple[list[str], str | None]] = []
 
         for proposal in result.intersections:
             # Filter to valid beat IDs
-            valid_ids = [bid for bid in proposal.beat_ids if bid in beat_nodes]
+            valid_ids = [bid for bid in proposal.beat_ids if bid in valid_beat_ids]
             if len(valid_ids) < 2:
                 log.warning(
                     "phase3_insufficient_valid_beats",
@@ -807,7 +833,7 @@ class GrowStage:
                 continue
 
             # Run compatibility check
-            errors = check_intersection_compatibility(graph, valid_ids)
+            errors = check_intersection_compatibility(pre_intersection_graph, valid_ids)
             if errors:
                 log.warning(
                     "phase3_incompatible_intersection",
@@ -821,19 +847,27 @@ class GrowStage:
             if proposal.resolved_location:
                 location = proposal.resolved_location
             else:
-                location = resolve_intersection_location(graph, valid_ids)
+                location = resolve_intersection_location(pre_intersection_graph, valid_ids)
                 log.debug(
                     "phase3_location_resolved",
                     beat_ids=valid_ids,
                     resolved=location,
                 )
 
-            # Apply the intersection
-            apply_intersection_mark(graph, valid_ids, location)
+            accepted.append((valid_ids, location))
+            log.debug(
+                "phase3_intersection_accepted",
+                beat_ids=valid_ids,
+                location=location,
+            )
+
+        # Apply accepted intersections in a batch to avoid cascade effects.
+        for beat_ids, location in accepted:
+            apply_intersection_mark(graph, beat_ids, location)
             applied_count += 1
             log.debug(
                 "phase3_intersection_applied",
-                beat_ids=valid_ids,
+                beat_ids=beat_ids,
                 location=location,
             )
 

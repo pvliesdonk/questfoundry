@@ -887,6 +887,9 @@ def _try_split_beat(
 def check_intersection_compatibility(
     graph: Graph,
     beat_ids: list[str],
+    *,
+    max_intersection_size: int = 3,
+    allow_prerequisite_recovery: bool = False,
 ) -> list[GrowValidationError]:
     """Check if beats can form a valid intersection.
 
@@ -897,17 +900,15 @@ def check_intersection_compatibility(
     - At least 2 beats
 
     For conditional prerequisites (beat requires a prerequisite that doesn't
-    span all intersection paths), attempts recovery strategies before rejecting:
-    1. **Lift**: widen the prerequisite to cover all intersection paths
-    2. **Split**: create a path-specific variant of the beat
-    3. **Reject**: if neither works, report the error
-
-    Note: lift and split may mutate the graph (adding edges/nodes). This is
-    intentional — the mutations are the recovery mechanism.
+    span all intersection paths), the default strategy is to reject the
+    intersection. Optional recovery strategies (lift/split) can be enabled via
+    ``allow_prerequisite_recovery``.
 
     Args:
         graph: Graph with beat and path nodes.
         beat_ids: Proposed intersection beat IDs.
+        max_intersection_size: Maximum allowed beats per intersection.
+        allow_prerequisite_recovery: If True, attempt lift/split before rejecting.
 
     Returns:
         List of validation errors. Empty if compatible.
@@ -919,6 +920,19 @@ def check_intersection_compatibility(
             GrowValidationError(
                 field_path="intersection.beat_ids",
                 issue="Intersection requires at least 2 beats",
+                category=GrowErrorCategory.STRUCTURAL,
+            )
+        )
+        return errors
+
+    if len(beat_ids) > max_intersection_size:
+        errors.append(
+            GrowValidationError(
+                field_path="intersection.beat_ids",
+                issue=(
+                    f"Intersection has {len(beat_ids)} beats; "
+                    f"maximum allowed is {max_intersection_size}"
+                ),
                 category=GrowErrorCategory.STRUCTURAL,
             )
         )
@@ -942,18 +956,53 @@ def check_intersection_compatibility(
 
     # Check beats are from different dilemmas
     beat_dilemma_map = _build_beat_dilemmas(graph, beat_nodes)
-    dilemma_sets = [beat_dilemma_map.get(bid, set()) for bid in beat_ids]
+    beat_primary_dilemma: dict[str, str] = {}
+    for bid in beat_ids:
+        dilemmas = beat_dilemma_map.get(bid, set())
+        if len(dilemmas) != 1:
+            errors.append(
+                GrowValidationError(
+                    field_path="intersection.dilemmas",
+                    issue=(
+                        f"Beat '{bid}' maps to {len(dilemmas)} dilemmas: {sorted(dilemmas)}. "
+                        f"Each beat in an intersection must map to exactly 1 dilemma."
+                    ),
+                    category=GrowErrorCategory.STRUCTURAL,
+                )
+            )
+            continue
+        beat_primary_dilemma[bid] = next(iter(dilemmas))
 
-    # Intersections must span at least 2 different dilemmas
-    all_dilemmas = set.union(*dilemma_sets) if dilemma_sets else set()
+    if errors:
+        return errors
 
-    if len(all_dilemmas) < 2:
+    # Intersections must span at least 2 different dilemmas and include
+    # at most 1 beat per dilemma (otherwise exclusivity collapses).
+    dilemma_to_beats: dict[str, list[str]] = defaultdict(list)
+    for bid, did in beat_primary_dilemma.items():
+        dilemma_to_beats[did].append(bid)
+
+    if len(dilemma_to_beats) < 2:
+        only = sorted(dilemma_to_beats.keys())
         errors.append(
             GrowValidationError(
                 field_path="intersection.dilemmas",
                 issue=(
-                    f"Beats span only {len(all_dilemmas)} dilemma(s): {sorted(all_dilemmas)}. "
+                    f"Beats span only {len(only)} dilemma(s): {only}. "
                     f"Intersections must span at least 2 different dilemmas."
+                ),
+                category=GrowErrorCategory.STRUCTURAL,
+            )
+        )
+
+    multi = {d: sorted(bs) for d, bs in dilemma_to_beats.items() if len(bs) > 1}
+    if multi:
+        errors.append(
+            GrowValidationError(
+                field_path="intersection.dilemmas",
+                issue=(
+                    "Intersection contains multiple beats from the same dilemma(s): "
+                    f"{multi}. Intersections must include at most 1 beat per dilemma."
                 ),
                 category=GrowErrorCategory.STRUCTURAL,
             )
@@ -1002,26 +1051,24 @@ def check_intersection_compatibility(
                 # silently dropped in arcs missing the target's path,
                 # producing inconsistent orderings and passage DAG cycles.
                 #
-                # Recovery strategy (in order):
-                #   1. Lift: widen the prerequisite to all intersection paths
-                #   2. Split: create a path-specific variant of the beat
-                #   3. Reject: if neither works, reject the intersection
                 prereq_paths = beat_paths.get(to_id, set())
                 if not prereq_paths >= union_paths:
-                    # Try lift first: widen prerequisite to cover union_paths
-                    lifted = _try_lift_prerequisite(graph, to_id, union_paths, beat_paths)
-                    if lifted:
-                        continue
-
-                    # Try split: create variant for narrow paths
-                    narrow = prereq_paths & beat_paths.get(from_id, set())
-                    wide = union_paths - narrow
-                    if narrow and wide:
-                        variant = _try_split_beat(graph, from_id, to_id, narrow, wide, beat_paths)
-                        if variant is not None:
+                    if allow_prerequisite_recovery:
+                        # Try lift first: widen prerequisite to cover union_paths
+                        lifted = _try_lift_prerequisite(graph, to_id, union_paths, beat_paths)
+                        if lifted:
                             continue
 
-                    # Neither strategy worked — reject
+                        # Try split: create variant for narrow paths
+                        narrow = prereq_paths & beat_paths.get(from_id, set())
+                        wide = union_paths - narrow
+                        if narrow and wide:
+                            variant = _try_split_beat(
+                                graph, from_id, to_id, narrow, wide, beat_paths
+                            )
+                            if variant is not None:
+                                continue
+
                     missing = sorted(union_paths - prereq_paths)
                     errors.append(
                         GrowValidationError(
@@ -1032,7 +1079,11 @@ def check_intersection_compatibility(
                                 f"but the intersection would span "
                                 f"{sorted(union_paths)}. "
                                 f"Missing paths: {missing}. "
-                                f"Lift and split strategies both failed."
+                                + (
+                                    "Lift and split strategies both failed."
+                                    if allow_prerequisite_recovery
+                                    else "Conditional prerequisites are not allowed."
+                                )
                             ),
                             category=GrowErrorCategory.STRUCTURAL,
                         )

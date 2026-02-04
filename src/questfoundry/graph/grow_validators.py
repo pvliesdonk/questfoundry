@@ -65,16 +65,30 @@ def validate_phase2_output(
 def validate_phase3_output(
     result: Phase3Output,
     valid_beat_ids: set[str],
+    *,
+    max_intersection_size: int = 3,
 ) -> list[GrowValidationError]:
     """Validate Phase 3 intersection proposals.
 
     Checks:
     - beat_ids exist in graph
     - No beat reused across multiple intersections
+    - Intersection sizes are bounded (prevents large clusters)
     """
     errors: list[GrowValidationError] = []
     seen_beats: set[str] = set()
     for i, intersection in enumerate(result.intersections):
+        if len(intersection.beat_ids) > max_intersection_size:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"intersections.{i}.beat_ids",
+                    issue=(
+                        f"Intersection has {len(intersection.beat_ids)} beats; "
+                        f"maximum allowed is {max_intersection_size}"
+                    ),
+                    provided=str(len(intersection.beat_ids)),
+                )
+            )
         for beat_id in intersection.beat_ids:
             if beat_id not in valid_beat_ids:
                 errors.append(
