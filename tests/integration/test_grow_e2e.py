@@ -148,56 +148,54 @@ def pipeline_result(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 
     result_dict, llm_calls, tokens = asyncio.run(stage.execute(model=mock_model, user_prompt=""))
 
-    return {"result_dict": result_dict, "llm_calls": llm_calls, "tokens": tokens}
+    return {
+        "result_dict": result_dict,
+        "llm_calls": llm_calls,
+        "tokens": tokens,
+        "project_path": tmp_path,
+    }
 
 
 class TestGrowFullPipeline:
     """E2E tests running all 21 GROW phases on the fixture graph."""
 
     def test_all_phases_complete(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify all 21 phases complete with no failures."""
-        phases = pipeline_result["result_dict"]["phases_completed"]
-        assert len(phases) == 21
-        for phase in phases:
-            assert phase["status"] in ("completed", "skipped"), (
-                f"Phase {phase['phase']} has unexpected status: {phase['status']}"
-            )
+        """Verify the stage completes and returns the topology artifact."""
+        result_dict = pipeline_result["result_dict"]
+        assert set(result_dict.keys()) == {"arcs", "beats", "passages", "choices", "codewords"}
 
     def test_arc_enumeration(self, pipeline_result: dict[str, Any]) -> None:
         """Verify 4 arcs are enumerated from 2 dilemmas x 2 paths."""
         result_dict = pipeline_result["result_dict"]
-        assert result_dict["arc_count"] == 4
-        assert result_dict["spine_arc_id"] is not None
+        assert len(result_dict["arcs"]) == 4
+        assert any(a.get("arc_type") == "spine" for a in result_dict["arcs"])
 
     def test_passages_created(self, pipeline_result: dict[str, Any]) -> None:
         """Verify passages are created for all beats (10 beats = 10 passages)."""
-        assert pipeline_result["result_dict"]["passage_count"] == 10
+        assert len(pipeline_result["result_dict"]["passages"]) == 10
 
     def test_codewords_derived(self, pipeline_result: dict[str, Any]) -> None:
         """Verify codewords are created from consequences (4 consequences)."""
-        assert pipeline_result["result_dict"]["codeword_count"] == 4
+        assert len(pipeline_result["result_dict"]["codewords"]) == 4
 
     def test_choices_created(self, pipeline_result: dict[str, Any]) -> None:
         """Verify choices are created at divergence points."""
-        assert pipeline_result["result_dict"]["choice_count"] > 0
+        assert len(pipeline_result["result_dict"]["choices"]) > 0
 
     def test_validation_phase_passes(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify Phase 10 validation passes on the fixture graph."""
-        phases = pipeline_result["result_dict"]["phases_completed"]
-        validation_phase = next((p for p in phases if p["phase"] == "validation"), None)
-        assert validation_phase is not None
-        assert validation_phase["status"] == "completed"
+        """Verify the resulting graph is structurally valid."""
+        saved_graph = Graph.load(pipeline_result["project_path"])
+        assert saved_graph.validate_invariants() == []
 
     def test_result_structure(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify GrowResult contains expected keys and counts."""
+        """Verify the topology artifact contains expected keys."""
         result_dict = pipeline_result["result_dict"]
         expected_keys = {
-            "phases_completed",
-            "arc_count",
-            "spine_arc_id",
-            "passage_count",
-            "codeword_count",
-            "choice_count",
+            "arcs",
+            "beats",
+            "passages",
+            "choices",
+            "codewords",
         }
         assert expected_keys.issubset(set(result_dict.keys()))
 

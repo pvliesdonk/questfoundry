@@ -55,11 +55,13 @@ class TestGrowStageExecute:
         result_dict, llm_calls, tokens = await stage.execute(model=mock_model, user_prompt="")
         assert llm_calls == 0
         assert tokens == 0
-        # All phases run to completion (empty graph = no work to do)
-        phases = result_dict["phases_completed"]
-        assert len(phases) == 21
-        for phase in phases:
-            assert phase["status"] == "completed"
+        # execute() returns the GROW artifact data (not telemetry)
+        assert set(result_dict.keys()) == {"arcs", "beats", "passages", "choices", "codewords"}
+        assert result_dict["arcs"] == []
+        assert result_dict["beats"] == []
+        assert result_dict["passages"] == []
+        assert result_dict["choices"] == []
+        assert result_dict["codewords"] == []
 
     @pytest.mark.asyncio
     async def test_execute_with_project_path_kwarg(
@@ -69,7 +71,7 @@ class TestGrowStageExecute:
         result_dict, _, _ = await stage.execute(
             model=mock_model, user_prompt="", project_path=tmp_project
         )
-        assert result_dict["arc_count"] == 0
+        assert result_dict["arcs"] == []
 
     @pytest.mark.asyncio
     async def test_execute_missing_project_path_raises(self, mock_model: MagicMock) -> None:
@@ -123,7 +125,7 @@ class TestGrowStageExecute:
 
         stage = GrowStage(project_path=tmp_path)
         result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
-        assert result_dict["arc_count"] == 0
+        assert result_dict["arcs"] == []
 
         graph = Graph.load(tmp_path)
         assert graph.get_last_stage() == "grow"
@@ -177,11 +179,7 @@ class TestGrowStageExecute:
     ) -> None:
         stage = GrowStage(project_path=tmp_project)
         result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
-        assert "arc_count" in result_dict
-        assert "passage_count" in result_dict
-        assert "codeword_count" in result_dict
-        assert "phases_completed" in result_dict
-        assert "spine_arc_id" in result_dict
+        assert set(result_dict.keys()) == {"arcs", "beats", "passages", "choices", "codewords"}
 
 
 class TestGrowStagePhaseOrder:
@@ -240,11 +238,10 @@ class TestGrowStageGateRejection:
 
         gate = RejectAfterFirstPhaseGate()
         stage = GrowStage(project_path=tmp_project, gate=gate)
-        result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
+        await stage.execute(model=mock_model, user_prompt="")
 
-        # Should have only 2 phases (first approved, second rejected stops)
-        phases = result_dict["phases_completed"]
-        assert len(phases) == 2
+        # First approved, second rejected stops further phase execution
+        assert gate.call_count == 2
 
     @pytest.mark.asyncio
     async def test_gate_rejection_rolls_back_graph(

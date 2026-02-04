@@ -236,7 +236,7 @@ class GrowStage:
             **kwargs: Additional keyword arguments (ignored).
 
         Returns:
-            Tuple of (GrowResult dict, total_llm_calls, total_tokens).
+            Tuple of (GROW artifact dict, total_llm_calls, total_tokens).
 
         Raises:
             GrowStageError: If project_path is not provided.
@@ -382,12 +382,11 @@ class GrowStage:
             spine_arc_id=spine_arc_id,
         )
 
-        # Write human-readable artifact (story data extracted from graph)
+        # Artifact is derived from the graph (beats/arcs/passages/choices/codewords).
+        # The orchestrator is responsible for writing artifacts to disk.
         from questfoundry.artifacts.enrichment import extract_grow_artifact
-        from questfoundry.artifacts.writer import ArtifactWriter
 
         artifact_data = extract_grow_artifact(graph)
-        ArtifactWriter(resolved_path).write(artifact_data, "grow")
 
         log.info(
             "stage_complete",
@@ -397,7 +396,7 @@ class GrowStage:
             codewords=grow_result.codeword_count,
         )
 
-        return grow_result.model_dump(), total_llm_calls, total_tokens
+        return artifact_data, total_llm_calls, total_tokens
 
     # -------------------------------------------------------------------------
     # LLM helper
