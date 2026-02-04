@@ -370,7 +370,7 @@ gh workflow run CI --ref <branch-name>
 PRs must meet ALL of these criteria before merging:
 
 1. **CI must be completely green** - all checks pass, no warnings treated as errors
-2. **PR must be reviewed** - at least one approval required
+2. **PR must be reviewed** - address all review comments before merging (approval not required unless branch protection requires it)
 3. **Review feedback must be addressed** - all comments resolved or responded to
 4. **Branch must be up to date** - rebase on main if needed
 
@@ -417,8 +417,8 @@ For PRs > 300 lines, add a **Review Guide** section with suggested file/commit o
 |---------------|---------------|-------------|
 | **LGTM** / **Approve** | Ready to merge | Merge when CI is green |
 | **Approve with minor fixes** | Small changes needed, no re-review | Fix the items, reply to comments, push, merge when CI green |
-| **Changes requested** | Substantive issues found | Fix all items, push, **wait for another review round** before merging |
-| **Comments only** (no verdict) | Reviewer raised concerns | Address all comments, then request re-review |
+| **Changes requested** | Substantive issues found | Fix all items, push, re-review optional unless branch protection requires approval |
+| **Comments only** (no verdict) | Reviewer raised concerns | Address all comments, then request re-review if needed |
 
 **NEVER merge a PR with "changes requested" status** without getting re-approval after addressing the feedback.
 
