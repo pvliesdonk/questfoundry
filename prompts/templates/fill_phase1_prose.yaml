@@ -61,6 +61,9 @@ system: |
   ## Recent Passages (Sliding Window)
   {sliding_window}
 
+  ## Continuity Warning
+  {continuity_warning}
+
   ## Lookahead
   {lookahead}
 

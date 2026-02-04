@@ -18,6 +18,8 @@ from questfoundry.observability.logging import get_logger
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
+log = get_logger(__name__)
+
 
 def get_spine_arc_id(graph: Graph) -> str | None:
     """Find the spine arc's node ID in the graph.
@@ -228,6 +230,136 @@ def format_sliding_window(
         lines.append("")
 
     return "\n".join(lines).strip() if lines else "(no previous passages)"
+
+
+def format_continuity_warning(
+    graph: Graph,
+    arc_id: str,
+    current_idx: int,
+    *,
+    entity_overlap_threshold: float = 0.0,
+) -> str:
+    """Warn when a passage transition is likely to feel like a hard cut.
+
+    This is a cheap, heuristic check intended to help FILL smooth transitions.
+    It looks at the immediately previous passage in the arc order and checks
+    for any overlap in entities or location. If there's no overlap and the
+    transition isn't marked as an explicit intersection pairing, we warn.
+
+    Args:
+        graph: Graph containing arc/passage/beat nodes.
+        arc_id: Arc being traversed.
+        current_idx: Index of the current passage in that arc order.
+        entity_overlap_threshold: Minimum Jaccard overlap required to avoid warning.
+            Default 0.0 means any shared entity avoids the warning.
+
+    Returns:
+        Warning text (markdown) or empty string when no warning is needed.
+    """
+
+    def _jaccard(a: set[str], b: set[str]) -> float:
+        if not a and not b:
+            return 1.0
+        u = a | b
+        return (len(a & b) / len(u)) if u else 0.0
+
+    def _entities_for(passage_id: str) -> set[str]:
+        passage = graph.get_node(passage_id) or {}
+        entities = passage.get("entities") or []
+        if not entities:
+            beat_id = passage.get("from_beat", "")
+            beat = graph.get_node(beat_id) if beat_id else {}
+            entities = (beat or {}).get("entities") or []
+        normalized: set[str] = set()
+        for e in entities:
+            if not e:
+                continue
+            eid = str(e)
+            normalized.add(eid if eid.startswith("entity::") else f"entity::{eid}")
+        return normalized
+
+    def _location_for(passage_id: str) -> str | None:
+        passage = graph.get_node(passage_id) or {}
+        beat_id = passage.get("from_beat", "")
+        beat = graph.get_node(beat_id) if beat_id else None
+        loc = (beat or {}).get("location")
+        if not loc:
+            return None
+        loc_id = str(loc)
+        return loc_id if loc_id.startswith("entity::") else f"entity::{loc_id}"
+
+    def _intersection_hint(prev_passage_id: str, cur_passage_id: str) -> bool:
+        prev = graph.get_node(prev_passage_id) or {}
+        cur = graph.get_node(cur_passage_id) or {}
+        prev_beat = prev.get("from_beat", "")
+        cur_beat = cur.get("from_beat", "")
+        if not prev_beat or not cur_beat:
+            return False
+        prev_b = graph.get_node(prev_beat) or {}
+        cur_b = graph.get_node(cur_beat) or {}
+        prev_group = set(prev_b.get("intersection_group") or [])
+        cur_group = set(cur_b.get("intersection_group") or [])
+        return (cur_beat in prev_group) or (prev_beat in cur_group)
+
+    passage_order = get_arc_passage_order(graph, arc_id)
+    if not passage_order or current_idx <= 0 or current_idx >= len(passage_order):
+        return ""
+
+    prev_passage_id = passage_order[current_idx - 1]
+    cur_passage_id = passage_order[current_idx]
+
+    prev_passage = graph.get_node(prev_passage_id) or {}
+    cur_passage = graph.get_node(cur_passage_id) or {}
+    if prev_passage.get("is_synthetic") or cur_passage.get("is_synthetic"):
+        return ""
+
+    cur_beat_id = cur_passage.get("from_beat", "")
+    cur_beat = graph.get_node(cur_beat_id) if cur_beat_id else None
+    if (cur_beat or {}).get("scene_type") == "micro_beat":
+        return ""
+
+    prev_entities = _entities_for(prev_passage_id)
+    cur_entities = _entities_for(cur_passage_id)
+    ent_overlap = _jaccard(prev_entities, cur_entities)
+    if ent_overlap > entity_overlap_threshold:
+        return ""
+
+    prev_loc = _location_for(prev_passage_id)
+    cur_loc = _location_for(cur_passage_id)
+    loc_shared = bool(prev_loc and cur_loc and prev_loc == cur_loc)
+    if loc_shared:
+        return ""
+
+    if _intersection_hint(prev_passage_id, cur_passage_id):
+        return ""
+
+    prev_raw = prev_passage.get("raw_id", prev_passage_id)
+    cur_raw = cur_passage.get("raw_id", cur_passage_id)
+    prev_sum = (prev_passage.get("summary") or "").strip()
+    cur_sum = (cur_passage.get("summary") or "").strip()
+
+    log.warning(
+        "fill_hard_transition_detected",
+        arc_id=arc_id,
+        prev_passage=prev_passage_id,
+        cur_passage=cur_passage_id,
+        shared_entities=len(prev_entities & cur_entities),
+        shared_location=loc_shared,
+    )
+
+    lines = [
+        "**Hard transition detected.** The previous and current beats share no obvious",
+        "entities or location in the graph. Smooth the cut in the opening lines:",
+        "- Echo one concrete image/action from the end of the previous passage, then pivot.",
+        "- Establish time/place quickly (one sensory anchor) before new information.",
+        "- Re-anchor POV with a bodily action or spoken line (don't jump straight into exposition).",
+        "",
+        f"Previous passage: `{prev_raw}` — {prev_sum}"
+        if prev_sum
+        else f"Previous passage: `{prev_raw}`",
+        f"Current passage: `{cur_raw}` — {cur_sum}" if cur_sum else f"Current passage: `{cur_raw}`",
+    ]
+    return "\n".join(lines).strip()
 
 
 def format_lookahead_context(
