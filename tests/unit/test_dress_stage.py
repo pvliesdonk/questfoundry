@@ -18,6 +18,7 @@ from questfoundry.models.dress import (
     DressPhase0Output,
     DressPhase1Output,
     DressPhase2Output,
+    DressPhaseResult,
     EntityVisualWithId,
     IllustrationBrief,
 )
@@ -133,6 +134,22 @@ class TestDressStageInit:
         stage = DressStage()
         with pytest.raises(DressStageError, match="project_path is required"):
             await stage.execute(MagicMock(), "test")
+
+    @pytest.mark.asyncio()
+    async def test_execute_sets_project_path_from_param(self, tmp_path: Path) -> None:
+        """Singleton stage should persist a resolved project_path for all phases."""
+        g = Graph()
+        g.set_last_stage("fill")
+        g.save(tmp_path / "graph.json")
+
+        stage = DressStage()
+
+        async def _phase_noop(_graph: Graph, _model: Any) -> DressPhaseResult:
+            assert stage.project_path == tmp_path
+            return DressPhaseResult(phase="noop", status="completed", detail="ok")
+
+        with patch.object(stage, "_phase_order", return_value=[(_phase_noop, "noop")]):
+            await stage.execute(MagicMock(), "test", project_path=tmp_path)
 
 
 class TestDressStagePrerequisites:
@@ -410,6 +427,7 @@ class TestPhase4Generate:
         mock_result = MagicMock()
         mock_result.image_data = b"fake_png_data"
         mock_result.content_type = "image/png"
+        mock_result.provider_metadata = {"quality": "high"}
 
         mock_provider = AsyncMock(spec=["generate"])
         mock_provider.generate = AsyncMock(return_value=mock_result)
@@ -425,6 +443,69 @@ class TestPhase4Generate:
         assert result.status == "completed"
         assert "1 images generated" in result.detail
         assert g.get_node("illustration::opening") is not None
+
+    @pytest.mark.asyncio()
+    async def test_writes_graph_after_each_image(self, tmp_path: Path) -> None:
+        """Phase 4 writes illustration nodes to graph.json incrementally."""
+        g = Graph()
+        g.create_node(
+            "art_direction::main",
+            {"type": "art_direction", "style": "ink", "aspect_ratio": "16:9"},
+        )
+
+        for pid in ("a", "b"):
+            g.create_node(
+                f"illustration_brief::{pid}",
+                {
+                    "type": "illustration_brief",
+                    "subject": f"Scene {pid}",
+                    "composition": "Wide shot",
+                    "mood": "foreboding",
+                    "caption": "Caption",
+                    "category": "scene",
+                    "entities": [],
+                },
+            )
+            g.create_node(f"passage::{pid}", {"type": "passage"})
+            g.add_edge("targets", f"illustration_brief::{pid}", f"passage::{pid}")
+
+        g.upsert_node(
+            "dress_meta::selection",
+            {
+                "type": "dress_meta",
+                "selected_briefs": ["illustration_brief::a", "illustration_brief::b"],
+                "total_briefs": 2,
+            },
+        )
+
+        mock_result_a = MagicMock()
+        mock_result_a.image_data = b"fake_png_a"
+        mock_result_a.content_type = "image/png"
+        mock_result_a.provider_metadata = {"quality": "high"}
+
+        mock_result_b = MagicMock()
+        mock_result_b.image_data = b"fake_png_b"
+        mock_result_b.content_type = "image/png"
+        mock_result_b.provider_metadata = {"quality": "high"}
+
+        mock_provider = AsyncMock(spec=["generate"])
+        mock_provider.generate = AsyncMock(side_effect=[mock_result_a, mock_result_b])
+
+        stage = DressStage(project_path=tmp_path, image_provider="openai/test")
+
+        with (
+            patch(
+                "questfoundry.pipeline.stages.dress.create_image_provider",
+                return_value=mock_provider,
+            ),
+            patch.object(g, "save", wraps=g.save) as save_mock,
+        ):
+            result = await stage._phase_4_generate(g, MagicMock())
+
+        assert result.status == "completed"
+        assert save_mock.call_count == 2
+        for call in save_mock.call_args_list:
+            assert call.args[0] == tmp_path / "graph.json"
 
     @pytest.mark.asyncio()
     async def test_no_provider_skips(self) -> None:
