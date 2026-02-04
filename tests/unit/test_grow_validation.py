@@ -12,6 +12,7 @@ from questfoundry.graph.grow_validation import (
     ValidationReport,
     check_all_endings_reachable,
     check_all_passages_reachable,
+    check_arc_divergence,
     check_commits_timing,
     check_dilemmas_resolved,
     check_gate_satisfiability,
@@ -641,6 +642,111 @@ class TestSpineArcExists:
         result = check_spine_arc_exists(graph)
         assert result.severity == "warn"
         assert "skipped" in result.message
+
+
+class TestArcDivergence:
+    def test_no_arcs(self) -> None:
+        graph = Graph.empty()
+        result = check_arc_divergence(graph)
+        assert result.severity == "pass"
+        assert "No arcs" in result.message
+
+    def test_no_spine_arc(self) -> None:
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::branch",
+            {"type": "arc", "raw_id": "branch", "arc_type": "branch", "paths": [], "sequence": []},
+        )
+        result = check_arc_divergence(graph)
+        assert result.severity == "warn"
+        assert "No spine arc" in result.message
+
+    def test_spine_with_empty_sequence(self) -> None:
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["path::p1"],
+                "sequence": [],
+            },
+        )
+        result = check_arc_divergence(graph)
+        assert result.severity == "warn"
+        assert "no sequence" in result.message.lower()
+
+    def test_no_branch_arcs(self) -> None:
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["path::p1"],
+                "sequence": ["beat::a"],
+            },
+        )
+        result = check_arc_divergence(graph)
+        assert result.severity == "pass"
+        assert "No branch arcs" in result.message
+
+    def test_low_divergence_warns(self) -> None:
+        graph = Graph.empty()
+        spine_seq = ["beat::a", "beat::b", "beat::c"]
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["path::p1"],
+                "sequence": spine_seq,
+            },
+        )
+        graph.create_node(
+            "arc::branch_0",
+            {
+                "type": "arc",
+                "raw_id": "branch_0",
+                "arc_type": "branch",
+                "paths": ["path::p2"],
+                "sequence": list(spine_seq),
+            },
+        )
+        result = check_arc_divergence(graph)
+        assert result.severity == "warn"
+        assert "Low divergence" in result.message
+
+    def test_sufficient_divergence_passes(self) -> None:
+        graph = Graph.empty()
+        spine_seq = ["beat::a", "beat::b", "beat::c", "beat::d"]
+        branch_seq = ["beat::a", "beat::b", "beat::x", "beat::y"]
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["path::p1"],
+                "sequence": spine_seq,
+            },
+        )
+        graph.create_node(
+            "arc::branch_0",
+            {
+                "type": "arc",
+                "raw_id": "branch_0",
+                "arc_type": "branch",
+                "paths": ["path::p2"],
+                "sequence": branch_seq,
+            },
+        )
+        result = check_arc_divergence(graph)
+        assert result.severity == "pass"
+        assert "sufficient divergence" in result.message
 
 
 class TestRunAllChecks:

@@ -596,6 +596,100 @@ def check_spine_arc_exists(graph: Graph) -> ValidationCheck:
     )
 
 
+def check_arc_divergence(
+    graph: Graph,
+    *,
+    min_exclusive_beats: int = 2,
+    max_shared_ratio: float = 0.9,
+) -> ValidationCheck:
+    """Warn when branch arcs are too similar to the spine arc.
+
+    Low divergence can produce a linear-feeling story even when multiple
+    dilemmas exist. This check compares each branch arc's beat sequence
+    against the spine arc and flags cases with too few exclusive beats
+    or extremely high overlap.
+
+    Args:
+        graph: Story graph.
+        min_exclusive_beats: Minimum beats in a branch arc not in spine.
+        max_shared_ratio: Maximum allowed fraction of branch beats shared
+            with the spine arc before warning.
+
+    Returns:
+        ValidationCheck with severity "warn" when divergence is insufficient.
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+    if not arc_nodes:
+        return ValidationCheck(
+            name="arc_divergence",
+            severity="pass",
+            message="No arcs to check",
+        )
+
+    spine_id = None
+    for arc_id, data in arc_nodes.items():
+        if data.get("arc_type") == "spine":
+            spine_id = arc_id
+            break
+
+    if not spine_id:
+        return ValidationCheck(
+            name="arc_divergence",
+            severity="warn",
+            message="No spine arc found; divergence check skipped",
+        )
+
+    spine_seq = arc_nodes[spine_id].get("sequence", [])
+    if not spine_seq:
+        return ValidationCheck(
+            name="arc_divergence",
+            severity="warn",
+            message="Spine arc has no sequence; divergence check skipped",
+        )
+
+    spine_set = set(spine_seq)
+    total_branches = 0
+    low_divergence: list[tuple[str, int, float]] = []
+
+    for arc_id, data in arc_nodes.items():
+        if arc_id == spine_id:
+            continue
+        seq = data.get("sequence", [])
+        if not seq:
+            continue
+        total_branches += 1
+        exclusive = [beat for beat in seq if beat not in spine_set]
+        exclusive_count = len(exclusive)
+        shared_ratio = 1 - (exclusive_count / len(seq))
+        if exclusive_count < min_exclusive_beats or shared_ratio >= max_shared_ratio:
+            low_divergence.append((arc_id, exclusive_count, shared_ratio))
+
+    if not total_branches:
+        return ValidationCheck(
+            name="arc_divergence",
+            severity="pass",
+            message="No branch arcs to check",
+        )
+
+    if low_divergence:
+        worst = max(low_divergence, key=lambda item: item[2])
+        return ValidationCheck(
+            name="arc_divergence",
+            severity="warn",
+            message=(
+                f"Low divergence in {len(low_divergence)}/{total_branches} branch arcs "
+                f"(min_exclusive_beats={min_exclusive_beats}, max_shared_ratio={max_shared_ratio:.2f}). "
+                f"Worst: {worst[0]} exclusive={worst[1]} shared_ratio={worst[2]:.2f}"
+            ),
+        )
+
+    return ValidationCheck(
+        name="arc_divergence",
+        severity="pass",
+        message="All branch arcs show sufficient divergence from spine",
+    )
+
+
 def build_passage_adjacency(graph: Graph) -> dict[str, list[str]]:
     """Build passage → successor passages adjacency list from choice nodes.
 
@@ -805,6 +899,7 @@ def run_all_checks(graph: Graph) -> ValidationReport:
         check_all_passages_reachable(graph),
         check_all_endings_reachable(graph),
         check_spine_arc_exists(graph),
+        check_arc_divergence(graph),
         check_dilemmas_resolved(graph),
         check_gate_satisfiability(graph),
         check_passage_dag_cycles(graph),
