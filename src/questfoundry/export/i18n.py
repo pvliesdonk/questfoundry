@@ -161,6 +161,19 @@ def get_output_language_instruction(language: str) -> str:
         return ""
     name = get_language_name(language)
     return (
-        f"Write all narrative content in {name}. "
-        f"Keep structural IDs, field names, and enums in English."
+        f"## Output Language: {name}\n"
+        f"Write ALL narrative content in {name}, including:\n"
+        f"- Entity concepts, notes, and descriptions\n"
+        f"- Dilemma questions, answers, and explanations\n"
+        f"- Path names and descriptions\n"
+        f"- Beat summaries\n"
+        f"- Consequence descriptions and narrative effects\n"
+        f"- Choice labels\n"
+        f"- Any prose or dialogue\n"
+        f"\n"
+        f"Keep these in English:\n"
+        f"- All IDs (entity_id, path_id, dilemma_id, beat_id, etc.)\n"
+        f"- Field names and JSON/YAML keys\n"
+        f"- Enum values (retained, cut, major, minor, advances, reveals, commits, complicates)\n"
+        f"- Entity categories (character, location, object, faction)\n"
     )
