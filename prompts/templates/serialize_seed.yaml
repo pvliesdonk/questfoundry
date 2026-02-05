@@ -118,7 +118,6 @@ system: |
   - path_importance must be exactly "major" or "minor" (lowercase)
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
   - disposition must be exactly "retained" or "cut"
-  {output_language_instruction}
 
   ## Output
 
