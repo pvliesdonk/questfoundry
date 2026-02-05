@@ -148,19 +148,39 @@ def get_output_language_instruction(language: str) -> str:
     """Build a prompt instruction for output language.
 
     Returns an empty string for English (no instruction needed).
-    For other languages, returns an instruction telling the LLM to
+    For other supported languages, returns an instruction telling the LLM to
     write player-facing content in the target language.
+
+    Unknown language codes return empty string to prevent prompt injection
+    from unsanitized user input.
 
     Args:
         language: ISO 639-1 language code.
 
     Returns:
-        Language instruction string, or empty string for English.
+        Language instruction string, or empty string for English/unknown codes.
     """
-    if language.lower() == "en":
+    lang_lower = language.lower()
+    if lang_lower == "en":
         return ""
-    name = get_language_name(language)
+    # Only allow known languages to prevent prompt injection
+    if lang_lower not in LANGUAGE_NAMES:
+        return ""
+    name = LANGUAGE_NAMES[lang_lower]
     return (
-        f"Write all narrative content in {name}. "
-        f"Keep structural IDs, field names, and enums in English."
+        f"## Output Language: {name}\n"
+        f"Write ALL narrative content in {name}, including:\n"
+        f"- Entity concepts, notes, and descriptions\n"
+        f"- Dilemma questions, answers, and explanations\n"
+        f"- Path names and descriptions\n"
+        f"- Beat summaries\n"
+        f"- Consequence descriptions and narrative effects\n"
+        f"- Choice labels\n"
+        f"- Any prose or dialogue\n"
+        f"\n"
+        f"Keep these in English:\n"
+        f"- All IDs (entity_id, path_id, dilemma_id, beat_id, etc.)\n"
+        f"- Field names and JSON/YAML keys\n"
+        f"- Enum values (retained, cut, major, minor, advances, reveals, commits, complicates)\n"
+        f"- Entity categories (character, location, object, faction)\n"
     )

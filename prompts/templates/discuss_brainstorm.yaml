@@ -82,6 +82,7 @@ system: |
   GOOD entity description:
   "Concept: Seasoned detective with sharp wit. Notes: Classical music lover,
   impeccable dresser - surface polish hiding relentless curiosity."
+  {output_language_instruction}
   {mode_section}
 
 non_interactive_section: |

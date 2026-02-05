@@ -44,6 +44,7 @@ system: |
   - Be specific about which answer is the "default path"
   - IMPORTANT: For each dilemma, list the central entity IDs exactly as defined in the entities section
   - If something wasn't discussed, don't invent it
+  {output_language_instruction}
 
   ## Output Format
   Write a narrative summary organized by the sections above.
