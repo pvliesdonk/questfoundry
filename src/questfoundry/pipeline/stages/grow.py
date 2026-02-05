@@ -2948,22 +2948,32 @@ class GrowStage:
     def _reachable_via_choices(
         self, graph: Graph, passage_nodes: dict[str, dict[str, Any]]
     ) -> set[str]:
-        """BFS from first spine passage via choice_to edges."""
-        # Find spine arc's first passage
-        arc_nodes = graph.get_nodes_by_type("arc")
-        start_passage: str | None = None
+        """BFS from story start via choice_to edges.
 
-        for _arc_id, arc_data in arc_nodes.items():
-            if arc_data.get("arc_type") == "spine":
-                sequence = arc_data.get("sequence", [])
-                if sequence:
-                    # First beat → its passage
-                    first_beat = sequence[0]
-                    for p_id, p_data in passage_nodes.items():
-                        if p_data.get("from_beat") == first_beat:
-                            start_passage = p_id
-                            break
-                break
+        If a synthetic prologue exists, it is the real story start and BFS
+        starts from there. Otherwise, falls back to the first spine passage.
+        """
+        # If synthetic prologue exists, it is the real start
+        prologue_id = "passage::prologue"
+        if prologue_id in passage_nodes:
+            start_passage = prologue_id
+            log.debug("prune_start_from_prologue", start=prologue_id)
+        else:
+            # Find spine arc's first passage
+            arc_nodes = graph.get_nodes_by_type("arc")
+            start_passage = None
+
+            for _arc_id, arc_data in arc_nodes.items():
+                if arc_data.get("arc_type") == "spine":
+                    sequence = arc_data.get("sequence", [])
+                    if sequence:
+                        # First beat → its passage
+                        first_beat = sequence[0]
+                        for p_id, p_data in passage_nodes.items():
+                            if p_data.get("from_beat") == first_beat:
+                                start_passage = p_id
+                                break
+                    break
 
         if not start_passage:
             log.warning("phase9_no_spine_arc", detail="Cannot BFS without spine; all passages kept")
