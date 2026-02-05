@@ -90,3 +90,11 @@ def test_continuity_warning_suppressed_for_synthetic_passage() -> None:
     graph, arc_id = _make_two_passages_graph(shared_entity=False)
     graph.update_node("passage::b", is_synthetic=True)
     assert format_continuity_warning(graph, arc_id, 1) == ""
+
+
+def test_continuity_warning_suppressed_for_gap_beat() -> None:
+    """Gap beats ARE the transition — they shouldn't trigger hard transition warnings."""
+    graph, arc_id = _make_two_passages_graph(shared_entity=False)
+    # Mark beat::b as a gap beat (created by GROW Phase 4b/4c)
+    graph.update_node("beat::b", is_gap_beat=True, transition_style="smooth")
+    assert format_continuity_warning(graph, arc_id, 1) == ""
