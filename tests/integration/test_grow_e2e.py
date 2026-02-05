@@ -162,7 +162,20 @@ class TestGrowFullPipeline:
     def test_all_phases_complete(self, pipeline_result: dict[str, Any]) -> None:
         """Verify the stage completes and returns the topology artifact."""
         result_dict = pipeline_result["result_dict"]
-        assert set(result_dict.keys()) == {"arcs", "beats", "passages", "choices", "codewords"}
+        expected_keys = {
+            "arc_count",
+            "passage_count",
+            "choice_count",
+            "codeword_count",
+            "overlay_count",
+            "spine_arc_id",
+            "arcs",
+            "beats",
+            "passages",
+            "choices",
+            "codewords",
+        }
+        assert set(result_dict.keys()) == expected_keys
 
     def test_arc_enumeration(self, pipeline_result: dict[str, Any]) -> None:
         """Verify 4 arcs are enumerated from 2 dilemmas x 2 paths."""

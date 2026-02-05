@@ -1708,7 +1708,20 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        assert set(result_dict.keys()) == {"arcs", "beats", "passages", "choices", "codewords"}
+        expected_keys = {
+            "arc_count",
+            "passage_count",
+            "choice_count",
+            "codeword_count",
+            "overlay_count",
+            "spine_arc_id",
+            "arcs",
+            "beats",
+            "passages",
+            "choices",
+            "codewords",
+        }
+        assert set(result_dict.keys()) == expected_keys
 
         # Should have created arcs
         assert len(result_dict["arcs"]) == 4  # 2x2 = 4 arcs
@@ -1734,7 +1747,20 @@ class TestPhaseIntegrationEndToEnd:
         mock_model = _make_grow_mock_model(graph)
         result_dict, _llm_calls, _tokens = await stage.execute(model=mock_model, user_prompt="")
 
-        assert set(result_dict.keys()) == {"arcs", "beats", "passages", "choices", "codewords"}
+        expected_keys = {
+            "arc_count",
+            "passage_count",
+            "choice_count",
+            "codeword_count",
+            "overlay_count",
+            "spine_arc_id",
+            "arcs",
+            "beats",
+            "passages",
+            "choices",
+            "codewords",
+        }
+        assert set(result_dict.keys()) == expected_keys
 
         assert len(result_dict["arcs"]) == 2  # 1 dilemma x 2 paths = 2 arcs
         assert len(result_dict["passages"]) == 4  # 4 beats

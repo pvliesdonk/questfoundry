@@ -56,7 +56,20 @@ class TestGrowStageExecute:
         assert llm_calls == 0
         assert tokens == 0
         # execute() returns the GROW artifact data (not telemetry)
-        assert set(result_dict.keys()) == {"arcs", "beats", "passages", "choices", "codewords"}
+        expected_keys = {
+            "arc_count",
+            "passage_count",
+            "choice_count",
+            "codeword_count",
+            "overlay_count",
+            "spine_arc_id",
+            "arcs",
+            "beats",
+            "passages",
+            "choices",
+            "codewords",
+        }
+        assert set(result_dict.keys()) == expected_keys
         assert result_dict["arcs"] == []
         assert result_dict["beats"] == []
         assert result_dict["passages"] == []
@@ -179,7 +192,20 @@ class TestGrowStageExecute:
     ) -> None:
         stage = GrowStage(project_path=tmp_project)
         result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
-        assert set(result_dict.keys()) == {"arcs", "beats", "passages", "choices", "codewords"}
+        expected_keys = {
+            "arc_count",
+            "passage_count",
+            "choice_count",
+            "codeword_count",
+            "overlay_count",
+            "spine_arc_id",
+            "arcs",
+            "beats",
+            "passages",
+            "choices",
+            "codewords",
+        }
+        assert set(result_dict.keys()) == expected_keys
 
 
 class TestGrowStagePhaseOrder:
