@@ -68,7 +68,7 @@ class TestGetOutputLanguageInstruction:
     def test_dutch_returns_instruction(self) -> None:
         result = get_output_language_instruction("nl")
         assert "Dutch" in result
-        assert "structural IDs" in result
+        assert "All IDs" in result  # Keep IDs in English
 
     def test_german_returns_instruction(self) -> None:
         result = get_output_language_instruction("de")
