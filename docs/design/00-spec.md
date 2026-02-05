@@ -513,6 +513,11 @@ beat:
   relationships: relationship_id[]
   location: entity_id | null              # primary location (assigned in SEED)
   location_alternatives: entity_id[]      # other valid locations (enables intersection flexibility)
+  # Gap beat fields (only present on beats created by GROW Phase 4b/4c)
+  is_gap_beat: boolean                    # true for beats inserted to fill narrative/pacing gaps
+  transition_style: smooth | cut          # guidance for FILL on how to handle the transition
+  bridges_from: beat_id | null            # beat this gap follows (traceability)
+  bridges_to: beat_id | null              # beat this gap precedes (traceability)
 ```
 
 **Lifecycle:** Initial beats created in SEED, mutated and new beats added in GROW. Not exported.
@@ -528,6 +533,13 @@ beat:
 | `micro_beat` | Transition, time passage, minor moment | Brief, 1 paragraph |
 
 Scene type is assigned during GROW (Phase 4: Gap Detection) to ensure pacing variety across arcs. GROW may propose additional beats to address pacing gaps (e.g., "three scenes in a row with no sequel").
+
+**Gap beats:** Beats created by GROW Phase 4b/4c to fill narrative or pacing gaps. Gap beats inherit `entities` and `location` from adjacent beats to maintain context. The `transition_style` field guides FILL:
+
+| Style | When Used | FILL Guidance |
+|-------|-----------|---------------|
+| `smooth` | Same location, shared entities, scene continuity | Flow naturally, echo imagery |
+| `cut` | Location change, scene type change, time jump | Establish new context quickly |
 
 **Beat types by path membership:**
 - **Single-path:** Serves one path's progression
