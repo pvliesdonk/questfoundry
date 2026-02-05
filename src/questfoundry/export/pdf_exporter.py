@@ -198,26 +198,44 @@ h1 {
 }
 
 /* Codex - two-column, compact layout */
-.codex {
+.codex h2 {
+    column-span: all;
+}
+
+.codex-content {
     columns: 2;
     column-gap: 1.5em;
 }
 
+.codex-type-section {
+    break-inside: avoid-column;
+    margin-bottom: 1.5em;
+}
+
+.codex-type-section h4 {
+    font-size: 10pt;
+    font-weight: bold;
+    font-variant: small-caps;
+    border-bottom: 0.5pt solid #999;
+    margin-bottom: 0.5em;
+    padding-bottom: 0.2em;
+}
+
 .codex-entry {
-    margin-bottom: 1em;
+    margin-bottom: 0.8em;
     break-inside: avoid;
 }
 
-.codex-entry h3 {
-    font-size: 10pt;
+.codex-entry h5 {
+    font-size: 9pt;
     font-weight: bold;
-    margin-bottom: 0.3em;
+    margin-bottom: 0.2em;
 }
 
 .codex-entry p {
-    font-size: 9pt;
+    font-size: 8pt;
     text-align: justify;
-    line-height: 1.4;
+    line-height: 1.35;
 }
 """
 
@@ -561,6 +579,9 @@ def _render_codex(codex_entries: list[ExportCodexEntry], ui: dict[str, str]) -> 
     For print media, we only include entries that have no visibility restrictions
     (visible_when is empty). Spoiler entries that require specific codewords are
     omitted since the reader can't dynamically unlock them in a physical book.
+
+    Entries are grouped by entity type (characters, locations, objects, factions)
+    and displayed in a two-column layout.
     """
     # Filter to only spoiler-free entries (no visibility restrictions)
     spoiler_free = [e for e in codex_entries if not e.visible_when]
@@ -570,22 +591,69 @@ def _render_codex(codex_entries: list[ExportCodexEntry], ui: dict[str, str]) -> 
 
     title = ui.get("codex", "Codex")
 
+    # Type display order and labels
+    type_order = ["character", "location", "object", "faction"]
+    type_labels = {
+        "character": "Characters",
+        "location": "Locations",
+        "object": "Objects",
+        "faction": "Factions",
+    }
+
+    # Group entries by entity type (extracted from entity_id prefix)
+    entries_by_type: dict[str, list[ExportCodexEntry]] = {}
+    for entry in spoiler_free:
+        # Extract type from entity_id (e.g., "character::maya" -> "character")
+        entity_type = entry.entity_id.split("::")[0] if "::" in entry.entity_id else "other"
+        entries_by_type.setdefault(entity_type, []).append(entry)
+
     parts: list[str] = ['<section class="appendix codex">']
     parts.append(f"<h2>{html.escape(title)}</h2>")
+    parts.append('<div class="codex-content">')
 
-    # Sort by rank, then title
-    sorted_entries = sorted(spoiler_free, key=lambda e: (e.rank, e.title))
+    # Render each type section in order
+    for entity_type in type_order:
+        entries = entries_by_type.get(entity_type)
+        if not entries:
+            continue
 
-    for entry in sorted_entries:
-        parts.append('<article class="codex-entry">')
-        parts.append(f"<h3>{html.escape(entry.title)}</h3>")
+        # Sort entries by rank, then title within each type
+        sorted_entries = sorted(entries, key=lambda e: (e.rank, e.title))
 
-        # Content
-        content_html = _format_prose(entry.content)
-        parts.append(content_html)
+        label = type_labels.get(entity_type, entity_type.title())
+        parts.append('<div class="codex-type-section">')
+        parts.append(f"<h4>{html.escape(label)}</h4>")
 
-        parts.append("</article>")
+        for entry in sorted_entries:
+            parts.append('<article class="codex-entry">')
+            parts.append(f"<h5>{html.escape(entry.title)}</h5>")
+            content_html = _format_prose(entry.content)
+            parts.append(content_html)
+            parts.append("</article>")
 
+        parts.append("</div>")
+
+    # Handle any other types not in the standard order
+    for entity_type, entries in entries_by_type.items():
+        if entity_type in type_order:
+            continue
+
+        sorted_entries = sorted(entries, key=lambda e: (e.rank, e.title))
+        label = entity_type.title()
+
+        parts.append('<div class="codex-type-section">')
+        parts.append(f"<h4>{html.escape(label)}</h4>")
+
+        for entry in sorted_entries:
+            parts.append('<article class="codex-entry">')
+            parts.append(f"<h5>{html.escape(entry.title)}</h5>")
+            content_html = _format_prose(entry.content)
+            parts.append(content_html)
+            parts.append("</article>")
+
+        parts.append("</div>")
+
+    parts.append("</div>")  # Close codex-content
     parts.append("</section>")
     return "\n".join(parts)
 
