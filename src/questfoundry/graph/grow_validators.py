@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         Phase2Output,
         Phase3Output,
         Phase4aOutput,
+        Phase4bOutput,
         Phase4fOutput,
         Phase8cOutput,
         Phase9bOutput,
@@ -172,6 +173,7 @@ def validate_phase8c_output(
 def validate_phase9_output(
     result: Phase9Output,
     valid_passage_ids: set[str],
+    expected_pairs: set[tuple[str, str]] | None = None,
 ) -> list[GrowValidationError]:
     """Validate Phase 9 choice labels.
 
@@ -180,6 +182,7 @@ def validate_phase9_output(
     - to_passage exists in graph
     """
     errors: list[GrowValidationError] = []
+    seen_pairs: set[tuple[str, str]] = set()
     for i, label in enumerate(result.labels):
         if label.from_passage not in valid_passage_ids:
             errors.append(
@@ -199,6 +202,80 @@ def validate_phase9_output(
                     available=sorted(valid_passage_ids)[:10],
                 )
             )
+        pair = (label.from_passage, label.to_passage)
+        if expected_pairs is not None and pair not in expected_pairs:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"labels.{i}",
+                    issue="Unexpected passage transition",
+                    provided=f"{label.from_passage}→{label.to_passage}",
+                    available=[f"{p[0]}→{p[1]}" for p in sorted(expected_pairs)[:10]],
+                )
+            )
+        if pair in seen_pairs:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"labels.{i}",
+                    issue="Duplicate passage transition",
+                    provided=f"{label.from_passage}→{label.to_passage}",
+                    available=[],
+                )
+            )
+        seen_pairs.add(pair)
+    if expected_pairs is not None:
+        missing = expected_pairs - seen_pairs
+        for pair in sorted(missing):
+            errors.append(
+                GrowValidationError(
+                    field_path="labels",
+                    issue="Missing label for passage transition",
+                    provided=f"{pair[0]}→{pair[1]}",
+                    available=[f"{p[0]}→{p[1]}" for p in sorted(expected_pairs)[:10]],
+                )
+            )
+    return errors
+
+
+def validate_phase4_output(
+    result: Phase4bOutput,
+    valid_path_ids: set[str],
+    valid_beat_ids: set[str],
+) -> list[GrowValidationError]:
+    """Validate Phase 4b/4c gap proposals.
+
+    Accepts unprefixed IDs if the prefixed version exists in valid IDs.
+    """
+    errors: list[GrowValidationError] = []
+    for i, gap in enumerate(result.gaps):
+        path_id = gap.path_id
+        if path_id not in valid_path_ids:
+            prefixed = f"path::{path_id}" if not path_id.startswith("path::") else path_id
+            if prefixed not in valid_path_ids:
+                errors.append(
+                    GrowValidationError(
+                        field_path=f"gaps.{i}.path_id",
+                        issue=f"Path ID not found: {gap.path_id}",
+                        provided=gap.path_id,
+                        available=sorted(valid_path_ids)[:10],
+                    )
+                )
+        for field_name, beat_id in (
+            ("after_beat", gap.after_beat),
+            ("before_beat", gap.before_beat),
+        ):
+            if not beat_id:
+                continue
+            if beat_id not in valid_beat_ids:
+                prefixed = f"beat::{beat_id}" if not beat_id.startswith("beat::") else beat_id
+                if prefixed not in valid_beat_ids:
+                    errors.append(
+                        GrowValidationError(
+                            field_path=f"gaps.{i}.{field_name}",
+                            issue=f"Beat ID not found: {beat_id}",
+                            provided=beat_id,
+                            available=sorted(valid_beat_ids)[:10],
+                        )
+                    )
     return errors
 
 
