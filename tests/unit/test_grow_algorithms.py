@@ -3251,3 +3251,228 @@ class TestSelectEntitiesForArc:
         graph = self._make_graph()
         result = select_entities_for_arc(graph, "path::trust__yes", ["beat::b1", "beat::b2"])
         assert result == sorted(result)
+
+
+# ---------------------------------------------------------------------------
+# Phase 9d: collapse_linear_passages
+# ---------------------------------------------------------------------------
+
+
+class TestCollapseLinearPassages:
+    def _make_linear_chain_graph(self, chain_length: int = 4) -> Graph:
+        """Create a graph with a linear passage chain."""
+        graph = Graph.empty()
+
+        # Create beats
+        for i in range(chain_length):
+            graph.create_node(
+                f"beat::b{i}",
+                {
+                    "type": "beat",
+                    "raw_id": f"b{i}",
+                    "summary": f"Beat {i}",
+                    "scene_type": "scene",
+                    "location": "location::castle",
+                    "entities": ["entity::hero"],
+                },
+            )
+
+        # Create passages
+        for i in range(chain_length):
+            graph.create_node(
+                f"passage::b{i}",
+                {
+                    "type": "passage",
+                    "raw_id": f"b{i}",
+                    "from_beat": f"beat::b{i}",
+                    "summary": f"Passage {i}",
+                },
+            )
+            graph.add_edge("passage_from", f"passage::b{i}", f"beat::b{i}")
+
+        # Create linear choice edges (single outgoing each except last)
+        for i in range(chain_length - 1):
+            choice_id = f"choice::c{i}"
+            graph.create_node(
+                choice_id,
+                {"type": "choice", "raw_id": f"c{i}", "label": f"Continue {i}"},
+            )
+            graph.add_edge("choice_from", choice_id, f"passage::b{i}")
+            graph.add_edge("choice_to", choice_id, f"passage::b{i + 1}")
+
+        return graph
+
+    def test_collapses_linear_chain(self) -> None:
+        """Collapses a linear chain of passages into a merged passage."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = self._make_linear_chain_graph(chain_length=4)
+
+        result = collapse_linear_passages(graph, min_chain_length=3)
+
+        assert result.chains_collapsed >= 1
+        assert result.passages_removed >= 3
+
+        # Original passages should be gone
+        assert graph.get_node("passage::b0") is None
+        assert graph.get_node("passage::b1") is None
+        assert graph.get_node("passage::b2") is None
+
+        # Merged passage should exist
+        merged = [
+            p for pid, p in graph.get_nodes_by_type("passage").items() if p.get("merged_from")
+        ]
+        assert len(merged) >= 1
+
+    def test_merged_passage_has_correct_fields(self) -> None:
+        """Merged passage has from_beats, primary_beat, merged_from, etc."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = self._make_linear_chain_graph(chain_length=4)
+
+        collapse_linear_passages(graph, min_chain_length=3)
+
+        # Find merged passage
+        merged_passages = [
+            (pid, p)
+            for pid, p in graph.get_nodes_by_type("passage").items()
+            if p.get("merged_from")
+        ]
+        assert len(merged_passages) >= 1
+
+        _pid, merged = merged_passages[0]
+        assert "from_beats" in merged
+        assert "primary_beat" in merged
+        assert "merged_from" in merged
+        assert len(merged["from_beats"]) >= 3
+        assert merged["primary_beat"] in merged["from_beats"]
+
+    def test_no_collapse_below_threshold(self) -> None:
+        """Does not collapse chains shorter than min_chain_length."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = self._make_linear_chain_graph(chain_length=2)
+
+        result = collapse_linear_passages(graph, min_chain_length=3)
+
+        assert result.chains_collapsed == 0
+        assert result.passages_removed == 0
+        # Original passages should still exist
+        assert graph.get_node("passage::b0") is not None
+        assert graph.get_node("passage::b1") is not None
+
+    def test_no_collapse_with_hard_cut(self) -> None:
+        """Does not collapse chains containing a hard cut transition."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = self._make_linear_chain_graph(chain_length=4)
+        # Mark middle beat as hard cut
+        graph.update_node("beat::b2", transition_style="cut")
+
+        result = collapse_linear_passages(graph, min_chain_length=3)
+
+        assert result.chains_collapsed == 0
+
+    def test_no_collapse_with_different_locations(self) -> None:
+        """Does not collapse chains spanning different locations."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = self._make_linear_chain_graph(chain_length=4)
+        # Change middle beat location
+        graph.update_node("beat::b2", location="location::forest")
+
+        result = collapse_linear_passages(graph, min_chain_length=3)
+
+        assert result.chains_collapsed == 0
+
+    def test_exempts_ending_passages(self) -> None:
+        """Does not include ending passages in collapse."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = self._make_linear_chain_graph(chain_length=4)
+        # Mark last passage as ending
+        graph.update_node("passage::b3", is_ending=True)
+
+        collapse_linear_passages(graph, min_chain_length=3)
+
+        # Should still collapse the first 3 (b0, b1, b2)
+        # The chain stops before b3 because it's exempt
+        # Whether this triggers depends on implementation
+        # At minimum, b3 should not be in any merged passage
+        merged_passages = [
+            p for pid, p in graph.get_nodes_by_type("passage").items() if p.get("merged_from")
+        ]
+        for merged in merged_passages:
+            assert "passage::b3" not in merged.get("merged_from", [])
+
+    def test_respects_max_chain_length(self) -> None:
+        """Does not create merged passages exceeding max_chain_length."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = self._make_linear_chain_graph(chain_length=8)
+
+        collapse_linear_passages(graph, min_chain_length=3, max_chain_length=4)
+
+        # Check that no merged passage has more than 4 source beats
+        merged_passages = [
+            p for pid, p in graph.get_nodes_by_type("passage").items() if p.get("from_beats")
+        ]
+        for merged in merged_passages:
+            assert len(merged["from_beats"]) <= 4
+
+    def test_redirects_incoming_choices(self) -> None:
+        """Incoming choice edges are redirected to merged passage."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = self._make_linear_chain_graph(chain_length=4)
+
+        # Add an external passage with TWO choices (so it's not part of a linear chain)
+        # One choice points to the chain start, the other to another target
+        graph.create_node("beat::ext", {"type": "beat", "raw_id": "ext", "summary": "External"})
+        graph.create_node("beat::other", {"type": "beat", "raw_id": "other", "summary": "Other"})
+        graph.create_node(
+            "passage::ext",
+            {"type": "passage", "raw_id": "ext", "from_beat": "beat::ext"},
+        )
+        graph.create_node(
+            "passage::other",
+            {"type": "passage", "raw_id": "other", "from_beat": "beat::other"},
+        )
+
+        # Choice 1: to chain start
+        graph.create_node(
+            "choice::ext_to_chain",
+            {"type": "choice", "raw_id": "ext_to_chain", "label": "Go to chain"},
+        )
+        graph.add_edge("choice_from", "choice::ext_to_chain", "passage::ext")
+        graph.add_edge("choice_to", "choice::ext_to_chain", "passage::b0")
+
+        # Choice 2: to other passage (makes ext non-linear)
+        graph.create_node(
+            "choice::ext_to_other",
+            {"type": "choice", "raw_id": "ext_to_other", "label": "Go other"},
+        )
+        graph.add_edge("choice_from", "choice::ext_to_other", "passage::ext")
+        graph.add_edge("choice_to", "choice::ext_to_other", "passage::other")
+
+        collapse_linear_passages(graph, min_chain_length=3)
+
+        # The external choice should now point to the merged passage
+        choice_to_edges = graph.get_edges(edge_type="choice_to", from_id="choice::ext_to_chain")
+        assert len(choice_to_edges) == 1
+        target = choice_to_edges[0]["to"]
+        # Target should be a merged passage, not the original passage::b0
+        merged_node = graph.get_node(target)
+        assert merged_node is not None
+        assert merged_node.get("from_beats") is not None, "Should point to merged passage"
+
+    def test_empty_graph_returns_zero(self) -> None:
+        """Empty graph returns zero counts."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = Graph.empty()
+
+        result = collapse_linear_passages(graph)
+
+        assert result.chains_collapsed == 0
+        assert result.passages_removed == 0

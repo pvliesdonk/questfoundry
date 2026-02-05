@@ -187,6 +187,7 @@ class GrowStage:
             (self._phase_9_choices, "choices"),
             (self._phase_9b_fork_beats, "fork_beats"),
             (self._phase_9c_hub_spokes, "hub_spokes"),
+            (self._phase_9d_collapse_passages, "collapse_passages"),
             (self._phase_10_validation, "validation"),
             (self._phase_11_prune, "prune"),
         ]
@@ -2861,6 +2862,37 @@ class GrowStage:
             detail=f"Inserted {hubs_inserted} hub(s) with spokes",
             llm_calls=llm_calls,
             tokens_used=tokens,
+        )
+
+    async def _phase_9d_collapse_passages(
+        self,
+        graph: Graph,
+        model: BaseChatModel,  # noqa: ARG002
+    ) -> GrowPhaseResult:
+        """Phase 9d: Collapse linear passage chains into merged passages.
+
+        Linear chains (3+ consecutive single-outgoing passages) create a passive
+        reading experience. This phase merges them into single passages with
+        multiple source beats, giving FILL richer context for continuous prose.
+        """
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        result = collapse_linear_passages(graph, min_chain_length=3, max_chain_length=5)
+
+        if result.chains_collapsed == 0:
+            return GrowPhaseResult(
+                phase="collapse_passages",
+                status="completed",
+                detail="No linear passage chains to collapse",
+            )
+
+        return GrowPhaseResult(
+            phase="collapse_passages",
+            status="completed",
+            detail=(
+                f"Collapsed {result.chains_collapsed} chain(s), "
+                f"removed {result.passages_removed} passages"
+            ),
         )
 
     async def _phase_10_validation(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG002

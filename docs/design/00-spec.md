@@ -191,14 +191,29 @@ Player-facing unit. The prose the player reads.
 ```yaml
 passage:
   id: string
+  # Single-beat passage (standard)
   from_beat: beat_id | null    # traceability (ignored by SHIP)
   summary: string | null       # pre-FILL (ignored by SHIP)
   prose: string | null         # post-FILL (required for SHIP)
+  # Merged passage fields (only present after Phase 9d collapse)
+  from_beats: beat_id[]        # all source beats (replaces from_beat)
+  primary_beat: beat_id        # main beat for ID derivation and summary
+  merged_from: passage_id[]    # original passages that were collapsed
+  transition_points:           # guidance for FILL on transitions
+    - index: int               # position in from_beats list
+      style: smooth | cut      # transition style
+      bridge_entities: entity_id[]
+      note: string             # human-readable guidance
 ```
 
 A passage is complete when `prose` exists.
 
-**Lifecycle:** Created in GROW (1:1 from beats), prose added in FILL. Exported.
+**Lifecycle:** Created in GROW (1:1 from beats or N:1 after collapse), prose added in FILL. Exported.
+
+**Single vs Merged passages:**
+- **Single-beat:** Uses `from_beat` field, created in Phase 8a
+- **Merged:** Uses `from_beats`, `primary_beat`, `merged_from`, created in Phase 9d
+- Code should check `from_beats` first, fall back to `from_beat`
 
 **Structural properties (derived):**
 - Start passage: no incoming choice edges
