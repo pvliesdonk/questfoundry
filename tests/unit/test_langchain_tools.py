@@ -8,11 +8,15 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from questfoundry.tools.langchain_tools import (
+    PresentOptionItem,
+    PresentOptionsArgs,
     get_all_research_tools,
     get_corpus_tools,
     get_document,
+    get_interactive_tools,
     get_web_tools,
     list_clusters,
+    present_options,
     search_corpus,
     web_fetch,
     web_search,
@@ -348,3 +352,117 @@ class TestErrorHandling:
 
             data = json.loads(result)
             assert data["result"] == "error"
+
+
+class TestPresentOptionsSchema:
+    """Test present_options Pydantic schema generates proper JSON schema."""
+
+    def test_present_options_is_tool(self) -> None:
+        """present_options should have LangChain tool metadata."""
+        assert hasattr(present_options, "name")
+        assert present_options.name == "present_options"
+
+    def test_present_options_has_args_schema(self) -> None:
+        """present_options should use PresentOptionsArgs schema."""
+        # The tool should have our Pydantic schema attached
+        assert present_options.args_schema is PresentOptionsArgs
+
+    def test_option_item_schema_has_explicit_properties(self) -> None:
+        """PresentOptionItem schema should have explicit properties, not additionalProperties."""
+        schema = PresentOptionItem.model_json_schema()
+        assert "properties" in schema
+        assert "label" in schema["properties"]
+        assert "description" in schema["properties"]
+        assert "recommended" in schema["properties"]
+        # Most importantly: should NOT use additionalProperties
+        assert "additionalProperties" not in schema
+
+    def test_options_args_schema_has_nested_properties(self) -> None:
+        """PresentOptionsArgs schema should have proper nested structure."""
+        schema = PresentOptionsArgs.model_json_schema()
+        assert "properties" in schema
+        assert "question" in schema["properties"]
+        assert "options" in schema["properties"]
+        # Verify options is an array of items with proper refs
+        options_schema = schema["properties"]["options"]
+        assert options_schema["type"] == "array"
+
+    def test_get_interactive_tools(self) -> None:
+        """get_interactive_tools should return present_options tool."""
+        tools = get_interactive_tools()
+        assert len(tools) == 1
+        assert tools[0].name == "present_options"
+
+
+class TestPresentOptionsExecution:
+    """Test present_options tool execution."""
+
+    @pytest.mark.asyncio
+    async def test_present_options_delegates(self) -> None:
+        """present_options should delegate to PresentOptionsTool."""
+        with patch("questfoundry.tools.langchain_tools._present_options_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(
+                return_value=json.dumps(
+                    {"result": "success", "selected": "Mystery", "action": "continue"}
+                )
+            )
+
+            result = await present_options.ainvoke(
+                {
+                    "question": "What genre?",
+                    "options": [
+                        {"label": "Mystery", "description": "Focus on clues"},
+                        {"label": "Horror", "description": "Focus on fear"},
+                    ],
+                }
+            )
+
+            # Verify the underlying tool was called
+            mock_tool.execute.assert_called_once()
+            call_args = mock_tool.execute.call_args[0][0]
+            assert call_args["question"] == "What genre?"
+            assert len(call_args["options"]) == 2
+            assert call_args["options"][0]["label"] == "Mystery"
+
+            # Verify result
+            assert "success" in result
+            assert "Mystery" in result
+
+    @pytest.mark.asyncio
+    async def test_present_options_converts_pydantic_to_dict(self) -> None:
+        """present_options should convert Pydantic models to dicts."""
+        with patch("questfoundry.tools.langchain_tools._present_options_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value=json.dumps({"result": "success"}))
+
+            await present_options.ainvoke(
+                {
+                    "question": "Test?",
+                    "options": [
+                        {"label": "A", "recommended": True},
+                        {"label": "B"},
+                    ],
+                }
+            )
+
+            call_args = mock_tool.execute.call_args[0][0]
+            # Options should be plain dicts, not Pydantic models
+            assert isinstance(call_args["options"], list)
+            assert isinstance(call_args["options"][0], dict)
+            # recommended=True should be preserved
+            assert call_args["options"][0]["recommended"] is True
+            # description=None should be excluded (exclude_none=True)
+            assert "description" not in call_args["options"][1]
+
+    @pytest.mark.asyncio
+    async def test_present_options_returns_string(self) -> None:
+        """present_options must return a string."""
+        with patch("questfoundry.tools.langchain_tools._present_options_tool") as mock_tool:
+            mock_tool.execute = AsyncMock(return_value='{"result": "skipped"}')
+
+            result = await present_options.ainvoke(
+                {
+                    "question": "Test?",
+                    "options": [{"label": "A"}, {"label": "B"}],
+                }
+            )
+            assert isinstance(result, str)
