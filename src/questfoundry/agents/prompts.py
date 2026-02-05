@@ -160,6 +160,7 @@ def get_brainstorm_discuss_prompt(
     research_tools_available: bool = True,
     interactive: bool = True,
     size_profile: SizeProfile | None = None,
+    output_language_instruction: str = "",
 ) -> str:
     """Build the BRAINSTORM discuss prompt with vision context.
 
@@ -169,6 +170,7 @@ def get_brainstorm_discuss_prompt(
         interactive: Whether running in interactive mode. When False,
             includes instructions for autonomous decision-making.
         size_profile: Size profile for parameterizing count guidance.
+        output_language_instruction: Language instruction for non-English output.
 
     Returns:
         System prompt string for the BRAINSTORM discuss agent.
@@ -178,17 +180,20 @@ def get_brainstorm_discuss_prompt(
         research_tools_available=research_tools_available,
         interactive=interactive,
         vision_context=vision_context,
+        output_language_instruction=output_language_instruction,
         **size_template_vars(size_profile),
     )
 
 
 def get_brainstorm_summarize_prompt(
     size_profile: SizeProfile | None = None,
+    output_language_instruction: str = "",
 ) -> str:
     """Build the BRAINSTORM summarize prompt.
 
     Args:
         size_profile: Size profile for parameterizing count guidance.
+        output_language_instruction: Language instruction for non-English output.
 
     Returns:
         System prompt string for the BRAINSTORM summarize call.
@@ -196,7 +201,10 @@ def get_brainstorm_summarize_prompt(
     loader = _get_loader()
     template = loader.load("summarize_brainstorm")
     prompt = PromptTemplate.from_template(template.system)
-    return prompt.format(**size_template_vars(size_profile))
+    return prompt.format(
+        output_language_instruction=output_language_instruction,
+        **size_template_vars(size_profile),
+    )
 
 
 def get_seed_discuss_prompt(
@@ -266,19 +274,25 @@ def get_seed_summarize_prompt(
     )
 
 
-def get_brainstorm_serialize_prompt() -> str:
+def get_brainstorm_serialize_prompt(
+    output_language_instruction: str = "",
+) -> str:
     """Build the BRAINSTORM serialize prompt.
 
     This prompt includes explicit instructions for mapping prose categories
     (Characters, Locations, Objects, Factions) to Entity objects with the
     correct type field.
 
+    Args:
+        output_language_instruction: Language instruction for non-English output.
+
     Returns:
         System prompt string for the BRAINSTORM serialize call.
     """
     loader = _get_loader()
     template = loader.load("serialize_brainstorm")
-    return template.system
+    prompt = PromptTemplate.from_template(template.system)
+    return prompt.format(output_language_instruction=output_language_instruction)
 
 
 def get_seed_serialize_prompt(

@@ -24,6 +24,7 @@ from questfoundry.agents import (
     serialize_to_artifact,
     summarize_discussion,
 )
+from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph import Graph
 from questfoundry.graph.mutations import (
     BrainstormMutationError,
@@ -224,6 +225,9 @@ class BrainstormStage:
         vision_context = self._get_vision_context(resolved_path)
         log.debug("brainstorm_vision_loaded", context_length=len(vision_context))
 
+        # Get language instruction (empty string for English)
+        lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
+
         # Get research tools (and interactive tools when in interactive mode)
         tools = get_all_research_tools()
         if interactive:
@@ -236,6 +240,7 @@ class BrainstormStage:
             research_tools_available=bool(tools),
             interactive=interactive,
             size_profile=size_profile,
+            output_language_instruction=lang_instruction,
         )
 
         # Phase 1: Discuss
@@ -267,7 +272,10 @@ class BrainstormStage:
 
         # Phase 2: Summarize (use summarize_model if provided)
         log.debug("brainstorm_phase", phase="summarize")
-        summarize_prompt = get_brainstorm_summarize_prompt(size_profile=size_profile)
+        summarize_prompt = get_brainstorm_summarize_prompt(
+            size_profile=size_profile,
+            output_language_instruction=lang_instruction,
+        )
         brief, summarize_tokens = await summarize_discussion(
             model=summarize_model or model,
             messages=messages,
@@ -287,7 +295,9 @@ class BrainstormStage:
 
         # Phase 3: Serialize (use serialize_model if provided)
         log.debug("brainstorm_phase", phase="serialize")
-        serialize_prompt = get_brainstorm_serialize_prompt()
+        serialize_prompt = get_brainstorm_serialize_prompt(
+            output_language_instruction=lang_instruction,
+        )
         artifact, serialize_tokens = await serialize_to_artifact(
             model=serialize_model or model,
             brief=brief,

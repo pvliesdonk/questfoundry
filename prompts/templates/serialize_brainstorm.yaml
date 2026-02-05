@@ -62,13 +62,14 @@ system: |
   - Use snake_case for all IDs (lowercase with underscores)
   - Each dilemma must have exactly ONE answer with is_default_path=true
   - CRITICAL: answer_id must be UNIQUE identifiers (e.g., "guilty", "framed"), NOT entity references
+  {output_language_instruction}
 
   ## Output
 
   Return ONLY valid JSON matching BrainstormOutput schema:
-  {
+  {{
     "entities": [...],
     "dilemmas": [...]
-  }
+  }}
 
 components: []
