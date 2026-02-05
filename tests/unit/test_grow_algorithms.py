@@ -1344,6 +1344,9 @@ class TestPhase11Integration:
                 "grants": [],
             },
         )
+        graph.add_edge("choice_from", "choice::prologue_to_spine", "passage::prologue")
+        graph.add_edge("choice_to", "choice::prologue_to_spine", "passage::spine_1")
+
         graph.create_node(
             "choice::prologue_to_branch",
             {
@@ -1355,6 +1358,8 @@ class TestPhase11Integration:
                 "grants": [],
             },
         )
+        graph.add_edge("choice_from", "choice::prologue_to_branch", "passage::prologue")
+        graph.add_edge("choice_to", "choice::prologue_to_branch", "passage::branch_1")
 
         # Create choice: spine_1 → spine_2
         graph.create_node(
@@ -1368,6 +1373,8 @@ class TestPhase11Integration:
                 "grants": [],
             },
         )
+        graph.add_edge("choice_from", "choice::spine_continue", "passage::spine_1")
+        graph.add_edge("choice_to", "choice::spine_continue", "passage::spine_2")
 
         stage = GrowStage()
         mock_model = MagicMock()

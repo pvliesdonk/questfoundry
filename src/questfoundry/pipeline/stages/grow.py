@@ -117,6 +117,7 @@ class GrowStage:
         self._lang_instruction: str = ""
 
     CHECKPOINT_DIR = "snapshots"
+    PROLOGUE_ID = "passage::prologue"
 
     # Type for async phase functions: (Graph, BaseChatModel) -> GrowPhaseResult
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[GrowPhaseResult]]
@@ -2231,7 +2232,7 @@ class GrowStage:
                 orphan_count=len(orphan_starts),
                 orphans=orphan_starts[:5],
             )
-            prologue_id = "passage::prologue"
+            prologue_id = self.PROLOGUE_ID
             graph.create_node(
                 prologue_id,
                 {
@@ -2954,10 +2955,9 @@ class GrowStage:
         starts from there. Otherwise, falls back to the first spine passage.
         """
         # If synthetic prologue exists, it is the real start
-        prologue_id = "passage::prologue"
-        if prologue_id in passage_nodes:
-            start_passage = prologue_id
-            log.debug("prune_start_from_prologue", start=prologue_id)
+        if self.PROLOGUE_ID in passage_nodes:
+            start_passage = self.PROLOGUE_ID
+            log.debug("prune_start_from_prologue", start=self.PROLOGUE_ID)
         else:
             # Find spine arc's first passage
             arc_nodes = graph.get_nodes_by_type("arc")
