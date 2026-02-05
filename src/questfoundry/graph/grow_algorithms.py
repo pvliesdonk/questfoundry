@@ -798,6 +798,8 @@ def _redirect_edges_for_merge(graph: Graph, chain: list[str], merged_id: str) ->
         # Redirect to merged passage
         graph.remove_edge("choice_to", edge["from"], edge["to"])
         graph.add_edge("choice_to", choice_id, merged_id)
+        # Also update the choice node's to_passage attribute
+        graph.update_node(choice_id, to_passage=merged_id)
 
     # Find outgoing choices (from last passage)
     choice_from_edges = graph.get_edges(edge_type="choice_from", to_id=last_passage)
@@ -813,6 +815,8 @@ def _redirect_edges_for_merge(graph: Graph, chain: list[str], merged_id: str) ->
         # Redirect from merged passage
         graph.remove_edge("choice_from", edge["from"], edge["to"])
         graph.add_edge("choice_from", choice_id, merged_id)
+        # Also update the choice node's from_passage attribute
+        graph.update_node(choice_id, from_passage=merged_id)
 
     # Delete internal choices (between chain passages)
     for i, pid in enumerate(chain[:-1]):
