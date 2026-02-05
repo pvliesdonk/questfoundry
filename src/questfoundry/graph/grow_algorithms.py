@@ -441,6 +441,403 @@ def collapse_linear_beats(graph: Graph, *, min_run_length: int = 2) -> CollapseR
 
 
 # ---------------------------------------------------------------------------
+# Phase 9d: Collapse linear passages
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PassageCollapseResult:
+    """Summary of linear-passage collapsing."""
+
+    chains_collapsed: int
+    passages_removed: int
+
+
+@dataclass
+class TransitionPoint:
+    """Transition guidance for FILL between beats in a merged passage."""
+
+    index: int  # Position in from_beats list (after which beat)
+    style: str  # "smooth" or "cut"
+    bridge_entities: list[str]  # Entities bridging the transition
+    note: str  # Human-readable guidance
+
+
+def collapse_linear_passages(
+    graph: Graph,
+    *,
+    min_chain_length: int = 3,
+    max_chain_length: int = 5,
+) -> PassageCollapseResult:
+    """Collapse linear passage chains into merged passages.
+
+    A "linear chain" is a sequence of passages where each has exactly one
+    outgoing choice leading to the next passage. This creates a merged
+    passage with multiple source beats, providing FILL with richer context
+    for writing continuous prose.
+
+    Args:
+        graph: Story graph with passage and choice nodes.
+        min_chain_length: Minimum chain length to collapse (default 3).
+        max_chain_length: Maximum beats per merged passage (default 5).
+
+    Returns:
+        PassageCollapseResult with counts of collapsed chains and removed passages.
+    """
+    passages = graph.get_nodes_by_type("passage")
+    if not passages:
+        return PassageCollapseResult(chains_collapsed=0, passages_removed=0)
+
+    # Build passage adjacency (via choice edges)
+    adjacency = _build_passage_choice_adjacency(graph)
+    outgoing_count = _build_passage_outgoing_count(graph)
+    exempt_passages = _build_collapse_exempt_passages(graph, passages)
+
+    # Find all linear chains
+    chains = _find_linear_chains(
+        passages,
+        adjacency,
+        outgoing_count,
+        exempt_passages,
+        min_length=min_chain_length,
+        max_length=max_chain_length,
+    )
+
+    if not chains:
+        return PassageCollapseResult(chains_collapsed=0, passages_removed=0)
+
+    removed_passages: set[str] = set()
+
+    for chain in chains:
+        if not _should_collapse_chain(graph, chain):
+            continue
+
+        merged_id = _create_merged_passage(graph, chain)
+        if not merged_id:
+            continue
+
+        _redirect_edges_for_merge(graph, chain, merged_id)
+
+        # Remove original passages (except they're now part of merged)
+        for pid in chain:
+            removed_passages.add(pid)
+            graph.delete_node(pid, cascade=True)
+
+    # Update arc sequences to remove collapsed passages
+    if removed_passages:
+        _update_arc_sequences(graph, removed_passages)
+
+    return PassageCollapseResult(
+        chains_collapsed=len([c for c in chains if _should_collapse_chain(graph, c)]),
+        passages_removed=len(removed_passages),
+    )
+
+
+def _build_passage_choice_adjacency(graph: Graph) -> dict[str, list[str]]:
+    """Build passage → successor passages mapping via choice edges."""
+    adjacency: dict[str, list[str]] = {}
+    choice_from_edges = graph.get_edges(edge_type="choice_from")
+    choice_to_edges = graph.get_edges(edge_type="choice_to")
+
+    # Build choice → (from_passage, to_passage) mapping
+    choice_from: dict[str, str] = {}
+    choice_to: dict[str, str] = {}
+    for edge in choice_from_edges:
+        choice_from[edge["from"]] = edge["to"]
+    for edge in choice_to_edges:
+        choice_to[edge["from"]] = edge["to"]
+
+    # Build adjacency from choices
+    for choice_id, from_passage in choice_from.items():
+        to_passage = choice_to.get(choice_id)
+        if to_passage:
+            adjacency.setdefault(from_passage, []).append(to_passage)
+
+    return adjacency
+
+
+def _build_passage_outgoing_count(graph: Graph) -> dict[str, int]:
+    """Count outgoing choices per passage."""
+    outgoing: dict[str, int] = {}
+    choice_from_edges = graph.get_edges(edge_type="choice_from")
+    for edge in choice_from_edges:
+        passage_id = edge["to"]
+        outgoing[passage_id] = outgoing.get(passage_id, 0) + 1
+    return outgoing
+
+
+def _build_collapse_exempt_passages(
+    graph: Graph, passages: dict[str, dict[str, object]]
+) -> set[str]:
+    """Build set of passages exempt from collapse.
+
+    Exempt passages:
+    - Climax/resolution beats (narrative_function in {"confront", "resolve"})
+    - Ending passages (is_ending=True)
+    - Passages with transition_style="cut" in their beat
+    """
+    beats = graph.get_nodes_by_type("beat")
+    exempt: set[str] = set()
+
+    for pid, pdata in passages.items():
+        # Check ending status
+        if pdata.get("is_ending"):
+            exempt.add(pid)
+            continue
+
+        # Check beat properties
+        beat_id = pdata.get("from_beat")
+        if not beat_id:
+            continue
+        beat = beats.get(str(beat_id), {})
+
+        # Exempt confront/resolve beats
+        if beat.get("narrative_function") in {"confront", "resolve"}:
+            exempt.add(pid)
+
+        # Exempt passages where beat has hard cut transition
+        if beat.get("transition_style") == "cut":
+            exempt.add(pid)
+
+    return exempt
+
+
+def _find_linear_chains(
+    passages: dict[str, dict[str, object]],
+    adjacency: dict[str, list[str]],
+    outgoing_count: dict[str, int],
+    exempt: set[str],
+    min_length: int,
+    max_length: int,
+) -> list[list[str]]:
+    """Find linear passage chains suitable for collapsing.
+
+    A chain is a sequence where each passage has exactly one outgoing choice.
+    """
+    chains: list[list[str]] = []
+    visited: set[str] = set()
+
+    def _is_linear(pid: str) -> bool:
+        return outgoing_count.get(pid, 0) == 1 and pid not in exempt
+
+    # Start from passages that are linear but have non-linear predecessors
+    # (chain starts) or no predecessors
+    incoming: dict[str, list[str]] = {}
+    for source, targets in adjacency.items():
+        for target in targets:
+            incoming.setdefault(target, []).append(source)
+
+    for pid in passages:
+        if pid in visited:
+            continue
+        if not _is_linear(pid):
+            continue
+
+        # Check if this is a chain start (no incoming or incoming is non-linear)
+        preds = incoming.get(pid, [])
+        is_start = not preds or all(not _is_linear(p) for p in preds)
+        if not is_start:
+            continue
+
+        # Walk the chain
+        chain: list[str] = [pid]
+        visited.add(pid)
+        current = pid
+
+        while len(chain) < max_length:
+            successors = adjacency.get(current, [])
+            if len(successors) != 1:
+                break
+            next_p = successors[0]
+            if next_p in visited or not _is_linear(next_p):
+                break
+            chain.append(next_p)
+            visited.add(next_p)
+            current = next_p
+
+        if len(chain) >= min_length:
+            chains.append(chain)
+
+    return chains
+
+
+def _should_collapse_chain(graph: Graph, chain: list[str]) -> bool:
+    """Determine if a chain should be collapsed based on continuity.
+
+    Criteria:
+    - Scene continuity: Same or compatible locations
+    - No hard cuts in gap beats within the chain
+    """
+    if len(chain) < 2:
+        return False
+
+    passages = {pid: graph.get_node(pid) or {} for pid in chain}
+    beats = {}
+    for pid, pdata in passages.items():
+        beat_id = pdata.get("from_beat")
+        if beat_id:
+            beats[pid] = graph.get_node(str(beat_id)) or {}
+
+    # Check for hard cuts
+    for pid in chain[1:]:  # Skip first
+        beat = beats.get(pid, {})
+        if beat.get("transition_style") == "cut":
+            return False
+
+    # Check location continuity (allow if all same or if locations are None)
+    locations = set()
+    for pid in chain:
+        beat = beats.get(pid, {})
+        loc = beat.get("location")
+        if loc:
+            locations.add(loc)
+
+    # More than one distinct location = don't collapse
+    return len(locations) <= 1
+
+
+def _create_merged_passage(graph: Graph, chain: list[str]) -> str | None:
+    """Create a merged passage from a chain of passages.
+
+    Returns the new passage ID, or None if creation fails.
+    """
+    if not chain:
+        return None
+
+    passages = [graph.get_node(pid) or {} for pid in chain]
+    beat_ids = [str(p.get("from_beat", "")) for p in passages if p.get("from_beat")]
+
+    if not beat_ids:
+        return None
+
+    # Primary beat is first non-gap beat, or just first beat
+    beats = [graph.get_node(bid) or {} for bid in beat_ids]
+    primary_idx = next(
+        (i for i, b in enumerate(beats) if not b.get("is_gap_beat")),
+        0,
+    )
+    primary_beat_id = beat_ids[primary_idx]
+    primary_beat = beats[primary_idx]
+
+    # Build transition points for gap beats
+    transition_points: list[dict[str, object]] = []
+    for i, (_bid, beat) in enumerate(zip(beat_ids[1:], beats[1:], strict=True), 1):
+        if beat.get("is_gap_beat") or beat.get("bridges_from"):
+            transition_points.append(
+                {
+                    "index": i,
+                    "style": beat.get("transition_style", "smooth"),
+                    "bridge_entities": beat.get("entities", []),
+                    "note": beat.get("summary", ""),
+                }
+            )
+
+    # Collect all entities from all beats
+    all_entities: list[str] = []
+    for beat in beats:
+        all_entities.extend(beat.get("entities") or [])
+    all_entities = list(dict.fromkeys(all_entities))  # Deduplicate
+
+    # Generate merged passage ID
+    primary_raw = primary_beat.get("raw_id", "merged")
+    merged_raw = f"merged_{primary_raw}"
+    merged_id = f"passage::{merged_raw}"
+
+    # Ensure unique ID
+    counter = 1
+    while graph.get_node(merged_id):
+        merged_id = f"passage::{merged_raw}_{counter}"
+        counter += 1
+
+    # Create merged passage node
+    graph.create_node(
+        merged_id,
+        {
+            "type": "passage",
+            "raw_id": merged_id.removeprefix("passage::"),
+            "from_beats": beat_ids,
+            "primary_beat": primary_beat_id,
+            "merged_from": chain,
+            "transition_points": transition_points,
+            "summary": primary_beat.get("summary", ""),
+            "entities": all_entities,
+            "prose": None,
+        },
+    )
+
+    # Add passage_from edges for all source beats
+    for bid in beat_ids:
+        graph.add_edge("passage_from", merged_id, bid)
+
+    log.info(
+        "passage_collapsed",
+        merged_id=merged_id,
+        source_passages=chain,
+        beats=beat_ids,
+    )
+
+    return merged_id
+
+
+def _redirect_edges_for_merge(graph: Graph, chain: list[str], merged_id: str) -> None:
+    """Redirect choice edges to point to/from the merged passage."""
+    first_passage = chain[0]
+    last_passage = chain[-1]
+
+    # Find incoming choices (pointing to first passage)
+    choice_to_edges = graph.get_edges(edge_type="choice_to", to_id=first_passage)
+    for edge in choice_to_edges:
+        choice_id = edge["from"]
+        # Check if this choice is internal to the chain
+        choice_from = graph.get_edges(edge_type="choice_from", from_id=choice_id)
+        if choice_from:
+            source = choice_from[0]["to"]
+            if source in chain:
+                # Internal choice - will be deleted
+                continue
+        # Redirect to merged passage
+        graph.remove_edge("choice_to", edge["from"], edge["to"])
+        graph.add_edge("choice_to", choice_id, merged_id)
+
+    # Find outgoing choices (from last passage)
+    choice_from_edges = graph.get_edges(edge_type="choice_from", to_id=last_passage)
+    for edge in choice_from_edges:
+        choice_id = edge["from"]
+        # Check if this choice is internal to the chain
+        choice_to = graph.get_edges(edge_type="choice_to", from_id=choice_id)
+        if choice_to:
+            target = choice_to[0]["to"]
+            if target in chain:
+                # Internal choice - will be deleted
+                continue
+        # Redirect from merged passage
+        graph.remove_edge("choice_from", edge["from"], edge["to"])
+        graph.add_edge("choice_from", choice_id, merged_id)
+
+    # Delete internal choices (between chain passages)
+    for i, pid in enumerate(chain[:-1]):
+        next_pid = chain[i + 1]
+        # Find choice connecting pid → next_pid
+        choice_from_edges = graph.get_edges(edge_type="choice_from", to_id=pid)
+        for edge in choice_from_edges:
+            choice_id = edge["from"]
+            choice_to = graph.get_edges(edge_type="choice_to", from_id=choice_id)
+            if choice_to and choice_to[0]["to"] == next_pid:
+                graph.delete_node(choice_id, cascade=True)
+
+
+def _update_arc_sequences(graph: Graph, removed_passages: set[str]) -> None:  # noqa: ARG001
+    """Update arc sequences after passage collapse.
+
+    Note: Arc sequences contain beat IDs, not passage IDs.
+    Collapsed passages don't affect arc sequences since beats remain intact.
+    This function is a placeholder for future extensions.
+    """
+    # Arc sequences contain beat IDs, not passage IDs - no updates needed
+    _ = graph  # Silence unused warning
+
+
+# ---------------------------------------------------------------------------
 # Phase 5: Arc Enumeration
 # ---------------------------------------------------------------------------
 
