@@ -9,6 +9,7 @@ Requires the optional `pdf` dependency: `uv pip install questfoundry[pdf]`
 
 from __future__ import annotations
 
+import hashlib
 import html
 import random
 from typing import TYPE_CHECKING
@@ -301,9 +302,11 @@ def _build_passage_numbering(passages: list[ExportPassage]) -> dict[str, int]:
     # Get other passage IDs (excluding start)
     other_ids = sorted(p.id for p in passages if p.id != start_id)
 
-    # Create reproducible random seed from passage IDs
+    # Create reproducible random seed from passage IDs using hashlib for cross-session determinism
+    # (Python's hash() is randomized per process via PYTHONHASHSEED)
     all_ids = sorted(p.id for p in passages)
-    seed = hash(tuple(all_ids)) % (2**32)
+    id_string = "|".join(all_ids)
+    seed = int(hashlib.md5(id_string.encode()).hexdigest(), 16) % (2**32)
     rng = random.Random(seed)
 
     # Assign numbers 2..N to other passages randomly
@@ -469,7 +472,18 @@ def _render_passage(
 
 
 def _format_prose(prose: str) -> str:
-    """Format prose text as HTML paragraphs."""
+    """Format prose text as HTML paragraphs.
+
+    Double newlines (\\n\\n) split paragraphs into separate <p> tags.
+    Single newlines within a paragraph become <br> tags.
+    Empty paragraphs (whitespace-only) are filtered out.
+
+    Args:
+        prose: Raw prose text with newlines.
+
+    Returns:
+        HTML string with <p> tags for each paragraph.
+    """
     paragraphs = prose.strip().split("\n\n")
     formatted = []
     for p in paragraphs:

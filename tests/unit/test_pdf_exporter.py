@@ -130,6 +130,20 @@ class TestPassageNumbering:
 
         assert numbering == {"only": 1}
 
+    def test_no_start_passage_uses_first(self) -> None:
+        """When no passage has is_start=True, first passage gets number 1."""
+        passages = [
+            ExportPassage(id="passage::alpha", prose="Alpha."),
+            ExportPassage(id="passage::beta", prose="Beta."),
+            ExportPassage(id="passage::gamma", prose="Gamma."),
+        ]
+        numbering = _build_passage_numbering(passages)
+
+        # First passage (alphabetically sorted) should be 1
+        assert numbering["passage::alpha"] == 1
+        # All passages should have unique numbers
+        assert len(set(numbering.values())) == 3
+
 
 class TestCodewordNameFormatting:
     """Tests for _format_codeword_name helper."""
