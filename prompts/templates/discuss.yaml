@@ -73,25 +73,17 @@ research_tools_section: |
   Use these tools when helpful, but don't overuse them - focus on the creative discussion.
 
   ## Structured Options (Interactive Mode)
-  When offering the user a choice between distinct options, ALWAYS use the
-  `present_options` tool. NEVER write numbered lists in your message text —
-  the tool provides proper formatting and input handling.
+  When offering the user a choice between distinct options, INVOKE the
+  `present_options` tool through function calling. Do NOT write numbered
+  lists or option text in your message — call the tool and it handles display.
   - Use for genre, tone, audience, or scope questions with 2-4 distinct options
   - The user can select by number or type a custom response
   - Mark your recommended option when you have a preference
   - Don't overuse - open discussion is often better than multiple-choice
 
-  Example:
-  ```
-  present_options(
-    question="What genre direction fits your idea best?",
-    options=[
-      {"label": "Mystery", "description": "Focus on investigation", "recommended": true},
-      {"label": "Horror", "description": "Focus on dread and fear"},
-      {"label": "Gothic Drama", "description": "Focus on atmosphere"}
-    ]
-  )
-  ```
+  IMPORTANT: Call the tool through the function calling interface. Do NOT
+  output the tool call as text in your response. The tool will display
+  options to the user and return their selection to you.
 
 size_presets_section: |
   ## Story Size Presets
