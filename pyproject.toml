@@ -88,6 +88,9 @@ viz = [
     "networkx>=3.0",
     "graphviz>=0.20",
 ]
+pdf = [
+    "weasyprint>=62.0",
+]
 
 [project.scripts]
 qf = "questfoundry.cli:app"
@@ -160,6 +163,8 @@ module = [
     "langchain_google_genai.*",
     "ifcraftcorpus.*",
     "pvlwebtools.*",
+    "weasyprint",
+    "weasyprint.*",
 ]
 ignore_missing_imports = true
 
