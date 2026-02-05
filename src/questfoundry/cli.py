@@ -1500,7 +1500,7 @@ def _run_ship(
 
     Args:
         project_path: Path to the project directory.
-        export_format: Export format name (json, twee, html).
+        export_format: Export format name (json, twee, html, pdf).
         output_dir: Custom output directory.
 
     Returns:
@@ -1546,7 +1546,7 @@ def ship(
         typer.Option(
             "--format",
             "-f",
-            help="Export format: json, twee, html.",
+            help="Export format: json, twee, html, pdf.",
         ),
     ] = "twee",
     output: Annotated[

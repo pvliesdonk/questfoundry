@@ -222,7 +222,7 @@ class TestShipStage:
 
         stage = ShipStage(project)
         with pytest.raises(ShipStageError, match="Unknown export format"):
-            stage.execute(export_format="pdf")
+            stage.execute(export_format="docx")
 
     def test_whitespace_prose_raises(self, tmp_path: Path) -> None:
         """Whitespace-only prose should be rejected."""
