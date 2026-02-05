@@ -20,6 +20,7 @@ Usage:
 from __future__ import annotations
 
 from langchain_core.tools import BaseTool, tool
+from pydantic import BaseModel, Field
 
 from questfoundry.tools.present_options import PresentOptionsTool
 from questfoundry.tools.research.corpus_tools import (
@@ -36,6 +37,31 @@ _list_clusters_tool = ListClustersTool()
 _web_search_tool = WebSearchTool()
 _web_fetch_tool = WebFetchTool()
 _present_options_tool = PresentOptionsTool()
+
+
+# Pydantic models for present_options tool schema
+# Using explicit models ensures LangChain generates proper JSON schema
+# with explicit properties instead of additionalProperties.
+class PresentOptionItem(BaseModel):
+    """A single option to present to the user."""
+
+    label: str = Field(..., description="Short option name (1-5 words)")
+    description: str | None = Field(None, description="Brief explanation of this choice")
+    recommended: bool = Field(False, description="True if this is your recommended option")
+
+
+class PresentOptionsArgs(BaseModel):
+    """Input schema for present_options tool."""
+
+    question: str = Field(
+        ..., description="The question to ask the user. Should be clear and specific."
+    )
+    options: list[PresentOptionItem] = Field(
+        ...,
+        min_length=2,
+        max_length=4,
+        description="2-4 options for the user to choose from.",
+    )
 
 
 @tool
@@ -142,8 +168,8 @@ async def web_fetch(url: str, extract_mode: str = "markdown") -> str:
     return await _web_fetch_tool.execute({"url": url, "extract_mode": extract_mode})
 
 
-@tool
-async def present_options(question: str, options: list[dict[str, str | bool]]) -> str:
+@tool(args_schema=PresentOptionsArgs)
+async def present_options(question: str, options: list[PresentOptionItem]) -> str:
     """Present structured choices to the user during conversation.
 
     Use when offering clear alternatives for decisions like genre, tone,
@@ -155,26 +181,16 @@ async def present_options(question: str, options: list[dict[str, str | bool]]) -
 
     Args:
         question: The question to ask the user. Should be clear and specific.
-        options: 2-4 options, each with:
-            - label (required): Short option name (1-5 words)
-            - description (optional): Brief explanation of this choice
-            - recommended (optional): True if this is your recommended option
+        options: 2-4 options, each with label, optional description, and optional recommended flag.
 
     Returns:
         JSON string with user's selection:
         - {"result": "success", "selected": "...", "action": "..."}
         - {"result": "skipped", "reason": "...", "action": "..."}
-
-    Example:
-        present_options(
-            question="What genre fits your haunted mansion idea?",
-            options=[
-                {"label": "Mystery", "description": "Focus on clues", "recommended": True},
-                {"label": "Horror", "description": "Focus on fear"},
-            ]
-        )
     """
-    return await _present_options_tool.execute({"question": question, "options": options})
+    # Convert Pydantic models to dicts for the underlying tool
+    options_dicts = [opt.model_dump(exclude_none=True) for opt in options]
+    return await _present_options_tool.execute({"question": question, "options": options_dicts})
 
 
 def get_all_research_tools() -> list[BaseTool]:
