@@ -21,28 +21,31 @@ def dress_graph() -> Graph:
         },
     )
     g.create_node(
-        "entity::protagonist",
+        "character::protagonist",
         {
             "type": "entity",
             "raw_id": "protagonist",
+            "category": "character",
             "entity_type": "character",
             "concept": "A young scholar seeking forbidden knowledge",
         },
     )
     g.create_node(
-        "entity::aldric",
+        "character::aldric",
         {
             "type": "entity",
             "raw_id": "aldric",
+            "category": "character",
             "entity_type": "character",
             "concept": "A former court advisor with hidden motives",
         },
     )
     g.create_node(
-        "entity::bridge",
+        "location::bridge",
         {
             "type": "entity",
             "raw_id": "bridge",
+            "category": "location",
             "entity_type": "location",
             "concept": "Ancient stone bridge spanning a chasm",
         },
@@ -63,7 +66,7 @@ def dress_graph() -> Graph:
             "raw_id": "opening",
             "from_beat": "beat::opening",
             "prose": "The wind howled across the ancient stone bridge...",
-            "entities": ["entity::protagonist", "entity::bridge"],
+            "entities": ["character::protagonist", "location::bridge"],
         },
     )
     g.create_node(
@@ -90,9 +93,9 @@ class TestFormatVisionAndEntities:
 
         result = format_vision_and_entities(dress_graph)
         assert "Characters" in result
-        assert "entity::protagonist" in result
+        assert "character::protagonist" in result
         assert "Locations" in result
-        assert "entity::bridge" in result
+        assert "location::bridge" in result
 
     def test_empty_graph(self) -> None:
         from questfoundry.graph.dress_context import format_vision_and_entities
@@ -130,7 +133,7 @@ class TestFormatPassageForBrief:
         result = format_passage_for_brief(dress_graph, "passage::opening")
         assert "wind howled" in result
         assert "establishing" in result
-        assert "entity::protagonist" in result
+        assert "character::protagonist" in result
 
     def test_nonexistent_passage(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_passage_for_brief
@@ -142,7 +145,7 @@ class TestFormatEntityForCodex:
     def test_includes_entity_details(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_entity_for_codex
 
-        result = format_entity_for_codex(dress_graph, "entity::aldric")
+        result = format_entity_for_codex(dress_graph, "character::aldric")
         assert "aldric" in result
         assert "character" in result
         assert "court advisor" in result
@@ -150,13 +153,13 @@ class TestFormatEntityForCodex:
     def test_includes_related_codewords(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_entity_for_codex
 
-        result = format_entity_for_codex(dress_graph, "entity::aldric")
+        result = format_entity_for_codex(dress_graph, "character::aldric")
         assert "met_aldric" in result
 
     def test_nonexistent_entity(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_entity_for_codex
 
-        assert format_entity_for_codex(dress_graph, "entity::nonexistent") == ""
+        assert format_entity_for_codex(dress_graph, "character::nonexistent") == ""
 
 
 class TestFormatEntityVisualsForPassage:

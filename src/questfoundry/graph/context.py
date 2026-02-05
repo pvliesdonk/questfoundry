@@ -14,12 +14,13 @@ if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
     from questfoundry.models.seed import SeedOutput
 
-# Standard entity categories for BRAINSTORM/SEED stages
-_ENTITY_CATEGORIES = ["character", "location", "object", "faction"]
+# Entity categories - used as scope prefixes for entity IDs
+# Format: category::name (e.g., character::pim, location::manor)
+ENTITY_CATEGORIES = frozenset(["character", "location", "object", "faction"])
 
 # Scope prefixes for typed IDs (disambiguates ID types for LLM)
-# Full word prefixes for semantic clarity (recommended by prompt engineering analysis)
-SCOPE_ENTITY = "entity"
+# Note: Entities use category as prefix (character::, location::, etc.)
+# rather than a generic "entity::" prefix
 SCOPE_DILEMMA = "dilemma"
 SCOPE_PATH = "path"
 
@@ -204,13 +205,100 @@ def normalize_scoped_id(raw_id: str, scope: str) -> str:
 
     Args:
         raw_id: ID that may or may not already have the scope prefix.
-        scope: The scope type (e.g., 'dilemma', 'path', 'entity').
+        scope: The scope type (e.g., 'dilemma', 'path').
 
     Returns:
         ID with scope prefix guaranteed (e.g., 'dilemma::mentor_trust').
     """
     prefix = f"{scope}::"
     return raw_id if raw_id.startswith(prefix) else f"{prefix}{raw_id}"
+
+
+def is_entity_id(scoped_id: str) -> bool:
+    """Check if an ID has an entity category prefix.
+
+    Entity IDs use category as their prefix (character::, location::, etc.)
+    rather than a generic "entity::" prefix.
+
+    Args:
+        scoped_id: An ID to check.
+
+    Returns:
+        True if the ID starts with a valid entity category prefix.
+
+    Examples:
+        >>> is_entity_id("character::pim")
+        True
+        >>> is_entity_id("location::manor")
+        True
+        >>> is_entity_id("dilemma::trust")
+        False
+        >>> is_entity_id("pim")
+        False
+    """
+    scope, _ = parse_scoped_id(scoped_id)
+    return scope in ENTITY_CATEGORIES
+
+
+def format_entity_id(category: str, raw_id: str) -> str:
+    """Create a category-prefixed entity ID.
+
+    Entity IDs use the category as their prefix for semantic clarity:
+    - character::pim (not entity::char_pim)
+    - location::manor (not entity::loc_manor)
+
+    Args:
+        category: Entity category (character, location, object, faction).
+        raw_id: Raw entity name without prefix.
+
+    Returns:
+        Category-prefixed entity ID.
+
+    Raises:
+        ValueError: If category is not a valid entity category.
+
+    Examples:
+        >>> format_entity_id("character", "pim")
+        'character::pim'
+        >>> format_entity_id("location", "manor")
+        'location::manor'
+    """
+    if category not in ENTITY_CATEGORIES:
+        raise ValueError(
+            f"Invalid entity category '{category}'. "
+            f"Must be one of: {', '.join(sorted(ENTITY_CATEGORIES))}"
+        )
+    # Strip any existing prefix from raw_id
+    if "::" in raw_id:
+        raw_id = raw_id.rsplit("::", 1)[-1]
+    return f"{category}::{raw_id}"
+
+
+def parse_entity_id(entity_id: str) -> tuple[str, str]:
+    """Parse a category-prefixed entity ID into (category, raw_id).
+
+    Args:
+        entity_id: An entity ID (e.g., 'character::pim').
+
+    Returns:
+        Tuple of (category, raw_id).
+
+    Raises:
+        ValueError: If entity_id doesn't have a valid category prefix.
+
+    Examples:
+        >>> parse_entity_id("character::pim")
+        ('character', 'pim')
+        >>> parse_entity_id("location::manor")
+        ('location', 'manor')
+    """
+    scope, raw_id = parse_scoped_id(entity_id)
+    if scope not in ENTITY_CATEGORIES:
+        raise ValueError(
+            f"Entity ID '{entity_id}' has invalid category prefix '{scope}'. "
+            f"Must be one of: {', '.join(sorted(ENTITY_CATEGORIES))}"
+        )
+    return scope, raw_id
 
 
 def parse_hierarchical_path_id(path_id: str) -> tuple[str, str]:
@@ -487,12 +575,12 @@ def _format_seed_valid_ids(graph: Graph) -> str:
         lines.append("Use these for `entity_id`, `entities`, and `location` fields:")
         lines.append("")
 
-        for category in _ENTITY_CATEGORIES:
+        for category in ENTITY_CATEGORIES:
             if category in by_category:
                 cat_count = len(by_category[category])
                 lines.append(f"**{category.title()}s ({cat_count}):**")
                 for raw_id in sorted(by_category[category]):
-                    lines.append(f"  - `{normalize_scoped_id(raw_id, SCOPE_ENTITY)}`")
+                    lines.append(f"  - `{category}::{raw_id}`")
                 lines.append("")
 
     # Dilemmas with answers
@@ -628,12 +716,12 @@ def format_retained_entity_ids(
         "",
     ]
 
-    for category in _ENTITY_CATEGORIES:
+    for category in ENTITY_CATEGORIES:
         if category in by_category:
             cat_count = len(by_category[category])
             lines.append(f"**{category.title()}s ({cat_count}):**")
             for raw_id in sorted(by_category[category]):
-                lines.append(f"  - `{normalize_scoped_id(raw_id, SCOPE_ENTITY)}`")
+                lines.append(f"  - `{category}::{raw_id}`")
             lines.append("")
 
     return "\n".join(lines)
@@ -647,7 +735,7 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
     dilemmas). Simpler than serialize manifest - just lists IDs without
     validation context.
 
-    Note: Entities with unknown entity_type (not in _ENTITY_CATEGORIES) are
+    Note: Entities with unknown category (not in ENTITY_CATEGORIES) are
     excluded from the manifest since they shouldn't appear in BRAINSTORM output.
 
     Args:
@@ -660,18 +748,19 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
     entities = graph.get_nodes_by_type("entity")
     by_category: dict[str, list[str]] = {}
     for node in entities.values():
-        cat = node.get("entity_type", "unknown")
+        # Support both 'category' (new) and 'entity_type' (legacy) field names
+        cat = node.get("category") or node.get("entity_type", "unknown")
         raw_id = node.get("raw_id", "")
         if raw_id:
             by_category.setdefault(cat, []).append(raw_id)
 
     # Format entity manifest (only standard categories)
     entity_lines: list[str] = []
-    for category in _ENTITY_CATEGORIES:
+    for category in ENTITY_CATEGORIES:
         if category in by_category:
             entity_lines.append(f"**{category.title()}s:**")
             for raw_id in sorted(by_category[category]):
-                entity_lines.append(f"  - `{normalize_scoped_id(raw_id, SCOPE_ENTITY)}`")
+                entity_lines.append(f"  - `{category}::{raw_id}`")
             entity_lines.append("")  # Blank line between categories
 
     # Collect dilemma IDs

@@ -36,6 +36,7 @@ from questfoundry.agents import (
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
+from questfoundry.graph.context import ENTITY_CATEGORIES, strip_scope_prefix
 from questfoundry.graph.dress_context import (
     format_art_direction_context,
     format_entity_for_codex,
@@ -466,8 +467,7 @@ class DressStage:
 
         # Phase 3: Serialize
         entity_ids = "\n".join(
-            f"- {edata.get('raw_id', eid.removeprefix('entity::'))}"
-            for eid, edata in entities.items()
+            f"- {edata.get('raw_id', strip_scope_prefix(eid))}" for eid, edata in entities.items()
         )
         serialize_template = loader.load("dress_serialize")
         serialize_prompt = serialize_template.system.format(
@@ -1479,8 +1479,6 @@ def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
     Returns:
         Populated :class:`ImageBrief`.
     """
-    from questfoundry.graph.context import strip_scope_prefix
-
     art_dir = graph.get_node("art_direction::main") or {}
 
     entity_fragments: list[str] = []
@@ -1492,7 +1490,13 @@ def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
             if frag:
                 # Include the display name so the distiller can match
                 # "Bailey" in the subject to "Bailey (ch_bailey): ..."
-                entity_node = graph.get_node(f"entity::{raw_eid}")
+                # Try all category prefixes to find the entity node
+                entity_node = None
+                for category in ENTITY_CATEGORIES:
+                    candidate = graph.get_node(f"{category}::{raw_eid}")
+                    if candidate:
+                        entity_node = candidate
+                        break
                 name = ""
                 if entity_node:
                     concept = entity_node.get("concept", "")
