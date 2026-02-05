@@ -197,25 +197,27 @@ h1 {
     letter-spacing: 0.05em;
 }
 
-/* Codex */
+/* Codex - two-column, compact layout */
+.codex {
+    columns: 2;
+    column-gap: 1.5em;
+}
+
 .codex-entry {
-    margin-bottom: 2em;
+    margin-bottom: 1em;
+    break-inside: avoid;
 }
 
 .codex-entry h3 {
-    font-size: 12pt;
+    font-size: 10pt;
     font-weight: bold;
-    margin-bottom: 0.5em;
+    margin-bottom: 0.3em;
 }
 
 .codex-entry p {
-    text-align: justify;
-}
-
-.codex-visibility {
     font-size: 9pt;
-    color: #666;
-    font-style: italic;
+    text-align: justify;
+    line-height: 1.4;
 }
 """
 
@@ -554,14 +556,25 @@ def _render_codeword_checklist(codewords: list[ExportCodeword], ui: dict[str, st
 
 
 def _render_codex(codex_entries: list[ExportCodexEntry], ui: dict[str, str]) -> str:
-    """Render the codex appendix."""
+    """Render the codex appendix with only spoiler-free entries.
+
+    For print media, we only include entries that have no visibility restrictions
+    (visible_when is empty). Spoiler entries that require specific codewords are
+    omitted since the reader can't dynamically unlock them in a physical book.
+    """
+    # Filter to only spoiler-free entries (no visibility restrictions)
+    spoiler_free = [e for e in codex_entries if not e.visible_when]
+
+    if not spoiler_free:
+        return ""
+
     title = ui.get("codex", "Codex")
 
     parts: list[str] = ['<section class="appendix codex">']
     parts.append(f"<h2>{html.escape(title)}</h2>")
 
     # Sort by rank, then title
-    sorted_entries = sorted(codex_entries, key=lambda e: (e.rank, e.title))
+    sorted_entries = sorted(spoiler_free, key=lambda e: (e.rank, e.title))
 
     for entry in sorted_entries:
         parts.append('<article class="codex-entry">')
@@ -570,14 +583,6 @@ def _render_codex(codex_entries: list[ExportCodexEntry], ui: dict[str, str]) -> 
         # Content
         content_html = _format_prose(entry.content)
         parts.append(content_html)
-
-        # Visibility hint (if restricted)
-        if entry.visible_when:
-            requires = ui.get("requires_codeword", "Requires")
-            codeword_names = ", ".join(_format_codeword_name(cw) for cw in entry.visible_when)
-            parts.append(
-                f'<p class="codex-visibility">{requires}: {html.escape(codeword_names)}</p>'
-            )
 
         parts.append("</article>")
 

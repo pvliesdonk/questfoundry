@@ -401,8 +401,15 @@ class TestCodexAppendix:
         assert alpha_pos < zebra_pos
         assert beta_pos < zebra_pos
 
-    def test_visibility_requirement_shown(self) -> None:
+    def test_spoiler_entries_filtered_out(self) -> None:
+        """Entries with visible_when restrictions are excluded from PDF."""
         entries = [
+            ExportCodexEntry(
+                entity_id="public",
+                title="Public Entry",
+                rank=1,
+                content="Visible to all.",
+            ),
             ExportCodexEntry(
                 entity_id="secret",
                 title="Secret Entry",
@@ -411,11 +418,27 @@ class TestCodexAppendix:
                 content="Hidden knowledge.",
             ),
         ]
-        ui = {"codex": "Codex", "requires_codeword": "Requires"}
+        ui = {"codex": "Codex"}
         html = _render_codex(entries, ui)
 
-        assert "Requires" in html
-        assert "Discovery" in html
+        assert "Public Entry" in html
+        assert "Secret Entry" not in html
+
+    def test_returns_empty_when_all_entries_are_spoilers(self) -> None:
+        """Returns empty string when only spoiler entries exist."""
+        entries = [
+            ExportCodexEntry(
+                entity_id="secret",
+                title="Secret",
+                rank=1,
+                visible_when=["codeword::x"],
+                content="Hidden.",
+            ),
+        ]
+        ui = {"codex": "Codex"}
+        html = _render_codex(entries, ui)
+
+        assert html == ""
 
     def test_codex_in_full_html_when_entries_present(self) -> None:
         ctx = ExportContext(
