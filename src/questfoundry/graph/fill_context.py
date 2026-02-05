@@ -188,6 +188,153 @@ def format_passage_context(graph: Graph, passage_id: str) -> str:
     return "\n".join(lines)
 
 
+def is_merged_passage(passage: dict[str, object]) -> bool:
+    """Check if a passage is a merge of multiple beats.
+
+    Merged passages have a ``from_beats`` field (list) instead of a single
+    ``from_beat`` field.
+
+    Args:
+        passage: The passage node data.
+
+    Returns:
+        True if the passage has from_beats (N:1 beat-to-passage mapping).
+    """
+    from_beats = passage.get("from_beats")
+    return bool(from_beats and isinstance(from_beats, list) and len(from_beats) > 1)
+
+
+def format_merged_passage_context(graph: Graph, passage_id: str) -> str:
+    """Format rich context for a merged passage with multiple source beats.
+
+    Provides FILL with:
+    - Primary summary from the primary beat
+    - Beat sequence showing each beat with its summary or gap status
+    - Transition guidance based on transition_points
+    - Writing instruction for continuous prose
+
+    Falls back to format_passage_context for non-merged passages.
+
+    Args:
+        graph: Graph containing passage, beat, and entity nodes.
+        passage_id: The passage node ID.
+
+    Returns:
+        Formatted context string, or empty string if passage not found.
+    """
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return ""
+
+    # Fall back to standard formatting for non-merged passages
+    if not is_merged_passage(passage):
+        return format_passage_context(graph, passage_id)
+
+    from_beats = passage.get("from_beats", [])
+    primary_beat_id = passage.get("primary_beat", from_beats[0] if from_beats else "")
+    primary_beat = graph.get_node(str(primary_beat_id)) if primary_beat_id else None
+
+    lines: list[str] = ["## Merged Passage Context"]
+
+    # Primary summary
+    primary_summary = ""
+    if primary_beat:
+        primary_summary = str(primary_beat.get("summary", ""))
+    if not primary_summary:
+        primary_summary = str(passage.get("summary", ""))
+    if primary_summary:
+        lines.append(f"\n**Primary Summary:** {primary_summary}")
+
+    # Beat sequence
+    lines.append("\n**Beat Sequence:**")
+    for i, beat_id in enumerate(from_beats, 1):
+        beat = graph.get_node(str(beat_id))
+        if not beat:
+            lines.append(f"{i}. [{beat_id}] (not found)")
+            continue
+
+        if beat.get("is_gap_beat"):
+            style = beat.get("transition_style", "smooth")
+            lines.append(f"{i}. [gap] ({style} transition)")
+        else:
+            summary = beat.get("summary", "")
+            lines.append(f"{i}. [{beat_id}] {summary}")
+
+    # Transition guidance from transition_points
+    transition_points = passage.get("transition_points", [])
+    if transition_points:
+        lines.append("\n**Transition Guidance:**")
+        for tp in transition_points:
+            if not isinstance(tp, dict):
+                continue
+            idx = tp.get("index", 0)
+            style = tp.get("style", "smooth")
+            note = tp.get("note", "")
+
+            # Get the prior beat for context
+            if idx > 0 and idx <= len(from_beats):
+                prior_beat_id = from_beats[idx - 1]
+                prior_beat = graph.get_node(str(prior_beat_id))
+                if prior_beat:
+                    prior_summary = str(prior_beat.get("summary", ""))[:50]
+                    if prior_summary:
+                        lines.append(f'- After "{prior_summary}...": {style.title()}. {note}')
+                    else:
+                        lines.append(f"- After beat {idx}: {style.title()}. {note}")
+
+    # Writing instruction
+    lines.append("\n**Writing Instruction:**")
+    lines.append(
+        "Write as continuous prose with smooth transitions. Do NOT insert "
+        "scene breaks or time jumps between beats. The merged passage should "
+        "read as one cohesive scene."
+    )
+
+    # Entities present across all beats
+    all_entities: set[str] = set()
+    for beat_id in from_beats:
+        beat = graph.get_node(str(beat_id))
+        if beat:
+            beat_entities = beat.get("entities", [])
+            if isinstance(beat_entities, list):
+                all_entities.update(str(e) for e in beat_entities)
+
+    # Also include passage-level entities
+    passage_entities = passage.get("entities", [])
+    if isinstance(passage_entities, list):
+        all_entities.update(str(e) for e in passage_entities)
+
+    if all_entities:
+        entity_details = []
+        for eid in sorted(all_entities):
+            enode = graph.get_node(eid)
+            if enode:
+                name = enode.get("raw_id", eid)
+                concept = enode.get("concept", "")
+                detail = f"- {name}: {concept}" if concept else f"- {name}"
+                entity_details.append(detail)
+        if entity_details:
+            lines.append("\n**Entities:**")
+            lines.extend(entity_details)
+
+    # Location (from first beat if shared)
+    locations: set[str] = set()
+    for beat_id in from_beats:
+        beat = graph.get_node(str(beat_id))
+        if beat:
+            loc = beat.get("location")
+            if loc:
+                locations.add(str(loc))
+    if len(locations) == 1:
+        loc_id = next(iter(locations))
+        loc_node = graph.get_node(loc_id)
+        if loc_node:
+            loc_name = loc_node.get("raw_id", loc_id)
+            lines.append(f"\n**Location:** {loc_name} (unchanged throughout)")
+
+    return "\n".join(lines)
+
+
 def format_sliding_window(
     graph: Graph,
     arc_id: str,
