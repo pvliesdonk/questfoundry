@@ -1251,6 +1251,147 @@ class TestPhase11Integration:
         assert "passage::a" in passage_nodes
         assert "passage::b" in passage_nodes
 
+    @pytest.mark.asyncio
+    async def test_prune_starts_from_prologue_when_exists(self) -> None:
+        """Prune uses prologue as BFS start when it exists (issue #627).
+
+        When Phase 9 creates a synthetic prologue to unify multiple orphan
+        starts, Phase 11 prune must start BFS from the prologue, not from the
+        first spine passage. Otherwise, the prologue and sibling branch paths
+        can be incorrectly pruned.
+        """
+        from questfoundry.pipeline.stages.grow import GrowStage
+
+        graph = Graph.empty()
+
+        # Create spine arc with 2 beats
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["path_a"],
+                "sequence": ["beat::spine_1", "beat::spine_2"],
+            },
+        )
+        graph.create_node("beat::spine_1", {"type": "beat", "raw_id": "spine_1"})
+        graph.create_node("beat::spine_2", {"type": "beat", "raw_id": "spine_2"})
+
+        # Create a sibling branch arc (different starting point)
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "arc_type": "branch",
+                "paths": ["path_b"],
+                "sequence": ["beat::branch_1"],
+            },
+        )
+        graph.create_node("beat::branch_1", {"type": "beat", "raw_id": "branch_1"})
+
+        # Create passages for beats
+        graph.create_node(
+            "passage::spine_1",
+            {
+                "type": "passage",
+                "raw_id": "spine_1",
+                "from_beat": "beat::spine_1",
+                "summary": "Spine start",
+            },
+        )
+        graph.create_node(
+            "passage::spine_2",
+            {
+                "type": "passage",
+                "raw_id": "spine_2",
+                "from_beat": "beat::spine_2",
+                "summary": "Spine end",
+            },
+        )
+        graph.create_node(
+            "passage::branch_1",
+            {
+                "type": "passage",
+                "raw_id": "branch_1",
+                "from_beat": "beat::branch_1",
+                "summary": "Branch start",
+            },
+        )
+
+        # Create synthetic prologue (as Phase 9 would when there are multiple orphan starts)
+        graph.create_node(
+            "passage::prologue",
+            {
+                "type": "passage",
+                "raw_id": "prologue",
+                "from_beat": None,
+                "summary": "The story begins...",
+                "is_synthetic": True,
+            },
+        )
+
+        # Create choices: prologue → both starting passages
+        graph.create_node(
+            "choice::prologue_to_spine",
+            {
+                "type": "choice",
+                "from_passage": "passage::prologue",
+                "to_passage": "passage::spine_1",
+                "label": "Take the spine path",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::prologue_to_spine", "passage::prologue")
+        graph.add_edge("choice_to", "choice::prologue_to_spine", "passage::spine_1")
+
+        graph.create_node(
+            "choice::prologue_to_branch",
+            {
+                "type": "choice",
+                "from_passage": "passage::prologue",
+                "to_passage": "passage::branch_1",
+                "label": "Take the branch path",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::prologue_to_branch", "passage::prologue")
+        graph.add_edge("choice_to", "choice::prologue_to_branch", "passage::branch_1")
+
+        # Create choice: spine_1 → spine_2
+        graph.create_node(
+            "choice::spine_continue",
+            {
+                "type": "choice",
+                "from_passage": "passage::spine_1",
+                "to_passage": "passage::spine_2",
+                "label": "Continue",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::spine_continue", "passage::spine_1")
+        graph.add_edge("choice_to", "choice::spine_continue", "passage::spine_2")
+
+        stage = GrowStage()
+        mock_model = MagicMock()
+        result = await stage._phase_11_prune(graph, mock_model)
+
+        assert result.status == "completed"
+        assert "All passages reachable" in result.detail
+
+        # All passages should be preserved including prologue and branch
+        passage_nodes = graph.get_nodes_by_type("passage")
+        assert "passage::prologue" in passage_nodes, "Prologue should NOT be pruned"
+        assert "passage::spine_1" in passage_nodes
+        assert "passage::spine_2" in passage_nodes
+        assert "passage::branch_1" in passage_nodes, (
+            "Branch should NOT be pruned (reachable via prologue)"
+        )
+
 
 # ---------------------------------------------------------------------------
 # Phase 3: Intersection Algorithms
