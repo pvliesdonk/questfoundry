@@ -148,18 +148,25 @@ def get_output_language_instruction(language: str) -> str:
     """Build a prompt instruction for output language.
 
     Returns an empty string for English (no instruction needed).
-    For other languages, returns an instruction telling the LLM to
+    For other supported languages, returns an instruction telling the LLM to
     write player-facing content in the target language.
+
+    Unknown language codes return empty string to prevent prompt injection
+    from unsanitized user input.
 
     Args:
         language: ISO 639-1 language code.
 
     Returns:
-        Language instruction string, or empty string for English.
+        Language instruction string, or empty string for English/unknown codes.
     """
-    if language.lower() == "en":
+    lang_lower = language.lower()
+    if lang_lower == "en":
         return ""
-    name = get_language_name(language)
+    # Only allow known languages to prevent prompt injection
+    if lang_lower not in LANGUAGE_NAMES:
+        return ""
+    name = LANGUAGE_NAMES[lang_lower]
     return (
         f"## Output Language: {name}\n"
         f"Write ALL narrative content in {name}, including:\n"
