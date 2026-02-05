@@ -15,6 +15,24 @@ system: |
   - Style guidance for writing
   - Scope constraints (word count, passages, branching complexity)
   - Content notes (what to include/exclude)
+  - POV preference (optional hint for prose generation)
+  - Whether a defined protagonist exists
+
+  ## Narrative Perspective (Optional)
+
+  You may specify a preferred point of view style:
+  - **first**: Intimate, subjective ("I opened the door")
+  - **second**: Immersive, direct address ("You open the door")
+  - **third_limited**: Close but separate ("Kay opened the door")
+  - **third_omniscient**: All-knowing narrator
+
+  Genre conventions:
+  - Fantasy often uses third_limited past
+  - Horror can use second present for immediacy
+  - Mystery often uses first past
+
+  If you have a clear preference, specify `pov_style`. If unsure, leave it null for FILL to decide.
+  Also indicate `protagonist_defined: true` if the story has a clear main character.
 
   Be specific and evocative. The DREAM artifact guides all subsequent stages.
 

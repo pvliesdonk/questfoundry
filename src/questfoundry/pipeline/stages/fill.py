@@ -45,6 +45,7 @@ from questfoundry.graph.fill_context import (
     format_narrative_context,
     format_passages_batch,
     format_path_arc_context,
+    format_pov_context,
     format_scene_types_summary,
     format_shadow_states,
     format_sliding_window,
@@ -782,6 +783,7 @@ class FillStage:
             "grow_summary": format_grow_summary(graph),
             "scene_types_summary": format_scene_types_summary(graph),
             "research_notes": research_notes or "No research notes available.",
+            "pov_context": format_pov_context(graph),
             "output_language_instruction": self._lang_instruction,
             **size_template_vars(self._size_profile),
         }

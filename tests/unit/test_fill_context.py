@@ -626,6 +626,169 @@ class TestFormatDreamVision:
 
 
 # ---------------------------------------------------------------------------
+# format_pov_context
+# ---------------------------------------------------------------------------
+
+
+class TestFormatPovContext:
+    def test_with_protagonist_and_pov_style(self) -> None:
+        """Returns formatted context with protagonist and POV style."""
+        from questfoundry.graph.fill_context import format_pov_context
+
+        g = Graph.empty()
+        g.create_node(
+            "vision",
+            {
+                "type": "vision",
+                "genre": "mystery",
+                "pov_style": "first",
+                "protagonist_defined": True,
+            },
+        )
+        g.create_node(
+            "character::detective",
+            {
+                "type": "entity",
+                "raw_id": "detective",
+                "category": "character",
+                "concept": "A seasoned private eye",
+                "is_protagonist": True,
+            },
+        )
+
+        result = format_pov_context(g)
+
+        assert "**Suggested POV:** first" in result
+        assert "**Protagonist Defined:** Yes" in result
+        assert "**Protagonist:** detective" in result
+        assert "A seasoned private eye" in result
+
+    def test_without_protagonist(self) -> None:
+        """Returns context noting protagonist not marked when protagonist_defined but none found."""
+        from questfoundry.graph.fill_context import format_pov_context
+
+        g = Graph.empty()
+        g.create_node(
+            "vision",
+            {
+                "type": "vision",
+                "genre": "fantasy",
+                "protagonist_defined": True,  # Says there should be one
+            },
+        )
+        # No entity with is_protagonist=True
+
+        result = format_pov_context(g)
+
+        assert "**Protagonist Defined:** Yes" in result
+        assert "Not explicitly marked" in result
+
+    def test_no_vision(self) -> None:
+        """Returns empty string when no vision node."""
+        from questfoundry.graph.fill_context import format_pov_context
+
+        g = Graph.empty()
+
+        result = format_pov_context(g)
+
+        assert result == ""
+
+    def test_minimal_vision(self) -> None:
+        """Vision without POV fields returns empty string."""
+        from questfoundry.graph.fill_context import format_pov_context
+
+        g = Graph.empty()
+        g.create_node(
+            "vision",
+            {"type": "vision", "genre": "fantasy"},  # No pov_style or protagonist_defined
+        )
+
+        result = format_pov_context(g)
+
+        assert result == ""
+
+
+# ---------------------------------------------------------------------------
+# get_path_pov_character
+# ---------------------------------------------------------------------------
+
+
+class TestGetPathPovCharacter:
+    def test_path_specific_override(self) -> None:
+        """Returns path-specific pov_character when set."""
+        from questfoundry.graph.fill_context import get_path_pov_character
+
+        g = Graph.empty()
+        g.create_node(
+            "arc::spine",
+            {"type": "arc", "arc_type": "spine", "paths": ["path::trust"]},
+        )
+        g.create_node(
+            "path::trust",
+            {"type": "path", "raw_id": "trust", "pov_character": "character::sidekick"},
+        )
+
+        result = get_path_pov_character(g, "arc::spine")
+
+        assert result == "character::sidekick"
+
+    def test_fallback_to_protagonist(self) -> None:
+        """Falls back to global protagonist when no path override."""
+        from questfoundry.graph.fill_context import get_path_pov_character
+
+        g = Graph.empty()
+        g.create_node(
+            "arc::spine",
+            {"type": "arc", "arc_type": "spine", "paths": ["path::trust"]},
+        )
+        g.create_node(
+            "path::trust",
+            {"type": "path", "raw_id": "trust"},  # No pov_character
+        )
+        g.create_node(
+            "character::protagonist",
+            {
+                "type": "entity",
+                "raw_id": "protagonist",
+                "category": "character",
+                "is_protagonist": True,
+            },
+        )
+
+        result = get_path_pov_character(g, "arc::spine")
+
+        assert result == "character::protagonist"
+
+    def test_no_pov_character(self) -> None:
+        """Returns None when no path override and no protagonist."""
+        from questfoundry.graph.fill_context import get_path_pov_character
+
+        g = Graph.empty()
+        g.create_node(
+            "arc::spine",
+            {"type": "arc", "arc_type": "spine", "paths": ["path::trust"]},
+        )
+        g.create_node(
+            "path::trust",
+            {"type": "path", "raw_id": "trust"},
+        )
+
+        result = get_path_pov_character(g, "arc::spine")
+
+        assert result is None
+
+    def test_nonexistent_arc(self) -> None:
+        """Returns None for nonexistent arc."""
+        from questfoundry.graph.fill_context import get_path_pov_character
+
+        g = Graph.empty()
+
+        result = get_path_pov_character(g, "arc::nonexistent")
+
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
 # format_passages_batch
 # ---------------------------------------------------------------------------
 

@@ -269,6 +269,45 @@ class TestDreamMutations:
         assert vision is not None
         assert vision["scope"]["estimated_passages"] == 50
 
+    def test_includes_pov_fields_if_present(self) -> None:
+        """Includes POV hint fields if present."""
+        graph = Graph.empty()
+        output = {
+            "genre": "horror",
+            "themes": ["fear"],
+            "tone": ["tense"],
+            "audience": "adult",
+            "pov_style": "second",
+            "protagonist_defined": True,
+        }
+
+        apply_dream_mutations(graph, output)
+
+        vision = graph.get_node("vision")
+        assert vision is not None
+        assert vision["pov_style"] == "second"
+        assert vision["protagonist_defined"] is True
+
+    def test_pov_fields_default_correctly(self) -> None:
+        """POV fields have correct defaults when not provided."""
+        graph = Graph.empty()
+        output = {
+            "genre": "fantasy",
+            "themes": ["adventure"],
+            "tone": ["light"],
+            "audience": "ya",
+            # No pov_style or protagonist_defined
+        }
+
+        apply_dream_mutations(graph, output)
+
+        vision = graph.get_node("vision")
+        assert vision is not None
+        # pov_style should be absent (None values are cleaned)
+        assert "pov_style" not in vision
+        # protagonist_defined defaults to False
+        assert vision["protagonist_defined"] is False
+
 
 class TestBrainstormMutations:
     """Test BRAINSTORM stage mutations."""
@@ -703,6 +742,76 @@ class TestValidateBrainstormMutations:
         assert "entities.1.entity_id" in error_paths  # Empty string
         assert "entities.2.entity_id" in error_paths  # None
         assert "entities.3.entity_id" in error_paths  # Missing key
+
+    def test_protagonist_on_non_character_detected(self) -> None:
+        """is_protagonist=true on non-character entity raises error."""
+        output = {
+            "entities": [
+                {
+                    "entity_id": "location_1",
+                    "entity_category": "location",
+                    "concept": "A manor",
+                    "is_protagonist": True,  # Invalid - only characters can be protagonist
+                },
+            ],
+            "dilemmas": [],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert len(errors) == 1
+        assert "is_protagonist" in errors[0].field_path
+        assert "character" in errors[0].available
+        assert "location" in errors[0].provided
+
+    def test_multiple_protagonists_detected(self) -> None:
+        """Multiple entities with is_protagonist=true raises error."""
+        output = {
+            "entities": [
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "concept": "Archivist",
+                    "is_protagonist": True,
+                },
+                {
+                    "entity_id": "mentor",
+                    "entity_category": "character",
+                    "concept": "Mentor",
+                    "is_protagonist": True,  # Second protagonist - invalid
+                },
+            ],
+            "dilemmas": [],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert len(errors) == 1
+        assert "Multiple protagonists" in errors[0].issue
+        assert "2" in errors[0].provided
+
+    def test_single_protagonist_valid(self) -> None:
+        """Single character with is_protagonist=true is valid."""
+        output = {
+            "entities": [
+                {
+                    "entity_id": "kay",
+                    "entity_category": "character",
+                    "concept": "Archivist",
+                    "is_protagonist": True,
+                },
+                {
+                    "entity_id": "mentor",
+                    "entity_category": "character",
+                    "concept": "Mentor",
+                },
+            ],
+            "dilemmas": [],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        assert errors == []
 
 
 class TestBrainstormMutationError:
@@ -3790,3 +3899,136 @@ class TestBackfillIntegrationWithApplySeedMutations:
         dilemma_node = graph.get_node("dilemma::choice_a_or_b")
         assert dilemma_node is not None
         assert sorted(dilemma_node.get("explored", [])) == ["option_a", "option_b"]
+
+
+class TestValidateSeedPovCharacter:
+    """Test POV character validation in SEED mutations."""
+
+    @pytest.fixture
+    def graph_with_entities(self) -> Graph:
+        """Graph with BRAINSTORM entities for testing."""
+        graph = Graph.empty()
+        # Add entity nodes
+        graph.create_node(
+            "character::kay",
+            {"type": "entity", "raw_id": "kay", "category": "character", "concept": "Archivist"},
+        )
+        graph.create_node(
+            "character::mentor",
+            {"type": "entity", "raw_id": "mentor", "category": "character", "concept": "Mentor"},
+        )
+        graph.create_node(
+            "location::manor",
+            {"type": "entity", "raw_id": "manor", "category": "location", "concept": "Manor"},
+        )
+        # Add dilemma and answers
+        graph.create_node(
+            "dilemma::trust_mentor_or_not",
+            {
+                "type": "dilemma",
+                "raw_id": "trust_mentor_or_not",
+                "question": "Trust the mentor?",
+            },
+        )
+        graph.create_node(
+            "dilemma::trust_mentor_or_not::alt::trust",
+            {"type": "answer", "raw_id": "trust", "is_default_path": True},
+        )
+        graph.create_node(
+            "dilemma::trust_mentor_or_not::alt::distrust",
+            {"type": "answer", "raw_id": "distrust", "is_default_path": False},
+        )
+        graph.add_edge(
+            "has_answer",
+            "dilemma::trust_mentor_or_not",
+            "dilemma::trust_mentor_or_not::alt::trust",
+        )
+        graph.add_edge(
+            "has_answer",
+            "dilemma::trust_mentor_or_not",
+            "dilemma::trust_mentor_or_not::alt::distrust",
+        )
+        return graph
+
+    def test_valid_pov_character_accepted(self, graph_with_entities: Graph) -> None:
+        """Valid pov_character reference is accepted."""
+        output = {
+            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "dilemmas": [
+                {"dilemma_id": "trust_mentor_or_not", "explored": ["trust"], "unexplored": []}
+            ],
+            "paths": [
+                {
+                    "path_id": "path::trust_mentor_or_not__trust",
+                    "name": "Trust Path",
+                    "dilemma_id": "trust_mentor_or_not",
+                    "answer_id": "trust",
+                    "path_importance": "major",
+                    "description": "Trust the mentor",
+                    "pov_character": "kay",  # Valid entity reference
+                }
+            ],
+            "consequences": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph_with_entities, output)
+
+        pov_errors = [e for e in errors if "pov_character" in e.field_path]
+        assert pov_errors == []
+
+    def test_invalid_pov_character_detected(self, graph_with_entities: Graph) -> None:
+        """Invalid pov_character reference raises error."""
+        output = {
+            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "dilemmas": [
+                {"dilemma_id": "trust_mentor_or_not", "explored": ["trust"], "unexplored": []}
+            ],
+            "paths": [
+                {
+                    "path_id": "path::trust_mentor_or_not__trust",
+                    "name": "Trust Path",
+                    "dilemma_id": "trust_mentor_or_not",
+                    "answer_id": "trust",
+                    "path_importance": "major",
+                    "description": "Trust the mentor",
+                    "pov_character": "nonexistent_entity",  # Invalid
+                }
+            ],
+            "consequences": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph_with_entities, output)
+
+        pov_errors = [e for e in errors if "pov_character" in e.field_path]
+        assert len(pov_errors) == 1
+        assert "not found" in pov_errors[0].issue
+        assert "kay" in pov_errors[0].available  # Should suggest valid entities
+
+    def test_pov_character_none_valid(self, graph_with_entities: Graph) -> None:
+        """Path without pov_character (None) is valid."""
+        output = {
+            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "dilemmas": [
+                {"dilemma_id": "trust_mentor_or_not", "explored": ["trust"], "unexplored": []}
+            ],
+            "paths": [
+                {
+                    "path_id": "path::trust_mentor_or_not__trust",
+                    "name": "Trust Path",
+                    "dilemma_id": "trust_mentor_or_not",
+                    "answer_id": "trust",
+                    "path_importance": "major",
+                    "description": "Trust the mentor",
+                    # No pov_character field
+                }
+            ],
+            "consequences": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph_with_entities, output)
+
+        pov_errors = [e for e in errors if "pov_character" in e.field_path]
+        assert pov_errors == []

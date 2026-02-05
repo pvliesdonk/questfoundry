@@ -20,6 +20,7 @@ system: |
   - `entity_category`: One of "character", "location", "object", "faction"
   - `concept`: One-line essence from the brief
   - `notes`: Optional additional context from the brief
+  - `is_protagonist`: true for ONE character if story has defined protagonist (default: false)
 
   ## Dilemma Structure
 

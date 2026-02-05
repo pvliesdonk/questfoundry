@@ -761,6 +761,87 @@ def format_dream_vision(graph: Graph) -> str:
     return "\n".join(lines)
 
 
+def format_pov_context(graph: Graph) -> str:
+    """Format POV context for FILL Phase 0 voice determination.
+
+    Extracts POV style hint from vision and protagonist entity details.
+    This information guides the LLM in determining the narrative voice.
+
+    Args:
+        graph: Graph containing vision and entity nodes.
+
+    Returns:
+        Formatted POV context string for LLM prompt.
+    """
+    lines: list[str] = []
+
+    # Get vision hints
+    vision_nodes = graph.get_nodes_by_type("vision")
+    if vision_nodes:
+        vision = next(iter(vision_nodes.values()))
+        pov_style = vision.get("pov_style")
+        if pov_style:
+            lines.append(f"**Suggested POV:** {pov_style}")
+        if vision.get("protagonist_defined"):
+            lines.append("**Protagonist Defined:** Yes")
+
+    # Find protagonist entity (entity with is_protagonist=True)
+    entity_nodes = graph.get_nodes_by_type("entity")
+    protagonist: tuple[str, dict[str, object]] | None = None
+    for eid, edata in entity_nodes.items():
+        if edata.get("is_protagonist") and edata.get("category") == "character":
+            protagonist = (eid, edata)
+            break
+
+    if protagonist:
+        eid, edata = protagonist
+        raw_id = edata.get("raw_id", eid)
+        lines.append(f"\n**Protagonist:** {raw_id}")
+        concept = edata.get("concept")
+        if concept:
+            lines.append(f"Concept: {concept}")
+    elif vision_nodes and next(iter(vision_nodes.values())).get("protagonist_defined"):
+        lines.append("\n**Protagonist:** Not explicitly marked in entities")
+
+    return "\n".join(lines) if lines else ""
+
+
+def get_path_pov_character(graph: Graph, arc_id: str) -> str | None:
+    """Get the POV character for passages in an arc.
+
+    Resolution order:
+    1. Path-specific pov_character (if any path in arc has one)
+    2. Global protagonist (entity with is_protagonist=True)
+    3. None
+
+    Args:
+        graph: Graph containing arc, path, and entity nodes.
+        arc_id: The arc to get POV character for.
+
+    Returns:
+        Entity ID of POV character, or None if not determined.
+    """
+    arc_node = graph.get_node(arc_id)
+    if not arc_node:
+        return None
+
+    arc_paths = arc_node.get("paths", [])
+
+    # Check path-specific override (first path with pov_character wins)
+    for path_id in arc_paths:
+        path_node = graph.get_node(path_id)
+        if path_node and path_node.get("pov_character"):
+            return str(path_node["pov_character"])
+
+    # Fall back to global protagonist
+    entity_nodes = graph.get_nodes_by_type("entity")
+    for eid, edata in entity_nodes.items():
+        if edata.get("is_protagonist") and edata.get("category") == "character":
+            return eid
+
+    return None
+
+
 def compute_open_questions(
     graph: Graph,
     arc_id: str,

@@ -42,6 +42,10 @@ class Entity(BaseModel):
     )
     concept: str = Field(min_length=1, description="One-line essence of the entity")
     notes: str | None = Field(default=None, description="Freeform notes from discussion")
+    is_protagonist: bool = Field(
+        default=False,
+        description="True if this character is the primary POV character (only valid for characters)",
+    )
 
 
 class Answer(BaseModel):
