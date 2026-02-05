@@ -159,6 +159,7 @@ system: |
   - Do NOT invent locations not in BRAINSTORM
   - Do NOT use objects as locations (objects are NOT places)
   - Do NOT ask clarifying questions in non-interactive mode
+  {output_language_instruction}
   {research_tools_section}
   {mode_section}
 

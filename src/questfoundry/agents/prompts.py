@@ -212,6 +212,7 @@ def get_seed_discuss_prompt(
     research_tools_available: bool = True,
     interactive: bool = True,
     size_profile: SizeProfile | None = None,
+    output_language_instruction: str = "",
 ) -> str:
     """Build the SEED discuss prompt with brainstorm context.
 
@@ -221,6 +222,7 @@ def get_seed_discuss_prompt(
         interactive: Whether running in interactive mode. When False,
             includes instructions for autonomous decision-making.
         size_profile: Size profile for parameterizing count guidance.
+        output_language_instruction: Language instruction for non-English output.
 
     Returns:
         System prompt string for the SEED discuss agent.
@@ -230,6 +232,7 @@ def get_seed_discuss_prompt(
         research_tools_available=research_tools_available,
         interactive=interactive,
         brainstorm_context=brainstorm_context,
+        output_language_instruction=output_language_instruction,
         **size_template_vars(size_profile),
     )
 
@@ -241,6 +244,7 @@ def get_seed_summarize_prompt(
     entity_manifest: str = "",
     dilemma_manifest: str = "",
     size_profile: SizeProfile | None = None,
+    output_language_instruction: str = "",
 ) -> str:
     """Build the SEED summarize prompt with manifest awareness.
 
@@ -255,6 +259,7 @@ def get_seed_summarize_prompt(
         entity_manifest: Formatted list of entity IDs for manifest.
         dilemma_manifest: Formatted list of dilemma IDs for manifest.
         size_profile: Size profile for parameterizing count guidance.
+        output_language_instruction: Language instruction for non-English output.
 
     Returns:
         System prompt string for the SEED summarize call.
@@ -270,6 +275,7 @@ def get_seed_summarize_prompt(
         dilemma_count=dilemma_count,
         entity_manifest=entity_manifest or "(No entities)",
         dilemma_manifest=dilemma_manifest or "(No dilemmas)",
+        output_language_instruction=output_language_instruction,
         **size_template_vars(size_profile),
     )
 

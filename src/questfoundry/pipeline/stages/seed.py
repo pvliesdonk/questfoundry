@@ -27,6 +27,7 @@ from questfoundry.agents import (
     serialize_seed_as_function,
     summarize_discussion,
 )
+from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph import Graph
 from questfoundry.graph.context import (
     format_summarize_manifest,
@@ -302,6 +303,9 @@ class SeedStage:
         brainstorm_context = self._get_brainstorm_context(resolved_path)
         log.debug("seed_brainstorm_loaded", context_length=len(brainstorm_context))
 
+        # Get language instruction (empty string for English)
+        lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
+
         # Get research tools (and interactive tools when in interactive mode)
         tools = get_all_research_tools()
         if interactive:
@@ -314,6 +318,7 @@ class SeedStage:
             research_tools_available=bool(tools),
             interactive=interactive,
             size_profile=size_profile,
+            output_language_instruction=lang_instruction,
         )
 
         # Phase 1: Discuss
@@ -357,6 +362,7 @@ class SeedStage:
             entity_manifest=manifests["entity_manifest"],
             dilemma_manifest=manifests["dilemma_manifest"],
             size_profile=size_profile,
+            output_language_instruction=lang_instruction,
         )
 
         # Outer loop: conversation-level retry for semantic errors

@@ -101,6 +101,7 @@ system: |
 
   If your story needs a scene in a character's personal space, use a retained
   location and put details in the beat summary.
+  {output_language_instruction}
 
   ## Output Format
 
