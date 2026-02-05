@@ -266,7 +266,10 @@ class PdfExporter:
         )
 
         # Convert to PDF
-        html_doc = HTML(string=html_content)
+        # Set base_url to project root so relative asset paths resolve correctly
+        # output_dir is typically PROJECT/exports/pdf/, so parent.parent = PROJECT/
+        project_root = output_dir.parent.parent
+        html_doc = HTML(string=html_content, base_url=str(project_root))
         html_doc.write_pdf(output_file)
 
         log.info(
