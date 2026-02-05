@@ -3466,6 +3466,69 @@ class TestCollapseLinearPassages:
         assert merged_node is not None
         assert merged_node.get("from_beats") is not None, "Should point to merged passage"
 
+    def test_updates_choice_node_attributes(self) -> None:
+        """Choice node to_passage/from_passage attrs are updated when edges are redirected."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = self._make_linear_chain_graph(chain_length=4)
+
+        # Add an external passage with TWO choices (so it's not part of a linear chain)
+        graph.create_node("beat::ext", {"type": "beat", "raw_id": "ext", "summary": "External"})
+        graph.create_node("beat::other", {"type": "beat", "raw_id": "other", "summary": "Other"})
+        graph.create_node(
+            "passage::ext",
+            {"type": "passage", "raw_id": "ext", "from_beat": "beat::ext"},
+        )
+        graph.create_node(
+            "passage::other",
+            {"type": "passage", "raw_id": "other", "from_beat": "beat::other"},
+        )
+
+        # Choice from external passage to chain start
+        graph.create_node(
+            "choice::ext_to_chain",
+            {
+                "type": "choice",
+                "raw_id": "ext_to_chain",
+                "label": "Go to chain",
+                "from_passage": "passage::ext",
+                "to_passage": "passage::b0",
+            },
+        )
+        graph.add_edge("choice_from", "choice::ext_to_chain", "passage::ext")
+        graph.add_edge("choice_to", "choice::ext_to_chain", "passage::b0")
+
+        # Second choice (makes ext non-linear)
+        graph.create_node(
+            "choice::ext_to_other",
+            {
+                "type": "choice",
+                "raw_id": "ext_to_other",
+                "label": "Go other",
+                "from_passage": "passage::ext",
+                "to_passage": "passage::other",
+            },
+        )
+        graph.add_edge("choice_from", "choice::ext_to_other", "passage::ext")
+        graph.add_edge("choice_to", "choice::ext_to_other", "passage::other")
+
+        collapse_linear_passages(graph, min_chain_length=3)
+
+        # Find the merged passage
+        merged_passages = [
+            (pid, p) for pid, p in graph.get_nodes_by_type("passage").items() if p.get("from_beats")
+        ]
+        assert len(merged_passages) == 1
+        merged_id = merged_passages[0][0]
+
+        # The choice node's to_passage attribute should be updated to the merged passage
+        choice_node = graph.get_node("choice::ext_to_chain")
+        assert choice_node is not None
+        assert choice_node.get("to_passage") == merged_id, (
+            f"to_passage attr should be updated to merged passage, "
+            f"got {choice_node.get('to_passage')}"
+        )
+
     def test_empty_graph_returns_zero(self) -> None:
         """Empty graph returns zero counts."""
         from questfoundry.graph.grow_algorithms import collapse_linear_passages
