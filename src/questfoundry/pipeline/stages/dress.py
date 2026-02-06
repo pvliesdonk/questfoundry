@@ -93,7 +93,7 @@ T = TypeVar("T", bound=BaseModel)
 log = get_logger(__name__)
 
 # Aspect ratios supported by all image providers.
-_VALID_ASPECT_RATIOS = {"1:1", "16:9", "9:16", "3:2", "2:3"}
+_VALID_ASPECT_RATIOS = {"1:1", "16:9", "9:16", "4:3", "3:4", "3:2", "2:3"}
 
 
 def _parse_aspect_ratio(raw: str) -> str:

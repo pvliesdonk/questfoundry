@@ -116,7 +116,7 @@ class TestA1111Provider:
         mock_post = AsyncMock(return_value=_fake_response())
 
         with patch.object(provider._client, "post", mock_post):
-            await provider.generate("test", aspect_ratio="4:3")
+            await provider.generate("test", aspect_ratio="5:7")  # Not in valid list
 
         payload = mock_post.call_args.kwargs["json"]
         # Falls back to preset 1:1 size (768x768 for SD 1.5)

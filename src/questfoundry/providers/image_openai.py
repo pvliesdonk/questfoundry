@@ -38,6 +38,8 @@ _GPT_IMAGE_SIZES: dict[str, str] = {
     "1:1": "1024x1024",
     "16:9": "1536x1024",
     "9:16": "1024x1536",
+    "4:3": "1536x1024",  # Closest supported size
+    "3:4": "1024x1536",  # Closest supported size
     "3:2": "1536x1024",
     "2:3": "1024x1536",
 }
@@ -46,6 +48,8 @@ _DALLE3_SIZES: dict[str, str] = {
     "1:1": "1024x1024",
     "16:9": "1792x1024",
     "9:16": "1024x1792",
+    "4:3": "1792x1024",  # Closest supported size
+    "3:4": "1024x1792",  # Closest supported size
     "3:2": "1792x1024",
     "2:3": "1024x1792",
 }
