@@ -157,6 +157,10 @@ class Path(BaseModel):
         default_factory=list,
         description="Consequence IDs for this path (references consequence_id)",
     )
+    pov_character: str | None = Field(
+        default=None,
+        description="Entity ID of the POV character for this path (overrides global protagonist)",
+    )
 
 
 class DilemmaImpact(BaseModel):

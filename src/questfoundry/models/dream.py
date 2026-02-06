@@ -59,3 +59,12 @@ class DreamArtifact(BaseModel):
     )
     type: Literal["dream"] = "dream"
     version: int = Field(default=1, description="Schema version number", ge=1)
+    # POV hints for downstream stages (optional)
+    pov_style: Literal["first", "second", "third_limited", "third_omniscient"] | None = Field(
+        default=None,
+        description="Preferred narrative POV (hint for FILL, not mandate)",
+    )
+    protagonist_defined: bool = Field(
+        default=False,
+        description="True if the story has a defined protagonist character",
+    )

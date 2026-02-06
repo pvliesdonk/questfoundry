@@ -555,6 +555,9 @@ def apply_dream_mutations(graph: Graph, output: dict[str, Any]) -> None:
         "style_notes": output.get("style_notes"),
         "scope": output.get("scope"),
         "content_notes": output.get("content_notes"),
+        # POV hints (optional, may be None)
+        "pov_style": output.get("pov_style"),
+        "protagonist_defined": output.get("protagonist_defined", False),
     }
 
     # Remove None values for cleaner storage
@@ -649,6 +652,36 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
                     provided=f"found {default_count} defaults",
                 )
             )
+
+    # 4. Validate is_protagonist constraints
+    protagonist_count = 0
+    protagonist_indices: list[int] = []
+    for i, entity in enumerate(entities):
+        if entity.get("is_protagonist"):
+            protagonist_count += 1
+            protagonist_indices.append(i)
+            # is_protagonist only valid for character entities
+            entity_category = entity.get("entity_category", "")
+            if entity_category != "character":
+                errors.append(
+                    BrainstormValidationError(
+                        field_path=f"entities.{i}.is_protagonist",
+                        issue=f"is_protagonist=true only valid for character entities, not '{entity_category}'",
+                        available=["character"],
+                        provided=entity_category,
+                    )
+                )
+
+    # At most one protagonist allowed
+    if protagonist_count > 1:
+        errors.append(
+            BrainstormValidationError(
+                field_path="entities",
+                issue=f"Multiple protagonists defined ({protagonist_count} at indices {protagonist_indices}). Only one character can be the protagonist.",
+                available=[],
+                provided=str(protagonist_count),
+            )
+        )
 
     return errors
 
@@ -1026,6 +1059,48 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                             issue=f"Answer '{raw_answer_id}' not in dilemma '{norm_did}'",
                             available=sorted(valid_answers) if path_dilemma_id else [],
                             provided=raw_answer_id,
+                            category=SeedErrorCategory.SEMANTIC,
+                        )
+                    )
+
+        # 4b. Validate pov_character references a valid retained entity
+        pov_char = path.get("pov_character")
+        if pov_char:
+            normalized_pov, scope_error = _normalize_id(pov_char, "entity")
+            if scope_error:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"paths.{i}.pov_character",
+                        issue=scope_error,
+                        available=sorted_entity_ids,
+                        provided=pov_char,
+                        category=SeedErrorCategory.INNER,
+                    )
+                )
+            elif normalized_pov not in valid_entity_ids:
+                errors.append(
+                    SeedValidationError(
+                        field_path=f"paths.{i}.pov_character",
+                        issue=f"POV character '{normalized_pov}' not found in entities",
+                        available=sorted_entity_ids,
+                        provided=pov_char,
+                        category=SeedErrorCategory.SEMANTIC,
+                    )
+                )
+            else:
+                # Validate pov_character is a character entity (not location/object/faction)
+                pov_entity_type = entity_types.get(normalized_pov, "")
+                if pov_entity_type != "character":
+                    # Get list of character entities for helpful error message
+                    character_ids = sorted(
+                        eid for eid, etype in entity_types.items() if etype == "character"
+                    )
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"paths.{i}.pov_character",
+                            issue=f"POV character must be a character entity, not '{pov_entity_type}'",
+                            available=character_ids,
+                            provided=pov_char,
                             category=SeedErrorCategory.SEMANTIC,
                         )
                     )
