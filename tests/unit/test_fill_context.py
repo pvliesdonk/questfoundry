@@ -22,6 +22,7 @@ from questfoundry.graph.fill_context import (
     format_grow_summary,
     format_introduction_guidance,
     format_lookahead_context,
+    format_merged_passage_context,
     format_narrative_context,
     format_passage_context,
     format_passages_batch,
@@ -33,6 +34,7 @@ from questfoundry.graph.fill_context import (
     format_voice_context,
     get_arc_passage_order,
     get_spine_arc_id,
+    is_merged_passage,
 )
 from questfoundry.graph.graph import Graph
 
@@ -1879,3 +1881,191 @@ class TestComputeArcHints:
         hints = compute_arc_hints(g, ["entity::mentor", "entity::bystander"], "arc::spine")
         assert "mentor" in hints
         assert "bystander" not in hints
+
+
+# ---------------------------------------------------------------------------
+# Merged Passage Context Tests
+# ---------------------------------------------------------------------------
+
+
+class TestIsMergedPassage:
+    """Tests for is_merged_passage helper."""
+
+    def test_single_beat_passage_is_not_merged(self) -> None:
+        passage = {"type": "passage", "from_beat": "beat::b1"}
+        assert is_merged_passage(passage) is False
+
+    def test_passage_with_from_beats_is_merged(self) -> None:
+        passage = {
+            "type": "passage",
+            "from_beats": ["beat::b1", "beat::b2", "beat::b3"],
+            "primary_beat": "beat::b1",
+        }
+        assert is_merged_passage(passage) is True
+
+    def test_empty_from_beats_is_not_merged(self) -> None:
+        passage = {"type": "passage", "from_beats": []}
+        assert is_merged_passage(passage) is False
+
+    def test_single_from_beats_is_not_merged(self) -> None:
+        passage = {"type": "passage", "from_beats": ["beat::b1"]}
+        assert is_merged_passage(passage) is False
+
+    def test_none_from_beats_is_not_merged(self) -> None:
+        passage = {"type": "passage", "from_beats": None}
+        assert is_merged_passage(passage) is False
+
+
+class TestFormatMergedPassageContext:
+    """Tests for format_merged_passage_context."""
+
+    def _make_merged_passage_graph(self) -> Graph:
+        """Create a graph with a merged passage."""
+        g = Graph.empty()
+
+        # Entities
+        g.create_node(
+            "entity::pim",
+            {
+                "type": "entity",
+                "raw_id": "pim",
+                "entity_type": "character",
+                "concept": "A curious child",
+            },
+        )
+        g.create_node(
+            "entity::manor",
+            {
+                "type": "entity",
+                "raw_id": "manor",
+                "entity_type": "location",
+                "concept": "An old manor house",
+            },
+        )
+
+        # Beats
+        g.create_node(
+            "beat::b1",
+            {
+                "type": "beat",
+                "raw_id": "b1",
+                "summary": "Pim searches the study",
+                "scene_type": "scene",
+                "entities": ["entity::pim"],
+                "location": "entity::manor",
+            },
+        )
+        g.create_node(
+            "beat::gap_1",
+            {
+                "type": "beat",
+                "raw_id": "gap_1",
+                "summary": "Transition",
+                "scene_type": "micro_beat",
+                "is_gap_beat": True,
+                "transition_style": "smooth",
+                "entities": ["entity::pim"],
+                "location": "entity::manor",
+            },
+        )
+        g.create_node(
+            "beat::b2",
+            {
+                "type": "beat",
+                "raw_id": "b2",
+                "summary": "Pim finds the letter",
+                "scene_type": "scene",
+                "entities": ["entity::pim"],
+                "location": "entity::manor",
+            },
+        )
+
+        # Merged passage
+        g.create_node(
+            "passage::merged_b1",
+            {
+                "type": "passage",
+                "raw_id": "merged_b1",
+                "from_beats": ["beat::b1", "beat::gap_1", "beat::b2"],
+                "primary_beat": "beat::b1",
+                "merged_from": ["passage::b1", "passage::gap_1", "passage::b2"],
+                "transition_points": [
+                    {"index": 1, "style": "smooth", "note": "Continue in same scene"},
+                    {"index": 2, "style": "smooth", "note": "Discovery moment"},
+                ],
+                "entities": ["entity::pim"],
+            },
+        )
+
+        return g
+
+    def test_returns_empty_for_nonexistent_passage(self) -> None:
+        g = Graph.empty()
+        result = format_merged_passage_context(g, "passage::nonexistent")
+        assert result == ""
+
+    def test_falls_back_for_non_merged_passage(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "beat::b1",
+            {"type": "beat", "raw_id": "b1", "summary": "Simple beat", "scene_type": "scene"},
+        )
+        g.create_node(
+            "passage::p1",
+            {
+                "type": "passage",
+                "raw_id": "p1",
+                "from_beat": "beat::b1",
+                "summary": "Simple passage",
+            },
+        )
+        result = format_merged_passage_context(g, "passage::p1")
+        # Should use standard format (not merged)
+        assert "Merged Passage Context" not in result
+        assert "Simple" in result
+
+    def test_formats_merged_passage_header(self) -> None:
+        g = self._make_merged_passage_graph()
+        result = format_merged_passage_context(g, "passage::merged_b1")
+        assert "## Merged Passage Context" in result
+
+    def test_includes_primary_summary(self) -> None:
+        g = self._make_merged_passage_graph()
+        result = format_merged_passage_context(g, "passage::merged_b1")
+        assert "**Primary Summary:**" in result
+        assert "Pim searches the study" in result
+
+    def test_includes_beat_sequence(self) -> None:
+        g = self._make_merged_passage_graph()
+        result = format_merged_passage_context(g, "passage::merged_b1")
+        assert "**Beat Sequence:**" in result
+        assert "[beat::b1] Pim searches the study" in result
+        assert "[gap] (smooth transition)" in result
+        assert "[beat::b2] Pim finds the letter" in result
+
+    def test_includes_transition_guidance(self) -> None:
+        g = self._make_merged_passage_graph()
+        result = format_merged_passage_context(g, "passage::merged_b1")
+        assert "**Transition Guidance:**" in result
+        assert "Smooth" in result
+        assert "Continue in same scene" in result
+
+    def test_includes_writing_instruction(self) -> None:
+        g = self._make_merged_passage_graph()
+        result = format_merged_passage_context(g, "passage::merged_b1")
+        assert "**Writing Instruction:**" in result
+        assert "continuous prose" in result
+        assert "one cohesive scene" in result
+
+    def test_includes_entities(self) -> None:
+        g = self._make_merged_passage_graph()
+        result = format_merged_passage_context(g, "passage::merged_b1")
+        assert "**Entities:**" in result
+        assert "pim" in result
+
+    def test_includes_location_when_shared(self) -> None:
+        g = self._make_merged_passage_graph()
+        result = format_merged_passage_context(g, "passage::merged_b1")
+        assert "**Location:**" in result
+        assert "manor" in result
+        assert "unchanged throughout" in result

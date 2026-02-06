@@ -758,7 +758,12 @@ def find_max_consecutive_linear(graph: Graph) -> int:
 
 
 def _build_exempt_passages(graph: Graph, passages: dict[str, dict[str, object]]) -> set[str]:
-    """Build set of passages exempt from linearity checks (confront/resolve beats)."""
+    """Build set of passages exempt from linearity checks.
+
+    Exempt passages include:
+    - Passages with confront/resolve narrative function (climax/resolution)
+    - Merged passages (already collapsed from linear stretches)
+    """
     beats = graph.get_nodes_by_type("beat")
     exempt_beats: set[str] = set()
     for bid, bdata in beats.items():
@@ -767,7 +772,12 @@ def _build_exempt_passages(graph: Graph, passages: dict[str, dict[str, object]])
 
     exempt: set[str] = set()
     for pid, pdata in passages.items():
+        # Exempt confront/resolve passages
         if pdata.get("from_beat") in exempt_beats:
+            exempt.add(pid)
+        # Exempt merged passages (they ARE the result of collapse)
+        from_beats = pdata.get("from_beats")
+        if from_beats and isinstance(from_beats, list) and len(from_beats) > 1:
             exempt.add(pid)
     return exempt
 

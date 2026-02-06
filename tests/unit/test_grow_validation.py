@@ -1003,6 +1003,20 @@ class TestMaxConsecutiveLinear:
         result = check_max_consecutive_linear(graph, max_run=2)
         assert result.severity == "pass"
 
+    def test_merged_passage_exempt(self) -> None:
+        """Merged passages (from_beats with N>1) are exempt from linearity check."""
+        graph = _make_chain_graph(["a", "b", "c", "d"])
+        # Mark passage::b as a merged passage (N:1 beat mapping)
+        graph.update_node(
+            "passage::b",
+            from_beats=["beat::b1", "beat::b2", "beat::b3"],
+            primary_beat="beat::b1",
+            merged_from=["passage::orig_b1", "passage::orig_b2", "passage::orig_b3"],
+        )
+        # a→b(merged)→c→d: b is exempt, so runs are [a] and [c] only
+        result = check_max_consecutive_linear(graph, max_run=2)
+        assert result.severity == "pass"
+
     def test_no_passages(self) -> None:
         """Empty graph passes."""
         graph = Graph.empty()

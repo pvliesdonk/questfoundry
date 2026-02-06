@@ -209,10 +209,10 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_twenty_one_phases(self) -> None:
+    def test_phase_order_returns_twenty_two_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 21
+        assert len(phases) == 22
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -237,6 +237,7 @@ class TestGrowStagePhaseOrder:
             "choices",
             "fork_beats",
             "hub_spokes",
+            "collapse_passages",
             "validation",
             "prune",
         ]
