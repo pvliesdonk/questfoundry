@@ -383,10 +383,14 @@ def _query_ollama_num_ctx(host: str, model: str) -> int | None:
 
 
 async def unload_ollama_model(chat_model: BaseChatModel) -> None:
-    """Send keep_alive=0 to Ollama to immediately unload a model from VRAM.
+    """Unload an Ollama model from VRAM and wait for it to complete.
 
     Used between pipeline phases when switching to a different Ollama model,
     so the outgoing model frees GPU memory for the incoming one.
+
+    The unload is done in two steps:
+    1. Send keep_alive=0 to trigger the unload
+    2. Poll /api/ps until the model is no longer listed (max 30s)
 
     Safe to call on non-Ollama models (silently returns).
 
@@ -394,6 +398,8 @@ async def unload_ollama_model(chat_model: BaseChatModel) -> None:
         chat_model: The model to unload. Must have ``base_url`` and ``model``
             attributes (ChatOllama instances do).
     """
+    import asyncio
+
     import httpx
 
     base_url = getattr(chat_model, "base_url", None)
@@ -403,10 +409,40 @@ async def unload_ollama_model(chat_model: BaseChatModel) -> None:
 
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
+            # Step 1: Request unload
             await client.post(
                 f"{base_url}/api/generate",
                 json={"model": model_name, "keep_alive": 0},
             )
-        log.info("ollama_model_unloaded", model=model_name)
+
+            # Step 2: Wait for model to actually unload (poll /api/ps)
+            # Ollama unloads asynchronously, so we need to verify it's gone
+            max_wait = 30.0  # seconds
+            poll_interval = 0.5  # seconds
+            waited = 0.0
+
+            while waited < max_wait:
+                try:
+                    response = await client.get(f"{base_url}/api/ps")
+                    if response.status_code == 200:
+                        data = response.json()
+                        loaded_models = [m.get("name", "") for m in data.get("models", [])]
+                        if model_name not in loaded_models:
+                            # Model successfully unloaded
+                            log.info("ollama_model_unloaded", model=model_name, wait_time=waited)
+                            return
+                except Exception:
+                    pass  # Ignore polling errors, keep trying
+
+                await asyncio.sleep(poll_interval)
+                waited += poll_interval
+
+            # Timed out waiting for unload
+            log.warning(
+                "ollama_unload_timeout",
+                model=model_name,
+                timeout=max_wait,
+            )
+
     except Exception as e:
         log.warning("ollama_unload_failed", model=model_name, error=str(e))
