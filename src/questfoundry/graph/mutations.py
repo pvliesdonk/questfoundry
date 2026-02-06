@@ -419,8 +419,9 @@ def _require_field(item: dict[str, Any], field: str, context: str) -> Any:
 def _normalize_id(provided_id: str, expected_scope: str) -> tuple[str, str | None]:
     """Normalize a potentially scoped ID for validation.
 
-    Accepts both scoped (`entity::hero`) and unscoped (`hero`) IDs.
-    If scoped, validates the scope matches expected_scope.
+    Accepts both scoped and unscoped IDs. If scoped, validates the scope matches
+    expected_scope. For entities, accepts category prefixes (character::, location::,
+    object::, faction::) in addition to the generic "entity::" prefix.
 
     Args:
         provided_id: The ID from LLM output (may or may not have scope prefix).
@@ -432,15 +433,26 @@ def _normalize_id(provided_id: str, expected_scope: str) -> tuple[str, str | Non
         - If wrong scope: (provided_id, error message describing mismatch)
 
     Examples:
-        >>> _normalize_id("entity::hero", "entity")
+        >>> _normalize_id("character::hero", "entity")
         ('hero', None)
+        >>> _normalize_id("location::manor", "entity")
+        ('manor', None)
         >>> _normalize_id("hero", "entity")
         ('hero', None)
         >>> _normalize_id("dilemma::hero", "entity")
-        ('dilemma::hero', "Wrong scope prefix: expected 'entity::', got 'dilemma::'")
+        ('dilemma::hero', "Wrong scope prefix: expected entity category (character/location/object/faction), got 'dilemma::'")
     """
     if "::" in provided_id:
         scope, raw_id = parse_scoped_id(provided_id)
+        # For entities, accept category prefixes (character::, location::, etc.)
+        # as well as legacy "entity::" prefix
+        if expected_scope == "entity":
+            if scope in ENTITY_CATEGORIES or scope == "entity":
+                return raw_id, None
+            return (
+                provided_id,
+                f"Wrong scope prefix: expected entity category (character/location/object/faction), got '{scope}::'",
+            )
         if scope != expected_scope:
             return (
                 provided_id,

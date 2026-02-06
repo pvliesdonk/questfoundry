@@ -636,7 +636,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
             f"- Generate EXACTLY {total_entity_count} entity decisions (one per entity above)",
             f"- Generate EXACTLY {dilemma_count} dilemma decisions (one per dilemma above)",
             "- Path `answer_id` must be from that dilemma's answers list",
-            "- Use scoped IDs with `entity::` or `dilemma::` prefix in your output",
+            "- Use scoped IDs: category prefix for entities (character::, location::, etc.), dilemma:: for dilemmas",
             "",
             "### Verification",
             "Before submitting, COUNT your outputs:",

@@ -2318,7 +2318,8 @@ class TestNormalizeId:
         # Returns original ID unchanged when scope is wrong
         assert normalized == "dilemma::hero"
         assert error is not None
-        assert "entity::" in error
+        # Error should mention entity categories and the wrong scope
+        assert "character/location/object/faction" in error
         assert "dilemma::" in error
 
     def test_entity_scope_rejected_when_path_expected(self) -> None:
@@ -2328,6 +2329,34 @@ class TestNormalizeId:
         assert error is not None
         assert "path::" in error
         assert "entity::" in error
+
+    def test_category_prefix_accepted_for_entity(self) -> None:
+        """Category prefixes (character::, location::, etc.) accepted for entities."""
+        # character:: prefix
+        normalized, error = _normalize_id("character::hero", "entity")
+        assert normalized == "hero"
+        assert error is None
+
+        # location:: prefix
+        normalized, error = _normalize_id("location::manor", "entity")
+        assert normalized == "manor"
+        assert error is None
+
+        # object:: prefix
+        normalized, error = _normalize_id("object::sword", "entity")
+        assert normalized == "sword"
+        assert error is None
+
+        # faction:: prefix
+        normalized, error = _normalize_id("faction::guild", "entity")
+        assert normalized == "guild"
+        assert error is None
+
+    def test_legacy_entity_prefix_still_accepted(self) -> None:
+        """Legacy entity:: prefix still works for backwards compatibility."""
+        normalized, error = _normalize_id("entity::hero", "entity")
+        assert normalized == "hero"
+        assert error is None
 
     def test_id_with_colons_in_raw_id(self) -> None:
         """IDs with :: only split on first occurrence."""
@@ -2434,7 +2463,7 @@ class TestScopedIdValidation:
         assert errors == []
 
     def test_wrong_scope_detected_for_entity(self) -> None:
-        """Wrong scope (dilemma:: instead of entity::) is detected."""
+        """Wrong scope (dilemma:: instead of entity category) is detected."""
         graph = Graph.empty()
         graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
 
@@ -2450,7 +2479,8 @@ class TestScopedIdValidation:
         assert len(errors) >= 1
         scope_errors = [e for e in errors if "Wrong scope prefix" in e.issue]
         assert len(scope_errors) == 1
-        assert "entity::" in scope_errors[0].issue
+        # Error should mention entity categories and the wrong scope
+        assert "character/location/object/faction" in scope_errors[0].issue
         assert "dilemma::" in scope_errors[0].issue
 
     def test_wrong_scope_detected_for_dilemma(self) -> None:
