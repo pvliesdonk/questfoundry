@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -270,12 +270,13 @@ def format_continuity_warning(
             beat_id = passage.get("from_beat", "")
             beat = graph.get_node(beat_id) if beat_id else {}
             entities = (beat or {}).get("entities") or []
+        # Normalize to raw IDs for comparison (handles character::, location::, etc.)
         normalized: set[str] = set()
         for e in entities:
             if not e:
                 continue
             eid = str(e)
-            normalized.add(eid if eid.startswith("entity::") else f"entity::{eid}")
+            normalized.add(strip_scope_prefix(eid))
         return normalized
 
     def _location_for(passage_id: str) -> str | None:
@@ -285,8 +286,8 @@ def format_continuity_warning(
         loc = (beat or {}).get("location")
         if not loc:
             return None
-        loc_id = str(loc)
-        return loc_id if loc_id.startswith("entity::") else f"entity::{loc_id}"
+        # Normalize to raw ID for comparison
+        return strip_scope_prefix(str(loc))
 
     def _intersection_hint(prev_passage_id: str, cur_passage_id: str) -> bool:
         prev = graph.get_node(prev_passage_id) or {}

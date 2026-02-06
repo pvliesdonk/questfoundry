@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from questfoundry.graph.context import _ENTITY_CATEGORIES, strip_scope_prefix
+from questfoundry.graph.context import ENTITY_CATEGORIES, parse_scoped_id, strip_scope_prefix
 from questfoundry.graph.fill_context import format_dream_vision
 
 if TYPE_CHECKING:
@@ -39,27 +39,28 @@ def format_vision_and_entities(graph: Graph) -> str:
         lines.append(vision)
         lines.append("")
 
-    # Entity list grouped by type
+    # Entity list grouped by category
     entities = graph.get_nodes_by_type("entity")
     if entities:
-        by_type: dict[str, list[tuple[str, str]]] = {}
+        by_category: dict[str, list[tuple[str, str]]] = {}
         for eid, edata in entities.items():
-            entity_type = edata.get("entity_type", "unknown")
+            # Use 'category' field, fall back to parsing from node ID
+            category = edata.get("category") or parse_scoped_id(eid)[0]
             raw_id = edata.get("raw_id", strip_scope_prefix(eid))
             concept = edata.get("concept", "")
-            by_type.setdefault(entity_type, []).append((raw_id, concept))
+            by_category.setdefault(category, []).append((raw_id, concept))
 
         lines.append("## Entities Requiring Visual Profiles")
         lines.append("")
-        for etype in _ENTITY_CATEGORIES:
-            items = by_type.get(etype, [])
+        for category in ENTITY_CATEGORIES:
+            items = by_category.get(category, [])
             if items:
-                lines.append(f"### {etype.title()}s")
+                lines.append(f"### {category.title()}s")
                 for raw_id, concept in sorted(items):
                     if concept:
-                        lines.append(f"- `entity::{raw_id}`: {concept}")
+                        lines.append(f"- `{category}::{raw_id}`: {concept}")
                     else:
-                        lines.append(f"- `entity::{raw_id}`")
+                        lines.append(f"- `{category}::{raw_id}`")
                 lines.append("")
 
     return "\n".join(lines).strip()

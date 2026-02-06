@@ -8,6 +8,7 @@ See docs/architecture/graph-storage.md for design details.
 
 from __future__ import annotations
 
+import contextlib
 import re
 from collections import Counter
 from dataclasses import dataclass, field
@@ -15,7 +16,13 @@ from difflib import SequenceMatcher
 from enum import Enum, auto
 from typing import TYPE_CHECKING, Any
 
-from questfoundry.graph.context import parse_scoped_id, strip_scope_prefix
+from questfoundry.graph.context import (
+    ENTITY_CATEGORIES,
+    format_entity_id,
+    is_entity_id,
+    parse_scoped_id,
+    strip_scope_prefix,
+)
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
@@ -690,25 +697,100 @@ def _prefix_id(node_type: str, raw_id: str) -> str:
     """Prefix a raw ID with its node type for namespace isolation.
 
     This allows entities and dilemmas to have the same raw ID without collision.
-    E.g., both can use "cipher_journal" -> "entity::cipher_journal", "dilemma::cipher_journal"
+    E.g., both can use "cipher_journal" -> "dilemma::cipher_journal"
 
     This function is idempotent - if the ID already has the correct prefix,
     it returns it unchanged. If it has a different prefix or multiple prefixes,
     the raw part is extracted and re-prefixed.
 
+    Note: For entity IDs, use _prefix_entity_id() which uses category-based
+    prefixes (character::, location::, etc.) instead of generic "entity::".
+
     Args:
-        node_type: Node type prefix (entity, dilemma, path, etc.)
+        node_type: Node type prefix (dilemma, path, beat, etc.)
         raw_id: Raw ID from LLM output (may already be prefixed).
 
     Returns:
         Prefixed ID in format "type::raw_id".
     """
     # Strip any existing prefixes to get the raw ID
-    # This handles: "the_detective", "entity::the_detective", "entity::entity::the_detective"
+    # This handles: "the_detective", "dilemma::the_detective", etc.
     if "::" in raw_id:
         raw_id = raw_id.rsplit("::", 1)[-1]
 
     return f"{node_type}::{raw_id}"
+
+
+def _prefix_entity_id(category: str, raw_id: str) -> str:
+    """Prefix an entity ID with its category for semantic clarity.
+
+    Entity IDs use category as prefix (character::pim, location::manor)
+    rather than generic "entity::" prefix. This avoids LLM confusion with
+    abbreviated prefixes like "char_" that resemble programming types.
+
+    Args:
+        category: Entity category (character, location, object, faction).
+        raw_id: Raw entity ID from LLM output (may already be prefixed).
+
+    Returns:
+        Category-prefixed ID (e.g., "character::pim").
+
+    Raises:
+        ValueError: If category is not valid.
+    """
+    # Strip any existing prefix (handles legacy "entity::" or double prefixes)
+    if "::" in raw_id:
+        raw_id = raw_id.rsplit("::", 1)[-1]
+
+    return format_entity_id(category, raw_id)
+
+
+def _resolve_entity_ref(graph: Graph, entity_ref: str) -> str:
+    """Resolve an entity reference to its full prefixed ID.
+
+    Handles various input formats:
+    - Raw ID: "pim" -> looks up entity, returns "character::pim"
+    - Legacy format: "entity::pim" -> returns as-is if exists in graph
+    - Category format: "character::pim" -> returns as-is
+
+    For backwards compatibility, accepts both legacy "entity::" and new
+    category-based prefixes. Returns the ID as it exists in the graph.
+
+    Args:
+        graph: Graph containing entity nodes.
+        entity_ref: Entity reference (raw ID or scoped ID).
+
+    Returns:
+        Entity ID as it exists in the graph.
+
+    Raises:
+        ValueError: If entity not found in graph.
+    """
+    # If already has valid entity category prefix and exists, return as-is
+    if is_entity_id(entity_ref) and graph.has_node(entity_ref):
+        return entity_ref
+
+    # Check if it's a legacy entity:: format that exists in graph
+    if entity_ref.startswith("entity::") and graph.has_node(entity_ref):
+        return entity_ref
+
+    # Extract raw ID (handles "entity::pim" -> "pim")
+    raw_id = strip_scope_prefix(entity_ref)
+
+    # Try to find entity in graph by checking all category prefixes
+    for category in ENTITY_CATEGORIES:
+        candidate_id = f"{category}::{raw_id}"
+        if graph.has_node(candidate_id):
+            return candidate_id
+
+    # Also try legacy entity:: prefix for backwards compatibility
+    legacy_id = f"entity::{raw_id}"
+    if graph.has_node(legacy_id):
+        return legacy_id
+
+    # Entity not found - return with placeholder prefix for error reporting
+    # The validation layer will catch this
+    raise ValueError(f"Entity '{entity_ref}' not found in graph")
 
 
 def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
@@ -718,7 +800,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
     Dilemmas are linked to their answers via has_answer edges.
 
     Node IDs are prefixed by type to avoid collisions:
-    - entity::raw_id
+    - character::name, location::name, etc. (entities use category prefix)
     - dilemma::raw_id
     - dilemma::dilemma_id::alt::answer_id (for answers)
 
@@ -729,15 +811,24 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
     Raises:
         MutationError: If entities or dilemmas are missing required id fields.
     """
-    # Add entities
+    # Add entities (must be done first so dilemmas can reference them)
     for i, entity in enumerate(output.get("entities", [])):
         raw_id = _require_field(entity, "entity_id", f"Entity at index {i}")
-        entity_id = _prefix_id("entity", raw_id)
+        category = entity.get("entity_category")
+        if not category:
+            raise MutationError(f"Entity at index {i} missing entity_category")
+        if category not in ENTITY_CATEGORIES:
+            raise MutationError(
+                f"Entity at index {i} has invalid category '{category}'. "
+                f"Must be one of: {', '.join(sorted(ENTITY_CATEGORIES))}"
+            )
+        entity_id = _prefix_entity_id(category, raw_id)
         raw_id = strip_scope_prefix(entity_id)
         node_data = {
             "type": "entity",
-            "raw_id": raw_id,  # Store unscoped ID for reference
-            "entity_type": entity.get("entity_category"),  # character, location, object, faction
+            "raw_id": raw_id,
+            "category": category,  # Store category for easy access
+            "entity_type": category,  # Backwards compat: some code still uses entity_type
             "concept": entity.get("concept"),
             "notes": entity.get("notes"),
             "disposition": "proposed",  # All entities start as proposed
@@ -754,9 +845,15 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         dilemma_node_id = _prefix_id("dilemma", raw_id)
         raw_id = strip_scope_prefix(dilemma_node_id)
 
-        # Prefix entity references in central_entity_ids list
+        # Resolve entity references in central_entity_ids list
         raw_central_entities = dilemma.get("central_entity_ids", [])
-        prefixed_central_entities = [_prefix_id("entity", eid) for eid in raw_central_entities]
+        prefixed_central_entities = []
+        for eid in raw_central_entities:
+            try:
+                prefixed_central_entities.append(_resolve_entity_ref(graph, eid))
+            except ValueError:
+                # Entity not found - keep raw ID for error reporting later
+                prefixed_central_entities.append(eid)
 
         # Create dilemma node
         dilemma_data = {
@@ -1480,12 +1577,15 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
     # Update entity dispositions
     for i, entity_decision in enumerate(output.get("entities", [])):
         raw_id = _require_field(entity_decision, "entity_id", f"Entity decision at index {i}")
-        entity_id = _prefix_id("entity", raw_id)
-        if graph.has_node(entity_id):
-            graph.update_node(
-                entity_id,
-                disposition=entity_decision.get("disposition", "retained"),
-            )
+        try:
+            entity_id = _resolve_entity_ref(graph, raw_id)
+        except ValueError:
+            # Entity not found - validation should have caught this
+            continue
+        graph.update_node(
+            entity_id,
+            disposition=entity_decision.get("disposition", "retained"),
+        )
 
     # Update dilemma exploration decisions
     for i, dilemma_decision in enumerate(output.get("dilemmas", [])):
@@ -1577,17 +1677,26 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         raw_id = _require_field(beat, "beat_id", f"Beat at index {i}")
         beat_id = _prefix_id("beat", raw_id)
 
-        # Prefix entity references
+        # Resolve entity references (entities now use category-based IDs like character::pim)
         raw_entities = beat.get("entities", [])
-        prefixed_entities = [_prefix_id("entity", eid) for eid in raw_entities]
+        prefixed_entities = []
+        for eid in raw_entities:
+            with contextlib.suppress(ValueError):
+                prefixed_entities.append(_resolve_entity_ref(graph, eid))
 
-        # Prefix location reference (location is an entity)
+        # Resolve location reference (location is an entity, typically location::X)
         raw_location = beat.get("location")
-        prefixed_location = _prefix_id("entity", raw_location) if raw_location else None
+        prefixed_location = None
+        if raw_location:
+            with contextlib.suppress(ValueError):
+                prefixed_location = _resolve_entity_ref(graph, raw_location)
 
-        # Prefix location_alternatives (also entity IDs)
+        # Resolve location_alternatives (also entity IDs)
         raw_location_alts = beat.get("location_alternatives", [])
-        prefixed_location_alts = [_prefix_id("entity", eid) for eid in raw_location_alts]
+        prefixed_location_alts = []
+        for eid in raw_location_alts:
+            with contextlib.suppress(ValueError):
+                prefixed_location_alts.append(_resolve_entity_ref(graph, eid))
 
         # Prefix dilemma_id in dilemma_impacts
         raw_impacts = beat.get("dilemma_impacts", [])

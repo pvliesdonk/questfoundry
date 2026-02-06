@@ -8,15 +8,18 @@ See docs/architecture/graph-storage.md for architecture details.
 """
 
 from questfoundry.graph.context import (
+    ENTITY_CATEGORIES,
     SCOPE_DILEMMA,
-    SCOPE_ENTITY,
     SCOPE_PATH,
     check_structural_completeness,
+    format_entity_id,
     format_hierarchical_path_id,
     format_scoped_id,
     format_summarize_manifest,
     format_valid_ids_context,
+    is_entity_id,
     normalize_scoped_id,
+    parse_entity_id,
     parse_hierarchical_path_id,
     parse_scoped_id,
 )
@@ -56,8 +59,8 @@ from questfoundry.graph.snapshots import (
 )
 
 __all__ = [
+    "ENTITY_CATEGORIES",
     "SCOPE_DILEMMA",
-    "SCOPE_ENTITY",
     "SCOPE_PATH",
     "BrainstormMutationError",
     "BrainstormValidationError",
@@ -82,13 +85,16 @@ __all__ = [
     "categorize_error",
     "categorize_errors",
     "check_structural_completeness",
+    "format_entity_id",
     "format_hierarchical_path_id",
     "format_scoped_id",
     "format_summarize_manifest",
     "format_valid_ids_context",
     "has_mutation_handler",
+    "is_entity_id",
     "list_snapshots",
     "normalize_scoped_id",
+    "parse_entity_id",
     "parse_hierarchical_path_id",
     "parse_scoped_id",
     "rollback_to_snapshot",

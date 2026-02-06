@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from itertools import product
 from typing import TYPE_CHECKING, Any
 
-from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.mutations import GrowErrorCategory, GrowValidationError
 from questfoundry.models.grow import Arc
 from questfoundry.observability.logging import get_logger
@@ -862,22 +862,25 @@ def _group_by_entity(
 ) -> list[IntersectionCandidate]:
     """Group beats by shared entity references."""
     # Build entity → beats mapping from features edges
+    # Normalize to raw IDs (without prefix) since entities may have different
+    # prefix formats (character::X, location::Y, or legacy entity::X)
     entity_beats: dict[str, list[str]] = defaultdict(list)
     features_edges = graph.get_edges(from_id=None, to_id=None, edge_type="features")
     for edge in features_edges:
         beat_id = edge["from"]
         entity_id = edge["to"]
         if beat_id in beat_nodes:
-            entity_beats[entity_id].append(beat_id)
+            raw_entity_id = strip_scope_prefix(entity_id)
+            entity_beats[raw_entity_id].append(beat_id)
 
     # Also check entity references in beat data.
-    # beat_data["entities"] may contain raw IDs ("mentor") or prefixed ("entity::mentor").
-    # Normalize to prefixed form to match features edges.
+    # beat_data["entities"] may contain raw IDs ("mentor") or prefixed IDs.
+    # Normalize to raw ID form to match across different prefix formats.
     for beat_id, beat_data in beat_nodes.items():
         entities = beat_data.get("entities", [])
         for entity_ref in entities:
-            prefixed = entity_ref if entity_ref.startswith("entity::") else f"entity::{entity_ref}"
-            entity_beats[prefixed].append(beat_id)
+            raw_entity_id = strip_scope_prefix(entity_ref)
+            entity_beats[raw_entity_id].append(beat_id)
 
     candidates: list[IntersectionCandidate] = []
     seen_pairs: set[tuple[str, ...]] = set()

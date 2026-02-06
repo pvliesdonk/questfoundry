@@ -25,7 +25,7 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
-from questfoundry.graph.context import strip_scope_prefix
+from questfoundry.graph.context import ENTITY_CATEGORIES, strip_scope_prefix
 from questfoundry.graph.fill_context import (
     compute_arc_hints,
     compute_first_appearances,
@@ -190,6 +190,40 @@ def _get_prompts_path() -> Path:
 
 
 log = get_logger(__name__)
+
+
+def _resolve_entity_id(graph: Graph, raw_id: str) -> str | None:
+    """Resolve a raw entity ID to its prefixed graph ID.
+
+    Tries all entity category prefixes (character::, location::, etc.)
+    and legacy entity:: prefix to find a matching node in the graph.
+
+    Args:
+        graph: Graph to search.
+        raw_id: Raw entity ID (may or may not have prefix).
+
+    Returns:
+        Entity ID as found in graph, None if not found.
+    """
+    # If already prefixed, check if it exists
+    if "::" in raw_id:
+        if graph.has_node(raw_id):
+            return raw_id
+        # Strip prefix and try again
+        raw_id = strip_scope_prefix(raw_id)
+
+    # Try each category prefix
+    for category in ENTITY_CATEGORIES:
+        candidate = f"{category}::{raw_id}"
+        if graph.has_node(candidate):
+            return candidate
+
+    # Try legacy entity:: prefix for backwards compatibility
+    legacy = f"entity::{raw_id}"
+    if graph.has_node(legacy):
+        return legacy
+
+    return None
 
 
 class FillStageError(ValueError):
@@ -1050,8 +1084,9 @@ class FillStage:
                     entity_updates = passage_output.entity_updates
 
                 for update in entity_updates:
-                    entity_id = f"entity::{update.entity_id}"
-                    if graph.has_node(entity_id):
+                    # Resolve entity ID using category prefixes (character::, location::, etc.)
+                    entity_id = _resolve_entity_id(graph, update.entity_id)
+                    if entity_id:
                         graph.update_node(
                             entity_id,
                             **{update.field: update.value},
@@ -1280,8 +1315,9 @@ class FillStage:
             for output in outputs:
                 if output.passage.prose:
                     for update in output.passage.entity_updates:
-                        entity_id = f"entity::{update.entity_id}"
-                        if graph.has_node(entity_id):
+                        # Resolve entity ID using category prefixes
+                        entity_id = _resolve_entity_id(graph, update.entity_id)
+                        if entity_id:
                             graph.update_node(entity_id, **{update.field: update.value})
                         else:
                             log.warning(

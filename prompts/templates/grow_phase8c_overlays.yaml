@@ -42,7 +42,7 @@ system: |
 
   ## Output Format
   Return a JSON object with an "overlays" array. Each overlay has:
-  - entity_id: the entity being modified (e.g., "entity::name" or just "name")
+  - entity_id: the entity being modified (e.g., "character::hero" or "location::castle")
   - when: list of codeword IDs that activate this overlay (all must be granted)
   - details: dict of field_name → description pairs describing the changes
 

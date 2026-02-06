@@ -7,7 +7,7 @@ system: |
   ## Scoped ID Format (CRITICAL)
 
   All IDs use type prefixes for disambiguation. Copy IDs EXACTLY as shown in the brief:
-  - Entity IDs: `entity::butler`, `entity::manor`
+  - Entity IDs use CATEGORY prefix: `character::butler`, `location::manor`, `object::key`, `faction::guards`
   - Dilemma IDs: `dilemma::host_benevolent_or_selfish`
   - Path IDs: `path::host_benevolent_or_selfish__protector` (hierarchical format: dilemma__answer)
 
@@ -18,13 +18,14 @@ system: |
   SeedOutput contains six main sections that must be populated from the brief:
 
   ### 1. entities (Entity Decisions)
-  For EVERY entity from brainstorm (characters, locations, objects, AND factions), create an EntityDecision:
+  For EVERY entity from brainstorm (characters, locations, items, AND factions), create an EntityDecision:
   ```json
   {{
-    "entity_id": "entity::butler",
+    "entity_id": "character::butler",
     "disposition": "retained"
   }}
   ```
+  Use the EXACT entity ID from the manifest (with its category prefix like `character::`, `location::`, etc.).
   IMPORTANT: Include ALL entity types - don't skip factions!
 
   ### 2. dilemmas (Dilemma Decisions)
@@ -81,9 +82,9 @@ system: |
         "note": "Explanation of the impact"
       }}
     ],
-    "entities": ["entity::butler", "entity::guest"],
-    "location": "entity::manor",
-    "location_alternatives": ["entity::garden"]
+    "entities": ["character::butler", "character::guest"],
+    "location": "location::manor",
+    "location_alternatives": ["location::garden"]
   }}
   ```
 

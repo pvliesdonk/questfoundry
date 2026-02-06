@@ -106,11 +106,9 @@ def _format_dilemma(dilemma_id: str, dilemma_data: dict[str, Any], graph: Graph)
     # Format central entities list - extract raw IDs from prefixed references
     entities_display = []
     for ref in central_entities:
-        # References are prefixed like "entity::raw_id", extract raw_id part
-        if ref.startswith("entity::"):
-            entities_display.append(ref[8:])  # Skip "entity::" prefix
-        elif "::" in ref:
-            # Fallback for other prefixed formats
+        # References use category prefix (character::pim, location::manor, etc.)
+        # Extract raw_id for display
+        if "::" in ref:
             entities_display.append(strip_scope_prefix(ref))
         else:
             entities_display.append(ref)

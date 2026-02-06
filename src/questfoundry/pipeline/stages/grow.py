@@ -31,7 +31,11 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
-from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
+from questfoundry.graph.context import (
+    ENTITY_CATEGORIES,
+    normalize_scoped_id,
+    strip_scope_prefix,
+)
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
@@ -2131,13 +2135,33 @@ class GrowStage:
         overlay_count = 0
 
         for overlay in result.overlays:
-            # Validate entity_id exists
-            prefixed_eid = (
-                f"entity::{overlay.entity_id}"
-                if "::" not in overlay.entity_id
-                else overlay.entity_id
-            )
-            if prefixed_eid not in valid_entity_set:
+            # Validate entity_id exists - try resolving through category prefixes
+            prefixed_eid = overlay.entity_id
+            if "::" not in overlay.entity_id:
+                # Try all category prefixes to find a match
+                raw_id = overlay.entity_id
+                found = False
+                for category in ENTITY_CATEGORIES:
+                    candidate = f"{category}::{raw_id}"
+                    if candidate in valid_entity_set:
+                        prefixed_eid = candidate
+                        found = True
+                        break
+                # Try legacy entity:: prefix for backwards compatibility
+                if not found:
+                    legacy = f"entity::{raw_id}"
+                    if legacy in valid_entity_set:
+                        prefixed_eid = legacy
+                        found = True
+                if not found:
+                    log.warning(
+                        "phase8c_invalid_entity",
+                        entity_id=overlay.entity_id,
+                        tried_categories=list(ENTITY_CATEGORIES),
+                    )
+                    continue
+            elif prefixed_eid not in valid_entity_set:
+                # Already prefixed but not found
                 log.warning(
                     "phase8c_invalid_entity",
                     entity_id=overlay.entity_id,

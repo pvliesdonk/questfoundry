@@ -126,7 +126,8 @@ class TestApplyMutations:
 
         apply_mutations(graph, "brainstorm", output)
 
-        assert graph.has_node("entity::char_001")
+        # Entities now use category prefix (character::, location::, etc.)
+        assert graph.has_node("character::char_001")
 
     def test_routes_to_seed(self) -> None:
         """Routes seed stage to apply_seed_mutations."""
@@ -380,19 +381,19 @@ class TestBrainstormMutations:
 
         apply_brainstorm_mutations(graph, output)
 
-        # Entity IDs are prefixed with "entity::"
-        kay = graph.get_node("entity::kay")
+        # Entity IDs now use category prefix (character::, location::, etc.)
+        kay = graph.get_node("character::kay")
         assert kay is not None
         assert kay["type"] == "entity"
         assert kay["raw_id"] == "kay"  # Original ID preserved
-        assert kay["entity_type"] == "character"
+        assert kay["category"] == "character"  # Category field instead of entity_type
         assert kay["concept"] == "Young archivist"
         assert kay["notes"] == "Curious and brave"
         assert kay["disposition"] == "proposed"
 
-        archive = graph.get_node("entity::archive")
+        archive = graph.get_node("location::archive")
         assert archive is not None
-        assert archive["entity_type"] == "location"
+        assert archive["category"] == "location"
 
     def test_strips_scope_prefixes_in_raw_ids(self) -> None:
         """Scoped IDs are stored unscoped in raw_id fields."""
@@ -428,14 +429,16 @@ class TestBrainstormMutations:
 
         apply_brainstorm_mutations(graph, output)
 
-        entity = graph.get_node("entity::kay")
+        # Entity is created with category prefix
+        entity = graph.get_node("character::kay")
         assert entity is not None
         assert entity["raw_id"] == "kay"
 
         dilemma = graph.get_node("dilemma::mentor_trust")
         assert dilemma is not None
         assert dilemma["raw_id"] == "mentor_trust"
-        assert dilemma["central_entity_ids"] == ["entity::kay"]
+        # central_entity_ids are resolved to category-based IDs
+        assert dilemma["central_entity_ids"] == ["character::kay"]
 
         protector = graph.get_node("dilemma::mentor_trust::alt::protector")
         assert protector is not None
@@ -449,7 +452,10 @@ class TestBrainstormMutations:
         """Creates dilemma nodes with linked answers."""
         graph = Graph.empty()
         output = {
-            "entities": [],
+            "entities": [
+                {"entity_id": "kay", "entity_category": "character", "concept": "Protagonist"},
+                {"entity_id": "mentor", "entity_category": "character", "concept": "Guide"},
+            ],
             "dilemmas": [
                 {
                     "dilemma_id": "mentor_trust",
@@ -480,8 +486,8 @@ class TestBrainstormMutations:
         assert dilemma["type"] == "dilemma"
         assert dilemma["raw_id"] == "mentor_trust"
         assert dilemma["question"] == "Can the mentor be trusted?"
-        # central_entity_ids list is prefixed in storage
-        assert dilemma["central_entity_ids"] == ["entity::kay", "entity::mentor"]
+        # central_entity_ids are resolved to category-based entity IDs
+        assert dilemma["central_entity_ids"] == ["character::kay", "character::mentor"]
 
         # Alternative IDs: dilemma::dilemma_id::alt::alt_id
         protector = graph.get_node("dilemma::mentor_trust::alt::protector")
@@ -2070,18 +2076,18 @@ class TestMutationIntegration:
         apply_mutations(graph, "seed", seed_output)
         graph.set_last_stage("seed")
 
-        # Verify final state - all IDs are prefixed by type
+        # Verify final state - entity IDs use category prefix, others use type prefix
         assert graph.get_last_stage() == "seed"
         assert graph.has_node("vision")
-        assert graph.has_node("entity::kay")
-        assert graph.has_node("entity::mentor")
+        assert graph.has_node("character::kay")  # Category-based entity ID
+        assert graph.has_node("character::mentor")  # Category-based entity ID
         assert graph.has_node("dilemma::mentor_trust")
         assert graph.has_node("dilemma::mentor_trust::alt::protector")
         assert graph.has_node("path::path_mentor")
         assert graph.has_node("beat::opening")
 
         # Check entity dispositions
-        assert graph.get_node("entity::kay")["disposition"] == "retained"
+        assert graph.get_node("character::kay")["disposition"] == "retained"
 
         # Check edges
         assert len(graph.get_edges(edge_type="has_answer")) == 2

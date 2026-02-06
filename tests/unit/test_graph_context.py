@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from questfoundry.graph import Graph, format_summarize_manifest, format_valid_ids_context
 from questfoundry.graph.context import (
+    ENTITY_CATEGORIES,
     SCOPE_DILEMMA,
-    SCOPE_ENTITY,
     SCOPE_PATH,
     check_structural_completeness,
     format_answer_ids_by_dilemma,
@@ -66,13 +66,13 @@ class TestFormatValidIdsContext:
 
         result = format_valid_ids_context(graph, "seed")
 
-        # Categories now include counts
+        # Categories now include counts, and entity IDs use category prefix
         assert "**Characters (1):**" in result
-        assert "`entity::hero`" in result
+        assert "`character::hero`" in result
         assert "**Locations (1):**" in result
-        assert "`entity::tavern`" in result
+        assert "`location::tavern`" in result
         assert "**Objects (1):**" in result
-        assert "`entity::sword`" in result
+        assert "`object::sword`" in result
 
     def test_seed_includes_dilemmas_with_answers(self) -> None:
         """SEED context lists dilemmas with their answers."""
@@ -152,9 +152,9 @@ class TestFormatValidIdsContext:
         result = format_valid_ids_context(graph, "seed")
 
         # Check order: alice should come before bob, bob before zara
-        alice_pos = result.find("`entity::alice`")
-        bob_pos = result.find("`entity::bob`")
-        zara_pos = result.find("`entity::zara`")
+        alice_pos = result.find("`character::alice`")
+        bob_pos = result.find("`character::bob`")
+        zara_pos = result.find("`character::zara`")
 
         assert alice_pos < bob_pos < zara_pos
 
@@ -180,7 +180,7 @@ class TestFormatValidIdsContext:
 
         result = format_valid_ids_context(graph, "seed")
 
-        assert "`entity::valid`" in result
+        assert "`character::valid`" in result
         assert "invalid" not in result
 
     def test_seed_handles_unknown_category(self) -> None:
@@ -248,8 +248,8 @@ class TestFormatValidIdsContext:
         assert "### Generation Requirements" in result
 
         # Verify content with scoped IDs
-        assert "`entity::hero`" in result
-        assert "`entity::castle`" in result
+        assert "`character::hero`" in result
+        assert "`location::castle`" in result
         assert "`dilemma::quest`" in result
         assert "`accept` (default)" in result  # answers stay unscoped
 
@@ -532,9 +532,9 @@ class TestFormatSummarizeManifest:
         result = format_summarize_manifest(graph)
 
         assert "**Characters:**" in result["entity_manifest"]
-        assert "`entity::hero`" in result["entity_manifest"]
+        assert "`character::hero`" in result["entity_manifest"]
         assert "**Locations:**" in result["entity_manifest"]
-        assert "`entity::castle`" in result["entity_manifest"]
+        assert "`location::castle`" in result["entity_manifest"]
 
     def test_formats_dilemmas_as_list(self) -> None:
         """Dilemmas are formatted as simple bullet list."""
@@ -581,7 +581,7 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        assert "`entity::valid`" in result["entity_manifest"]
+        assert "`character::valid`" in result["entity_manifest"]
         assert "invalid" not in result["entity_manifest"]
 
     def test_skips_dilemmas_without_raw_id(self) -> None:
@@ -621,8 +621,8 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        alice_pos = result["entity_manifest"].find("`entity::alice`")
-        zara_pos = result["entity_manifest"].find("`entity::zara`")
+        alice_pos = result["entity_manifest"].find("`character::alice`")
+        zara_pos = result["entity_manifest"].find("`character::zara`")
         assert alice_pos < zara_pos
 
     def test_sorts_dilemmas_by_node_id(self) -> None:
@@ -699,7 +699,7 @@ class TestFormatSummarizeManifest:
         result = format_summarize_manifest(graph)
 
         # Only standard categories are included
-        assert "entity::hero" in result["entity_manifest"]
+        assert "character::hero" in result["entity_manifest"]
         assert "weird_thing" not in result["entity_manifest"]
         assert "custom_item" not in result["entity_manifest"]
 
@@ -717,8 +717,14 @@ class TestFormatSummarizeManifest:
 
         result = format_summarize_manifest(graph)
 
-        # Should have blank line after Characters section, before Locations
-        assert "**Characters:**\n  - `entity::hero`\n\n**Locations:**" in result["entity_manifest"]
+        # Should have blank line between category sections (order may vary)
+        manifest = result["entity_manifest"]
+        assert "**Characters:**" in manifest
+        assert "**Locations:**" in manifest
+        assert "`character::hero`" in manifest
+        assert "`location::castle`" in manifest
+        # Verify blank line between sections (double newline pattern)
+        assert "\n\n**" in manifest
 
 
 class TestFormatRetainedEntityIds:
@@ -759,7 +765,7 @@ class TestFormatRetainedEntityIds:
 
         result = format_retained_entity_ids(graph, decisions)
 
-        assert "`entity::hero`" in result
+        assert "`character::hero`" in result
         assert "villain" not in result
 
     def test_handles_scoped_entity_ids_in_decisions(self) -> None:
@@ -783,7 +789,7 @@ class TestFormatRetainedEntityIds:
 
         result = format_retained_entity_ids(graph, decisions)
 
-        assert "`entity::hero`" in result
+        assert "`character::hero`" in result
         assert "villain" not in result
 
     def test_includes_count_of_retained_entities(self) -> None:
@@ -1070,9 +1076,12 @@ class TestFormatScopedId:
 class TestScopeConstants:
     """Tests for scope constant values."""
 
-    def test_scope_entity_value(self) -> None:
-        """SCOPE_ENTITY has expected value."""
-        assert SCOPE_ENTITY == "entity"
+    def test_entity_categories(self) -> None:
+        """ENTITY_CATEGORIES contains expected categories."""
+        assert "character" in ENTITY_CATEGORIES
+        assert "location" in ENTITY_CATEGORIES
+        assert "object" in ENTITY_CATEGORIES
+        assert "faction" in ENTITY_CATEGORIES
 
     def test_scope_dilemma_value(self) -> None:
         """SCOPE_DILEMMA has expected value."""
