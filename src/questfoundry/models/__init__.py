@@ -50,6 +50,7 @@ from questfoundry.models.fill import (
     FillPhaseResult,
     FillResult,
     ReviewFlag,
+    SpokeLabelUpdate,
     VoiceDocument,
 )
 from questfoundry.models.grow import (
@@ -84,6 +85,7 @@ from questfoundry.models.grow import (
     Phase9cOutput,
     Phase9Output,
     SceneTypeTag,
+    SpokeLabelStyle,
     SpokeProposal,
 )
 from questfoundry.models.pipeline import PhaseResult
@@ -174,6 +176,8 @@ __all__ = [
     "SceneTypeTag",
     "Scope",
     "SeedOutput",
+    "SpokeLabelStyle",
+    "SpokeLabelUpdate",
     "SpokeProposal",
     "VoiceDocument",
 ]

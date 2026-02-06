@@ -117,13 +117,18 @@ system: |
   voice), list them in entity_updates so they persist for later passages.
   Only update EXISTING entities — do not create new ones.
 
+  {spoke_context}
+
   ## Output Format
   Return a JSON object with a "passage" field containing:
   - passage_id: the passage ID
   - prose: the generated text
   - flag: "ok" or "incompatible_states"
   - flag_reason: explanation if flagged (empty otherwise)
-  - entity_updates: list of {{entity_id, field, value}} (may be empty)
+  - entity_updates: array of objects with entity_id, field, value (may be empty)
+  - spoke_labels: array of spoke label objects (may be empty), each with:
+    - choice_id: the choice node ID (may omit "choice::" prefix)
+    - label: the final label text (3-60 characters)
 
 user: |
   Write the prose for passage {passage_id} following the voice document and

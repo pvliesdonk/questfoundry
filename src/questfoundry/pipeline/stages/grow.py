@@ -2845,18 +2845,19 @@ class GrowStage:
                 )
 
                 # Choice: hub → spoke
+                # If label is None, FILL will generate it alongside prose
                 to_spoke_cid = f"choice::{raw_id}__spoke_{i}"
-                graph.create_node(
-                    to_spoke_cid,
-                    {
-                        "type": "choice",
-                        "from_passage": hub_id,
-                        "to_passage": spoke_pid,
-                        "label": spoke.label,
-                        "requires": [],
-                        "grants": [],
-                    },
-                )
+                choice_data: dict[str, object] = {
+                    "type": "choice",
+                    "from_passage": hub_id,
+                    "to_passage": spoke_pid,
+                    "requires": [],
+                    "grants": [],
+                    "label_style": spoke.label_style,
+                }
+                if spoke.label:
+                    choice_data["label"] = spoke.label
+                graph.create_node(to_spoke_cid, choice_data)
                 graph.add_edge("choice_from", to_spoke_cid, hub_id)
                 graph.add_edge("choice_to", to_spoke_cid, spoke_pid)
 

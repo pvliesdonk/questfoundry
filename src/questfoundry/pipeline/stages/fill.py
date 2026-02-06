@@ -25,7 +25,11 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
-from questfoundry.graph.context import ENTITY_CATEGORIES, strip_scope_prefix
+from questfoundry.graph.context import (
+    ENTITY_CATEGORIES,
+    normalize_scoped_id,
+    strip_scope_prefix,
+)
 from questfoundry.graph.fill_context import (
     compute_arc_hints,
     compute_first_appearances,
@@ -49,6 +53,7 @@ from questfoundry.graph.fill_context import (
     format_scene_types_summary,
     format_shadow_states,
     format_sliding_window,
+    format_spoke_context,
     format_story_identity,
     format_valid_characters,
     format_vocabulary_note,
@@ -1045,6 +1050,7 @@ class FillStage:
                 ),
                 "output_language_instruction": self._lang_instruction,
                 "poly_state_section": poly_section,
+                "spoke_context": format_spoke_context(graph, passage_id),
             }
 
             if self._two_step:
@@ -1142,6 +1148,25 @@ class FillStage:
                             entity_id=update.entity_id,
                             reason="entity not found in graph",
                         )
+
+                # Spoke label updates: single-call mode only (two-step doesn't extract these)
+                if not self._two_step:
+                    for label_update in passage_output.spoke_labels:
+                        # Normalize choice ID to ensure choice:: prefix
+                        choice_id = normalize_scoped_id(label_update.choice_id, "choice")
+                        if graph.has_node(choice_id):
+                            graph.update_node(choice_id, label=label_update.label)
+                            log.debug(
+                                "spoke_label_set",
+                                choice_id=choice_id,
+                                label=label_update.label,
+                            )
+                        else:
+                            log.warning(
+                                "spoke_label_skipped",
+                                choice_id=choice_id,
+                                reason="choice not found in graph",
+                            )
 
             log.debug(
                 "passage_generated",

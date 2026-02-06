@@ -32,8 +32,10 @@ system: |
   1. Each spoke is 1-2 sentences of flavor/atmosphere, NOT plot-critical content
   2. Spokes should reveal character, setting, or world detail
   3. 2-4 spokes per hub
-  4. Spoke labels: 3-6 words, action phrases in imperative form
-  5. Forward label: describes continuing the main story
+  4. Spoke labels are OPTIONAL — if omitted, FILL stage will generate them
+     based on the prose it writes. This ensures labels match actual content.
+  5. If you DO provide labels: 3-6 words, action phrases in imperative form
+  6. Forward label: describes continuing the main story (required)
 
   ## What NOT to Do
   - Do NOT use passage IDs not listed in the Valid IDs section
@@ -50,7 +52,12 @@ system: |
   - passage_id: the passage that becomes a hub
   - spokes: array of 2-4 spokes, each with:
     - summary: 1-2 sentence description of what the player finds
-    - label: choice label to enter the spoke (3-6 words)
+    - label: (optional) choice label to enter the spoke (3-6 words)
+    - label_style: (optional) style hint for FILL-generated labels:
+      - "functional": Clear action verbs (default) — "Examine the clock", "Read the letter"
+      - "evocative": Atmospheric — "Trace the faded ink", "Listen to the silence"
+      - "character_voice": Internal thought — "That clock... why did it stop?"
+      If omitted, defaults to "functional"
   - forward_label: choice label for continuing the story (3-6 words)
 
 user: |
