@@ -112,6 +112,179 @@ def get_max_temperature(provider: str) -> float:
     return provider_limits.get(provider.lower(), 1.0)
 
 
+# ---------------------------------------------------------------------------
+# Provider Capabilities Registry
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class ProviderCapabilities:
+    """What parameters a provider actually supports at construction time.
+
+    Used to filter kwargs before passing to init_chat_model, preventing
+    silent failures and runtime errors from unsupported parameters.
+    """
+
+    temperature: bool = True
+    top_p: bool = True
+    seed: bool = False
+    stop: bool = True
+    max_tokens_param: str = "max_tokens"  # Ollama uses "num_predict"
+    supports_runtime_binding: bool = True  # Ollama does NOT respect bind()
+
+
+PROVIDER_CAPABILITIES: dict[str, ProviderCapabilities] = {
+    "ollama": ProviderCapabilities(
+        seed=True,
+        max_tokens_param="num_predict",
+        supports_runtime_binding=False,  # bind() kwargs ignored!
+    ),
+    "openai": ProviderCapabilities(
+        seed=True,
+        supports_runtime_binding=True,
+    ),
+    "anthropic": ProviderCapabilities(
+        seed=False,  # Not supported by Anthropic API
+        supports_runtime_binding=True,
+    ),
+    "google": ProviderCapabilities(
+        seed=False,  # Not supported by Google Gemini API
+        supports_runtime_binding=True,
+    ),
+}
+
+
+@dataclass(frozen=True)
+class ModelVariant:
+    """Special model characteristics that affect parameter handling.
+
+    Some models (like OpenAI's o1/o3 reasoning models) reject standard
+    parameters at runtime even when the provider generally supports them.
+    """
+
+    rejects_temperature: bool = False
+    rejects_stop: bool = False
+    rejects_top_p: bool = False
+    supports_reasoning_effort: bool = False
+
+
+def _detect_model_variant(provider: str, model: str) -> ModelVariant:
+    """Detect special model characteristics.
+
+    Args:
+        provider: Normalized provider name.
+        model: Model name/identifier.
+
+    Returns:
+        ModelVariant describing the model's parameter restrictions.
+    """
+    model_lower = model.lower()
+
+    # OpenAI reasoning models (o1, o3 families) don't support temperature/top_p
+    if provider == "openai" and (model_lower.startswith("o1") or model_lower.startswith("o3")):
+        return ModelVariant(
+            rejects_temperature=True,
+            rejects_top_p=True,
+            supports_reasoning_effort=True,
+        )
+
+    # GPT-5-mini currently rejects stop sequences
+    if provider == "openai" and "gpt-5-mini" in model_lower:
+        return ModelVariant(rejects_stop=True)
+
+    return ModelVariant()
+
+
+def get_provider_capabilities(provider: str) -> ProviderCapabilities:
+    """Get capabilities for a provider.
+
+    Args:
+        provider: Provider name (ollama, openai, anthropic, google).
+
+    Returns:
+        ProviderCapabilities for the provider. Returns default capabilities
+        (temperature, top_p, stop supported; seed not supported) for unknown
+        providers.
+    """
+    return PROVIDER_CAPABILITIES.get(provider.lower(), ProviderCapabilities())
+
+
+def filter_model_kwargs(
+    provider: str,
+    model: str,
+    kwargs: dict[str, Any],
+) -> dict[str, Any]:
+    """Filter kwargs to only include supported parameters.
+
+    Checks both provider-level capabilities and model-specific restrictions.
+    Logs warnings for dropped parameters (graceful degradation).
+
+    Args:
+        provider: Normalized provider name.
+        model: Model name/identifier.
+        kwargs: Raw kwargs to filter.
+
+    Returns:
+        Filtered kwargs with only supported parameters.
+    """
+    caps = get_provider_capabilities(provider)
+    variant = _detect_model_variant(provider, model)
+    filtered: dict[str, Any] = {}
+
+    for key, value in kwargs.items():
+        # Skip None values (explicit None is treated as "not provided")
+        if value is None:
+            log.debug("param_is_none", param=key, action="skipping")
+            continue
+
+        # Check provider capabilities for seed
+        if key == "seed" and not caps.seed:
+            log.warning(
+                "param_not_supported",
+                param=key,
+                provider=provider,
+                reason="seed_not_supported",
+            )
+            continue
+
+        # Check model variant restrictions
+        if key == "temperature" and variant.rejects_temperature:
+            log.warning(
+                "param_rejected_by_model",
+                param=key,
+                model=model,
+                reason="reasoning_model_controls_temperature",
+            )
+            continue
+
+        if key == "top_p" and variant.rejects_top_p:
+            log.warning(
+                "param_rejected_by_model",
+                param=key,
+                model=model,
+                reason="reasoning_model_controls_sampling",
+            )
+            continue
+
+        if key == "stop" and variant.rejects_stop:
+            log.warning(
+                "param_rejected_by_model",
+                param=key,
+                model=model,
+                reason="stop_sequences_not_supported",
+            )
+            continue
+
+        # Translate max_tokens to provider-specific param name
+        if key == "max_tokens" and caps.max_tokens_param != "max_tokens":
+            filtered[caps.max_tokens_param] = value
+            continue
+
+        filtered[key] = value
+
+    return filtered
+
+
 @dataclass
 class PhaseSettings:
     """Model settings for a specific pipeline phase.
