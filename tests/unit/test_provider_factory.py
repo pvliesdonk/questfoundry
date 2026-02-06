@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-import sys
 from dataclasses import FrozenInstanceError
-from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -144,11 +142,8 @@ def test_create_chat_model_ollama_import_error() -> None:
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
         patch(
-            "questfoundry.providers.factory._create_ollama_base_model",
-            side_effect=ProviderError(
-                "ollama",
-                "langchain-ollama not installed. Run: uv add langchain-ollama",
-            ),
+            "questfoundry.providers.factory._init_chat_model_safe",
+            side_effect=ImportError("No module named 'langchain_ollama'"),
         ),
         pytest.raises(ProviderError) as exc_info,
     ):
@@ -200,11 +195,8 @@ def test_create_chat_model_openai_import_error() -> None:
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
         patch(
-            "questfoundry.providers.factory._create_openai_base_model",
-            side_effect=ProviderError(
-                "openai",
-                "langchain-openai not installed. Run: uv add langchain-openai",
-            ),
+            "questfoundry.providers.factory._init_chat_model_safe",
+            side_effect=ImportError("No module named 'langchain_openai'"),
         ),
         pytest.raises(ProviderError) as exc_info,
     ):
@@ -245,11 +237,8 @@ def test_create_chat_model_anthropic_import_error() -> None:
     with (
         patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}),
         patch(
-            "questfoundry.providers.factory._create_anthropic_base_model",
-            side_effect=ProviderError(
-                "anthropic",
-                "langchain-anthropic not installed. Run: uv add langchain-anthropic",
-            ),
+            "questfoundry.providers.factory._init_chat_model_safe",
+            side_effect=ImportError("No module named 'langchain_anthropic'"),
         ),
         pytest.raises(ProviderError) as exc_info,
     ):
@@ -260,15 +249,10 @@ def test_create_chat_model_anthropic_import_error() -> None:
 
 def test_create_chat_model_google_missing_key() -> None:
     """Factory raises error when GOOGLE_API_KEY not set."""
+    # With the new architecture, the error is raised during preprocessing,
+    # so no need to patch - just clear the environment
     with (
         patch.dict("os.environ", {}, clear=True),
-        patch(
-            "questfoundry.providers.factory._create_google_base_model",
-            side_effect=ProviderError(
-                "google",
-                "API key required. Set GOOGLE_API_KEY environment variable.",
-            ),
-        ),
         pytest.raises(ProviderError) as exc_info,
     ):
         create_chat_model("google", "gemini-2.5-flash")
@@ -277,32 +261,27 @@ def test_create_chat_model_google_missing_key() -> None:
     assert exc_info.value.provider == "google"
 
 
-def _mock_google_module() -> tuple[ModuleType, MagicMock]:
-    """Create a mock langchain_google_genai module with ChatGoogleGenerativeAI."""
-    mock_module = ModuleType("langchain_google_genai")
-    mock_class = MagicMock()
-    mock_module.ChatGoogleGenerativeAI = mock_class  # type: ignore[attr-defined]
-    return mock_module, mock_class
-
-
 def test_create_chat_model_google_success() -> None:
     """Factory creates Google Gemini chat model."""
     mock_chat = MagicMock()
-    mock_module, mock_class = _mock_google_module()
-    mock_class.return_value = mock_chat
 
     with (
         patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
-        patch.dict(sys.modules, {"langchain_google_genai": mock_module}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         result = create_chat_model("google", "gemini-2.5-flash", temperature=0.7)
 
     assert result is mock_chat
-    mock_class.assert_called_once_with(
-        model="gemini-2.5-flash",
-        google_api_key="test-key",
-        temperature=0.7,
-    )
+    # Verify the call used google_genai (not google) and passed the right args
+    mock_init.assert_called_once()
+    call_args = mock_init.call_args
+    assert call_args[0][0] == "google_genai"  # provider mapped to google_genai
+    assert call_args[0][1] == "gemini-2.5-flash"
+    assert call_args[1]["temperature"] == 0.7
+    assert call_args[1]["api_key"] == "test-key"
 
 
 def test_create_chat_model_google_import_error() -> None:
@@ -310,11 +289,8 @@ def test_create_chat_model_google_import_error() -> None:
     with (
         patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
         patch(
-            "questfoundry.providers.factory._create_google_base_model",
-            side_effect=ProviderError(
-                "google",
-                "langchain-google-genai not installed. Run: uv add langchain-google-genai",
-            ),
+            "questfoundry.providers.factory._init_chat_model_safe",
+            side_effect=ImportError("No module named 'langchain_google_genai'"),
         ),
         pytest.raises(ProviderError) as exc_info,
     ):
@@ -326,16 +302,17 @@ def test_create_chat_model_google_import_error() -> None:
 def test_create_chat_model_google_top_p() -> None:
     """Factory passes top_p parameter for Google."""
     mock_chat = MagicMock()
-    mock_module, mock_class = _mock_google_module()
-    mock_class.return_value = mock_chat
 
     with (
         patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
-        patch.dict(sys.modules, {"langchain_google_genai": mock_module}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_chat_model("google", "gemini-2.5-flash", temperature=0.5, top_p=0.9)
 
-    call_kwargs = mock_class.call_args[1]
+    call_kwargs = mock_init.call_args[1]
     assert call_kwargs["top_p"] == 0.9
 
 
@@ -598,12 +575,13 @@ def test_create_model_structured_google_with_schema() -> None:
     mock_chat = MagicMock()
     mock_structured = MagicMock()
     mock_chat.with_structured_output.return_value = mock_structured
-    mock_module, mock_class = _mock_google_module()
-    mock_class.return_value = mock_chat
 
     with (
         patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
-        patch.dict(sys.modules, {"langchain_google_genai": mock_module}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ),
     ):
         result = create_model_for_structured_output(
             "google",
@@ -620,33 +598,37 @@ def test_create_model_structured_google_with_schema() -> None:
 def test_create_model_structured_default_model_google() -> None:
     """Factory uses default model name for Google when not provided."""
     mock_chat = MagicMock()
-    mock_module, mock_class = _mock_google_module()
-    mock_class.return_value = mock_chat
 
     with (
         patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
-        patch.dict(sys.modules, {"langchain_google_genai": mock_module}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_model_for_structured_output("google")
 
-    call_kwargs = mock_class.call_args[1]
-    assert call_kwargs["model"] == "gemini-2.5-flash"  # Uses PROVIDER_DEFAULTS
+    # Check model name passed to init
+    call_args = mock_init.call_args
+    assert call_args[0][1] == "gemini-2.5-flash"  # Uses PROVIDER_DEFAULTS
 
 
 def test_create_model_structured_gemini_alias() -> None:
     """Factory handles 'gemini' alias in structured output creation."""
     mock_chat = MagicMock()
-    mock_module, mock_class = _mock_google_module()
-    mock_class.return_value = mock_chat
 
     with (
         patch.dict("os.environ", {"GOOGLE_API_KEY": "test-key"}),
-        patch.dict(sys.modules, {"langchain_google_genai": mock_module}),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_model_for_structured_output("gemini")
 
-    call_kwargs = mock_class.call_args[1]
-    assert call_kwargs["model"] == "gemini-2.5-flash"
+    # Check model name passed to init
+    call_args = mock_init.call_args
+    assert call_args[0][1] == "gemini-2.5-flash"
 
 
 def test_create_model_structured_unknown_provider() -> None:
@@ -746,10 +728,12 @@ def test_model_info_is_frozen() -> None:
     ],
 )
 def test_is_reasoning_model(model_name: str, expected: bool) -> None:
-    """_is_reasoning_model correctly identifies reasoning models."""
-    from questfoundry.providers.factory import _is_reasoning_model
+    """_detect_model_variant correctly identifies reasoning models."""
+    from questfoundry.providers.settings import _detect_model_variant
 
-    assert _is_reasoning_model(model_name) is expected
+    variant = _detect_model_variant("openai", model_name)
+    # Reasoning models reject temperature
+    assert variant.rejects_temperature is expected
 
 
 @pytest.mark.parametrize("model_name", ["o1", "o1-mini", "o1-preview", "o3", "o3-mini"])
