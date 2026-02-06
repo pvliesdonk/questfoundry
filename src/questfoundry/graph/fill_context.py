@@ -966,11 +966,14 @@ def format_valid_characters(graph: Graph) -> str:
     highlighting the protagonist if defined. This prevents the LLM from
     inventing phantom characters during voice determination.
 
+    Note: Assumes all character entities have raw_id field (guaranteed by
+    SEED stage). Falls back to scope-stripped entity ID if missing.
+
     Args:
         graph: Graph containing entity nodes.
 
     Returns:
-        Formatted list of valid character IDs, or placeholder if none defined.
+        Formatted list of valid character IDs, or error message if none defined.
     """
     entity_nodes = graph.get_nodes_by_type("entity")
     characters: list[str] = []
@@ -988,10 +991,19 @@ def format_valid_characters(graph: Graph) -> str:
             else:
                 marker = ""
 
-            characters.append(f"- {raw_id}{marker}: {concept}")
+            # Conditionally add concept to avoid trailing colon
+            if concept:
+                characters.append(f"- {raw_id}{marker}: {concept}")
+            else:
+                characters.append(f"- {raw_id}{marker}")
 
     if not characters:
-        return "(No character entities defined)"
+        log.warning("no_character_entities", stage="fill", phase="voice_research")
+        return (
+            "ERROR: No character entities found. "
+            "Voice determination requires at least one character from SEED/BRAINSTORM. "
+            "Do NOT invent characters."
+        )
 
     header = ""
     if protagonist_id:

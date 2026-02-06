@@ -36,7 +36,7 @@ system: |
   - If no protagonist is defined, discuss options with the user (interactive) or choose the most prominent character (autonomous)
 
   ### POV Character Naming (CRITICAL)
-  GOOD: Use a character from the valid characters list: "Kay", "Marcus", "the protagonist"
+  GOOD: Use an exact character name from the valid characters list: "Kay", "Marcus"
   BAD: Invent a new character: "Mila", "the reader as Alex", "your character named Sam"
 
   ### Voice Decisions to Make

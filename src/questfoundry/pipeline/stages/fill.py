@@ -763,12 +763,22 @@ class FillStage:
         template = loader.load("fill_phase0_discuss")
 
         # Build mode section based on interactive flag
+        mode_section: str
         if self._interactive:
             mode_section = ""
         else:
-            mode_section = getattr(template, "non_interactive_section", None) or (
-                "## Mode: Autonomous\nMake confident voice decisions based on genre and tone."
-            )
+            raw_mode_section = getattr(template, "non_interactive_section", None)
+            if raw_mode_section is None:
+                log.warning(
+                    "template_missing_field",
+                    field="non_interactive_section",
+                    template="fill_phase0_discuss",
+                )
+                mode_section = (
+                    "## Mode: Autonomous\nMake confident voice decisions based on genre and tone."
+                )
+            else:
+                mode_section = str(raw_mode_section)
 
         system_prompt = template.system.format(
             dream_vision=format_dream_vision(graph),
@@ -783,7 +793,10 @@ class FillStage:
             tools = [*tools, *get_interactive_tools()]
 
         if not tools and not self._interactive:
-            log.info("voice_research_skipped", reason="no corpus tools available")
+            log.info(
+                "voice_research_skipped",
+                reason="no_corpus_tools_in_autonomous_mode",
+            )
             return "", 0, 0
 
         messages, discuss_calls, discuss_tokens = await run_discuss_phase(
