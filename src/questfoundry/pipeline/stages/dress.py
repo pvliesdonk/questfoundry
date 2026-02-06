@@ -1497,6 +1497,9 @@ def build_image_brief(graph: Graph, brief: dict[str, Any]) -> ImageBrief:
                     if candidate:
                         entity_node = candidate
                         break
+                # Fallback: try legacy "entity::" prefix for backwards compatibility
+                if not entity_node:
+                    entity_node = graph.get_node(f"entity::{raw_eid}")
                 name = ""
                 if entity_node:
                     concept = entity_node.get("concept", "")

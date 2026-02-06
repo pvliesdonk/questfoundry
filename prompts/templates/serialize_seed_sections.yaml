@@ -12,7 +12,7 @@ entities_prompt: |
 
   ## Scoped ID Format (CRITICAL)
   All IDs use type prefixes for disambiguation. Copy IDs EXACTLY as shown in the manifest,
-  including the CATEGORY prefix (`character::`, `location::`, `item::`, or `faction::`).
+  including the CATEGORY prefix (`character::`, `location::`, `object::`, or `faction::`).
 
   ## Schema
   Return a JSON object with an "entities" array. Each item is an EntityDecision:
@@ -358,7 +358,7 @@ beats_prompt: |
   |-------|--------|-------------|-------|
   | `paths[]` | `path::` | VALID PATH IDs | hierarchical: `dilemma__answer` |
   | `dilemma_impacts.dilemma_id` | `dilemma::` | Dilemma IDs | long: `subject_X_or_Y` |
-  | `entities[]` | `character::`, `item::`, `faction::` | Entity IDs (non-locations) | varies |
+  | `entities[]` | `character::`, `object::`, `faction::` | Entity IDs (non-locations) | varies |
   | `location` | `location::` | Entity IDs (locations only) | varies |
 
   Path IDs are hierarchical (dilemma__answer). Dilemma IDs are binary questions.

@@ -828,6 +828,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "type": "entity",
             "raw_id": raw_id,
             "category": category,  # Store category for easy access
+            "entity_type": category,  # Backwards compat: some code still uses entity_type
             "concept": entity.get("concept"),
             "notes": entity.get("notes"),
             "disposition": "proposed",  # All entities start as proposed

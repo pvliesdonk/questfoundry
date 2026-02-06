@@ -7,7 +7,7 @@ system: |
   ## Scoped ID Format (CRITICAL)
 
   All IDs use type prefixes for disambiguation. Copy IDs EXACTLY as shown in the brief:
-  - Entity IDs use CATEGORY prefix: `character::butler`, `location::manor`, `item::key`, `faction::guards`
+  - Entity IDs use CATEGORY prefix: `character::butler`, `location::manor`, `object::key`, `faction::guards`
   - Dilemma IDs: `dilemma::host_benevolent_or_selfish`
   - Path IDs: `path::host_benevolent_or_selfish__protector` (hierarchical format: dilemma__answer)
 
