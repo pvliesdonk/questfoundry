@@ -2197,6 +2197,291 @@ class TestInsertGapBeat:
         # Should be gap_4 (max existing is 3, so next is 4)
         assert beat_id == "beat::gap_4"
 
+    def test_inherits_entities_from_adjacent_beats(self) -> None:
+        """Gap beat inherits entities (union) from adjacent beats."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
+        graph.create_node(
+            "beat::a",
+            {
+                "type": "beat",
+                "raw_id": "a",
+                "summary": "Beat A",
+                "entities": ["entity::hero", "entity::mentor"],
+            },
+        )
+        graph.create_node(
+            "beat::b",
+            {
+                "type": "beat",
+                "raw_id": "b",
+                "summary": "Beat B",
+                "entities": ["entity::mentor", "entity::villain"],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+        graph.add_edge("requires", "beat::b", "beat::a")
+
+        beat_id = insert_gap_beat(
+            graph,
+            path_id="path::t1",
+            after_beat="beat::a",
+            before_beat="beat::b",
+            summary="Gap transition",
+            scene_type="sequel",
+        )
+
+        node = graph.get_node(beat_id)
+        assert node is not None
+        # Union of entities from both beats, deduplicated
+        assert set(node["entities"]) == {"entity::hero", "entity::mentor", "entity::villain"}
+
+    def test_inherits_shared_location(self) -> None:
+        """Gap beat inherits location when adjacent beats share it."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
+        graph.create_node(
+            "beat::a",
+            {"type": "beat", "raw_id": "a", "summary": "A", "location": "location::castle"},
+        )
+        graph.create_node(
+            "beat::b",
+            {"type": "beat", "raw_id": "b", "summary": "B", "location": "location::castle"},
+        )
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+
+        beat_id = insert_gap_beat(
+            graph,
+            path_id="path::t1",
+            after_beat="beat::a",
+            before_beat="beat::b",
+            summary="Gap",
+            scene_type="sequel",
+        )
+
+        node = graph.get_node(beat_id)
+        assert node["location"] == "location::castle"
+
+    def test_inherits_location_fallback(self) -> None:
+        """Gap beat falls back to available location when not shared."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
+        graph.create_node(
+            "beat::a",
+            {"type": "beat", "raw_id": "a", "summary": "A", "location": "location::castle"},
+        )
+        graph.create_node(
+            "beat::b",
+            {"type": "beat", "raw_id": "b", "summary": "B", "location": "location::forest"},
+        )
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+
+        beat_id = insert_gap_beat(
+            graph,
+            path_id="path::t1",
+            after_beat="beat::a",
+            before_beat="beat::b",
+            summary="Gap",
+            scene_type="sequel",
+        )
+
+        node = graph.get_node(beat_id)
+        # Falls back to after_beat's location when they differ
+        assert node["location"] == "location::castle"
+
+    def test_bridges_fields_set(self) -> None:
+        """Gap beat records bridges_from and bridges_to for traceability."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "A"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "B"})
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+
+        beat_id = insert_gap_beat(
+            graph,
+            path_id="path::t1",
+            after_beat="beat::a",
+            before_beat="beat::b",
+            summary="Gap",
+            scene_type="sequel",
+        )
+
+        node = graph.get_node(beat_id)
+        assert node["bridges_from"] == "beat::a"
+        assert node["bridges_to"] == "beat::b"
+
+    def test_transition_style_smooth_same_location_shared_entities(self) -> None:
+        """Transition style is smooth when location and entities are shared."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
+        graph.create_node(
+            "beat::a",
+            {
+                "type": "beat",
+                "raw_id": "a",
+                "summary": "A",
+                "location": "location::castle",
+                "entities": ["entity::hero"],
+                "scene_type": "scene",
+            },
+        )
+        graph.create_node(
+            "beat::b",
+            {
+                "type": "beat",
+                "raw_id": "b",
+                "summary": "B",
+                "location": "location::castle",
+                "entities": ["entity::hero", "entity::mentor"],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+
+        beat_id = insert_gap_beat(
+            graph,
+            path_id="path::t1",
+            after_beat="beat::a",
+            before_beat="beat::b",
+            summary="Gap",
+            scene_type="sequel",
+        )
+
+        node = graph.get_node(beat_id)
+        assert node["transition_style"] == "smooth"
+
+    def test_transition_style_cut_different_locations(self) -> None:
+        """Transition style is cut when locations differ."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
+        graph.create_node(
+            "beat::a",
+            {
+                "type": "beat",
+                "raw_id": "a",
+                "summary": "A",
+                "location": "location::castle",
+                "scene_type": "scene",
+            },
+        )
+        graph.create_node(
+            "beat::b",
+            {
+                "type": "beat",
+                "raw_id": "b",
+                "summary": "B",
+                "location": "location::forest",
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+
+        beat_id = insert_gap_beat(
+            graph,
+            path_id="path::t1",
+            after_beat="beat::a",
+            before_beat="beat::b",
+            summary="Gap",
+            scene_type="sequel",
+        )
+
+        node = graph.get_node(beat_id)
+        assert node["transition_style"] == "cut"
+
+    def test_transition_style_cut_different_scene_types(self) -> None:
+        """Transition style is cut when scene types differ."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
+        graph.create_node(
+            "beat::a",
+            {
+                "type": "beat",
+                "raw_id": "a",
+                "summary": "A",
+                "location": "location::castle",
+                "scene_type": "scene",
+            },
+        )
+        graph.create_node(
+            "beat::b",
+            {
+                "type": "beat",
+                "raw_id": "b",
+                "summary": "B",
+                "location": "location::castle",
+                "scene_type": "sequel",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+
+        beat_id = insert_gap_beat(
+            graph,
+            path_id="path::t1",
+            after_beat="beat::a",
+            before_beat="beat::b",
+            summary="Gap",
+            scene_type="micro_beat",
+        )
+
+        node = graph.get_node(beat_id)
+        assert node["transition_style"] == "cut"
+
+    def test_handles_missing_adjacent_beat(self) -> None:
+        """Gap beat handles None adjacent beat gracefully."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
+        graph.create_node(
+            "beat::b",
+            {
+                "type": "beat",
+                "raw_id": "b",
+                "summary": "B",
+                "entities": ["entity::hero"],
+                "location": "location::forest",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+
+        beat_id = insert_gap_beat(
+            graph,
+            path_id="path::t1",
+            after_beat=None,  # No after beat
+            before_beat="beat::b",
+            summary="Prologue",
+            scene_type="scene",
+        )
+
+        node = graph.get_node(beat_id)
+        # Should inherit from before_beat only
+        assert node["entities"] == ["entity::hero"]
+        assert node["location"] == "location::forest"
+        assert node["bridges_from"] is None
+        assert node["bridges_to"] == "beat::b"
+        assert node["transition_style"] == "smooth"  # Default when context missing
+
 
 # ---------------------------------------------------------------------------
 # Phase 9: find_passage_successors

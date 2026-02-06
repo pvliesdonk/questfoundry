@@ -18,7 +18,7 @@ import contextlib
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from itertools import product
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.mutations import GrowErrorCategory, GrowValidationError
@@ -1481,6 +1481,10 @@ def insert_gap_beat(
     Creates a new beat node and adjusts requires edges to maintain ordering.
     The new beat is assigned to the specified path.
 
+    Gap beats inherit entities (union) and location from adjacent beats to
+    provide context for FILL stage transitions. A transition_style field
+    indicates whether the gap should be a smooth continuation or a hard cut.
+
     Args:
         graph: Graph to mutate.
         path_id: Path this beat belongs to (prefixed ID).
@@ -1504,7 +1508,31 @@ def insert_gap_beat(
     raw_id = f"gap_{max_gap_index + 1}"
     beat_id = f"beat::{raw_id}"
 
-    # Create the beat node
+    # Get adjacent beat nodes for inheritance
+    after_node = graph.get_node(after_beat) if after_beat else None
+    before_node = graph.get_node(before_beat) if before_beat else None
+
+    # Inherit entities (union of both adjacent beats, deduplicated)
+    entities: list[str] = []
+    if after_node:
+        after_ents = after_node.get("entities")
+        if isinstance(after_ents, list):
+            entities.extend(after_ents)
+    if before_node:
+        before_ents = before_node.get("entities")
+        if isinstance(before_ents, list):
+            entities.extend(before_ents)
+    entities = list(dict.fromkeys(entities))  # Deduplicate preserving order
+
+    # Inherit location (prefer shared location, fallback to either)
+    after_loc = after_node.get("location") if after_node else None
+    before_loc = before_node.get("location") if before_node else None
+    location = after_loc if after_loc == before_loc else (after_loc or before_loc)
+
+    # Infer transition style based on context
+    transition_style = _infer_transition_style(after_node, before_node)
+
+    # Create the beat node with enriched context
     graph.create_node(
         beat_id,
         {
@@ -1514,6 +1542,12 @@ def insert_gap_beat(
             "scene_type": scene_type,
             "paths": [path_id.removeprefix("path::")],
             "is_gap_beat": True,
+            # Enrichment fields for transition handling
+            "entities": entities,
+            "location": location,
+            "transition_style": transition_style,
+            "bridges_from": after_beat,
+            "bridges_to": before_beat,
         },
     )
 
@@ -1530,6 +1564,50 @@ def insert_gap_beat(
         graph.add_edge("requires", before_beat, beat_id)
 
     return beat_id
+
+
+def _infer_transition_style(
+    from_beat: dict[str, object] | None,
+    to_beat: dict[str, object] | None,
+) -> Literal["smooth", "cut"]:
+    """Infer whether a gap transition should be smooth or a hard cut.
+
+    Heuristics:
+    - Same location + shared entities → smooth
+    - Different locations → cut
+    - Different scene types → cut
+    - No shared entities but same location → smooth
+
+    Args:
+        from_beat: The beat before the gap (or None).
+        to_beat: The beat after the gap (or None).
+
+    Returns:
+        "smooth" or "cut" based on context analysis.
+    """
+    if not from_beat or not to_beat:
+        return "smooth"  # Default when context is missing
+
+    from_loc = from_beat.get("location")
+    to_loc = to_beat.get("location")
+
+    # Different locations usually warrant a cut
+    if from_loc and to_loc and from_loc != to_loc:
+        return "cut"
+
+    # Scene type changes often need cuts
+    if from_beat.get("scene_type") != to_beat.get("scene_type"):
+        return "cut"
+
+    # Same location with any shared entities → smooth
+    from_ent_raw = from_beat.get("entities")
+    to_ent_raw = to_beat.get("entities")
+    from_entities: set[str] = set(from_ent_raw) if isinstance(from_ent_raw, list) else set()
+    to_entities: set[str] = set(to_ent_raw) if isinstance(to_ent_raw, list) else set()
+    if from_loc == to_loc and from_entities & to_entities:
+        return "smooth"
+
+    return "smooth"  # Default to smooth for continuity
 
 
 # ---------------------------------------------------------------------------
