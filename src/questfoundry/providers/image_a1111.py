@@ -403,7 +403,9 @@ class A1111ImageProvider:
         }
 
         last_error: str | None = None
-        for attempt in range(1, _DISTILL_MAX_RETRIES + 1):
+        attempt = 0
+        while attempt < _DISTILL_MAX_RETRIES:
+            attempt += 1
             try:
                 response = await distill_llm.ainvoke(messages, config=invoke_config)
                 raw = (
@@ -425,7 +427,8 @@ class A1111ImageProvider:
                     )
                     use_stop = None
                     distill_llm = _rebind()
-                    continue  # Don't count as retry attempt
+                    attempt -= 1  # Don't count as retry attempt
+                    continue
 
                 # Check if error is due to unsupported 'temperature' value
                 if (
@@ -440,7 +443,8 @@ class A1111ImageProvider:
                     )
                     use_temperature = None
                     distill_llm = _rebind()
-                    continue  # Don't count as retry attempt
+                    attempt -= 1  # Don't count as retry attempt
+                    continue
 
                 log.warning(
                     "image_prompt_distill_failed",
