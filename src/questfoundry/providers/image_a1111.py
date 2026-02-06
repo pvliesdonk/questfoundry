@@ -197,7 +197,13 @@ class A1111ImageProvider:
             )
         return await self._distill_with_llm(brief)
 
-    def _bind_distill_limits(self, llm: Any, *, stop: list[str] | None = None) -> Any:
+    def _bind_distill_limits(
+        self,
+        llm: Any,
+        *,
+        stop: list[str] | None = None,
+        temperature: float | None = 0.2,
+    ) -> Any:
         """Bind conservative generation limits for prompt distillation.
 
         We rely on provider-side caps to prevent pathological runs where the
@@ -207,6 +213,8 @@ class A1111ImageProvider:
             llm: The LangChain LLM to bind limits to.
             stop: Optional stop sequences. Some models (o1/o3) don't support
                 this parameter even if the LangChain wrapper has the attribute.
+            temperature: Optional temperature. Some models (gpt-5-mini) only
+                support the default value (1.0). Pass None to skip binding.
         """
         if not hasattr(llm, "bind"):
             return llm
@@ -224,10 +232,9 @@ class A1111ImageProvider:
         if stop and hasattr(llm, "stop"):
             bind_kwargs["stop"] = stop
 
-        # Keep distillation deterministic-ish; if a provider doesn't support it,
-        # the attribute check keeps this a no-op.
-        if hasattr(llm, "temperature"):
-            bind_kwargs["temperature"] = 0.2
+        # Only add temperature if explicitly requested (caller handles fallback)
+        if temperature is not None and hasattr(llm, "temperature"):
+            bind_kwargs["temperature"] = temperature
 
         if not bind_kwargs:
             return llm
@@ -376,9 +383,16 @@ class A1111ImageProvider:
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        # Try with stop parameter first; some models (o1/o3) don't support it
+        # Try with optional params first; some models don't support them
+        # - o1/o3: don't support 'stop' parameter
+        # - gpt-5-mini: only supports default temperature (1.0)
         use_stop: list[str] | None = [_DISTILL_STOP_MARKER]
-        distill_llm = self._bind_distill_limits(self._llm, stop=use_stop)
+        use_temperature: float | None = 0.2
+
+        def _rebind() -> Any:
+            return self._bind_distill_limits(self._llm, stop=use_stop, temperature=use_temperature)
+
+        distill_llm = _rebind()
         messages = [SystemMessage(content=system_msg), HumanMessage(content=brief_text)]
         invoke_config = {
             "metadata": {
@@ -405,14 +419,28 @@ class A1111ImageProvider:
                 # Check if error is due to unsupported 'stop' parameter
                 if use_stop and "stop" in error_msg and "not supported" in error_msg:
                     log.info(
-                        "image_prompt_distill_stop_unsupported",
+                        "image_prompt_distill_param_unsupported",
+                        param="stop",
                         model=self._model,
-                        message="Retrying without stop parameter",
                     )
                     use_stop = None
-                    distill_llm = self._bind_distill_limits(self._llm, stop=None)
-                    # Don't count this as a retry attempt
-                    continue
+                    distill_llm = _rebind()
+                    continue  # Don't count as retry attempt
+
+                # Check if error is due to unsupported 'temperature' value
+                if (
+                    use_temperature is not None
+                    and "temperature" in error_msg
+                    and ("not support" in error_msg or "unsupported" in error_msg)
+                ):
+                    log.info(
+                        "image_prompt_distill_param_unsupported",
+                        param="temperature",
+                        model=self._model,
+                    )
+                    use_temperature = None
+                    distill_llm = _rebind()
+                    continue  # Don't count as retry attempt
 
                 log.warning(
                     "image_prompt_distill_failed",
