@@ -191,36 +191,40 @@ class A1111ImageProvider:
             )
         return await self._distill_with_llm(brief)
 
-    def _bind_distill_limits(self, llm: Any, *, stop: list[str]) -> Any:
-        """Bind conservative generation limits for prompt distillation.
+    def _apply_distill_limits(self, llm: Any, *, stop: list[str]) -> Any:
+        """Create a model copy with conservative generation limits for distillation.
+
+        Uses model_copy() instead of bind() because bind() kwargs are ignored
+        by some providers (Ollama reads from instance attributes, not invoke kwargs).
 
         We rely on provider-side caps to prevent pathological runs where the
         model ignores formatting instructions and generates extremely long output.
         """
-        if not hasattr(llm, "bind"):
+        # model_copy requires the model to be a Pydantic model
+        if not hasattr(llm, "model_copy"):
             return llm
 
-        bind_kwargs: dict[str, Any] = {}
+        updates: dict[str, Any] = {}
 
         # Ollama (langchain-ollama ChatOllama) uses num_predict.
         if hasattr(llm, "num_predict"):
-            bind_kwargs["num_predict"] = _DISTILL_MAX_OUTPUT_TOKENS
+            updates["num_predict"] = _DISTILL_MAX_OUTPUT_TOKENS
         # Most hosted providers use max_tokens.
         elif hasattr(llm, "max_tokens"):
-            bind_kwargs["max_tokens"] = _DISTILL_MAX_OUTPUT_TOKENS
+            updates["max_tokens"] = _DISTILL_MAX_OUTPUT_TOKENS
 
+        # Stop sequences - skip if model doesn't support
         if hasattr(llm, "stop"):
-            bind_kwargs["stop"] = stop
+            updates["stop"] = stop
 
-        # Keep distillation deterministic-ish; if a provider doesn't support it,
-        # the attribute check keeps this a no-op.
+        # Keep distillation deterministic-ish
         if hasattr(llm, "temperature"):
-            bind_kwargs["temperature"] = 0.2
+            updates["temperature"] = 0.2
 
-        if not bind_kwargs:
+        if not updates:
             return llm
 
-        return llm.bind(**bind_kwargs)
+        return llm.model_copy(update=updates)
 
     def _parse_distilled_output(self, raw: str) -> tuple[str, str | None]:
         """Parse the LLM's output into (positive, negative).
@@ -364,7 +368,7 @@ class A1111ImageProvider:
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        distill_llm = self._bind_distill_limits(self._llm, stop=[_DISTILL_STOP_MARKER])
+        distill_llm = self._apply_distill_limits(self._llm, stop=[_DISTILL_STOP_MARKER])
 
         last_error: str | None = None
         for attempt in range(1, _DISTILL_MAX_RETRIES + 1):
