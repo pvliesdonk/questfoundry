@@ -396,7 +396,7 @@ class TestA1111DistillPrompt:
     async def test_llm_system_prompt_tag_limit(self) -> None:
         """SD 1.5 distiller should enforce 40-tag limit."""
         mock_llm = AsyncMock()
-        mock_llm.bind = Mock(return_value=mock_llm)
+        mock_llm.model_copy = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = "warrior battle, courtyard, epic, watercolor"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -413,14 +413,16 @@ class TestA1111DistillPrompt:
         assert "subject" in system_msg.lower()
         assert "CLIP encoder" in system_msg
         assert "ENTITY EXPANSION" in system_msg
-        assert mock_llm.bind.call_args.kwargs["num_predict"] > 0
-        assert mock_llm.bind.call_args.kwargs["stop"]
+        # model_copy is called with update={...} instead of bind(**kwargs)
+        update_dict = mock_llm.model_copy.call_args.kwargs["update"]
+        assert update_dict["num_predict"] > 0
+        assert update_dict["stop"]
 
     @pytest.mark.asyncio()
     async def test_llm_sdxl_break_instruction(self) -> None:
         """SDXL LLM distiller should mention BREAK and 75-tag limit."""
         mock_llm = AsyncMock()
-        mock_llm.bind = Mock(return_value=mock_llm)
+        mock_llm.model_copy = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = "scene tags BREAK style tags"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -439,7 +441,7 @@ class TestA1111DistillPrompt:
     async def test_llm_entity_cap(self) -> None:
         """LLM distiller should also cap entities."""
         mock_llm = AsyncMock()
-        mock_llm.bind = Mock(return_value=mock_llm)
+        mock_llm.model_copy = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = "test prompt"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -459,7 +461,7 @@ class TestA1111DistillPrompt:
     async def test_llm_distillation_two_line_output(self) -> None:
         """LLM returns positive on line 1, negative on line 2."""
         mock_llm = AsyncMock()
-        mock_llm.bind = Mock(return_value=mock_llm)
+        mock_llm.model_copy = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = (
             "warrior battle, courtyard, epic, watercolor, golden hour\n"
@@ -480,7 +482,7 @@ class TestA1111DistillPrompt:
     async def test_llm_distillation_single_line_output(self) -> None:
         """LLM returns only positive — negative is None."""
         mock_llm = AsyncMock()
-        mock_llm.bind = Mock(return_value=mock_llm)
+        mock_llm.model_copy = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = "warrior battle, courtyard, epic, watercolor"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
@@ -496,7 +498,7 @@ class TestA1111DistillPrompt:
     async def test_llm_strips_labels(self) -> None:
         """LLM output with 'Positive:' / 'Negative:' labels gets stripped."""
         mock_llm = AsyncMock()
-        mock_llm.bind = Mock(return_value=mock_llm)
+        mock_llm.model_copy = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = (
             "Positive: warrior, courtyard, watercolor\nNegative: photorealism, text"
@@ -514,7 +516,7 @@ class TestA1111DistillPrompt:
     async def test_llm_receives_negative_in_brief(self) -> None:
         """Negative prompt text is included in the brief sent to the LLM."""
         mock_llm = AsyncMock()
-        mock_llm.bind = Mock(return_value=mock_llm)
+        mock_llm.model_copy = Mock(return_value=mock_llm)
         mock_response = AsyncMock()
         mock_response.content = "tags\nbad things"
         mock_llm.ainvoke = AsyncMock(return_value=mock_response)
