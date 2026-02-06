@@ -50,6 +50,7 @@ from questfoundry.graph.fill_context import (
     format_shadow_states,
     format_sliding_window,
     format_story_identity,
+    format_valid_characters,
     format_vocabulary_note,
     format_voice_context,
     get_arc_passage_order,
@@ -266,6 +267,12 @@ class FillStage:
         self._max_concurrency: int = 2
         self._lang_instruction: str = ""
         self._two_step: bool = False
+        # Interactive mode attributes (set in execute(), defaults for direct calls)
+        self._interactive: bool = False
+        self._user_input_fn: UserInputFn | None = None
+        self._on_assistant_message: AssistantMessageFn | None = None
+        self._on_llm_start: LLMCallbackFn | None = None
+        self._on_llm_end: LLMCallbackFn | None = None
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -318,11 +325,11 @@ class FillStage:
         user_prompt: str,  # noqa: ARG002
         provider_name: str | None = None,
         *,
-        interactive: bool = False,  # noqa: ARG002
-        user_input_fn: UserInputFn | None = None,  # noqa: ARG002
-        on_assistant_message: AssistantMessageFn | None = None,  # noqa: ARG002
-        on_llm_start: LLMCallbackFn | None = None,  # noqa: ARG002
-        on_llm_end: LLMCallbackFn | None = None,  # noqa: ARG002
+        interactive: bool = False,
+        user_input_fn: UserInputFn | None = None,
+        on_assistant_message: AssistantMessageFn | None = None,
+        on_llm_start: LLMCallbackFn | None = None,
+        on_llm_end: LLMCallbackFn | None = None,
         project_path: Path | None = None,
         callbacks: list[BaseCallbackHandler] | None = None,
         summarize_model: BaseChatModel | None = None,  # noqa: ARG002
@@ -342,11 +349,11 @@ class FillStage:
             model: LangChain chat model for prose generation.
             user_prompt: User guidance (unused in FILL).
             provider_name: Provider name for structured output strategy.
-            interactive: Interactive mode flag (unused).
-            user_input_fn: User input function (unused).
-            on_assistant_message: Assistant message callback (unused).
-            on_llm_start: LLM start callback (unused).
-            on_llm_end: LLM end callback (unused).
+            interactive: Enable interactive discuss phase for voice determination.
+            user_input_fn: Function for interactive user input.
+            on_assistant_message: Callback for assistant messages in interactive mode.
+            on_llm_start: LLM start callback for progress tracking.
+            on_llm_end: LLM end callback for progress tracking.
             project_path: Override for project path.
             callbacks: LangChain callback handlers.
             summarize_model: Summarize model (unused).
@@ -374,11 +381,16 @@ class FillStage:
         self._provider_name = provider_name
         self._serialize_model = serialize_model
         self._serialize_provider_name = serialize_provider_name
+        self._interactive = interactive
+        self._user_input_fn = user_input_fn
+        self._on_assistant_message = on_assistant_message
+        self._on_llm_start = on_llm_start
+        self._on_llm_end = on_llm_end
         self._size_profile = kwargs.get("size_profile")
         self._max_concurrency = kwargs.get("max_concurrency", 2)
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
         self._two_step = kwargs.get("two_step", True)
-        log.info("stage_start", stage="fill")
+        log.info("stage_start", stage="fill", interactive=interactive)
 
         phases = self._phase_order()
         phase_map = {name: i for i, (_, name) in enumerate(phases)}
@@ -731,30 +743,60 @@ class FillStage:
         graph: Graph,
         model: BaseChatModel,
     ) -> tuple[str, int, int]:
-        """Phase 0a: Research voice guidance using corpus tools.
+        """Phase 0a: Research voice guidance using discuss phase.
 
-        Runs a non-interactive discuss phase with corpus-only tools to
-        gather craft advice on POV, tense, register, and genre pitfalls.
-        Results are summarized for injection into the voice template.
+        Runs a discuss phase (interactive or autonomous) to explore voice
+        decisions including POV character selection. Prevents phantom character
+        invention by providing explicit valid character list.
 
         Returns:
             Tuple of (research_summary, llm_calls, tokens_used).
         """
         from questfoundry.agents import run_discuss_phase, summarize_discussion
         from questfoundry.prompts.loader import PromptLoader
-        from questfoundry.tools.langchain_tools import get_corpus_tools
+        from questfoundry.tools.langchain_tools import (
+            get_corpus_tools,
+            get_interactive_tools,
+        )
 
         loader = PromptLoader(_get_prompts_path())
         template = loader.load("fill_phase0_discuss")
 
+        # Build mode section based on interactive flag
+        mode_section: str
+        if self._interactive:
+            mode_section = ""
+        else:
+            raw_mode_section = getattr(template, "non_interactive_section", None)
+            if raw_mode_section is None:
+                log.warning(
+                    "template_missing_field",
+                    field="non_interactive_section",
+                    template="fill_phase0_discuss",
+                )
+                mode_section = (
+                    "## Mode: Autonomous\nMake confident voice decisions based on genre and tone."
+                )
+            else:
+                mode_section = str(raw_mode_section)
+
         system_prompt = template.system.format(
             dream_vision=format_dream_vision(graph),
             grow_summary=format_grow_summary(graph),
+            valid_characters=format_valid_characters(graph),
+            pov_context=format_pov_context(graph),
+            mode_section=mode_section,
         )
 
         tools = get_corpus_tools()
-        if not tools:
-            log.info("voice_research_skipped", reason="no corpus tools available")
+        if self._interactive:
+            tools = [*tools, *get_interactive_tools()]
+
+        if not tools and not self._interactive:
+            log.info(
+                "voice_research_skipped",
+                reason="no_corpus_tools_in_autonomous_mode",
+            )
             return "", 0, 0
 
         messages, discuss_calls, discuss_tokens = await run_discuss_phase(
@@ -762,7 +804,9 @@ class FillStage:
             tools=tools,
             user_prompt="Research voice and style guidance for this story.",
             max_iterations=25,
-            interactive=False,
+            interactive=self._interactive,
+            user_input_fn=self._user_input_fn,
+            on_assistant_message=self._on_assistant_message,
             system_prompt=system_prompt,
             stage_name="fill",
             callbacks=self._callbacks,
@@ -781,6 +825,7 @@ class FillStage:
             llm_calls=discuss_calls + 1,
             tokens=total_tokens,
             brief_length=len(brief),
+            interactive=self._interactive,
         )
 
         return brief, discuss_calls + 1, total_tokens

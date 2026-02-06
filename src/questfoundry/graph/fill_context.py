@@ -959,6 +959,59 @@ def format_pov_context(graph: Graph) -> str:
     return "\n".join(lines) if lines else ""
 
 
+def format_valid_characters(graph: Graph) -> str:
+    """Format valid character entities for POV selection in discuss phase.
+
+    Lists all character entities by raw_id with their concept,
+    highlighting the protagonist if defined. This prevents the LLM from
+    inventing phantom characters during voice determination.
+
+    Note: Assumes all character entities have raw_id field (guaranteed by
+    SEED stage). Falls back to scope-stripped entity ID if missing.
+
+    Args:
+        graph: Graph containing entity nodes.
+
+    Returns:
+        Formatted list of valid character IDs, or error message if none defined.
+    """
+    entity_nodes = graph.get_nodes_by_type("entity")
+    characters: list[str] = []
+    protagonist_id: str | None = None
+
+    for eid, edata in entity_nodes.items():
+        if edata.get("category") == "character":
+            raw_id = edata.get("raw_id", strip_scope_prefix(eid))
+            concept = edata.get("concept", "")
+            is_protag = edata.get("is_protagonist", False)
+
+            if is_protag:
+                protagonist_id = raw_id
+                marker = " (PROTAGONIST)"
+            else:
+                marker = ""
+
+            # Conditionally add concept to avoid trailing colon
+            if concept:
+                characters.append(f"- {raw_id}{marker}: {concept}")
+            else:
+                characters.append(f"- {raw_id}{marker}")
+
+    if not characters:
+        log.warning("no_character_entities", stage="fill", phase="voice_research")
+        return (
+            "ERROR: No character entities found. "
+            "Voice determination requires at least one character from SEED/BRAINSTORM. "
+            "Do NOT invent characters."
+        )
+
+    header = ""
+    if protagonist_id:
+        header = f"Protagonist: **{protagonist_id}** (use for first/third_limited POV)\n\n"
+
+    return header + "\n".join(characters)
+
+
 def get_path_pov_character(graph: Graph, arc_id: str) -> str | None:
     """Get the POV character for passages in an arc.
 

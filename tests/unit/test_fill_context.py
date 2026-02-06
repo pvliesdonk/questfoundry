@@ -30,6 +30,7 @@ from questfoundry.graph.fill_context import (
     format_scene_types_summary,
     format_shadow_states,
     format_sliding_window,
+    format_valid_characters,
     format_vocabulary_note,
     format_voice_context,
     get_arc_passage_order,
@@ -2069,3 +2070,142 @@ class TestFormatMergedPassageContext:
         assert "**Location:**" in result
         assert "manor" in result
         assert "unchanged throughout" in result
+
+
+class TestFormatValidCharacters:
+    """Tests for format_valid_characters function."""
+
+    def test_empty_graph_returns_error_message(self) -> None:
+        """No character entities returns directive error message."""
+        g = Graph.empty()
+        result = format_valid_characters(g)
+        assert "ERROR:" in result
+        assert "No character entities found" in result
+        assert "Do NOT invent" in result
+
+    def test_single_character_without_protagonist(self) -> None:
+        """Single character listed correctly."""
+        g = Graph.empty()
+        g.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "category": "character",
+                "concept": "A brave adventurer",
+            },
+        )
+        result = format_valid_characters(g)
+        assert "- hero: A brave adventurer" in result
+        assert "PROTAGONIST" not in result
+        assert "Protagonist:" not in result
+
+    def test_character_marked_as_protagonist(self) -> None:
+        """Protagonist gets marked and header added."""
+        g = Graph.empty()
+        g.create_node(
+            "entity::kay",
+            {
+                "type": "entity",
+                "raw_id": "kay",
+                "category": "character",
+                "concept": "The chosen one",
+                "is_protagonist": True,
+            },
+        )
+        result = format_valid_characters(g)
+        assert "Protagonist: **kay**" in result
+        assert "- kay (PROTAGONIST): The chosen one" in result
+
+    def test_multiple_characters_with_protagonist(self) -> None:
+        """Multiple characters with one protagonist."""
+        g = Graph.empty()
+        g.create_node(
+            "entity::alice",
+            {
+                "type": "entity",
+                "raw_id": "alice",
+                "category": "character",
+                "concept": "The hero",
+                "is_protagonist": True,
+            },
+        )
+        g.create_node(
+            "entity::bob",
+            {
+                "type": "entity",
+                "raw_id": "bob",
+                "category": "character",
+                "concept": "The sidekick",
+            },
+        )
+        result = format_valid_characters(g)
+        assert "Protagonist: **alice**" in result
+        assert "- alice (PROTAGONIST): The hero" in result
+        assert "- bob: The sidekick" in result
+
+    def test_character_with_empty_concept(self) -> None:
+        """Empty concept doesn't produce trailing colon."""
+        g = Graph.empty()
+        g.create_node(
+            "entity::mystery",
+            {
+                "type": "entity",
+                "raw_id": "mystery",
+                "category": "character",
+                "concept": "",
+            },
+        )
+        result = format_valid_characters(g)
+        assert "- mystery" in result
+        assert "- mystery:" not in result  # No trailing colon
+
+    def test_non_character_entities_excluded(self) -> None:
+        """Location and item entities are not included."""
+        g = Graph.empty()
+        g.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "category": "character",
+                "concept": "Main character",
+            },
+        )
+        g.create_node(
+            "entity::castle",
+            {
+                "type": "entity",
+                "raw_id": "castle",
+                "category": "location",
+                "concept": "A dark castle",
+            },
+        )
+        g.create_node(
+            "entity::sword",
+            {
+                "type": "entity",
+                "raw_id": "sword",
+                "category": "item",
+                "concept": "A magic sword",
+            },
+        )
+        result = format_valid_characters(g)
+        assert "hero" in result
+        assert "castle" not in result
+        assert "sword" not in result
+
+    def test_fallback_to_stripped_id_when_raw_id_missing(self) -> None:
+        """Falls back to scope-stripped entity ID if raw_id missing."""
+        g = Graph.empty()
+        g.create_node(
+            "entity::fallback_char",
+            {
+                "type": "entity",
+                "category": "character",
+                "concept": "Test character",
+                # raw_id intentionally missing
+            },
+        )
+        result = format_valid_characters(g)
+        assert "fallback_char" in result
