@@ -25,7 +25,11 @@ from pydantic import BaseModel, ValidationError
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
-from questfoundry.graph.context import ENTITY_CATEGORIES, strip_scope_prefix
+from questfoundry.graph.context import (
+    ENTITY_CATEGORIES,
+    normalize_scoped_id,
+    strip_scope_prefix,
+)
 from questfoundry.graph.fill_context import (
     compute_arc_hints,
     compute_first_appearances,
@@ -1148,10 +1152,8 @@ class FillStage:
                 # Spoke label updates: single-call mode only (two-step doesn't extract these)
                 if not self._two_step:
                     for label_update in passage_output.spoke_labels:
-                        # Resolve choice ID (may need choice:: prefix)
-                        choice_id = label_update.choice_id
-                        if not choice_id.startswith("choice::"):
-                            choice_id = f"choice::{choice_id}"
+                        # Normalize choice ID to ensure choice:: prefix
+                        choice_id = normalize_scoped_id(label_update.choice_id, "choice")
                         if graph.has_node(choice_id):
                             graph.update_node(choice_id, label=label_update.label)
                             log.debug(
@@ -1162,7 +1164,7 @@ class FillStage:
                         else:
                             log.warning(
                                 "spoke_label_skipped",
-                                choice_id=label_update.choice_id,
+                                choice_id=choice_id,
                                 reason="choice not found in graph",
                             )
 

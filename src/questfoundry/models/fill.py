@@ -88,8 +88,8 @@ class SpokeLabelUpdate(BaseModel):
     choice_id: str = Field(min_length=1, description="ID of the hub-to-spoke choice")
     label: str = Field(
         min_length=1,
-        max_length=60,
-        description="Final choice label (e.g., 'Examine the sketch')",
+        max_length=80,  # Allows some flexibility for verbose styles and translations
+        description="Final choice label, 3-60 chars (e.g., 'Examine the sketch')",
     )
 
 

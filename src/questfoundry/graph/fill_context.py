@@ -218,8 +218,8 @@ def get_pending_spoke_labels(graph: Graph, hub_passage_id: str) -> list[dict[str
         if not choice_data:
             continue
 
-        # Check if label is missing or empty
-        current_label = choice_data.get("label", "")
+        # Check if label is missing or empty (both None and "" are falsy)
+        current_label = choice_data.get("label")
         if current_label:
             continue  # Already has a label
 
