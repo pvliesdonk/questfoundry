@@ -3310,19 +3310,22 @@ class TestCollapseLinearPassages:
 
         result = collapse_linear_passages(graph, min_chain_length=3)
 
-        assert result.chains_collapsed >= 1
-        assert result.passages_removed >= 3
+        assert result.chains_collapsed == 1
+        # Chain detection excludes end passages (no outgoing choices), so b3 not in chain
+        assert result.passages_removed == 3
 
-        # Original passages should be gone
+        # Original chain passages should be gone
         assert graph.get_node("passage::b0") is None
         assert graph.get_node("passage::b1") is None
         assert graph.get_node("passage::b2") is None
+        # End passage b3 not part of chain, should still exist
+        assert graph.get_node("passage::b3") is not None
 
         # Merged passage should exist
         merged = [
             p for pid, p in graph.get_nodes_by_type("passage").items() if p.get("merged_from")
         ]
-        assert len(merged) >= 1
+        assert len(merged) == 1
 
     def test_merged_passage_has_correct_fields(self) -> None:
         """Merged passage has from_beats, primary_beat, merged_from, etc."""
@@ -3338,13 +3341,13 @@ class TestCollapseLinearPassages:
             for pid, p in graph.get_nodes_by_type("passage").items()
             if p.get("merged_from")
         ]
-        assert len(merged_passages) >= 1
+        assert len(merged_passages) == 1
 
         _pid, merged = merged_passages[0]
         assert "from_beats" in merged
         assert "primary_beat" in merged
         assert "merged_from" in merged
-        assert len(merged["from_beats"]) >= 3
+        assert len(merged["from_beats"]) == 3  # 3 beats from collapsed chain
         assert merged["primary_beat"] in merged["from_beats"]
 
     def test_no_collapse_below_threshold(self) -> None:

@@ -453,16 +453,6 @@ class PassageCollapseResult:
     passages_removed: int
 
 
-@dataclass
-class TransitionPoint:
-    """Transition guidance for FILL between beats in a merged passage."""
-
-    index: int  # Position in from_beats list (after which beat)
-    style: str  # "smooth" or "cut"
-    bridge_entities: list[str]  # Entities bridging the transition
-    note: str  # Human-readable guidance
-
-
 def collapse_linear_passages(
     graph: Graph,
     *,
@@ -507,6 +497,7 @@ def collapse_linear_passages(
         return PassageCollapseResult(chains_collapsed=0, passages_removed=0)
 
     removed_passages: set[str] = set()
+    chains_collapsed = 0
 
     for chain in chains:
         if not _should_collapse_chain(graph, chain):
@@ -523,12 +514,14 @@ def collapse_linear_passages(
             removed_passages.add(pid)
             graph.delete_node(pid, cascade=True)
 
+        chains_collapsed += 1
+
     # Update arc sequences to remove collapsed passages
     if removed_passages:
         _update_arc_sequences(graph, removed_passages)
 
     return PassageCollapseResult(
-        chains_collapsed=len([c for c in chains if _should_collapse_chain(graph, c)]),
+        chains_collapsed=chains_collapsed,
         passages_removed=len(removed_passages),
     )
 
