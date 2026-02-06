@@ -191,7 +191,7 @@ class A1111ImageProvider:
             )
         return await self._distill_with_llm(brief)
 
-    def _bind_distill_limits(self, llm: Any, *, stop: list[str]) -> Any:
+    def _apply_distill_limits(self, llm: Any, *, stop: list[str]) -> Any:
         """Create a model copy with conservative generation limits for distillation.
 
         Uses model_copy() instead of bind() because bind() kwargs are ignored
@@ -368,7 +368,7 @@ class A1111ImageProvider:
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        distill_llm = self._bind_distill_limits(self._llm, stop=[_DISTILL_STOP_MARKER])
+        distill_llm = self._apply_distill_limits(self._llm, stop=[_DISTILL_STOP_MARKER])
 
         last_error: str | None = None
         for attempt in range(1, _DISTILL_MAX_RETRIES + 1):
