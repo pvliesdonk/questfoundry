@@ -14,6 +14,20 @@ entities_prompt: |
   All IDs use type prefixes for disambiguation. Copy IDs EXACTLY as shown in the manifest,
   including the CATEGORY prefix (`character::`, `location::`, `object::`, or `faction::`).
 
+  ## Entity Names (CRITICAL)
+  The manifest shows which entities need names (marked with "(needs name)").
+  For each RETAINED entity that needs a name, you MUST provide a `name` field.
+
+  Good names are memorable and fit the story's tone:
+  - Characters: "Lady Beatrice Ashford", "Marcus the Groundskeeper", "Dr. Chen"
+  - Locations: "The Gilded Compass Inn", "Thornwood Manor", "The Eastern Archives"
+  - Objects: "The Obsidian Key", "Captain's Logbook", "The Crimson Pendant"
+  - Factions: "The Night Watch", "House of Whispers", "The Merchant Guild"
+
+  Do NOT just title-case the entity_id - create a proper name that fits the concept.
+  WRONG: "Lady_Beatrice" or "The Butler" for entity_id "character::butler"
+  RIGHT: "Edmund Graves" or "Old Whitmore" for a butler character
+
   ## Schema
   Return a JSON object with an "entities" array. Each item is an EntityDecision:
   ```json
@@ -21,7 +35,8 @@ entities_prompt: |
     "entities": [
       {
         "entity_id": "character::butler",
-        "disposition": "retained"
+        "disposition": "retained",
+        "name": "Edmund Graves"
       },
       {
         "entity_id": "location::manor",
@@ -31,16 +46,22 @@ entities_prompt: |
   }
   ```
 
+  Note: `name` is only needed for RETAINED entities marked "(needs name)" in the manifest.
+  Omit `name` for cut entities or entities that already have names.
+
   ## Rules
   - disposition must be exactly "retained" or "cut" (lowercase)
   - entity_id must include the category prefix and match EXACTLY an ID from the manifest
   - Generate a decision for EVERY entity in the manifest
+  - For RETAINED entities marked "(needs name)", provide a fitting `name`
 
   ## What NOT to Do
   - Do NOT skip entities because they aren't mentioned in the brief
   - Do NOT invent entities not in the manifest
   - Do NOT partially complete the list
   - Do NOT omit the category prefix from IDs
+  - Do NOT provide names for cut entities (waste of effort)
+  - Do NOT just title-case the entity_id as the name
 
   ## Output
   Return ONLY valid JSON with the "entities" array.

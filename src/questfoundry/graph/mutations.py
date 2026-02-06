@@ -1574,7 +1574,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
     if errors:
         raise SeedMutationError(errors)
 
-    # Update entity dispositions
+    # Update entity dispositions and names
     for i, entity_decision in enumerate(output.get("entities", [])):
         raw_id = _require_field(entity_decision, "entity_id", f"Entity decision at index {i}")
         try:
@@ -1582,10 +1582,21 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         except ValueError:
             # Entity not found - validation should have caught this
             continue
-        graph.update_node(
-            entity_id,
-            disposition=entity_decision.get("disposition", "retained"),
-        )
+
+        # Build update dict with disposition and optional name
+        update_data: dict[str, Any] = {
+            "disposition": entity_decision.get("disposition", "retained"),
+        }
+
+        # Apply SEED name only if entity doesn't already have one from BRAINSTORM.
+        # This preserves BRAINSTORM names (which emerged naturally during discussion)
+        # while allowing SEED to generate names for entities that need them.
+        if name := entity_decision.get("name"):
+            existing_node = graph.get_node(entity_id)
+            if existing_node and not existing_node.get("name"):
+                update_data["name"] = name
+
+        graph.update_node(entity_id, **update_data)
 
     # Update dilemma exploration decisions
     for i, dilemma_decision in enumerate(output.get("dilemmas", [])):

@@ -33,9 +33,14 @@ class EntityDecision(BaseModel):
     for the story. Entities are the building blocks; not all brainstorm
     ideas make it into the final story.
 
+    When retaining an entity that lacks a name from BRAINSTORM, SEED
+    generates an appropriate canonical name based on the entity's
+    concept and role in the story.
+
     Attributes:
         entity_id: Entity ID from BRAINSTORM.
         disposition: Whether to keep (retained) or discard (cut).
+        name: Canonical display name for retained entities (required if missing from BRAINSTORM).
     """
 
     entity_id: str = Field(
@@ -44,6 +49,15 @@ class EntityDecision(BaseModel):
     disposition: EntityDisposition = Field(
         default="retained",
         description="Whether to keep or discard the entity",
+    )
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Canonical display name for this entity. Required for retained entities "
+            "that don't already have a name from BRAINSTORM (e.g., 'Lady Beatrice Ashford', "
+            "'The Gilded Compass Inn'). Leave absent if entity already has a name."
+        ),
     )
 
 
