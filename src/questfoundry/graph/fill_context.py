@@ -319,6 +319,11 @@ def format_continuity_warning(
     if (cur_beat or {}).get("scene_type") == "micro_beat":
         return ""
 
+    # Gap beats ARE the transition — they have inherited context and shouldn't
+    # trigger hard transition warnings. Their transition_style already guides FILL.
+    if (cur_beat or {}).get("is_gap_beat"):
+        return ""
+
     prev_entities = _entities_for(prev_passage_id)
     cur_entities = _entities_for(cur_passage_id)
     ent_overlap = _jaccard(prev_entities, cur_entities)
