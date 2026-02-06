@@ -202,7 +202,9 @@ def get_provider_capabilities(provider: str) -> ProviderCapabilities:
         provider: Provider name (ollama, openai, anthropic, google).
 
     Returns:
-        ProviderCapabilities for the provider, or defaults if unknown.
+        ProviderCapabilities for the provider. Returns default capabilities
+        (temperature, top_p, stop supported; seed not supported) for unknown
+        providers.
     """
     return PROVIDER_CAPABILITIES.get(provider.lower(), ProviderCapabilities())
 
@@ -230,8 +232,9 @@ def filter_model_kwargs(
     filtered: dict[str, Any] = {}
 
     for key, value in kwargs.items():
-        # Skip None values
+        # Skip None values (explicit None is treated as "not provided")
         if value is None:
+            log.debug("param_is_none", param=key, action="skipping")
             continue
 
         # Check provider capabilities for seed
@@ -240,7 +243,7 @@ def filter_model_kwargs(
                 "param_not_supported",
                 param=key,
                 provider=provider,
-                note=f"{provider} does not support seed parameter",
+                reason="seed_not_supported",
             )
             continue
 
@@ -250,7 +253,7 @@ def filter_model_kwargs(
                 "param_rejected_by_model",
                 param=key,
                 model=model,
-                note="reasoning models control their own temperature",
+                reason="reasoning_model_controls_temperature",
             )
             continue
 
@@ -259,7 +262,7 @@ def filter_model_kwargs(
                 "param_rejected_by_model",
                 param=key,
                 model=model,
-                note="reasoning models control their own sampling",
+                reason="reasoning_model_controls_sampling",
             )
             continue
 
@@ -268,7 +271,7 @@ def filter_model_kwargs(
                 "param_rejected_by_model",
                 param=key,
                 model=model,
-                note="this model does not support stop sequences",
+                reason="stop_sequences_not_supported",
             )
             continue
 

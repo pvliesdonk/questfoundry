@@ -33,6 +33,14 @@ PROVIDER_DEFAULTS: dict[str, str | None] = {
     "google": "gemini-2.5-flash",
 }
 
+# Known provider names for validation
+_KNOWN_PROVIDERS = frozenset({"ollama", "openai", "anthropic", "google"})
+
+# Fallback models for providers where PROVIDER_DEFAULTS returns None
+_FALLBACK_MODELS: dict[str, str] = {
+    "ollama": "qwen3:4b-instruct-32k",
+}
+
 
 def get_default_model(provider_name: str) -> str | None:
     """Get default model for a provider.
@@ -73,8 +81,7 @@ def create_chat_model(
     provider = _normalize_provider(provider_name)
 
     # Validate provider is known
-    known_providers = {"ollama", "openai", "anthropic", "google"}
-    if provider not in known_providers:
+    if provider not in _KNOWN_PROVIDERS:
         log.error("provider_unknown", provider=provider)
         raise ProviderError(provider, f"Unknown provider: {provider}")
 
@@ -166,30 +173,26 @@ def _preprocess_provider_kwargs(
             kwargs["num_ctx"] = num_ctx if num_ctx else 32_768
 
     elif provider == "openai":
-        # Resolve API key from kwargs or env var
-        if "api_key" not in kwargs:
-            api_key = os.getenv("OPENAI_API_KEY")
-            if not api_key:
-                log.error("provider_config_error", provider="openai", missing="OPENAI_API_KEY")
-                raise ProviderError(
-                    "openai",
-                    "API key required. Set OPENAI_API_KEY environment variable.",
-                )
-            kwargs["api_key"] = api_key
+        # Resolve API key from kwargs or env var (handles api_key=None case)
+        api_key = kwargs.get("api_key") or os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            log.error("provider_config_error", provider="openai", missing="OPENAI_API_KEY")
+            raise ProviderError(
+                "openai",
+                "API key required. Set OPENAI_API_KEY environment variable.",
+            )
+        kwargs["api_key"] = api_key
 
     elif provider == "anthropic":
-        # Resolve API key from kwargs or env var
-        if "api_key" not in kwargs:
-            api_key = os.getenv("ANTHROPIC_API_KEY")
-            if not api_key:
-                log.error(
-                    "provider_config_error", provider="anthropic", missing="ANTHROPIC_API_KEY"
-                )
-                raise ProviderError(
-                    "anthropic",
-                    "API key required. Set ANTHROPIC_API_KEY environment variable.",
-                )
-            kwargs["api_key"] = api_key
+        # Resolve API key from kwargs or env var (handles api_key=None case)
+        api_key = kwargs.get("api_key") or os.getenv("ANTHROPIC_API_KEY")
+        if not api_key:
+            log.error("provider_config_error", provider="anthropic", missing="ANTHROPIC_API_KEY")
+            raise ProviderError(
+                "anthropic",
+                "API key required. Set ANTHROPIC_API_KEY environment variable.",
+            )
+        kwargs["api_key"] = api_key
 
     elif provider == "google":
         # Resolve API key from kwargs or env var (accept google_api_key or api_key)
@@ -292,8 +295,7 @@ def create_model_for_structured_output(
     resolved_model = model_name or get_default_model(provider)
     # Fallback for providers where get_default_model returns None (e.g., ollama)
     if resolved_model is None:
-        fallback_models = {"ollama": "qwen3:4b-instruct-32k"}
-        resolved_model = fallback_models.get(provider)
+        resolved_model = _FALLBACK_MODELS.get(provider)
         if resolved_model is None:
             raise ProviderError(provider, f"No default model for provider: {provider}")
 
