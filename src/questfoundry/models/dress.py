@@ -55,14 +55,18 @@ class ArtDirection(BaseModel):
 
 
 class Illustration(BaseModel):
-    """Art asset with diegetic caption.
+    """Art asset with descriptive caption for accessibility.
 
     Generated from an IllustrationBrief and linked to a passage
     via a Depicts edge.
     """
 
     asset: str = Field(min_length=1, description="Path to image file (e.g. assets/<hash>.png)")
-    caption: str = Field(min_length=1, description="Diegetic caption — in-world voice")
+    caption: str = Field(
+        min_length=1,
+        max_length=100,  # Defensive max; prompt targets 10-60 chars
+        description="Short descriptive caption for alt-text (10-60 chars ideal)",
+    )
     category: IllustrationCategory = Field(
         description="Image category",
     )
@@ -147,7 +151,11 @@ class IllustrationBrief(BaseModel):
     entities: list[str] = Field(
         description="Entity IDs present in scene",
     )
-    caption: str = Field(min_length=1, description="Proposed diegetic caption")
+    caption: str = Field(
+        min_length=1,
+        max_length=100,  # Defensive max; prompt targets 10-60 chars
+        description="Short descriptive caption for alt-text (10-60 chars ideal)",
+    )
     mood: str = Field(min_length=1, description="Emotional tone")
     composition: str = Field(min_length=1, description="Framing / camera notes")
     style_overrides: str = Field(
