@@ -797,7 +797,25 @@ class PipelineOrchestrator:
         )
 
     async def close(self) -> None:
-        """Close the orchestrator and release resources."""
+        """Close the orchestrator and release resources.
+
+        When using different Ollama models for phases, the serialize phase
+        leaves its model loaded in VRAM. Unload it here so the next stage
+        can start fresh with the creative model without waiting for a swap.
+        """
+        # Unload structured model from Ollama if it's different from creative.
+        # This ensures the next stage can load the creative model without
+        # having to evict the structured model first.
+        creative_provider = self._get_resolved_role_provider("creative")
+        structured_provider = self._get_resolved_role_provider("structured")
+
+        if (
+            self._structured_model is not None
+            and structured_provider != creative_provider
+            and structured_provider.startswith("ollama")
+        ):
+            await unload_ollama_model(self._structured_model)
+
         if self._creative_model is not None:
             # Some chat models may have async close methods
             if hasattr(self._creative_model, "close"):
@@ -807,3 +825,7 @@ class PipelineOrchestrator:
                     if hasattr(result, "__await__"):
                         await result
             self._creative_model = None
+
+        # Clear other model references
+        self._balanced_model = None
+        self._structured_model = None
