@@ -1087,6 +1087,23 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                         category=SeedErrorCategory.SEMANTIC,
                     )
                 )
+            else:
+                # Validate pov_character is a character entity (not location/object/faction)
+                pov_entity_type = entity_types.get(normalized_pov, "")
+                if pov_entity_type != "character":
+                    # Get list of character entities for helpful error message
+                    character_ids = sorted(
+                        eid for eid, etype in entity_types.items() if etype == "character"
+                    )
+                    errors.append(
+                        SeedValidationError(
+                            field_path=f"paths.{i}.pov_character",
+                            issue=f"POV character must be a character entity, not '{pov_entity_type}'",
+                            available=character_ids,
+                            provided=pov_char,
+                            category=SeedErrorCategory.SEMANTIC,
+                        )
+                    )
 
     # 5-8. Validate beats (single pass over initial_beats)
     # Build cut-entity set for disposition checks

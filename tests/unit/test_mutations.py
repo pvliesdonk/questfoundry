@@ -3911,15 +3911,15 @@ class TestValidateSeedPovCharacter:
         # Add entity nodes
         graph.create_node(
             "character::kay",
-            {"type": "entity", "raw_id": "kay", "category": "character", "concept": "Archivist"},
+            {"type": "entity", "raw_id": "kay", "entity_type": "character", "concept": "Archivist"},
         )
         graph.create_node(
             "character::mentor",
-            {"type": "entity", "raw_id": "mentor", "category": "character", "concept": "Mentor"},
+            {"type": "entity", "raw_id": "mentor", "entity_type": "character", "concept": "Mentor"},
         )
         graph.create_node(
             "location::manor",
-            {"type": "entity", "raw_id": "manor", "category": "location", "concept": "Manor"},
+            {"type": "entity", "raw_id": "manor", "entity_type": "location", "concept": "Manor"},
         )
         # Add dilemma and answers
         graph.create_node(
@@ -4032,3 +4032,39 @@ class TestValidateSeedPovCharacter:
 
         pov_errors = [e for e in errors if "pov_character" in e.field_path]
         assert pov_errors == []
+
+    def test_pov_character_non_character_rejected(self, graph_with_entities: Graph) -> None:
+        """POV character must be a character entity, not location/object/faction."""
+        output = {
+            "entities": [
+                {"entity_id": "kay", "disposition": "retained"},
+                {"entity_id": "manor", "disposition": "retained"},
+            ],
+            "dilemmas": [
+                {"dilemma_id": "trust_mentor_or_not", "explored": ["trust"], "unexplored": []}
+            ],
+            "paths": [
+                {
+                    "path_id": "path::trust_mentor_or_not__trust",
+                    "name": "Trust Path",
+                    "dilemma_id": "trust_mentor_or_not",
+                    "answer_id": "trust",
+                    "path_importance": "major",
+                    "description": "Trust the mentor",
+                    "pov_character": "manor",  # Location, not character
+                }
+            ],
+            "consequences": [],
+            "initial_beats": [],
+        }
+
+        errors = validate_seed_mutations(graph_with_entities, output)
+
+        pov_errors = [e for e in errors if "pov_character" in e.field_path]
+        assert len(pov_errors) == 1
+        assert "character entity" in pov_errors[0].issue
+        assert "location" in pov_errors[0].issue
+        # Should suggest character entities
+        assert "kay" in pov_errors[0].available
+        assert "mentor" in pov_errors[0].available
+        assert "manor" not in pov_errors[0].available
