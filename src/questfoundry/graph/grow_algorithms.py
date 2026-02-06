@@ -18,7 +18,7 @@ import contextlib
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from itertools import product
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.graph.mutations import GrowErrorCategory, GrowValidationError
@@ -1512,9 +1512,13 @@ def insert_gap_beat(
     # Inherit entities (union of both adjacent beats, deduplicated)
     entities: list[str] = []
     if after_node:
-        entities.extend(after_node.get("entities") or [])
+        after_ents = after_node.get("entities")
+        if isinstance(after_ents, list):
+            entities.extend(after_ents)
     if before_node:
-        entities.extend(before_node.get("entities") or [])
+        before_ents = before_node.get("entities")
+        if isinstance(before_ents, list):
+            entities.extend(before_ents)
     entities = list(dict.fromkeys(entities))  # Deduplicate preserving order
 
     # Inherit location (prefer shared location, fallback to either)
@@ -1562,7 +1566,7 @@ def insert_gap_beat(
 def _infer_transition_style(
     from_beat: dict[str, object] | None,
     to_beat: dict[str, object] | None,
-) -> str:
+) -> Literal["smooth", "cut"]:
     """Infer whether a gap transition should be smooth or a hard cut.
 
     Heuristics:
