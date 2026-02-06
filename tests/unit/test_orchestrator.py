@@ -400,6 +400,117 @@ async def test_orchestrator_close_async(tmp_path: Path) -> None:
     mock_model.close.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_orchestrator_close_unloads_different_ollama_structured_model(
+    tmp_path: Path,
+) -> None:
+    """Close unloads structured model when different from creative (Ollama)."""
+    from unittest.mock import AsyncMock, patch
+
+    # Create project config with different Ollama models
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: test
+providers:
+  creative: ollama/mistral:7b
+  structured: ollama/phi3:mini
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    # Inject mock structured model
+    mock_structured = MagicMock()
+    mock_structured.base_url = "http://localhost:11434"
+    mock_structured.model = "phi3:mini"
+    orchestrator._structured_model = mock_structured
+
+    with patch(
+        "questfoundry.pipeline.orchestrator.unload_ollama_model",
+        new_callable=AsyncMock,
+    ) as mock_unload:
+        await orchestrator.close()
+
+        # Should have called unload with the structured model
+        mock_unload.assert_awaited_once_with(mock_structured)
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_close_skips_unload_when_same_model(tmp_path: Path) -> None:
+    """Close skips unload when structured and creative use same model."""
+    from unittest.mock import AsyncMock, patch
+
+    # Create project config with same model for all phases
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: test
+providers:
+  default: ollama/mistral:7b
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+    orchestrator._structured_model = MagicMock()
+
+    with patch(
+        "questfoundry.pipeline.orchestrator.unload_ollama_model",
+        new_callable=AsyncMock,
+    ) as mock_unload:
+        await orchestrator.close()
+
+        # Should NOT have called unload (same model)
+        mock_unload.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_close_skips_unload_for_non_ollama(tmp_path: Path) -> None:
+    """Close skips unload when structured provider is not Ollama."""
+    from unittest.mock import AsyncMock, patch
+
+    # Create project config with non-Ollama structured provider
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: test
+providers:
+  creative: ollama/mistral:7b
+  structured: openai/gpt-4o
+"""
+    )
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+    orchestrator._structured_model = MagicMock()
+
+    with patch(
+        "questfoundry.pipeline.orchestrator.unload_ollama_model",
+        new_callable=AsyncMock,
+    ) as mock_unload:
+        await orchestrator.close()
+
+        # Should NOT have called unload (not Ollama)
+        mock_unload.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_orchestrator_close_clears_all_model_references(tmp_path: Path) -> None:
+    """Close sets _balanced_model and _structured_model to None."""
+    orchestrator = PipelineOrchestrator(tmp_path)
+
+    # Set all model references
+    orchestrator._creative_model = MagicMock()
+    orchestrator._balanced_model = MagicMock()
+    orchestrator._structured_model = MagicMock()
+
+    await orchestrator.close()
+
+    # All should be cleared
+    assert orchestrator._creative_model is None
+    assert orchestrator._balanced_model is None
+    assert orchestrator._structured_model is None
+
+
 # --- Post-Mutation Validation Integration Tests ---
 
 

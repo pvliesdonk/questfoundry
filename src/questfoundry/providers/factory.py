@@ -399,6 +399,7 @@ async def unload_ollama_model(chat_model: BaseChatModel) -> None:
             attributes (ChatOllama instances do).
     """
     import asyncio
+    import time
 
     import httpx
 
@@ -419,23 +420,34 @@ async def unload_ollama_model(chat_model: BaseChatModel) -> None:
             # Ollama unloads asynchronously, so we need to verify it's gone
             max_wait = 30.0  # seconds
             poll_interval = 0.5  # seconds
-            waited = 0.0
+            start_time = time.monotonic()
 
-            while waited < max_wait:
+            while (time.monotonic() - start_time) < max_wait:
                 try:
                     response = await client.get(f"{base_url}/api/ps")
                     if response.status_code == 200:
-                        data = response.json()
+                        try:
+                            data = response.json()
+                        except (ValueError, TypeError):
+                            # Malformed JSON response, keep polling
+                            log.debug(
+                                "ollama_ps_parse_error",
+                                model=model_name,
+                                status=response.status_code,
+                            )
+                            await asyncio.sleep(poll_interval)
+                            continue
+
                         loaded_models = [m.get("name", "") for m in data.get("models", [])]
                         if model_name not in loaded_models:
                             # Model successfully unloaded
-                            log.info("ollama_model_unloaded", model=model_name, wait_time=waited)
+                            elapsed = time.monotonic() - start_time
+                            log.info("ollama_model_unloaded", model=model_name, wait_time=elapsed)
                             return
                 except Exception:
                     pass  # Ignore polling errors, keep trying
 
                 await asyncio.sleep(poll_interval)
-                waited += poll_interval
 
             # Timed out waiting for unload
             log.warning(
