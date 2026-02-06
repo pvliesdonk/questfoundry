@@ -117,6 +117,8 @@ system: |
   voice), list them in entity_updates so they persist for later passages.
   Only update EXISTING entities — do not create new ones.
 
+  {spoke_context}
+
   ## Output Format
   Return a JSON object with a "passage" field containing:
   - passage_id: the passage ID
@@ -124,6 +126,7 @@ system: |
   - flag: "ok" or "incompatible_states"
   - flag_reason: explanation if flagged (empty otherwise)
   - entity_updates: list of {{entity_id, field, value}} (may be empty)
+  - spoke_labels: list of {{choice_id, label}} for any hub-to-spoke choices (may be empty)
 
 user: |
   Write the prose for passage {passage_id} following the voice document and

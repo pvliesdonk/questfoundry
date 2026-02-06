@@ -76,6 +76,8 @@ system: |
   ## Vocabulary Note
   {vocabulary_note}
 
+  {spoke_context}
+
   {output_language_instruction}
 
   ## Rules

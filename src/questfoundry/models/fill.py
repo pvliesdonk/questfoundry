@@ -78,6 +78,21 @@ class EntityUpdate(BaseModel):
     value: str = Field(min_length=1, description="New detail to add")
 
 
+class SpokeLabelUpdate(BaseModel):
+    """Final label for a hub-to-spoke choice.
+
+    When GROW creates spokes with label=None, FILL generates labels
+    alongside prose to ensure the choice text matches passage content.
+    """
+
+    choice_id: str = Field(min_length=1, description="ID of the hub-to-spoke choice")
+    label: str = Field(
+        min_length=1,
+        max_length=60,
+        description="Final choice label (e.g., 'Examine the sketch')",
+    )
+
+
 class FillPassageOutput(BaseModel):
     """LLM output for a single passage prose generation.
 
@@ -98,6 +113,10 @@ class FillPassageOutput(BaseModel):
     entity_updates: list[EntityUpdate] = Field(
         default_factory=list,
         description="Micro-details discovered during generation",
+    )
+    spoke_labels: list[SpokeLabelUpdate] = Field(
+        default_factory=list,
+        description="Labels for hub-to-spoke choices (when hub passage generates prose)",
     )
 
 

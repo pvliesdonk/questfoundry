@@ -188,6 +188,120 @@ def format_passage_context(graph: Graph, passage_id: str) -> str:
     return "\n".join(lines)
 
 
+def get_pending_spoke_labels(graph: Graph, hub_passage_id: str) -> list[dict[str, str]]:
+    """Get spokes originating from this hub that need labels generated.
+
+    Returns spoke choices where:
+    - The choice goes from this passage to a spoke passage
+    - The choice has no label or an empty label
+
+    Args:
+        graph: Graph containing passage and choice nodes.
+        hub_passage_id: The hub passage node ID.
+
+    Returns:
+        List of dicts with choice_id, spoke_summary, and label_style.
+    """
+    # Find all choice_from edges where to=hub_passage_id
+    # (choice_from edges go FROM choice TO source-passage)
+    from_edges = graph.get_edges(to_id=hub_passage_id, edge_type="choice_from")
+    if not from_edges:
+        return []
+
+    pending = []
+    for from_edge in from_edges:
+        choice_id = from_edge.get("from")
+        if not choice_id:
+            continue
+
+        choice_data = graph.get_node(choice_id)
+        if not choice_data:
+            continue
+
+        # Check if label is missing or empty
+        current_label = choice_data.get("label", "")
+        if current_label:
+            continue  # Already has a label
+
+        # Find the target passage via choice_to edge
+        to_edges = graph.get_edges(from_id=choice_id, edge_type="choice_to")
+        if not to_edges:
+            continue
+
+        to_passage_id = to_edges[0].get("to")
+        if not to_passage_id:
+            continue
+
+        to_passage = graph.get_node(to_passage_id)
+        if not to_passage:
+            continue
+
+        # Check if the target is a spoke passage (raw_id starts with "spoke_")
+        raw_id = to_passage.get("raw_id", "")
+        if not raw_id.startswith("spoke_"):
+            continue
+
+        pending.append(
+            {
+                "choice_id": choice_id,
+                "spoke_summary": to_passage.get("summary", ""),
+                "label_style": choice_data.get("label_style", "functional"),
+            }
+        )
+
+    return pending
+
+
+def format_spoke_context(graph: Graph, hub_passage_id: str) -> str:
+    """Format spoke label generation context for a hub passage.
+
+    If this passage has outgoing spoke choices without labels, provides
+    FILL with the spoke summaries and style hints so it can generate
+    coherent labels alongside prose.
+
+    Args:
+        graph: Graph containing passage and choice nodes.
+        hub_passage_id: The passage node ID to check.
+
+    Returns:
+        Formatted context string, or empty string if no pending spokes.
+    """
+    pending = get_pending_spoke_labels(graph, hub_passage_id)
+    if not pending:
+        return ""
+
+    lines = [
+        "## Exploration Options (Generate Labels)",
+        "",
+        "This passage has environmental exploration spokes. Your prose should",
+        "naturally highlight these features, and you must generate choice labels",
+        "for each spoke that match what you describe in the prose.",
+        "",
+    ]
+
+    for i, spoke in enumerate(pending, 1):
+        style = spoke.get("label_style", "functional")
+        summary = spoke.get("spoke_summary", "")
+        choice_id = spoke.get("choice_id", "")
+
+        lines.append(f"**Spoke {i}** (choice_id: `{strip_scope_prefix(choice_id)}`)")
+        lines.append(f"- Summary: {summary}")
+        lines.append(f"- Label style: {style}")
+        if style == "functional":
+            lines.append("  → Use clear, action-oriented labels: 'Examine the X', 'Read the Y'")
+        elif style == "evocative":
+            lines.append(
+                "  → Use atmospheric labels: 'Trace the faded ink', 'Listen to the silence'"
+            )
+        elif style == "character_voice":
+            lines.append("  → Use character-voice labels: 'That clock... why did it stop?'")
+        lines.append("")
+
+    lines.append("Return spoke_labels in your output with the choice_id and final label.")
+
+    return "\n".join(lines)
+
+
 def is_merged_passage(passage: dict[str, object]) -> bool:
     """Check if a passage is a merge of multiple beats.
 

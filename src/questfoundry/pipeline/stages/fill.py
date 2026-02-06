@@ -49,6 +49,7 @@ from questfoundry.graph.fill_context import (
     format_scene_types_summary,
     format_shadow_states,
     format_sliding_window,
+    format_spoke_context,
     format_story_identity,
     format_valid_characters,
     format_vocabulary_note,
@@ -1045,6 +1046,7 @@ class FillStage:
                 ),
                 "output_language_instruction": self._lang_instruction,
                 "poly_state_section": poly_section,
+                "spoke_context": format_spoke_context(graph, passage_id),
             }
 
             if self._two_step:
@@ -1142,6 +1144,27 @@ class FillStage:
                             entity_id=update.entity_id,
                             reason="entity not found in graph",
                         )
+
+                # Spoke label updates: single-call mode only (two-step doesn't extract these)
+                if not self._two_step:
+                    for label_update in passage_output.spoke_labels:
+                        # Resolve choice ID (may need choice:: prefix)
+                        choice_id = label_update.choice_id
+                        if not choice_id.startswith("choice::"):
+                            choice_id = f"choice::{choice_id}"
+                        if graph.has_node(choice_id):
+                            graph.update_node(choice_id, label=label_update.label)
+                            log.debug(
+                                "spoke_label_set",
+                                choice_id=choice_id,
+                                label=label_update.label,
+                            )
+                        else:
+                            log.warning(
+                                "spoke_label_skipped",
+                                choice_id=label_update.choice_id,
+                                reason="choice not found in graph",
+                            )
 
             log.debug(
                 "passage_generated",

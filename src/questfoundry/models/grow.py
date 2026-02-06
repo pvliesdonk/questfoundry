@@ -328,11 +328,26 @@ class Phase9bOutput(BaseModel):
     proposals: list[ForkProposal] = Field(default_factory=list)
 
 
+SpokeLabelStyle = Literal["functional", "evocative", "character_voice"]
+
+
 class SpokeProposal(BaseModel):
-    """A single spoke in a hub-and-spoke exploration node."""
+    """A single spoke in a hub-and-spoke exploration node.
+
+    The label field is optional: if None, FILL will generate the label
+    alongside prose to ensure coherence between passage content and
+    choice text.
+    """
 
     summary: str = Field(min_length=1, description="Summary of the spoke passage")
-    label: str = Field(min_length=1, description="Choice label to enter the spoke")
+    label: str | None = Field(
+        default=None,
+        description="Choice label to enter the spoke (None = FILL generates)",
+    )
+    label_style: SpokeLabelStyle = Field(
+        default="functional",
+        description="Style hint for FILL-generated labels",
+    )
 
 
 class HubProposal(BaseModel):

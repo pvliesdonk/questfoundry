@@ -2209,3 +2209,128 @@ class TestFormatValidCharacters:
         )
         result = format_valid_characters(g)
         assert "fallback_char" in result
+
+
+class TestGetPendingSpokeLabels:
+    """Tests for get_pending_spoke_labels function."""
+
+    def test_returns_empty_for_non_hub_passage(self) -> None:
+        """Returns empty list for passages without spoke choices."""
+        from questfoundry.graph.fill_context import get_pending_spoke_labels
+
+        g = Graph.empty()
+        g.create_node("passage::normal", {"type": "passage", "raw_id": "normal"})
+        result = get_pending_spoke_labels(g, "passage::normal")
+        assert result == []
+
+    def test_returns_pending_spokes_without_labels(self) -> None:
+        """Returns spokes that don't have labels set."""
+        from questfoundry.graph.fill_context import get_pending_spoke_labels
+
+        g = Graph.empty()
+        # Hub passage
+        g.create_node("passage::hub", {"type": "passage", "raw_id": "hub"})
+        # Spoke passage
+        g.create_node(
+            "passage::spoke_hub_0",
+            {
+                "type": "passage",
+                "raw_id": "spoke_hub_0",
+                "summary": "Examine the mysterious artifact",
+            },
+        )
+        # Choice without label (pending)
+        g.create_node(
+            "choice::hub__spoke_0",
+            {
+                "type": "choice",
+                # no label field
+                "label_style": "evocative",
+            },
+        )
+        g.add_edge("choice_from", "choice::hub__spoke_0", "passage::hub")
+        g.add_edge("choice_to", "choice::hub__spoke_0", "passage::spoke_hub_0")
+
+        result = get_pending_spoke_labels(g, "passage::hub")
+        assert len(result) == 1
+        assert result[0]["choice_id"] == "choice::hub__spoke_0"
+        assert result[0]["spoke_summary"] == "Examine the mysterious artifact"
+        assert result[0]["label_style"] == "evocative"
+
+    def test_excludes_spokes_with_labels(self) -> None:
+        """Excludes spokes that already have labels."""
+        from questfoundry.graph.fill_context import get_pending_spoke_labels
+
+        g = Graph.empty()
+        g.create_node("passage::hub", {"type": "passage", "raw_id": "hub"})
+        g.create_node(
+            "passage::spoke_hub_0",
+            {"type": "passage", "raw_id": "spoke_hub_0", "summary": "Some spoke"},
+        )
+        # Choice WITH label (not pending)
+        g.create_node(
+            "choice::hub__spoke_0",
+            {"type": "choice", "label": "Examine the clock"},
+        )
+        g.add_edge("choice_from", "choice::hub__spoke_0", "passage::hub")
+        g.add_edge("choice_to", "choice::hub__spoke_0", "passage::spoke_hub_0")
+
+        result = get_pending_spoke_labels(g, "passage::hub")
+        assert result == []
+
+    def test_excludes_non_spoke_choices(self) -> None:
+        """Excludes choices to non-spoke passages."""
+        from questfoundry.graph.fill_context import get_pending_spoke_labels
+
+        g = Graph.empty()
+        g.create_node("passage::hub", {"type": "passage", "raw_id": "hub"})
+        # Normal passage (not a spoke - raw_id doesn't start with spoke_)
+        g.create_node(
+            "passage::next_scene",
+            {"type": "passage", "raw_id": "next_scene", "summary": "Continue story"},
+        )
+        g.create_node(
+            "choice::hub__next",
+            {"type": "choice"},  # No label
+        )
+        g.add_edge("choice_from", "choice::hub__next", "passage::hub")
+        g.add_edge("choice_to", "choice::hub__next", "passage::next_scene")
+
+        result = get_pending_spoke_labels(g, "passage::hub")
+        assert result == []
+
+
+class TestFormatSpokeContext:
+    """Tests for format_spoke_context function."""
+
+    def test_returns_empty_for_non_hub(self) -> None:
+        """Returns empty string for passages without pending spokes."""
+        from questfoundry.graph.fill_context import format_spoke_context
+
+        g = Graph.empty()
+        g.create_node("passage::normal", {"type": "passage", "raw_id": "normal"})
+        result = format_spoke_context(g, "passage::normal")
+        assert result == ""
+
+    def test_formats_spoke_context_for_hub(self) -> None:
+        """Formats context string for hub with pending spokes."""
+        from questfoundry.graph.fill_context import format_spoke_context
+
+        g = Graph.empty()
+        g.create_node("passage::hub", {"type": "passage", "raw_id": "hub"})
+        g.create_node(
+            "passage::spoke_hub_0",
+            {"type": "passage", "raw_id": "spoke_hub_0", "summary": "Examine the map"},
+        )
+        g.create_node(
+            "choice::hub__spoke_0",
+            {"type": "choice", "label_style": "functional"},
+        )
+        g.add_edge("choice_from", "choice::hub__spoke_0", "passage::hub")
+        g.add_edge("choice_to", "choice::hub__spoke_0", "passage::spoke_hub_0")
+
+        result = format_spoke_context(g, "passage::hub")
+        assert "Exploration Options" in result
+        assert "Examine the map" in result
+        assert "functional" in result
+        assert "spoke_labels" in result
