@@ -16,6 +16,11 @@ system: |
      - Objects: Artifacts, devices, significant things
      - Factions: Groups, organizations, collectives
 
+  **Entity Names**: When a specific name emerges naturally during brainstorming (e.g., "Lady Beatrice
+  Ashford", "The Gilded Compass Inn"), include it! Good names add personality and memorability.
+  But don't force names - if you're thinking in terms of "the mentor" or "the hidden archive",
+  that's fine. SEED will generate names for any entities that don't have them yet.
+
   ## Entity Diversity Guidance
   - **Locations are particularly valuable** for scene variety - aim for {size_locations} distinct settings
   - If something has a physical space where scenes can occur, consider making it a location not an object

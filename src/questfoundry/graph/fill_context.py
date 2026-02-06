@@ -177,7 +177,7 @@ def format_passage_context(graph: Graph, passage_id: str) -> str:
         for eid in entities:
             enode = graph.get_node(eid)
             if enode:
-                name = enode.get("raw_id", eid)
+                name = enode.get("name") or enode.get("raw_id", eid)
                 concept = enode.get("concept", "")
                 detail = f"- {name}: {concept}" if concept else f"- {name}"
                 entity_details.append(detail)
@@ -423,7 +423,7 @@ def format_merged_passage_context(graph: Graph, passage_id: str) -> str:
         for eid in sorted(all_entities):
             enode = graph.get_node(eid)
             if enode:
-                name = enode.get("raw_id", eid)
+                name = enode.get("name") or enode.get("raw_id", eid)
                 concept = enode.get("concept", "")
                 detail = f"- {name}: {concept}" if concept else f"- {name}"
                 entity_details.append(detail)
@@ -443,7 +443,7 @@ def format_merged_passage_context(graph: Graph, passage_id: str) -> str:
         loc_id = next(iter(locations))
         loc_node = graph.get_node(loc_id)
         if loc_node:
-            loc_name = loc_node.get("raw_id", loc_id)
+            loc_name = loc_node.get("name") or loc_node.get("raw_id", loc_id)
             lines.append(f"\n**Location:** {loc_name} (unchanged throughout)")
 
     return "\n".join(lines)
@@ -839,9 +839,9 @@ def format_entity_states(graph: Graph, passage_id: str) -> str:
         enode = graph.get_node(eid)
         if not enode:
             continue
-        raw_id = enode.get("raw_id", eid)
+        display_name = enode.get("name") or enode.get("raw_id", eid)
         concept = enode.get("concept", "")
-        lines.append(f"**{raw_id}**: {concept}" if concept else f"**{raw_id}**")
+        lines.append(f"**{display_name}**: {concept}" if concept else f"**{display_name}**")
 
         # Include overlays if any
         overlays = enode.get("overlays", [])
@@ -1759,7 +1759,7 @@ def compute_arc_hints(
     for eid in entity_ids:
         if eid in entity_arc_types:
             enode = graph.get_node(eid)
-            name = enode.get("raw_id", eid) if enode else eid
+            name = enode.get("name") or enode.get("raw_id", eid) if enode else eid
             hints[name] = entity_arc_types[eid]
 
     return hints
@@ -1917,9 +1917,11 @@ def format_entity_arc_context(
             if entity_id not in passage_entities:
                 continue
 
-            # Get entity display name
+            # Get entity display name (prefer canonical name over raw_id)
             enode = graph.get_node(entity_id)
-            entity_name = enode.get("raw_id", entity_id) if enode else entity_id
+            entity_name = (
+                enode.get("name") or enode.get("raw_id", entity_id) if enode else entity_id
+            )
 
             # Compute position relative to pivot
             if pivot_beat in beat_sequence:

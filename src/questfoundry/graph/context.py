@@ -562,25 +562,30 @@ def _format_seed_valid_ids(graph: Graph) -> str:
     ]
 
     # Group entities by type (character, location, object, faction)
+    # Track which entities need names (don't have one from BRAINSTORM)
     entities = graph.get_nodes_by_type("entity")
-    by_category: dict[str, list[str]] = {}
+    by_category: dict[str, list[tuple[str, bool]]] = {}  # (raw_id, needs_name)
     for node in entities.values():
         cat = node.get("entity_type", "unknown")
         raw_id = node.get("raw_id", "")
         if raw_id:  # Only include entities with valid raw_id
-            by_category.setdefault(cat, []).append(raw_id)
+            # Check if entity has a name from BRAINSTORM
+            needs_name = not node.get("name")
+            by_category.setdefault(cat, []).append((raw_id, needs_name))
 
     if by_category:
         lines.append(f"### Entity IDs (TOTAL: {total_entity_count} - generate decision for ALL)")
         lines.append("Use these for `entity_id`, `entities`, and `location` fields:")
+        lines.append("Entities marked (needs name) require a `name` field if RETAINED.")
         lines.append("")
 
         for category in ENTITY_CATEGORIES:
             if category in by_category:
                 cat_count = len(by_category[category])
                 lines.append(f"**{category.title()}s ({cat_count}):**")
-                for raw_id in sorted(by_category[category]):
-                    lines.append(f"  - `{category}::{raw_id}`")
+                for raw_id, needs_name in sorted(by_category[category]):
+                    marker = " (needs name)" if needs_name else ""
+                    lines.append(f"  - `{category}::{raw_id}`{marker}")
                 lines.append("")
 
     # Dilemmas with answers

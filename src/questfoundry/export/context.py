@@ -207,14 +207,21 @@ def _extract_codex_entries(graph: Graph) -> list[ExportCodexEntry]:
         if entity_id:
             title = data.get("title", "")
             if not title:
-                # Fallback: derive from entity concept ("Name — description")
+                # Fallback chain for title:
+                # 1. Entity's canonical name (from BRAINSTORM/SEED)
+                # 2. Derive from concept ("Name — description" pattern)
+                # 3. Fall back to entity_id
                 entity_node = graph.get_node(entity_id)
                 if entity_node:
-                    concept = entity_node.get("concept", "")
-                    for sep in (" \u2014 ", " - ", " \u2013 "):
-                        if sep in concept:
-                            title = concept.split(sep, 1)[0].strip()
-                            break
+                    # Try canonical name first
+                    title = entity_node.get("name", "")
+                    if not title:
+                        # Derive from concept
+                        concept = entity_node.get("concept", "")
+                        for sep in (" \u2014 ", " - ", " \u2013 "):
+                            if sep in concept:
+                                title = concept.split(sep, 1)[0].strip()
+                                break
                 if not title:
                     title = entity_id
             result.append(

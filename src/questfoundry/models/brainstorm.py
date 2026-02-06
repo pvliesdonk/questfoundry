@@ -29,6 +29,7 @@ class Entity(BaseModel):
     Attributes:
         entity_id: Short identifier (e.g., "kay", "mentor", "archive").
         entity_category: Entity category (character, location, object, faction).
+        name: Canonical display name if it emerges naturally (e.g., "Dr. Aris Chen").
         concept: One-line essence capturing what makes it interesting.
         notes: Freeform context from discussion (rich detail allowed).
     """
@@ -39,6 +40,14 @@ class Entity(BaseModel):
     )
     entity_category: EntityType = Field(
         description="Entity category: character, location, object, or faction"
+    )
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        description=(
+            "Canonical display name if it emerges naturally during brainstorming "
+            "(e.g., 'Dr. Aris Chen', 'Maya's Bakery'). SEED will generate if missing."
+        ),
     )
     concept: str = Field(min_length=1, description="One-line essence of the entity")
     notes: str | None = Field(default=None, description="Freeform notes from discussion")

@@ -18,6 +18,9 @@ system: |
   Each entity needs:
   - `entity_id`: Short snake_case identifier (e.g., "lady_beatrice", "vane_manor")
   - `entity_category`: One of "character", "location", "object", "faction"
+  - `name`: Optional canonical display name if it emerged naturally during brainstorming
+    (e.g., "Lady Beatrice Ashford", "The Gilded Compass"). Leave absent if no specific
+    name was established - SEED will generate one. Do NOT just title-case the entity_id.
   - `concept`: One-line essence from the brief
   - `notes`: Optional additional context from the brief
   - `is_protagonist`: true for ONE character if story has defined protagonist (default: false)
