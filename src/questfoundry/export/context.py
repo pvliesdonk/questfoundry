@@ -213,8 +213,8 @@ def _extract_codex_entries(graph: Graph) -> list[ExportCodexEntry]:
                 # 3. Fall back to entity_id
                 entity_node = graph.get_node(entity_id)
                 if entity_node:
-                    # Try canonical name first
-                    title = entity_node.get("name", "")
+                    # Try canonical name first (treat None and "" the same)
+                    title = entity_node.get("name") or ""
                     if not title:
                         # Derive from concept
                         concept = entity_node.get("concept", "")

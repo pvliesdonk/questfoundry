@@ -1588,9 +1588,13 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "disposition": entity_decision.get("disposition", "retained"),
         }
 
-        # Apply name if provided (SEED generates names for entities missing them)
+        # Apply SEED name only if entity doesn't already have one from BRAINSTORM.
+        # This preserves BRAINSTORM names (which emerged naturally during discussion)
+        # while allowing SEED to generate names for entities that need them.
         if name := entity_decision.get("name"):
-            update_data["name"] = name
+            existing_node = graph.get_node(entity_id)
+            if existing_node and not existing_node.get("name"):
+                update_data["name"] = name
 
         graph.update_node(entity_id, **update_data)
 

@@ -1759,7 +1759,7 @@ def compute_arc_hints(
     for eid in entity_ids:
         if eid in entity_arc_types:
             enode = graph.get_node(eid)
-            name = enode.get("name") or enode.get("raw_id", eid) if enode else eid
+            name = (enode.get("name") or enode.get("raw_id", eid)) if enode else eid
             hints[name] = entity_arc_types[eid]
 
     return hints
@@ -1920,7 +1920,7 @@ def format_entity_arc_context(
             # Get entity display name (prefer canonical name over raw_id)
             enode = graph.get_node(entity_id)
             entity_name = (
-                enode.get("name") or enode.get("raw_id", entity_id) if enode else entity_id
+                (enode.get("name") or enode.get("raw_id", entity_id)) if enode else entity_id
             )
 
             # Compute position relative to pivot
