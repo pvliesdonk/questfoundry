@@ -126,15 +126,19 @@ def test_create_chat_model_ollama_with_custom_host() -> None:
     """Factory uses custom host parameter."""
     mock_chat = MagicMock()
 
-    with patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class:
+    with patch(
+        "questfoundry.providers.factory._init_chat_model_safe",
+        return_value=mock_chat,
+    ) as mock_init:
         create_chat_model("ollama", "llama3:8b", host="http://custom:8080", temperature=0.5)
 
-    mock_class.assert_called_once_with(
-        model="llama3:8b",
-        base_url="http://custom:8080",
-        temperature=0.5,
-        num_ctx=32768,
-    )
+    # Verify host was passed as base_url to init_chat_model_safe
+    mock_init.assert_called_once()
+    call_args = mock_init.call_args
+    assert call_args[0][0] == "ollama"  # provider
+    assert call_args[0][1] == "llama3:8b"  # model
+    assert call_args[1]["base_url"] == "http://custom:8080"
+    assert call_args[1]["temperature"] == 0.5
 
 
 def test_create_chat_model_ollama_import_error() -> None:
@@ -183,10 +187,13 @@ def test_create_chat_model_openai_with_custom_key() -> None:
     """Factory uses custom API key parameter."""
     mock_chat = MagicMock()
 
-    with patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class:
+    with patch(
+        "questfoundry.providers.factory._init_chat_model_safe",
+        return_value=mock_chat,
+    ) as mock_init:
         create_chat_model("openai", "gpt-5-mini", api_key="sk-custom")
 
-    call_kwargs = mock_class.call_args[1]
+    call_kwargs = mock_init.call_args[1]
     assert call_kwargs["api_key"] == "sk-custom"
 
 
@@ -335,11 +342,14 @@ def test_create_chat_model_custom_temperature() -> None:
 
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
-        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_chat_model("ollama", "model", temperature=0.5)
 
-    call_kwargs = mock_class.call_args[1]
+    call_kwargs = mock_init.call_args[1]
     assert call_kwargs["temperature"] == 0.5
 
 
@@ -349,11 +359,14 @@ def test_create_chat_model_ollama_custom_num_ctx() -> None:
 
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
-        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_chat_model("ollama", "model", num_ctx=131072, temperature=0.5)
 
-    call_kwargs = mock_class.call_args[1]
+    call_kwargs = mock_init.call_args[1]
     assert call_kwargs["num_ctx"] == 131072
 
 
@@ -363,11 +376,14 @@ def test_create_chat_model_ollama_no_temperature_when_not_provided() -> None:
 
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
-        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_chat_model("ollama", "model")
 
-    call_kwargs = mock_class.call_args[1]
+    call_kwargs = mock_init.call_args[1]
     assert "temperature" not in call_kwargs
 
 
@@ -377,11 +393,14 @@ def test_create_chat_model_ollama_top_p() -> None:
 
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
-        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_chat_model("ollama", "model", temperature=0.5, top_p=0.95)
 
-    call_kwargs = mock_class.call_args[1]
+    call_kwargs = mock_init.call_args[1]
     assert call_kwargs["top_p"] == 0.95
 
 
@@ -391,11 +410,14 @@ def test_create_chat_model_ollama_seed() -> None:
 
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
-        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_chat_model("ollama", "model", temperature=0.5, seed=42)
 
-    call_kwargs = mock_class.call_args[1]
+    call_kwargs = mock_init.call_args[1]
     assert call_kwargs["seed"] == 42
 
 
@@ -405,11 +427,14 @@ def test_create_chat_model_openai_top_p_and_seed() -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_chat_model("openai", "gpt-5-mini", temperature=0.7, top_p=0.9, seed=123)
 
-    call_kwargs = mock_class.call_args[1]
+    call_kwargs = mock_init.call_args[1]
     assert call_kwargs["top_p"] == 0.9
     assert call_kwargs["seed"] == 123
 
@@ -420,11 +445,14 @@ def test_create_chat_model_anthropic_top_p() -> None:
 
     with (
         patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}),
-        patch("langchain_anthropic.ChatAnthropic", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_chat_model("anthropic", "claude-3-opus", temperature=0.5, top_p=0.85)
 
-    call_kwargs = mock_class.call_args[1]
+    call_kwargs = mock_init.call_args[1]
     assert call_kwargs["top_p"] == 0.85
 
 
@@ -446,7 +474,10 @@ def test_create_model_structured_ollama_with_schema() -> None:
 
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
-        patch("langchain_ollama.ChatOllama", return_value=mock_chat),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ),
     ):
         result = create_model_for_structured_output(
             "ollama",
@@ -471,7 +502,10 @@ def test_create_model_structured_openai_with_schema() -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("langchain_openai.ChatOpenAI", return_value=mock_chat),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ),
     ):
         result = create_model_for_structured_output(
             "openai",
@@ -493,7 +527,10 @@ def test_create_model_structured_without_schema() -> None:
 
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
-        patch("langchain_ollama.ChatOllama", return_value=mock_chat),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ),
     ):
         result = create_model_for_structured_output(
             "ollama",
@@ -513,7 +550,10 @@ def test_create_model_structured_explicit_strategy() -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("langchain_openai.ChatOpenAI", return_value=mock_chat),
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ),
     ):
         # Force tool strategy on OpenAI (normally would use JSON mode)
         result = create_model_for_structured_output(
@@ -534,12 +574,15 @@ def test_create_model_structured_default_model_ollama() -> None:
 
     with (
         patch.dict("os.environ", {"OLLAMA_HOST": "http://test:11434"}),
-        patch("langchain_ollama.ChatOllama", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_model_for_structured_output("ollama")
 
-    call_kwargs = mock_class.call_args[1]
-    assert call_kwargs["model"] == "qwen3:4b-instruct-32k"
+    call_args = mock_init.call_args
+    assert call_args[0][1] == "qwen3:4b-instruct-32k"  # model is second positional arg
 
 
 def test_create_model_structured_default_model_openai() -> None:
@@ -548,12 +591,15 @@ def test_create_model_structured_default_model_openai() -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_model_for_structured_output("openai")
 
-    call_kwargs = mock_class.call_args[1]
-    assert call_kwargs["model"] == "gpt-5-mini"  # Uses PROVIDER_DEFAULTS
+    call_args = mock_init.call_args
+    assert call_args[0][1] == "gpt-5-mini"  # Uses PROVIDER_DEFAULTS
 
 
 def test_create_model_structured_default_model_anthropic() -> None:
@@ -562,12 +608,15 @@ def test_create_model_structured_default_model_anthropic() -> None:
 
     with (
         patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-ant-test"}),
-        patch("langchain_anthropic.ChatAnthropic", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_model_for_structured_output("anthropic")
 
-    call_kwargs = mock_class.call_args[1]
-    assert call_kwargs["model"] == "claude-sonnet-4-20250514"  # Uses PROVIDER_DEFAULTS
+    call_args = mock_init.call_args
+    assert call_args[0][1] == "claude-sonnet-4-20250514"  # Uses PROVIDER_DEFAULTS
 
 
 def test_create_model_structured_google_with_schema() -> None:
@@ -743,13 +792,16 @@ def test_create_chat_model_reasoning_model_no_temperature(model_name: str) -> No
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_chat_model("openai", model_name)
 
-    call_kwargs = mock_class.call_args[1]
-    assert call_kwargs["model"] == model_name
-    assert "temperature" not in call_kwargs
+    call_args = mock_init.call_args
+    assert call_args[0][1] == model_name
+    assert "temperature" not in call_args[1]
 
 
 def test_create_chat_model_gpt4o_has_temperature() -> None:
@@ -758,11 +810,14 @@ def test_create_chat_model_gpt4o_has_temperature() -> None:
 
     with (
         patch.dict("os.environ", {"OPENAI_API_KEY": "sk-test"}),
-        patch("langchain_openai.ChatOpenAI", return_value=mock_chat) as mock_class,
+        patch(
+            "questfoundry.providers.factory._init_chat_model_safe",
+            return_value=mock_chat,
+        ) as mock_init,
     ):
         create_chat_model("openai", "gpt-5-mini", temperature=0.7)
 
-    call_kwargs = mock_class.call_args[1]
+    call_kwargs = mock_init.call_args[1]
     # GPT-4o should have temperature when provided
     assert "temperature" in call_kwargs
     assert call_kwargs["temperature"] == 0.7
@@ -857,6 +912,71 @@ class TestUnloadOllamaModel:
 
             # Should not raise
             await unload_ollama_model(mock_model)
+
+    @pytest.mark.asyncio
+    async def test_polls_api_ps_until_model_disappears(self) -> None:
+        """Polls /api/ps until model is no longer listed."""
+        from unittest.mock import AsyncMock
+
+        mock_model = MagicMock()
+        mock_model.base_url = "http://localhost:11434"
+        mock_model.model = "qwen3:4b"
+
+        # First poll: model still loaded, second poll: model gone
+        ps_responses = [
+            MagicMock(status_code=200, json=lambda: {"models": [{"name": "qwen3:4b"}]}),
+            MagicMock(status_code=200, json=lambda: {"models": []}),
+        ]
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=MagicMock())
+        mock_client.get = AsyncMock(side_effect=ps_responses)
+
+        with (
+            patch("httpx.AsyncClient") as mock_cls,
+            patch("asyncio.sleep", new_callable=AsyncMock) as mock_sleep,
+        ):
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            await unload_ollama_model(mock_model)
+
+            # Should have called POST once and GET twice
+            assert mock_client.post.call_count == 1
+            assert mock_client.get.call_count == 2
+            # Should have slept once (between first and second poll)
+            mock_sleep.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_handles_ps_endpoint_errors_gracefully(self) -> None:
+        """Continues polling if /api/ps fails transiently."""
+        from unittest.mock import AsyncMock
+
+        mock_model = MagicMock()
+        mock_model.base_url = "http://localhost:11434"
+        mock_model.model = "qwen3:4b"
+
+        # First poll fails, second succeeds with empty models
+        ps_responses = [
+            ConnectionError("transient"),
+            MagicMock(status_code=200, json=lambda: {"models": []}),
+        ]
+
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=MagicMock())
+        mock_client.get = AsyncMock(side_effect=ps_responses)
+
+        with (
+            patch("httpx.AsyncClient") as mock_cls,
+            patch("asyncio.sleep", new_callable=AsyncMock),
+        ):
+            mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_client)
+            mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
+
+            # Should not raise despite first poll failing
+            await unload_ollama_model(mock_model)
+
+            assert mock_client.get.call_count == 2
 
 
 # --- Tests for _query_ollama_num_ctx ---
