@@ -63,6 +63,8 @@ _SD15_PRESET = _A1111Preset(
         "1:1": (768, 768),
         "16:9": (1024, 768),
         "9:16": (768, 1024),
+        "4:3": (1024, 768),
+        "3:4": (768, 1024),
         "3:2": (768, 512),
         "2:3": (512, 768),
     },
@@ -78,6 +80,8 @@ _SDXL_PRESET = _A1111Preset(
         "1:1": (1024, 1024),
         "16:9": (1344, 768),
         "9:16": (768, 1344),
+        "4:3": (1152, 896),
+        "3:4": (896, 1152),
         "3:2": (1216, 832),
         "2:3": (832, 1216),
     },
@@ -93,6 +97,8 @@ _SDXL_LIGHTNING_PRESET = _A1111Preset(
         "1:1": (1024, 1024),
         "16:9": (1344, 768),
         "9:16": (768, 1344),
+        "4:3": (1152, 896),
+        "3:4": (896, 1152),
         "3:2": (1216, 832),
         "2:3": (832, 1216),
     },
@@ -191,11 +197,16 @@ class A1111ImageProvider:
             )
         return await self._distill_with_llm(brief)
 
-    def _bind_distill_limits(self, llm: Any, *, stop: list[str]) -> Any:
+    def _bind_distill_limits(self, llm: Any, *, stop: list[str] | None = None) -> Any:
         """Bind conservative generation limits for prompt distillation.
 
         We rely on provider-side caps to prevent pathological runs where the
         model ignores formatting instructions and generates extremely long output.
+
+        Args:
+            llm: The LangChain LLM to bind limits to.
+            stop: Optional stop sequences. Some models (o1/o3) don't support
+                this parameter even if the LangChain wrapper has the attribute.
         """
         if not hasattr(llm, "bind"):
             return llm
@@ -209,7 +220,8 @@ class A1111ImageProvider:
         elif hasattr(llm, "max_tokens"):
             bind_kwargs["max_tokens"] = _DISTILL_MAX_OUTPUT_TOKENS
 
-        if hasattr(llm, "stop"):
+        # Only add stop if explicitly requested (caller handles fallback)
+        if stop and hasattr(llm, "stop"):
             bind_kwargs["stop"] = stop
 
         # Keep distillation deterministic-ish; if a provider doesn't support it,
@@ -364,21 +376,22 @@ class A1111ImageProvider:
 
         from langchain_core.messages import HumanMessage, SystemMessage
 
-        distill_llm = self._bind_distill_limits(self._llm, stop=[_DISTILL_STOP_MARKER])
+        # Try with stop parameter first; some models (o1/o3) don't support it
+        use_stop: list[str] | None = [_DISTILL_STOP_MARKER]
+        distill_llm = self._bind_distill_limits(self._llm, stop=use_stop)
+        messages = [SystemMessage(content=system_msg), HumanMessage(content=brief_text)]
+        invoke_config = {
+            "metadata": {
+                "stage": "dress",
+                "phase": "prompt_distill",
+                "image_provider": "a1111",
+            }
+        }
 
         last_error: str | None = None
         for attempt in range(1, _DISTILL_MAX_RETRIES + 1):
             try:
-                response = await distill_llm.ainvoke(
-                    [SystemMessage(content=system_msg), HumanMessage(content=brief_text)],
-                    config={
-                        "metadata": {
-                            "stage": "dress",
-                            "phase": "prompt_distill",
-                            "image_provider": "a1111",
-                        }
-                    },
-                )
+                response = await distill_llm.ainvoke(messages, config=invoke_config)
                 raw = (
                     response.content.strip()
                     if hasattr(response, "content")
@@ -386,7 +399,21 @@ class A1111ImageProvider:
                 )
                 positive, negative = self._parse_distilled_output(raw)
             except Exception as exc:
+                error_msg = str(exc).lower()
                 last_error = f"{type(exc).__name__}: {exc}"
+
+                # Check if error is due to unsupported 'stop' parameter
+                if use_stop and "stop" in error_msg and "not supported" in error_msg:
+                    log.info(
+                        "image_prompt_distill_stop_unsupported",
+                        model=self._model,
+                        message="Retrying without stop parameter",
+                    )
+                    use_stop = None
+                    distill_llm = self._bind_distill_limits(self._llm, stop=None)
+                    # Don't count this as a retry attempt
+                    continue
+
                 log.warning(
                     "image_prompt_distill_failed",
                     attempt=attempt,

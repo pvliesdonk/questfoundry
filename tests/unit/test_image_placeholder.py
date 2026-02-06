@@ -67,7 +67,7 @@ class TestPlaceholderImageProvider:
     async def test_unknown_aspect_ratio_falls_back(self) -> None:
         """Unknown aspect ratios fall back to 1:1 instead of erroring."""
         provider = PlaceholderImageProvider()
-        result = await provider.generate("test", aspect_ratio="4:3")
+        result = await provider.generate("test", aspect_ratio="5:7")  # Not in valid list
 
         assert result.provider_metadata["size"] == "256x256"
 
