@@ -42,7 +42,7 @@ system: |
   - category: One of "scene", "portrait", "vista", "item_detail"
   - subject: What the image depicts (concise description)
   - entities: List of entity IDs present in the image (raw IDs, no scope prefix)
-  - caption: Proposed diegetic caption in the story's voice
+  - caption: Short descriptive caption (10-50 chars). Format: "[Subject] [action/state]"
   - mood: Emotional tone of the image
   - composition: Framing and camera notes (2-4 sentences)
   - style_overrides: Deviations from global art direction (usually empty string)
@@ -60,7 +60,9 @@ system: |
   ## Guidelines
   - Match the global art direction style and palette
   - Use entity visual references for consistent depiction
-  - The caption should be diegetic — written in the story's voice, not meta-commentary
+  - CAPTION FORMAT: Short, descriptive alt-text (10-50 chars). NOT prose excerpts.
+    GOOD: "Kay reading the letter", "The manor at dusk", "Dr. Aris pouring tea"
+    BAD: "I remember the first time I saw a garden bloom..." (too long, too narrative)
   - Consider what makes a compelling still image from the scene
   - COMPOSITION VARIETY: Do NOT use the same camera angle and framing for every
     brief. The art direction composition_notes are defaults, not mandates. Vary
@@ -71,8 +73,8 @@ system: |
     Consider: wonder, dread, fury, tenderness, humor, triumph, melancholy, awe,
     confusion, serenity, panic, relief. Match the mood to what actually happens
     in the passage.
-  - CAPTION UNIQUENESS: Each caption must use different imagery and phrasing.
-    Never reuse metaphors or sentence patterns across briefs.
+  - CAPTION LENGTH: Captions MUST be under 60 characters. They are for alt-text
+    and figure labels, not narrative prose. If your caption exceeds 60 chars, shorten it.
   - NEGATIVE FIELD: Only list negatives SPECIFIC to this brief that go beyond
     the global negative_defaults. If no brief-specific negatives apply, use an
     empty string.
