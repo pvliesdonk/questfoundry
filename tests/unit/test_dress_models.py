@@ -34,9 +34,10 @@ class TestArtDirection:
             palette=["indigo", "rust"],
             composition_notes="wide shots",
             negative_defaults="photorealistic",
+            aspect_ratio="16:9",
         )
         assert ad.style == "watercolor"
-        assert ad.aspect_ratio == "16:9"  # default
+        assert ad.aspect_ratio == "16:9"
 
     def test_custom_aspect_ratio(self) -> None:
         ad = ArtDirection(
@@ -48,6 +49,17 @@ class TestArtDirection:
             aspect_ratio="1:1",
         )
         assert ad.aspect_ratio == "1:1"
+
+    def test_aspect_ratio_required(self) -> None:
+        """aspect_ratio must be explicitly provided."""
+        with pytest.raises(ValidationError, match="aspect_ratio"):
+            ArtDirection(  # type: ignore[call-arg]
+                style="watercolor",
+                medium="traditional",
+                palette=["indigo"],
+                composition_notes="wide shots",
+                negative_defaults="photorealistic",
+            )
 
     @pytest.mark.parametrize(
         "field",
@@ -61,6 +73,7 @@ class TestArtDirection:
             "palette": ["indigo"],
             "composition_notes": "wide shots",
             "negative_defaults": "photorealistic",
+            "aspect_ratio": "16:9",
         }
         data[field] = ""
         with pytest.raises(ValidationError):
@@ -74,6 +87,7 @@ class TestArtDirection:
                 palette=[],
                 composition_notes="wide shots",
                 negative_defaults="photorealistic",
+                aspect_ratio="16:9",
             )
 
 
@@ -306,6 +320,7 @@ class TestDressPhase0Output:
                 palette=["indigo", "rust"],
                 composition_notes="wide shots",
                 negative_defaults="photorealistic",
+                aspect_ratio="16:9",
             ),
             entity_visuals=[
                 EntityVisualWithId(
@@ -327,6 +342,7 @@ class TestDressPhase0Output:
                     palette=["black"],
                     composition_notes="close-up",
                     negative_defaults="text",
+                    aspect_ratio="16:9",
                 ),
                 entity_visuals=[],
             )
@@ -431,6 +447,7 @@ class TestRoundtrip:
             palette=["indigo"],
             composition_notes="wide shots",
             negative_defaults="photorealistic",
+            aspect_ratio="16:9",
         )
         data = ad.model_dump()
         restored = ArtDirection.model_validate(data)
@@ -452,6 +469,7 @@ class TestRoundtrip:
                 palette=["black"],
                 composition_notes="minimalist",
                 negative_defaults="color",
+                aspect_ratio="16:9",
             ),
             entity_visuals=[
                 EntityVisualWithId(

@@ -88,7 +88,17 @@ class EntityOverlay(BaseModel):
 
     entity_id: str = Field(min_length=1)
     when: list[str] = Field(min_length=1)
-    details: dict[str, str] = Field(default_factory=dict)
+    details: dict[str, str] = Field(
+        description="Entity state changes when codewords are active (must have at least one key)"
+    )
+
+    @model_validator(mode="after")
+    def details_not_empty(self) -> EntityOverlay:
+        """Reject empty details dict - must have at least one key."""
+        if not self.details:
+            msg = "details must contain at least one key-value pair"
+            raise ValueError(msg)
+        return self
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +298,17 @@ class OverlayProposal(BaseModel):
 
     entity_id: str = Field(min_length=1)
     when: list[str] = Field(min_length=1)
-    details: dict[str, str] = Field(default_factory=dict)
+    details: dict[str, str] = Field(
+        description="Entity state changes when codewords are active (must have at least one key)"
+    )
+
+    @model_validator(mode="after")
+    def details_not_empty(self) -> OverlayProposal:
+        """Reject empty details dict - must have at least one key."""
+        if not self.details:
+            msg = "details must contain at least one key-value pair"
+            raise ValueError(msg)
+        return self
 
 
 class Phase8cOutput(BaseModel):

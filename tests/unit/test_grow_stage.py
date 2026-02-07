@@ -1549,52 +1549,10 @@ class TestPhase8cOverlays:
         assert result.status == "completed"
         assert "0" in result.detail
 
-    @pytest.mark.asyncio
-    async def test_phase_8c_skips_empty_details(self) -> None:
-        """Phase 8c skips overlays with empty details dict."""
-        from questfoundry.graph.graph import Graph
-        from questfoundry.models.grow import OverlayProposal, Phase8cOutput
-
-        graph = Graph.empty()
-        graph.create_node(
-            "entity::hero",
-            {
-                "type": "entity",
-                "raw_id": "hero",
-                "entity_category": "character",
-                "concept": "Protagonist",
-            },
-        )
-        graph.create_node(
-            "codeword::cw1",
-            {
-                "type": "codeword",
-                "raw_id": "cw1",
-                "tracks": "consequence::c1",
-                "codeword_type": "granted",
-            },
-        )
-
-        stage = GrowStage()
-        phase8c_output = Phase8cOutput(
-            overlays=[
-                OverlayProposal(
-                    entity_id="entity::hero",
-                    when=["codeword::cw1"],
-                    details={},
-                ),
-            ]
-        )
-
-        mock_structured = AsyncMock()
-        mock_structured.ainvoke = AsyncMock(return_value=phase8c_output)
-        mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
-
-        result = await stage._phase_8c_overlays(graph, mock_model)
-
-        assert result.status == "completed"
-        assert "0" in result.detail
+    # NOTE: test_phase_8c_skips_empty_details was removed because empty details
+    # are now rejected at the Pydantic validation level (see test_grow_models.py::
+    # TestOverlayProposal::test_empty_details_rejected). The runtime skip logic
+    # is no longer reachable since the model won't validate with empty details.
 
     @pytest.mark.asyncio
     async def test_phase_8c_no_codewords(self) -> None:
