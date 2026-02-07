@@ -2,12 +2,14 @@
 
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import MagicMock
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
+    _make_all_required,
     get_default_strategy,
     unwrap_structured_result,
     with_structured_output,
@@ -21,30 +23,42 @@ class SampleSchema(BaseModel):
     value: int
 
 
+class SchemaWithOptional(BaseModel):
+    """Schema with optional fields for testing _make_all_required."""
+
+    required_field: str
+    optional_field: str = Field(default="default")
+    optional_list: list[str] = Field(default_factory=list)
+
+
 class TestGetDefaultStrategy:
     """Test get_default_strategy function."""
 
     def test_get_default_strategy_ollama(self) -> None:
-        """Should return JSON_MODE strategy for Ollama (better for complex schemas)."""
+        """Should return JSON_MODE strategy for Ollama."""
         assert get_default_strategy("ollama") == StructuredOutputStrategy.JSON_MODE
 
     def test_get_default_strategy_openai(self) -> None:
-        """Should return TOOL strategy for OpenAI (function_calling handles optional fields)."""
-        assert get_default_strategy("openai") == StructuredOutputStrategy.TOOL
+        """Should return JSON_MODE strategy for OpenAI (with schema post-processing)."""
+        assert get_default_strategy("openai") == StructuredOutputStrategy.JSON_MODE
 
     def test_get_default_strategy_anthropic(self) -> None:
         """Should return JSON_MODE strategy for Anthropic."""
         assert get_default_strategy("anthropic") == StructuredOutputStrategy.JSON_MODE
 
+    def test_get_default_strategy_google(self) -> None:
+        """Should return JSON_MODE strategy for Google."""
+        assert get_default_strategy("google") == StructuredOutputStrategy.JSON_MODE
+
     def test_get_default_strategy_unknown(self) -> None:
-        """Should return JSON_MODE for unknown providers (TOOL can fail on complex schemas)."""
+        """Should return JSON_MODE for unknown providers."""
         assert get_default_strategy("unknown") == StructuredOutputStrategy.JSON_MODE
         assert get_default_strategy("custom-provider") == StructuredOutputStrategy.JSON_MODE
 
     def test_get_default_strategy_case_insensitive(self) -> None:
-        """Should handle uppercase provider names."""
+        """Should handle uppercase provider names - all return JSON_MODE now."""
         assert get_default_strategy("OLLAMA") == StructuredOutputStrategy.JSON_MODE
-        assert get_default_strategy("OpenAI") == StructuredOutputStrategy.TOOL
+        assert get_default_strategy("OpenAI") == StructuredOutputStrategy.JSON_MODE
         assert get_default_strategy("ANTHROPIC") == StructuredOutputStrategy.JSON_MODE
 
 
@@ -64,113 +78,131 @@ class TestStructuredOutputStrategy:
         assert isinstance(StructuredOutputStrategy.AUTO, str)
 
 
+class TestMakeAllRequired:
+    """Test _make_all_required schema transformation."""
+
+    def test_makes_optional_fields_required(self) -> None:
+        """Should add all properties to required array."""
+        schema = SchemaWithOptional.model_json_schema()
+
+        # Before: only 'required_field' is required
+        assert "required" in schema
+
+        result = _make_all_required(schema, schema_name="SchemaWithOptional")
+
+        # After: all properties are required
+        assert set(result["required"]) == {"required_field", "optional_field", "optional_list"}
+
+    def test_preserves_truly_optional_fields(self) -> None:
+        """Should not require fields in truly_optional set."""
+        schema = SchemaWithOptional.model_json_schema()
+
+        result = _make_all_required(
+            schema,
+            schema_name="SchemaWithOptional",
+            truly_optional={"SchemaWithOptional.optional_list"},
+        )
+
+        assert "optional_list" not in result["required"]
+        assert "required_field" in result["required"]
+        assert "optional_field" in result["required"]
+
+    def test_handles_nested_schemas(self) -> None:
+        """Should recurse into nested object schemas."""
+
+        class Nested(BaseModel):
+            inner: str
+            inner_optional: str = "default"
+
+        class Outer(BaseModel):
+            nested: Nested
+            outer_optional: str = "default"
+
+        schema = Outer.model_json_schema()
+        result = _make_all_required(schema, schema_name="Outer")
+
+        # Check outer required
+        assert "nested" in result["required"]
+        assert "outer_optional" in result["required"]
+
+        # Check $defs (where Nested is defined)
+        nested_def = result["$defs"]["Nested"]
+        assert "inner" in nested_def["required"]
+        assert "inner_optional" in nested_def["required"]
+
+    def test_handles_empty_schema(self) -> None:
+        """Should handle schema without properties."""
+        schema: dict[str, Any] = {"type": "object"}
+        result = _make_all_required(schema, schema_name="Empty")
+        assert result == {"type": "object"}
+
+
 class TestWithStructuredOutput:
     """Test with_structured_output function."""
 
-    def test_with_structured_output_tool_strategy(self) -> None:
-        """Should call with_structured_output with function_calling method."""
+    def test_with_structured_output_uses_json_schema_method(self) -> None:
+        """Should always use json_schema method (strategy parameter ignored)."""
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_model)
 
-        result = with_structured_output(
+        # Even with TOOL strategy specified, should use json_schema
+        with_structured_output(
             mock_model,
             SampleSchema,
             strategy=StructuredOutputStrategy.TOOL,
-        )
-
-        mock_model.with_structured_output.assert_called_once_with(
-            SampleSchema,
-            method="function_calling",
-            include_raw=True,
-        )
-        assert result is mock_model
-
-    def test_with_structured_output_json_mode_strategy(self) -> None:
-        """Should call with_structured_output with json_schema method."""
-        mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_model)
-
-        result = with_structured_output(
-            mock_model,
-            SampleSchema,
-            strategy=StructuredOutputStrategy.JSON_MODE,
-        )
-
-        mock_model.with_structured_output.assert_called_once_with(
-            SampleSchema,
-            method="json_schema",
-            include_raw=True,
-        )
-        assert result is mock_model
-
-    def test_with_structured_output_auto_with_provider(self) -> None:
-        """Should auto-select strategy based on provider."""
-        mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_model)
-
-        # Test Ollama (JSON_MODE - better for complex schemas)
-        with_structured_output(
-            mock_model,
-            SampleSchema,
-            strategy=StructuredOutputStrategy.AUTO,
             provider_name="ollama",
         )
-        mock_model.with_structured_output.assert_called_with(
-            SampleSchema,
-            method="json_schema",
-            include_raw=True,
-        )
 
-        # Test OpenAI (TOOL - function_calling handles optional fields)
-        mock_model.reset_mock()
+        call_args = mock_model.with_structured_output.call_args
+        assert call_args.kwargs["method"] == "json_schema"
+        assert call_args.kwargs["include_raw"] is True
+
+    def test_with_structured_output_openai_uses_strict_mode(self) -> None:
+        """Should set strict=True for OpenAI provider."""
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_model)
+
         with_structured_output(
             mock_model,
             SampleSchema,
-            strategy=StructuredOutputStrategy.AUTO,
             provider_name="openai",
         )
-        mock_model.with_structured_output.assert_called_with(
-            SampleSchema,
-            method="function_calling",
-            include_raw=True,
-        )
 
-    def test_with_structured_output_none_strategy_defaults_to_tool(self) -> None:
-        """Should default to TOOL when strategy is None and no provider."""
+        call_args = mock_model.with_structured_output.call_args
+        assert call_args.kwargs["strict"] is True
+
+    def test_with_structured_output_non_openai_no_strict(self) -> None:
+        """Should not set strict=True for non-OpenAI providers."""
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_model)
 
         with_structured_output(
             mock_model,
             SampleSchema,
-            strategy=None,
-            provider_name=None,
+            provider_name="ollama",
         )
 
-        mock_model.with_structured_output.assert_called_once_with(
-            SampleSchema,
-            method="function_calling",
-            include_raw=True,
-        )
+        call_args = mock_model.with_structured_output.call_args
+        assert call_args.kwargs.get("strict") is None
 
-    def test_with_structured_output_none_strategy_with_provider(self) -> None:
-        """Should auto-detect strategy when strategy is None but provider given."""
+    def test_with_structured_output_passes_json_schema_dict(self) -> None:
+        """Should pass JSON schema dict, not Pydantic class."""
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_model)
 
         with_structured_output(
             mock_model,
             SampleSchema,
-            strategy=None,
-            provider_name="anthropic",
+            provider_name="ollama",
         )
 
-        # Anthropic defaults to JSON_MODE (which uses json_schema method)
-        mock_model.with_structured_output.assert_called_once_with(
-            SampleSchema,
-            method="json_schema",
-            include_raw=True,
-        )
+        call_args = mock_model.with_structured_output.call_args
+        schema_arg = call_args.args[0]
+        # Should be a dict (JSON schema), not a class
+        assert isinstance(schema_arg, dict)
+        assert "properties" in schema_arg
+        assert "name" in schema_arg["properties"]
+        assert "value" in schema_arg["properties"]
 
 
 class TestUnwrapStructuredResult:

@@ -88,7 +88,7 @@ class TestArc:
         arc = Arc(
             arc_id="test",
             arc_type="spine",
-            paths=["path_a", "path_b"],  # type: ignore[call-arg]
+            paths=["path_a", "path_b"],
         )
         assert arc.paths == ["path_a", "path_b"]
         # Backward compat property still works
@@ -185,11 +185,12 @@ class TestEntityOverlay:
 
     def test_empty_when_rejected(self) -> None:
         with pytest.raises(ValidationError, match="when"):
-            EntityOverlay(entity_id="e1", when=[], details={})
+            EntityOverlay(entity_id="e1", when=[], details={"mood": "neutral"})
 
-    def test_empty_details_allowed(self) -> None:
-        overlay = EntityOverlay(entity_id="e1", when=["cw1"])
-        assert overlay.details == {}
+    def test_details_required(self) -> None:
+        """Details is required for overlay (must describe what changes)."""
+        with pytest.raises(ValidationError, match="details"):
+            EntityOverlay(entity_id="e1", when=["cw1"])  # type: ignore[call-arg]
 
 
 class TestPathAgnosticAssessment:
@@ -330,7 +331,12 @@ class TestOverlayProposal:
 
     def test_empty_when_rejected(self) -> None:
         with pytest.raises(ValidationError, match="when"):
-            OverlayProposal(entity_id="e1", when=[])
+            OverlayProposal(entity_id="e1", when=[], details={"state": "active"})
+
+    def test_details_required(self) -> None:
+        """Details is required for overlay proposal (must describe what changes)."""
+        with pytest.raises(ValidationError, match="details"):
+            OverlayProposal(entity_id="e1", when=["cw1"])  # type: ignore[call-arg]
 
 
 class TestChoiceLabel:

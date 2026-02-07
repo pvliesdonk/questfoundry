@@ -28,6 +28,7 @@ class TestVoiceDocument:
     def test_minimal_creation(self) -> None:
         doc = VoiceDocument(
             pov="third_limited",
+            pov_character="",  # Required but can be empty for omniscient
             tense="past",
             voice_register="literary",
             sentence_rhythm="varied",
@@ -42,6 +43,17 @@ class TestVoiceDocument:
         assert doc.avoid_words == []
         assert doc.avoid_patterns == []
         assert doc.exemplar_passages == []
+
+    def test_pov_character_required(self) -> None:
+        """pov_character must be explicitly provided (even if empty)."""
+        with pytest.raises(ValidationError, match="pov_character"):
+            VoiceDocument(  # type: ignore[call-arg]
+                pov="third_omniscient",
+                tense="past",
+                voice_register="literary",
+                sentence_rhythm="varied",
+                tone_words=["atmospheric"],
+            )
 
     def test_full_creation(self) -> None:
         doc = VoiceDocument(
@@ -63,6 +75,7 @@ class TestVoiceDocument:
         for pov in ("first", "second", "third_limited", "third_omniscient"):
             doc = VoiceDocument(
                 pov=pov,
+                pov_character="",  # Required
                 tense="past",
                 voice_register="literary",
                 sentence_rhythm="varied",
@@ -74,6 +87,7 @@ class TestVoiceDocument:
         with pytest.raises(ValidationError):
             VoiceDocument(
                 pov="fourth_wall",  # type: ignore[arg-type]
+                pov_character="",
                 tense="past",
                 voice_register="literary",
                 sentence_rhythm="varied",
@@ -84,6 +98,7 @@ class TestVoiceDocument:
         with pytest.raises(ValidationError):
             VoiceDocument(
                 pov="first",
+                pov_character="",
                 tense="future",  # type: ignore[arg-type]
                 voice_register="literary",
                 sentence_rhythm="varied",
@@ -94,6 +109,7 @@ class TestVoiceDocument:
         with pytest.raises(ValidationError):
             VoiceDocument(
                 pov="first",
+                pov_character="",
                 tense="past",
                 voice_register="literary",
                 sentence_rhythm="varied",
@@ -104,6 +120,7 @@ class TestVoiceDocument:
         for reg in ("formal", "conversational", "literary", "sparse"):
             doc = VoiceDocument(
                 pov="first",
+                pov_character="",
                 tense="past",
                 voice_register=reg,
                 sentence_rhythm="varied",
@@ -115,6 +132,7 @@ class TestVoiceDocument:
         for rhythm in ("varied", "punchy", "flowing"):
             doc = VoiceDocument(
                 pov="first",
+                pov_character="",
                 tense="past",
                 voice_register="literary",
                 sentence_rhythm=rhythm,
@@ -258,6 +276,7 @@ class TestFillPhase0Output:
     def test_wraps_voice_document(self) -> None:
         voice = VoiceDocument(
             pov="third_limited",
+            pov_character="",
             tense="past",
             voice_register="literary",
             sentence_rhythm="varied",
@@ -270,6 +289,7 @@ class TestFillPhase0Output:
     def test_empty_title_rejected(self) -> None:
         voice = VoiceDocument(
             pov="first",
+            pov_character="",
             tense="past",
             voice_register="sparse",
             sentence_rhythm="punchy",
@@ -281,6 +301,7 @@ class TestFillPhase0Output:
     def test_whitespace_only_title_rejected(self) -> None:
         voice = VoiceDocument(
             pov="first",
+            pov_character="",
             tense="past",
             voice_register="sparse",
             sentence_rhythm="punchy",
