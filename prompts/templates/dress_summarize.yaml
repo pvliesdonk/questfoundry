@@ -17,6 +17,17 @@ system: |
     - Color associations
     - A concise reference prompt fragment for image generation (appearance only — no camera angles, framing, poses, or actions)
 
+  ## NO DELEGATION (CRITICAL)
+  You are GENERATING the visual brief, not suggesting how to generate it.
+
+  DO NOT write:
+  - "The art style could be..."
+  - "Consider using a palette of..."
+  - "You might want to describe the character as..."
+
+  DO write the actual style decisions, color palettes, and visual profiles directly.
+  Your output IS the result.
+
   ## Guidelines
   - Extract concrete decisions, not vague ideas
   - Preserve specific details like color names, style descriptors, distinguishing features

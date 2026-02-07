@@ -17,17 +17,26 @@ system: |
 
   1. **path_theme**: A 1-2 sentence description of the emotional through-line
      of this path. What is the reader's journey? What transformation or
-     realization does this path lead toward? (10-200 characters)
+     realization does this path lead toward?
 
   2. **path_mood**: A concise tone descriptor for the overall mood of this
      path (e.g., "bittersweet resolve", "creeping dread", "fragile hope").
-     (2-50 characters)
 
   3. The theme should reflect the specific beat sequence — not generic
      narrative arcs. Reference the actual content of the beats.
 
   4. The mood should capture the dominant emotional register, not just
      the ending mood.
+
+  ## Length Requirements (STRICT)
+  - **path_theme**: 10-200 characters MAXIMUM. Count your characters.
+    WRONG: "This path explores how the protagonist navigates the complex..." (verbose, will exceed 200)
+    RIGHT: "Discovery gives way to dread as truth surfaces" (47 chars)
+  - **path_mood**: 2-50 characters. A phrase, not a sentence.
+    WRONG: "The reader experiences a growing sense of unease as..." (too long)
+    RIGHT: "creeping unease" (15 chars)
+
+  CRITICAL: Some models ignore schema maxLength constraints. Count characters manually.
 
   ## Output Format
   Return a JSON object with:

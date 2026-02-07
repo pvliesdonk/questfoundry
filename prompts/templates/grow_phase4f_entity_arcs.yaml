@@ -21,12 +21,19 @@ system: |
   Write a concise trajectory showing how the entity changes across this path's
   beats. Use 2-4 steps separated by arrows.
 
-  GOOD: "trusted ally → doubts surface → revealed as spy"
-  GOOD: "mundane letter → imbued with dread → proof of betrayal"
-  GOOD: "safe harbor → tension creeps in → site of confrontation"
+  GOOD: "trusted ally → doubts surface → revealed as spy" (47 chars)
+  GOOD: "mundane letter → imbued with dread → proof of betrayal" (55 chars)
+  GOOD: "safe harbor → tension creeps in → site of confrontation" (56 chars)
   BAD: "the character undergoes a transformation" (too abstract)
   BAD: "start → middle → end" (generic, not specific to this entity)
   BAD: "A complex journey of self-discovery and growth" (prose, not trajectory)
+
+  ## Length Requirements (STRICT)
+  - **arc_line**: 10-200 characters MAXIMUM. Count your characters.
+    WRONG: "The entity begins as a trusted figure but slowly reveals layers of..." (verbose, will exceed 200)
+    RIGHT: "trusted → tested → betrayed" (27 chars)
+
+  CRITICAL: Some models ignore schema maxLength constraints. Count characters manually.
 
   ## Pivot Beat
   The pivot_beat is where the entity's arc TURNS — the beat where the

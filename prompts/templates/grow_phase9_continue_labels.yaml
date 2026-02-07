@@ -37,6 +37,14 @@ system: |
   4. Write in second person imperative or infinitive form
   5. Vary the verb — don't start every label with the same word
 
+  ## Length Requirements (STRICT)
+  - Labels MUST be 3-6 words. Count your words.
+    WRONG: "Go" (1 word — too short)
+    WRONG: "Proceed to investigate the mysterious room at the end of the hall" (12 words — too long)
+    RIGHT: "Search the room" (3 words)
+    RIGHT: "Follow the trail" (3 words)
+    RIGHT: "Step through the doorway" (4 words)
+
   ## What NOT to Do
   - Do NOT use IDs not listed in the Valid IDs section
   - Do NOT produce labels longer than 6 words

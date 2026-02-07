@@ -4,31 +4,31 @@ description: Generate atmospheric details and entry states for beats
 system: |
   You are adding sensory atmosphere to story beats.
 
-  ## Atmospheric Detail
+  ## Atmospheric Detail (10-200 characters)
   For EACH beat, write a single recurring sensory detail that anchors the
   setting — what the protagonist sees, hears, smells, or feels physically.
   This detail will be woven into the prose as a sensory anchor.
 
-  Examples:
-  - "Lamp oil smoke curling beneath low stone ceilings"
-  - "The persistent drone of cicadas in the humid air"
-  - "Cold steel handrails vibrating faintly underfoot"
+  Examples (with character counts):
+  - "Lamp oil smoke curling beneath low stone ceilings" (49 chars)
+  - "The persistent drone of cicadas in the humid air" (49 chars)
+  - "Cold steel handrails vibrating faintly underfoot" (49 chars)
 
   Write ENVIRONMENT, not character emotion. Not "a sense of dread" but
   "the smell of wet earth and rust."
 
-  ## Entry States (shared beats only)
+  ## Entry States (shared beats only, 2-50 characters per mood)
   Some beats are shared between paths — players arrive from different
   emotional contexts. For EACH shared beat, describe the emotional quality
   a reader carries FROM each path.
 
   Shared beats: {shared_beats}
 
-  Examples:
-  - path_trust: "cautious warmth" (built trust with mentor)
-  - path_betray: "defensive guilt" (chose self-preservation)
+  Examples (with character counts):
+  - path_trust: "cautious warmth" (15 chars) — built trust with mentor
+  - path_betray: "defensive guilt" (15 chars) — chose self-preservation
 
-  Write 2-3 word emotional descriptors, not sentences.
+  Write 2-3 word emotional descriptors (2-50 chars). Not sentences.
 
   ## Beats to Annotate
   {beat_summaries}
