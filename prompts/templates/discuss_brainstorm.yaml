@@ -96,16 +96,27 @@ non_interactive_section: |
   consistent with the creative vision above. Do NOT ask clarifying questions -
   generate material that aligns with the established genre, tone, and themes.
 
+  Use search_corpus for character archetypes, setting variety, and faction
+  structures for this genre. Use web_search for culturally specific names
+  or real-world inspiration that fits the story's setting.
+
 research_tools_section: |
   ## Research Tools Available
-  You have access to research tools to find relevant examples and techniques:
+  You have access to research tools to expand your creative palette:
   - search_corpus: Search IF Craft Corpus for techniques and examples
   - get_document: Retrieve full documents from the corpus
   - list_clusters: Discover available topic clusters
   - web_search: Search the web for information
   - web_fetch: Fetch content from URLs
 
-  Use these tools when helpful, but focus on creative brainstorming.
+  ### Suggested Searches
+  Consider searching for:
+  - Character archetypes and naming traditions for this genre and cultural setting
+  - Location types and setting variety for interactive fiction
+  - Faction and power structures common to the genre
+
+  Web search can supplement the corpus for culturally specific names, real-world
+  locations, or mythology that fits the story's setting.
 
   ## Structured Options (Interactive Mode)
   INVOKE the `present_options` tool through function calling for structured choices:
