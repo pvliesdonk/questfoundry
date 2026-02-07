@@ -26,6 +26,10 @@ from questfoundry.providers.image import (
     ImageProviderError,
     ImageResult,
 )
+from questfoundry.providers.settings import (
+    _detect_model_variant,
+    get_provider_capabilities,
+)
 
 if TYPE_CHECKING:
     from questfoundry.providers.image_brief import ImageBrief
@@ -36,6 +40,49 @@ _DEFAULT_TIMEOUT = 180.0  # SDXL at high res can be slow on consumer GPUs
 _DISTILL_STOP_MARKER = "<QF_END>"
 _DISTILL_MAX_OUTPUT_TOKENS = 512
 _DISTILL_MAX_RETRIES = 2
+
+
+def _detect_provider_from_llm(llm: Any) -> str:
+    """Detect provider name from a LangChain model instance.
+
+    Used to look up provider capabilities for parameter filtering.
+
+    Args:
+        llm: LangChain chat model instance.
+
+    Returns:
+        Provider name ("ollama", "openai", "anthropic", "google") or "unknown".
+    """
+    class_name = type(llm).__name__.lower()
+
+    if "ollama" in class_name:
+        return "ollama"
+    if "openai" in class_name or "chatgpt" in class_name:
+        return "openai"
+    if "anthropic" in class_name or "claude" in class_name:
+        return "anthropic"
+    if "google" in class_name or "gemini" in class_name:
+        return "google"
+
+    return "unknown"
+
+
+def _get_model_name_from_llm(llm: Any) -> str:
+    """Extract model name from a LangChain model instance.
+
+    Args:
+        llm: LangChain chat model instance.
+
+    Returns:
+        Model name string or empty string if not found.
+    """
+    # Try common attribute names
+    for attr in ("model", "model_name", "model_id"):
+        if hasattr(llm, attr):
+            value = getattr(llm, attr)
+            if isinstance(value, str):
+                return value
+    return ""
 
 
 # -- Model-aware generation presets ----------------------------------------
@@ -197,29 +244,46 @@ class A1111ImageProvider:
         Uses model_copy() instead of bind() because bind() kwargs are ignored
         by some providers (Ollama reads from instance attributes, not invoke kwargs).
 
-        We rely on provider-side caps to prevent pathological runs where the
-        model ignores formatting instructions and generates extremely long output.
+        Uses the provider capabilities registry to check which parameters are
+        supported. Some models (OpenAI reasoning models like o1/o3, gpt-5-mini)
+        reject certain parameters at runtime.
         """
         # model_copy requires the model to be a Pydantic model
         if not hasattr(llm, "model_copy"):
             return llm
 
+        # Detect provider and model for capability checking
+        provider = _detect_provider_from_llm(llm)
+        model_name = _get_model_name_from_llm(llm)
+        caps = get_provider_capabilities(provider)
+        variant = _detect_model_variant(provider, model_name)
+
         updates: dict[str, Any] = {}
 
-        # Ollama (langchain-ollama ChatOllama) uses num_predict.
-        if hasattr(llm, "num_predict"):
-            updates["num_predict"] = _DISTILL_MAX_OUTPUT_TOKENS
-        # Most hosted providers use max_tokens.
-        elif hasattr(llm, "max_tokens"):
-            updates["max_tokens"] = _DISTILL_MAX_OUTPUT_TOKENS
+        # Set max tokens with correct param name for provider
+        updates[caps.max_tokens_param] = _DISTILL_MAX_OUTPUT_TOKENS
 
-        # Stop sequences - skip if model doesn't support
-        if hasattr(llm, "stop"):
-            updates["stop"] = stop
-
-        # Keep distillation deterministic-ish
-        if hasattr(llm, "temperature"):
+        # Temperature - skip if model rejects it (reasoning models)
+        if caps.temperature and not variant.rejects_temperature:
             updates["temperature"] = 0.2
+        elif variant.rejects_temperature:
+            log.debug(
+                "distill_param_skipped",
+                param="temperature",
+                model=model_name,
+                reason="reasoning_model",
+            )
+
+        # Stop sequences - check both provider and model variant support
+        if caps.stop and not variant.rejects_stop:
+            updates["stop"] = stop
+        elif variant.rejects_stop:
+            log.debug(
+                "distill_param_skipped",
+                param="stop",
+                model=model_name,
+                reason="model_rejects_stop",
+            )
 
         if not updates:
             return llm
