@@ -37,6 +37,13 @@ system: |
   5. Labels should feel natural in the story's voice and tone
   6. Write in second person imperative or infinitive form
 
+  ## Length Requirements (STRICT)
+  - Labels MUST be 3-8 words. Count your words.
+    WRONG: "Go" (1 word — too short)
+    WRONG: "Decide to trust the mentor and follow their advice into the unknown" (12 words — too long)
+    RIGHT: "Trust the mentor's guidance" (4 words)
+    RIGHT: "Demand proof before agreeing" (4 words)
+
   ## What NOT to Do
   - Do NOT use IDs not listed in the Valid IDs section
   - Do NOT produce labels longer than 8 words

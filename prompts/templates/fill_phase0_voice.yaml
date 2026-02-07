@@ -50,10 +50,20 @@ system: |
 
   Also propose a **story_title** — a compelling title for this interactive fiction story.
 
-  - 2–8 words, evocative and genre-appropriate
+  ## Length Requirements (STRICT)
+  - **story_title**: 2-8 words. Count your words.
+    WRONG: "A" (1 word — too short)
+    WRONG: "The Long and Winding Road Through the Mountains of Despair" (11 words — too long)
+    RIGHT: "The Hollow Crown" (3 words)
+    RIGHT: "Beneath the Crimson Tide" (4 words)
+    RIGHT: "Whispers at Dawnbreak" (3 words)
+
+  - **tone_words**: At least 1 adjective required (typically 3-5).
+    WRONG: [] (empty — validation will fail)
+    RIGHT: ["terse", "wry", "melancholic"]
+
   - Reflect the central tension, setting, or theme — not generic
-  - Good: "The Hollow Crown", "Beneath the Crimson Tide", "Whispers at Dawnbreak"
-  - Bad: "Adventure Story", "The Quest", "A Dark Tale"
+  - Bad: "Adventure Story", "The Quest", "A Dark Tale" (too generic)
 
   {output_language_instruction}
 

@@ -28,9 +28,9 @@ system: |
   "reluctant hope", "cold clarity", "breathless tension", "numb acceptance",
   "fierce defiance", "bitter calm", "fragile trust"
 
-  Write a SHORT emotional phrase (2-3 words). Not a sentence.
-  GOOD: "bitter resolve"
-  BAD: "The reader feels a sense of growing unease about what comes next"
+  Write a SHORT emotional phrase (2-3 words, 2-40 characters). Not a sentence.
+  GOOD: "bitter resolve" (14 chars)
+  BAD: "The reader feels a sense of growing unease about what comes next" (too long)
 
   ## Classification Guidelines
   1. Beats with dilemma_impacts (commits/escalates) are scenes — they drive conflict forward
