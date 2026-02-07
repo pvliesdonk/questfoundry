@@ -48,7 +48,6 @@ class ArtDirection(BaseModel):
         description="Global things to avoid in image generation",
     )
     aspect_ratio: str = Field(
-        default="16:9",
         min_length=1,
         description="Default image dimensions (e.g. 16:9, 1:1)",
     )

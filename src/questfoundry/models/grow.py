@@ -88,7 +88,9 @@ class EntityOverlay(BaseModel):
 
     entity_id: str = Field(min_length=1)
     when: list[str] = Field(min_length=1)
-    details: dict[str, str] = Field(default_factory=dict)
+    details: dict[str, str] = Field(
+        description="Entity state changes when codewords are active (must have at least one key)"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -288,7 +290,9 @@ class OverlayProposal(BaseModel):
 
     entity_id: str = Field(min_length=1)
     when: list[str] = Field(min_length=1)
-    details: dict[str, str] = Field(default_factory=dict)
+    details: dict[str, str] = Field(
+        description="Entity state changes when codewords are active (must have at least one key)"
+    )
 
 
 class Phase8cOutput(BaseModel):
