@@ -120,6 +120,52 @@ class FillPassageOutput(BaseModel):
     )
 
 
+# ---------------------------------------------------------------------------
+# Expand blueprint (Phase 1a)
+# ---------------------------------------------------------------------------
+
+
+class ExpandBlueprint(BaseModel):
+    """Scene blueprint for a single passage.
+
+    Generated in Phase 1a (expand) and consumed by Phase 1 (prose).
+    Separates creative planning from prose rendering so each LLM call
+    has lower cognitive load.
+    """
+
+    passage_id: str = Field(min_length=1)
+    sensory_palette: list[str] = Field(
+        min_length=3,
+        max_length=8,
+        description="Sense-tagged details (e.g. 'sight: guttering torchlight')",
+    )
+    character_gestures: list[str] = Field(
+        default_factory=list,
+        max_length=4,
+        description="Physical mannerisms or body language beats",
+    )
+    opening_move: Literal["dialogue", "action", "sensory_image", "internal_thought"] = Field(
+        description="How the passage should begin"
+    )
+    craft_constraint: str = Field(
+        default="",
+        description="Structural or stylistic constraint (empty when probabilistically omitted)",
+    )
+    emotional_arc_word: str = Field(
+        min_length=1,
+        description="Single word capturing the emotional trajectory (e.g. 'dread', 'resolve')",
+    )
+
+
+class BatchedExpandOutput(BaseModel):
+    """Phase 1a structured output: blueprints for a batch of passages."""
+
+    blueprints: list[ExpandBlueprint] = Field(
+        min_length=1,
+        description="One blueprint per passage in the batch",
+    )
+
+
 class FillExtractOutput(BaseModel):
     """Analytical extraction of entity updates from generated prose.
 
@@ -152,6 +198,7 @@ class ReviewFlag(BaseModel):
         "continuity_break",
         "convergence_awkwardness",
         "flat_prose",
+        "blueprint_bleed",
     ] = Field(description="Category of the review issue")
 
 
