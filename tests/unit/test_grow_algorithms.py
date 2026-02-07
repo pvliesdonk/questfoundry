@@ -1698,6 +1698,190 @@ class TestApplyKnotMark:
         assert "location" not in mentor
 
 
+class TestFormatIntersectionCandidates:
+    """Tests for format_intersection_candidates()."""
+
+    def test_formats_location_group(self) -> None:
+        """Location-based candidate group is formatted with signal and beat details."""
+        from questfoundry.graph.grow_algorithms import (
+            IntersectionCandidate,
+            format_intersection_candidates,
+        )
+
+        candidates = [
+            IntersectionCandidate(
+                beat_ids=["beat::mentor_meet", "beat::artifact_discover"],
+                signal_type="location",
+                shared_value="market",
+            )
+        ]
+        beat_nodes = {
+            "beat::mentor_meet": {
+                "summary": "Hero meets mentor",
+                "location": "market",
+                "entities": ["mentor", "hero"],
+            },
+            "beat::artifact_discover": {
+                "summary": "Hero finds artifact",
+                "location": "docks",
+                "location_alternatives": ["market"],
+                "entities": ["artifact"],
+            },
+        }
+        beat_dilemmas = {
+            "beat::mentor_meet": {"mentor_trust"},
+            "beat::artifact_discover": {"artifact_quest"},
+        }
+
+        result = format_intersection_candidates(candidates, beat_nodes, beat_dilemmas)
+
+        assert '### Candidate Group 1 (shared location: "market")' in result
+        assert "Dilemmas represented: artifact_quest, mentor_trust" in result
+        assert "beat::mentor_meet [dilemma: mentor_trust]:" in result
+        assert "beat::artifact_discover [dilemma: artifact_quest]:" in result
+        assert 'summary="Hero meets mentor"' in result
+        assert 'location="market"' in result
+        assert "entities=['mentor', 'hero']" in result
+
+    def test_formats_entity_group(self) -> None:
+        """Entity-based candidate group shows entity signal in header."""
+        from questfoundry.graph.grow_algorithms import (
+            IntersectionCandidate,
+            format_intersection_candidates,
+        )
+
+        candidates = [
+            IntersectionCandidate(
+                beat_ids=["beat::a", "beat::b"],
+                signal_type="entity",
+                shared_value="hero",
+            )
+        ]
+        beat_nodes = {
+            "beat::a": {"summary": "Beat A", "location": "loc_a"},
+            "beat::b": {"summary": "Beat B", "location": "loc_b"},
+        }
+        beat_dilemmas = {
+            "beat::a": {"dilemma_x"},
+            "beat::b": {"dilemma_y"},
+        }
+
+        result = format_intersection_candidates(candidates, beat_nodes, beat_dilemmas)
+
+        assert '### Candidate Group 1 (shared entity: "hero")' in result
+        assert "Dilemmas represented: dilemma_x, dilemma_y" in result
+
+    def test_multiple_groups_numbered(self) -> None:
+        """Multiple candidate groups are numbered sequentially."""
+        from questfoundry.graph.grow_algorithms import (
+            IntersectionCandidate,
+            format_intersection_candidates,
+        )
+
+        candidates = [
+            IntersectionCandidate(
+                beat_ids=["beat::a", "beat::b"],
+                signal_type="location",
+                shared_value="market",
+            ),
+            IntersectionCandidate(
+                beat_ids=["beat::c", "beat::d"],
+                signal_type="entity",
+                shared_value="hero",
+            ),
+        ]
+        beat_nodes = {
+            "beat::a": {"summary": "A"},
+            "beat::b": {"summary": "B"},
+            "beat::c": {"summary": "C"},
+            "beat::d": {"summary": "D"},
+        }
+        beat_dilemmas = {
+            "beat::a": {"d1"},
+            "beat::b": {"d2"},
+            "beat::c": {"d1"},
+            "beat::d": {"d3"},
+        }
+
+        result = format_intersection_candidates(candidates, beat_nodes, beat_dilemmas)
+
+        assert "### Candidate Group 1" in result
+        assert "### Candidate Group 2" in result
+
+    def test_beat_in_multiple_groups(self) -> None:
+        """A beat appearing in multiple groups is included in each."""
+        from questfoundry.graph.grow_algorithms import (
+            IntersectionCandidate,
+            format_intersection_candidates,
+        )
+
+        candidates = [
+            IntersectionCandidate(
+                beat_ids=["beat::shared", "beat::x"],
+                signal_type="location",
+                shared_value="market",
+            ),
+            IntersectionCandidate(
+                beat_ids=["beat::shared", "beat::y"],
+                signal_type="entity",
+                shared_value="hero",
+            ),
+        ]
+        beat_nodes = {
+            "beat::shared": {"summary": "Shared beat"},
+            "beat::x": {"summary": "X"},
+            "beat::y": {"summary": "Y"},
+        }
+        beat_dilemmas = {
+            "beat::shared": {"d1"},
+            "beat::x": {"d2"},
+            "beat::y": {"d3"},
+        }
+
+        result = format_intersection_candidates(candidates, beat_nodes, beat_dilemmas)
+
+        # beat::shared should appear in both groups
+        groups = result.split("### Candidate Group")
+        # groups[0] is empty (before first header), groups[1] and groups[2] are the groups
+        assert "beat::shared" in groups[1]
+        assert "beat::shared" in groups[2]
+
+    def test_empty_candidates_returns_empty_string(self) -> None:
+        """No candidates produces empty string."""
+        from questfoundry.graph.grow_algorithms import format_intersection_candidates
+
+        result = format_intersection_candidates([], {}, {})
+        assert result == ""
+
+    def test_missing_beat_data_uses_defaults(self) -> None:
+        """Beats not found in beat_nodes get default values."""
+        from questfoundry.graph.grow_algorithms import (
+            IntersectionCandidate,
+            format_intersection_candidates,
+        )
+
+        candidates = [
+            IntersectionCandidate(
+                beat_ids=["beat::missing", "beat::present"],
+                signal_type="location",
+                shared_value="loc",
+            )
+        ]
+        beat_nodes = {
+            "beat::present": {"summary": "Present beat", "location": "loc"},
+        }
+        beat_dilemmas = {
+            "beat::missing": {"d1"},
+            "beat::present": {"d2"},
+        }
+
+        result = format_intersection_candidates(candidates, beat_nodes, beat_dilemmas)
+
+        assert "beat::missing" in result
+        assert 'summary=""' in result
+        assert 'location="unspecified"' in result
+
+
 # ---------------------------------------------------------------------------
 # End-to-end: all phases on fixture graphs
 # ---------------------------------------------------------------------------
