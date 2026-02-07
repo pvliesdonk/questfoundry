@@ -23,6 +23,7 @@ system: |
   | continuity_break | Details contradict earlier passages (wrong name, changed appearance, impossible geography) |
   | convergence_awkwardness | Passage doesn't work for one of the arriving branches |
   | flat_prose | Lacks sensory detail, dilemma tension, or emotional engagement — reads as summary not prose |
+  | blueprint_bleed | Passage reads like a checklist of blueprint items rather than integrated prose — sensory details feel catalogued, not woven |
 
   ## Guidelines
 
@@ -43,7 +44,7 @@ user: |
   CRITICAL REMINDERS:
   - Be selective — flag real problems, not stylistic preferences
   - issue_type must be one of: voice_drift, scene_type_mismatch, summary_deviation,
-    continuity_break, convergence_awkwardness, flat_prose
+    continuity_break, convergence_awkwardness, flat_prose, blueprint_bleed
   - An empty flags list is fine if no issues found
   - Return ONLY a valid JSON object. Do NOT add prose before or after the JSON.
 
