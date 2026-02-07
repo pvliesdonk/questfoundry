@@ -93,12 +93,9 @@ def _format_structural_feedback(errors: list[GrowValidationError]) -> str:
     Categorizes errors by type and produces a correction message that
     tells the LLM exactly what went wrong, enabling targeted repair.
     """
+    dilemma_substrings = ("same dilemma", "span only", "at most 1 beat per dilemma")
     same_dilemma_count = sum(
-        1
-        for e in errors
-        if "same dilemma" in e.issue.lower()
-        or "span only" in e.issue.lower()
-        or "at most 1 beat per dilemma" in e.issue.lower()
+        1 for e in errors if any(sub in e.issue.lower() for sub in dilemma_substrings)
     )
 
     lines = ["\n\n## CORRECTION REQUIRED"]
@@ -113,8 +110,11 @@ def _format_structural_feedback(errors: list[GrowValidationError]) -> str:
         )
 
     # Show up to 3 specific errors for clarity
-    for err in errors[:3]:
+    max_shown = 3
+    for err in errors[:max_shown]:
         lines.append(f"  - {err.issue}")
+    if len(errors) > max_shown:
+        lines.append(f"  ... and {len(errors) - max_shown} more error(s)")
 
     lines.append(
         "Try again. Use the beat IDs from WITHIN each candidate group to form intersections."
@@ -861,6 +861,7 @@ class GrowStage:
 
         validator = partial(validate_phase3_output, valid_beat_ids=valid_beat_ids)
 
+        # 2 attempts: initial call + 1 structural retry
         max_structural_retries = 2
         total_llm_calls = 0
         total_tokens = 0
@@ -940,8 +941,14 @@ class GrowStage:
             if accepted:
                 break
 
-            # All rejected — retry with targeted feedback if attempts remain
-            if len(result.intersections) > 0 and structural_attempt < max_structural_retries - 1:
+            # All rejected — retry with targeted feedback if structural errors
+            # exist and attempts remain. Skip retry when rejections are
+            # non-structural (e.g. invalid beat IDs) since feedback would be empty.
+            if (
+                structural_errors
+                and len(result.intersections) > 0
+                and structural_attempt < max_structural_retries - 1
+            ):
                 context["structural_feedback"] = _format_structural_feedback(structural_errors)
                 log.warning(
                     "phase3_structural_retry",
@@ -950,14 +957,14 @@ class GrowStage:
                 )
                 continue
 
-            # Final attempt exhausted — fail
+            # Final attempt exhausted or non-structural failures — fail
             if len(result.intersections) > 0:
                 return GrowPhaseResult(
                     phase="intersections",
                     status="failed",
                     detail=(
                         f"All {len(result.intersections)} proposed intersections rejected "
-                        f"after {structural_attempt + 1} attempts. "
+                        f"after {structural_attempt + 1} attempt(s). "
                         f"Story structure lacks cross-dilemma scene overlap. "
                         f"Common causes: insufficient shared locations, isolated storylines, "
                         f"or characters confined to a single dilemma."
@@ -974,6 +981,18 @@ class GrowStage:
                 "phase3_intersection_applied",
                 beat_ids=beat_ids,
                 location=location,
+            )
+
+        # Defensive check: if proposals were made but none accepted after
+        # exhausting the loop (shouldn't happen given the checks above,
+        # but guards against future logic changes).
+        if len(result.intersections) > 0 and not accepted:
+            return GrowPhaseResult(
+                phase="intersections",
+                status="failed",
+                detail=(f"All {len(result.intersections)} proposed intersections were rejected."),
+                llm_calls=total_llm_calls,
+                tokens_used=total_tokens,
             )
 
         return GrowPhaseResult(
