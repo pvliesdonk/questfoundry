@@ -61,16 +61,25 @@ non_interactive_section: |
   based on the initial prompt. Do NOT ask clarifying questions - interpret
   the prompt and commit to choices that best serve the story idea presented.
 
+  Use search_corpus to find genre conventions and tone techniques for your
+  chosen genre before finalizing your vision.
+
 research_tools_section: |
   ## Research Tools Available
-  You have access to research tools to find relevant examples and techniques:
+  You have access to research tools to expand your creative palette:
   - search_corpus: Search IF Craft Corpus for techniques and examples
   - get_document: Retrieve full documents from the corpus
   - list_clusters: Discover available topic clusters
   - web_search: Search the web for information
   - web_fetch: Fetch content from URLs
 
-  Use these tools when helpful, but don't overuse them - focus on the creative discussion.
+  ### Suggested Searches
+  Consider searching early in the conversation for:
+  - Genre conventions and audience expectations for the chosen genre
+  - Tone and atmosphere techniques that suit the themes
+  - Scope guidance for interactive fiction at the target length
+
+  These searches surface patterns and possibilities beyond your defaults.
 
   ## Structured Options (Interactive Mode)
   When offering the user a choice between distinct options, INVOKE the
