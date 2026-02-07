@@ -87,6 +87,41 @@ class GrowStageError(ValueError):
     pass
 
 
+def _format_structural_feedback(errors: list[GrowValidationError]) -> str:
+    """Format structural compatibility errors as targeted LLM feedback.
+
+    Categorizes errors by type and produces a correction message that
+    tells the LLM exactly what went wrong, enabling targeted repair.
+    """
+    same_dilemma_count = sum(
+        1
+        for e in errors
+        if "same dilemma" in e.issue.lower()
+        or "span only" in e.issue.lower()
+        or "at most 1 beat per dilemma" in e.issue.lower()
+    )
+
+    lines = ["\n\n## CORRECTION REQUIRED"]
+    lines.append(f"Your previous {len(errors)} error(s) caused ALL intersections to be REJECTED.")
+
+    if same_dilemma_count > 0:
+        lines.append(
+            "PROBLEM: You grouped beats from the SAME dilemma together. "
+            "Each intersection MUST combine beats from DIFFERENT dilemmas. "
+            "Each candidate group already contains beats from different dilemmas -- "
+            "select beats from WITHIN a group, not across groups."
+        )
+
+    # Show up to 3 specific errors for clarity
+    for err in errors[:3]:
+        lines.append(f"  - {err.issue}")
+
+    lines.append(
+        "Try again. Use the beat IDs from WITHIN each candidate group to form intersections."
+    )
+    return "\n".join(lines)
+
+
 class GrowStage:
     """GROW stage: builds complete branching structure from SEED graph.
 
@@ -740,9 +775,13 @@ class GrowStage:
     async def _phase_3_intersections(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 3: Intersection detection.
 
-        Clusters beats from different paths (different dilemmas) into
-        scenes where multiple dilemmas intersect. Uses LLM to propose
-        intersections, then validates with deterministic compatibility checks.
+        Pre-clusters beats from different dilemmas into candidate groups
+        using algorithmic signal detection (shared locations/entities),
+        then asks the LLM to evaluate which groups form natural scenes.
+
+        Includes a structural retry: if all proposed intersections are
+        rejected by compatibility checks, the LLM is re-invoked with
+        targeted error feedback.
 
         An intersection is valid when:
         - Beats are from different dilemmas
@@ -753,6 +792,7 @@ class GrowStage:
             apply_intersection_mark,
             build_intersection_candidates,
             check_intersection_compatibility,
+            format_intersection_candidates,
             resolve_intersection_location,
         )
         from questfoundry.models.grow import Phase3Output
@@ -766,17 +806,14 @@ class GrowStage:
                 detail="No intersection candidates found (no beats share signals across dilemmas)",
             )
 
-        # Build context for LLM
+        # Build beat-to-dilemma mapping and valid beat ID set
         beat_nodes = graph.get_nodes_by_type("beat")
         path_nodes = graph.get_nodes_by_type("path")
-        beat_summaries: list[str] = []
 
-        beat_info: dict[str, str] = {}
         from collections import defaultdict
 
         from questfoundry.graph.context import normalize_scoped_id
 
-        # Build beat -> dilemma mapping via belongs_to -> path.dilemma_id
         beat_dilemmas: dict[str, set[str]] = defaultdict(set)
         belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
         for edge in belongs_to_edges:
@@ -789,30 +826,14 @@ class GrowStage:
             if dilemma_id:
                 beat_dilemmas[beat_id].add(normalize_scoped_id(dilemma_id, "dilemma"))
 
+        # Collect valid beat IDs (beats that map to exactly 1 dilemma)
+        valid_beat_ids: set[str] = set()
         for candidate in candidates:
             for bid in candidate.beat_ids:
-                if bid in beat_info:
-                    continue
-                dilemma_ids = sorted(beat_dilemmas.get(bid, set()))
-                if len(dilemma_ids) != 1:
-                    continue
+                dilemma_ids = beat_dilemmas.get(bid, set())
+                if len(dilemma_ids) == 1:
+                    valid_beat_ids.add(bid)
 
-                data = beat_nodes.get(bid, {})
-                location = data.get("location", "unspecified")
-                alternatives = data.get("location_alternatives", [])
-                summary = data.get("summary", "")
-                entities = data.get("entities", [])
-                dilemma_tag = dilemma_ids[0]
-                beat_info[bid] = (
-                    f"- {bid} [dilemma: {dilemma_tag}]: "
-                    f'summary="{summary}", '
-                    f'location="{location}", '
-                    f"location_alternatives={alternatives}, "
-                    f"entities={entities}"
-                )
-        beat_summaries = list(beat_info.values())
-
-        valid_beat_ids = set(beat_info.keys())
         if not valid_beat_ids:
             return GrowPhaseResult(
                 phase="intersections",
@@ -823,79 +844,127 @@ class GrowStage:
                 ),
             )
 
-        valid_beat_ids_list = sorted(valid_beat_ids)
+        # Format candidates as pre-clustered groups for the LLM
+        candidate_groups_text = format_intersection_candidates(
+            candidates, beat_nodes, beat_dilemmas
+        )
 
-        context = {
-            "beat_summaries": "\n".join(beat_summaries),
-            "valid_beat_ids": ", ".join(valid_beat_ids_list),
-            "candidate_count": str(len(valid_beat_ids_list)),
+        context: dict[str, str] = {
+            "candidate_groups": candidate_groups_text,
+            "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
+            "candidate_count": str(len(candidates)),
+            "structural_feedback": "",
         }
 
-        # Call LLM for intersection proposals
+        # Call LLM with structural retry loop
         from questfoundry.graph.grow_validators import validate_phase3_output
 
         validator = partial(validate_phase3_output, valid_beat_ids=valid_beat_ids)
-        try:
-            result, llm_calls, tokens = await self._grow_llm_call(
-                model=model,
-                template_name="grow_phase3_intersections",
-                context=context,
-                output_schema=Phase3Output,
-                semantic_validator=validator,
-            )
-        except GrowStageError as e:
-            return GrowPhaseResult(
-                phase="intersections",
-                status="failed",
-                detail=str(e),
-            )
 
-        # Validate and apply intersections
-        applied_count = 0
-        skipped_count = 0
-        pre_intersection_graph = Graph.from_dict(graph.to_dict())
-        accepted: list[tuple[list[str], str | None]] = []
+        max_structural_retries = 2
+        total_llm_calls = 0
+        total_tokens = 0
 
-        for proposal in result.intersections:
-            # Filter to valid beat IDs
-            valid_ids = [bid for bid in proposal.beat_ids if bid in valid_beat_ids]
-            if len(valid_ids) < 2:
-                log.warning(
-                    "phase3_insufficient_valid_beats",
-                    proposed=proposal.beat_ids,
-                    valid=valid_ids,
+        for structural_attempt in range(max_structural_retries):
+            try:
+                result, llm_calls, tokens = await self._grow_llm_call(
+                    model=model,
+                    template_name="grow_phase3_intersections",
+                    context=context,
+                    output_schema=Phase3Output,
+                    semantic_validator=validator,
                 )
-                skipped_count += 1
-                continue
-
-            # Run compatibility check
-            errors = check_intersection_compatibility(pre_intersection_graph, valid_ids)
-            if errors:
-                log.warning(
-                    "phase3_incompatible_intersection",
-                    beat_ids=valid_ids,
-                    errors=[e.issue for e in errors],
+            except GrowStageError as e:
+                return GrowPhaseResult(
+                    phase="intersections",
+                    status="failed",
+                    detail=str(e),
+                    llm_calls=total_llm_calls,
+                    tokens_used=total_tokens,
                 )
-                skipped_count += 1
-                continue
 
-            # Resolve location (prefer LLM proposal, fallback to algorithm)
-            if proposal.resolved_location:
-                location = proposal.resolved_location
-            else:
-                location = resolve_intersection_location(pre_intersection_graph, valid_ids)
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            # Validate and apply intersections
+            applied_count = 0
+            skipped_count = 0
+            pre_intersection_graph = Graph.from_dict(graph.to_dict())
+            accepted: list[tuple[list[str], str | None]] = []
+            structural_errors: list[GrowValidationError] = []
+
+            for proposal in result.intersections:
+                # Filter to valid beat IDs
+                valid_ids = [bid for bid in proposal.beat_ids if bid in valid_beat_ids]
+                if len(valid_ids) < 2:
+                    log.warning(
+                        "phase3_insufficient_valid_beats",
+                        proposed=proposal.beat_ids,
+                        valid=valid_ids,
+                    )
+                    skipped_count += 1
+                    continue
+
+                # Run compatibility check
+                errors = check_intersection_compatibility(pre_intersection_graph, valid_ids)
+                if errors:
+                    log.warning(
+                        "phase3_incompatible_intersection",
+                        beat_ids=valid_ids,
+                        errors=[e.issue for e in errors],
+                    )
+                    structural_errors.extend(errors)
+                    skipped_count += 1
+                    continue
+
+                # Resolve location (prefer LLM proposal, fallback to algorithm)
+                location: str | None
+                if proposal.resolved_location:
+                    location = proposal.resolved_location
+                else:
+                    location = resolve_intersection_location(pre_intersection_graph, valid_ids)
+                    log.debug(
+                        "phase3_location_resolved",
+                        beat_ids=valid_ids,
+                        resolved=location,
+                    )
+
+                accepted.append((valid_ids, location))
                 log.debug(
-                    "phase3_location_resolved",
+                    "phase3_intersection_accepted",
                     beat_ids=valid_ids,
-                    resolved=location,
+                    location=location,
                 )
 
-            accepted.append((valid_ids, location))
-            log.debug(
-                "phase3_intersection_accepted",
-                beat_ids=valid_ids,
-                location=location,
-            )
+            # If some were accepted, break out of retry loop
+            if accepted:
+                break
+
+            # All rejected — retry with targeted feedback if attempts remain
+            if len(result.intersections) > 0 and structural_attempt < max_structural_retries - 1:
+                context["structural_feedback"] = _format_structural_feedback(structural_errors)
+                log.warning(
+                    "phase3_structural_retry",
+                    attempt=structural_attempt + 1,
+                    errors=len(structural_errors),
+                )
+                continue
+
+            # Final attempt exhausted — fail
+            if len(result.intersections) > 0:
+                return GrowPhaseResult(
+                    phase="intersections",
+                    status="failed",
+                    detail=(
+                        f"All {len(result.intersections)} proposed intersections rejected "
+                        f"after {structural_attempt + 1} attempts. "
+                        f"Story structure lacks cross-dilemma scene overlap. "
+                        f"Common causes: insufficient shared locations, isolated storylines, "
+                        f"or characters confined to a single dilemma."
+                    ),
+                    llm_calls=total_llm_calls,
+                    tokens_used=total_tokens,
+                )
 
         # Apply accepted intersections in a batch to avoid cascade effects.
         for beat_ids, location in accepted:
@@ -907,23 +976,6 @@ class GrowStage:
                 location=location,
             )
 
-        # Fail if all proposed intersections were rejected — the story lacks
-        # cross-dilemma scene overlap and downstream phases will degrade.
-        if len(result.intersections) > 0 and applied_count == 0:
-            return GrowPhaseResult(
-                phase="intersections",
-                status="failed",
-                detail=(
-                    f"All {len(result.intersections)} proposed intersections rejected. "
-                    f"Story structure lacks cross-dilemma scene overlap. "
-                    f"Common causes: insufficient shared locations, isolated storylines, "
-                    f"or characters confined to a single dilemma. "
-                    f"Review brainstorm/seed for shared location convergence points."
-                ),
-                llm_calls=llm_calls,
-                tokens_used=tokens,
-            )
-
         return GrowPhaseResult(
             phase="intersections",
             status="completed",
@@ -931,8 +983,8 @@ class GrowStage:
                 f"Proposed {len(result.intersections)} intersections: "
                 f"{applied_count} applied, {skipped_count} skipped"
             ),
-            llm_calls=llm_calls,
-            tokens_used=tokens,
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
         )
 
     async def _phase_4a_scene_types(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
