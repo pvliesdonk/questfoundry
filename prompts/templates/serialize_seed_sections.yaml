@@ -299,6 +299,21 @@ beats_prompt: |
   - `## VALID PATH IDs` - use ONLY these in `paths` arrays
   - `### Entity IDs` - use ONLY these in `entities` and `location` fields
 
+  ## PATH ID vs DILEMMA ID: THE CRITICAL DISTINCTION
+
+  SHAPE RECOGNITION (memorize this):
+  - **Path IDs** are HIERARCHICAL: `path::dilemma_name__answer` (contains `__` double underscore)
+  - **Dilemma IDs** are BINARY questions: `dilemma::subject_optionA_or_optionB` (contains `_or_`)
+  - **Entity IDs** have CATEGORY prefix: `character::name`, `location::place`, `object::item`
+
+  WRONG: Using `dilemma::...` in the `paths[]` field
+  RIGHT: Using `path::...` in the `paths[]` field
+
+  WRONG: Using `path::...` in the `dilemma_impacts.dilemma_id` field
+  RIGHT: Using `dilemma::...` in the `dilemma_impacts.dilemma_id` field
+
+  If you see `__` (double underscore), it's a PATH. If you see `_or_`, it's a DILEMMA.
+
   WRONG examples that WILL FAIL:
   - `"clock_distortion"` - NOT a valid path (derived from concept)
   - `"the_garden"` - WRONG, use `"garden"` (no prefix)
