@@ -1184,6 +1184,120 @@ class FillStage:
 
     REVIEW_BATCH_SIZE = 8
 
+    # -- Mechanical quality gate thresholds --
+    _NEAR_DUP_THRESHOLD = 75.0  # rapidfuzz ratio %
+    _TRIGRAM_COLLISION_MAX = 2  # max passages sharing opening trigram
+    _TTR_THRESHOLD = 0.35  # type-token ratio below this = flag
+    _SENTENCE_LEN_STDEV_MIN = 3.0  # sentence length stdev below this = flag
+    _BIGRAM_PASSAGE_MAX = 3  # bigram in more than N passages = flag
+
+    async def _phase_1c_mechanical_gate(
+        self,
+        graph: Graph,
+        _model: BaseChatModel,
+    ) -> FillPhaseResult:
+        """Phase 1c: Mechanical quality gate.
+
+        Deterministic checks on generated prose — no LLM calls.
+        Flags passages with flat_prose for revision in Phase 3.
+        """
+        import re
+        import statistics
+
+        try:
+            from rapidfuzz import fuzz
+        except ImportError:
+            log.warning("rapidfuzz_unavailable", detail="skipping near-duplicate check")
+            fuzz = None
+
+        passage_nodes = graph.get_nodes_by_type("passage")
+        prose_entries: list[tuple[str, str]] = [
+            (pid, pdata.get("prose", ""))
+            for pid, pdata in passage_nodes.items()
+            if pdata.get("prose") and pdata.get("flag") != "incompatible_states"
+        ]
+        if not prose_entries:
+            return FillPhaseResult(
+                phase="quality_gate", status="completed", detail="no passages to check"
+            )
+
+        flags_added = 0
+
+        def _add_flag(pid: str, issue: str) -> None:
+            nonlocal flags_added
+            node = graph.get_node(pid)
+            if not node:
+                return
+            flag_data = {"passage_id": pid, "issue": issue, "issue_type": "flat_prose"}
+            graph.update_node(
+                pid,
+                review_flags=[*node.get("review_flags", []), flag_data],
+            )
+            flags_added += 1
+
+        # 1. Near-duplicate detection (pairwise)
+        if fuzz is not None:
+            for i in range(len(prose_entries)):
+                for j in range(i + 1, len(prose_entries)):
+                    ratio = fuzz.ratio(prose_entries[i][1], prose_entries[j][1])
+                    if ratio > self._NEAR_DUP_THRESHOLD:
+                        _add_flag(
+                            prose_entries[j][0],
+                            f"Near-duplicate of {prose_entries[i][0]} (similarity: {ratio:.0f}%)",
+                        )
+
+        # 2. Opening trigram collision
+        trigrams: dict[str, list[str]] = {}
+        for pid, prose in prose_entries:
+            words = prose.split()[:3]
+            if len(words) == 3:
+                key = " ".join(w.lower() for w in words)
+                trigrams.setdefault(key, []).append(pid)
+        for trigram, pids in trigrams.items():
+            if len(pids) > self._TRIGRAM_COLLISION_MAX:
+                for pid in pids[self._TRIGRAM_COLLISION_MAX :]:
+                    _add_flag(pid, f'Opening trigram collision: "{trigram}"')
+
+        # 3. Vocabulary diversity (TTR per passage)
+        for pid, prose in prose_entries:
+            words = re.sub(r"[^\w\s]", "", prose.lower()).split()
+            if len(words) >= 20:
+                ttr = len(set(words)) / len(words)
+                if ttr < self._TTR_THRESHOLD:
+                    _add_flag(pid, f"Low vocabulary diversity (TTR: {ttr:.2f})")
+
+        # 4. Sentence length variance
+        for pid, prose in prose_entries:
+            sentences = [s.strip() for s in re.split(r"[.!?]+", prose) if s.strip()]
+            if len(sentences) >= 3:
+                lengths = [len(s.split()) for s in sentences]
+                stdev = statistics.stdev(lengths)
+                if stdev < self._SENTENCE_LEN_STDEV_MIN:
+                    _add_flag(pid, f"Low sentence length variance (stdev: {stdev:.1f})")
+
+        # 5. Cross-passage bigram repetition
+        bigram_passages: dict[str, list[str]] = {}
+        for pid, prose in prose_entries:
+            words = re.sub(r"[^\w\s]", "", prose.lower()).split()
+            seen: set[str] = set()
+            for k in range(len(words) - 1):
+                bg = f"{words[k]} {words[k + 1]}"
+                if bg not in seen:
+                    bigram_passages.setdefault(bg, []).append(pid)
+                    seen.add(bg)
+        for bigram, pids in bigram_passages.items():
+            if len(pids) > self._BIGRAM_PASSAGE_MAX:
+                for pid in pids:
+                    _add_flag(pid, f'Overused bigram across passages: "{bigram}"')
+
+        log.info("mechanical_gate_complete", flags_added=flags_added)
+
+        return FillPhaseResult(
+            phase="quality_gate",
+            status="completed",
+            detail=f"{flags_added} mechanical flags across {len(prose_entries)} passages",
+        )
+
     async def _phase_2_review(
         self,
         graph: Graph,
