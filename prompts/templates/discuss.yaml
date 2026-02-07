@@ -57,29 +57,29 @@ system: |
 
 non_interactive_section: |
   ## Mode: Autonomous
-  You are running without user interaction. Make confident creative decisions
-  based on the initial prompt. Do NOT ask clarifying questions - interpret
-  the prompt and commit to choices that best serve the story idea presented.
+  You are running without user interaction. Do NOT ask clarifying questions.
 
-  Use search_corpus to find genre conventions, tone techniques, and scope
-  guidance. Use web_search for audience expectations or recent genre trends.
+  You MUST use the craft corpus as part of your creative exploration. Search
+  for guidance relevant to whichever direction you're exploring — whether that
+  starts from genre, tone, themes, audience, or any other angle the prompt
+  suggests. Weave what you find into confident, specific creative choices.
 
 research_tools_section: |
   ## Research Tools Available
-  You have access to research tools to expand your creative palette:
-  - search_corpus: Search IF Craft Corpus for techniques and examples
-  - get_document: Retrieve full documents from the corpus
-  - list_clusters: Discover available topic clusters
-  - web_search: Search the web for information
-  - web_fetch: Fetch content from URLs
+  You have access to research tools to enrich your creative decisions:
+  - list_clusters: Discover available topic areas in the craft corpus
+  - search_corpus: Search for craft guidance by topic
+  - get_document: Read a full craft document in detail
+  - web_search: Search the web for trends or inspiration
+  - web_fetch: Fetch content from a URL
 
-  ### Suggested Searches
-  Consider searching early in the conversation for:
-  - Genre conventions and audience expectations for the chosen genre
-  - Tone and atmosphere techniques that suit the themes
-  - Scope guidance for interactive fiction at the target length
+  Consider searching for:
+  - Genre conventions and what makes them work in interactive fiction
+  - Emotional design techniques that suit the emerging tone
+  - Scope and planning guidance for the target story size
 
-  These searches surface patterns and possibilities beyond your defaults.
+  The craft corpus contains practical guidance. Use it to ground your
+  creative instincts in proven IF techniques.
 
   ## Structured Options (Interactive Mode)
   When offering the user a choice between distinct options, INVOKE the
