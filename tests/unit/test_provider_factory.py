@@ -488,10 +488,10 @@ def test_create_model_structured_ollama_with_schema() -> None:
     assert result is mock_structured
     mock_chat.with_structured_output.assert_called_once()
     call_args = mock_chat.with_structured_output.call_args
-    assert call_args[0][0] is SampleSchema
-    assert (
-        call_args[1]["method"] == "json_schema"
-    )  # JSON_MODE for Ollama (better for complex schemas)
+    # Now passes JSON schema dict instead of Pydantic type
+    assert isinstance(call_args[0][0], dict)
+    assert call_args[0][0]["title"] == "SampleSchema"
+    assert call_args[1]["method"] == "json_schema"  # JSON_MODE for all providers
 
 
 def test_create_model_structured_openai_with_schema() -> None:
@@ -516,9 +516,10 @@ def test_create_model_structured_openai_with_schema() -> None:
     assert result is mock_structured
     mock_chat.with_structured_output.assert_called_once()
     call_args = mock_chat.with_structured_output.call_args
-    assert (
-        call_args[1]["method"] == "function_calling"
-    )  # function_calling for OpenAI (handles optional fields)
+    # Now uses json_schema for all providers (schema post-processing handles OpenAI strict mode)
+    assert call_args[1]["method"] == "json_schema"
+    # OpenAI uses strict mode
+    assert call_args[1]["strict"] is True
 
 
 def test_create_model_structured_without_schema() -> None:
@@ -543,7 +544,7 @@ def test_create_model_structured_without_schema() -> None:
 
 
 def test_create_model_structured_explicit_strategy() -> None:
-    """Factory uses explicit strategy over auto-detect."""
+    """Strategy parameter is accepted but ignored (always uses JSON_MODE)."""
     mock_chat = MagicMock()
     mock_structured = MagicMock()
     mock_chat.with_structured_output.return_value = mock_structured
@@ -555,7 +556,7 @@ def test_create_model_structured_explicit_strategy() -> None:
             return_value=mock_chat,
         ),
     ):
-        # Force tool strategy on OpenAI (normally would use JSON mode)
+        # Strategy parameter kept for API compatibility but ignored
         result = create_model_for_structured_output(
             "openai",
             model_name="gpt-5-mini",
@@ -565,7 +566,8 @@ def test_create_model_structured_explicit_strategy() -> None:
 
     assert result is mock_structured
     call_args = mock_chat.with_structured_output.call_args
-    assert call_args[1]["method"] == "function_calling"
+    # Always uses json_schema regardless of strategy parameter
+    assert call_args[1]["method"] == "json_schema"
 
 
 def test_create_model_structured_default_model_ollama() -> None:
@@ -640,8 +642,10 @@ def test_create_model_structured_google_with_schema() -> None:
 
     assert result is mock_structured
     call_args = mock_chat.with_structured_output.call_args
-    assert call_args[0][0] is SampleSchema
-    assert call_args[1]["method"] == "json_schema"  # JSON_MODE for Google
+    # Now passes JSON schema dict instead of Pydantic type
+    assert isinstance(call_args[0][0], dict)
+    assert call_args[0][0]["title"] == "SampleSchema"
+    assert call_args[1]["method"] == "json_schema"  # JSON_MODE for all providers
 
 
 def test_create_model_structured_default_model_google() -> None:

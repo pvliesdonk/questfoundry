@@ -221,7 +221,9 @@ class TestValidatePhase8cOutput:
     def test_valid_output_no_errors(self) -> None:
         result = Phase8cOutput(
             overlays=[
-                OverlayProposal(entity_id="entity::e1", when=["cw::c1"], details={}),
+                OverlayProposal(
+                    entity_id="entity::e1", when=["cw::c1"], details={"state": "active"}
+                ),
             ]
         )
         errors = validate_phase8c_output(
@@ -234,7 +236,9 @@ class TestValidatePhase8cOutput:
     def test_invalid_entity_id(self) -> None:
         result = Phase8cOutput(
             overlays=[
-                OverlayProposal(entity_id="entity::bad", when=["cw::c1"], details={}),
+                OverlayProposal(
+                    entity_id="entity::bad", when=["cw::c1"], details={"state": "active"}
+                ),
             ]
         )
         errors = validate_phase8c_output(
@@ -248,7 +252,9 @@ class TestValidatePhase8cOutput:
     def test_invalid_codeword_id(self) -> None:
         result = Phase8cOutput(
             overlays=[
-                OverlayProposal(entity_id="entity::e1", when=["cw::bad"], details={}),
+                OverlayProposal(
+                    entity_id="entity::e1", when=["cw::bad"], details={"state": "active"}
+                ),
             ]
         )
         errors = validate_phase8c_output(
@@ -262,7 +268,11 @@ class TestValidatePhase8cOutput:
     def test_multiple_invalid_codewords(self) -> None:
         result = Phase8cOutput(
             overlays=[
-                OverlayProposal(entity_id="entity::e1", when=["cw::bad1", "cw::bad2"], details={}),
+                OverlayProposal(
+                    entity_id="entity::e1",
+                    when=["cw::bad1", "cw::bad2"],
+                    details={"state": "active"},
+                ),
             ]
         )
         errors = validate_phase8c_output(

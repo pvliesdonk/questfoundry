@@ -106,19 +106,21 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
     phase8c_output = Phase8cOutput(overlays=[])
     phase9_output = Phase9Output(labels=[])
 
-    output_by_schema: dict[type, object] = {
-        Phase2Output: phase2_output,
-        Phase3Output: phase3_output,
-        Phase4aOutput: phase4a_output,
-        Phase4bOutput: phase4b_output,
-        Phase4dOutput: phase4d_output,
-        PathMiniArc: phase4e_output,
-        Phase8cOutput: phase8c_output,
-        Phase9Output: phase9_output,
+    # Map schema title -> output (schema is now a dict with "title" field)
+    output_by_title: dict[str, object] = {
+        "Phase2Output": phase2_output,
+        "Phase3Output": phase3_output,
+        "Phase4aOutput": phase4a_output,
+        "Phase4bOutput": phase4b_output,
+        "Phase4dOutput": phase4d_output,
+        "PathMiniArc": phase4e_output,
+        "Phase8cOutput": phase8c_output,
+        "Phase9Output": phase9_output,
     }
 
-    def _with_structured_output(schema: type, **_kwargs: object) -> AsyncMock:
-        output = output_by_schema.get(schema, phase2_output)
+    def _with_structured_output(schema: dict[str, Any], **_kwargs: object) -> AsyncMock:
+        title = schema.get("title", "") if isinstance(schema, dict) else ""
+        output = output_by_title.get(title, phase2_output)
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(return_value=output)
         return mock_structured

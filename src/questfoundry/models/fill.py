@@ -35,8 +35,8 @@ class VoiceDocument(BaseModel):
         description="Narrative point of view"
     )
     pov_character: str = Field(
-        min_length=0,  # Empty string valid for omniscient POV
-        description="Whose perspective (for limited POVs). Empty string for omniscient.",
+        default="",  # Empty string valid for omniscient/second POV
+        description="Whose perspective (for limited POVs). Empty string for omniscient/second.",
     )
     tense: Literal["past", "present"] = Field(description="Narrative tense")
     voice_register: Literal["formal", "conversational", "literary", "sparse"] = Field(

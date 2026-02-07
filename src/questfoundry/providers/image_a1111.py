@@ -261,7 +261,15 @@ class A1111ImageProvider:
         updates: dict[str, Any] = {}
 
         # Set max tokens with correct param name for provider
-        updates[caps.max_tokens_param] = _DISTILL_MAX_OUTPUT_TOKENS
+        if caps.max_tokens_param:
+            updates[caps.max_tokens_param] = _DISTILL_MAX_OUTPUT_TOKENS
+        else:
+            log.debug(
+                "distill_param_skipped",
+                param="max_tokens",
+                model=model_name,
+                reason="not_supported",
+            )
 
         # Temperature - skip if model rejects it (reasoning models)
         if caps.temperature and not variant.rejects_temperature:

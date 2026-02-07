@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -1811,22 +1811,23 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
     # Phase 4f: empty arcs (no eligible entities in test graph)
     phase4f_output = Phase4fOutput(arcs=[])
 
-    # Map schema -> output
-    output_by_schema: dict[type, object] = {
-        Phase2Output: phase2_output,
-        Phase3Output: phase3_output,
-        Phase4aOutput: phase4a_output,
-        Phase4bOutput: phase4b_output,
-        Phase4dOutput: phase4d_output,
-        PathMiniArc: phase4e_output,
-        Phase4fOutput: phase4f_output,
-        Phase8cOutput: phase8c_output,
-        Phase9Output: phase9_output,
+    # Map schema title -> output (schema is now a dict with "title" field)
+    output_by_title: dict[str, object] = {
+        "Phase2Output": phase2_output,
+        "Phase3Output": phase3_output,
+        "Phase4aOutput": phase4a_output,
+        "Phase4bOutput": phase4b_output,
+        "Phase4dOutput": phase4d_output,
+        "PathMiniArc": phase4e_output,
+        "Phase4fOutput": phase4f_output,
+        "Phase8cOutput": phase8c_output,
+        "Phase9Output": phase9_output,
     }
 
-    def _with_structured_output(schema: type, **_kwargs: object) -> AsyncMock:
+    def _with_structured_output(schema: dict[str, Any], **_kwargs: object) -> AsyncMock:
         """Return a mock that produces the correct output for the given schema."""
-        output = output_by_schema.get(schema, phase2_output)
+        title = schema.get("title", "") if isinstance(schema, dict) else ""
+        output = output_by_title.get(title, phase2_output)
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(return_value=output)
         return mock_structured

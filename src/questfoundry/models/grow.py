@@ -92,6 +92,14 @@ class EntityOverlay(BaseModel):
         description="Entity state changes when codewords are active (must have at least one key)"
     )
 
+    @model_validator(mode="after")
+    def details_not_empty(self) -> EntityOverlay:
+        """Reject empty details dict - must have at least one key."""
+        if not self.details:
+            msg = "details must contain at least one key-value pair"
+            raise ValueError(msg)
+        return self
+
 
 # ---------------------------------------------------------------------------
 # LLM sub-phase output models
@@ -293,6 +301,14 @@ class OverlayProposal(BaseModel):
     details: dict[str, str] = Field(
         description="Entity state changes when codewords are active (must have at least one key)"
     )
+
+    @model_validator(mode="after")
+    def details_not_empty(self) -> OverlayProposal:
+        """Reject empty details dict - must have at least one key."""
+        if not self.details:
+            msg = "details must contain at least one key-value pair"
+            raise ValueError(msg)
+        return self
 
 
 class Phase8cOutput(BaseModel):

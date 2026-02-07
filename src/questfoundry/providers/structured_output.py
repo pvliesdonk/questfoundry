@@ -24,6 +24,7 @@ See PR #479 and the model testing report for investigation history.
 
 from __future__ import annotations
 
+import copy
 from enum import StrEnum
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -183,9 +184,11 @@ def with_structured_output(
 
     # OpenAI's strict mode requires all properties in 'required'
     # Post-process the schema to make all fields required
+    # Deep copy first to avoid mutating Pydantic's cached schema
     is_openai = provider_name and provider_name.lower().startswith("openai")
     if is_openai:
         log.debug("applying_openai_strict_schema", schema=schema_name)
+        json_schema = copy.deepcopy(json_schema)
         json_schema = _make_all_required(json_schema, schema_name=schema_name)
 
     return model.with_structured_output(

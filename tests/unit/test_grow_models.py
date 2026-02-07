@@ -192,6 +192,11 @@ class TestEntityOverlay:
         with pytest.raises(ValidationError, match="details"):
             EntityOverlay(entity_id="e1", when=["cw1"])  # type: ignore[call-arg]
 
+    def test_empty_details_rejected(self) -> None:
+        """Empty details dict is rejected - must have at least one key."""
+        with pytest.raises(ValidationError, match="details must contain at least one"):
+            EntityOverlay(entity_id="e1", when=["cw1"], details={})
+
 
 class TestPathAgnosticAssessment:
     def test_valid_assessment(self) -> None:
@@ -337,6 +342,11 @@ class TestOverlayProposal:
         """Details is required for overlay proposal (must describe what changes)."""
         with pytest.raises(ValidationError, match="details"):
             OverlayProposal(entity_id="e1", when=["cw1"])  # type: ignore[call-arg]
+
+    def test_empty_details_rejected(self) -> None:
+        """Empty details dict is rejected - must have at least one key."""
+        with pytest.raises(ValidationError, match="details must contain at least one"):
+            OverlayProposal(entity_id="e1", when=["cw1"], details={})
 
 
 class TestChoiceLabel:

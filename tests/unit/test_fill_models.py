@@ -44,16 +44,18 @@ class TestVoiceDocument:
         assert doc.avoid_patterns == []
         assert doc.exemplar_passages == []
 
-    def test_pov_character_required(self) -> None:
-        """pov_character must be explicitly provided (even if empty)."""
-        with pytest.raises(ValidationError, match="pov_character"):
-            VoiceDocument(  # type: ignore[call-arg]
-                pov="third_omniscient",
-                tense="past",
-                voice_register="literary",
-                sentence_rhythm="varied",
-                tone_words=["atmospheric"],
-            )
+    def test_pov_character_defaults_to_empty(self) -> None:
+        """pov_character defaults to empty string when not provided."""
+        doc = VoiceDocument(
+            pov="third_omniscient",
+            tense="past",
+            voice_register="literary",
+            sentence_rhythm="varied",
+            tone_words=["atmospheric"],
+        )
+        # pov_character defaults to "" for semantic clarity
+        # (OpenAI strict mode is handled by schema post-processing)
+        assert doc.pov_character == ""
 
     def test_full_creation(self) -> None:
         doc = VoiceDocument(

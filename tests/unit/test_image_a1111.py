@@ -395,17 +395,33 @@ class TestA1111DistillPrompt:
     @pytest.mark.asyncio()
     async def test_llm_system_prompt_tag_limit(self) -> None:
         """SD 1.5 distiller should enforce 40-tag limit."""
-        mock_llm = AsyncMock()
-        mock_llm.model_copy = Mock(return_value=mock_llm)
+
+        # Create a mock that looks like an Ollama model
+        # The provider detection checks type(llm).__name__, so we need a real class
+        class ChatOllama:
+            """Mock ChatOllama class for provider detection."""
+
+            def __init__(self) -> None:
+                self._model_copy_mock = Mock()
+                self._ainvoke_mock = AsyncMock()
+
+            def model_copy(self, **kwargs: object) -> ChatOllama:
+                self._model_copy_mock(**kwargs)
+                return self
+
+            async def ainvoke(self, *args: object, **kwargs: object) -> object:
+                return await self._ainvoke_mock(*args, **kwargs)
+
+        mock_llm = ChatOllama()
         mock_response = AsyncMock()
         mock_response.content = "warrior battle, courtyard, epic, watercolor"
-        mock_llm.ainvoke = AsyncMock(return_value=mock_response)
+        mock_llm._ainvoke_mock.return_value = mock_response
 
         provider = A1111ImageProvider(host="http://localhost:7860", llm=mock_llm)
         brief = self._make_brief()
         await provider.distill_prompt(brief)
 
-        call = mock_llm.ainvoke.call_args
+        call = mock_llm._ainvoke_mock.call_args
         messages = call.args[0]
         system_msg = messages[0].content
         assert "40" in system_msg
@@ -414,7 +430,7 @@ class TestA1111DistillPrompt:
         assert "CLIP encoder" in system_msg
         assert "ENTITY EXPANSION" in system_msg
         # model_copy is called with update={...} instead of bind(**kwargs)
-        update_dict = mock_llm.model_copy.call_args.kwargs["update"]
+        update_dict = mock_llm._model_copy_mock.call_args.kwargs["update"]
         assert update_dict["num_predict"] > 0
         assert update_dict["stop"]
 
