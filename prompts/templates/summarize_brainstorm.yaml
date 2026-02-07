@@ -37,6 +37,17 @@ system: |
   - **Central entity IDs**: List the exact entity IDs involved (e.g., "[character_id], [location_id]")
   - Why this dilemma matters thematically
 
+  ## NO DELEGATION (CRITICAL)
+  You are GENERATING the summary, not suggesting how to generate it.
+
+  DO NOT write:
+  - "The characters could include..."
+  - "Based on the discussion, you might develop..."
+  - "Consider adding a dilemma about..."
+
+  DO write the actual character descriptions, location details, and dilemmas directly.
+  Your output IS the result.
+
   ## Guidelines
   - Write in flowing prose, not schema fields
   - Capture ALL entities and dilemmas mentioned in discussion

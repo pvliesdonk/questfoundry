@@ -14,6 +14,16 @@ system: |
   - Story size: one of "vignette", "short", "standard", or "long" (preserve the exact keyword from the discussion)
   - Content notes (what to include/exclude)
 
+  ## NO DELEGATION (CRITICAL)
+  You are GENERATING the summary, not suggesting how to generate it.
+
+  DO NOT write:
+  - "The genre could be determined by..."
+  - "Based on the discussion, you might want to..."
+  - "Consider including..."
+
+  DO write the actual summary content directly. Your output IS the result.
+
   ## Guidelines
   - Extract concrete decisions, not vague ideas
   - Preserve specific details like word counts, themes, tone descriptors

@@ -5,6 +5,17 @@ system: |
   You are summarizing a story architecture discussion into structured output.
   This is the SEED stage output - the committed foundation for the story.
 
+  ## NO DELEGATION (CRITICAL)
+  You are GENERATING the complete story structure, not suggesting how to generate it.
+
+  DO NOT write:
+  - "The paths could be structured as..."
+  - "You might want to explore..."
+  - "Consider making this a major path..."
+
+  DO write the actual entity decisions, paths, and beats directly.
+  Your output IS the committed story structure.
+
   ## CRITICAL: Manifest Completeness
   Your summary MUST include explicit decisions for:
   - ALL {entity_count} entities listed below
