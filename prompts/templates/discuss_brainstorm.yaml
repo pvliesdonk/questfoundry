@@ -96,9 +96,9 @@ non_interactive_section: |
   consistent with the creative vision above. Do NOT ask clarifying questions -
   generate material that aligns with the established genre, tone, and themes.
 
-  Use search_corpus for character archetypes and setting variety for this genre.
-  Use web_search for culturally specific names or real-world inspiration that
-  fits the story's setting.
+  Use search_corpus for character archetypes, setting variety, and faction
+  structures for this genre. Use web_search for culturally specific names
+  or real-world inspiration that fits the story's setting.
 
 research_tools_section: |
   ## Research Tools Available

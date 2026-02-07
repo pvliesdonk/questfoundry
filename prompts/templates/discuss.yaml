@@ -61,8 +61,8 @@ non_interactive_section: |
   based on the initial prompt. Do NOT ask clarifying questions - interpret
   the prompt and commit to choices that best serve the story idea presented.
 
-  Use search_corpus to find genre conventions and tone techniques for your
-  chosen genre before finalizing your vision.
+  Use search_corpus to find genre conventions, tone techniques, and scope
+  guidance. Use web_search for audience expectations or recent genre trends.
 
 research_tools_section: |
   ## Research Tools Available
