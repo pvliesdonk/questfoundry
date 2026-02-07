@@ -14,6 +14,7 @@ from questfoundry.graph.fill_context import (
     derive_pacing,
     extract_used_imagery,
     format_atmospheric_detail,
+    format_blueprint_context,
     format_dramatic_questions,
     format_dream_vision,
     format_ending_guidance,
@@ -31,6 +32,7 @@ from questfoundry.graph.fill_context import (
     format_scene_types_summary,
     format_shadow_states,
     format_sliding_window,
+    format_used_imagery_blocklist,
     format_valid_characters,
     format_vocabulary_note,
     format_voice_context,
@@ -2382,3 +2384,79 @@ class TestExtractUsedImagery:
         ]
         result = extract_used_imagery(texts, min_bigram_count=2, min_word_count=2)
         assert len(result) > 0
+
+
+class TestFormatBlueprintContext:
+    def test_none_returns_fallback(self) -> None:
+        result = format_blueprint_context(None)
+        assert "no blueprint available" in result
+
+    def test_empty_dict_returns_fallback(self) -> None:
+        result = format_blueprint_context({})
+        assert "no blueprint available" in result
+
+    def test_full_blueprint(self) -> None:
+        bp = {
+            "sensory_palette": ["rain on cobblestones", "woodsmoke", "distant bells"],
+            "character_gestures": ["fidgets with ring", "avoids eye contact"],
+            "opening_move": "sensory_image",
+            "craft_constraint": "Begin each paragraph with a different sense",
+            "emotional_arc_word": "dread",
+        }
+        result = format_blueprint_context(bp)
+        assert "Sensory Palette" in result
+        assert "rain on cobblestones" in result
+        assert "woodsmoke" in result
+        assert "distant bells" in result
+        assert "Character Gestures" in result
+        assert "fidgets with ring" in result
+        assert "Opening Move" in result
+        assert "sensory_image" in result
+        assert "Craft Constraint" in result
+        assert "Begin each paragraph" in result
+        assert "Emotional Arc Word" in result
+        assert "dread" in result
+
+    def test_palette_only(self) -> None:
+        bp = {"sensory_palette": ["fog", "salt air", "creaking wood"]}
+        result = format_blueprint_context(bp)
+        assert "Sensory Palette" in result
+        assert "fog" in result
+        assert "Character Gestures" not in result
+        assert "Opening Move" not in result
+
+    def test_empty_lists_produces_empty_blueprint(self) -> None:
+        bp = {"sensory_palette": [], "character_gestures": []}
+        result = format_blueprint_context(bp)
+        assert result == "(empty blueprint)"
+
+    def test_no_craft_constraint_omits_section(self) -> None:
+        bp = {
+            "sensory_palette": ["firelight"],
+            "opening_move": "dialogue",
+            "craft_constraint": "",
+            "emotional_arc_word": "hope",
+        }
+        result = format_blueprint_context(bp)
+        assert "Craft Constraint" not in result
+        assert "Opening Move" in result
+
+
+class TestFormatUsedImageryBlocklist:
+    def test_empty_blocklist(self) -> None:
+        result = format_used_imagery_blocklist([])
+        assert "no repeated imagery" in result
+        assert "full creative freedom" in result
+
+    def test_single_item(self) -> None:
+        result = format_used_imagery_blocklist(["amber glow"])
+        assert "DO NOT reuse" in result
+        assert '"amber glow"' in result
+        assert "fresh sensory material" in result
+
+    def test_multiple_items(self) -> None:
+        items = ["amber glow", "weight of choice", "ancient stones"]
+        result = format_used_imagery_blocklist(items)
+        for item in items:
+            assert f'"{item}"' in result
+        assert "DO NOT reuse" in result

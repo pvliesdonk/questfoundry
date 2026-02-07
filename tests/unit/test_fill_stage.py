@@ -89,11 +89,23 @@ def _mock_implemented_phases(stage: FillStage) -> None:
         )
         return FillPhaseResult(phase="voice", status="completed", llm_calls=1, tokens_used=500)
 
+    async def _fake_phase_1a(
+        graph: Graph,  # noqa: ARG001
+        model: MagicMock,  # noqa: ARG001
+    ) -> FillPhaseResult:
+        return FillPhaseResult(phase="expand", status="completed", llm_calls=1, tokens_used=300)
+
     async def _fake_phase_1(
         graph: Graph,  # noqa: ARG001
         model: MagicMock,  # noqa: ARG001
     ) -> FillPhaseResult:
         return FillPhaseResult(phase="generate", status="completed", llm_calls=2, tokens_used=1000)
+
+    async def _fake_phase_1c(
+        graph: Graph,  # noqa: ARG001
+        model: MagicMock,  # noqa: ARG001
+    ) -> FillPhaseResult:
+        return FillPhaseResult(phase="quality_gate", status="completed", llm_calls=0, tokens_used=0)
 
     async def _fake_phase_2(
         graph: Graph,  # noqa: ARG001
@@ -108,7 +120,9 @@ def _mock_implemented_phases(stage: FillStage) -> None:
         return FillPhaseResult(phase="revision", status="completed", llm_calls=0, tokens_used=0)
 
     stage._phase_0_voice = _fake_phase_0  # type: ignore[method-assign]
+    stage._phase_1a_expand = _fake_phase_1a  # type: ignore[method-assign]
     stage._phase_1_generate = _fake_phase_1  # type: ignore[method-assign]
+    stage._phase_1c_mechanical_gate = _fake_phase_1c  # type: ignore[method-assign]
     stage._phase_2_review = _fake_phase_2  # type: ignore[method-assign]
     stage._phase_3_revision = _fake_phase_3  # type: ignore[method-assign]
 
@@ -146,9 +160,9 @@ class TestFillStageExecute:
         assert "passages" in result_dict
         assert "review_summary" not in result_dict  # No telemetry in artifact
 
-        # Sum of all phase LLM calls (1 + 2 + 1 + 0 = 4)
-        assert llm_calls == 4
-        assert tokens == 1700
+        # Sum of all phase LLM calls (1 + 1 + 2 + 0 + 1 + 0 + 0 = 5)
+        assert llm_calls == 5
+        assert tokens == 2000
 
     @pytest.mark.asyncio
     async def test_sets_last_stage(
@@ -256,7 +270,7 @@ class TestFillStageExecute:
         _mock_implemented_phases(stage)
         await stage.execute(mock_model, "", on_phase_progress=on_progress)
 
-        assert len(progress_calls) == 5
+        assert len(progress_calls) == 7
         assert progress_calls[0][0] == "voice"
 
     @pytest.mark.asyncio
@@ -274,15 +288,23 @@ class TestFillStageExecute:
 
 
 class TestPhaseOrder:
-    def test_five_phases(self) -> None:
+    def test_seven_phases(self) -> None:
         stage = FillStage()
         phases = stage._phase_order()
-        assert len(phases) == 5
+        assert len(phases) == 7
 
     def test_phase_names(self) -> None:
         stage = FillStage()
         names = [name for _, name in stage._phase_order()]
-        assert names == ["voice", "generate", "review", "revision", "arc_validation"]
+        assert names == [
+            "voice",
+            "expand",
+            "generate",
+            "quality_gate",
+            "review",
+            "revision",
+            "arc_validation",
+        ]
 
 
 class TestCheckpointing:
@@ -776,6 +798,114 @@ class TestGenerationOrder:
         assert passage_ids.count("passage::p1") == 2
         # p2 appears once (deduped, no flag)
         assert passage_ids.count("passage::p2") == 1
+
+
+class TestPhase1aExpand:
+    @pytest.mark.asyncio
+    async def test_creates_blueprints_on_passages(self) -> None:
+        graph = _make_prose_graph()
+        stage = FillStage()
+
+        from questfoundry.models.fill import BatchedExpandOutput, ExpandBlueprint
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,  # noqa: ARG001
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            return (
+                BatchedExpandOutput(
+                    blueprints=[
+                        ExpandBlueprint(
+                            passage_id="p1",
+                            sensory_palette=["sight: torchlight", "sound: drip", "smell: damp"],
+                            opening_move="sensory_image",
+                            emotional_arc_word="dread",
+                        ),
+                        ExpandBlueprint(
+                            passage_id="p2",
+                            sensory_palette=["sight: dust", "sound: echo", "touch: cold stone"],
+                            opening_move="action",
+                            emotional_arc_word="resolve",
+                        ),
+                    ]
+                ),
+                1,
+                400,
+            )
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        result = await stage._phase_1a_expand(graph, MagicMock())
+
+        assert result.phase == "expand"
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+
+        # Blueprints should be stored on passage nodes
+        p1 = graph.get_node("passage::p1")
+        assert p1 is not None
+        assert p1.get("blueprint") is not None
+        assert p1["blueprint"]["opening_move"] == "sensory_image"
+
+        p2 = graph.get_node("passage::p2")
+        assert p2 is not None
+        assert p2.get("blueprint") is not None
+        assert p2["blueprint"]["emotional_arc_word"] == "resolve"
+
+    @pytest.mark.asyncio
+    async def test_no_passages_returns_completed(self) -> None:
+        graph = Graph.empty()
+        stage = FillStage()
+        result = await stage._phase_1a_expand(graph, MagicMock())
+        assert result.status == "completed"
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio
+    async def test_blueprint_context_in_generate(self) -> None:
+        """Phase 1 generate includes blueprint_context when blueprint exists."""
+        graph = _make_prose_graph()
+        # Add a blueprint to p1
+        graph.update_node(
+            "passage::p1",
+            blueprint={
+                "passage_id": "p1",
+                "sensory_palette": ["sight: torchlight", "sound: drip", "smell: damp"],
+                "character_gestures": [],
+                "opening_move": "sensory_image",
+                "craft_constraint": "",
+                "emotional_arc_word": "dread",
+            },
+        )
+        stage = FillStage()
+
+        captured_contexts: list[dict] = []
+
+        async def mock_llm_call(
+            model: MagicMock,  # noqa: ARG001
+            template_name: str,  # noqa: ARG001
+            context: dict,
+            output_schema: type,  # noqa: ARG001
+            max_retries: int = 3,  # noqa: ARG001
+            **kwargs: object,  # noqa: ARG001
+        ) -> tuple:
+            captured_contexts.append(context)
+            pid = context["passage_id"]
+            return _make_passage_output(pid, f"Prose for {pid}."), 1, 100
+
+        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
+        await stage._phase_1_generate(graph, MagicMock())
+
+        # p1 has blueprint — should have blueprint_context, empty atmospheric_detail
+        p1_ctx = next(c for c in captured_contexts if c["passage_id"] == "p1")
+        assert "sensory_image" in p1_ctx["blueprint_context"]
+        assert p1_ctx["atmospheric_detail"] == ""
+
+        # p2 has no blueprint — should have fallback blueprint_context
+        p2_ctx = next(c for c in captured_contexts if c["passage_id"] == "p2")
+        assert "no blueprint available" in p2_ctx["blueprint_context"]
 
 
 def _make_reviewed_graph() -> Graph:
