@@ -1152,6 +1152,65 @@ class IntersectionCandidate:
     shared_value: str
 
 
+def format_intersection_candidates(
+    candidates: list[IntersectionCandidate],
+    beat_nodes: dict[str, Any],
+    beat_dilemmas: dict[str, set[str]],
+) -> str:
+    """Format intersection candidates as numbered groups for the LLM prompt.
+
+    Each group shows the shared signal, involved dilemmas, and beat details.
+    Beats appearing in multiple candidate groups are included in all of them.
+
+    Args:
+        candidates: Pre-screened cross-dilemma candidate groups.
+        beat_nodes: Beat node data keyed by beat ID.
+        beat_dilemmas: Mapping of beat_id to set of dilemma IDs.
+
+    Returns:
+        Formatted string with numbered candidate groups, or empty string
+        if no candidates.
+    """
+    if not candidates:
+        return ""
+
+    sections: list[str] = []
+    for i, candidate in enumerate(candidates, 1):
+        signal_label = candidate.signal_type
+        header = f'### Candidate Group {i} (shared {signal_label}: "{candidate.shared_value}")'
+
+        # Collect dilemmas represented in this group
+        group_dilemmas: set[str] = set()
+        for bid in candidate.beat_ids:
+            group_dilemmas.update(beat_dilemmas.get(bid, set()))
+
+        dilemma_line = f"Dilemmas represented: {', '.join(sorted(group_dilemmas))}"
+
+        # Format each beat
+        beat_lines: list[str] = []
+        for bid in candidate.beat_ids:
+            data = beat_nodes.get(bid, {})
+            dilemma_ids = sorted(beat_dilemmas.get(bid, set()))
+            dilemma_tag = dilemma_ids[0] if dilemma_ids else "unknown"
+            summary = data.get("summary", "")
+            location = data.get("location", "unspecified")
+            alternatives = data.get("location_alternatives", [])
+            entities = data.get("entities", [])
+
+            parts = [
+                f"- {bid} [dilemma: {dilemma_tag}]:",
+                f'  summary="{summary}",',
+                f'  location="{location}",',
+                f"  location_alternatives={alternatives},",
+                f"  entities={entities}",
+            ]
+            beat_lines.append("\n".join(parts))
+
+        sections.append("\n".join([header, dilemma_line, "", *beat_lines]))
+
+    return "\n\n".join(sections)
+
+
 def build_intersection_candidates(graph: Graph) -> list[IntersectionCandidate]:
     """Find beats that share signals and could form intersections.
 

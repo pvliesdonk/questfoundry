@@ -807,6 +807,47 @@ class TestPhase3Knots:
         assert "rejected" in result.detail
 
     @pytest.mark.asyncio
+    async def test_phase_3_retries_on_structural_failure(self) -> None:
+        """Phase 3 retries with targeted feedback when all proposals fail structurally."""
+        from questfoundry.models.grow import IntersectionProposal, Phase3Output
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        stage = GrowStage()
+
+        # First call: same-dilemma beats (invalid)
+        bad_output = Phase3Output(
+            intersections=[
+                IntersectionProposal(
+                    beat_ids=["beat::mentor_commits_canonical", "beat::mentor_commits_alt"],
+                    resolved_location="market",
+                    rationale="Same dilemma beats",
+                ),
+            ]
+        )
+        # Second call: cross-dilemma beats (valid)
+        good_output = Phase3Output(
+            intersections=[
+                IntersectionProposal(
+                    beat_ids=["beat::mentor_meet", "beat::artifact_discover"],
+                    resolved_location="market",
+                    rationale="Cross-dilemma intersection",
+                ),
+            ]
+        )
+
+        mock_structured = AsyncMock()
+        mock_structured.ainvoke = AsyncMock(side_effect=[bad_output, good_output])
+        mock_model = MagicMock()
+        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
+
+        result = await stage._phase_3_intersections(graph, mock_model)
+
+        assert result.status == "completed"
+        assert result.llm_calls == 2
+        assert "1 applied" in result.detail
+
+    @pytest.mark.asyncio
     async def test_phase_3_fails_with_requires_conflict(self) -> None:
         """Phase 3 fails when all intersections have requires dependency."""
         from questfoundry.models.grow import IntersectionProposal, Phase3Output

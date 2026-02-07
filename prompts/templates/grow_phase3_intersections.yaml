@@ -1,64 +1,71 @@
 name: grow_phase3_intersections
-description: Cluster beats from different dilemmas into intersection scenes
+description: Evaluate pre-screened candidate groups for intersection scenes
 
 system: |
-  You are analyzing story beats to find "intersections" -- scenes where multiple
-  narrative dilemmas meet in the same location or moment.
+  You are evaluating pre-screened candidate groups for story "intersections" --
+  scenes where beats from DIFFERENT dilemmas converge in the same location or moment.
 
   ## What is an Intersection?
   An intersection occurs when beats from DIFFERENT dilemmas naturally occur in the
-  same scene. For example:
+  same scene.
+
+  GOOD intersection:
   - The hero meets the mentor (mentor_trust dilemma) at the market where
-    the artifact is displayed (artifact_quest dilemma). These beats form an intersection.
+    the artifact is displayed (artifact_quest dilemma). Two beats, two dilemmas,
+    one scene -- the market naturally hosts both events.
 
-  ## Clustering Rules
-  1. Each intersection must contain beats from at least 2 DIFFERENT dilemmas
-  1b. Keep intersections SMALL: prefer 2 beats; 3 beats maximum
-  2. Beats in an intersection should share a plausible location or moment
-  3. Prefer location overlap as the strongest signal for clustering
-  4. Entity overlap (same character in both beats) is a secondary signal
-  5. CRITICAL: Each beat can appear in at most ONE intersection. Never assign the
-     same beat to multiple intersections.
+  NOT an intersection (reject):
+  - The hero trains alone in the woods (survival dilemma) while the council
+    debates in the city (political dilemma). Same time, but different locations
+    and no shared scene -- these beats do not form a natural combined moment.
 
-  ## Dilemma Matching (CRITICAL)
-  Each beat below is tagged with `[dilemma: ...]`. Use this tag to ensure
-  every intersection mixes beats from DIFFERENT dilemmas. This also means:
-  - An intersection may include at most ONE beat per dilemma (all dilemma tags must be distinct)
+  ## Your Task
+  Each candidate group below contains beats that share a connection -- either the
+  same location or a common entity -- and come from different dilemmas. For each
+  group, decide whether the beats form a natural scene when combined.
 
-  GOOD: beat from [dilemma: dilemma::A] + beat from [dilemma: dilemma::B] = valid (2 different dilemmas)
-  BAD:  beat from [dilemma: dilemma::A] + beat from [dilemma: dilemma::A] = INVALID (same dilemma)
-  BAD:  beat from [dilemma: dilemma::A] + another beat from [dilemma: dilemma::A] + beat from [dilemma: dilemma::B]
-        = INVALID (multiple beats from the same dilemma)
+  Accept groups that work. Reject groups that feel forced.
 
-  ## What NOT to Do
-  - Do NOT group beats that share the same [dilemma: ...] tag
-  - Do NOT propose intersections with 4+ beats (max is 3)
-  - Do NOT propose intersections with only 1 beat
-  - Do NOT use beat IDs not listed in the Valid IDs section
-  - Do NOT force intersections where there is no natural scene overlap
-  - Do NOT reuse a beat ID across multiple intersection proposals
+  ## Rules
+  1. Keep intersections SMALL: prefer 2 beats; 3 beats maximum.
+  2. Beats in an intersection must share a plausible location or moment.
+  3. Each beat can appear in at most ONE intersection. If a beat appears in
+     multiple candidate groups, choose the group where it fits most naturally
+     and skip the others that use that beat.
+  4. Do NOT force intersections. Rejecting a weak group is better than
+     accepting a forced one.
+  5. Use ONLY beat IDs from the Valid IDs section. Do not invent or modify IDs.
 
-  ## Candidate Beats
-  Each beat is tagged with its dilemma in [dilemma: ...]. Mix different dilemmas.
-  {beat_summaries}
+  ## Output Format
+  Return a JSON object with an "intersections" array. Each element has:
+  - beat_ids: list of 2-3 beat IDs that form the intersection (from DIFFERENT dilemmas)
+  - resolved_location: where this combined scene takes place (string or null)
+  - rationale: one sentence explaining why these beats form a natural scene
+
+  Example (do not copy these IDs -- use the real IDs from the candidate groups):
+  {
+    "intersections": [
+      {
+        "beat_ids": ["beat::market_encounter", "beat::artifact_reveal"],
+        "resolved_location": "the central market",
+        "rationale": "The mentor introduction and artifact discovery both occur at the market."
+      }
+    ]
+  }
+
+  If no groups form natural intersections, return: {"intersections": []}
+
+  ## Candidate Groups
+  {candidate_groups}
 
   ## Valid IDs
   Valid beat_ids (use ONLY these): {valid_beat_ids}
-  Total candidates: {candidate_count}
-
-  ## Output Format
-  Return a JSON object with an "intersections" array. Each intersection has:
-  - beat_ids: list of beat IDs that form the intersection (minimum 2)
-  - resolved_location: the location where this combined scene takes place (or null)
-  - rationale: a concise sentence explaining why these beats form a natural scene
-    (e.g., "Both beats occur at the market and involve the hero interacting with key NPCs")
-
-  Only propose intersections where the beats genuinely share a scene context.
-  If no natural intersections exist, return an empty intersections array.
+  Total candidate groups: {candidate_count}
 
 user: |
-  Analyze the candidate beats above and propose intersection groupings.
+  Select which candidate groups form natural intersection scenes.
 
-  REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section. Do NOT add prose before or after the JSON.
+  REMINDER: Return ONLY a valid JSON object. Use ONLY beat IDs from the Valid IDs section. Each beat in at most ONE intersection. Do NOT add prose before or after the JSON.
+  {structural_feedback}
 
 components: []
