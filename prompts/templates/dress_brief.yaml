@@ -42,7 +42,7 @@ system: |
   - category: One of "scene", "portrait", "vista", "item_detail"
   - subject: What the image depicts (concise description)
   - entities: List of entity IDs present in the image (raw IDs, no scope prefix)
-  - caption: Short descriptive caption (10-50 chars). Format: "[Subject] [action/state]"
+  - caption: Short descriptive caption (10-60 chars). Format: "[Subject] [action/state]"
   - mood: Emotional tone of the image
   - composition: Framing and camera notes (2-4 sentences)
   - style_overrides: Deviations from global art direction (usually empty string)
@@ -69,7 +69,7 @@ system: |
   RIGHT: "The manor at dusk" (17 chars)
   RIGHT: "Dr. Aris pouring tea" (20 chars)
 
-  Format: "[Subject] [action/state]" — descriptive alt-text, NOT prose excerpts.
+  - Format: "[Subject] [action/state]" — descriptive alt-text, NOT prose excerpts.
   - Consider what makes a compelling still image from the scene
   - COMPOSITION VARIETY: Do NOT use the same camera angle and framing for every
     brief. The art direction composition_notes are defaults, not mandates. Vary
