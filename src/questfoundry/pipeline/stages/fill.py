@@ -1204,11 +1204,13 @@ class FillStage:
         import re
         import statistics
 
+        _has_rapidfuzz = False
         try:
             from rapidfuzz import fuzz
+
+            _has_rapidfuzz = True
         except ImportError:
             log.warning("rapidfuzz_unavailable", detail="skipping near-duplicate check")
-            fuzz = None
 
         passage_nodes = graph.get_nodes_by_type("passage")
         prose_entries: list[tuple[str, str]] = [
@@ -1236,7 +1238,7 @@ class FillStage:
             flags_added += 1
 
         # 1. Near-duplicate detection (pairwise)
-        if fuzz is not None:
+        if _has_rapidfuzz:
             for i in range(len(prose_entries)):
                 for j in range(i + 1, len(prose_entries)):
                     ratio = fuzz.ratio(prose_entries[i][1], prose_entries[j][1])

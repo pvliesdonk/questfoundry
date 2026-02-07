@@ -6,7 +6,9 @@ import pytest
 from pydantic import ValidationError
 
 from questfoundry.models.fill import (
+    BatchedExpandOutput,
     EntityUpdate,
+    ExpandBlueprint,
     FillExtractOutput,
     FillPassageOutput,
     FillPhase0Output,
@@ -247,6 +249,7 @@ class TestReviewFlag:
             "continuity_break",
             "convergence_awkwardness",
             "flat_prose",
+            "blueprint_bleed",
         ]
         for issue_type in types:
             flag = ReviewFlag(
@@ -413,3 +416,120 @@ class TestFillResult:
         )
         assert result.passages_filled == 45
         assert len(result.phases_completed) == 4
+
+
+# ---------------------------------------------------------------------------
+# ExpandBlueprint
+# ---------------------------------------------------------------------------
+
+
+class TestExpandBlueprint:
+    def test_minimal_creation(self) -> None:
+        bp = ExpandBlueprint(
+            passage_id="p1",
+            sensory_palette=["sight: torchlight", "sound: dripping", "smell: damp stone"],
+            opening_move="sensory_image",
+            emotional_arc_word="dread",
+        )
+        assert bp.passage_id == "p1"
+        assert len(bp.sensory_palette) == 3
+        assert bp.character_gestures == []
+        assert bp.craft_constraint == ""
+
+    def test_full_creation(self) -> None:
+        bp = ExpandBlueprint(
+            passage_id="p2",
+            sensory_palette=[
+                "sight: amber lantern",
+                "sound: whispered oath",
+                "touch: cold iron",
+                "smell: parchment dust",
+            ],
+            character_gestures=["clenches jaw", "averts gaze"],
+            opening_move="dialogue",
+            craft_constraint="Open in medias res",
+            emotional_arc_word="resolve",
+        )
+        assert len(bp.sensory_palette) == 4
+        assert len(bp.character_gestures) == 2
+        assert bp.craft_constraint == "Open in medias res"
+
+    def test_sensory_palette_min_length(self) -> None:
+        with pytest.raises(ValidationError):
+            ExpandBlueprint(
+                passage_id="p1",
+                sensory_palette=["sight: a", "sound: b"],  # needs 3
+                opening_move="action",
+                emotional_arc_word="fear",
+            )
+
+    def test_sensory_palette_max_length(self) -> None:
+        with pytest.raises(ValidationError):
+            ExpandBlueprint(
+                passage_id="p1",
+                sensory_palette=[f"sense{i}: x" for i in range(9)],  # max 8
+                opening_move="action",
+                emotional_arc_word="fear",
+            )
+
+    def test_empty_passage_id_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            ExpandBlueprint(
+                passage_id="",
+                sensory_palette=["a", "b", "c"],
+                opening_move="action",
+                emotional_arc_word="fear",
+            )
+
+    def test_empty_emotional_arc_word_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            ExpandBlueprint(
+                passage_id="p1",
+                sensory_palette=["a", "b", "c"],
+                opening_move="action",
+                emotional_arc_word="",
+            )
+
+    def test_invalid_opening_move_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            ExpandBlueprint(
+                passage_id="p1",
+                sensory_palette=["a", "b", "c"],
+                opening_move="narration",  # type: ignore[arg-type]
+                emotional_arc_word="fear",
+            )
+
+    def test_character_gestures_max_length(self) -> None:
+        with pytest.raises(ValidationError):
+            ExpandBlueprint(
+                passage_id="p1",
+                sensory_palette=["a", "b", "c"],
+                character_gestures=["a", "b", "c", "d", "e"],  # max 4
+                opening_move="action",
+                emotional_arc_word="fear",
+            )
+
+
+class TestBatchedExpandOutput:
+    def test_creation(self) -> None:
+        output = BatchedExpandOutput(
+            blueprints=[
+                ExpandBlueprint(
+                    passage_id="p1",
+                    sensory_palette=["a", "b", "c"],
+                    opening_move="action",
+                    emotional_arc_word="dread",
+                ),
+                ExpandBlueprint(
+                    passage_id="p2",
+                    sensory_palette=["d", "e", "f"],
+                    opening_move="dialogue",
+                    emotional_arc_word="hope",
+                ),
+            ]
+        )
+        assert len(output.blueprints) == 2
+
+    def test_empty_blueprints_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            BatchedExpandOutput(blueprints=[])
