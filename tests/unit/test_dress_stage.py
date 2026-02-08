@@ -1063,6 +1063,137 @@ class TestPhase1Briefs:
         assert result.status == "completed"
         assert "7 briefs created" in result.detail
 
+    @pytest.mark.asyncio()
+    async def test_min_priority_filters_low_priority_passages(self) -> None:
+        """Passages with structural priority > min_priority are skipped before LLM calls."""
+        g = Graph()
+        g.create_node(
+            "art_direction::main",
+            {"type": "art_direction", "style": "ink", "palette": ["grey"]},
+        )
+        # High-priority passage: spine arc opening + climax = high score
+        g.create_node("arc::spine", {"type": "arc", "arc_type": "spine", "sequence": ["beat::a"]})
+        g.create_node("beat::a", {"type": "beat", "raw_id": "a", "scene_type": "climax"})
+        g.create_node(
+            "passage::important",
+            {
+                "type": "passage",
+                "raw_id": "important",
+                "prose": "Epic moment.",
+                "from_beat": "beat::a",
+            },
+        )
+        # Low-priority passage: no beat, no arc = score 0 → priority 0 (or 3 if score=1+)
+        g.create_node(
+            "passage::filler",
+            {"type": "passage", "raw_id": "filler", "prose": "Nothing notable."},
+        )
+
+        stage = DressStage()
+        stage._min_priority = 2  # Only generate briefs for priority 1-2
+
+        with patch.object(
+            stage,
+            "_dress_llm_call",
+            new_callable=AsyncMock,
+            return_value=(_make_brief_output("important"), 1, 100),
+        ):
+            result = await stage._phase_1_briefs(g, MagicMock())
+
+        assert result.status == "completed"
+        assert g.get_node("illustration_brief::important") is not None
+        # Filler passage has score 0, best_possible=map(2)=3, filtered (3 > 2)
+        assert g.get_node("illustration_brief::filler") is None
+
+    @pytest.mark.asyncio()
+    async def test_min_priority_stores_config_in_graph(self) -> None:
+        """Phase 1 stores dress_min_priority in graph metadata."""
+        g = Graph()
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "prose": "Some prose."},
+        )
+
+        stage = DressStage()
+        stage._min_priority = 2
+
+        with patch.object(
+            stage,
+            "_dress_llm_call",
+            new_callable=AsyncMock,
+            return_value=(_make_brief_output("p1"), 1, 50),
+        ):
+            await stage._phase_1_briefs(g, MagicMock())
+
+        config = g.get_node("dress_meta::brief_config")
+        assert config is not None
+        assert config["min_priority"] == 2
+
+    @pytest.mark.asyncio()
+    async def test_min_priority_3_generates_all(self) -> None:
+        """min_priority=3 does not filter any passages (current default behavior)."""
+        g = Graph()
+        g.create_node(
+            "art_direction::main",
+            {"type": "art_direction", "style": "ink", "palette": ["grey"]},
+        )
+        # Low-score passage (score=0 → best_possible=map(0+2)=3, passes threshold)
+        g.create_node(
+            "passage::low",
+            {"type": "passage", "raw_id": "low", "prose": "Filler."},
+        )
+
+        calls: list[dict[str, Any]] = []
+
+        async def _mock_llm_call(
+            _model: Any,
+            _template: str,
+            context: dict[str, Any],
+            _schema: type,
+            **_kwargs: Any,
+        ) -> tuple[BatchedBriefOutput, int, int]:
+            calls.append(context)
+            return _make_brief_output("low", llm_adjustment=1), 1, 50
+
+        stage = DressStage()
+        stage._min_priority = 3  # Generate all
+
+        with patch.object(stage, "_dress_llm_call", side_effect=_mock_llm_call):
+            result = await stage._phase_1_briefs(g, MagicMock())
+
+        # With min_priority=3, even score-0 passages pass (best_possible=3)
+        assert len(calls) == 1
+        assert result.status == "completed"
+
+
+class TestPriorityMismatchWarning:
+    """Test priority mismatch detection in generate-images."""
+
+    @pytest.mark.asyncio()
+    async def test_warns_on_priority_mismatch(self, tmp_path: Path) -> None:
+        """run_generate_only warns when min_priority > dress_min_priority."""
+        g = Graph()
+        g.set_last_stage("dress")
+        g.upsert_node(
+            "dress_meta::brief_config",
+            {"type": "dress_meta", "min_priority": 2},
+        )
+        g.upsert_node(
+            "dress_meta::selection",
+            {"type": "dress_meta", "selected_briefs": [], "total_briefs": 0},
+        )
+        g.save(tmp_path / "graph.json")
+
+        stage = DressStage(project_path=tmp_path)
+
+        with patch.object(stage, "_phase_4_generate", new_callable=AsyncMock) as mock_gen:
+            mock_gen.return_value = DressPhaseResult(
+                phase="generate", status="completed", detail="0 images"
+            )
+            result = await stage.run_generate_only(tmp_path, min_priority=3, image_budget=0)
+
+        assert result.status == "completed"
+
 
 # ---------------------------------------------------------------------------
 # Phase 2: Codex Entries
