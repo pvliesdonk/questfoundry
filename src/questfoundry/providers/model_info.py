@@ -30,11 +30,20 @@ class ModelProperties:
     """Known properties for a specific model.
 
     Used in KNOWN_MODELS registry to consolidate model metadata.
+
+    Attributes:
+        context_window: Maximum input tokens the model can process.
+        supports_vision: Whether the model can process images.
+        supports_tools: Whether the model supports tool/function calling.
+        capability_tier: Model capability classification ("small" or "large").
+            Small models (<=13B params) copy exemplar content verbatim;
+            large models can abstract style from content.
     """
 
     context_window: int
     supports_vision: bool = False
     supports_tools: bool = True  # Most models support tools; o1 family doesn't
+    capability_tier: str = "small"  # "small" or "large"
 
 
 # Known model properties by provider and model name.
@@ -50,31 +59,67 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
         "deepseek-coder:6.7b": ModelProperties(context_window=16_384),
     },
     "openai": {
-        "gpt-5-mini": ModelProperties(context_window=1_000_000, supports_vision=True),
-        "gpt-4o": ModelProperties(context_window=128_000, supports_vision=True),
-        "gpt-4o-mini": ModelProperties(context_window=128_000, supports_vision=True),
-        "gpt-4-turbo": ModelProperties(context_window=128_000, supports_vision=True),
-        "gpt-4": ModelProperties(context_window=8_192),
-        "gpt-3.5-turbo": ModelProperties(context_window=16_385),
+        "gpt-5-mini": ModelProperties(
+            context_window=1_000_000, supports_vision=True, capability_tier="large"
+        ),
+        "gpt-4o": ModelProperties(
+            context_window=128_000, supports_vision=True, capability_tier="large"
+        ),
+        "gpt-4o-mini": ModelProperties(
+            context_window=128_000, supports_vision=True, capability_tier="large"
+        ),
+        "gpt-4-turbo": ModelProperties(
+            context_window=128_000, supports_vision=True, capability_tier="large"
+        ),
+        "gpt-4": ModelProperties(context_window=8_192, capability_tier="large"),
+        "gpt-3.5-turbo": ModelProperties(context_window=16_385, capability_tier="large"),
         # Reasoning models: no tool support, no temperature parameter
-        "o1": ModelProperties(context_window=200_000, supports_tools=False),
-        "o1-mini": ModelProperties(context_window=128_000, supports_tools=False),
-        "o1-preview": ModelProperties(context_window=128_000, supports_tools=False),
-        "o3": ModelProperties(context_window=200_000, supports_tools=False),
-        "o3-mini": ModelProperties(context_window=200_000, supports_tools=False),
+        "o1": ModelProperties(
+            context_window=200_000, supports_tools=False, capability_tier="large"
+        ),
+        "o1-mini": ModelProperties(
+            context_window=128_000, supports_tools=False, capability_tier="large"
+        ),
+        "o1-preview": ModelProperties(
+            context_window=128_000, supports_tools=False, capability_tier="large"
+        ),
+        "o3": ModelProperties(
+            context_window=200_000, supports_tools=False, capability_tier="large"
+        ),
+        "o3-mini": ModelProperties(
+            context_window=200_000, supports_tools=False, capability_tier="large"
+        ),
     },
     "anthropic": {
-        "claude-sonnet-4-20250514": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-opus-4-20250514": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-3-5-sonnet-latest": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-3-5-sonnet-20241022": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-3-opus-20240229": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-3-haiku-20240307": ModelProperties(context_window=200_000, supports_vision=True),
+        "claude-sonnet-4-20250514": ModelProperties(
+            context_window=200_000, supports_vision=True, capability_tier="large"
+        ),
+        "claude-opus-4-20250514": ModelProperties(
+            context_window=200_000, supports_vision=True, capability_tier="large"
+        ),
+        "claude-3-5-sonnet-latest": ModelProperties(
+            context_window=200_000, supports_vision=True, capability_tier="large"
+        ),
+        "claude-3-5-sonnet-20241022": ModelProperties(
+            context_window=200_000, supports_vision=True, capability_tier="large"
+        ),
+        "claude-3-opus-20240229": ModelProperties(
+            context_window=200_000, supports_vision=True, capability_tier="large"
+        ),
+        "claude-3-haiku-20240307": ModelProperties(
+            context_window=200_000, supports_vision=True, capability_tier="large"
+        ),
     },
     "google": {
-        "gemini-2.5-flash": ModelProperties(context_window=1_000_000, supports_vision=True),
-        "gemini-2.5-pro": ModelProperties(context_window=1_000_000, supports_vision=True),
-        "gemini-2.0-flash": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "gemini-2.5-flash": ModelProperties(
+            context_window=1_000_000, supports_vision=True, capability_tier="large"
+        ),
+        "gemini-2.5-pro": ModelProperties(
+            context_window=1_000_000, supports_vision=True, capability_tier="large"
+        ),
+        "gemini-2.0-flash": ModelProperties(
+            context_window=1_000_000, supports_vision=True, capability_tier="large"
+        ),
     },
 }
 
@@ -135,3 +180,46 @@ def get_model_info(provider: str, model: str) -> ModelInfo:
         supports_vision=supports_vision,
         max_concurrency=max_concurrency,
     )
+
+
+# Name patterns that indicate small models (<=13B parameters).
+_SMALL_MODEL_PATTERNS = ("1b", "2b", "3b", "4b", "7b", "8b", "13b")
+
+# Cloud providers where even "mini" models are large enough to abstract style.
+_LARGE_PROVIDERS = frozenset({"openai", "anthropic", "google"})
+
+
+def get_capability_tier(provider: str, model: str) -> str:
+    """Resolve the model's capability tier.
+
+    Determines whether a model is "small" (copies exemplar content verbatim)
+    or "large" (can abstract style from exemplar content).
+
+    Resolution order:
+    1. Explicit annotation in KNOWN_MODELS registry
+    2. Name-pattern heuristic for unknown models
+    3. Cloud provider default (large) or conservative default (small)
+
+    Args:
+        provider: Provider name (e.g., "ollama", "openai").
+        model: Model name (e.g., "qwen3:4b-instruct-32k", "gpt-4o").
+
+    Returns:
+        "small" or "large".
+    """
+    provider_lower = provider.lower()
+    props = KNOWN_MODELS.get(provider_lower, {}).get(model)
+    if props is not None:
+        return props.capability_tier
+
+    # Heuristic for unknown models
+    model_lower = model.lower()
+    if any(f"{p}" in model_lower for p in _SMALL_MODEL_PATTERNS):
+        return "small"
+
+    # Cloud providers default to large
+    if provider_lower in _LARGE_PROVIDERS:
+        return "large"
+
+    # Conservative default: unknown local models are small
+    return "small"
