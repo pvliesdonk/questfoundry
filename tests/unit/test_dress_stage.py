@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 from questfoundry.graph.graph import Graph
 from questfoundry.models.dress import (
     ArtDirection,
+    BatchedBriefItem,
+    BatchedBriefOutput,
     CodexEntry,
     DressPhase0Output,
     DressPhase1Output,
@@ -884,6 +886,29 @@ class TestMapScoreToPriority:
 # ---------------------------------------------------------------------------
 
 
+def _make_brief_output(passage_id: str = "opening", llm_adjustment: int = 1) -> BatchedBriefOutput:
+    """Helper to build a BatchedBriefOutput for a single passage."""
+    return BatchedBriefOutput(
+        briefs=[
+            BatchedBriefItem(
+                passage_id=passage_id,
+                brief=IllustrationBrief(
+                    priority=2,
+                    category="scene",
+                    subject="Scholar arrives at the ancient bridge",
+                    entities=["protagonist"],
+                    composition="Wide establishing shot",
+                    mood="foreboding",
+                    style_overrides="",
+                    negative="",
+                    caption="The bridge loomed through the mist.",
+                ),
+                llm_adjustment=llm_adjustment,
+            )
+        ]
+    )
+
+
 @pytest.fixture()
 def mock_brief_output() -> DressPhase1Output:
     return DressPhase1Output(
@@ -898,13 +923,13 @@ def mock_brief_output() -> DressPhase1Output:
             negative="",
             caption="The bridge loomed through the mist.",
         ),
-        llm_adjustment=1,  # Enough to push base_score=0 to priority 3
+        llm_adjustment=1,
     )
 
 
 class TestPhase1Briefs:
     @pytest.mark.asyncio()
-    async def test_creates_brief_nodes(self, mock_brief_output: DressPhase1Output) -> None:
+    async def test_creates_brief_nodes(self) -> None:
         """Phase 1 creates illustration_brief nodes for passages with prose."""
         g = Graph()
         g.create_node(
@@ -921,7 +946,7 @@ class TestPhase1Briefs:
             stage,
             "_dress_llm_call",
             new_callable=AsyncMock,
-            return_value=(mock_brief_output, 1, 100),
+            return_value=(_make_brief_output("opening"), 1, 100),
         ):
             result = await stage._phase_1_briefs(g, MagicMock())
 
@@ -954,22 +979,8 @@ class TestPhase1Briefs:
         """Brief with very low combined score is skipped."""
         g = Graph()
         g.create_node(
-            "passage::boring", {"type": "passage", "raw_id": "boring", "prose": "Nothing happened."}
-        )
-
-        low_output = DressPhase1Output(
-            brief=IllustrationBrief(
-                priority=3,
-                category="scene",
-                subject="Nothing",
-                entities=[],
-                composition="Static",
-                mood="flat",
-                style_overrides="",
-                negative="",
-                caption="...",
-            ),
-            llm_adjustment=-2,
+            "passage::boring",
+            {"type": "passage", "raw_id": "boring", "prose": "Nothing happened."},
         )
 
         stage = DressStage()
@@ -977,13 +988,73 @@ class TestPhase1Briefs:
             stage,
             "_dress_llm_call",
             new_callable=AsyncMock,
-            return_value=(low_output, 1, 50),
+            return_value=(_make_brief_output("boring", llm_adjustment=-2), 1, 50),
         ):
             result = await stage._phase_1_briefs(g, MagicMock())
 
         # base_score=0, llm_adj=-2 → total=-2 → priority=0 → skipped
         assert g.get_node("illustration_brief::boring") is None
         assert "skipped" in result.detail
+
+    @pytest.mark.asyncio()
+    async def test_batching_groups_passages(self) -> None:
+        """Multiple passages are grouped into batches of 5."""
+        g = Graph()
+        g.create_node(
+            "art_direction::main",
+            {"type": "art_direction", "style": "ink", "palette": ["grey"]},
+        )
+        # Create 7 passages — should produce 2 batches (5 + 2)
+        passage_ids = []
+        for i in range(7):
+            pid = f"p{i}"
+            g.create_node(
+                f"passage::{pid}",
+                {"type": "passage", "raw_id": pid, "prose": f"Prose for passage {i}."},
+            )
+            passage_ids.append(pid)
+
+        calls: list[dict[str, Any]] = []
+
+        async def _mock_llm_call(
+            _model: Any,
+            _template: str,
+            context: dict[str, Any],
+            _schema: type,
+            **_kwargs: Any,
+        ) -> tuple[BatchedBriefOutput, int, int]:
+            calls.append(context)
+            # Identify which passages are in this batch by matching known IDs
+            batch_text = context["passages_batch"]
+            batch_pids = [pid for pid in passage_ids if f"### {pid}\n" in batch_text]
+            briefs = []
+            for raw_id in batch_pids:
+                briefs.append(
+                    BatchedBriefItem(
+                        passage_id=f"passage::{raw_id}",
+                        brief=IllustrationBrief(
+                            priority=2,
+                            category="scene",
+                            subject=f"Subject {raw_id}",
+                            entities=[],
+                            composition=f"Comp {raw_id}",
+                            mood="neutral",
+                            style_overrides="",
+                            negative="",
+                            caption=f"Caption {raw_id}",
+                        ),
+                        llm_adjustment=1,
+                    )
+                )
+            return BatchedBriefOutput(briefs=briefs), 1, 100
+
+        stage = DressStage()
+        with patch.object(stage, "_dress_llm_call", side_effect=_mock_llm_call):
+            result = await stage._phase_1_briefs(g, MagicMock())
+
+        assert len(calls) == 2  # 5 + 2
+        assert result.status == "completed"
+        assert "7 briefs created" in result.detail
 
 
 # ---------------------------------------------------------------------------

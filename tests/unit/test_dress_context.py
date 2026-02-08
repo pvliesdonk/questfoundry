@@ -181,3 +181,68 @@ class TestFormatEntityVisualsForPassage:
         from questfoundry.graph.dress_context import format_entity_visuals_for_passage
 
         assert format_entity_visuals_for_passage(dress_graph, "passage::opening") == ""
+
+
+# ---------------------------------------------------------------------------
+# Batch context formatters
+# ---------------------------------------------------------------------------
+
+
+class TestFormatPassagesBatchForBriefs:
+    def test_formats_multiple_passages(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import format_passages_batch_for_briefs
+
+        passage_ids = ["passage::opening"]
+        base_scores = {"passage::opening": 3}
+        result = format_passages_batch_for_briefs(dress_graph, passage_ids, base_scores)
+        assert "opening" in result
+        assert "Structural base score: 3" in result
+
+    def test_empty_list(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import format_passages_batch_for_briefs
+
+        result = format_passages_batch_for_briefs(dress_graph, [], {})
+        assert result == ""
+
+    def test_missing_passage_graceful(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import format_passages_batch_for_briefs
+
+        result = format_passages_batch_for_briefs(
+            dress_graph, ["passage::nonexistent"], {"passage::nonexistent": 0}
+        )
+        # Should still produce a section header even if passage context is empty
+        assert "nonexistent" in result
+
+
+class TestFormatAllEntityVisuals:
+    def test_deduplicates_across_passages(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import format_all_entity_visuals
+
+        # Add a second passage with same entity
+        dress_graph.create_node(
+            "passage::p2",
+            {
+                "type": "passage",
+                "raw_id": "p2",
+                "prose": "More prose.",
+                "entities": ["character::protagonist"],
+            },
+        )
+        dress_graph.create_node(
+            "entity_visual::protagonist",
+            {
+                "type": "entity_visual",
+                "reference_prompt_fragment": "young scholar, dark hair",
+            },
+        )
+
+        result = format_all_entity_visuals(dress_graph, ["passage::opening", "passage::p2"])
+        # Should appear only once despite being in both passages
+        assert result.count("protagonist") == 1
+        assert "young scholar" in result
+
+    def test_no_visuals(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import format_all_entity_visuals
+
+        result = format_all_entity_visuals(dress_graph, ["passage::opening"])
+        assert result == ""

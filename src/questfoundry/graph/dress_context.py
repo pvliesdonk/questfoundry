@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 import yaml
 
 from questfoundry.graph.context import ENTITY_CATEGORIES, parse_scoped_id, strip_scope_prefix
-from questfoundry.graph.fill_context import format_dream_vision
+from questfoundry.graph.fill_context import format_dream_vision, get_spine_arc_id
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
@@ -277,5 +277,104 @@ def format_entity_visuals_for_passage(graph: Graph, passage_id: str) -> str:
             fragment = visual.get("reference_prompt_fragment", "")
             if fragment:
                 lines.append(f"- **{raw_eid}**: {fragment}")
+
+    return "\n".join(lines) if lines else ""
+
+
+def describe_priority_context(graph: Graph, passage_id: str, base_score: int) -> str:
+    """Describe the structural position of a passage for the LLM.
+
+    Args:
+        graph: Story graph.
+        passage_id: Passage node ID.
+        base_score: Pre-computed structural score.
+
+    Returns:
+        Human-readable priority context string.
+    """
+    parts: list[str] = [f"Structural base score: {base_score}"]
+
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return parts[0]
+
+    beat_id = passage.get("from_beat", "")
+    beat = graph.get_node(beat_id) if beat_id else None
+    scene_type = beat.get("scene_type", "") if beat else ""
+    if scene_type:
+        parts.append(f"Scene type: {scene_type}")
+
+    spine_id = get_spine_arc_id(graph)
+    if spine_id:
+        spine = graph.get_node(spine_id)
+        if spine and beat_id in spine.get("sequence", []):
+            parts.append("Position: spine arc (main storyline)")
+        else:
+            parts.append("Position: branch arc")
+
+    choices = graph.get_edges(from_id=passage_id, edge_type="choice")
+    if choices:
+        parts.append(f"Divergence point: {len(choices)} choices")
+
+    return "\n".join(parts)
+
+
+def format_passages_batch_for_briefs(
+    graph: Graph,
+    passage_ids: list[str],
+    base_scores: dict[str, int],
+) -> str:
+    """Format a batch of passages for illustration brief generation.
+
+    Combines per-passage context (prose, metadata) with priority context
+    into a single markdown string for batched brief prompts.
+
+    Args:
+        graph: Graph containing passage, beat, and entity nodes.
+        passage_ids: Passage node IDs in this batch.
+        base_scores: Pre-computed structural scores keyed by passage_id.
+
+    Returns:
+        Formatted batch string with sections per passage.
+    """
+    sections: list[str] = []
+    for pid in passage_ids:
+        raw_id = (graph.get_node(pid) or {}).get("raw_id", strip_scope_prefix(pid))
+        passage_ctx = format_passage_for_brief(graph, pid)
+        score = base_scores.get(pid, 0)
+        priority_ctx = describe_priority_context(graph, pid, score)
+        sections.append(f"### {raw_id}\n{passage_ctx}\n**Priority:** {priority_ctx}")
+
+    return "\n\n".join(sections)
+
+
+def format_all_entity_visuals(graph: Graph, passage_ids: list[str]) -> str:
+    """Collect deduplicated entity visual references for a batch of passages.
+
+    Args:
+        graph: Graph containing passage, entity, and entity_visual nodes.
+        passage_ids: Passage node IDs in this batch.
+
+    Returns:
+        Formatted visual reference strings, or empty string if none.
+    """
+    seen: set[str] = set()
+    lines: list[str] = []
+
+    for pid in passage_ids:
+        passage = graph.get_node(pid)
+        if not passage:
+            continue
+        for eid in passage.get("entities", []):
+            raw_eid = strip_scope_prefix(eid)
+            if raw_eid in seen:
+                continue
+            seen.add(raw_eid)
+            visual_id = f"entity_visual::{raw_eid}"
+            visual = graph.get_node(visual_id)
+            if visual:
+                fragment = visual.get("reference_prompt_fragment", "")
+                if fragment:
+                    lines.append(f"- **{raw_eid}**: {fragment}")
 
     return "\n".join(lines) if lines else ""
