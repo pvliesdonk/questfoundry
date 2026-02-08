@@ -1693,11 +1693,11 @@ class TestMechanicalQualityGate:
         assert "overused bigrams logged" in result.detail or "0 mechanical flags" in result.detail
 
     @pytest.mark.asyncio
-    async def test_bigram_check_filters_short_words(self, mock_model: MagicMock) -> None:
-        """Bigrams of only short words (< 4 chars) should be filtered out."""
+    async def test_bigram_check_no_flags_with_mixed_content(self, mock_model: MagicMock) -> None:
+        """Bigram check is log-only — no flags injected even with repeated bigrams."""
         g = Graph.empty()
-        # "in the" — both words < 4 chars — should be filtered
-        # "amber glow" — both words >= 4 chars — should be counted
+        # Passages share both short-word ("in the") and content-word ("amber glow")
+        # bigrams. Neither should produce flags — bigram check is observational.
         for i in range(20):
             g.create_node(
                 f"passage::p{i}",
@@ -1712,8 +1712,7 @@ class TestMechanicalQualityGate:
             )
         stage = FillStage()
         await stage._phase_1c_mechanical_gate(g, mock_model)
-        # "in the" should NOT appear in logged bigrams
-        # We can only verify no flags are added (bigram check is log-only)
+        # Bigram check is log-only — verify no bigram flags in graph
         for i in range(20):
             node = g.get_node(f"passage::p{i}")
             if node:

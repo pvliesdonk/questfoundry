@@ -1475,7 +1475,11 @@ class FillStage:
                 lengths = [len(s.split()) for s in sentences]
                 stdev = statistics.stdev(lengths)
                 if stdev < self._SENTENCE_LEN_STDEV_MIN:
-                    _add_flag(pid, f"Low sentence length variance (stdev: {stdev:.1f})")
+                    _add_flag(
+                        pid,
+                        f"Low sentence length variance (stdev: {stdev:.1f})",
+                        issue_type="flat_prose",
+                    )
 
         # 5. Cross-passage bigram repetition — observational only
         # Proactive layers handle repetition (expand blocklist + vocabulary alerts).
