@@ -2487,3 +2487,21 @@ class TestFormatAntislopBlocklist:
 
         assert "en" in ANTISLOP_PHRASES
         assert len(ANTISLOP_PHRASES["en"]) >= 30
+
+    def test_antislop_patterns_compiled(self) -> None:
+        """ANTISLOP_PATTERNS contains compiled regex for each language."""
+        import re
+
+        from questfoundry.graph.fill_context import ANTISLOP_PATTERNS
+
+        assert "en" in ANTISLOP_PATTERNS
+        assert isinstance(ANTISLOP_PATTERNS["en"], re.Pattern)
+        # Should match a known phrase
+        assert ANTISLOP_PATTERNS["en"].search("her eyes widened in shock")
+        # Should not match clean prose
+        assert not ANTISLOP_PATTERNS["en"].search("the door swung open")
+
+    def test_antislop_patterns_unknown_lang(self) -> None:
+        from questfoundry.graph.fill_context import ANTISLOP_PATTERNS
+
+        assert "xx" not in ANTISLOP_PATTERNS

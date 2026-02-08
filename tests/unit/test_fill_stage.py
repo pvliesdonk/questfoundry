@@ -1741,3 +1741,20 @@ class TestMechanicalQualityGate:
         dup_flags = [f for f in flags if "Near-duplicate" in f.get("issue", "")]
         assert len(dup_flags) >= 1
         assert dup_flags[0]["issue_type"] == "near_duplicate"
+
+    @pytest.mark.asyncio
+    async def test_antislop_detection_runs(self, mock_model: MagicMock) -> None:
+        """Antislop detection runs without error on prose with cliche phrases."""
+        g = Graph.empty()
+        g.create_node(
+            "passage::p1",
+            {
+                "type": "passage",
+                "raw_id": "p1",
+                "prose": "Her eyes widened as her breath caught in the palpable tension.",
+            },
+        )
+        stage = FillStage()
+        stage._language = "en"
+        result = await stage._phase_1c_mechanical_gate(g, mock_model)
+        assert result.status == "completed"
