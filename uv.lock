@@ -677,14 +677,14 @@ wheels = [
 
 [[package]]
 name = "ifcraftcorpus"
-version = "1.7.0"
+version = "1.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f5/a6/e161e12be6960b86f9449c7bab0a5c7df264bac4791a95f8eee1eb7555ba/ifcraftcorpus-1.7.0.tar.gz", hash = "sha256:d21ca127a52f0c3c24de2902b51da3d0830bb6d6acce11a9d658a55fa3979470", size = 272304, upload-time = "2026-02-07T13:28:34.731Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/56/7a/b104795be489c6f5920a2d29195981281a6f20e8544a056b9fab58a7dcff/ifcraftcorpus-1.9.0.tar.gz", hash = "sha256:b8529e89f1649c045a059015fab48c8a01e5e800c4b95b21f4ae02bdb8d1fd7c", size = 295102, upload-time = "2026-02-08T11:55:43.702Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/09/23/a9b3658d52b01ca52eb12a755f41c7b723145c688557010cfe5029921a39/ifcraftcorpus-1.7.0-py3-none-any.whl", hash = "sha256:16236f2291ce2be43d94c568add291f098527959fd89a2c238f5827d7a19e89e", size = 332599, upload-time = "2026-02-07T13:28:33.19Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/5a/3cf89343eb083f84122be73523b2ccd23e92ffcf110060b145741772a80f/ifcraftcorpus-1.9.0-py3-none-any.whl", hash = "sha256:151f1c4a916311fb52b7feeee53bade66906f755607d58ce87d571d21febce60", size = 369160, upload-time = "2026-02-08T11:55:41.616Z" },
 ]
 
 [package.optional-dependencies]
@@ -1981,7 +1981,7 @@ dev = [
 requires-dist = [
     { name = "graphviz", marker = "extra == 'viz'", specifier = ">=0.20" },
     { name = "httpx", specifier = ">=0.27" },
-    { name = "ifcraftcorpus", extras = ["embeddings-api"], specifier = ">=1.4.0" },
+    { name = "ifcraftcorpus", extras = ["embeddings-api"], specifier = ">=1.9.0" },
     { name = "ifcraftcorpus", extras = ["embeddings-api"], marker = "extra == 'research'" },
     { name = "ifcraftcorpus", extras = ["embeddings-api"], marker = "extra == 'research-corpus'" },
     { name = "jinja2", specifier = ">=3.1.6" },
