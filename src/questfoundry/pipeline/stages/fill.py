@@ -67,6 +67,7 @@ from questfoundry.graph.fill_context import (
 from questfoundry.graph.graph import Graph
 from questfoundry.models.fill import (
     BatchedExpandOutput,
+    ExpandBlueprint,
     FillExtractOutput,
     FillPhase0Output,
     FillPhase1Output,
@@ -992,8 +993,8 @@ class FillStage:
         blocklist = extract_used_imagery(recent_prose)
         blocklist_text = format_used_imagery_blocklist(blocklist)
 
-        # Craft constraint tracking
-        rng = Random(42)
+        # Craft constraint tracking — seed from passage count for variety across runs
+        rng = Random(len(generation_order))
         recently_used: deque[str] = deque(maxlen=5)
 
         # Build chunks across all arcs
@@ -1096,10 +1097,19 @@ class FillStage:
                 continue
             for bp_dict in blueprints:
                 pid = bp_dict.get("passage_id", "")
-                full_pid = pid if pid.startswith("passage::") else f"passage::{pid}"
-                if graph.has_node(full_pid):
-                    graph.update_node(full_pid, blueprint=bp_dict)
+                # Defensive: strip existing prefix if model returned full ID
+                clean_id = pid.removeprefix("passage::") if pid.startswith("passage::") else pid
+                full_pid = f"passage::{clean_id}"
+                if not graph.has_node(full_pid):
+                    continue
+                # Validate blueprint before persisting
+                try:
+                    validated = ExpandBlueprint.model_validate(bp_dict)
+                    graph.update_node(full_pid, blueprint=validated.model_dump())
                     blueprints_created += 1
+                except Exception:
+                    log.warning("blueprint_validation_failed", passage_id=full_pid)
+                    continue
 
         log.info(
             "expand_complete",
@@ -1626,8 +1636,9 @@ class FillStage:
             for flag_data in flags:
                 issue_type = flag_data.get("issue_type", "")
 
-                # For flat_prose/blueprint_bleed, clear stale blueprint
-                # so the revision prompt doesn't anchor on bad materials.
+                # Once blueprint is stale (flat_prose/blueprint_bleed), all
+                # subsequent revisions for this passage regenerate without
+                # blueprint anchoring — the bad materials taint all flags.
                 if issue_type in ("flat_prose", "blueprint_bleed") and blueprint:
                     bp_ctx = format_blueprint_context(None)
 

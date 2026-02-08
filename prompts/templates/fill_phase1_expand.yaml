@@ -41,6 +41,8 @@ system: |
 user: |
   Generate blueprints for the {passage_count} passages listed above.
 
+  CRITICAL: Avoid all items from the Used Imagery blocklist — find fresh sensory material.
+
   Return a JSON object with a "blueprints" array. Each blueprint must have:
   - passage_id (matching the ID above exactly)
   - sensory_palette (3–8 sense-tagged items)

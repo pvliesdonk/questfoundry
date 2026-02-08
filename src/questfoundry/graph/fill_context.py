@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -2027,12 +2027,15 @@ def extract_used_imagery(
     return blocklist[:top_n]
 
 
-def format_blueprint_context(blueprint: dict[str, object] | None) -> str:
+def format_blueprint_context(blueprint: dict[str, Any] | None) -> str:
     """Format an expand blueprint for the prose generation prompt.
 
     When a blueprint exists, renders its materials (sensory palette,
     gestures, opening move, etc.) as structured context. When absent,
     returns a fallback instruction.
+
+    Uses ``dict[str, Any]`` because blueprints are stored as plain dicts
+    on graph nodes (not typed models) for serialization flexibility.
 
     Args:
         blueprint: Blueprint dict from passage node, or None.
