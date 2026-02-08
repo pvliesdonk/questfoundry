@@ -1376,7 +1376,6 @@ class FillStage:
     _TRIGRAM_COLLISION_MAX = 2  # max passages sharing opening trigram
     _TTR_THRESHOLD = 0.35  # type-token ratio below this = flag
     _SENTENCE_LEN_STDEV_MIN = 3.0  # sentence length stdev below this = flag
-    _BIGRAM_PASSAGE_MAX = 3  # bigram in more than N passages = flag
 
     async def _phase_1c_mechanical_gate(
         self,
@@ -1412,7 +1411,7 @@ class FillStage:
 
         flags_added = 0
 
-        def _add_flag(pid: str, issue: str) -> None:
+        def _add_flag(pid: str, issue: str, issue_type: str = "flat_prose") -> None:
             nonlocal flags_added
             node = graph.get_node(pid)
             if not node:
@@ -1420,7 +1419,7 @@ class FillStage:
             flag_data = {
                 "passage_id": strip_scope_prefix(pid),
                 "issue": issue,
-                "issue_type": "flat_prose",
+                "issue_type": issue_type,
             }
             graph.update_node(
                 pid,
@@ -1437,6 +1436,7 @@ class FillStage:
                         _add_flag(
                             prose_entries[j][0],
                             f"Near-duplicate of {prose_entries[i][0]} (similarity: {ratio:.0f}%)",
+                            issue_type="near_duplicate",
                         )
 
         # 2. Opening trigram collision
@@ -1450,7 +1450,11 @@ class FillStage:
             if len(pids) > self._TRIGRAM_COLLISION_MAX:
                 # Flag later arrivals only — earlier passages established the pattern
                 for pid in pids[self._TRIGRAM_COLLISION_MAX :]:
-                    _add_flag(pid, f'Opening trigram collision: "{trigram}"')
+                    _add_flag(
+                        pid,
+                        f'Opening trigram collision: "{trigram}"',
+                        issue_type="opening_trigram",
+                    )
 
         # 3. Vocabulary diversity (TTR per passage)
         for pid, prose in prose_entries:
@@ -1458,7 +1462,11 @@ class FillStage:
             if len(words) >= 20:
                 ttr = len(set(words)) / len(words)
                 if ttr < self._TTR_THRESHOLD:
-                    _add_flag(pid, f"Low vocabulary diversity (TTR: {ttr:.2f})")
+                    _add_flag(
+                        pid,
+                        f"Low vocabulary diversity (TTR: {ttr:.2f})",
+                        issue_type="low_vocabulary",
+                    )
 
         # 4. Sentence length variance
         for pid, prose in prose_entries:
@@ -1469,28 +1477,46 @@ class FillStage:
                 if stdev < self._SENTENCE_LEN_STDEV_MIN:
                     _add_flag(pid, f"Low sentence length variance (stdev: {stdev:.1f})")
 
-        # 5. Cross-passage bigram repetition
+        # 5. Cross-passage bigram repetition — observational only
+        # Proactive layers handle repetition (expand blocklist + vocabulary alerts).
+        # This check logs findings for assessment but does not inject flags.
+        bigram_threshold = max(5, len(prose_entries) // 10)
         bigram_passages: dict[str, list[str]] = {}
         for pid, prose in prose_entries:
             words = re.sub(r"[^\w\s]", " ", prose.lower()).split()
             seen: set[str] = set()
             for k in range(len(words) - 1):
-                bg = f"{words[k]} {words[k + 1]}"
+                w1, w2 = words[k], words[k + 1]
+                if len(w1) < 4 and len(w2) < 4:
+                    continue  # skip stopword-only bigrams
+                bg = f"{w1} {w2}"
                 if bg not in seen:
                     bigram_passages.setdefault(bg, []).append(pid)
                     seen.add(bg)
-        for bigram, pids in bigram_passages.items():
-            if len(pids) > self._BIGRAM_PASSAGE_MAX:
-                # Flag excess passages only — earlier ones established the pattern
-                for pid in pids[self._BIGRAM_PASSAGE_MAX :]:
-                    _add_flag(pid, f'Overused bigram across passages: "{bigram}"')
+
+        overused_bigrams = {
+            bg: pids for bg, pids in bigram_passages.items() if len(pids) > bigram_threshold
+        }
+        if overused_bigrams:
+            log.info(
+                "mechanical_bigram_analysis",
+                overused_bigrams=len(overused_bigrams),
+                threshold=bigram_threshold,
+                top_offenders=[
+                    {"bigram": bg, "passages": len(pids)}
+                    for bg, pids in sorted(overused_bigrams.items(), key=lambda x: -len(x[1]))[:10]
+                ],
+            )
 
         log.info("mechanical_gate_complete", flags_added=flags_added)
 
         return FillPhaseResult(
             phase="quality_gate",
             status="completed",
-            detail=f"{flags_added} mechanical flags across {len(prose_entries)} passages",
+            detail=(
+                f"{flags_added} mechanical flags across {len(prose_entries)} passages"
+                + (f"; {len(overused_bigrams)} overused bigrams logged" if overused_bigrams else "")
+            ),
         )
 
     async def _phase_2_review(
@@ -1632,61 +1658,52 @@ class FillStage:
 
             current_prose = passage.get("prose", "")
             arc_id, current_idx = passage_arc_info[passage_id]
-            all_addressed = True
-            local_revised = 0
-            local_calls = 0
-            local_tokens = 0
-            outputs: list[FillPhase1Output] = []
 
-            # Blueprint context for revision guidance
+            # Blueprint context — clear if any flag is flat_prose/blueprint_bleed
             blueprint = passage.get("blueprint")
-            bp_ctx = format_blueprint_context(blueprint)
+            has_tainted_blueprint = any(
+                f.get("issue_type") in ("flat_prose", "blueprint_bleed") for f in flags
+            )
+            bp_ctx = format_blueprint_context(None if has_tainted_blueprint else blueprint)
 
-            for flag_data in flags:
-                issue_type = flag_data.get("issue_type", "")
+            # Format all flags as a numbered issues list for single LLM call
+            issues_list = "\n".join(
+                f"{i + 1}. [{f.get('issue_type', 'unknown')}] {f.get('issue', '')}"
+                for i, f in enumerate(flags)
+            )
 
-                # Once blueprint is stale (flat_prose/blueprint_bleed), all
-                # subsequent revisions for this passage regenerate without
-                # blueprint anchoring — the bad materials taint all flags.
-                if issue_type in ("flat_prose", "blueprint_bleed") and blueprint:
-                    bp_ctx = format_blueprint_context(None)
+            context = {
+                "voice_document": voice_context,
+                "passage_id": passage.get("raw_id", passage_id),
+                "issues_list": issues_list,
+                "blueprint_context": bp_ctx,
+                "current_prose": current_prose,
+                "extended_window": (
+                    format_sliding_window(graph, arc_id, current_idx, window_size=5)
+                    if arc_id
+                    else ""
+                ),
+                "output_language_instruction": self._lang_instruction,
+            }
 
-                context = {
-                    "voice_document": voice_context,
-                    "passage_id": passage.get("raw_id", passage_id),
-                    "issue_type": issue_type,
-                    "issue_description": flag_data.get("issue", ""),
-                    "blueprint_context": bp_ctx,
-                    "current_prose": current_prose,
-                    "extended_window": (
-                        format_sliding_window(graph, arc_id, current_idx, window_size=5)
-                        if arc_id
-                        else ""
-                    ),
-                    "output_language_instruction": self._lang_instruction,
-                }
+            output, llm_calls, tokens = await self._fill_llm_call(
+                model,
+                "fill_phase3_revision",
+                context,
+                FillPhase1Output,
+                creative=True,
+            )
 
-                output, llm_calls, tokens = await self._fill_llm_call(
-                    model,
-                    "fill_phase3_revision",
-                    context,
-                    FillPhase1Output,
-                    creative=True,
+            if output.passage.prose:
+                return (
+                    (passage_id, output.passage.prose, True, len(flags), [output]),
+                    llm_calls,
+                    tokens,
                 )
-                local_calls += llm_calls
-                local_tokens += tokens
-                outputs.append(output)
-
-                if output.passage.prose:
-                    current_prose = output.passage.prose
-                    local_revised += 1
-                else:
-                    all_addressed = False
-
             return (
-                (passage_id, current_prose, all_addressed, local_revised, outputs),
-                local_calls,
-                local_tokens,
+                (passage_id, current_prose, False, 0, [output]),
+                llm_calls,
+                tokens,
             )
 
         results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
