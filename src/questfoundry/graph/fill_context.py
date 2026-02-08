@@ -211,6 +211,9 @@ def format_story_identity(graph: Graph) -> str:
 def format_voice_context(graph: Graph) -> str:
     """Format the voice document node as a YAML string for LLM context.
 
+    Excludes ``exemplar_passages`` — those are rendered separately by
+    :func:`format_exemplar_passages` as prose examples, not YAML rules.
+
     Args:
         graph: Graph containing a ``voice`` type node.
 
@@ -224,14 +227,52 @@ def format_voice_context(graph: Graph) -> str:
     # Take the first (and only expected) voice node
     voice_data = next(iter(voice_nodes.values()))
 
-    # Exclude graph metadata fields
-    _EXCLUDE_KEYS = {"type", "raw_id", "story_title"}
+    # Exclude graph metadata and exemplar_passages (rendered separately)
+    _EXCLUDE_KEYS = {"type", "raw_id", "exemplar_passages", "story_title"}
     voice_fields = {k: v for k, v in voice_data.items() if k not in _EXCLUDE_KEYS and v is not None}
 
     if not voice_fields:
         return ""
 
     return yaml.dump(voice_fields, default_flow_style=False, sort_keys=False).strip()
+
+
+def format_exemplar_passages(graph: Graph) -> str:
+    """Format exemplar passages from the voice node as prose examples.
+
+    Renders exemplar passages as numbered prose examples with framing
+    instructions. These are show-don't-tell anchors for small models.
+
+    Args:
+        graph: Graph containing a ``voice`` type node with exemplar_passages.
+
+    Returns:
+        Formatted exemplar context, or empty string if no exemplars.
+    """
+    voice_nodes = graph.get_nodes_by_type("voice")
+    if not voice_nodes:
+        return ""
+
+    voice_data = next(iter(voice_nodes.values()))
+    exemplars = voice_data.get("exemplar_passages", [])
+    if not exemplars or not isinstance(exemplars, list):
+        return ""
+
+    valid_exemplars = [p.strip() for p in exemplars if isinstance(p, str) and p.strip()]
+    if not valid_exemplars:
+        return ""
+
+    lines: list[str] = [
+        "The following passages demonstrate the target voice. Match their style,",
+        "rhythm, and register. Do NOT copy their content or imagery.",
+        "",
+    ]
+    for i, passage in enumerate(valid_exemplars, 1):
+        lines.append(f"**Example {i}:**")
+        lines.append(passage)
+        lines.append("")
+
+    return "\n".join(lines).strip()
 
 
 def format_passage_context(graph: Graph, passage_id: str) -> str:

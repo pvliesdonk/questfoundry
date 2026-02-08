@@ -33,6 +33,7 @@ system: |
   - **tone_words**: {size_tone_words} adjectives describing the voice (e.g. terse, wry, melancholic, atmospheric)
   - **avoid_words**: Words/phrases to never use (e.g. suddenly, very, really)
   - **avoid_patterns**: Patterns to avoid (e.g. adverb-heavy dialogue tags, excessive internal monologue)
+  - **exemplar_passages**: Leave empty (will be generated separately if needed)
 
   ## Guidelines
 

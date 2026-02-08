@@ -48,6 +48,7 @@ from questfoundry.graph.fill_context import (
     format_entity_arc_context,
     format_entity_states,
     format_entry_states,
+    format_exemplar_passages,
     format_grow_summary,
     format_introduction_guidance,
     format_lookahead_context,
@@ -71,6 +72,7 @@ from questfoundry.graph.graph import Graph
 from questfoundry.models.fill import (
     BatchedExpandOutput,
     ExpandBlueprint,
+    FillExemplarOutput,
     FillExtractOutput,
     FillPhase0Output,
     FillPhase1Output,
@@ -328,6 +330,7 @@ class FillStage:
         """
         return [
             (self._phase_0_voice, "voice"),
+            (self._phase_0b_exemplar, "exemplar"),
             (self._phase_1a_expand, "expand"),
             (self._phase_1_generate, "generate"),
             (self._phase_1c_mechanical_gate, "quality_gate"),
@@ -947,6 +950,187 @@ class FillStage:
             tokens_used=total_tokens,
         )
 
+    async def _phase_0b_exemplar(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+    ) -> FillPhaseResult:
+        """Phase 0b: Generate voice exemplar passages.
+
+        Strategy: corpus-first, LLM-fallback.
+        1. Query ifcraftcorpus for style exemplars matching voice attributes
+        2. If >= 2 corpus matches → use them (zero LLM cost)
+        3. If < 2 → fall back to strong model LLM generation
+
+        Stores exemplar passages on the voice node for consumption by
+        Phase 1 prose generation templates.
+        """
+        voice_nodes = graph.get_nodes_by_type("voice")
+        if not voice_nodes:
+            return FillPhaseResult(phase="exemplar", status="skipped", detail="no voice node")
+
+        voice_data = next(iter(voice_nodes.values()))
+        pov = voice_data.get("pov", "")
+        tense = voice_data.get("tense", "")
+        voice_register = voice_data.get("voice_register", "")
+        sentence_rhythm = voice_data.get("sentence_rhythm", "")
+
+        # Step 1: Try corpus-sourced exemplars
+        exemplars: list[str] = []
+        try:
+            from ifcraftcorpus import Corpus
+
+            corpus = Corpus()
+            results = corpus.search_exemplars(
+                pov=pov or None,
+                tense=tense or None,
+                register=voice_register or None,
+                rhythm=sentence_rhythm or None,
+                language=self._language,
+                limit=3,
+            )
+            # Extract first non-empty section from each document
+            for doc in results:
+                sections = doc.get("sections", [])
+                content = next(
+                    (
+                        s.get("content", "").strip()
+                        for s in sections
+                        if s.get("content", "").strip()
+                    ),
+                    None,
+                )
+                if content:
+                    exemplars.append(content)
+
+            exemplars = exemplars[:3]
+            if len(exemplars) >= 2:
+                log.info(
+                    "exemplar_source",
+                    source="corpus",
+                    count=len(exemplars),
+                    pov=pov,
+                    register=voice_register,
+                )
+                graph.update_node("voice::voice", exemplar_passages=exemplars)
+                return FillPhaseResult(
+                    phase="exemplar",
+                    status="completed",
+                    detail=f"corpus: {len(exemplars)} exemplars",
+                    llm_calls=0,
+                    tokens_used=0,
+                )
+        except ImportError:
+            log.warning("ifcraftcorpus_not_available", fallback="llm")
+        except (RuntimeError, ValueError, KeyError, OSError) as exc:
+            log.warning(
+                "corpus_exemplar_search_failed",
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
+
+        # Step 2: LLM fallback — generate story-specific exemplars
+        log.info("exemplar_fallback_to_llm", corpus_matches=len(exemplars))
+
+        tone_words = voice_data.get("tone_words", [])
+        avoid_words = voice_data.get("avoid_words", [])
+        avoid_patterns = voice_data.get("avoid_patterns", [])
+
+        context = {
+            "voice_document": format_voice_context(graph),
+            "story_identity": format_story_identity(graph),
+            "grow_summary": format_grow_summary(graph),
+            "pov": pov,
+            "tense": tense,
+            "voice_register": voice_register,
+            "sentence_rhythm": sentence_rhythm,
+            "tone_words": ", ".join(str(t) for t in tone_words) if tone_words else "(none)",
+            "avoid_words": ", ".join(str(w) for w in avoid_words) if avoid_words else "(none)",
+            "avoid_patterns": ", ".join(str(p) for p in avoid_patterns)
+            if avoid_patterns
+            else "(none)",
+            "output_language_instruction": self._lang_instruction,
+        }
+
+        output, llm_calls, tokens = await self._fill_llm_call(
+            model,
+            "fill_phase0_exemplars",
+            context,
+            FillExemplarOutput,
+            creative=True,
+        )
+
+        exemplars = output.exemplar_passages
+        log.info("exemplar_source", source="llm", count=len(exemplars))
+
+        # Mechanical validation (warning-only, English only)
+        self._validate_exemplars(voice_data, exemplars)
+
+        graph.update_node("voice::voice", exemplar_passages=exemplars)
+
+        return FillPhaseResult(
+            phase="exemplar",
+            status="completed",
+            detail=f"llm: {len(exemplars)} exemplars",
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    def _validate_exemplars(
+        self,
+        voice_data: dict[str, object],
+        exemplars: list[str],
+    ) -> None:
+        """Mechanical validation of exemplar passages (warning-only).
+
+        Checks POV pronouns, tense markers, and avoid_words. Logs warnings
+        but does not reject — voice drift in exemplars is a quality concern,
+        not a correctness concern. Skips validation for non-English.
+        """
+        if self._language != "en":
+            return
+
+        pov = str(voice_data.get("pov", ""))
+        avoid_words = voice_data.get("avoid_words", [])
+
+        for i, text in enumerate(exemplars):
+            lower = text.lower()
+
+            # POV pronoun check
+            if pov == "first" and not re.search(r"\bi('m|'ve|'d|'ll)?\b", lower):
+                log.warning(
+                    "exemplar_pov_drift",
+                    exemplar=i + 1,
+                    expected_pov=pov,
+                    hint="no first-person pronoun ('I', 'I'm', etc.) found",
+                )
+            elif pov == "second" and not re.search(r"\byou\b", lower):
+                log.warning(
+                    "exemplar_pov_drift",
+                    exemplar=i + 1,
+                    expected_pov=pov,
+                    hint="no second-person pronoun found",
+                )
+            elif pov.startswith("third") and not re.search(r"\b(he|she|they|it)\b", lower):
+                log.warning(
+                    "exemplar_pov_drift",
+                    exemplar=i + 1,
+                    expected_pov=pov,
+                    hint="no third-person pronoun found",
+                )
+
+            # Avoid-words check (word boundaries prevent substring false positives)
+            if isinstance(avoid_words, list):
+                for word in avoid_words:
+                    if isinstance(word, str) and re.search(
+                        rf"\b{re.escape(word.lower())}\b", lower
+                    ):
+                        log.warning(
+                            "exemplar_avoid_word",
+                            exemplar=i + 1,
+                            word=word,
+                        )
+
     def _get_generation_order(self, graph: Graph) -> list[tuple[str, str]]:
         """Return passage IDs in generation order with their arc IDs.
 
@@ -1248,6 +1432,7 @@ class FillStage:
 
             context = {
                 "voice_document": voice_context,
+                "exemplar_passages": format_exemplar_passages(graph),
                 "story_identity": story_identity_context,
                 "passage_id": passage.get("raw_id", passage_id),
                 "beat_summary": beat_summary,
