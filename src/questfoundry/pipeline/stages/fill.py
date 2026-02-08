@@ -445,20 +445,26 @@ class FillStage:
                 f"FILL requires completed GROW stage. Current last_stage: '{last_stage}'. "
                 f"Run GROW before FILL."
             )
-        if last_stage != "grow" and not resume_from:
-            first_phase = phases[0][1]  # name of the first phase (e.g. "voice")
+
+        # Snapshot management for re-runs:
+        # - On first run (last_stage == "grow"): save clean GROW-completed state
+        #   to "fill-pre-initial.json" — this is never overwritten by the phase loop
+        # - On re-runs (last_stage != "grow"): restore from that checkpoint
+        if last_stage == "grow" and not resume_from:
+            self._save_checkpoint(graph, resolved_path, "initial")
+        elif last_stage != "grow" and not resume_from:
             try:
-                graph = self._load_checkpoint(resolved_path, first_phase)
+                graph = self._load_checkpoint(resolved_path, "initial")
                 log.info(
                     "rerun_restored_checkpoint",
                     stage="fill",
                     from_last_stage=last_stage,
-                    checkpoint_phase=first_phase,
+                    checkpoint_phase="initial",
                 )
             except FillStageError as e:
                 raise FillStageError(
                     f"FILL re-run requires the pre-FILL snapshot "
-                    f"({self._get_checkpoint_path(resolved_path, first_phase)}). "
+                    f"({self._get_checkpoint_path(resolved_path, 'initial')}). "
                     f"Re-run GROW first, or use --resume-from to skip the voice phase."
                 ) from e
 

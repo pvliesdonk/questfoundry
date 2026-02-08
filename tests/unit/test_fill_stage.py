@@ -168,7 +168,7 @@ class TestFillStageExecute:
         # Save the pre-FILL checkpoint (needed for re-runs from fill/dress/ship)
         snapshot_dir = tmp_path / "snapshots"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
-        pre_fill.save(snapshot_dir / "fill-pre-voice.json")
+        pre_fill.save(snapshot_dir / "fill-pre-initial.json")
 
         # The main graph has progressed past GROW
         g = Graph.empty()
@@ -197,7 +197,7 @@ class TestFillStageExecute:
         pre_fill.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
         snapshot_dir = tmp_path / "snapshots"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
-        pre_fill.save(snapshot_dir / "fill-pre-voice.json")
+        pre_fill.save(snapshot_dir / "fill-pre-initial.json")
 
         # Main graph: FILL already ran, has voice node
         g = Graph.empty()
