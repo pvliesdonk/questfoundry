@@ -1384,9 +1384,9 @@ async def serialize_seed_as_function(
             # retried upstream data is available for downstream retries.
             sorted_section_names = sorted(
                 section_errors.keys(),
-                key=lambda s: _SECTION_ORDER.index(s)
-                if s in _SECTION_ORDER
-                else len(_SECTION_ORDER),
+                key=lambda s: (
+                    _SECTION_ORDER.index(s) if s in _SECTION_ORDER else len(_SECTION_ORDER)
+                ),
             )
 
             for section_name in sorted_section_names:
