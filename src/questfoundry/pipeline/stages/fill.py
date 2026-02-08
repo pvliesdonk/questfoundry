@@ -1283,7 +1283,7 @@ class FillStage:
 
                 # Track prose for lexical diversity monitoring
                 recent_prose.append(prose)
-                window = recent_prose[-5:]
+                window = recent_prose[-self._DIVERSITY_WINDOW_SIZE :]
                 ratio = compute_lexical_diversity(window)
                 vocabulary_note = format_vocabulary_note(
                     ratio, recent_prose=window, lang=self._language
@@ -1378,6 +1378,7 @@ class FillStage:
     _TRIGRAM_COLLISION_MAX = 2  # max passages sharing opening trigram
     _ROOT_TTR_THRESHOLD = 4.5  # root type-token ratio below this = flag
     _SENTENCE_LEN_STDEV_MIN = 3.0  # sentence length stdev below this = flag
+    _DIVERSITY_WINDOW_SIZE = 5  # number of recent passages for diversity check
 
     async def _phase_1c_mechanical_gate(
         self,

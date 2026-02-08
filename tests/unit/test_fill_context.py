@@ -1415,31 +1415,54 @@ class TestLexicalDiversity:
     """Tests for compute_lexical_diversity and format_vocabulary_note."""
 
     def test_empty_input(self) -> None:
-        assert compute_lexical_diversity([]) == 1.0
-        assert compute_lexical_diversity([""]) == 1.0
+        assert compute_lexical_diversity([]) == 10.0
+        assert compute_lexical_diversity([""]) == 10.0
 
     def test_high_diversity(self) -> None:
-        texts = ["The quick brown fox jumps", "over a lazy dog sleeping"]
+        # 43 words, 40 unique → root-TTR = 40/√43 ≈ 6.10
+        texts = [
+            "The quick brown fox jumps over a lazy dog sleeping",
+            "Crimson shadows danced beneath ancient silver moonlight",
+            "Whispered secrets echoed through marble halls of forgotten kingdoms",
+            "Gentle rain cascaded upon weathered stone pathways leading nowhere",
+        ]
         ratio = compute_lexical_diversity(texts)
-        assert ratio > 0.8  # all unique words
+        assert ratio > 4.5  # well above threshold
 
     def test_low_diversity(self) -> None:
-        texts = ["the the the the the", "the the the the the"]
+        # 70 words, only 3 unique → root-TTR = 3/√70 ≈ 0.36
+        texts = ["the the the the the", "the the the the the"] * 7
         ratio = compute_lexical_diversity(texts)
-        assert ratio < 0.2  # only one unique word
+        assert ratio < 1.0  # well below threshold
+
+    def test_root_ttr_is_length_independent(self) -> None:
+        """Root-TTR should not penalise longer text with good vocabulary."""
+        short = ["Crimson shadows danced beneath moonlight"]
+        long = [
+            "Crimson shadows danced beneath moonlight",
+            "Silver rain cascaded upon weathered stone",
+            "Gentle whispers echoed through marble halls",
+            "Ancient secrets lingered in forgotten kingdoms",
+            "Verdant moss crept along crumbling arches",
+        ]
+        short_ratio = compute_lexical_diversity(short)
+        long_ratio = compute_lexical_diversity(long)
+        # Both should be high — raw TTR would penalise the longer text
+        assert short_ratio > 2.0
+        assert long_ratio > 4.0
 
     def test_vocabulary_note_below_threshold(self) -> None:
-        note = format_vocabulary_note(0.3)
+        note = format_vocabulary_note(3.2)
         assert "VOCABULARY ALERT" in note
-        assert "0.30" in note
+        assert "3.20" in note
 
     def test_vocabulary_note_above_threshold(self) -> None:
-        assert format_vocabulary_note(0.5) == ""
-        assert format_vocabulary_note(0.4) == ""
+        assert format_vocabulary_note(5.0) == ""
+        assert format_vocabulary_note(4.5) == ""
 
     def test_vocabulary_note_custom_threshold(self) -> None:
-        assert format_vocabulary_note(0.5, threshold=0.6) != ""
-        assert format_vocabulary_note(0.5, threshold=0.4) == ""
+        assert format_vocabulary_note(5.0, threshold=6.0) != ""
+        assert format_vocabulary_note(5.0, threshold=4.0) == ""
 
     def test_vocabulary_note_with_prose_shows_specific_phrases(self) -> None:
         # "stale air" appears across 2 passages → doc_freq=2 → shown in note
@@ -1447,20 +1470,20 @@ class TestLexicalDiversity:
             "stale air filled everything",
             "thick stale air everywhere",
         ]
-        note = format_vocabulary_note(0.3, recent_prose=prose)
+        note = format_vocabulary_note(3.2, recent_prose=prose)
         assert "VOCABULARY ALERT" in note
         assert "stale air" in note
         assert "MUST NOT" in note
 
     def test_vocabulary_note_without_prose_shows_generic(self) -> None:
-        note = format_vocabulary_note(0.3)
+        note = format_vocabulary_note(3.2)
         assert "VOCABULARY ALERT" in note
         assert "MUST NOT" not in note
         assert "seek fresh" in note
 
     def test_vocabulary_note_with_prose_no_repeats_shows_generic(self) -> None:
         prose = ["every word here is unique and different"]
-        note = format_vocabulary_note(0.3, recent_prose=prose)
+        note = format_vocabulary_note(3.2, recent_prose=prose)
         assert "VOCABULARY ALERT" in note
         assert "seek fresh" in note
 

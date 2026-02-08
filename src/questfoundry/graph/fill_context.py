@@ -6,6 +6,7 @@ arcs) as context strings for FILL's prose generation and review phases.
 
 from __future__ import annotations
 
+import math
 import re
 from collections import Counter
 from typing import TYPE_CHECKING, Any
@@ -1863,21 +1864,25 @@ def compute_arc_hints(
 
 
 def compute_lexical_diversity(prose_texts: list[str]) -> float:
-    """Compute type-token ratio across recent prose passages.
+    """Compute root type-token ratio across recent prose passages.
+
+    Root-TTR (unique / sqrt(total)) is length-independent, unlike raw TTR
+    which penalises longer texts regardless of vocabulary quality
+    (McCarthy & Jarvis 2010).
 
     Args:
         prose_texts: List of prose strings to analyze.
 
     Returns:
-        Ratio of unique words to total words (0.0-1.0).
-        Returns 1.0 if no words are found.
+        Root-TTR value (typically 1.0-10.0 for prose). Higher is better.
+        Returns 10.0 if no words are found (assume acceptable).
     """
     words: list[str] = []
     for text in prose_texts:
         words.extend(text.lower().split())
     if not words:
-        return 1.0
-    return len(set(words)) / len(words)
+        return 10.0
+    return len(set(words)) / math.sqrt(len(words))
 
 
 def _extract_top_bigrams(
@@ -1920,7 +1925,7 @@ def _extract_top_bigrams(
 
 def format_vocabulary_note(
     diversity_ratio: float,
-    threshold: float = 0.4,
+    threshold: float = 4.5,
     recent_prose: list[str] | None = None,
     lang: str = "en",
 ) -> str:
@@ -1930,7 +1935,7 @@ def format_vocabulary_note(
     repeated bigrams and lists them as explicit prohibitions.
 
     Args:
-        diversity_ratio: Type-token ratio from compute_lexical_diversity.
+        diversity_ratio: Root-TTR value from compute_lexical_diversity.
         threshold: Below this ratio, inject a refresh instruction.
         recent_prose: Optional list of recent prose strings for bigram extraction.
         lang: Language code for stopword-aware bigram filtering.
