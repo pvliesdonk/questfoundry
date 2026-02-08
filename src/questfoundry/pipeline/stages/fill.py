@@ -31,11 +31,13 @@ from questfoundry.graph.context import (
     strip_scope_prefix,
 )
 from questfoundry.graph.fill_context import (
+    ANTISLOP_PATTERNS,
     compute_arc_hints,
     compute_first_appearances,
     compute_is_ending,
     compute_lexical_diversity,
     extract_used_imagery,
+    format_antislop_blocklist,
     format_atmospheric_detail,
     format_blueprint_context,
     format_continuity_warning,
@@ -998,8 +1000,6 @@ class FillStage:
         blocklist_text = format_used_imagery_blocklist(blocklist)
 
         # Append antislop phrases to imagery blocklist
-        from questfoundry.graph.fill_context import format_antislop_blocklist
-
         antislop_text = format_antislop_blocklist(self._language)
         if antislop_text:
             blocklist_text = blocklist_text + "\n\n" + antislop_text
@@ -1521,17 +1521,15 @@ class FillStage:
             )
 
         # 6. Antislop detection — observational, English only
-        from questfoundry.graph.fill_context import ANTISLOP_PHRASES
-
-        antislop = ANTISLOP_PHRASES.get(self._language, [])
-        if antislop:
+        antislop_re = ANTISLOP_PATTERNS.get(self._language)
+        if antislop_re:
             all_prose = " ".join(prose for _, prose in prose_entries).lower()
-            matches = [phrase for phrase in antislop if phrase in all_prose]
+            matches = list({m.group() for m in antislop_re.finditer(all_prose)})
             if len(matches) >= 3:
                 log.info(
                     "antislop_detected",
                     count=len(matches),
-                    matches=matches[:5],
+                    matches=sorted(matches)[:5],
                 )
 
         log.info("mechanical_gate_complete", flags_added=flags_added)

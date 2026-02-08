@@ -2103,7 +2103,7 @@ def format_used_imagery_blocklist(blocklist: list[str]) -> str:
 
 ANTISLOP_PHRASES: dict[str, list[str]] = {
     "en": [
-        # Body / emotion clichés
+        # Body / emotion cliches
         "eyes widened",
         "breath caught",
         "heart pounded",
@@ -2155,6 +2155,13 @@ ANTISLOP_PHRASES: dict[str, list[str]] = {
         "reality came crashing",
         "stark contrast",
     ],
+}
+
+# Compiled regex patterns for efficient antislop detection (one alternation
+# per language, compiled once at import time).
+ANTISLOP_PATTERNS: dict[str, re.Pattern[str]] = {
+    lang: re.compile("|".join(re.escape(p) for p in phrases))
+    for lang, phrases in ANTISLOP_PHRASES.items()
 }
 
 
