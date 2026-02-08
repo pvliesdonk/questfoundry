@@ -217,29 +217,35 @@ class TestApplyDressArtDirection:
         )
         assert len(edges) == 1
 
-    def test_nonexistent_entity_raises(self) -> None:
+    def test_nonexistent_entity_skips_edge(self) -> None:
+        """Unresolvable entity creates visual node but no describes_visual edge."""
         from questfoundry.graph.dress_mutations import apply_dress_art_direction
-        from questfoundry.graph.errors import NodeNotFoundError
 
-        with pytest.raises(NodeNotFoundError):
-            apply_dress_art_direction(
-                Graph(),
-                art_dir={
-                    "style": "ink",
-                    "medium": "d",
-                    "palette": ["b"],
-                    "composition_notes": "c",
-                    "negative_defaults": "n",
-                },
-                entity_visuals=[
-                    {
-                        "entity_id": "nonexistent",
-                        "description": "d",
-                        "distinguishing_features": ["f"],
-                        "reference_prompt_fragment": "frag",
-                    }
-                ],
-            )
+        g = Graph()
+        apply_dress_art_direction(
+            g,
+            art_dir={
+                "style": "ink",
+                "medium": "d",
+                "palette": ["b"],
+                "composition_notes": "c",
+                "negative_defaults": "n",
+            },
+            entity_visuals=[
+                {
+                    "entity_id": "nonexistent",
+                    "description": "d",
+                    "distinguishing_features": ["f"],
+                    "reference_prompt_fragment": "frag",
+                }
+            ],
+        )
+
+        # Visual node created
+        assert g.get_node("entity_visual::nonexistent") is not None
+        # No edge because entity doesn't exist in any category
+        edges = g.get_edges(from_id="entity_visual::nonexistent", edge_type="describes_visual")
+        assert len(edges) == 0
 
 
 # ---------------------------------------------------------------------------
