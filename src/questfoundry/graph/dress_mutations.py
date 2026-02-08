@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
-from questfoundry.graph.context import strip_scope_prefix
+from questfoundry.graph.context import ENTITY_CATEGORIES, strip_scope_prefix
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
@@ -42,8 +42,11 @@ def apply_dress_art_direction(
         art_dir: ArtDirection fields (style, medium, palette, etc.).
         entity_visuals: List of dicts with ``entity_id`` plus EntityVisual fields.
 
-    Raises:
-        NodeNotFoundError: If a referenced entity doesn't exist in the graph.
+    Note:
+        If a referenced entity doesn't exist under any category prefix
+        (character, location, object, faction) or the legacy ``entity::``
+        prefix, the visual node is created but no ``describes_visual`` edge
+        is added.
     """
     # Singleton art direction node
     ad_data = {"type": "art_direction", **_clean_dict(art_dir)}
@@ -56,11 +59,11 @@ def apply_dress_art_direction(
         node_id = f"entity_visual::{entity_id}"
         ev_data = {"type": "entity_visual", **_clean_dict(ev)}
         graph.upsert_node(node_id, ev_data)
-        # Edge: entity_visual → entity
-        entity_ref = graph.ref("entity", entity_id)
-        # Remove existing edge if re-running
-        _remove_edges(graph, from_id=node_id, edge_type="describes_visual")
-        graph.add_edge("describes_visual", node_id, entity_ref)
+        # Edge: entity_visual → entity (entities use subtype prefixes)
+        entity_ref = _resolve_entity_ref(graph, entity_id)
+        if entity_ref:
+            _remove_edges(graph, from_id=node_id, edge_type="describes_visual")
+            graph.add_edge("describes_visual", node_id, entity_ref)
 
 
 # ---------------------------------------------------------------------------
@@ -129,7 +132,14 @@ def apply_dress_codex(
         NodeNotFoundError: If the entity doesn't exist.
     """
     raw_entity_id = strip_scope_prefix(entity_id)
-    entity_ref = graph.ref("entity", raw_entity_id)
+    entity_ref = _resolve_entity_ref(graph, raw_entity_id)
+    if not entity_ref:
+        from questfoundry.graph.errors import NodeNotFoundError
+
+        raise NodeNotFoundError(
+            raw_entity_id,
+            context=f"codex entity reference (tried {', '.join(ENTITY_CATEGORIES)} and legacy entity:: prefix)",
+        )
     created_ids: list[str] = []
 
     for entry in entries:
@@ -277,6 +287,19 @@ def validate_dress_codex_entries(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _resolve_entity_ref(graph: Graph, raw_id: str) -> str | None:
+    """Resolve entity ID across category prefixes (character, location, etc.)."""
+    for category in ENTITY_CATEGORIES:
+        candidate = f"{category}::{raw_id}"
+        if graph.has_node(candidate):
+            return candidate
+    # Legacy fallback
+    legacy = f"entity::{raw_id}"
+    if graph.has_node(legacy):
+        return legacy
+    return None
 
 
 def _clean_dict(data: dict[str, Any]) -> dict[str, Any]:
