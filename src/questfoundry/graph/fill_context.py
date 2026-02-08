@@ -2257,3 +2257,100 @@ def format_used_imagery_blocklist(blocklist: list[str]) -> str:
     lines.append("Find fresh sensory material instead.")
 
     return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Antislop blocklist (#694)
+# ---------------------------------------------------------------------------
+
+ANTISLOP_PHRASES: dict[str, list[str]] = {
+    "en": [
+        # Body / emotion cliches
+        "eyes widened",
+        "breath caught",
+        "heart pounded",
+        "blood ran cold",
+        "knuckles whitened",
+        "jaw clenched",
+        "stomach churned",
+        "pulse quickened",
+        "breath hitched",
+        "heart hammered",
+        "fists clenched",
+        "tears streamed",
+        "breath she didn't know",
+        "breath he didn't know",
+        "let out a breath",
+        # Formulaic transitions
+        "couldn't help but",
+        "a testament to",
+        "sent shivers down",
+        "it was as if",
+        "little did they know",
+        "as if on cue",
+        "time seemed to",
+        "hung in the air",
+        "filled the air",
+        "pierced the silence",
+        "shattered the silence",
+        "broke the silence",
+        # Purple prose markers
+        "cascade of emotions",
+        "waves of emotion",
+        "a symphony of",
+        "tapestry of",
+        "kaleidoscope of",
+        "dance of shadows",
+        "sea of faces",
+        "ocean of",
+        "whirlwind of",
+        "delicate dance",
+        # Overwrought description
+        "seemed to mock",
+        "mocking laughter",
+        "palpable tension",
+        "deafening silence",
+        "tangible silence",
+        "electric tension",
+        "weight of the world",
+        "the world seemed",
+        "reality came crashing",
+        "stark contrast",
+    ],
+}
+
+# Compiled regex patterns for efficient antislop detection (one alternation
+# per language, compiled once at import time).
+ANTISLOP_PATTERNS: dict[str, re.Pattern[str]] = {
+    lang: re.compile("|".join(re.escape(p) for p in phrases))
+    for lang, phrases in ANTISLOP_PHRASES.items()
+}
+
+
+def format_antislop_blocklist(lang: str = "en") -> str:
+    """Format the antislop phrase blocklist for the expand prompt.
+
+    Returns a formatted blocklist of LLM-overused phrases that the model
+    should avoid. Returns empty string for unsupported languages (graceful
+    degradation — no blocklist is better than a wrong-language blocklist).
+
+    Args:
+        lang: Language code for phrase lookup.
+
+    Returns:
+        Formatted blocklist string, or empty string for unsupported languages.
+    """
+    phrases = ANTISLOP_PHRASES.get(lang)
+    if not phrases:
+        return ""
+
+    lines = [
+        "**Overused Phrases (AVOID):** The following phrases are LLM clichés. "
+        "Do NOT use them or close variants:",
+    ]
+    for phrase in phrases:
+        lines.append(f'  - "{phrase}"')
+    lines.append("")
+    lines.append("Find original phrasing instead. Show, don't tell.")
+
+    return "\n".join(lines)

@@ -32,11 +32,13 @@ from questfoundry.graph.context import (
     strip_scope_prefix,
 )
 from questfoundry.graph.fill_context import (
+    ANTISLOP_PATTERNS,
     compute_arc_hints,
     compute_first_appearances,
     compute_is_ending,
     compute_lexical_diversity,
     extract_used_imagery,
+    format_antislop_blocklist,
     format_atmospheric_detail,
     format_blueprint_context,
     format_continuity_warning,
@@ -1184,6 +1186,11 @@ class FillStage:
         blocklist = extract_used_imagery(recent_prose, lang=self._language)
         blocklist_text = format_used_imagery_blocklist(blocklist)
 
+        # Append antislop phrases to imagery blocklist
+        antislop_text = format_antislop_blocklist(self._language)
+        if antislop_text:
+            blocklist_text = blocklist_text + "\n\n" + antislop_text
+
         # Craft constraint tracking — seed from passage count for variety across runs
         rng = Random(len(generation_order))
         recently_used: deque[str] = deque(maxlen=5)
@@ -1703,6 +1710,18 @@ class FillStage:
                     for bg, pids in sorted(overused_bigrams.items(), key=lambda x: -len(x[1]))[:10]
                 ],
             )
+
+        # 6. Antislop detection — observational, English only
+        antislop_re = ANTISLOP_PATTERNS.get(self._language)
+        if antislop_re:
+            all_prose = " ".join(prose for _, prose in prose_entries).lower()
+            matches = list({m.group() for m in antislop_re.finditer(all_prose)})
+            if len(matches) >= 3:
+                log.info(
+                    "antislop_detected",
+                    count=len(matches),
+                    matches=sorted(matches)[:5],
+                )
 
         log.info("mechanical_gate_complete", flags_added=flags_added)
 
