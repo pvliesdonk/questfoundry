@@ -378,3 +378,22 @@ def format_all_entity_visuals(graph: Graph, passage_ids: list[str]) -> str:
                     lines.append(f"- **{raw_eid}**: {fragment}")
 
     return "\n".join(lines) if lines else ""
+
+
+def format_entities_batch_for_codex(graph: Graph, entity_ids: list[str]) -> str:
+    """Format a batch of entities for codex generation.
+
+    Args:
+        graph: Graph containing entity and codeword nodes.
+        entity_ids: Entity node IDs in this batch.
+
+    Returns:
+        Formatted batch string with sections per entity.
+    """
+    sections: list[str] = []
+    for eid in entity_ids:
+        entity_details = format_entity_for_codex(graph, eid)
+        if entity_details:
+            sections.append(entity_details)
+
+    return "\n\n".join(sections)
