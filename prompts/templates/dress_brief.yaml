@@ -80,8 +80,7 @@ system: |
     Consider: wonder, dread, fury, tenderness, humor, triumph, melancholy, awe,
     confusion, serenity, panic, relief. Match the mood to what actually happens
     in the passage.
-  - CAPTION LENGTH: Captions MUST be under 60 characters. They are for alt-text
-    and figure labels, not narrative prose. If your caption exceeds 60 chars, shorten it.
+  - CAPTION: See format above (10-60 chars, "[Subject] [action/state]")
   - NEGATIVE FIELD: Only list negatives SPECIFIC to this brief that go beyond
     the global negative_defaults. If no brief-specific negatives apply, use an
     empty string.
