@@ -1230,7 +1230,11 @@ class FillStage:
             node = graph.get_node(pid)
             if not node:
                 return
-            flag_data = {"passage_id": pid, "issue": issue, "issue_type": "flat_prose"}
+            flag_data = {
+                "passage_id": strip_scope_prefix(pid),
+                "issue": issue,
+                "issue_type": "flat_prose",
+            }
             graph.update_node(
                 pid,
                 review_flags=[*node.get("review_flags", []), flag_data],
@@ -1257,12 +1261,13 @@ class FillStage:
                 trigrams.setdefault(key, []).append(pid)
         for trigram, pids in trigrams.items():
             if len(pids) > self._TRIGRAM_COLLISION_MAX:
+                # Flag later arrivals only — earlier passages established the pattern
                 for pid in pids[self._TRIGRAM_COLLISION_MAX :]:
                     _add_flag(pid, f'Opening trigram collision: "{trigram}"')
 
         # 3. Vocabulary diversity (TTR per passage)
         for pid, prose in prose_entries:
-            words = re.sub(r"[^\w\s]", "", prose.lower()).split()
+            words = re.sub(r"[^\w\s]", " ", prose.lower()).split()
             if len(words) >= 20:
                 ttr = len(set(words)) / len(words)
                 if ttr < self._TTR_THRESHOLD:
@@ -1280,7 +1285,7 @@ class FillStage:
         # 5. Cross-passage bigram repetition
         bigram_passages: dict[str, list[str]] = {}
         for pid, prose in prose_entries:
-            words = re.sub(r"[^\w\s]", "", prose.lower()).split()
+            words = re.sub(r"[^\w\s]", " ", prose.lower()).split()
             seen: set[str] = set()
             for k in range(len(words) - 1):
                 bg = f"{words[k]} {words[k + 1]}"
@@ -1289,7 +1294,8 @@ class FillStage:
                     seen.add(bg)
         for bigram, pids in bigram_passages.items():
             if len(pids) > self._BIGRAM_PASSAGE_MAX:
-                for pid in pids:
+                # Flag excess passages only — earlier ones established the pattern
+                for pid in pids[self._BIGRAM_PASSAGE_MAX :]:
                     _add_flag(pid, f'Overused bigram across passages: "{bigram}"')
 
         log.info("mechanical_gate_complete", flags_added=flags_added)

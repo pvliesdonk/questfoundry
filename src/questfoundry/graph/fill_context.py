@@ -2009,16 +2009,18 @@ def extract_used_imagery(
     blocklist = _extract_top_bigrams(prose_texts, n=top_n, min_count=min_bigram_count)
 
     # Repeated long words (supplements bigrams for single-word imagery)
-    all_words: list[str] = []
-    for text in prose_texts:
-        all_words.extend(
-            w for w in re.sub(r"[^\w\s]", "", text.lower()).split() if len(w) >= min_word_length
-        )
+    blocklist_words = {word for bigram in blocklist for word in bigram.split()}
+    all_words: list[str] = [
+        w
+        for text in prose_texts
+        for w in re.sub(r"[^\w\s]", " ", text.lower()).split()
+        if len(w) >= min_word_length
+    ]
     word_counts = Counter(all_words)
     repeated_words = [
         word
         for word, count in word_counts.most_common(top_n)
-        if count >= min_word_count and word not in " ".join(blocklist)
+        if count >= min_word_count and word not in blocklist_words
     ]
 
     blocklist.extend(repeated_words[: top_n - len(blocklist)])
