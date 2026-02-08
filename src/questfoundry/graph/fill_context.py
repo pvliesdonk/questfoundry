@@ -1976,3 +1976,52 @@ def format_passages_batch(
         lines.append("")
 
     return "\n".join(lines).strip()
+
+
+def extract_used_imagery(
+    prose_texts: list[str],
+    top_n: int = 10,
+    min_bigram_count: int = 2,
+    min_word_count: int = 3,
+    min_word_length: int = 5,
+) -> list[str]:
+    """Build an imagery blocklist from recent prose for the expand phase.
+
+    Extracts repeated bigrams and frequently used long words so the expand
+    prompt can instruct the LLM to avoid recycled imagery.
+
+    Args:
+        prose_texts: Recent prose strings (sliding window).
+        top_n: Maximum number of blocklist entries.
+        min_bigram_count: Minimum occurrences for a bigram to be flagged.
+        min_word_count: Minimum occurrences for a single word to be flagged.
+        min_word_length: Minimum character length for single-word entries
+            (filters out common short words).
+
+    Returns:
+        List of imagery strings to avoid (bigrams and repeated words),
+        ordered by frequency. Empty list if no repetition detected.
+    """
+    if not prose_texts:
+        return []
+
+    # Repeated bigrams
+    blocklist = _extract_top_bigrams(prose_texts, n=top_n, min_count=min_bigram_count)
+
+    # Repeated long words (supplements bigrams for single-word imagery)
+    blocklist_words = {word for bigram in blocklist for word in bigram.split()}
+    all_words: list[str] = [
+        w
+        for text in prose_texts
+        for w in re.sub(r"[^\w\s]", " ", text.lower()).split()
+        if len(w) >= min_word_length
+    ]
+    word_counts = Counter(all_words)
+    repeated_words = [
+        word
+        for word, count in word_counts.most_common(top_n)
+        if count >= min_word_count and word not in blocklist_words
+    ]
+
+    blocklist.extend(repeated_words[: top_n - len(blocklist)])
+    return blocklist[:top_n]

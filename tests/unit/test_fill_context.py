@@ -12,6 +12,7 @@ from questfoundry.graph.fill_context import (
     compute_lexical_diversity,
     compute_open_questions,
     derive_pacing,
+    extract_used_imagery,
     format_atmospheric_detail,
     format_dramatic_questions,
     format_dream_vision,
@@ -2334,3 +2335,50 @@ class TestFormatSpokeContext:
         assert "Examine the map" in result
         assert "functional" in result
         assert "spoke_labels" in result
+
+
+# ---------------------------------------------------------------------------
+# extract_used_imagery
+# ---------------------------------------------------------------------------
+
+
+class TestExtractUsedImagery:
+    def test_empty_input(self) -> None:
+        assert extract_used_imagery([]) == []
+
+    def test_no_repetition(self) -> None:
+        result = extract_used_imagery(["The sun rose over the hills."])
+        assert result == []
+
+    def test_bigram_extraction(self) -> None:
+        texts = [
+            "The amber glow filled the room with amber glow.",
+            "She saw the amber glow through the window.",
+            "Once more the amber glow crept in.",
+        ]
+        result = extract_used_imagery(texts, min_bigram_count=2)
+        assert any("amber glow" in item for item in result)
+
+    def test_repeated_word_extraction(self) -> None:
+        texts = [
+            "The shadow crept through the corridor of shadows.",
+            "Another shadow appeared in the distant shadow.",
+            "Shadows danced where shadows fell before.",
+        ]
+        result = extract_used_imagery(texts, min_word_count=3, min_word_length=5)
+        # "shadow" or "shadows" should appear
+        assert len(result) > 0
+
+    def test_top_n_limit(self) -> None:
+        texts = [f"word{i} word{i} word{i} word{i}" for i in range(20)]
+        result = extract_used_imagery(texts, top_n=5)
+        assert len(result) <= 5
+
+    def test_combined_bigrams_and_words(self) -> None:
+        texts = [
+            "The weight of choice pressed heavily. Weight of choice again.",
+            "Weight of choice once more. The ancient stones whispered ancient stones.",
+            "Ancient stones echoed. Weight of choice eternal.",
+        ]
+        result = extract_used_imagery(texts, min_bigram_count=2, min_word_count=2)
+        assert len(result) > 0

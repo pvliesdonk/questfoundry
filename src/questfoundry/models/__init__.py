@@ -41,7 +41,9 @@ from questfoundry.models.dress import (
     IllustrationCategory,
 )
 from questfoundry.models.fill import (
+    BatchedExpandOutput,
     EntityUpdate,
+    ExpandBlueprint,
     FillExtractOutput,
     FillPassageOutput,
     FillPhase0Output,
@@ -108,6 +110,7 @@ __all__ = [
     "Arc",
     "ArtDirection",
     "AtmosphericDetail",
+    "BatchedExpandOutput",
     "BrainstormOutput",
     "Choice",
     "ChoiceLabel",
@@ -137,6 +140,7 @@ __all__ = [
     "EntityVisualWithId",
     "EntryMood",
     "EntryStateBeat",
+    "ExpandBlueprint",
     "FillExtractOutput",
     "FillPassageOutput",
     "FillPhase0Output",

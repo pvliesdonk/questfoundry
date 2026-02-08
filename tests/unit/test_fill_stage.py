@@ -1408,3 +1408,119 @@ class TestTwoStepFill:
         # startswith() correctly ignores sentinel appearing mid-text
         assert flag == "ok"
         assert "INCOMPATIBLE_STATES" in prose
+
+
+# ---------------------------------------------------------------------------
+# Phase 1c: Mechanical quality gate
+# ---------------------------------------------------------------------------
+
+
+class TestMechanicalQualityGate:
+    @pytest.mark.asyncio
+    async def test_no_passages_returns_completed(self, mock_model: MagicMock) -> None:
+        g = Graph.empty()
+        stage = FillStage()
+        result = await stage._phase_1c_mechanical_gate(g, mock_model)
+        assert result.status == "completed"
+        assert "no passages" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_near_duplicate_detection(self, mock_model: MagicMock) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "prose": "The amber light flickered in the hall."},
+        )
+        g.create_node(
+            "passage::p2",
+            {"type": "passage", "raw_id": "p2", "prose": "The amber light flickered in the hall."},
+        )
+        stage = FillStage()
+        await stage._phase_1c_mechanical_gate(g, mock_model)
+        p2 = g.get_node("passage::p2")
+        assert p2 is not None
+        flags = p2.get("review_flags", [])
+        assert any("Near-duplicate" in f.get("issue", "") for f in flags)
+
+    @pytest.mark.asyncio
+    async def test_opening_trigram_collision(self, mock_model: MagicMock) -> None:
+        g = Graph.empty()
+        for i in range(4):
+            g.create_node(
+                f"passage::p{i}",
+                {
+                    "type": "passage",
+                    "raw_id": f"p{i}",
+                    "prose": f"The ancient door creaked open and passage {i} began.",
+                },
+            )
+        stage = FillStage()
+        await stage._phase_1c_mechanical_gate(g, mock_model)
+        # At least one passage should be flagged (collision > 2)
+        flagged = 0
+        for i in range(4):
+            node = g.get_node(f"passage::p{i}")
+            if node and any(
+                "trigram" in f.get("issue", "").lower() for f in node.get("review_flags", [])
+            ):
+                flagged += 1
+        assert flagged >= 1
+
+    @pytest.mark.asyncio
+    async def test_low_ttr_flagged(self, mock_model: MagicMock) -> None:
+        g = Graph.empty()
+        # Extremely repetitive prose
+        g.create_node(
+            "passage::p1",
+            {
+                "type": "passage",
+                "raw_id": "p1",
+                "prose": " ".join(["the"] * 50 + ["rain"] * 10 + ["fell"] * 10),
+            },
+        )
+        stage = FillStage()
+        await stage._phase_1c_mechanical_gate(g, mock_model)
+        p1 = g.get_node("passage::p1")
+        assert p1 is not None
+        flags = p1.get("review_flags", [])
+        assert any("diversity" in f.get("issue", "").lower() for f in flags)
+
+    @pytest.mark.asyncio
+    async def test_good_prose_not_flagged(self, mock_model: MagicMock) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "passage::p1",
+            {
+                "type": "passage",
+                "raw_id": "p1",
+                "prose": (
+                    "Morning light filtered through broken shutters. "
+                    "Dust motes danced in amber shafts, settling on forgotten books. "
+                    "A clock ticked somewhere in the distance, marking seconds nobody counted. "
+                    "The detective ran calloused fingers across the desk, tracing scratches "
+                    "that mapped years of desperate correspondence."
+                ),
+            },
+        )
+        stage = FillStage()
+        result = await stage._phase_1c_mechanical_gate(g, mock_model)
+        p1 = g.get_node("passage::p1")
+        assert p1 is not None
+        assert p1.get("review_flags", []) == []
+        assert "0 mechanical flags" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_skips_incompatible_states(self, mock_model: MagicMock) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "passage::p1",
+            {
+                "type": "passage",
+                "raw_id": "p1",
+                "prose": "some prose",
+                "flag": "incompatible_states",
+            },
+        )
+        stage = FillStage()
+        result = await stage._phase_1c_mechanical_gate(g, mock_model)
+        assert "no passages" in result.detail
