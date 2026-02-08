@@ -1601,9 +1601,9 @@ class TestMechanicalQualityGate:
         assert flagged >= 1
 
     @pytest.mark.asyncio
-    async def test_low_ttr_flagged(self, mock_model: MagicMock) -> None:
+    async def test_low_root_ttr_flagged(self, mock_model: MagicMock) -> None:
         g = Graph.empty()
-        # Extremely repetitive prose
+        # Extremely repetitive prose: 70 words, 3 unique → root-TTR ≈ 0.36
         g.create_node(
             "passage::p1",
             {
@@ -1617,7 +1617,7 @@ class TestMechanicalQualityGate:
         p1 = g.get_node("passage::p1")
         assert p1 is not None
         flags = p1.get("review_flags", [])
-        assert any("diversity" in f.get("issue", "").lower() for f in flags)
+        assert any("root-ttr" in f.get("issue", "").lower() for f in flags)
 
     @pytest.mark.asyncio
     async def test_good_prose_not_flagged(self, mock_model: MagicMock) -> None:

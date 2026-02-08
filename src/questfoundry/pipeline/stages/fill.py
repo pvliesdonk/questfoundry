@@ -275,6 +275,7 @@ class FillStage:
         self._serialize_model: BaseChatModel | None = None
         self._serialize_provider_name: str | None = None
         self._size_profile: SizeProfile | None = None
+        self._language: str = "en"
         self._max_concurrency: int = 2
         self._lang_instruction: str = ""
         self._two_step: bool = False
@@ -402,7 +403,8 @@ class FillStage:
         self._on_llm_end = on_llm_end
         self._size_profile = kwargs.get("size_profile")
         self._max_concurrency = kwargs.get("max_concurrency", 2)
-        self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
+        self._language = kwargs.get("language", "en")
+        self._lang_instruction = get_output_language_instruction(self._language)
         self._two_step = kwargs.get("two_step", True)
         self._on_connectivity_error = kwargs.get("on_connectivity_error")
         log.info("stage_start", stage="fill", interactive=interactive)
@@ -993,7 +995,7 @@ class FillStage:
         recent_prose = [
             pdata.get("prose", "") for pdata in passage_nodes.values() if pdata.get("prose")
         ]
-        blocklist = extract_used_imagery(recent_prose)
+        blocklist = extract_used_imagery(recent_prose, lang=self._language)
         blocklist_text = format_used_imagery_blocklist(blocklist)
 
         # Craft constraint tracking — seed from passage count for variety across runs
@@ -1155,9 +1157,8 @@ class FillStage:
         passages_filled = 0
         passages_flagged = 0
 
-        # Lexical diversity tracking: recompute every N passages from
+        # Lexical diversity tracking: recomputed after every passage from
         # the sliding window prose to detect vocabulary convergence.
-        _DIVERSITY_CHECK_INTERVAL = 5
         recent_prose: list[str] = []
         vocabulary_note = ""
 
@@ -1282,12 +1283,13 @@ class FillStage:
 
                 # Track prose for lexical diversity monitoring
                 recent_prose.append(prose)
-                if len(recent_prose) % _DIVERSITY_CHECK_INTERVAL == 0:
-                    window = recent_prose[-_DIVERSITY_CHECK_INTERVAL:]
-                    ratio = compute_lexical_diversity(window)
-                    vocabulary_note = format_vocabulary_note(ratio, recent_prose=window)
-                    if vocabulary_note:
-                        log.info("lexical_diversity_low", ratio=f"{ratio:.2f}")
+                window = recent_prose[-5:]
+                ratio = compute_lexical_diversity(window)
+                vocabulary_note = format_vocabulary_note(
+                    ratio, recent_prose=window, lang=self._language
+                )
+                if vocabulary_note:
+                    log.info("lexical_diversity_low", ratio=f"{ratio:.2f}")
 
                 # Entity updates: two-step extracts analytically,
                 # single-call gets them from the structured output.
@@ -1374,7 +1376,7 @@ class FillStage:
     # -- Mechanical quality gate thresholds --
     _NEAR_DUP_THRESHOLD = 75.0  # rapidfuzz ratio %
     _TRIGRAM_COLLISION_MAX = 2  # max passages sharing opening trigram
-    _TTR_THRESHOLD = 0.35  # type-token ratio below this = flag
+    _ROOT_TTR_THRESHOLD = 4.5  # root type-token ratio below this = flag
     _SENTENCE_LEN_STDEV_MIN = 3.0  # sentence length stdev below this = flag
 
     async def _phase_1c_mechanical_gate(
@@ -1456,15 +1458,15 @@ class FillStage:
                         issue_type="opening_trigram",
                     )
 
-        # 3. Vocabulary diversity (TTR per passage)
+        # 3. Vocabulary diversity (root-TTR per passage)
         for pid, prose in prose_entries:
             words = re.sub(r"[^\w\s]", " ", prose.lower()).split()
             if len(words) >= 20:
-                ttr = len(set(words)) / len(words)
-                if ttr < self._TTR_THRESHOLD:
+                root_ttr = len(set(words)) / (len(words) ** 0.5)
+                if root_ttr < self._ROOT_TTR_THRESHOLD:
                     _add_flag(
                         pid,
-                        f"Low vocabulary diversity (TTR: {ttr:.2f})",
+                        f"Low vocabulary diversity (root-TTR: {root_ttr:.2f})",
                         issue_type="low_vocabulary",
                     )
 
@@ -1484,15 +1486,18 @@ class FillStage:
         # 5. Cross-passage bigram repetition — observational only
         # Proactive layers handle repetition (expand blocklist + vocabulary alerts).
         # This check logs findings for assessment but does not inject flags.
+        from questfoundry.graph.fill_context import STOPWORDS
+
         bigram_threshold = max(5, len(prose_entries) // 10)
+        stops = STOPWORDS.get(self._language, frozenset())
         bigram_passages: dict[str, list[str]] = {}
         for pid, prose in prose_entries:
             words = re.sub(r"[^\w\s]", " ", prose.lower()).split()
             seen: set[str] = set()
             for k in range(len(words) - 1):
                 w1, w2 = words[k], words[k + 1]
-                if len(w1) < 4 and len(w2) < 4:
-                    continue  # skip stopword-only bigrams
+                if stops and (w1 in stops or w2 in stops):
+                    continue  # skip bigrams containing stopwords
                 bg = f"{w1} {w2}"
                 if bg not in seen:
                     bigram_passages.setdefault(bg, []).append(pid)

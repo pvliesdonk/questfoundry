@@ -15,6 +15,103 @@ import yaml
 from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.observability.logging import get_logger
 
+# ---------------------------------------------------------------------------
+# Language-specific stopwords for bigram filtering (#690)
+# ---------------------------------------------------------------------------
+
+STOPWORDS: dict[str, frozenset[str]] = {
+    "en": frozenset(
+        {
+            # Articles
+            "a",
+            "an",
+            "the",
+            # Prepositions
+            "at",
+            "by",
+            "for",
+            "from",
+            "in",
+            "into",
+            "of",
+            "on",
+            "to",
+            "up",
+            "with",
+            "as",
+            "about",
+            "after",
+            "before",
+            "between",
+            "down",
+            "during",
+            "over",
+            "through",
+            "under",
+            "upon",
+            # Pronouns
+            "i",
+            "me",
+            "my",
+            "he",
+            "him",
+            "his",
+            "she",
+            "her",
+            "it",
+            "its",
+            "we",
+            "us",
+            "our",
+            "they",
+            "them",
+            "their",
+            "you",
+            "your",
+            # Auxiliaries / copulas
+            "is",
+            "am",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "has",
+            "had",
+            "have",
+            "do",
+            "did",
+            "does",
+            "will",
+            "would",
+            "could",
+            "should",
+            "can",
+            "may",
+            "might",
+            "shall",
+            # Conjunctions
+            "and",
+            "but",
+            "or",
+            "nor",
+            "so",
+            "yet",
+            # Demonstratives / determiners
+            "this",
+            "that",
+            "these",
+            "those",
+            # Common adverbs
+            "not",
+            "no",
+            "then",
+            "than",
+        }
+    ),
+}
+
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
@@ -1783,32 +1880,49 @@ def compute_lexical_diversity(prose_texts: list[str]) -> float:
     return len(set(words)) / len(words)
 
 
-def _extract_top_bigrams(texts: list[str], n: int = 5, min_count: int = 2) -> list[str]:
+def _extract_top_bigrams(
+    texts: list[str], n: int = 5, min_count: int = 2, lang: str = "en"
+) -> list[str]:
     """Extract the most repeated bigrams from prose texts.
+
+    Uses document-frequency counting (each bigram counted at most once per
+    passage) and stopword OR-logic filtering (skip if either word is a
+    stopword for the given language).
 
     Args:
         texts: List of prose strings to analyze.
         n: Maximum number of bigrams to return.
-        min_count: Minimum occurrence count to include a bigram.
+        min_count: Minimum document frequency to include a bigram.
+        lang: Language code for stopword lookup. When no stopword set
+            exists for the language, filtering is skipped (graceful degradation).
 
     Returns:
         List of bigram strings (e.g. ["stale air", "whiskey burn"]),
-        ordered by frequency descending.
+        ordered by document frequency descending.
     """
-    bigrams: list[str] = []
+    stops = STOPWORDS.get(lang, frozenset())
+    doc_freq: Counter[str] = Counter()
     for text in texts:
         words = re.sub(r"[^\w\s]", "", text.lower()).split()
         if len(words) < 2:
             continue
-        bigrams.extend(f"{words[i]} {words[i + 1]}" for i in range(len(words) - 1))
-    counts = Counter(bigrams)
-    return [bigram for bigram, count in counts.most_common(n) if count >= min_count]
+        seen: set[str] = set()
+        for i in range(len(words) - 1):
+            w1, w2 = words[i], words[i + 1]
+            if stops and (w1 in stops or w2 in stops):
+                continue
+            bg = f"{w1} {w2}"
+            if bg not in seen:
+                seen.add(bg)
+                doc_freq[bg] += 1
+    return [bg for bg, c in doc_freq.most_common(n) if c >= min_count]
 
 
 def format_vocabulary_note(
     diversity_ratio: float,
     threshold: float = 0.4,
     recent_prose: list[str] | None = None,
+    lang: str = "en",
 ) -> str:
     """Format a vocabulary refresh instruction if diversity is low.
 
@@ -1819,13 +1933,14 @@ def format_vocabulary_note(
         diversity_ratio: Type-token ratio from compute_lexical_diversity.
         threshold: Below this ratio, inject a refresh instruction.
         recent_prose: Optional list of recent prose strings for bigram extraction.
+        lang: Language code for stopword-aware bigram filtering.
 
     Returns:
         Instruction string, or empty string if diversity is acceptable.
     """
     if diversity_ratio >= threshold:
         return ""
-    overused = _extract_top_bigrams(recent_prose or [])
+    overused = _extract_top_bigrams(recent_prose or [], lang=lang)
     if overused:
         phrase_list = "\n".join(f'- "{phrase}"' for phrase in overused)
         return (
@@ -1984,6 +2099,7 @@ def extract_used_imagery(
     min_bigram_count: int = 2,
     min_word_count: int = 3,
     min_word_length: int = 5,
+    lang: str = "en",
 ) -> list[str]:
     """Build an imagery blocklist from recent prose for the expand phase.
 
@@ -1997,6 +2113,7 @@ def extract_used_imagery(
         min_word_count: Minimum occurrences for a single word to be flagged.
         min_word_length: Minimum character length for single-word entries
             (filters out common short words).
+        lang: Language code for stopword-aware bigram filtering.
 
     Returns:
         List of imagery strings to avoid (bigrams and repeated words),
@@ -2006,7 +2123,7 @@ def extract_used_imagery(
         return []
 
     # Repeated bigrams
-    blocklist = _extract_top_bigrams(prose_texts, n=top_n, min_count=min_bigram_count)
+    blocklist = _extract_top_bigrams(prose_texts, n=top_n, min_count=min_bigram_count, lang=lang)
 
     # Repeated long words (supplements bigrams for single-word imagery)
     blocklist_words = {word for bigram in blocklist for word in bigram.split()}

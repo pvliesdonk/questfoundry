@@ -1341,33 +1341,74 @@ class TestExtractTopBigrams:
         assert _extract_top_bigrams([]) == []
         assert _extract_top_bigrams([""]) == []
 
-    def test_no_repeated_bigrams(self) -> None:
-        texts = ["The quick brown fox jumps over a lazy dog"]
+    def test_no_repeated_bigrams_single_passage(self) -> None:
+        # Single passage can't produce doc_freq >= 2
+        texts = ["stale air stale air stale air"]
         assert _extract_top_bigrams(texts) == []
 
-    def test_extracts_repeated_bigrams(self) -> None:
+    def test_extracts_repeated_bigrams_across_passages(self) -> None:
+        # "stale air" appears in 2 passages → doc_freq=2
         texts = [
-            "stale air filled the room with stale air",
-            "the stale air was thick",
+            "stale air filled everything",
+            "thick stale air everywhere",
         ]
         result = _extract_top_bigrams(texts)
         assert "stale air" in result
 
+    def test_stopwords_filtered_for_english(self) -> None:
+        # "the corridor" has a stopword → filtered out despite cross-passage repetition
+        texts = [
+            "the corridor was dark",
+            "the corridor echoed",
+            "the corridor narrowed",
+        ]
+        result = _extract_top_bigrams(texts, lang="en")
+        assert "the corridor" not in result
+
+    def test_no_filtering_for_unknown_language(self) -> None:
+        # Unknown language skips stopword filtering
+        texts = [
+            "the corridor was dark",
+            "the corridor echoed",
+            "the corridor narrowed",
+        ]
+        result = _extract_top_bigrams(texts, lang="xx")
+        assert "the corridor" in result
+
+    def test_doc_freq_not_raw_freq(self) -> None:
+        # Bigram repeated 10x in one passage = doc_freq 1 (below min_count=2)
+        texts = ["crash bang " * 10]
+        assert _extract_top_bigrams(texts) == []
+        # Same bigram in 3 separate passages = doc_freq 3
+        texts = ["crash bang loud", "crash bang noise", "crash bang thud"]
+        result = _extract_top_bigrams(texts, min_count=3)
+        assert "crash bang" in result
+
     def test_respects_min_count(self) -> None:
-        texts = ["one two one two one two"]
+        # "one two" in 3 passages → doc_freq=3
+        texts = ["one two three", "one two four", "one two five"]
         assert _extract_top_bigrams(texts, min_count=3) == ["one two"]
         assert _extract_top_bigrams(texts, min_count=4) == []
 
     def test_limits_to_n(self) -> None:
-        # Repeat many different bigrams
-        texts = ["a b a b c d c d e f e f g h g h"]
-        result = _extract_top_bigrams(texts, n=2)
-        assert len(result) <= 2
+        # Multiple bigrams across multiple passages
+        texts = [
+            "crash bang loud thud",
+            "crash bang loud thud",
+            "crash bang loud thud",
+        ]
+        result = _extract_top_bigrams(texts, n=1, lang="xx")
+        assert len(result) <= 1
 
-    def test_ordered_by_frequency(self) -> None:
-        texts = ["x y x y x y a b a b"]
-        result = _extract_top_bigrams(texts, n=2)
-        assert result[0] == "x y"
+    def test_ordered_by_doc_frequency(self) -> None:
+        # "crash bang" in 3 passages, "loud thud" in 2
+        texts = [
+            "crash bang loud thud",
+            "crash bang loud thud",
+            "crash bang noise",
+        ]
+        result = _extract_top_bigrams(texts, n=2, lang="xx")
+        assert result[0] == "crash bang"
 
 
 class TestLexicalDiversity:
@@ -1401,9 +1442,10 @@ class TestLexicalDiversity:
         assert format_vocabulary_note(0.5, threshold=0.4) == ""
 
     def test_vocabulary_note_with_prose_shows_specific_phrases(self) -> None:
+        # "stale air" appears across 2 passages → doc_freq=2 → shown in note
         prose = [
-            "stale air filled the room with stale air",
-            "the stale air was thick and stale air hung low",
+            "stale air filled everything",
+            "thick stale air everywhere",
         ]
         note = format_vocabulary_note(0.3, recent_prose=prose)
         assert "VOCABULARY ALERT" in note
