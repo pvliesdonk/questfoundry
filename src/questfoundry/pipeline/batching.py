@@ -22,13 +22,13 @@ Item = TypeVar("Item")
 _MAX_CONNECTIVITY_RETRIES = 3
 
 
-def is_connectivity_error(exc: Exception) -> bool:
+def is_connectivity_error(exc: Exception, *, _depth: int = 0) -> bool:
     """Check if an exception indicates provider connectivity loss.
 
     Recognises httpx network/timeout errors, Python built-in
     ConnectionError, and QuestFoundry's ProviderConnectionError.
-    Walks the ``__cause__`` chain so LangChain-wrapped errors are
-    also detected.
+    Walks the ``__cause__`` chain (up to 10 levels) so
+    LangChain-wrapped errors are also detected.
     """
     import httpx
 
@@ -45,10 +45,11 @@ def is_connectivity_error(exc: Exception) -> bool:
     ):
         return True
 
-    # LangChain may wrap httpx errors — walk the cause chain
-    cause = exc.__cause__
-    if cause is not None and isinstance(cause, Exception):
-        return is_connectivity_error(cause)
+    # LangChain may wrap httpx errors — walk the cause chain (bounded)
+    if _depth < 10:
+        cause = exc.__cause__
+        if cause is not None and isinstance(cause, Exception):
+            return is_connectivity_error(cause, _depth=_depth + 1)
 
     return False
 
@@ -171,7 +172,8 @@ async def batch_llm_calls(
         await asyncio.gather(*retry_tasks, return_exceptions=True)
         errors = retry_errors
 
-    # Log connectivity loss at ERROR level for visibility (even without hook)
+    # Log connectivity loss at ERROR level for visibility (even without hook).
+    # _is_connectivity_loss guarantees len(errors) >= 2, so errors[0] is safe.
     if _is_connectivity_loss(errors):
         log.error(
             "batch_connectivity_failure",
