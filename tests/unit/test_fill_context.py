@@ -1341,84 +1341,149 @@ class TestExtractTopBigrams:
         assert _extract_top_bigrams([]) == []
         assert _extract_top_bigrams([""]) == []
 
-    def test_no_repeated_bigrams(self) -> None:
-        texts = ["The quick brown fox jumps over a lazy dog"]
+    def test_no_repeated_bigrams_single_passage(self) -> None:
+        # Single passage can't produce doc_freq >= 2
+        texts = ["stale air stale air stale air"]
         assert _extract_top_bigrams(texts) == []
 
-    def test_extracts_repeated_bigrams(self) -> None:
+    def test_extracts_repeated_bigrams_across_passages(self) -> None:
+        # "stale air" appears in 2 passages → doc_freq=2
         texts = [
-            "stale air filled the room with stale air",
-            "the stale air was thick",
+            "stale air filled everything",
+            "thick stale air everywhere",
         ]
         result = _extract_top_bigrams(texts)
         assert "stale air" in result
 
+    def test_stopwords_filtered_for_english(self) -> None:
+        # "the corridor" has a stopword → filtered out despite cross-passage repetition
+        texts = [
+            "the corridor was dark",
+            "the corridor echoed",
+            "the corridor narrowed",
+        ]
+        result = _extract_top_bigrams(texts, lang="en")
+        assert "the corridor" not in result
+
+    def test_no_filtering_for_unknown_language(self) -> None:
+        # Unknown language skips stopword filtering
+        texts = [
+            "the corridor was dark",
+            "the corridor echoed",
+            "the corridor narrowed",
+        ]
+        result = _extract_top_bigrams(texts, lang="xx")
+        assert "the corridor" in result
+
+    def test_doc_freq_not_raw_freq(self) -> None:
+        # Bigram repeated 10x in one passage = doc_freq 1 (below min_count=2)
+        texts = ["crash bang " * 10]
+        assert _extract_top_bigrams(texts) == []
+        # Same bigram in 3 separate passages = doc_freq 3
+        texts = ["crash bang loud", "crash bang noise", "crash bang thud"]
+        result = _extract_top_bigrams(texts, min_count=3)
+        assert "crash bang" in result
+
     def test_respects_min_count(self) -> None:
-        texts = ["one two one two one two"]
+        # "one two" in 3 passages → doc_freq=3
+        texts = ["one two three", "one two four", "one two five"]
         assert _extract_top_bigrams(texts, min_count=3) == ["one two"]
         assert _extract_top_bigrams(texts, min_count=4) == []
 
     def test_limits_to_n(self) -> None:
-        # Repeat many different bigrams
-        texts = ["a b a b c d c d e f e f g h g h"]
-        result = _extract_top_bigrams(texts, n=2)
-        assert len(result) <= 2
+        # Multiple bigrams across multiple passages
+        texts = [
+            "crash bang loud thud",
+            "crash bang loud thud",
+            "crash bang loud thud",
+        ]
+        result = _extract_top_bigrams(texts, n=1, lang="xx")
+        assert len(result) <= 1
 
-    def test_ordered_by_frequency(self) -> None:
-        texts = ["x y x y x y a b a b"]
-        result = _extract_top_bigrams(texts, n=2)
-        assert result[0] == "x y"
+    def test_ordered_by_doc_frequency(self) -> None:
+        # "crash bang" in 3 passages, "loud thud" in 2
+        texts = [
+            "crash bang loud thud",
+            "crash bang loud thud",
+            "crash bang noise",
+        ]
+        result = _extract_top_bigrams(texts, n=2, lang="xx")
+        assert result[0] == "crash bang"
 
 
 class TestLexicalDiversity:
     """Tests for compute_lexical_diversity and format_vocabulary_note."""
 
     def test_empty_input(self) -> None:
-        assert compute_lexical_diversity([]) == 1.0
-        assert compute_lexical_diversity([""]) == 1.0
+        assert compute_lexical_diversity([]) == 10.0
+        assert compute_lexical_diversity([""]) == 10.0
 
     def test_high_diversity(self) -> None:
-        texts = ["The quick brown fox jumps", "over a lazy dog sleeping"]
+        # 43 words, 40 unique → root-TTR = 40/√43 ≈ 6.10
+        texts = [
+            "The quick brown fox jumps over a lazy dog sleeping",
+            "Crimson shadows danced beneath ancient silver moonlight",
+            "Whispered secrets echoed through marble halls of forgotten kingdoms",
+            "Gentle rain cascaded upon weathered stone pathways leading nowhere",
+        ]
         ratio = compute_lexical_diversity(texts)
-        assert ratio > 0.8  # all unique words
+        assert ratio > 4.5  # well above threshold
 
     def test_low_diversity(self) -> None:
-        texts = ["the the the the the", "the the the the the"]
+        # 70 words, only 3 unique → root-TTR = 3/√70 ≈ 0.36
+        texts = ["the the the the the", "the the the the the"] * 7
         ratio = compute_lexical_diversity(texts)
-        assert ratio < 0.2  # only one unique word
+        assert ratio < 1.0  # well below threshold
+
+    def test_root_ttr_is_length_independent(self) -> None:
+        """Root-TTR should not penalise longer text with good vocabulary."""
+        short = ["Crimson shadows danced beneath moonlight"]
+        long = [
+            "Crimson shadows danced beneath moonlight",
+            "Silver rain cascaded upon weathered stone",
+            "Gentle whispers echoed through marble halls",
+            "Ancient secrets lingered in forgotten kingdoms",
+            "Verdant moss crept along crumbling arches",
+        ]
+        short_ratio = compute_lexical_diversity(short)
+        long_ratio = compute_lexical_diversity(long)
+        # Both should be high — raw TTR would penalise the longer text
+        assert short_ratio > 2.0
+        assert long_ratio > 4.0
 
     def test_vocabulary_note_below_threshold(self) -> None:
-        note = format_vocabulary_note(0.3)
+        note = format_vocabulary_note(3.2)
         assert "VOCABULARY ALERT" in note
-        assert "0.30" in note
+        assert "3.20" in note
 
     def test_vocabulary_note_above_threshold(self) -> None:
-        assert format_vocabulary_note(0.5) == ""
-        assert format_vocabulary_note(0.4) == ""
+        assert format_vocabulary_note(5.0) == ""
+        assert format_vocabulary_note(4.5) == ""
 
     def test_vocabulary_note_custom_threshold(self) -> None:
-        assert format_vocabulary_note(0.5, threshold=0.6) != ""
-        assert format_vocabulary_note(0.5, threshold=0.4) == ""
+        assert format_vocabulary_note(5.0, threshold=6.0) != ""
+        assert format_vocabulary_note(5.0, threshold=4.0) == ""
 
     def test_vocabulary_note_with_prose_shows_specific_phrases(self) -> None:
+        # "stale air" appears across 2 passages → doc_freq=2 → shown in note
         prose = [
-            "stale air filled the room with stale air",
-            "the stale air was thick and stale air hung low",
+            "stale air filled everything",
+            "thick stale air everywhere",
         ]
-        note = format_vocabulary_note(0.3, recent_prose=prose)
+        note = format_vocabulary_note(3.2, recent_prose=prose)
         assert "VOCABULARY ALERT" in note
         assert "stale air" in note
         assert "MUST NOT" in note
 
     def test_vocabulary_note_without_prose_shows_generic(self) -> None:
-        note = format_vocabulary_note(0.3)
+        note = format_vocabulary_note(3.2)
         assert "VOCABULARY ALERT" in note
         assert "MUST NOT" not in note
         assert "seek fresh" in note
 
     def test_vocabulary_note_with_prose_no_repeats_shows_generic(self) -> None:
         prose = ["every word here is unique and different"]
-        note = format_vocabulary_note(0.3, recent_prose=prose)
+        note = format_vocabulary_note(3.2, recent_prose=prose)
         assert "VOCABULARY ALERT" in note
         assert "seek fresh" in note
 
