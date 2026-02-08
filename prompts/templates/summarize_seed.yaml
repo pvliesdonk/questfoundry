@@ -83,7 +83,7 @@ system: |
 
   ### Initial Beats ({size_beats_per_path} per path)
   For each opening beat, provide a beat sketch:
-  - id: unique beat identifier
+  - beat_id: unique beat identifier
   - summary: one sentence describing what happens
   - location: primary location entity ID (must be a retained location)
   - entities: key entity IDs present in this beat
