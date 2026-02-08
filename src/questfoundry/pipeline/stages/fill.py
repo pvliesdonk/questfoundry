@@ -277,6 +277,7 @@ class FillStage:
         self.gate = gate or AutoApprovePhaseGate()
         self._callbacks: list[BaseCallbackHandler] | None = None
         self._provider_name: str | None = None
+        self._model_name: str | None = None
         self._serialize_model: BaseChatModel | None = None
         self._serialize_provider_name: str | None = None
         self._size_profile: SizeProfile | None = None
@@ -284,6 +285,7 @@ class FillStage:
         self._max_concurrency: int = 2
         self._lang_instruction: str = ""
         self._two_step: bool = False
+        self._exemplar_strategy: str = "auto"
         # Interactive mode attributes (set in execute(), defaults for direct calls)
         self._interactive: bool = False
         self._user_input_fn: UserInputFn | None = None
@@ -400,6 +402,7 @@ class FillStage:
 
         self._callbacks = callbacks
         self._provider_name = provider_name
+        self._model_name = kwargs.get("model_name")
         self._serialize_model = serialize_model
         self._serialize_provider_name = serialize_provider_name
         self._interactive = interactive
@@ -412,6 +415,7 @@ class FillStage:
         self._language = kwargs.get("language", "en")
         self._lang_instruction = get_output_language_instruction(self._language)
         self._two_step = kwargs.get("two_step", True)
+        self._exemplar_strategy = kwargs.get("exemplar_strategy", "auto")
         self._on_connectivity_error = kwargs.get("on_connectivity_error")
         log.info("stage_start", stage="fill", interactive=interactive)
 
