@@ -1014,7 +1014,7 @@ class TestPhase1Briefs:
             )
             passage_ids.append(pid)
 
-        call_count = 0
+        calls: list[dict[str, Any]] = []
 
         async def _mock_llm_call(
             _model: Any,
@@ -1023,25 +1023,25 @@ class TestPhase1Briefs:
             _schema: type,
             **_kwargs: Any,
         ) -> tuple[BatchedBriefOutput, int, int]:
-            nonlocal call_count
-            call_count += 1
-            count = int(context["passage_count"])
+            calls.append(context)
+            # Identify which passages are in this batch by matching known IDs
+            batch_text = context["passages_batch"]
+            batch_pids = [pid for pid in passage_ids if f"### {pid}\n" in batch_text]
             briefs = []
-            for j in range(count):
-                idx = (call_count - 1) * 5 + j
+            for raw_id in batch_pids:
                 briefs.append(
                     BatchedBriefItem(
-                        passage_id=passage_ids[idx],
+                        passage_id=f"passage::{raw_id}",
                         brief=IllustrationBrief(
                             priority=2,
                             category="scene",
-                            subject=f"Subject {idx}",
+                            subject=f"Subject {raw_id}",
                             entities=[],
-                            composition=f"Comp {idx}",
+                            composition=f"Comp {raw_id}",
                             mood="neutral",
                             style_overrides="",
                             negative="",
-                            caption=f"Caption {idx}",
+                            caption=f"Caption {raw_id}",
                         ),
                         llm_adjustment=1,
                     )
@@ -1052,7 +1052,7 @@ class TestPhase1Briefs:
         with patch.object(stage, "_dress_llm_call", side_effect=_mock_llm_call):
             result = await stage._phase_1_briefs(g, MagicMock())
 
-        assert call_count == 2  # 5 + 2
+        assert len(calls) == 2  # 5 + 2
         assert result.status == "completed"
         assert "7 briefs created" in result.detail
 

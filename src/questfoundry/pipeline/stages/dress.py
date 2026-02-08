@@ -756,8 +756,11 @@ class DressStage:
         )
 
         # Post-process results: apply priority mapping, store on graph
+        # Composition log is best-effort: concurrent batches read a snapshot
+        # from before their wave started; updates accumulate sequentially here.
         for batch_result in results:
             if batch_result is None:
+                log.warning("brief_batch_failed", detail="batch returned no results")
                 continue
             for passage_id, brief_dict, llm_adjustment in batch_result:
                 score = base_scores.get(passage_id, 0)
@@ -1494,44 +1497,6 @@ def map_score_to_priority(score: int) -> int:
     if score >= 1:
         return 3
     return 0
-
-
-def describe_priority_context(graph: Graph, passage_id: str, base_score: int) -> str:
-    """Describe the structural position of a passage for the LLM.
-
-    Args:
-        graph: Story graph.
-        passage_id: Passage node ID.
-        base_score: Pre-computed structural score.
-
-    Returns:
-        Human-readable priority context string.
-    """
-    parts: list[str] = [f"Structural base score: {base_score}"]
-
-    passage = graph.get_node(passage_id)
-    if not passage:
-        return parts[0]
-
-    beat_id = passage.get("from_beat", "")
-    beat = graph.get_node(beat_id) if beat_id else None
-    scene_type = beat.get("scene_type", "") if beat else ""
-    if scene_type:
-        parts.append(f"Scene type: {scene_type}")
-
-    spine_id = get_spine_arc_id(graph)
-    if spine_id:
-        spine = graph.get_node(spine_id)
-        if spine and beat_id in spine.get("sequence", []):
-            parts.append("Position: spine arc (main storyline)")
-        else:
-            parts.append("Position: branch arc")
-
-    choices = graph.get_edges(from_id=passage_id, edge_type="choice")
-    if choices:
-        parts.append(f"Divergence point: {len(choices)} choices")
-
-    return "\n".join(parts)
 
 
 # ---------------------------------------------------------------------------
