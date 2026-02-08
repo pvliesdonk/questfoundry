@@ -9,6 +9,10 @@ from pydantic import ValidationError
 
 from questfoundry.models.dress import (
     ArtDirection,
+    BatchedBriefItem,
+    BatchedBriefOutput,
+    BatchedCodexItem,
+    BatchedCodexOutput,
     CodexEntry,
     DressPhase0Output,
     DressPhase1Output,
@@ -401,6 +405,99 @@ class TestDressPhase2Output:
     def test_empty_entries_rejected(self) -> None:
         with pytest.raises(ValidationError):
             DressPhase2Output(entries=[])
+
+
+# ---------------------------------------------------------------------------
+# Batched output models
+# ---------------------------------------------------------------------------
+
+
+def _make_brief(**overrides: Any) -> IllustrationBrief:
+    defaults: dict[str, Any] = {
+        "priority": 1,
+        "category": "scene",
+        "subject": "subject",
+        "entities": [],
+        "composition": "comp",
+        "mood": "mood",
+        "style_overrides": "",
+        "negative": "",
+        "caption": "caption",
+    }
+    defaults.update(overrides)
+    return IllustrationBrief(**defaults)
+
+
+class TestBatchedBriefItem:
+    def test_valid_item(self) -> None:
+        item = BatchedBriefItem(
+            passage_id="opening",
+            brief=_make_brief(),
+            llm_adjustment=1,
+        )
+        assert item.passage_id == "opening"
+        assert item.llm_adjustment == 1
+
+    def test_empty_passage_id_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            BatchedBriefItem(passage_id="", brief=_make_brief(), llm_adjustment=0)
+
+    def test_adjustment_out_of_range(self) -> None:
+        with pytest.raises(ValidationError):
+            BatchedBriefItem(passage_id="p1", brief=_make_brief(), llm_adjustment=3)
+
+
+class TestBatchedBriefOutput:
+    def test_valid_output(self) -> None:
+        output = BatchedBriefOutput(
+            briefs=[
+                BatchedBriefItem(passage_id="p1", brief=_make_brief(), llm_adjustment=0),
+                BatchedBriefItem(passage_id="p2", brief=_make_brief(), llm_adjustment=-1),
+            ]
+        )
+        assert len(output.briefs) == 2
+
+    def test_empty_briefs_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            BatchedBriefOutput(briefs=[])
+
+
+class TestBatchedCodexItem:
+    def test_valid_item(self) -> None:
+        item = BatchedCodexItem(
+            entity_id="protagonist",
+            entries=[CodexEntry(title="Hero", rank=1, content="A young scholar.")],
+        )
+        assert item.entity_id == "protagonist"
+        assert len(item.entries) == 1
+
+    def test_empty_entity_id_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            BatchedCodexItem(
+                entity_id="",
+                entries=[CodexEntry(title="Hero", rank=1, content="Scholar.")],
+            )
+
+    def test_empty_entries_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            BatchedCodexItem(entity_id="hero", entries=[])
+
+
+class TestBatchedCodexOutput:
+    def test_valid_output(self) -> None:
+        output = BatchedCodexOutput(
+            entities=[
+                BatchedCodexItem(
+                    entity_id="hero",
+                    entries=[CodexEntry(title="Hero", rank=1, content="A warrior.")],
+                ),
+            ]
+        )
+        assert len(output.entities) == 1
+
+    def test_empty_entities_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            BatchedCodexOutput(entities=[])
 
 
 # ---------------------------------------------------------------------------
