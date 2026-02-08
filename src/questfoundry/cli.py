@@ -566,6 +566,21 @@ def _run_stage_command(
 
     context["on_phase_progress"] = _on_phase_progress
 
+    # Connectivity retry hook — prompt user when the LLM server goes down
+    if _is_interactive_tty():
+
+        async def _on_connectivity_error(failed: int, total: int, error_sample: str) -> bool:
+            """Prompt user to retry after LLM connectivity failure."""
+            console.print()
+            console.print(
+                f"[red bold]Connectivity failure:[/red bold] {failed}/{total} batch items failed."
+            )
+            console.print(f"[dim]Error: {error_sample}[/dim]")
+            console.print("[yellow]Verify the LLM server is running before retrying.[/yellow]")
+            return await asyncio.to_thread(typer.confirm, "Retry failed items?", default=True)
+
+        context["on_connectivity_error"] = _on_connectivity_error
+
     if use_interactive:
         log.debug("interactive_mode", mode="enabled")
         context.update(_setup_interactive_context(console))
