@@ -134,7 +134,7 @@ class TestGrowStageExecute:
         pre_grow.set_last_stage("seed")
         checkpoints_dir = tmp_path / "snapshots"
         checkpoints_dir.mkdir(parents=True, exist_ok=True)
-        pre_grow.save(checkpoints_dir / "grow-pre-validate_dag.json")
+        pre_grow.save(checkpoints_dir / "pre-grow.json")
 
         stage = GrowStage(project_path=tmp_path)
         result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
@@ -155,7 +155,7 @@ class TestGrowStageExecute:
         graph.save(tmp_path / "graph.json")
 
         stage = GrowStage(project_path=tmp_path)
-        with pytest.raises(GrowStageError, match="pre-GROW checkpoint"):
+        with pytest.raises(GrowStageError, match="pre-GROW snapshot"):
             await stage.execute(model=mock_model, user_prompt="")
 
     @pytest.mark.asyncio
@@ -173,10 +173,10 @@ class TestGrowStageExecute:
         bad_checkpoint.set_last_stage("dream")
         checkpoints_dir = tmp_path / "snapshots"
         checkpoints_dir.mkdir(parents=True, exist_ok=True)
-        bad_checkpoint.save(checkpoints_dir / "grow-pre-validate_dag.json")
+        bad_checkpoint.save(checkpoints_dir / "pre-grow.json")
 
         stage = GrowStage(project_path=tmp_path)
-        with pytest.raises(GrowStageError, match="Pre-GROW checkpoint"):
+        with pytest.raises(GrowStageError, match="Pre-GROW snapshot"):
             await stage.execute(model=mock_model, user_prompt="")
 
     @pytest.mark.asyncio

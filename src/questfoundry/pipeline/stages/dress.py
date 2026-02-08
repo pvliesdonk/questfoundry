@@ -296,10 +296,32 @@ class DressStage:
 
         # Verify FILL has completed before running DRESS
         last_stage = graph.get_last_stage()
-        if last_stage not in ("fill", "dress"):
+        if last_stage not in ("fill", "dress", "ship"):
             raise DressStageError(
                 f"DRESS requires completed FILL stage. Current last_stage: '{last_stage}'. "
                 f"Run FILL before DRESS."
+            )
+
+        # Snapshot management for re-runs:
+        # Save pre-dress.json on first run (same naming as orchestrator snapshots).
+        # The phase loop uses dress-pre-*.json naming, so pre-dress.json is never
+        # overwritten by phase checkpoints. On re-runs, restore from pre-dress.json.
+        pre_dress_snapshot = resolved_path / "snapshots" / "pre-dress.json"
+        if last_stage == "fill" and not resume_from:
+            pre_dress_snapshot.parent.mkdir(parents=True, exist_ok=True)
+            graph.save(pre_dress_snapshot)
+        elif last_stage != "fill" and not resume_from:
+            if not pre_dress_snapshot.exists():
+                raise DressStageError(
+                    f"DRESS re-run requires the pre-DRESS snapshot ({pre_dress_snapshot}). "
+                    f"Re-run FILL first, or use --resume-from to skip to a specific phase."
+                )
+            graph = Graph.load_from_file(pre_dress_snapshot)
+            log.info(
+                "rerun_restored_checkpoint",
+                stage="dress",
+                from_last_stage=last_stage,
+                snapshot=str(pre_dress_snapshot),
             )
 
         phase_results: list[DressPhaseResult] = []

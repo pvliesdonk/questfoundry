@@ -166,6 +166,13 @@ class TestDressStagePrerequisites:
     @pytest.mark.asyncio()
     async def test_accepts_dress_rerun(self, tmp_path: Path) -> None:
         """DRESS can re-run on a graph already at dress stage."""
+        # Pre-DRESS snapshot (FILL-completed state)
+        pre_dress = Graph()
+        pre_dress.set_last_stage("fill")
+        snapshot_dir = tmp_path / "snapshots"
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        pre_dress.save(snapshot_dir / "pre-dress.json")
+
         g = Graph()
         g.set_last_stage("dress")
         g.save(tmp_path / "graph.json")

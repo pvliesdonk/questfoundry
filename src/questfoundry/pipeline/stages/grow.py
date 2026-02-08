@@ -329,35 +329,40 @@ class GrowStage:
         # re-running GROW should restore the pre-GROW snapshot to avoid accumulating
         # stale GROW/FILL/DRESS nodes.
         last_stage = graph.get_last_stage()
-        if last_stage != "seed":
-            if last_stage in ("grow", "fill", "dress", "ship"):
-                try:
-                    graph = self._load_checkpoint(resolved_path, "validate_dag")
-                    log.info(
-                        "rerun_restored_checkpoint",
-                        stage="grow",
-                        from_last_stage=last_stage,
-                        checkpoint_phase="validate_dag",
-                    )
-                except GrowStageError as e:
-                    raise GrowStageError(
-                        "GROW can be re-run after later stages only if the pre-GROW checkpoint "
-                        "exists. Re-run from SEED or restore "
-                        f"{resolved_path / self.CHECKPOINT_DIR / 'grow-pre-validate_dag.json'}."
-                    ) from e
+        if last_stage not in ("seed", "grow", "fill", "dress", "ship"):
+            raise GrowStageError(
+                f"GROW requires completed SEED stage. Current last_stage: '{last_stage}'. "
+                f"Run SEED before GROW."
+            )
 
-                restored_last_stage = graph.get_last_stage()
-                if restored_last_stage != "seed":
-                    raise GrowStageError(
-                        "Pre-GROW checkpoint does not contain a SEED-completed graph. "
-                        f"Current last_stage: '{restored_last_stage}'. "
-                        "Re-run SEED before GROW."
-                    )
-            else:
+        # Snapshot management for re-runs:
+        # Save pre-grow.json on first run (same naming as orchestrator snapshots).
+        # The phase loop uses grow-pre-*.json naming, so pre-grow.json is never
+        # overwritten by phase checkpoints. On re-runs, restore from pre-grow.json.
+        pre_grow_snapshot = resolved_path / "snapshots" / "pre-grow.json"
+        if last_stage == "seed" and not resume_from:
+            pre_grow_snapshot.parent.mkdir(parents=True, exist_ok=True)
+            graph.save(pre_grow_snapshot)
+        elif last_stage != "seed" and not resume_from:
+            if not pre_grow_snapshot.exists():
                 raise GrowStageError(
-                    f"GROW requires completed SEED stage. Current last_stage: '{last_stage}'. "
-                    f"Run SEED before GROW."
+                    f"GROW re-run requires the pre-GROW snapshot ({pre_grow_snapshot}). "
+                    f"Re-run SEED first, or use --resume-from to skip to a specific phase."
                 )
+            graph = Graph.load_from_file(pre_grow_snapshot)
+            restored_last_stage = graph.get_last_stage()
+            if restored_last_stage != "seed":
+                raise GrowStageError(
+                    "Pre-GROW snapshot does not contain a SEED-completed graph. "
+                    f"Current last_stage: '{restored_last_stage}'. "
+                    "Re-run SEED before GROW."
+                )
+            log.info(
+                "rerun_restored_checkpoint",
+                stage="grow",
+                from_last_stage=last_stage,
+                snapshot=str(pre_grow_snapshot),
+            )
 
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0
