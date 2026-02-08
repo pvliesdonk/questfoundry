@@ -40,7 +40,7 @@ from questfoundry.graph.context import ENTITY_CATEGORIES, strip_scope_prefix
 from questfoundry.graph.dress_context import (
     format_all_entity_visuals,
     format_art_direction_context,
-    format_entity_for_codex,
+    format_entities_batch_for_codex,
     format_passages_batch_for_briefs,
     format_vision_and_entities,
 )
@@ -55,8 +55,8 @@ from questfoundry.graph.fill_context import format_dream_vision, get_spine_arc_i
 from questfoundry.graph.graph import Graph
 from questfoundry.models.dress import (
     BatchedBriefOutput,
+    BatchedCodexOutput,
     DressPhase0Output,
-    DressPhase2Output,
     DressPhaseResult,
 )
 from questfoundry.observability.logging import get_logger
@@ -810,6 +810,8 @@ class DressStage:
     # Phase 2: Codex Entries
     # -------------------------------------------------------------------------
 
+    _CODEX_BATCH_SIZE = 4
+
     async def _phase_2_codex(
         self,
         graph: Graph,
@@ -817,8 +819,9 @@ class DressStage:
     ) -> DressPhaseResult:
         """Phase 2: Generate codex entries for entities.
 
-        Iterates entities, builds per-entity context with codewords,
-        calls LLM for codex tiers, validates, and applies to graph.
+        Batches entities (default 4 per LLM call) to reduce repeated
+        context injection. Shared vision and codewords go in the system
+        message; per-batch entity details in the user message.
         """
         if self._skip_codex:
             log.info("codex_skipped", reason="--no-codex flag")
@@ -840,43 +843,64 @@ class DressStage:
 
         entity_ids = list(entities.keys())
 
-        async def _codex_for_entity(
-            entity_id: str,
-        ) -> tuple[tuple[str, DressPhase2Output], int, int]:
-            entity_details_ctx = format_entity_for_codex(graph, entity_id)
+        # Chunk into batches
+        chunks: list[list[str]] = []
+        for i in range(0, len(entity_ids), self._CODEX_BATCH_SIZE):
+            chunks.append(entity_ids[i : i + self._CODEX_BATCH_SIZE])
+
+        async def _codex_batch(
+            chunk: list[str],
+        ) -> tuple[list[tuple[str, list[dict[str, Any]]]], int, int]:
+            entities_batch = format_entities_batch_for_codex(graph, chunk)
             context = {
                 "vision_context": vision_ctx or "No creative vision available.",
-                "entity_details": entity_details_ctx,
+                "entities_batch": entities_batch,
+                "entity_count": str(len(chunk)),
                 "codewords": codeword_list or "No codewords defined.",
                 "output_language_instruction": self._lang_instruction,
             }
             output, llm_calls, tokens = await self._dress_llm_call(
-                model, "dress_codex", context, DressPhase2Output
+                model, "dress_codex_batch", context, BatchedCodexOutput
             )
-            return (entity_id, output), llm_calls, tokens
+
+            # Validate returned entity_ids match input chunk
+            expected_ids = set(chunk)
+            items: list[tuple[str, list[dict[str, Any]]]] = []
+            for codex_item in output.entities:
+                if codex_item.entity_id not in expected_ids:
+                    log.warning(
+                        "codex_batch_invalid_entity_id",
+                        entity_id=codex_item.entity_id,
+                        expected=list(expected_ids),
+                    )
+                    continue
+                entry_dicts = [e.model_dump() for e in codex_item.entries]
+                items.append((codex_item.entity_id, entry_dicts))
+
+            return items, llm_calls, tokens
 
         results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
-            entity_ids,
-            _codex_for_entity,
+            chunks,
+            _codex_batch,
             self._max_concurrency,
             on_connectivity_error=self._on_connectivity_error,
         )
 
-        for item in results:
-            if item is None:
+        for batch_result in results:
+            if batch_result is None:
+                log.warning("codex_batch_failed", detail="batch returned no results")
                 continue
-            entity_id, output = item
-            entry_dicts = [e.model_dump() for e in output.entries]
-            errs = validate_dress_codex_entries(graph, entity_id, entry_dicts)
-            if errs:
-                validation_warnings += 1
-                log.warning(
-                    "codex_validation_issues",
-                    entity_id=entity_id,
-                    errors=errs,
-                )
-            apply_dress_codex(graph, entity_id, entry_dicts)
-            codex_created += len(entry_dicts)
+            for entity_id, entry_dicts in batch_result:
+                errs = validate_dress_codex_entries(graph, entity_id, entry_dicts)
+                if errs:
+                    validation_warnings += 1
+                    log.warning(
+                        "codex_validation_issues",
+                        entity_id=entity_id,
+                        errors=errs,
+                    )
+                apply_dress_codex(graph, entity_id, entry_dicts)
+                codex_created += len(entry_dicts)
 
         log.info(
             "codex_phase_complete",

@@ -162,6 +162,32 @@ class TestFormatEntityForCodex:
         assert format_entity_for_codex(dress_graph, "character::nonexistent") == ""
 
 
+class TestFormatEntitiesBatchForCodex:
+    def test_formats_multiple_entities(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import format_entities_batch_for_codex
+
+        result = format_entities_batch_for_codex(
+            dress_graph, ["character::protagonist", "character::aldric"]
+        )
+        assert "protagonist" in result
+        assert "aldric" in result
+        assert "court advisor" in result
+
+    def test_skips_missing_entities(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import format_entities_batch_for_codex
+
+        result = format_entities_batch_for_codex(
+            dress_graph, ["character::protagonist", "character::nonexistent"]
+        )
+        assert "protagonist" in result
+        assert "nonexistent" not in result
+
+    def test_empty_list(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import format_entities_batch_for_codex
+
+        assert format_entities_batch_for_codex(dress_graph, []) == ""
+
+
 class TestFormatEntityVisualsForPassage:
     def test_includes_visual_fragments(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_entity_visuals_for_passage
