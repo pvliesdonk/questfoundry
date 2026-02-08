@@ -160,9 +160,19 @@ class TestFillStageExecute:
         self, mock_model: MagicMock, tmp_path: Path, last_stage: str
     ) -> None:
         """FILL should accept re-runs when last_stage is grow or any later stage."""
+        # Create a GROW-completed graph as the pre-FILL snapshot
+        pre_fill = Graph.empty()
+        pre_fill.set_last_stage("grow")
+        pre_fill.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
+
+        # Save the pre-FILL checkpoint (needed for re-runs from fill/dress/ship)
+        snapshot_dir = tmp_path / "snapshots"
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        pre_fill.save(snapshot_dir / "fill-pre-voice.json")
+
+        # The main graph has progressed past GROW
         g = Graph.empty()
         g.set_last_stage(last_stage)
-        # Minimal passage so the stage doesn't fail on missing data
         g.create_node(
             "voice::voice",
             {"type": "voice", "raw_id": "voice", "pov": "third_limited", "tense": "past"},
@@ -177,6 +187,36 @@ class TestFillStageExecute:
             await stage.execute(mock_model, "")
         except FillStageError as e:
             assert "FILL requires completed GROW" not in str(e)
+
+    @pytest.mark.asyncio
+    async def test_rerun_restores_snapshot(self, mock_model: MagicMock, tmp_path: Path) -> None:
+        """Re-running FILL should restore pre-FILL snapshot, removing stale nodes."""
+        # Pre-FILL snapshot: GROW-completed, no voice node
+        pre_fill = Graph.empty()
+        pre_fill.set_last_stage("grow")
+        pre_fill.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
+        snapshot_dir = tmp_path / "snapshots"
+        snapshot_dir.mkdir(parents=True, exist_ok=True)
+        pre_fill.save(snapshot_dir / "fill-pre-voice.json")
+
+        # Main graph: FILL already ran, has voice node
+        g = Graph.empty()
+        g.set_last_stage("fill")
+        g.create_node(
+            "voice::voice",
+            {"type": "voice", "raw_id": "voice", "pov": "first", "tense": "present"},
+        )
+        g.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
+        g.save(tmp_path / "graph.json")
+
+        stage = FillStage(project_path=tmp_path)
+        _mock_implemented_phases(stage)
+        await stage.execute(mock_model, "", project_path=tmp_path)
+
+        # The voice node from the stale graph should NOT cause a conflict
+        # (snapshot restored before phases run)
+        saved = Graph.load(tmp_path)
+        assert saved.get_last_stage() == "fill"
 
     @pytest.mark.asyncio
     async def test_runs_all_phases(

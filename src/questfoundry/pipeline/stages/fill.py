@@ -436,13 +436,31 @@ class FillStage:
             graph = Graph.load(resolved_path)
 
         # Verify GROW has completed before running FILL
-        # Accept "grow" or any later stage (fill/dress/ship) for re-runs
+        # Accept "grow" or any later stage (fill/dress/ship) for re-runs.
+        # When re-running, restore the pre-FILL snapshot to avoid stale
+        # FILL/DRESS nodes (e.g. voice::voice already exists).
         last_stage = graph.get_last_stage()
         if last_stage not in ("grow", "fill", "dress", "ship"):
             raise FillStageError(
                 f"FILL requires completed GROW stage. Current last_stage: '{last_stage}'. "
                 f"Run GROW before FILL."
             )
+        if last_stage != "grow" and not resume_from:
+            first_phase = phases[0][1]  # name of the first phase (e.g. "voice")
+            try:
+                graph = self._load_checkpoint(resolved_path, first_phase)
+                log.info(
+                    "rerun_restored_checkpoint",
+                    stage="fill",
+                    from_last_stage=last_stage,
+                    checkpoint_phase=first_phase,
+                )
+            except FillStageError as e:
+                raise FillStageError(
+                    f"FILL re-run requires the pre-FILL snapshot "
+                    f"({self._get_checkpoint_path(resolved_path, first_phase)}). "
+                    f"Re-run GROW first, or use --resume-from to skip the voice phase."
+                ) from e
 
         phase_results: list[FillPhaseResult] = []
         total_llm_calls = 0
