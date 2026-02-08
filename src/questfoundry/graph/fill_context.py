@@ -160,21 +160,19 @@ def format_exemplar_passages(graph: Graph) -> str:
     if not exemplars or not isinstance(exemplars, list):
         return ""
 
+    valid_exemplars = [p.strip() for p in exemplars if isinstance(p, str) and p.strip()]
+    if not valid_exemplars:
+        return ""
+
     lines: list[str] = [
         "The following passages demonstrate the target voice. Match their style,",
         "rhythm, and register. Do NOT copy their content or imagery.",
         "",
     ]
-    for i, passage in enumerate(exemplars, 1):
-        if not isinstance(passage, str) or not passage.strip():
-            continue
+    for i, passage in enumerate(valid_exemplars, 1):
         lines.append(f"**Example {i}:**")
-        lines.append(passage.strip())
+        lines.append(passage)
         lines.append("")
-
-    # If all exemplars were empty strings, return nothing
-    if len(lines) <= 3:
-        return ""
 
     return "\n".join(lines).strip()
 

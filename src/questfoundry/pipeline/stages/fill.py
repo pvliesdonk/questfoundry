@@ -15,6 +15,7 @@ single LLM call → validate → retry (max 3).
 
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar
@@ -960,14 +961,19 @@ class FillStage:
                 language=self._language,
                 limit=3,
             )
-            # Extract prose content from results
+            # Extract first non-empty section from each document
             for doc in results:
                 sections = doc.get("sections", [])
-                for section in sections:
-                    content = section.get("content", "")
-                    if content and content.strip():
-                        exemplars.append(content.strip())
-                        break  # One passage per document
+                content = next(
+                    (
+                        s.get("content", "").strip()
+                        for s in sections
+                        if s.get("content", "").strip()
+                    ),
+                    None,
+                )
+                if content:
+                    exemplars.append(content)
 
             exemplars = exemplars[:3]
             if len(exemplars) >= 2:
@@ -988,8 +994,12 @@ class FillStage:
                 )
         except ImportError:
             log.warning("ifcraftcorpus_not_available", fallback="llm")
-        except Exception:
-            log.warning("corpus_exemplar_search_failed", exc_info=True)
+        except (RuntimeError, ValueError, KeyError, OSError) as exc:
+            log.warning(
+                "corpus_exemplar_search_failed",
+                error_type=type(exc).__name__,
+                exc_info=True,
+            )
 
         # Step 2: LLM fallback — generate story-specific exemplars
         log.info("exemplar_fallback_to_llm", corpus_matches=len(exemplars))
@@ -1059,18 +1069,34 @@ class FillStage:
             lower = text.lower()
 
             # POV pronoun check
-            if pov == "first" and " i " not in f" {lower} ":
+            if pov == "first" and not re.search(r"\bi('m|'ve|'d|'ll)?\b", lower):
                 log.warning(
                     "exemplar_pov_drift",
                     exemplar=i + 1,
                     expected_pov=pov,
-                    hint="no first-person pronoun found",
+                    hint="no first-person pronoun ('I', 'I'm', etc.) found",
+                )
+            elif pov == "second" and not re.search(r"\byou\b", lower):
+                log.warning(
+                    "exemplar_pov_drift",
+                    exemplar=i + 1,
+                    expected_pov=pov,
+                    hint="no second-person pronoun found",
+                )
+            elif pov.startswith("third") and not re.search(r"\b(he|she|they|it)\b", lower):
+                log.warning(
+                    "exemplar_pov_drift",
+                    exemplar=i + 1,
+                    expected_pov=pov,
+                    hint="no third-person pronoun found",
                 )
 
-            # Avoid-words check
+            # Avoid-words check (word boundaries prevent substring false positives)
             if isinstance(avoid_words, list):
                 for word in avoid_words:
-                    if isinstance(word, str) and word.lower() in lower:
+                    if isinstance(word, str) and re.search(
+                        rf"\b{re.escape(word.lower())}\b", lower
+                    ):
                         log.warning(
                             "exemplar_avoid_word",
                             exemplar=i + 1,
@@ -1549,7 +1575,6 @@ class FillStage:
         Deterministic checks on generated prose — no LLM calls.
         Flags passages with flat_prose for revision in Phase 3.
         """
-        import re
         import statistics
 
         _has_rapidfuzz = False

@@ -368,7 +368,9 @@ class TestExemplarPhase:
 
 
 class TestExemplarValidation:
-    def test_pov_check_warns(self, stage: FillStage, caplog: pytest.LogCaptureFixture) -> None:
+    def test_pov_first_warns_when_missing(
+        self, stage: FillStage, caplog: pytest.LogCaptureFixture
+    ) -> None:
         """First-person voice with no 'I' pronoun logs warning."""
         voice_data: dict[str, object] = {
             "pov": "first",
@@ -378,7 +380,19 @@ class TestExemplarValidation:
         stage._validate_exemplars(voice_data, ["The corridor stretched on."])
         assert any("exemplar_pov_drift" in r.message for r in caplog.records)
 
-    def test_no_pov_warning_when_present(
+    def test_pov_first_accepts_contractions(
+        self, stage: FillStage, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """First-person contractions like I'm, I've should pass."""
+        voice_data: dict[str, object] = {
+            "pov": "first",
+            "avoid_words": [],
+        }
+        stage._language = "en"
+        stage._validate_exemplars(voice_data, ["I'm walking down the corridor."])
+        assert not any("exemplar_pov_drift" in r.message for r in caplog.records)
+
+    def test_pov_first_accepts_bare_i(
         self, stage: FillStage, caplog: pytest.LogCaptureFixture
     ) -> None:
         voice_data: dict[str, object] = {
@@ -389,14 +403,71 @@ class TestExemplarValidation:
         stage._validate_exemplars(voice_data, ["I walked down the corridor."])
         assert not any("exemplar_pov_drift" in r.message for r in caplog.records)
 
+    def test_pov_second_warns_when_missing(
+        self, stage: FillStage, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        voice_data: dict[str, object] = {
+            "pov": "second",
+            "avoid_words": [],
+        }
+        stage._language = "en"
+        stage._validate_exemplars(voice_data, ["The corridor stretched on."])
+        assert any("exemplar_pov_drift" in r.message for r in caplog.records)
+
+    def test_pov_second_accepts_you(
+        self, stage: FillStage, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        voice_data: dict[str, object] = {
+            "pov": "second",
+            "avoid_words": [],
+        }
+        stage._language = "en"
+        stage._validate_exemplars(voice_data, ["You walk down the corridor."])
+        assert not any("exemplar_pov_drift" in r.message for r in caplog.records)
+
+    def test_pov_third_warns_when_missing(
+        self, stage: FillStage, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        voice_data: dict[str, object] = {
+            "pov": "third_limited",
+            "avoid_words": [],
+        }
+        stage._language = "en"
+        stage._validate_exemplars(voice_data, ["The corridor stretched on."])
+        assert any("exemplar_pov_drift" in r.message for r in caplog.records)
+
+    def test_pov_third_accepts_pronouns(
+        self, stage: FillStage, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Third-person POV with he/she/they should not warn."""
+        voice_data: dict[str, object] = {
+            "pov": "third_limited",
+            "avoid_words": [],
+        }
+        stage._language = "en"
+        stage._validate_exemplars(voice_data, ["She walked away."])
+        assert not any("exemplar_pov_drift" in r.message for r in caplog.records)
+
     def test_avoid_words_warns(self, stage: FillStage, caplog: pytest.LogCaptureFixture) -> None:
         voice_data: dict[str, object] = {
             "pov": "third_limited",
             "avoid_words": ["suddenly"],
         }
         stage._language = "en"
-        stage._validate_exemplars(voice_data, ["Suddenly the door opened."])
+        stage._validate_exemplars(voice_data, ["She suddenly opened the door."])
         assert any("exemplar_avoid_word" in r.message for r in caplog.records)
+
+    def test_avoid_words_no_substring_match(
+        self, stage: FillStage, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Avoid word 'is' should not flag 'his' (word boundary check)."""
+        voice_data: dict[str, object] = {
+            "pov": "third_limited",
+            "avoid_words": ["is"],
+        }
+        stage._language = "en"
+        stage._validate_exemplars(voice_data, ["He took his coat and left."])
+        assert not any("exemplar_avoid_word" in r.message for r in caplog.records)
 
     def test_non_english_skips_validation(
         self, stage: FillStage, caplog: pytest.LogCaptureFixture
@@ -409,15 +480,3 @@ class TestExemplarValidation:
         stage._validate_exemplars(voice_data, ["Plotseling opende de deur."])
         assert not any("exemplar_pov_drift" in r.message for r in caplog.records)
         assert not any("exemplar_avoid_word" in r.message for r in caplog.records)
-
-    def test_third_person_no_pov_warning(
-        self, stage: FillStage, caplog: pytest.LogCaptureFixture
-    ) -> None:
-        """Third-person POV should not trigger first-person pronoun check."""
-        voice_data: dict[str, object] = {
-            "pov": "third_limited",
-            "avoid_words": [],
-        }
-        stage._language = "en"
-        stage._validate_exemplars(voice_data, ["She walked away."])
-        assert not any("exemplar_pov_drift" in r.message for r in caplog.records)
