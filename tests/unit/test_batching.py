@@ -4,9 +4,14 @@ from __future__ import annotations
 
 import asyncio
 
+import httpx
 import pytest
 
-from questfoundry.pipeline.batching import batch_llm_calls
+from questfoundry.pipeline.batching import batch_llm_calls, is_connectivity_error
+
+# ---------------------------------------------------------------------------
+# Existing tests (unchanged)
+# ---------------------------------------------------------------------------
 
 
 @pytest.mark.asyncio
@@ -153,3 +158,234 @@ async def test_batch_aggregates_calls_and_tokens() -> None:
     assert calls == 1 + 2 + 3  # 6
     assert tokens == 100 + 200 + 300  # 600
     assert errors == []
+
+
+# ---------------------------------------------------------------------------
+# is_connectivity_error tests
+# ---------------------------------------------------------------------------
+
+
+class TestIsConnectivityError:
+    """Tests for the is_connectivity_error classifier."""
+
+    def test_httpx_connect_error(self) -> None:
+        """httpx.ConnectError is a connectivity error."""
+        exc = httpx.ConnectError("All connection attempts failed")
+        assert is_connectivity_error(exc) is True
+
+    def test_httpx_read_timeout(self) -> None:
+        """httpx.ReadTimeout is a connectivity error."""
+        exc = httpx.ReadTimeout("timed out")
+        assert is_connectivity_error(exc) is True
+
+    def test_httpx_connect_timeout(self) -> None:
+        """httpx.ConnectTimeout is a connectivity error."""
+        exc = httpx.ConnectTimeout("timed out")
+        assert is_connectivity_error(exc) is True
+
+    def test_python_connection_error(self) -> None:
+        """Python built-in ConnectionError is a connectivity error."""
+        exc = ConnectionRefusedError("Connection refused")
+        assert is_connectivity_error(exc) is True
+
+    def test_validation_error_is_not_connectivity(self) -> None:
+        """ValueError is NOT a connectivity error."""
+        assert is_connectivity_error(ValueError("bad data")) is False
+
+    def test_runtime_error_is_not_connectivity(self) -> None:
+        """RuntimeError is NOT a connectivity error."""
+        assert is_connectivity_error(RuntimeError("something broke")) is False
+
+    def test_wrapped_cause_single_level(self) -> None:
+        """LangChain-wrapped httpx error detected via __cause__."""
+        inner = httpx.ConnectError("All connection attempts failed")
+        outer = RuntimeError("invocation failed")
+        outer.__cause__ = inner
+        assert is_connectivity_error(outer) is True
+
+    def test_wrapped_cause_double_level(self) -> None:
+        """Double-wrapped httpx error detected via nested __cause__."""
+        innermost = httpx.ConnectError("refused")
+        middle = RuntimeError("retry failed")
+        middle.__cause__ = innermost
+        outer = RuntimeError("LLM call failed")
+        outer.__cause__ = middle
+        assert is_connectivity_error(outer) is True
+
+    def test_wrapped_non_connectivity_cause(self) -> None:
+        """Wrapped ValueError cause is NOT connectivity."""
+        inner = ValueError("bad schema")
+        outer = RuntimeError("invocation failed")
+        outer.__cause__ = inner
+        assert is_connectivity_error(outer) is False
+
+
+# ---------------------------------------------------------------------------
+# Connectivity retry tests
+# ---------------------------------------------------------------------------
+
+
+class TestBatchConnectivityRetry:
+    """Tests for the connectivity retry loop in batch_llm_calls."""
+
+    @pytest.mark.asyncio
+    async def test_retry_succeeds_on_second_attempt(self) -> None:
+        """All items fail with ConnectError, hook says retry, second attempt works."""
+        attempt = 0
+
+        async def _fail_then_succeed(item: int) -> tuple[int, int, int]:
+            nonlocal attempt
+            if attempt == 0:
+                raise httpx.ConnectError("server down")
+            return item * 10, 1, 100
+
+        hook_calls: list[tuple[int, int]] = []
+
+        async def _hook(failed: int, total: int, _msg: str) -> bool:
+            nonlocal attempt
+            hook_calls.append((failed, total))
+            attempt = 1  # Mark server as "back up"
+            return True
+
+        items = [1, 2, 3]
+        results, calls, _tokens, errors = await batch_llm_calls(
+            items, _fail_then_succeed, on_connectivity_error=_hook
+        )
+
+        assert results == [10, 20, 30]
+        assert errors == []
+        assert calls == 3
+        assert len(hook_calls) == 1
+        assert hook_calls[0] == (3, 3)
+
+    @pytest.mark.asyncio
+    async def test_retry_declined(self) -> None:
+        """All items fail, hook returns False — errors are preserved."""
+
+        async def _always_fail(_item: int) -> tuple[int, int, int]:
+            raise httpx.ConnectError("server down")
+
+        async def _decline(_f: int, _t: int, _m: str) -> bool:
+            return False
+
+        items = [1, 2, 3]
+        results, _calls, _tokens, errors = await batch_llm_calls(
+            items, _always_fail, on_connectivity_error=_decline
+        )
+
+        assert all(r is None for r in results)
+        assert len(errors) == 3
+
+    @pytest.mark.asyncio
+    async def test_no_hook_no_retry(self) -> None:
+        """Without on_connectivity_error, batch failures are not retried."""
+
+        async def _always_fail(_item: int) -> tuple[int, int, int]:
+            raise httpx.ConnectError("server down")
+
+        items = [1, 2, 3]
+        results, _calls, _tokens, errors = await batch_llm_calls(items, _always_fail)
+
+        assert all(r is None for r in results)
+        assert len(errors) == 3
+
+    @pytest.mark.asyncio
+    async def test_max_retries_respected(self) -> None:
+        """Retry loop stops after _MAX_CONNECTIVITY_RETRIES attempts."""
+        hook_calls = 0
+
+        async def _always_fail(_item: int) -> tuple[int, int, int]:
+            raise httpx.ConnectError("server down")
+
+        async def _always_retry(_f: int, _t: int, _m: str) -> bool:
+            nonlocal hook_calls
+            hook_calls += 1
+            return True
+
+        items = [1, 2, 3]
+        results, _calls, _tokens, errors = await batch_llm_calls(
+            items, _always_fail, on_connectivity_error=_always_retry
+        )
+
+        # 3 retries max (from _MAX_CONNECTIVITY_RETRIES)
+        assert hook_calls == 3
+        assert all(r is None for r in results)
+        assert len(errors) == 3
+
+    @pytest.mark.asyncio
+    async def test_mixed_errors_no_retry(self) -> None:
+        """Mix of connectivity and validation errors — no retry triggered."""
+        hook_called = False
+
+        async def _mixed_fail(item: int) -> tuple[int, int, int]:
+            if item % 2 == 0:
+                raise httpx.ConnectError("server down")
+            raise ValueError("bad data")
+
+        async def _hook(_f: int, _t: int, _m: str) -> bool:
+            nonlocal hook_called
+            hook_called = True  # pragma: no cover
+            return True  # pragma: no cover
+
+        items = [0, 1, 2, 3]
+        results, _calls, _tokens, errors = await batch_llm_calls(
+            items, _mixed_fail, on_connectivity_error=_hook
+        )
+
+        assert not hook_called
+        assert all(r is None for r in results)
+        assert len(errors) == 4
+
+    @pytest.mark.asyncio
+    async def test_single_connectivity_error_no_retry(self) -> None:
+        """Only 1 item fails with ConnectError (< threshold of 2) — no retry."""
+        hook_called = False
+
+        async def _one_fails(item: int) -> tuple[int, int, int]:
+            if item == 0:
+                raise httpx.ConnectError("server blip")
+            return item * 10, 1, 10
+
+        async def _hook(_f: int, _t: int, _m: str) -> bool:
+            nonlocal hook_called
+            hook_called = True  # pragma: no cover
+            return True  # pragma: no cover
+
+        items = [0, 1, 2]
+        results, _calls, _tokens, errors = await batch_llm_calls(
+            items, _one_fails, on_connectivity_error=_hook
+        )
+
+        assert not hook_called
+        assert results[0] is None
+        assert results[1] == 10
+        assert results[2] == 20
+        assert len(errors) == 1
+
+    @pytest.mark.asyncio
+    async def test_retry_only_failed_items(self) -> None:
+        """On retry, only previously failed items are retried — successful ones kept."""
+        attempt_counts: dict[int, int] = {}
+
+        async def _fail_first_two(item: int) -> tuple[int, int, int]:
+            attempt_counts[item] = attempt_counts.get(item, 0) + 1
+            # Items 0 and 1 fail on first attempt, succeed on retry
+            if item < 2 and attempt_counts[item] == 1:
+                raise httpx.ConnectError("server down")
+            return item * 10, 1, 100
+
+        async def _retry(_f: int, _t: int, _m: str) -> bool:
+            return True
+
+        items = [0, 1, 2]
+        results, _calls, _tokens, errors = await batch_llm_calls(
+            items, _fail_first_two, on_connectivity_error=_retry
+        )
+
+        assert results == [0, 10, 20]
+        assert errors == []
+        # Item 2 should only have been called once (it succeeded first time)
+        assert attempt_counts[2] == 1
+        # Items 0 and 1 should have been called twice
+        assert attempt_counts[0] == 2
+        assert attempt_counts[1] == 2
