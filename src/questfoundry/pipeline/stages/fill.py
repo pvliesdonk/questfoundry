@@ -447,26 +447,27 @@ class FillStage:
             )
 
         # Snapshot management for re-runs:
-        # - On first run (last_stage == "grow"): save clean GROW-completed state
-        #   to "fill-pre-initial.json" — this is never overwritten by the phase loop
-        # - On re-runs (last_stage != "grow"): restore from that checkpoint
+        # Save pre-fill.json on first run (same naming as orchestrator snapshots
+        # like pre-dream.json, pre-seed.json). The phase loop uses fill-pre-*.json
+        # naming, so pre-fill.json is never overwritten by phase checkpoints.
+        # On re-runs, restore from pre-fill.json to avoid stale nodes.
+        pre_fill_snapshot = resolved_path / "snapshots" / "pre-fill.json"
         if last_stage == "grow" and not resume_from:
-            self._save_checkpoint(graph, resolved_path, "initial")
+            pre_fill_snapshot.parent.mkdir(parents=True, exist_ok=True)
+            graph.save(pre_fill_snapshot)
         elif last_stage != "grow" and not resume_from:
-            try:
-                graph = self._load_checkpoint(resolved_path, "initial")
-                log.info(
-                    "rerun_restored_checkpoint",
-                    stage="fill",
-                    from_last_stage=last_stage,
-                    checkpoint_phase="initial",
-                )
-            except FillStageError as e:
+            if not pre_fill_snapshot.exists():
                 raise FillStageError(
-                    f"FILL re-run requires the pre-FILL snapshot "
-                    f"({self._get_checkpoint_path(resolved_path, 'initial')}). "
+                    f"FILL re-run requires the pre-FILL snapshot ({pre_fill_snapshot}). "
                     f"Re-run GROW first, or use --resume-from to skip the voice phase."
-                ) from e
+                )
+            graph = Graph.load_from_file(pre_fill_snapshot)
+            log.info(
+                "rerun_restored_checkpoint",
+                stage="fill",
+                from_last_stage=last_stage,
+                snapshot=str(pre_fill_snapshot),
+            )
 
         phase_results: list[FillPhaseResult] = []
         total_llm_calls = 0
