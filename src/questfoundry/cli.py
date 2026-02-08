@@ -1768,8 +1768,8 @@ def generate_images(
                     f"Priority {dress_min + 1}-{min_priority} briefs were not generated.\n"
                     f"Re-run [bold]qf dress --min-priority {min_priority}[/bold] to generate them."
                 )
-    except Exception:
-        pass  # Graph load failure will be caught by run_generate_only
+    except Exception as e:
+        log.debug("priority_check_failed", error=str(e))
 
     console.print()
     console.print(f"[dim]Generating images with {resolved_provider}...[/dim]")
