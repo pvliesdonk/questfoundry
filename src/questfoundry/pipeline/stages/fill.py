@@ -45,6 +45,7 @@ from questfoundry.graph.fill_context import (
     format_entity_arc_context,
     format_entity_states,
     format_entry_states,
+    format_exemplar_passages,
     format_grow_summary,
     format_introduction_guidance,
     format_lookahead_context,
@@ -1213,6 +1214,7 @@ class FillStage:
 
             context = {
                 "voice_document": voice_context,
+                "exemplar_passages": format_exemplar_passages(graph),
                 "story_identity": story_identity_context,
                 "passage_id": passage.get("raw_id", passage_id),
                 "beat_summary": beat_summary,
