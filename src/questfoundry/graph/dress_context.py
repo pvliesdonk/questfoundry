@@ -279,3 +279,66 @@ def format_entity_visuals_for_passage(graph: Graph, passage_id: str) -> str:
                 lines.append(f"- **{raw_eid}**: {fragment}")
 
     return "\n".join(lines) if lines else ""
+
+
+def format_passages_batch_for_briefs(
+    graph: Graph,
+    passage_ids: list[str],
+    base_scores: dict[str, int],
+) -> str:
+    """Format a batch of passages for illustration brief generation.
+
+    Combines per-passage context (prose, metadata) with priority context
+    into a single markdown string for batched brief prompts.
+
+    Args:
+        graph: Graph containing passage, beat, and entity nodes.
+        passage_ids: Passage node IDs in this batch.
+        base_scores: Pre-computed structural scores keyed by passage_id.
+
+    Returns:
+        Formatted batch string with sections per passage.
+    """
+    from questfoundry.pipeline.stages.dress import describe_priority_context
+
+    sections: list[str] = []
+    for pid in passage_ids:
+        raw_id = (graph.get_node(pid) or {}).get("raw_id", strip_scope_prefix(pid))
+        passage_ctx = format_passage_for_brief(graph, pid)
+        score = base_scores.get(pid, 0)
+        priority_ctx = describe_priority_context(graph, pid, score)
+        sections.append(f"### {raw_id}\n{passage_ctx}\n**Priority:** {priority_ctx}")
+
+    return "\n\n".join(sections)
+
+
+def format_all_entity_visuals(graph: Graph, passage_ids: list[str]) -> str:
+    """Collect deduplicated entity visual references for a batch of passages.
+
+    Args:
+        graph: Graph containing passage, entity, and entity_visual nodes.
+        passage_ids: Passage node IDs in this batch.
+
+    Returns:
+        Formatted visual reference strings, or empty string if none.
+    """
+    seen: set[str] = set()
+    lines: list[str] = []
+
+    for pid in passage_ids:
+        passage = graph.get_node(pid)
+        if not passage:
+            continue
+        for eid in passage.get("entities", []):
+            raw_eid = strip_scope_prefix(eid)
+            if raw_eid in seen:
+                continue
+            seen.add(raw_eid)
+            visual_id = f"entity_visual::{raw_eid}"
+            visual = graph.get_node(visual_id)
+            if visual:
+                fragment = visual.get("reference_prompt_fragment", "")
+                if fragment:
+                    lines.append(f"- **{raw_eid}**: {fragment}")
+
+    return "\n".join(lines) if lines else ""
