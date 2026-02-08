@@ -137,8 +137,8 @@ def apply_dress_codex(
         from questfoundry.graph.errors import NodeNotFoundError
 
         raise NodeNotFoundError(
-            f"entity::{raw_entity_id}",
-            context="codex entity reference",
+            raw_entity_id,
+            context=f"codex entity reference (tried {', '.join(ENTITY_CATEGORIES)} and legacy entity:: prefix)",
         )
     created_ids: list[str] = []
 
