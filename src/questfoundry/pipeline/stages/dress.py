@@ -38,10 +38,10 @@ from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph.context import ENTITY_CATEGORIES, strip_scope_prefix
 from questfoundry.graph.dress_context import (
+    format_all_entity_visuals,
     format_art_direction_context,
     format_entity_for_codex,
-    format_entity_visuals_for_passage,
-    format_passage_for_brief,
+    format_passages_batch_for_briefs,
     format_vision_and_entities,
 )
 from questfoundry.graph.dress_mutations import (
@@ -54,8 +54,8 @@ from questfoundry.graph.dress_mutations import (
 from questfoundry.graph.fill_context import format_dream_vision, get_spine_arc_id
 from questfoundry.graph.graph import Graph
 from questfoundry.models.dress import (
+    BatchedBriefOutput,
     DressPhase0Output,
-    DressPhase1Output,
     DressPhase2Output,
     DressPhaseResult,
 )
@@ -657,6 +657,8 @@ class DressStage:
     # Phase 1: Illustration Briefs
     # -------------------------------------------------------------------------
 
+    _BRIEF_BATCH_SIZE = 5
+
     async def _phase_1_briefs(
         self,
         graph: Graph,
@@ -664,38 +666,51 @@ class DressStage:
     ) -> DressPhaseResult:
         """Phase 1: Generate illustration briefs for passages.
 
-        Iterates all passages, computes structural priority, calls LLM
-        for each to generate a brief, and applies to graph.
+        Batches passages (default 5 per LLM call) to reduce repeated
+        context injection. Shared art direction and entity visuals go
+        in the system message; per-batch passage data in the user message.
         """
         passages = graph.get_nodes_by_type("passage")
         if not passages:
             return DressPhaseResult(phase="briefs", status="completed", detail="no passages")
 
         art_direction_ctx = format_art_direction_context(graph)
-        total_llm_calls = 0
-        total_tokens = 0
         briefs_created = 0
         briefs_skipped = 0
 
-        # Composition log: accumulate recent compositions/moods to inject
-        # as anti-repetition signal into subsequent brief prompts.
-        recent_compositions: list[str] = []
-
+        # Collect passage IDs with prose and pre-compute structural scores
+        eligible_ids: list[str] = []
+        base_scores: dict[str, int] = {}
         for passage_id, passage_data in passages.items():
-            # Skip passages without prose
             if not passage_data.get("prose"):
                 briefs_skipped += 1
                 continue
+            eligible_ids.append(passage_id)
+            base_scores[passage_id] = compute_structural_score(graph, passage_id)
 
-            # Compute structural priority
-            base_score = compute_structural_score(graph, passage_id)
+        if not eligible_ids:
+            cover_created = _create_cover_brief(graph)
+            return DressPhaseResult(
+                phase="briefs",
+                status="completed",
+                detail=f"0 briefs created, {briefs_skipped} skipped"
+                + (", cover added" if cover_created else ""),
+            )
 
-            # Build context
-            passage_ctx = format_passage_for_brief(graph, passage_id)
-            entity_visuals_ctx = format_entity_visuals_for_passage(graph, passage_id)
-            priority_ctx = describe_priority_context(graph, passage_id, base_score)
+        # Chunk into batches
+        chunks: list[list[str]] = []
+        for i in range(0, len(eligible_ids), self._BRIEF_BATCH_SIZE):
+            chunks.append(eligible_ids[i : i + self._BRIEF_BATCH_SIZE])
 
-            # Format composition log (last 5 entries)
+        # Composition log: accumulate across batches for anti-repetition
+        recent_compositions: list[str] = []
+
+        async def _brief_batch(
+            chunk: list[str],
+        ) -> tuple[list[tuple[str, dict[str, Any], int]], int, int]:
+            passages_batch = format_passages_batch_for_briefs(graph, chunk, base_scores)
+            entity_visuals = format_all_entity_visuals(graph, chunk)
+
             if recent_compositions:
                 comp_log = "Recent briefs used these compositions — DO NOT repeat:\n"
                 comp_log += "\n".join(f"- {c}" for c in recent_compositions[-5:])
@@ -704,48 +719,69 @@ class DressStage:
 
             context = {
                 "art_direction": art_direction_ctx,
-                "passage_context": passage_ctx,
-                "entity_visuals": entity_visuals_ctx or "No entity visual profiles available.",
-                "priority_context": priority_ctx,
+                "entity_visuals": entity_visuals or "No entity visual profiles available.",
                 "composition_log": comp_log,
+                "passages_batch": passages_batch,
+                "passage_count": str(len(chunk)),
                 "output_language_instruction": self._lang_instruction,
             }
 
             output, llm_calls, tokens = await self._dress_llm_call(
                 model,
-                "dress_brief",
+                "dress_brief_batch",
                 context,
-                DressPhase1Output,
+                BatchedBriefOutput,
                 creative=True,
                 strategy=StructuredOutputStrategy.JSON_MODE,
             )
-            total_llm_calls += llm_calls
-            total_tokens += tokens
 
-            # Combine structural score + LLM adjustment
-            final_priority = map_score_to_priority(base_score + output.llm_adjustment)
-            if final_priority < 1:
-                briefs_skipped += 1
-                log.debug(
-                    "brief_skipped",
-                    passage_id=passage_id,
-                    base_score=base_score,
-                    llm_adj=output.llm_adjustment,
+            # Extract per-item results
+            items: list[tuple[str, dict[str, Any], int]] = []
+            for brief_item in output.briefs:
+                items.append(
+                    (
+                        brief_item.passage_id,
+                        brief_item.brief.model_dump(),
+                        brief_item.llm_adjustment,
+                    )
                 )
+
+            return items, llm_calls, tokens
+
+        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+            chunks,
+            _brief_batch,
+            self._max_concurrency,
+            on_connectivity_error=self._on_connectivity_error,
+        )
+
+        # Post-process results: apply priority mapping, store on graph
+        for batch_result in results:
+            if batch_result is None:
                 continue
+            for passage_id, brief_dict, llm_adjustment in batch_result:
+                score = base_scores.get(passage_id, 0)
+                final_priority = map_score_to_priority(score + llm_adjustment)
+                if final_priority < 1:
+                    briefs_skipped += 1
+                    log.debug(
+                        "brief_skipped",
+                        passage_id=passage_id,
+                        base_score=score,
+                        llm_adj=llm_adjustment,
+                    )
+                    continue
 
-            brief_dict = output.brief.model_dump()
-            # Override LLM's priority with our computed value (structural + adjustment)
-            brief_dict["priority"] = final_priority
-            apply_dress_brief(graph, passage_id, brief_dict, final_priority)
-            briefs_created += 1
+                brief_dict["priority"] = final_priority
+                apply_dress_brief(graph, passage_id, brief_dict, final_priority)
+                briefs_created += 1
 
-            # Log composition for anti-repetition in subsequent briefs
-            comp = brief_dict.get("composition", "")
-            mood = brief_dict.get("mood", "")
-            category = brief_dict.get("category", "")
-            if comp or mood:
-                recent_compositions.append(f"{category}: {comp} | mood: {mood}")
+                # Log composition for anti-repetition
+                comp = brief_dict.get("composition", "")
+                mood = brief_dict.get("mood", "")
+                category = brief_dict.get("category", "")
+                if comp or mood:
+                    recent_compositions.append(f"{category}: {comp} | mood: {mood}")
 
         # Create cover brief from vision data
         cover_created = _create_cover_brief(graph)
