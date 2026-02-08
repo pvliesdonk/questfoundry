@@ -1475,6 +1475,7 @@ def dress(
         str | None,
         typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
     ] = None,
+    min_priority: MinPriorityOption = 2,
     no_codex: Annotated[
         bool,
         typer.Option("--no-codex", help="Skip codex generation (Phase 2)"),
@@ -1485,6 +1486,10 @@ def dress(
     Establishes visual identity, generates illustration briefs for
     passages, creates codex entries for entities, and optionally
     generates images via an image provider.
+
+    By default, only generates briefs for priority 1-2 passages
+    (--min-priority 2). Use --min-priority 3 to generate briefs
+    for all passages.
 
     Requires FILL stage to have completed first.
     """
@@ -1508,6 +1513,7 @@ def dress(
         resume_from=resume_from,
         image_provider=image_provider,
         image_budget=image_budget,
+        min_priority=min_priority,
         language=language,
         skip_codex=no_codex,
     )
@@ -1746,6 +1752,24 @@ def generate_images(
         else:
             status_icon = "[yellow]○[/yellow]"
         console.print(f"  {status_icon} {phase}{detail_str}")
+
+    # Warn if requesting briefs that were never generated
+    from questfoundry.graph.graph import Graph
+
+    try:
+        _graph = Graph.load(project_path)
+        brief_config = _graph.get_node("dress_meta::brief_config")
+        if brief_config:
+            dress_min = brief_config.get("min_priority", 3)
+            if min_priority > dress_min:
+                console.print(
+                    f"[yellow]Warning:[/yellow] Requesting priority {min_priority} briefs, "
+                    f"but dress was run with --min-priority {dress_min}. "
+                    f"Priority {dress_min + 1}-{min_priority} briefs were not generated.\n"
+                    f"Re-run [bold]qf dress --min-priority {min_priority}[/bold] to generate them."
+                )
+    except Exception as e:
+        log.debug("priority_check_failed", error=str(e))
 
     console.print()
     console.print(f"[dim]Generating images with {resolved_provider}...[/dim]")

@@ -678,15 +678,42 @@ class DressStage:
         briefs_created = 0
         briefs_skipped = 0
 
-        # Collect passage IDs with prose and pre-compute structural scores
+        # Collect passage IDs with prose and pre-compute structural scores.
+        # Pre-filter by min_priority: skip passages whose *best possible*
+        # priority (structural score + max LLM adjustment of +2) would still
+        # exceed the threshold. This avoids wasting LLM tokens on passages
+        # that can't possibly make the cut.
         eligible_ids: list[str] = []
         base_scores: dict[str, int] = {}
+        priority_filtered = 0
         for passage_id, passage_data in passages.items():
             if not passage_data.get("prose"):
                 briefs_skipped += 1
                 continue
+            score = compute_structural_score(graph, passage_id)
+            best_possible = map_score_to_priority(score + 2)
+            if best_possible > self._min_priority or best_possible == 0:
+                priority_filtered += 1
+                continue
             eligible_ids.append(passage_id)
-            base_scores[passage_id] = compute_structural_score(graph, passage_id)
+            base_scores[passage_id] = score
+
+        if priority_filtered:
+            log.info(
+                "briefs_priority_filtered",
+                min_priority=self._min_priority,
+                filtered=priority_filtered,
+            )
+
+        # Store the min_priority used for brief generation so generate-images
+        # can detect when it requests briefs that were never generated.
+        graph.upsert_node(
+            "dress_meta::brief_config",
+            {
+                "type": "dress_meta",
+                "min_priority": self._min_priority,
+            },
+        )
 
         if not eligible_ids:
             cover_created = _create_cover_brief(graph)
@@ -1023,6 +1050,18 @@ class DressStage:
         self._image_budget = image_budget
         self._min_priority = min_priority
         self._force_regenerate = force
+
+        # Warn if requesting briefs that were never generated
+        brief_config = graph.get_node("dress_meta::brief_config")
+        if brief_config:
+            dress_min = brief_config.get("min_priority", 3)
+            if min_priority > dress_min:
+                log.warning(
+                    "priority_mismatch",
+                    requested_min_priority=min_priority,
+                    dress_min_priority=dress_min,
+                    hint=f"Re-run 'qf dress --min-priority {min_priority}' to generate missing briefs.",
+                )
 
         result = await self._phase_4_generate(
             graph, model=model, on_phase_progress=on_phase_progress
