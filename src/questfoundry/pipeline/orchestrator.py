@@ -580,6 +580,7 @@ class PipelineOrchestrator:
             on_llm_end = context.get("on_llm_end")
             resume_from = context.get("resume_from")
             on_phase_progress = context.get("on_phase_progress")
+            on_connectivity_error = context.get("on_connectivity_error")
 
             # Build stage kwargs, only including optional params if set
             stage_kwargs: dict[str, Any] = {}
@@ -590,6 +591,8 @@ class PipelineOrchestrator:
                 stage_kwargs["resume_from"] = resume_from
             if on_phase_progress:
                 stage_kwargs["on_phase_progress"] = on_phase_progress
+            if on_connectivity_error:
+                stage_kwargs["on_connectivity_error"] = on_connectivity_error
 
             # Stage-specific options
             image_provider = self._get_resolved_image_provider()

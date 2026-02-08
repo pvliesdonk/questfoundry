@@ -84,6 +84,7 @@ if TYPE_CHECKING:
     from questfoundry.pipeline.gates import PhaseGateHook
     from questfoundry.pipeline.stages.base import (
         AssistantMessageFn,
+        ConnectivityRetryFn,
         LLMCallbackFn,
         PhaseProgressFn,
         UserInputFn,
@@ -162,6 +163,7 @@ class DressStage:
         self._min_priority: int = 3
         self._max_concurrency: int = 2
         self._lang_instruction: str = ""
+        self._on_connectivity_error: ConnectivityRetryFn | None = None
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -272,6 +274,7 @@ class DressStage:
         self._image_budget = kwargs.get("image_budget", 0)
         self._min_priority = kwargs.get("min_priority", 3)
         self._max_concurrency = kwargs.get("max_concurrency", 2)
+        self._on_connectivity_error = kwargs.get("on_connectivity_error")
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
 
         log.info("stage_start", stage="dress")
@@ -786,7 +789,10 @@ class DressStage:
             return (entity_id, output), llm_calls, tokens
 
         results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
-            entity_ids, _codex_for_entity, self._max_concurrency
+            entity_ids,
+            _codex_for_entity,
+            self._max_concurrency,
+            on_connectivity_error=self._on_connectivity_error,
         )
 
         for item in results:
@@ -1075,7 +1081,10 @@ class DressStage:
                 return (bid, pos, neg, bdata), 1, 0
 
             results, _, _, _errs = await batch_llm_calls(
-                distill_items, _distill_one, self._max_concurrency
+                distill_items,
+                _distill_one,
+                self._max_concurrency,
+                on_connectivity_error=self._on_connectivity_error,
             )
             for item in results:
                 if item is not None:

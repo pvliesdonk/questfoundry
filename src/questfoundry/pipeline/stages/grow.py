@@ -59,6 +59,7 @@ if TYPE_CHECKING:
     from questfoundry.pipeline.size import SizeProfile
     from questfoundry.pipeline.stages.base import (
         AssistantMessageFn,
+        ConnectivityRetryFn,
         LLMCallbackFn,
         PhaseProgressFn,
         UserInputFn,
@@ -154,6 +155,7 @@ class GrowStage:
         self._size_profile: SizeProfile | None = None
         self._max_concurrency: int = 2
         self._lang_instruction: str = ""
+        self._on_connectivity_error: ConnectivityRetryFn | None = None
 
     CHECKPOINT_DIR = "snapshots"
     PROLOGUE_ID = "passage::prologue"
@@ -297,6 +299,7 @@ class GrowStage:
         self._serialize_provider_name = serialize_provider_name
         self._size_profile = kwargs.get("size_profile")
         self._max_concurrency = kwargs.get("max_concurrency", 2)
+        self._on_connectivity_error = kwargs.get("on_connectivity_error")
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
         log.info("stage_start", stage="grow")
 
@@ -1571,7 +1574,10 @@ class GrowStage:
             return (pid, result), llm_calls, tokens
 
         results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
-            path_items, _arc_for_path, self._max_concurrency
+            path_items,
+            _arc_for_path,
+            self._max_concurrency,
+            on_connectivity_error=self._on_connectivity_error,
         )
 
         for item in results:
@@ -1711,7 +1717,10 @@ class GrowStage:
             return (pid, result), llm_calls, tokens
 
         results, total_llm_calls, total_tokens, errors = await batch_llm_calls(
-            path_items, _arcs_for_path, self._max_concurrency
+            path_items,
+            _arcs_for_path,
+            self._max_concurrency,
+            on_connectivity_error=self._on_connectivity_error,
         )
 
         for item in results:

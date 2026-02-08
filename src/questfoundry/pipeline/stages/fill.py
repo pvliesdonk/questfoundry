@@ -92,6 +92,7 @@ if TYPE_CHECKING:
     from questfoundry.pipeline.size import SizeProfile
     from questfoundry.pipeline.stages.base import (
         AssistantMessageFn,
+        ConnectivityRetryFn,
         LLMCallbackFn,
         PhaseProgressFn,
         UserInputFn,
@@ -283,6 +284,7 @@ class FillStage:
         self._on_assistant_message: AssistantMessageFn | None = None
         self._on_llm_start: LLMCallbackFn | None = None
         self._on_llm_end: LLMCallbackFn | None = None
+        self._on_connectivity_error: ConnectivityRetryFn | None = None
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -402,6 +404,7 @@ class FillStage:
         self._max_concurrency = kwargs.get("max_concurrency", 2)
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
         self._two_step = kwargs.get("two_step", True)
+        self._on_connectivity_error = kwargs.get("on_connectivity_error")
         log.info("stage_start", stage="fill", interactive=interactive)
 
         phases = self._phase_order()
@@ -1087,7 +1090,10 @@ class FillStage:
             return [bp.model_dump() for bp in output.blueprints], llm_calls, tokens
 
         results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
-            chunks, _expand_chunk, self._max_concurrency
+            chunks,
+            _expand_chunk,
+            self._max_concurrency,
+            on_connectivity_error=self._on_connectivity_error,
         )
 
         # Store blueprints on passage nodes
@@ -1528,7 +1534,10 @@ class FillStage:
             )
 
         results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
-            batches, _review_batch, self._max_concurrency
+            batches,
+            _review_batch,
+            self._max_concurrency,
+            on_connectivity_error=self._on_connectivity_error,
         )
 
         for output in results:
@@ -1681,7 +1690,10 @@ class FillStage:
             )
 
         results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
-            passage_items, _revise_passage, self._max_concurrency
+            passage_items,
+            _revise_passage,
+            self._max_concurrency,
+            on_connectivity_error=self._on_connectivity_error,
         )
 
         # Apply results to graph (sequential — graph mutations not thread-safe)
