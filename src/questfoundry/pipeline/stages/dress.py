@@ -863,8 +863,17 @@ class DressStage:
                 model, "dress_codex_batch", context, BatchedCodexOutput
             )
 
+            # Validate returned entity_ids match input chunk
+            expected_ids = set(chunk)
             items: list[tuple[str, list[dict[str, Any]]]] = []
             for codex_item in output.entities:
+                if codex_item.entity_id not in expected_ids:
+                    log.warning(
+                        "codex_batch_invalid_entity_id",
+                        entity_id=codex_item.entity_id,
+                        expected=list(expected_ids),
+                    )
+                    continue
                 entry_dicts = [e.model_dump() for e in codex_item.entries]
                 items.append((codex_item.entity_id, entry_dicts))
 
@@ -879,6 +888,7 @@ class DressStage:
 
         for batch_result in results:
             if batch_result is None:
+                log.warning("codex_batch_failed", detail="batch returned no results")
                 continue
             for entity_id, entry_dicts in batch_result:
                 errs = validate_dress_codex_entries(graph, entity_id, entry_dicts)

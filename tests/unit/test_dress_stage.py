@@ -1173,7 +1173,7 @@ class TestPhase2Codex:
                 ]
             )
 
-        call_count = 0
+        calls: list[dict[str, Any]] = []
 
         async def _mock_llm_call(
             _model: Any,
@@ -1182,25 +1182,61 @@ class TestPhase2Codex:
             _schema: type,
             **_kwargs: Any,
         ) -> tuple:
-            nonlocal call_count
-            call_count += 1
-            # Parse entity count from context to build matching output
-            count = int(_context["entity_count"])
-            # Build entity IDs from batch text (rough extraction)
-            eids = [
-                f"entity::e{j}" for j in range((call_count - 1) * 4, (call_count - 1) * 4 + count)
-            ]
+            calls.append(_context)
+            # Parse entity IDs from batch context (each starts with "## Entity: <raw_id>")
+            import re
+
+            raw_ids = re.findall(r"## Entity: (\S+)", _context["entities_batch"])
+            eids = [f"entity::{raw_id}" for raw_id in raw_ids]
             return (_make_batch_output(eids), 1, 100)
 
         stage = DressStage()
         with patch.object(stage, "_dress_llm_call", side_effect=_mock_llm_call):
             result = await stage._phase_2_codex(g, MagicMock())
 
-        assert call_count == 2  # 4 + 1
+        assert len(calls) == 2  # 4 + 1
         assert result.llm_calls == 2
         # All 5 entities should have codex entries
         for i in range(5):
             assert g.get_node(f"codex::e{i}_rank1") is not None
+
+    @pytest.mark.asyncio()
+    async def test_invalid_entity_id_skipped(self) -> None:
+        """LLM returning an entity_id not in the batch is skipped gracefully."""
+        g = Graph()
+        g.create_node(
+            "entity::real",
+            {"type": "entity", "raw_id": "real", "entity_type": "character"},
+        )
+
+        wrong_output = BatchedCodexOutput(
+            entities=[
+                BatchedCodexItem(
+                    entity_id="entity::hallucinated",
+                    entries=[CodexEntry(title="X", rank=1, visible_when=[], content="X")],
+                ),
+                BatchedCodexItem(
+                    entity_id="entity::real",
+                    entries=[CodexEntry(title="Real", rank=1, visible_when=[], content="Info.")],
+                ),
+            ]
+        )
+
+        stage = DressStage()
+        with patch.object(
+            stage,
+            "_dress_llm_call",
+            new_callable=AsyncMock,
+            return_value=(wrong_output, 1, 100),
+        ):
+            result = await stage._phase_2_codex(g, MagicMock())
+
+        assert result.status == "completed"
+        # Valid entity should have codex, hallucinated one should not
+        assert g.get_node("codex::real_rank1") is not None
+        codex_nodes = g.get_nodes_by_type("codex_entry")
+        # Only 1 entry (for "real"), not 2
+        assert len(codex_nodes) == 1
 
     @pytest.mark.asyncio()
     async def test_logs_validation_warnings(self) -> None:
