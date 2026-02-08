@@ -16,6 +16,8 @@ LLMCallbackFn = Callable[[str], None]
 PhaseProgressFn = Callable[[str, str, str | None], None]
 # Async hook called between pipeline phases to unload Ollama models from VRAM
 UnloadHookFn = Callable[[], Awaitable[None]]
+# Connectivity retry callback: (failed_count, total_count, error_sample) -> should_retry
+ConnectivityRetryFn = Callable[[int, int, str], Awaitable[bool]]
 
 
 class Stage(Protocol):
