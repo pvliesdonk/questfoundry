@@ -164,6 +164,7 @@ class DressStage:
         self._max_concurrency: int = 2
         self._lang_instruction: str = ""
         self._on_connectivity_error: ConnectivityRetryFn | None = None
+        self._skip_codex: bool = False
 
     CHECKPOINT_DIR = "snapshots"
 
@@ -274,6 +275,7 @@ class DressStage:
         self._image_budget = kwargs.get("image_budget", 0)
         self._min_priority = kwargs.get("min_priority", 3)
         self._max_concurrency = kwargs.get("max_concurrency", 2)
+        self._skip_codex = kwargs.get("skip_codex", False)
         self._on_connectivity_error = kwargs.get("on_connectivity_error")
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
 
@@ -779,6 +781,10 @@ class DressStage:
         Iterates entities, builds per-entity context with codewords,
         calls LLM for codex tiers, validates, and applies to graph.
         """
+        if self._skip_codex:
+            log.info("codex_skipped", reason="--no-codex flag")
+            return DressPhaseResult(phase="codex", status="skipped", detail="--no-codex")
+
         entities = graph.get_nodes_by_type("entity")
         if not entities:
             return DressPhaseResult(phase="codex", status="completed", detail="no entities")

@@ -605,6 +605,8 @@ class PipelineOrchestrator:
                 min_priority = context.get("min_priority", 3)
                 if isinstance(min_priority, int) and min_priority < 3:
                     stage_kwargs["min_priority"] = min_priority
+                if context.get("skip_codex"):
+                    stage_kwargs["skip_codex"] = True
             if stage_name == "fill":
                 stage_kwargs["two_step"] = context.get("two_step", self.config.fill.two_step)
 

@@ -476,6 +476,7 @@ def _run_stage_command(
     min_priority: int = 3,
     two_step: bool | None = None,
     language: str | None = None,
+    skip_codex: bool = False,
 ) -> None:
     """Common logic for running a stage command.
 
@@ -501,6 +502,7 @@ def _run_stage_command(
         min_priority: Only generate briefs with this priority or higher (1-3).
         two_step: Whether to use two-step prose generation in FILL stage.
         language: ISO 639-1 language code override (e.g., "nl", "ja").
+        skip_codex: Skip codex generation in DRESS stage.
     """
     log = get_logger(__name__)
 
@@ -536,6 +538,8 @@ def _run_stage_command(
         context["two_step"] = two_step
     if language:
         context["language"] = language
+    if skip_codex:
+        context["skip_codex"] = True
 
     # Add phase progress callback (used by GROW, and optionally by other stages)
     def _on_phase_progress(phase: str, status: str, detail: str | None) -> None:
@@ -1471,6 +1475,10 @@ def dress(
         str | None,
         typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
     ] = None,
+    no_codex: Annotated[
+        bool,
+        typer.Option("--no-codex", help="Skip codex generation (Phase 2)"),
+    ] = False,
 ) -> None:
     """Run DRESS stage - art direction, illustrations, and codex.
 
@@ -1501,6 +1509,7 @@ def dress(
         image_provider=image_provider,
         image_budget=image_budget,
         language=language,
+        skip_codex=no_codex,
     )
 
 

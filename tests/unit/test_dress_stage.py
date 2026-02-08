@@ -1045,6 +1045,21 @@ class TestPhase2Codex:
         assert g.get_node("codex::protagonist_rank2") is not None
 
     @pytest.mark.asyncio()
+    async def test_skip_codex_flag(self) -> None:
+        """--no-codex flag skips Phase 2 entirely."""
+        g = Graph()
+        g.create_node(
+            "entity::protagonist",
+            {"type": "entity", "raw_id": "protagonist", "entity_type": "character"},
+        )
+        stage = DressStage()
+        stage._skip_codex = True
+        result = await stage._phase_2_codex(g, MagicMock())
+        assert result.status == "skipped"
+        assert result.detail == "--no-codex"
+        assert result.llm_calls == 0
+
+    @pytest.mark.asyncio()
     async def test_no_entities(self) -> None:
         g = Graph()
         stage = DressStage()
