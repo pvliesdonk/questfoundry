@@ -282,7 +282,6 @@ class FillStage:
         self._size_profile: SizeProfile | None = None
         self._language: str = "en"
         self._max_concurrency: int = 2
-        self._language: str = "en"
         self._lang_instruction: str = ""
         self._two_step: bool = False
         # Interactive mode attributes (set in execute(), defaults for direct calls)
@@ -437,8 +436,9 @@ class FillStage:
             graph = Graph.load(resolved_path)
 
         # Verify GROW has completed before running FILL
+        # Accept "grow" or any later stage (fill/dress/ship) for re-runs
         last_stage = graph.get_last_stage()
-        if last_stage != "grow":
+        if last_stage not in ("grow", "fill", "dress", "ship"):
             raise FillStageError(
                 f"FILL requires completed GROW stage. Current last_stage: '{last_stage}'. "
                 f"Run GROW before FILL."

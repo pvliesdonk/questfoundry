@@ -142,14 +142,41 @@ class TestFillStageExecute:
             await stage.execute(mock_model, "")
 
     @pytest.mark.asyncio
-    async def test_requires_grow_completed(self, mock_model: MagicMock, tmp_path: Path) -> None:
+    @pytest.mark.parametrize("last_stage", ["dream", "brainstorm", "seed"])
+    async def test_rejects_pre_grow_stages(
+        self, mock_model: MagicMock, tmp_path: Path, last_stage: str
+    ) -> None:
         g = Graph.empty()
-        g.set_last_stage("seed")
+        g.set_last_stage(last_stage)
         g.save(tmp_path / "graph.json")
 
         stage = FillStage(project_path=tmp_path)
         with pytest.raises(FillStageError, match="FILL requires completed GROW"):
             await stage.execute(mock_model, "")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("last_stage", ["grow", "fill", "dress", "ship"])
+    async def test_accepts_grow_and_later_stages(
+        self, mock_model: MagicMock, tmp_path: Path, last_stage: str
+    ) -> None:
+        """FILL should accept re-runs when last_stage is grow or any later stage."""
+        g = Graph.empty()
+        g.set_last_stage(last_stage)
+        # Minimal passage so the stage doesn't fail on missing data
+        g.create_node(
+            "voice::voice",
+            {"type": "voice", "raw_id": "voice", "pov": "third_limited", "tense": "past"},
+        )
+        g.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
+        g.save(tmp_path / "graph.json")
+
+        stage = FillStage(project_path=tmp_path)
+        # Should not raise FillStageError about GROW requirement
+        # (will proceed to phases — we just verify the gate passes)
+        try:
+            await stage.execute(mock_model, "")
+        except FillStageError as e:
+            assert "FILL requires completed GROW" not in str(e)
 
     @pytest.mark.asyncio
     async def test_runs_all_phases(
