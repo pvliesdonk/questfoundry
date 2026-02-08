@@ -198,6 +198,42 @@ class DressPhase2Output(BaseModel):
 
 
 # ---------------------------------------------------------------------------
+# Batched LLM output wrappers
+# ---------------------------------------------------------------------------
+
+
+class BatchedBriefItem(BaseModel):
+    """One brief within a batched response."""
+
+    passage_id: str = Field(min_length=1, description="Passage ID (must match exactly)")
+    brief: IllustrationBrief
+    llm_adjustment: int = Field(
+        ge=-2,
+        le=2,
+        description="LLM priority adjustment (-2 to +2)",
+    )
+
+
+class BatchedBriefOutput(BaseModel):
+    """Phase 1 batched output: briefs for multiple passages."""
+
+    briefs: list[BatchedBriefItem] = Field(min_length=1)
+
+
+class BatchedCodexItem(BaseModel):
+    """Codex entries for one entity within a batch."""
+
+    entity_id: str = Field(min_length=1, description="Entity ID (must match exactly)")
+    entries: list[CodexEntry] = Field(min_length=1)
+
+
+class BatchedCodexOutput(BaseModel):
+    """Phase 2 batched output: codex entries for multiple entities."""
+
+    entities: list[BatchedCodexItem] = Field(min_length=1)
+
+
+# ---------------------------------------------------------------------------
 # Stage result
 # ---------------------------------------------------------------------------
 

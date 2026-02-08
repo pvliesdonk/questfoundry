@@ -28,6 +28,10 @@ from questfoundry.models.dream import (
 )
 from questfoundry.models.dress import (
     ArtDirection,
+    BatchedBriefItem,
+    BatchedBriefOutput,
+    BatchedCodexItem,
+    BatchedCodexOutput,
     CodexEntry,
     DressPhase0Output,
     DressPhase1Output,
@@ -110,6 +114,10 @@ __all__ = [
     "Arc",
     "ArtDirection",
     "AtmosphericDetail",
+    "BatchedBriefItem",
+    "BatchedBriefOutput",
+    "BatchedCodexItem",
+    "BatchedCodexOutput",
     "BatchedExpandOutput",
     "BrainstormOutput",
     "Choice",

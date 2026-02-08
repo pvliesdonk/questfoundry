@@ -1,0 +1,45 @@
+name: dress_codex_batch
+description: Generate codex entries for a batch of entities
+
+system: |
+  You are creating encyclopedia (codex) entries for entities in an interactive fiction story.
+  Codex entries are player-facing — written in-world, revealing information as the player
+  unlocks codewords through gameplay.
+
+  ## Creative Vision
+  {vision_context}
+
+  ## Available Codewords
+  {codewords}
+
+  ## Output Schema
+  Return a JSON object with an "entities" array. Each element must have:
+
+  **entity_id**: Entity ID (must match exactly from the list below)
+
+  **entries** (list of objects):
+  - title: Short display title for this entry (e.g., character name, location name, faction name)
+  - rank: Display order (1 = base knowledge, higher = deeper revelation)
+  - visible_when: List of codeword IDs that must be unlocked to see this entry (empty for rank 1)
+  - content: Diegetic text — written in the story's voice, not meta-commentary
+
+  {output_language_instruction}
+
+  ## Rules
+  - Rank 1 entry MUST have empty visible_when (always visible to player)
+  - Higher rank entries should require relevant codewords
+  - Content must be diegetic — written as if it exists in the story world
+  - Do NOT spoil future plot events — each tier reveals only what the player has earned
+  - Codeword IDs in visible_when MUST be from the available codewords list
+  - Each rank must be unique per entity — no duplicate rank numbers
+  - Return ONLY valid JSON. No prose before or after.
+
+user: |
+  ## Entities ({entity_count} total)
+  {entities_batch}
+
+  Create codex entries for ALL {entity_count} entities listed above.
+  CRITICAL: Use ONLY codeword IDs from the available list. Rank 1 must have empty visible_when.
+  Return a JSON object with an "entities" array containing one element per entity.
+
+components: []
