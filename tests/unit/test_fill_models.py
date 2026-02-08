@@ -250,6 +250,9 @@ class TestReviewFlag:
             "convergence_awkwardness",
             "flat_prose",
             "blueprint_bleed",
+            "near_duplicate",
+            "opening_trigram",
+            "low_vocabulary",
         ]
         for issue_type in types:
             flag = ReviewFlag(

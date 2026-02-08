@@ -1039,19 +1039,20 @@ class TestPhase3Revision:
         assert result.llm_calls == 0
 
     @pytest.mark.asyncio
-    async def test_multiple_flags_chained(self) -> None:
-        """Multiple flags on same passage should chain revisions."""
+    async def test_multiple_flags_batched(self) -> None:
+        """Multiple flags on same passage should be batched into one LLM call."""
         graph = _make_reviewed_graph()
         graph.update_node(
             "passage::p1",
             review_flags=[
                 {"passage_id": "p1", "issue": "Voice drift", "issue_type": "voice_drift"},
-                {"passage_id": "p1", "issue": "Pacing issue", "issue_type": "pacing"},
+                {"passage_id": "p1", "issue": "Flat prose", "issue_type": "flat_prose"},
             ],
         )
         stage = FillStage()
 
         call_count = 0
+        captured_issues: str = ""
 
         async def mock_llm_call(
             model: MagicMock,  # noqa: ARG001
@@ -1061,13 +1062,13 @@ class TestPhase3Revision:
             max_retries: int = 3,  # noqa: ARG001
             **kwargs: object,  # noqa: ARG001
         ) -> tuple:
-            nonlocal call_count
+            nonlocal call_count, captured_issues
             call_count += 1
-            # Each revision builds on the previous prose
+            captured_issues = context.get("issues_list", "")
             return (
                 FillPhase1Output(
                     passage=FillPassageOutput(
-                        passage_id="p1", prose=f"Revision {call_count}: {context['current_prose']}"
+                        passage_id="p1", prose="Revised prose addressing all issues."
                     )
                 ),
                 1,
@@ -1081,14 +1082,17 @@ class TestPhase3Revision:
         # Both flags should be addressed
         assert "2 of 2 flags addressed" in (result.detail or "")
 
-        # LLM called twice (once per flag)
-        assert call_count == 2
+        # LLM called once (batched) not twice (per-flag)
+        assert call_count == 1
 
-        # Final prose should be the chained result (revision 2 includes revision 1)
+        # issues_list should contain both flags
+        assert "voice_drift" in captured_issues
+        assert "flat_prose" in captured_issues
+
+        # Prose updated
         p1 = graph.get_node("passage::p1")
         assert p1 is not None
-        assert p1["prose"].startswith("Revision 2:")
-        assert "Revision 1:" in p1["prose"]
+        assert p1["prose"] == "Revised prose addressing all issues."
 
         # Flags should be cleared
         assert p1.get("review_flags") == []
@@ -1654,3 +1658,86 @@ class TestMechanicalQualityGate:
         stage = FillStage()
         result = await stage._phase_1c_mechanical_gate(g, mock_model)
         assert "no passages" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_bigram_check_logs_only(self, mock_model: MagicMock) -> None:
+        """Bigram check should NOT add flags to graph, only log."""
+        g = Graph.empty()
+        # Create many passages sharing the same content-word bigram
+        for i in range(20):
+            g.create_node(
+                f"passage::p{i}",
+                {
+                    "type": "passage",
+                    "raw_id": f"p{i}",
+                    "prose": (
+                        f"The amber glow illuminated passage {i} with "
+                        f"warm light. Different words here to avoid TTR flags."
+                    ),
+                },
+            )
+        stage = FillStage()
+        result = await stage._phase_1c_mechanical_gate(g, mock_model)
+
+        # No flags should be added for bigram repetition
+        total_flags = 0
+        for i in range(20):
+            node = g.get_node(f"passage::p{i}")
+            if node:
+                flags = node.get("review_flags", [])
+                total_flags += len(flags)
+                # Verify no bigram-related flags exist
+                assert not any("bigram" in f.get("issue", "").lower() for f in flags)
+
+        # Detail should mention overused bigrams logged (if threshold exceeded)
+        assert "overused bigrams logged" in result.detail or "0 mechanical flags" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_bigram_check_no_flags_with_mixed_content(self, mock_model: MagicMock) -> None:
+        """Bigram check is log-only — no flags injected even with repeated bigrams."""
+        g = Graph.empty()
+        # Passages share both short-word ("in the") and content-word ("amber glow")
+        # bigrams. Neither should produce flags — bigram check is observational.
+        for i in range(20):
+            g.create_node(
+                f"passage::p{i}",
+                {
+                    "type": "passage",
+                    "raw_id": f"p{i}",
+                    "prose": (
+                        f"In the darkness of passage {i}, the amber glow "
+                        f"flickered softly. Unique vocabulary item{i} here."
+                    ),
+                },
+            )
+        stage = FillStage()
+        await stage._phase_1c_mechanical_gate(g, mock_model)
+        # Bigram check is log-only — verify no bigram flags in graph
+        for i in range(20):
+            node = g.get_node(f"passage::p{i}")
+            if node:
+                assert not any(
+                    "bigram" in f.get("issue", "").lower() for f in node.get("review_flags", [])
+                )
+
+    @pytest.mark.asyncio
+    async def test_mechanical_flag_types_differentiated(self, mock_model: MagicMock) -> None:
+        """Different checks should produce different issue_type values."""
+        g = Graph.empty()
+        # Near-duplicate pair
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "prose": "The amber light flickered in the hall."},
+        )
+        g.create_node(
+            "passage::p2",
+            {"type": "passage", "raw_id": "p2", "prose": "The amber light flickered in the hall."},
+        )
+        stage = FillStage()
+        await stage._phase_1c_mechanical_gate(g, mock_model)
+        p2 = g.get_node("passage::p2")
+        assert p2 is not None
+        flags = p2.get("review_flags", [])
+        dup_flags = [f for f in flags if "Near-duplicate" in f.get("issue", "")]
+        assert len(dup_flags) >= 1
+        assert dup_flags[0]["issue_type"] == "near_duplicate"

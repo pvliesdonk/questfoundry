@@ -199,6 +199,9 @@ class ReviewFlag(BaseModel):
         "convergence_awkwardness",
         "flat_prose",
         "blueprint_bleed",
+        "near_duplicate",
+        "opening_trigram",
+        "low_vocabulary",
     ] = Field(description="Category of the review issue")
 
 
