@@ -35,7 +35,9 @@ from questfoundry.graph.fill_context import (
     compute_first_appearances,
     compute_is_ending,
     compute_lexical_diversity,
+    extract_used_imagery,
     format_atmospheric_detail,
+    format_blueprint_context,
     format_continuity_warning,
     format_dramatic_questions,
     format_dream_vision,
@@ -55,6 +57,7 @@ from questfoundry.graph.fill_context import (
     format_sliding_window,
     format_spoke_context,
     format_story_identity,
+    format_used_imagery_blocklist,
     format_valid_characters,
     format_vocabulary_note,
     format_voice_context,
@@ -63,6 +66,8 @@ from questfoundry.graph.fill_context import (
 )
 from questfoundry.graph.graph import Graph
 from questfoundry.models.fill import (
+    BatchedExpandOutput,
+    ExpandBlueprint,
     FillExtractOutput,
     FillPhase0Output,
     FillPhase1Output,
@@ -317,7 +322,9 @@ class FillStage:
         """
         return [
             (self._phase_0_voice, "voice"),
+            (self._phase_1a_expand, "expand"),
             (self._phase_1_generate, "generate"),
+            (self._phase_1c_mechanical_gate, "quality_gate"),
             (self._phase_2_review, "review"),
             (self._phase_3_revision, "revision"),
             (self._phase_4_arc_validation, "arc_validation"),
@@ -951,6 +958,173 @@ class FillStage:
 
         return order
 
+    _EXPAND_BATCH_SIZE = 8
+
+    async def _phase_1a_expand(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+    ) -> FillPhaseResult:
+        """Phase 1a: Expand — generate scene blueprints for passages.
+
+        Groups passages by arc, chunks of ~8, generates ExpandBlueprint
+        for each passage via batched LLM calls. Blueprints are stored
+        on passage nodes for consumption by Phase 1 generate.
+        """
+        from collections import deque
+        from random import Random
+
+        from questfoundry.pipeline.craft_constraints import select_constraint
+
+        generation_order = self._get_generation_order(graph)
+        if not generation_order:
+            return FillPhaseResult(
+                phase="expand", status="completed", detail="no passages to expand"
+            )
+
+        voice_context = format_voice_context(graph)
+        story_identity_context = format_story_identity(graph)
+
+        # Collect recent prose for imagery blocklist
+        passage_nodes = graph.get_nodes_by_type("passage")
+        recent_prose = [
+            pdata.get("prose", "") for pdata in passage_nodes.values() if pdata.get("prose")
+        ]
+        blocklist = extract_used_imagery(recent_prose)
+        blocklist_text = format_used_imagery_blocklist(blocklist)
+
+        # Craft constraint tracking — seed from passage count for variety across runs
+        rng = Random(len(generation_order))
+        recently_used: deque[str] = deque(maxlen=5)
+
+        # Build chunks across all arcs
+        arc_groups: dict[str, list[str]] = {}
+        for passage_id, arc_id in generation_order:
+            arc_groups.setdefault(arc_id, []).append(passage_id)
+
+        chunks: list[tuple[list[str], str]] = []
+        for arc_id, passage_ids in arc_groups.items():
+            for i in range(0, len(passage_ids), self._EXPAND_BATCH_SIZE):
+                batch = passage_ids[i : i + self._EXPAND_BATCH_SIZE]
+                chunks.append((batch, arc_id))
+
+        # Pre-compute craft constraints for all passages (must be sequential
+        # to maintain recently-used dedup across chunks).
+        passage_constraints: dict[str, str] = {}
+        for passage_id, _arc_id in generation_order:
+            passage = graph.get_node(passage_id)
+            if not passage:
+                continue
+            beat_id = passage.get("from_beat", "")
+            beat = graph.get_node(beat_id) if beat_id else None
+            nf = beat.get("narrative_function", "develop") if beat else "develop"
+            constraint = select_constraint(nf, recently_used, rng=rng)
+            if constraint:
+                recently_used.append(constraint)
+            passage_constraints[passage_id] = constraint
+
+        async def _expand_chunk(
+            chunk_data: tuple[list[str], str],
+        ) -> tuple[list[dict[str, Any]], int, int]:
+            chunk_ids, _chunk_arc = chunk_data
+
+            passage_lines: list[str] = []
+            for pid in chunk_ids:
+                passage = graph.get_node(pid)
+                if not passage:
+                    continue
+                beat_id = passage.get("from_beat", "")
+                beat = graph.get_node(beat_id) if beat_id else None
+                beat_summary = beat.get("summary", "") if beat else ""
+                scene_type = beat.get("scene_type", "scene") if beat else "scene"
+                nf = beat.get("narrative_function", "develop") if beat else "develop"
+                entities = passage.get("entities", [])
+                entity_names = [
+                    (graph.get_node(eid) or {}).get("raw_id", eid)
+                    for eid in entities
+                    if graph.has_node(eid)
+                ]
+                constraint = passage_constraints.get(pid, "")
+                raw_id = passage.get("raw_id", pid)
+
+                passage_lines.append(f"### {raw_id}")
+                passage_lines.append(f"- **Beat Summary:** {beat_summary}")
+                passage_lines.append(f"- **Scene Type:** {scene_type}")
+                passage_lines.append(f"- **Narrative Function:** {nf}")
+                if entity_names:
+                    passage_lines.append(f"- **Characters:** {', '.join(entity_names)}")
+                if constraint:
+                    passage_lines.append(f"- **Craft Constraint:** {constraint}")
+                    passage_lines.append(
+                        "  Follow this unless you can demonstrably serve "
+                        "the scene better with a different approach."
+                    )
+                else:
+                    passage_lines.append("- **Craft Constraint:** (none for this passage)")
+                passage_lines.append("")
+
+            context = {
+                "voice_document": voice_context,
+                "story_identity": story_identity_context,
+                "passages_batch": "\n".join(passage_lines),
+                "used_imagery_blocklist": blocklist_text,
+                "craft_constraint_instruction": (
+                    "Copy the craft constraint from each passage's details above. "
+                    "If a passage has no constraint, leave craft_constraint as an empty string."
+                ),
+                "passage_count": str(len(chunk_ids)),
+                "output_language_instruction": self._lang_instruction,
+            }
+
+            output, llm_calls, tokens = await self._fill_llm_call(
+                model,
+                "fill_phase1_expand",
+                context,
+                BatchedExpandOutput,
+                creative=True,
+            )
+
+            return [bp.model_dump() for bp in output.blueprints], llm_calls, tokens
+
+        results, total_llm_calls, total_tokens, _errors = await batch_llm_calls(
+            chunks, _expand_chunk, self._max_concurrency
+        )
+
+        # Store blueprints on passage nodes
+        blueprints_created = 0
+        for blueprints in results:
+            if blueprints is None:
+                continue
+            for bp_dict in blueprints:
+                pid = bp_dict.get("passage_id", "")
+                # Defensive: strip existing prefix if model returned full ID
+                clean_id = pid.removeprefix("passage::") if pid.startswith("passage::") else pid
+                full_pid = f"passage::{clean_id}"
+                if not graph.has_node(full_pid):
+                    continue
+                # Validate blueprint before persisting
+                try:
+                    validated = ExpandBlueprint.model_validate(bp_dict)
+                    graph.update_node(full_pid, blueprint=validated.model_dump())
+                    blueprints_created += 1
+                except Exception:
+                    log.warning("blueprint_validation_failed", passage_id=full_pid)
+                    continue
+
+        log.info(
+            "expand_complete",
+            blueprints_created=blueprints_created,
+            total_passages=len(generation_order),
+        )
+
+        return FillPhaseResult(
+            phase="expand",
+            status="completed",
+            detail=f"{blueprints_created} blueprints for {len(generation_order)} passages",
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
+        )
+
     async def _phase_1_generate(
         self,
         graph: Graph,
@@ -1025,6 +1199,12 @@ class FillStage:
                 else ""
             )
 
+            # Blueprint from expand phase (if available)
+            blueprint = passage.get("blueprint")
+            blueprint_ctx = format_blueprint_context(blueprint)
+            # When blueprint is present, it subsumes atmospheric detail
+            atmo_detail = "" if blueprint else format_atmospheric_detail(graph, passage_id)
+
             context = {
                 "voice_document": voice_context,
                 "story_identity": story_identity_context,
@@ -1033,7 +1213,8 @@ class FillStage:
                 "scene_type": scene_type,
                 "dramatic_questions": format_dramatic_questions(graph, arc_id, beat_id),
                 "narrative_context": format_narrative_context(graph, passage_id),
-                "atmospheric_detail": format_atmospheric_detail(graph, passage_id),
+                "blueprint_context": blueprint_ctx,
+                "atmospheric_detail": atmo_detail,
                 "entry_states": entry_states_text,
                 "entity_states": format_entity_states(graph, passage_id),
                 "entity_arc_context": format_entity_arc_context(graph, passage_id, arc_id),
@@ -1448,12 +1629,25 @@ class FillStage:
             local_tokens = 0
             outputs: list[FillPhase1Output] = []
 
+            # Blueprint context for revision guidance
+            blueprint = passage.get("blueprint")
+            bp_ctx = format_blueprint_context(blueprint)
+
             for flag_data in flags:
+                issue_type = flag_data.get("issue_type", "")
+
+                # Once blueprint is stale (flat_prose/blueprint_bleed), all
+                # subsequent revisions for this passage regenerate without
+                # blueprint anchoring — the bad materials taint all flags.
+                if issue_type in ("flat_prose", "blueprint_bleed") and blueprint:
+                    bp_ctx = format_blueprint_context(None)
+
                 context = {
                     "voice_document": voice_context,
                     "passage_id": passage.get("raw_id", passage_id),
-                    "issue_type": flag_data.get("issue_type", ""),
+                    "issue_type": issue_type,
                     "issue_description": flag_data.get("issue", ""),
+                    "blueprint_context": bp_ctx,
                     "current_prose": current_prose,
                     "extended_window": (
                         format_sliding_window(graph, arc_id, current_idx, window_size=5)

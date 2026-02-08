@@ -34,20 +34,8 @@ system: |
   - **micro_beat**: Brief transition. 1 paragraph. Functional prose that moves
     the story forward without dwelling. Prefer a single concrete action or image.
 
-  ## Narrative Function Guidance
-  - **introduce**: Ground the reader. Establish new elements through sensory detail
-    and action, not exposition. End with a hook or question.
-  - **develop**: Deepen what is already known. Layer in contradiction, nuance, or
-    intimacy. Show character through choice, not description.
-  - **complicate**: Raise stakes or introduce obstacles. The reader should feel
-    the ground shift. End with the situation worse or more uncertain.
-  - **confront**: Direct engagement with tension. Strip away ambiguity. Force
-    characters (and reader) to face what they have been avoiding.
-  - **resolve**: Settle a thread. Provide earned clarity — not easy answers.
-    The resolution should feel inevitable in hindsight.
-
-  ## Atmospheric Detail
-  {atmospheric_detail}
+  ## Scene Blueprint
+  {blueprint_context}
 
   ## Entry States
   {entry_states}
@@ -84,28 +72,18 @@ system: |
 
   1. Follow the voice document for POV, tense, register, rhythm, and tone
   2. Match the scene type guidance for length and structure
-  3. Match the narrative function guidance for dramatic purpose
-  4. Match the target length — do not over-write micro_beats or under-write confrontations
-  5. Cover the beat summary content — do not invent major plot points
-  6. Maintain continuity with the sliding window passages
-  7. Let open dramatic questions create subtext — do not resolve them unless
-     this beat commits to an answer
-  8. Build toward the exit mood through imagery and rhythm — do not state it directly
-  9. DO NOT repeat phrases, metaphors, or sentence structures from the sliding
-      window. Each passage must use fresh imagery and vocabulary. If the previous
-      passages used a metaphor (e.g., "like a wound"), find a different one.
-  10. Every scene and sequel MUST contain at least one line of dialogue or one
-      concrete physical action (a character doing something with their body, not
-      just thinking or feeling).
-  11. Dialogue tags: prefer "said" or no tag. Use action beats instead of
-      adverb-laden tags or said-bookisms.
-      BAD: "she whispered softly", "he retorted angrily"
-      GOOD: She leaned closer. "..." / He slammed the glass down. "..."
-  12. NEVER name the theme, mood, or emotion directly in prose. Show it through
-      what characters do, notice, or fail to notice.
-      BAD: "A wave of grief washed over her." / "He felt angry."
-      GOOD: "She picked up his coffee mug, still warm, and held it with both hands."
-      GOOD: "His jaw tightened. He set down the glass without drinking."
+  3. Match the target length — do not over-write micro_beats or under-write confrontations
+  4. Cover the beat summary content and maintain continuity with the sliding window
+  5. Use the scene blueprint's materials — weave at least 3 sensory palette items
+     into the prose and follow the opening move. Do not substitute generic
+     alternatives. If no blueprint is available, use atmospheric detail and
+     narrative context above.
+  6. Let open dramatic questions create subtext; build toward the exit mood
+     through imagery and rhythm — do not state emotions, themes, or moods
+     directly. Dialogue tags: prefer "said" or action beats.
+     BAD: "A wave of grief washed over her." / "she whispered softly"
+     GOOD: "She picked up his coffee mug, still warm, and held it with both hands."
+     GOOD: She leaned closer. "..." / He slammed the glass down. "..."
 
   {ending_guidance}
 

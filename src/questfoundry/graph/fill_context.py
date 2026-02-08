@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import yaml
 
@@ -2025,3 +2025,73 @@ def extract_used_imagery(
 
     blocklist.extend(repeated_words[: top_n - len(blocklist)])
     return blocklist[:top_n]
+
+
+def format_blueprint_context(blueprint: dict[str, Any] | None) -> str:
+    """Format an expand blueprint for the prose generation prompt.
+
+    When a blueprint exists, renders its materials (sensory palette,
+    gestures, opening move, etc.) as structured context. When absent,
+    returns a fallback instruction.
+
+    Uses ``dict[str, Any]`` because blueprints are stored as plain dicts
+    on graph nodes (not typed models) for serialization flexibility.
+
+    Args:
+        blueprint: Blueprint dict from passage node, or None.
+
+    Returns:
+        Formatted blueprint context string.
+    """
+    if not blueprint:
+        return "(no blueprint available — use atmospheric detail and narrative context above)"
+
+    lines: list[str] = []
+
+    palette = blueprint.get("sensory_palette", [])
+    if palette and isinstance(palette, list):
+        lines.append("**Sensory Palette** (weave at least 3 into prose):")
+        for item in palette:
+            lines.append(f"  - {item}")
+
+    gestures = blueprint.get("character_gestures", [])
+    if gestures and isinstance(gestures, list):
+        lines.append("**Character Gestures:**")
+        for g in gestures:
+            lines.append(f"  - {g}")
+
+    opening = blueprint.get("opening_move", "")
+    if opening:
+        lines.append(f"**Opening Move:** {opening}")
+
+    constraint = blueprint.get("craft_constraint", "")
+    if constraint:
+        lines.append(f"**Craft Constraint:** {constraint}")
+
+    arc_word = blueprint.get("emotional_arc_word", "")
+    if arc_word:
+        lines.append(f"**Emotional Arc Word:** {arc_word}")
+
+    return "\n".join(lines) if lines else "(empty blueprint)"
+
+
+def format_used_imagery_blocklist(blocklist: list[str]) -> str:
+    """Format an imagery blocklist for the expand prompt.
+
+    Args:
+        blocklist: List of overused imagery strings from
+            :func:`extract_used_imagery`.
+
+    Returns:
+        Formatted blocklist, or a note that no repetition was detected.
+    """
+    if not blocklist:
+        return "(no repeated imagery detected — you have full creative freedom)"
+
+    lines = ["These images and phrases appeared in recent passages. DO NOT reuse them:"]
+    for item in blocklist:
+        lines.append(f'  - "{item}"')
+    lines.append("")
+    lines.append("Find fresh sensory material instead.")
+
+    return "\n".join(lines)

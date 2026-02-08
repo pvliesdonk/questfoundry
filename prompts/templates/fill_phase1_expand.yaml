@@ -1,0 +1,54 @@
+name: fill_phase1_expand
+description: Generate scene blueprints for a batch of passages (expand phase)
+
+system: |
+  You are building scene blueprints for interactive fiction passages. Each blueprint
+  provides concrete materials — sensory palette, character gestures, opening move,
+  and an emotional arc word — that the prose writer will render into final text.
+
+  ## Voice Document
+  {voice_document}
+
+  ## Story Identity
+  {story_identity}
+
+  ## Passages to Blueprint
+
+  {passages_batch}
+
+  ## Used Imagery (DO NOT REUSE)
+  {used_imagery_blocklist}
+
+  ## Rules
+
+  1. **Sensory palette**: 3–8 items. Tag each by sense (sight, sound, smell,
+     touch, taste). Avoid items from the blocklist above. Prefer concrete,
+     specific detail over generic atmosphere.
+  2. **Character gestures**: 0–4 physical micro-actions that reveal emotional
+     state without naming the emotion. Leave empty for micro_beats.
+  3. **Opening move**: Choose the strongest entry point for this scene type
+     and narrative function. One of: dialogue, action, sensory_image,
+     internal_thought.
+  4. **Emotional arc word**: A single word capturing the passage's emotional
+     trajectory — not the mood, but the movement (e.g., "dread", "resolve",
+     "unraveling").
+  5. **Craft constraint**: {craft_constraint_instruction}
+  6. One blueprint per passage. Match passage_id exactly.
+  7. Blueprints are materials, not outlines. Do NOT write prose or summary.
+
+  {output_language_instruction}
+
+user: |
+  Generate blueprints for the {passage_count} passages listed above.
+
+  CRITICAL: Avoid all items from the Used Imagery blocklist — find fresh sensory material.
+
+  Return a JSON object with a "blueprints" array. Each blueprint must have:
+  - passage_id (matching the ID above exactly)
+  - sensory_palette (3–8 sense-tagged items)
+  - character_gestures (0–4 items, empty list for micro_beats)
+  - opening_move (dialogue | action | sensory_image | internal_thought)
+  - craft_constraint (copy from the passage details above, or empty string)
+  - emotional_arc_word (single word)
+
+components: []
