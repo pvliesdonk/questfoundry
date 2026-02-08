@@ -58,6 +58,14 @@ def stage() -> FillStage:
     return FillStage()
 
 
+@pytest.fixture
+def stage_full() -> FillStage:
+    """FillStage with exemplar_strategy='full' for LLM fallback tests."""
+    s = FillStage()
+    s._exemplar_strategy = "full"
+    return s
+
+
 # ---------------------------------------------------------------------------
 # TestFormatExemplarPassages
 # ---------------------------------------------------------------------------
@@ -177,7 +185,7 @@ class TestExemplarPhase:
 
     @pytest.mark.asyncio
     async def test_corpus_no_match_falls_back_to_llm(
-        self, stage: FillStage, graph_with_voice: Graph
+        self, stage_full: FillStage, graph_with_voice: Graph
     ) -> None:
         mock_corpus = MagicMock()
         mock_corpus.search_exemplars.return_value = []  # No matches
@@ -193,12 +201,12 @@ class TestExemplarPhase:
 
         try:
             with patch.object(
-                stage,
+                stage_full,
                 "_fill_llm_call",
                 new_callable=AsyncMock,
                 return_value=(llm_output, 1, 500),
             ):
-                result = await stage._phase_0b_exemplar(graph_with_voice, model)
+                result = await stage_full._phase_0b_exemplar(graph_with_voice, model)
                 assert result.status == "completed"
                 assert "llm" in result.detail
                 assert result.llm_calls == 1
@@ -207,7 +215,7 @@ class TestExemplarPhase:
 
     @pytest.mark.asyncio
     async def test_corpus_partial_match_falls_back(
-        self, stage: FillStage, graph_with_voice: Graph
+        self, stage_full: FillStage, graph_with_voice: Graph
     ) -> None:
         mock_corpus = MagicMock()
         mock_corpus.search_exemplars.return_value = [
@@ -225,12 +233,12 @@ class TestExemplarPhase:
 
         try:
             with patch.object(
-                stage,
+                stage_full,
                 "_fill_llm_call",
                 new_callable=AsyncMock,
                 return_value=(llm_output, 1, 500),
             ):
-                result = await stage._phase_0b_exemplar(graph_with_voice, model)
+                result = await stage_full._phase_0b_exemplar(graph_with_voice, model)
                 assert result.status == "completed"
                 assert "llm" in result.detail
         finally:
@@ -238,9 +246,9 @@ class TestExemplarPhase:
 
     @pytest.mark.asyncio
     async def test_corpus_import_error_falls_back(
-        self, stage: FillStage, graph_with_voice: Graph
+        self, stage_full: FillStage, graph_with_voice: Graph
     ) -> None:
-        """ImportError on ifcraftcorpus falls back to LLM."""
+        """ImportError on ifcraftcorpus falls back to LLM when strategy is full."""
         # Remove ifcraftcorpus from modules so import fails
         import sys
 
@@ -251,7 +259,7 @@ class TestExemplarPhase:
 
         try:
             with patch.object(
-                stage,
+                stage_full,
                 "_fill_llm_call",
                 new_callable=AsyncMock,
                 return_value=(llm_output, 1, 500),
@@ -267,7 +275,7 @@ class TestExemplarPhase:
                     return real_import(name, *args, **kwargs)
 
                 with patch("builtins.__import__", side_effect=fail_import):
-                    result = await stage._phase_0b_exemplar(graph_with_voice, model)
+                    result = await stage_full._phase_0b_exemplar(graph_with_voice, model)
                     assert result.status == "completed"
                     assert "llm" in result.detail
         finally:
@@ -275,7 +283,9 @@ class TestExemplarPhase:
                 sys.modules["ifcraftcorpus"] = saved
 
     @pytest.mark.asyncio
-    async def test_stores_on_voice_node(self, stage: FillStage, graph_with_voice: Graph) -> None:
+    async def test_stores_on_voice_node(
+        self, stage_full: FillStage, graph_with_voice: Graph
+    ) -> None:
         """LLM-generated exemplars are stored on the voice node."""
         model = MagicMock()
         llm_output = FillExemplarOutput(
@@ -298,13 +308,13 @@ class TestExemplarPhase:
             with (
                 patch("builtins.__import__", side_effect=fail_import),
                 patch.object(
-                    stage,
+                    stage_full,
                     "_fill_llm_call",
                     new_callable=AsyncMock,
                     return_value=(llm_output, 1, 500),
                 ),
             ):
-                await stage._phase_0b_exemplar(graph_with_voice, model)
+                await stage_full._phase_0b_exemplar(graph_with_voice, model)
                 voice = graph_with_voice.get_node("voice::voice")
                 assert voice is not None
                 assert voice["exemplar_passages"] == [
@@ -316,7 +326,9 @@ class TestExemplarPhase:
                 sys.modules["ifcraftcorpus"] = saved
 
     @pytest.mark.asyncio
-    async def test_uses_creative_model(self, stage: FillStage, graph_with_voice: Graph) -> None:
+    async def test_uses_creative_model(
+        self, stage_full: FillStage, graph_with_voice: Graph
+    ) -> None:
         """LLM fallback uses creative=True for strong model."""
         model = MagicMock()
         llm_output = FillExemplarOutput(exemplar_passages=["One.", "Two."])
@@ -337,13 +349,13 @@ class TestExemplarPhase:
             with (
                 patch("builtins.__import__", side_effect=fail_import),
                 patch.object(
-                    stage,
+                    stage_full,
                     "_fill_llm_call",
                     new_callable=AsyncMock,
                     return_value=(llm_output, 1, 500),
                 ) as mock_llm_call,
             ):
-                await stage._phase_0b_exemplar(graph_with_voice, model)
+                await stage_full._phase_0b_exemplar(graph_with_voice, model)
                 # Verify creative=True was passed
                 mock_llm_call.assert_called_once()
                 _, kwargs = mock_llm_call.call_args
@@ -480,3 +492,181 @@ class TestExemplarValidation:
         stage._validate_exemplars(voice_data, ["Plotseling opende de deur."])
         assert not any("exemplar_pov_drift" in r.message for r in caplog.records)
         assert not any("exemplar_avoid_word" in r.message for r in caplog.records)
+
+
+# ---------------------------------------------------------------------------
+# TestExemplarStrategy
+# ---------------------------------------------------------------------------
+
+
+class TestExemplarStrategy:
+    """Tests for strategy-aware exemplar generation."""
+
+    def test_resolve_strategy_explicit_corpus_only(self) -> None:
+        """Explicit corpus_only strategy is returned as-is."""
+        stage = FillStage()
+        stage._exemplar_strategy = "corpus_only"
+        assert stage._resolve_exemplar_strategy() == "corpus_only"
+
+    def test_resolve_strategy_explicit_full(self) -> None:
+        """Explicit full strategy is returned as-is."""
+        stage = FillStage()
+        stage._exemplar_strategy = "full"
+        assert stage._resolve_exemplar_strategy() == "full"
+
+    def test_resolve_strategy_auto_small_model(self) -> None:
+        """Auto strategy with small model resolves to corpus_only."""
+        stage = FillStage()
+        stage._exemplar_strategy = "auto"
+        stage._provider_name = "ollama"
+        stage._model_name = "qwen3:4b-instruct-32k"
+        assert stage._resolve_exemplar_strategy() == "corpus_only"
+
+    def test_resolve_strategy_auto_large_model(self) -> None:
+        """Auto strategy with large model resolves to full."""
+        stage = FillStage()
+        stage._exemplar_strategy = "auto"
+        stage._provider_name = "openai"
+        stage._model_name = "gpt-4o"
+        assert stage._resolve_exemplar_strategy() == "full"
+
+    def test_resolve_strategy_auto_unknown_defaults_small(self) -> None:
+        """Auto with unknown provider/model defaults to corpus_only (conservative)."""
+        stage = FillStage()
+        stage._exemplar_strategy = "auto"
+        stage._provider_name = None
+        stage._model_name = None
+        assert stage._resolve_exemplar_strategy() == "corpus_only"
+
+    @pytest.mark.asyncio
+    async def test_corpus_only_skips_llm_on_no_match(self, graph_with_voice: Graph) -> None:
+        """corpus_only strategy skips LLM when corpus has no matches."""
+        stage = FillStage()
+        stage._exemplar_strategy = "corpus_only"
+        stage._language = "en"
+
+        mock_corpus = MagicMock()
+        mock_corpus.search_exemplars.return_value = []
+
+        import sys
+
+        mock_module = MagicMock()
+        mock_module.Corpus.return_value = mock_corpus
+        sys.modules["ifcraftcorpus"] = mock_module
+
+        model = MagicMock()
+
+        try:
+            with patch.object(
+                stage,
+                "_fill_llm_call",
+                new_callable=AsyncMock,
+            ) as mock_llm:
+                result = await stage._phase_0b_exemplar(graph_with_voice, model)
+                assert result.status == "completed"
+                assert "corpus_only" in result.detail
+                assert "no LLM fallback" in result.detail
+                assert result.llm_calls == 0
+                mock_llm.assert_not_called()
+        finally:
+            del sys.modules["ifcraftcorpus"]
+
+    @pytest.mark.asyncio
+    async def test_corpus_only_stores_partial_match(self, graph_with_voice: Graph) -> None:
+        """corpus_only stores single corpus match even though < 2."""
+        stage = FillStage()
+        stage._exemplar_strategy = "corpus_only"
+        stage._language = "en"
+
+        mock_corpus = MagicMock()
+        mock_corpus.search_exemplars.return_value = [
+            {"sections": [{"content": "Only one match."}]},
+        ]
+
+        import sys
+
+        mock_module = MagicMock()
+        mock_module.Corpus.return_value = mock_corpus
+        sys.modules["ifcraftcorpus"] = mock_module
+
+        model = MagicMock()
+
+        try:
+            result = await stage._phase_0b_exemplar(graph_with_voice, model)
+            assert result.status == "completed"
+            assert "corpus_only: 1 exemplars" in result.detail
+            voice = graph_with_voice.get_node("voice::voice")
+            assert voice is not None
+            assert voice["exemplar_passages"] == ["Only one match."]
+        finally:
+            del sys.modules["ifcraftcorpus"]
+
+    @pytest.mark.asyncio
+    async def test_corpus_only_import_error_skips_llm(self, graph_with_voice: Graph) -> None:
+        """corpus_only with ImportError skips LLM (does not fall back)."""
+        stage = FillStage()
+        stage._exemplar_strategy = "corpus_only"
+        stage._language = "en"
+
+        import builtins
+        import sys
+
+        saved = sys.modules.pop("ifcraftcorpus", None)
+        real_import = builtins.__import__
+
+        def fail_import(name: str, *args: object, **kwargs: object) -> object:
+            if name == "ifcraftcorpus":
+                raise ImportError("not available")
+            return real_import(name, *args, **kwargs)
+
+        model = MagicMock()
+
+        try:
+            with (
+                patch("builtins.__import__", side_effect=fail_import),
+                patch.object(
+                    stage,
+                    "_fill_llm_call",
+                    new_callable=AsyncMock,
+                ) as mock_llm,
+            ):
+                result = await stage._phase_0b_exemplar(graph_with_voice, model)
+                assert result.status == "completed"
+                assert "corpus_only" in result.detail
+                mock_llm.assert_not_called()
+        finally:
+            if saved is not None:
+                sys.modules["ifcraftcorpus"] = saved
+
+    @pytest.mark.asyncio
+    async def test_full_strategy_falls_back_to_llm(self, graph_with_voice: Graph) -> None:
+        """full strategy falls back to LLM when corpus has no matches."""
+        stage = FillStage()
+        stage._exemplar_strategy = "full"
+        stage._language = "en"
+
+        mock_corpus = MagicMock()
+        mock_corpus.search_exemplars.return_value = []
+
+        import sys
+
+        mock_module = MagicMock()
+        mock_module.Corpus.return_value = mock_corpus
+        sys.modules["ifcraftcorpus"] = mock_module
+
+        model = MagicMock()
+        llm_output = FillExemplarOutput(exemplar_passages=["LLM one.", "LLM two."])
+
+        try:
+            with patch.object(
+                stage,
+                "_fill_llm_call",
+                new_callable=AsyncMock,
+                return_value=(llm_output, 1, 500),
+            ):
+                result = await stage._phase_0b_exemplar(graph_with_voice, model)
+                assert result.status == "completed"
+                assert "llm" in result.detail
+                assert result.llm_calls == 1
+        finally:
+            del sys.modules["ifcraftcorpus"]

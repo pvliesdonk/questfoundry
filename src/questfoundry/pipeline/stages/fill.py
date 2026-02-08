@@ -954,6 +954,23 @@ class FillStage:
             tokens_used=total_tokens,
         )
 
+    def _resolve_exemplar_strategy(self) -> str:
+        """Resolve the effective exemplar strategy.
+
+        Precedence: explicit config > auto-detection from model capability tier.
+        """
+        if self._exemplar_strategy != "auto":
+            return self._exemplar_strategy
+
+        from questfoundry.providers.model_info import get_capability_tier
+
+        provider = self._provider_name or "ollama"
+        tier = get_capability_tier(provider, self._model_name or "")
+
+        resolved = "corpus_only" if tier == "small" else "full"
+        log.info("exemplar_strategy_resolved", tier=tier, strategy=resolved)
+        return resolved
+
     async def _phase_0b_exemplar(
         self,
         graph: Graph,
@@ -961,10 +978,10 @@ class FillStage:
     ) -> FillPhaseResult:
         """Phase 0b: Generate voice exemplar passages.
 
-        Strategy: corpus-first, LLM-fallback.
-        1. Query ifcraftcorpus for style exemplars matching voice attributes
-        2. If >= 2 corpus matches → use them (zero LLM cost)
-        3. If < 2 → fall back to strong model LLM generation
+        Strategy depends on exemplar_strategy config:
+        - "corpus_only": corpus exemplars only, skip LLM fallback
+        - "full": corpus-first, LLM-fallback
+        - "auto": resolved from model capability tier
 
         Stores exemplar passages on the voice node for consumption by
         Phase 1 prose generation templates.
@@ -979,8 +996,11 @@ class FillStage:
         voice_register = voice_data.get("voice_register", "")
         sentence_rhythm = voice_data.get("sentence_rhythm", "")
 
+        strategy = self._resolve_exemplar_strategy()
+
         # Step 1: Try corpus-sourced exemplars
         exemplars: list[str] = []
+        corpus_available = True
         try:
             from ifcraftcorpus import Corpus
 
@@ -1025,6 +1045,7 @@ class FillStage:
                     tokens_used=0,
                 )
         except ImportError:
+            corpus_available = False
             log.warning("ifcraftcorpus_not_available", fallback="llm")
         except (RuntimeError, ValueError, KeyError, OSError) as exc:
             log.warning(
@@ -1033,7 +1054,28 @@ class FillStage:
                 exc_info=True,
             )
 
-        # Step 2: LLM fallback — generate story-specific exemplars
+        # Step 2: Strategy-dependent fallback
+        if strategy == "corpus_only":
+            log.info(
+                "exemplar_corpus_only_no_match",
+                pov=pov,
+                tense=tense,
+                register=voice_register,
+                corpus_matches=len(exemplars),
+            )
+            if corpus_available:
+                self._log_corpus_coverage_suggestions(pov, tense, voice_register)
+            if exemplars:
+                graph.update_node("voice::voice", exemplar_passages=exemplars)
+            return FillPhaseResult(
+                phase="exemplar",
+                status="completed",
+                detail=f"corpus_only: {len(exemplars)} exemplars (no LLM fallback)",
+                llm_calls=0,
+                tokens_used=0,
+            )
+
+        # strategy == "full": LLM fallback — generate story-specific exemplars
         log.info("exemplar_fallback_to_llm", corpus_matches=len(exemplars))
 
         tone_words = voice_data.get("tone_words", [])
@@ -1079,6 +1121,39 @@ class FillStage:
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
+
+    def _log_corpus_coverage_suggestions(self, pov: str, tense: str, register: str) -> None:
+        """Log nearby voice combos that have corpus exemplar coverage."""
+        try:
+            from ifcraftcorpus import Corpus
+
+            corpus = Corpus()
+            suggestions: list[str] = []
+            for alt_register in ("conversational", "literary", "ornate", "sparse"):
+                if alt_register == register:
+                    continue
+                results = corpus.search_exemplars(
+                    pov=pov or None,
+                    tense=tense or None,
+                    register=alt_register,
+                    language=self._language,
+                    limit=1,
+                )
+                if results:
+                    suggestions.append(f"{pov}/{tense}/{alt_register}")
+            if suggestions:
+                log.info(
+                    "exemplar_nearby_combos_available",
+                    current=f"{pov}/{tense}/{register}",
+                    alternatives=suggestions,
+                )
+            else:
+                log.info(
+                    "exemplar_no_nearby_combos",
+                    current=f"{pov}/{tense}/{register}",
+                )
+        except (ImportError, RuntimeError, ValueError, KeyError, OSError):
+            pass
 
     def _validate_exemplars(
         self,
