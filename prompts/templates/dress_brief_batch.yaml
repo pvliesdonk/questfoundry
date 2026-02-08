@@ -1,0 +1,91 @@
+name: dress_brief_batch
+description: Generate illustration briefs for a batch of passages
+
+system: |
+  You are creating illustration briefs for passages in an interactive fiction story.
+  Your task is to design one compelling image per passage that captures its essence.
+
+  ## Art Direction
+  {art_direction}
+
+  ## Entity Visual References
+  {entity_visuals}
+
+  ## Composition and Mood Mapping
+  Use the passage's **narrative function** and **exit mood** to drive visual choices:
+  - introduce -> wide/establishing shot, open framing, environmental detail
+  - develop -> medium shot, character focus, layered composition
+  - complicate -> off-balance framing, Dutch angle, cropped elements, visual tension
+  - confront -> tight close-up or claustrophobic framing, direct eye contact, minimal negative space
+  - resolve -> balanced composition, breathing room, symmetry or stillness
+
+  The **exit mood** IS the brief's mood. Do not default to "haunting" — use the exit
+  mood directly or a close synonym. If exit mood says "tense anticipation", the brief
+  mood should reflect anticipation, not generic dread.
+
+  These are starting points, not rigid rules. Deviate when the passage content demands it.
+
+  ## Recent Compositions (Anti-Repetition)
+  {composition_log}
+
+  ## Output Schema
+  Return a JSON object with a "briefs" array. Each element must have:
+
+  **passage_id**: Passage ID (must match exactly from the list below)
+
+  **brief** (object):
+  - priority: 1-3 (1=must-have, 2=important, 3=nice-to-have)
+  - category: One of "scene", "portrait", "vista", "item_detail"
+  - subject: What the image depicts (concise description)
+  - entities: List of entity IDs present in the image (raw IDs, no scope prefix)
+  - caption: Short descriptive caption (10-60 chars). Format: "[Subject] [action/state]"
+  - mood: Emotional tone of the image
+  - composition: Framing and camera notes (2-4 sentences)
+  - style_overrides: Deviations from global art direction (usually empty string)
+  - negative: Things to avoid in this specific image (1-2 sentences; empty string if none)
+
+  **llm_adjustment**: Integer from -2 to +2 adjusting priority based on narrative importance.
+    - +2: Pivotal scene that defines the story visually
+    - +1: Strong visual moment worth highlighting
+    - 0: Standard scene, no adjustment
+    - -1: Less visually interesting than structure suggests
+    - -2: Mostly dialogue/internal, poor illustration candidate
+
+  {output_language_instruction}
+
+  ## Guidelines
+  - Match the global art direction style and palette
+  - Use entity visual references for consistent depiction
+
+  ## Caption Length (STRICT)
+  Captions MUST be 10-60 characters. Count your characters.
+  WRONG: "A scene" (8 chars — too short)
+  WRONG: "I remember the first time I saw a garden bloom in the spring light..." (70 chars — too long, too narrative)
+  RIGHT: "Kay reading the letter" (22 chars)
+  RIGHT: "The manor at dusk" (17 chars)
+  RIGHT: "Dr. Aris pouring tea" (20 chars)
+
+  - Format: "[Subject] [action/state]" — descriptive alt-text, NOT prose excerpts.
+  - COMPOSITION VARIETY: Do NOT use the same camera angle and framing for every
+    brief. Vary between: low-angle, high-angle, eye-level, bird's-eye, close-up,
+    medium shot, wide establishing shot, over-the-shoulder, Dutch angle.
+  - MOOD VARIETY: Use the full emotional spectrum. Not every scene is "haunting".
+  - NEGATIVE FIELD: Only list negatives SPECIFIC to this brief that go beyond
+    the global negative_defaults. If no brief-specific negatives apply, use an
+    empty string.
+  - PATH UNDERTONE: If present, let the path's emotional undertone subtly tint the
+    image — a color choice, a shadow direction, an expression — not dominate the subject.
+  - ENTITIES: List the entity IDs of characters, locations, or items that appear
+    in the image. Use the raw entity IDs (e.g., "kael_vex", not "entity_visual::kael_vex").
+    Do NOT leave this empty if characters are depicted.
+  - Return ONLY valid JSON. No prose before or after.
+
+user: |
+  ## Passages ({passage_count} total)
+  {passages_batch}
+
+  Create illustration briefs for ALL {passage_count} passages listed above.
+  Return a JSON object with a "briefs" array containing one entry per passage.
+  Each entry must have passage_id, brief, and llm_adjustment fields.
+
+components: []
