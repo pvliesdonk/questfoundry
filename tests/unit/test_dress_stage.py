@@ -16,10 +16,11 @@ from questfoundry.models.dress import (
     ArtDirection,
     BatchedBriefItem,
     BatchedBriefOutput,
+    BatchedCodexItem,
+    BatchedCodexOutput,
     CodexEntry,
     DressPhase0Output,
     DressPhase1Output,
-    DressPhase2Output,
     DressPhaseResult,
     EntityVisualWithId,
     IllustrationBrief,
@@ -232,9 +233,16 @@ class TestPhase0ArtDirection:
             ),
             llm_adjustment=0,
         )
-        mock_codex_out = DressPhase2Output(
-            entries=[
-                CodexEntry(title="Test Entity", rank=1, visible_when=[], content="Base knowledge.")
+        mock_codex_out = BatchedCodexOutput(
+            entities=[
+                BatchedCodexItem(
+                    entity_id="entity::protagonist",
+                    entries=[CodexEntry(title="Test", rank=1, visible_when=[], content="Base.")],
+                ),
+                BatchedCodexItem(
+                    entity_id="entity::aldric",
+                    entries=[CodexEntry(title="Test", rank=1, visible_when=[], content="Base.")],
+                ),
             ]
         )
 
@@ -258,12 +266,11 @@ class TestPhase0ArtDirection:
                 stage,
                 "_dress_llm_call",
                 new_callable=AsyncMock,
-                # Order is deterministic: dict insertion order (Python 3.7+).
-                # Phase 1: 1 passage, Phase 2: protagonist then aldric.
+                # Phase 1: 1 passage (per-passage call).
+                # Phase 2: 1 batch with both entities (batch size 4).
                 side_effect=[
                     (mock_brief_output, 1, 50),  # Phase 1: opening passage
-                    (mock_codex_out, 1, 50),  # Phase 2: protagonist
-                    (mock_codex_out, 1, 50),  # Phase 2: aldric
+                    (mock_codex_out, 1, 50),  # Phase 2: batch of 2 entities
                 ],
             ),
         ):
@@ -1062,29 +1069,34 @@ class TestPhase1Briefs:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
-def mock_codex_output() -> DressPhase2Output:
-    return DressPhase2Output(
-        entries=[
-            CodexEntry(
-                title="Aldric",
-                rank=1,
-                visible_when=[],
-                content="A young scholar of the old academy.",
-            ),
-            CodexEntry(
-                title="Aldric's Secret",
-                rank=2,
-                visible_when=["met_aldric"],
-                content="The scholar secretly studies forbidden texts.",
-            ),
+def _make_codex_output(entity_id: str) -> BatchedCodexOutput:
+    """Helper to create a BatchedCodexOutput for a single entity."""
+    return BatchedCodexOutput(
+        entities=[
+            BatchedCodexItem(
+                entity_id=entity_id,
+                entries=[
+                    CodexEntry(
+                        title="Aldric",
+                        rank=1,
+                        visible_when=[],
+                        content="A young scholar of the old academy.",
+                    ),
+                    CodexEntry(
+                        title="Aldric's Secret",
+                        rank=2,
+                        visible_when=["met_aldric"],
+                        content="The scholar secretly studies forbidden texts.",
+                    ),
+                ],
+            )
         ]
     )
 
 
 class TestPhase2Codex:
     @pytest.mark.asyncio()
-    async def test_creates_codex_nodes(self, mock_codex_output: DressPhase2Output) -> None:
+    async def test_creates_codex_nodes(self) -> None:
         """Phase 2 creates codex nodes for each entity."""
         g = Graph()
         g.create_node(
@@ -1102,11 +1114,12 @@ class TestPhase2Codex:
         )
 
         stage = DressStage()
+        mock_output = _make_codex_output("entity::protagonist")
         with patch.object(
             stage,
             "_dress_llm_call",
             new_callable=AsyncMock,
-            return_value=(mock_codex_output, 1, 150),
+            return_value=(mock_output, 1, 150),
         ):
             result = await stage._phase_2_codex(g, MagicMock())
 
@@ -1138,7 +1151,59 @@ class TestPhase2Codex:
         assert result.detail == "no entities"
 
     @pytest.mark.asyncio()
-    async def test_logs_validation_warnings(self, mock_codex_output: DressPhase2Output) -> None:
+    async def test_batching_groups_entities(self) -> None:
+        """5 entities with batch size 4 produce 2 LLM calls."""
+        g = Graph()
+        for i in range(5):
+            g.create_node(
+                f"entity::e{i}",
+                {"type": "entity", "raw_id": f"e{i}", "entity_type": "character"},
+            )
+
+        def _make_batch_output(chunk: list[str]) -> BatchedCodexOutput:
+            return BatchedCodexOutput(
+                entities=[
+                    BatchedCodexItem(
+                        entity_id=eid,
+                        entries=[
+                            CodexEntry(title=f"E{i}", rank=1, visible_when=[], content="Info.")
+                        ],
+                    )
+                    for i, eid in enumerate(chunk)
+                ]
+            )
+
+        call_count = 0
+
+        async def _mock_llm_call(
+            _model: Any,
+            _template: str,
+            _context: dict[str, Any],
+            _schema: type,
+            **_kwargs: Any,
+        ) -> tuple:
+            nonlocal call_count
+            call_count += 1
+            # Parse entity count from context to build matching output
+            count = int(_context["entity_count"])
+            # Build entity IDs from batch text (rough extraction)
+            eids = [
+                f"entity::e{j}" for j in range((call_count - 1) * 4, (call_count - 1) * 4 + count)
+            ]
+            return (_make_batch_output(eids), 1, 100)
+
+        stage = DressStage()
+        with patch.object(stage, "_dress_llm_call", side_effect=_mock_llm_call):
+            result = await stage._phase_2_codex(g, MagicMock())
+
+        assert call_count == 2  # 4 + 1
+        assert result.llm_calls == 2
+        # All 5 entities should have codex entries
+        for i in range(5):
+            assert g.get_node(f"codex::e{i}_rank1") is not None
+
+    @pytest.mark.asyncio()
+    async def test_logs_validation_warnings(self) -> None:
         """Codex validation warnings are logged but don't fail the phase."""
         g = Graph()
         g.create_node(
@@ -1148,11 +1213,12 @@ class TestPhase2Codex:
         # No codewords defined — met_aldric in visible_when will trigger warning
 
         stage = DressStage()
+        mock_output = _make_codex_output("entity::protagonist")
         with patch.object(
             stage,
             "_dress_llm_call",
             new_callable=AsyncMock,
-            return_value=(mock_codex_output, 1, 150),
+            return_value=(mock_output, 1, 150),
         ):
             result = await stage._phase_2_codex(g, MagicMock())
 
