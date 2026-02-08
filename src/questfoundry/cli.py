@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import os
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -475,6 +476,7 @@ def _run_stage_command(
     image_budget: int = 0,
     min_priority: int = 3,
     two_step: bool | None = None,
+    exemplar_strategy: str | None = None,
     language: str | None = None,
 ) -> None:
     """Common logic for running a stage command.
@@ -500,6 +502,7 @@ def _run_stage_command(
         image_provider: Image provider spec for DRESS stage (e.g., ``openai/gpt-image-1``).
         min_priority: Only generate briefs with this priority or higher (1-3).
         two_step: Whether to use two-step prose generation in FILL stage.
+        exemplar_strategy: Exemplar strategy for FILL stage (auto/corpus_only/full).
         language: ISO 639-1 language code override (e.g., "nl", "ja").
     """
     log = get_logger(__name__)
@@ -534,6 +537,11 @@ def _run_stage_command(
         context["min_priority"] = min_priority
     if stage_name == "fill" and two_step is not None:
         context["two_step"] = two_step
+    if stage_name == "fill":
+        # CLI flag > env var; project config is handled by orchestrator
+        effective_strategy = exemplar_strategy or os.environ.get("QF_EXEMPLAR_STRATEGY")
+        if effective_strategy:
+            context["exemplar_strategy"] = effective_strategy
     if language:
         context["language"] = language
 
@@ -1370,6 +1378,15 @@ def fill(
             "Defaults to fill.two_step in project.yaml (true if unset).",
         ),
     ] = None,
+    exemplar_strategy: Annotated[
+        str | None,
+        typer.Option(
+            "--exemplar-strategy",
+            help="Exemplar generation strategy: 'auto' (detect from model size), "
+            "'corpus_only' (no LLM fallback), 'full' (corpus + LLM fallback). "
+            "Defaults to fill.exemplar_strategy in project.yaml (auto if unset).",
+        ),
+    ] = None,
     language: Annotated[
         str | None,
         typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
@@ -1405,6 +1422,7 @@ def fill(
         provider_serialize=provider_structured or provider_serialize,
         resume_from=resume_from,
         two_step=two_step,
+        exemplar_strategy=exemplar_strategy,
         language=language,
     )
 
@@ -1873,6 +1891,13 @@ def run(
             help="Two-step FILL prose generation. Defaults to fill.two_step in project.yaml.",
         ),
     ] = None,
+    exemplar_strategy: Annotated[
+        str | None,
+        typer.Option(
+            "--exemplar-strategy",
+            help="FILL exemplar strategy: auto/corpus_only/full.",
+        ),
+    ] = None,
     language: Annotated[
         str | None,
         typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
@@ -1991,6 +2016,7 @@ def run(
                 image_budget=image_budget,
                 min_priority=min_priority,
                 two_step=two_step,
+                exemplar_strategy=exemplar_strategy,
                 language=language,
             )
 

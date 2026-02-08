@@ -607,6 +607,10 @@ class PipelineOrchestrator:
                     stage_kwargs["min_priority"] = min_priority
             if stage_name == "fill":
                 stage_kwargs["two_step"] = context.get("two_step", self.config.fill.two_step)
+                stage_kwargs["model_name"] = self._model_name
+                stage_kwargs["exemplar_strategy"] = context.get(
+                    "exemplar_strategy", self.config.fill.exemplar_strategy
+                )
 
             # Resolve size profile from DREAM vision node (for post-DREAM stages)
             if stage_name != "dream":

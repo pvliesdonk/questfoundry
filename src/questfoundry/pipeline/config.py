@@ -254,9 +254,14 @@ class FillConfig:
         two_step: Use two-step prose generation (write prose first, then
             extract entities). Improves quality by removing JSON constraints
             from creative output.
+        exemplar_strategy: Controls voice exemplar generation.
+            "auto" (default): detect from model capability tier.
+            "corpus_only": corpus exemplars only, no LLM fallback.
+            "full": corpus-first with LLM fallback for missing combos.
     """
 
     two_step: bool = True
+    exemplar_strategy: str = "auto"
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> FillConfig:
@@ -270,6 +275,7 @@ class FillConfig:
         """
         return cls(
             two_step=data.get("two_step", True),
+            exemplar_strategy=data.get("exemplar_strategy", "auto"),
         )
 
 

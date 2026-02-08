@@ -583,6 +583,26 @@ class TestFillConfig:
         config = FillConfig.from_dict({})
         assert config.two_step is True
 
+    def test_default_exemplar_strategy_is_auto(self) -> None:
+        """FillConfig defaults to exemplar_strategy='auto'."""
+        config = FillConfig()
+        assert config.exemplar_strategy == "auto"
+
+    def test_from_dict_exemplar_strategy(self) -> None:
+        """FillConfig.from_dict reads exemplar_strategy."""
+        config = FillConfig.from_dict({"exemplar_strategy": "corpus_only"})
+        assert config.exemplar_strategy == "corpus_only"
+
+    def test_from_dict_exemplar_strategy_full(self) -> None:
+        """FillConfig.from_dict reads exemplar_strategy=full."""
+        config = FillConfig.from_dict({"exemplar_strategy": "full"})
+        assert config.exemplar_strategy == "full"
+
+    def test_from_dict_empty_preserves_exemplar_default(self) -> None:
+        """Empty dict keeps exemplar_strategy default."""
+        config = FillConfig.from_dict({})
+        assert config.exemplar_strategy == "auto"
+
 
 class TestProjectConfigFill:
     """Tests for ProjectConfig fill section."""
@@ -606,6 +626,16 @@ class TestProjectConfigFill:
         config = ProjectConfig.from_dict(data)
         assert config.fill.two_step is False
 
+    def test_fill_exemplar_strategy_from_yaml(self) -> None:
+        """ProjectConfig parses fill.exemplar_strategy from dict."""
+        data = {
+            "name": "test",
+            "providers": {"default": "ollama/qwen3:4b-instruct-32k"},
+            "fill": {"exemplar_strategy": "corpus_only"},
+        }
+        config = ProjectConfig.from_dict(data)
+        assert config.fill.exemplar_strategy == "corpus_only"
+
     def test_fill_section_missing_uses_defaults(self) -> None:
         """Missing fill section uses FillConfig defaults."""
         data = {
@@ -615,3 +645,4 @@ class TestProjectConfigFill:
         config = ProjectConfig.from_dict(data)
         assert isinstance(config.fill, FillConfig)
         assert config.fill.two_step is True
+        assert config.fill.exemplar_strategy == "auto"
