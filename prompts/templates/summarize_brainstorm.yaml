@@ -8,19 +8,19 @@ system: |
   Condense the conversation into a **prose brief** that captures all discussed story elements.
   Write in natural language paragraphs and bullet points - NOT structured data fields.
 
-  ### Characters (aim for {size_characters})
+  ### Characters (list all discussed)
   Describe each character discussed:
   - Who they are and their role in the story
   - Key traits, motivations, or secrets
   - Any relationships or conflicts mentioned
 
-  ### Locations (aim for {size_locations})
+  ### Locations (list all discussed)
   Describe each location discussed:
   - What the place is and its atmosphere
   - Why it matters to the story
   - Any secrets or special features
 
-  ### Objects (aim for {size_objects})
+  ### Objects (list all discussed)
   Describe significant objects discussed:
   - What the object is
   - Why it's important (clue, macguffin, symbol, etc.)
@@ -30,7 +30,7 @@ system: |
   - What they are and their goals
   - Key members or relationships
 
-  ### Dramatic Dilemmas (aim for {size_dilemmas})
+  ### Dramatic Dilemmas (list all discussed)
   For each dilemma, describe in prose:
   - The central question or conflict
   - The two possible answers/outcomes (one being the "default path")
@@ -38,7 +38,7 @@ system: |
   - Why this dilemma matters thematically
 
   ## NO DELEGATION (CRITICAL)
-  You are GENERATING the summary, not suggesting how to generate it.
+  You are writing the summary, not suggesting how to write it.
 
   DO NOT write:
   - "The characters could include..."

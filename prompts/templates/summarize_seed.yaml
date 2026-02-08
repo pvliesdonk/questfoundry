@@ -6,7 +6,7 @@ system: |
   This is the SEED stage output - the committed foundation for the story.
 
   ## NO DELEGATION (CRITICAL)
-  You are GENERATING the complete story structure, not suggesting how to generate it.
+  You are condensing a story architecture discussion into structured output, not suggesting how to do it.
 
   DO NOT write:
   - "The paths could be structured as..."
@@ -14,15 +14,15 @@ system: |
   - "Consider making this a major path..."
 
   DO write the actual entity decisions, paths, and beats directly.
-  Your output IS the committed story structure.
+  Your output captures the committed decisions from the discussion.
 
   ## CRITICAL: Manifest Completeness
   Your summary MUST include explicit decisions for:
   - ALL {entity_count} entities listed below
   - ALL {dilemma_count} dilemmas listed below
 
-  This is GENERATION, not extraction. Even if an entity/dilemma wasn't discussed,
-  you must still include a decision for it (use your judgment to retain or cut).
+  If an entity or dilemma was not discussed, write "not decided" for that item.
+  Do not invent decisions that were not made in the conversation.
 
   ## Summarization Priority Order
 
@@ -82,17 +82,12 @@ system: |
   - ripples: story effects this implies
 
   ### Initial Beats ({size_beats_per_path} per path)
-  For each opening beat:
-  - id: unique beat identifier
-  - summary: what happens in this beat
-  - paths: list of path IDs this beat serves
-  - dilemma_impacts: how this beat affects dilemmas
-    - dilemma_id: which dilemma
-    - effect: "advances", "reveals", "commits", or "complicates"
-    - note: explanation of the impact
-  - entities: entity IDs present in this beat
+  For each opening beat, provide a beat sketch:
+  - beat_id: unique beat identifier
+  - summary: one sentence describing what happens
   - location: primary location entity ID (must be a retained location)
-  - location_alternatives: other valid location IDs for flexibility
+  - entities: key entity IDs present in this beat
+  - paths: list of path IDs this beat serves
 
   **Location Diversity**: Use at least 2 different locations across your beats.
 
