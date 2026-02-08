@@ -119,14 +119,7 @@ def _mock_implemented_phases(stage: FillStage) -> None:
     ) -> FillPhaseResult:
         return FillPhaseResult(phase="revision", status="completed", llm_calls=0, tokens_used=0)
 
-    async def _fake_phase_0b(
-        graph: Graph,  # noqa: ARG001
-        model: MagicMock,  # noqa: ARG001
-    ) -> FillPhaseResult:
-        return FillPhaseResult(phase="exemplar", status="completed", llm_calls=0, tokens_used=0)
-
     stage._phase_0_voice = _fake_phase_0  # type: ignore[method-assign]
-    stage._phase_0b_exemplar = _fake_phase_0b  # type: ignore[method-assign]
     stage._phase_1a_expand = _fake_phase_1a  # type: ignore[method-assign]
     stage._phase_1_generate = _fake_phase_1  # type: ignore[method-assign]
     stage._phase_1c_mechanical_gate = _fake_phase_1c  # type: ignore[method-assign]
@@ -344,9 +337,9 @@ class TestFillStageExecute:
         _mock_implemented_phases(stage)
         await stage.execute(mock_model, "", on_phase_progress=on_progress)
 
-        assert len(progress_calls) == 8
+        assert len(progress_calls) == 7
         assert progress_calls[0][0] == "voice"
-        assert progress_calls[1][0] == "exemplar"
+        assert progress_calls[1][0] == "expand"
 
     @pytest.mark.asyncio
     async def test_project_path_override(
@@ -363,17 +356,16 @@ class TestFillStageExecute:
 
 
 class TestPhaseOrder:
-    def test_eight_phases(self) -> None:
+    def test_seven_phases(self) -> None:
         stage = FillStage()
         phases = stage._phase_order()
-        assert len(phases) == 8
+        assert len(phases) == 7
 
     def test_phase_names(self) -> None:
         stage = FillStage()
         names = [name for _, name in stage._phase_order()]
         assert names == [
             "voice",
-            "exemplar",
             "expand",
             "generate",
             "quality_gate",

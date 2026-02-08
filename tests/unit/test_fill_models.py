@@ -44,7 +44,6 @@ class TestVoiceDocument:
         assert doc.pov_character == ""
         assert doc.avoid_words == []
         assert doc.avoid_patterns == []
-        assert doc.exemplar_passages == []
 
     def test_pov_character_defaults_to_empty(self) -> None:
         """pov_character defaults to empty string when not provided."""
@@ -69,11 +68,9 @@ class TestVoiceDocument:
             tone_words=["terse", "wry"],
             avoid_words=["suddenly", "very"],
             avoid_patterns=["adverb-heavy dialogue tags"],
-            exemplar_passages=["The rain fell. I didn't care."],
         )
         assert doc.pov_character == "kay"
         assert len(doc.avoid_words) == 2
-        assert len(doc.exemplar_passages) == 1
 
     def test_all_pov_values(self) -> None:
         for pov in ("first", "second", "third_limited", "third_omniscient"):

@@ -8,9 +8,6 @@ system: |
   ## Voice Document
   {voice_document}
 
-  ## Voice Exemplars
-  {exemplar_passages}
-
   ## Story Identity
   {story_identity}
 
