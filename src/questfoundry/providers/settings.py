@@ -399,7 +399,7 @@ class PhaseSettings:
                         del kwargs[param]
 
         if self.verbosity is not None:
-            kwargs["model_kwargs"] = {"verbosity": self.verbosity}
+            kwargs.setdefault("model_kwargs", {})["verbosity"] = self.verbosity
 
         return kwargs
 
