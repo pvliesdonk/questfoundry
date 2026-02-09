@@ -590,9 +590,11 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
     """Validate BRAINSTORM output internal consistency.
 
     Checks that the output is self-consistent (no graph needed):
-    1. All central_entity_ids in dilemmas exist in entities list
-    2. All answer IDs within a dilemma are unique
-    3. Each dilemma has exactly one is_default_path=true answer
+    1. No duplicate entity IDs (same category + raw_id)
+    2. No duplicate dilemma IDs
+    3. All central_entity_ids in dilemmas exist in entities list
+    4. All answer IDs within a dilemma are unique
+    5. Each dilemma has exactly one is_default_path=true answer
 
     Args:
         output: BRAINSTORM stage output (entities, dilemmas).
@@ -605,6 +607,7 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
     # Validate entities and build ID set in single pass
     entities = output.get("entities", [])
     entity_ids: set[str] = set()
+    seen_full_ids: dict[str, int] = {}  # full_id -> first index
     for i, entity in enumerate(entities):
         entity_id = entity.get("entity_id")
         if not entity_id:  # None or empty string
@@ -617,13 +620,43 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
                 )
             )
         else:
-            entity_ids.add(strip_scope_prefix(entity_id))
+            raw_id = strip_scope_prefix(entity_id)
+            entity_ids.add(raw_id)
+
+            # Check for duplicate entity IDs (same category + raw_id = same graph node)
+            category = entity.get("entity_category", "unknown")
+            full_id = f"{category}::{raw_id}"
+            if full_id in seen_full_ids:
+                errors.append(
+                    BrainstormValidationError(
+                        field_path=f"entities.{i}.entity_id",
+                        issue=f"Duplicate entity '{full_id}' (first seen at index {seen_full_ids[full_id]}). Each entity must have a unique ID.",
+                        available=[],
+                        provided=entity_id,
+                    )
+                )
+            else:
+                seen_full_ids[full_id] = i
     sorted_entity_ids = sorted(entity_ids)
 
     # Validate each dilemma
+    seen_dilemma_ids: dict[str, int] = {}  # dilemma_id -> first index
     for i, dilemma in enumerate(output.get("dilemmas", [])):
         raw_dilemma_id = dilemma.get("dilemma_id", f"<index {i}>")
         dilemma_id = strip_scope_prefix(raw_dilemma_id)
+
+        # 0. Check for duplicate dilemma IDs
+        if dilemma_id in seen_dilemma_ids:
+            errors.append(
+                BrainstormValidationError(
+                    field_path=f"dilemmas.{i}.dilemma_id",
+                    issue=f"Duplicate dilemma_id '{dilemma_id}' (first seen at index {seen_dilemma_ids[dilemma_id]}). Each dilemma must have a unique ID.",
+                    available=[],
+                    provided=raw_dilemma_id,
+                )
+            )
+        else:
+            seen_dilemma_ids[dilemma_id] = i
 
         # 1. Check central_entity_ids reference valid entities
         for eid in dilemma.get("central_entity_ids", []):

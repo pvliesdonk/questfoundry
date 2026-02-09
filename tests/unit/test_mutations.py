@@ -819,6 +819,87 @@ class TestValidateBrainstormMutations:
 
         assert errors == []
 
+    def test_duplicate_entity_ids_detected(self) -> None:
+        """Detects duplicate entity IDs within the same category."""
+        output = {
+            "entities": [
+                {
+                    "entity_id": "loc_boathouse_and_dock",
+                    "entity_category": "location",
+                    "concept": "A boathouse",
+                },
+                {
+                    "entity_id": "loc_boathouse_and_dock",
+                    "entity_category": "location",
+                    "concept": "A boathouse (duplicate)",
+                },
+            ],
+            "dilemmas": [],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        duplicate_errors = [e for e in errors if "Duplicate entity" in e.issue]
+        assert len(duplicate_errors) == 1
+        assert "location::loc_boathouse_and_dock" in duplicate_errors[0].issue
+        assert "index 0" in duplicate_errors[0].issue
+
+    def test_same_raw_id_different_categories_valid(self) -> None:
+        """Same raw ID in different categories is valid (different graph nodes)."""
+        output = {
+            "entities": [
+                {
+                    "entity_id": "the_archive",
+                    "entity_category": "location",
+                    "concept": "A building",
+                },
+                {
+                    "entity_id": "the_archive",
+                    "entity_category": "faction",
+                    "concept": "A secret society",
+                },
+            ],
+            "dilemmas": [],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        duplicate_errors = [e for e in errors if "Duplicate" in e.issue]
+        assert len(duplicate_errors) == 0
+
+    def test_duplicate_dilemma_ids_detected(self) -> None:
+        """Detects duplicate dilemma IDs."""
+        output = {
+            "entities": [],
+            "dilemmas": [
+                {
+                    "dilemma_id": "trust_or_betray",
+                    "question": "Can the mentor be trusted?",
+                    "central_entity_ids": [],
+                    "answers": [
+                        {"answer_id": "trust", "description": "Trust", "is_default_path": True},
+                        {"answer_id": "betray", "description": "Betray", "is_default_path": False},
+                    ],
+                },
+                {
+                    "dilemma_id": "trust_or_betray",
+                    "question": "Duplicate dilemma",
+                    "central_entity_ids": [],
+                    "answers": [
+                        {"answer_id": "a", "description": "A", "is_default_path": True},
+                        {"answer_id": "b", "description": "B", "is_default_path": False},
+                    ],
+                },
+            ],
+        }
+
+        errors = validate_brainstorm_mutations(output)
+
+        duplicate_errors = [e for e in errors if "Duplicate dilemma_id" in e.issue]
+        assert len(duplicate_errors) == 1
+        assert "trust_or_betray" in duplicate_errors[0].issue
+        assert "index 0" in duplicate_errors[0].issue
+
 
 class TestBrainstormMutationError:
     """Test BrainstormMutationError formatting."""
