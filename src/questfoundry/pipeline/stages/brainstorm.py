@@ -87,11 +87,20 @@ def _format_vision_context(vision_node: dict[str, Any]) -> str:
     if themes := vision_node.get("themes"):
         parts.append(f"**Themes**: {_format_list_or_str(themes)}")
 
+    if content_notes := vision_node.get("content_notes"):
+        if includes := content_notes.get("includes"):
+            parts.append("**Include**: " + "; ".join(includes))
+        if excludes := content_notes.get("excludes"):
+            parts.append("**Avoid**: " + "; ".join(excludes))
+
     if audience := vision_node.get("audience"):
         parts.append(f"**Audience**: {audience}")
 
     if style_notes := vision_node.get("style_notes"):
         parts.append(f"**Style**: {style_notes}")
+
+    if pov_style := vision_node.get("pov_style"):
+        parts.append(f"**POV**: {pov_style}")
 
     if scope := vision_node.get("scope"):
         parts.append(f"**Scope**: {scope}")
