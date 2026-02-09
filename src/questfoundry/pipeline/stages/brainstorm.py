@@ -89,9 +89,9 @@ def _format_vision_context(vision_node: dict[str, Any]) -> str:
 
     if content_notes := vision_node.get("content_notes"):
         if includes := content_notes.get("includes"):
-            parts.append("**Include**: " + "; ".join(includes))
+            parts.append(f"**Include**: {'; '.join(includes)}")
         if excludes := content_notes.get("excludes"):
-            parts.append("**Avoid**: " + "; ".join(excludes))
+            parts.append(f"**Avoid**: {'; '.join(excludes)}")
 
     if audience := vision_node.get("audience"):
         parts.append(f"**Audience**: {audience}")
