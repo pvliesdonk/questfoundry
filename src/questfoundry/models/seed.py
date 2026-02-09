@@ -16,6 +16,7 @@ Terminology (v5):
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -300,6 +301,18 @@ class SeedOutput(BaseModel):
 # These allow serializing SEED output in chunks to avoid output truncation
 
 
+def _check_ids_unique(items: list[Any], id_attr: str, type_name: str) -> None:
+    """Check that IDs are unique in a collection of Pydantic models.
+
+    Raises ValueError with a descriptive message listing duplicates.
+    """
+    ids = [getattr(item, id_attr) for item in items]
+    dupes = [item_id for item_id, count in Counter(ids).items() if count > 1]
+    if dupes:
+        msg = f"Duplicate {type_name}s found: {sorted(dupes)}. Each {type_name.split('_')[0]} must appear exactly once."
+        raise ValueError(msg)
+
+
 class EntitiesSection(BaseModel):
     """Wrapper for serializing entity decisions separately."""
 
@@ -311,13 +324,7 @@ class EntitiesSection(BaseModel):
     @model_validator(mode="after")
     def _check_entity_ids_unique(self) -> EntitiesSection:
         """Validate that entity IDs are unique."""
-        from collections import Counter
-
-        ids = [e.entity_id for e in self.entities]
-        dupes = [eid for eid, count in Counter(ids).items() if count > 1]
-        if dupes:
-            msg = f"Duplicate entity_ids found: {sorted(dupes)}. Each entity must appear exactly once."
-            raise ValueError(msg)
+        _check_ids_unique(self.entities, "entity_id", "entity_id")
         return self
 
 
@@ -332,13 +339,7 @@ class DilemmasSection(BaseModel):
     @model_validator(mode="after")
     def _check_dilemma_ids_unique(self) -> DilemmasSection:
         """Validate that dilemma IDs are unique."""
-        from collections import Counter
-
-        ids = [d.dilemma_id for d in self.dilemmas]
-        dupes = [did for did, count in Counter(ids).items() if count > 1]
-        if dupes:
-            msg = f"Duplicate dilemma_ids found: {sorted(dupes)}. Each dilemma must appear exactly once."
-            raise ValueError(msg)
+        _check_ids_unique(self.dilemmas, "dilemma_id", "dilemma_id")
         return self
 
 
@@ -353,13 +354,7 @@ class PathsSection(BaseModel):
     @model_validator(mode="after")
     def _check_path_ids_unique(self) -> PathsSection:
         """Validate that path IDs are unique."""
-        from collections import Counter
-
-        ids = [p.path_id for p in self.paths]
-        dupes = [pid for pid, count in Counter(ids).items() if count > 1]
-        if dupes:
-            msg = f"Duplicate path_ids found: {sorted(dupes)}. Each path must appear exactly once."
-            raise ValueError(msg)
+        _check_ids_unique(self.paths, "path_id", "path_id")
         return self
 
 
@@ -374,13 +369,7 @@ class ConsequencesSection(BaseModel):
     @model_validator(mode="after")
     def _check_consequence_ids_unique(self) -> ConsequencesSection:
         """Validate that consequence IDs are unique."""
-        from collections import Counter
-
-        ids = [c.consequence_id for c in self.consequences]
-        dupes = [cid for cid, count in Counter(ids).items() if count > 1]
-        if dupes:
-            msg = f"Duplicate consequence_ids found: {sorted(dupes)}. Each consequence must appear exactly once."
-            raise ValueError(msg)
+        _check_ids_unique(self.consequences, "consequence_id", "consequence_id")
         return self
 
 

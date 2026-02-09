@@ -26,7 +26,7 @@ class TestEntitiesSectionUniqueness:
         assert len(section.entities) == 2
 
     def test_duplicate_entities_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="Duplicate entity_ids"):
+        with pytest.raises(ValidationError, match="Duplicate entity_id"):
             EntitiesSection(
                 entities=[
                     {"entity_id": "character::alice", "disposition": "retained"},
@@ -37,6 +37,23 @@ class TestEntitiesSectionUniqueness:
     def test_empty_entities_accepted(self) -> None:
         section = EntitiesSection(entities=[])
         assert len(section.entities) == 0
+
+    def test_single_entity_accepted(self) -> None:
+        section = EntitiesSection(
+            entities=[{"entity_id": "character::alice", "disposition": "retained"}]
+        )
+        assert len(section.entities) == 1
+
+    def test_non_adjacent_duplicate_rejected(self) -> None:
+        """Duplicate not adjacent — ensures we check all items, not just neighbors."""
+        with pytest.raises(ValidationError, match="Duplicate entity_id"):
+            EntitiesSection(
+                entities=[
+                    {"entity_id": "character::alice", "disposition": "retained"},
+                    {"entity_id": "character::bob", "disposition": "cut"},
+                    {"entity_id": "character::alice", "disposition": "retained"},
+                ]
+            )
 
 
 class TestDilemmasSectionUniqueness:
@@ -52,13 +69,17 @@ class TestDilemmasSectionUniqueness:
         assert len(section.dilemmas) == 2
 
     def test_duplicate_dilemmas_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="Duplicate dilemma_ids"):
+        with pytest.raises(ValidationError, match="Duplicate dilemma_id"):
             DilemmasSection(
                 dilemmas=[
                     {"dilemma_id": "dilemma::trust_or_betray", "explored": ["trust"]},
                     {"dilemma_id": "dilemma::trust_or_betray", "explored": ["betray"]},
                 ]
             )
+
+    def test_empty_dilemmas_accepted(self) -> None:
+        section = DilemmasSection(dilemmas=[])
+        assert len(section.dilemmas) == 0
 
 
 class TestPathsSectionUniqueness:
@@ -88,7 +109,7 @@ class TestPathsSectionUniqueness:
         assert len(section.paths) == 2
 
     def test_duplicate_paths_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="Duplicate path_ids"):
+        with pytest.raises(ValidationError, match="Duplicate path_id"):
             PathsSection(
                 paths=[
                     {
@@ -109,6 +130,10 @@ class TestPathsSectionUniqueness:
                     },
                 ]
             )
+
+    def test_empty_paths_accepted(self) -> None:
+        section = PathsSection(paths=[])
+        assert len(section.paths) == 0
 
 
 class TestConsequencesSectionUniqueness:
@@ -132,7 +157,7 @@ class TestConsequencesSectionUniqueness:
         assert len(section.consequences) == 2
 
     def test_duplicate_consequences_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="Duplicate consequence_ids"):
+        with pytest.raises(ValidationError, match="Duplicate consequence_id"):
             ConsequencesSection(
                 consequences=[
                     {
@@ -147,3 +172,7 @@ class TestConsequencesSectionUniqueness:
                     },
                 ]
             )
+
+    def test_empty_consequences_accepted(self) -> None:
+        section = ConsequencesSection(consequences=[])
+        assert len(section.consequences) == 0
