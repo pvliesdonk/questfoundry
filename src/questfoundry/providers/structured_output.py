@@ -5,9 +5,9 @@ Strategy Selection History and Rationale
 All providers now use ``JSON_MODE`` (json_schema) as the unified strategy:
 
 - **JSON_MODE** works reliably for complex nested schemas across all providers.
-- **OpenAI strict mode** requires all properties in ``required``. We handle this
-  by post-processing schemas with ``_make_all_required()`` which recursively
-  adds all properties to the required array.
+- **OpenAI strict mode** requires all properties in ``required`` and
+  ``additionalProperties: false`` on every object schema (including ``$defs``).
+  We handle this by post-processing schemas with ``_make_all_required()``.
 
 Earlier iterations used provider-specific strategies:
 - OpenAI used ``TOOL`` (function_calling) to avoid strict mode's all-required rule
@@ -78,10 +78,14 @@ def _make_all_required(
     schema_name: str = "root",
     truly_optional: set[str] | None = None,
 ) -> dict[str, Any]:
-    """Post-process JSON schema to make all properties required.
+    """Post-process JSON schema for OpenAI strict mode compatibility.
 
-    OpenAI's json_schema strict mode requires all properties in 'required'.
-    This transforms schemas with optional fields to be all-required.
+    OpenAI's json_schema strict mode requires:
+    1. All properties listed in the ``required`` array.
+    2. ``additionalProperties: false`` on **every** object schema, including
+       nested ``$defs`` entries.
+
+    This transforms schemas to satisfy both requirements recursively.
 
     Args:
         schema: JSON schema dict to modify in-place.
@@ -90,11 +94,13 @@ def _make_all_required(
             Use dot notation like "Phase8cOutput.overlay.maybe_field".
 
     Returns:
-        Modified schema with all properties in required array.
+        Modified schema satisfying OpenAI strict mode constraints.
     """
     truly_optional = truly_optional or set()
 
     if "properties" in schema:
+        # OpenAI strict mode requires additionalProperties: false on all objects
+        schema["additionalProperties"] = False
         current_required = set(schema.get("required", []))
         all_props = set(schema.get("properties", {}).keys())
         newly_required = all_props - current_required
@@ -146,6 +152,17 @@ def _make_all_required(
                     schema_name=def_name,
                     truly_optional=truly_optional,
                 )
+
+    # Recurse into anyOf/oneOf entries (e.g., Optional[Model] unions)
+    for keyword in ("anyOf", "oneOf"):
+        if keyword in schema:
+            for item in schema[keyword]:
+                if isinstance(item, dict):
+                    _make_all_required(
+                        item,
+                        schema_name=schema_name,
+                        truly_optional=truly_optional,
+                    )
 
     return schema
 

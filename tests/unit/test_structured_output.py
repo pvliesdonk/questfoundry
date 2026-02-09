@@ -130,6 +130,31 @@ class TestMakeAllRequired:
         assert "inner" in nested_def["required"]
         assert "inner_optional" in nested_def["required"]
 
+    def test_adds_additional_properties_false_to_root(self) -> None:
+        """Should add additionalProperties: false to root object schema."""
+        schema = SchemaWithOptional.model_json_schema()
+        result = _make_all_required(schema, schema_name="SchemaWithOptional")
+        assert result.get("additionalProperties") is False
+
+    def test_adds_additional_properties_false_to_defs(self) -> None:
+        """Should add additionalProperties: false to all $defs object schemas."""
+
+        class Inner(BaseModel):
+            field_a: str
+            field_b: int = 0
+
+        class Outer(BaseModel):
+            inner: Inner
+
+        schema = Outer.model_json_schema()
+        result = _make_all_required(schema, schema_name="Outer")
+
+        # Root must have it
+        assert result.get("additionalProperties") is False
+        # $defs entry must have it
+        inner_def = result["$defs"]["Inner"]
+        assert inner_def.get("additionalProperties") is False
+
     def test_handles_empty_schema(self) -> None:
         """Should handle schema without properties."""
         schema: dict[str, Any] = {"type": "object"}
