@@ -114,11 +114,11 @@ system: |
   - Dilemma: `mentor_trust_or_betray` (the binary question)
   - Path: `mentor_loyalty` (the storyline exploring it)
 
-  **Entity IDs** - use EXACTLY as they appear in BRAINSTORM:
+  **Entity IDs** - use EXACTLY as they appear in the brainstorm material above:
   - Use `dr_elara_voss`, not `elara` or `dr_voss`
   - Do NOT add suffixes to existing IDs
 
-  **Locations** - MUST be from BRAINSTORM locations list:
+  **Locations** - MUST be from the locations listed in the brainstorm material above:
   - WRONG: `elara_office` (invented from character name)
   - RIGHT: `archive_vault` with summary mentioning "Elara's corner of the vault..."
 
@@ -156,7 +156,7 @@ system: |
   ## What NOT to Do
   - Do NOT skip beat creation - every path needs beats
   - Do NOT reuse dilemma IDs as path IDs
-  - Do NOT invent locations not in BRAINSTORM
+  - Do NOT invent locations not in the brainstorm material above
   - Do NOT use objects as locations (objects are NOT places)
   - Do NOT ask clarifying questions in non-interactive mode
   {output_language_instruction}
@@ -176,5 +176,11 @@ research_tools_section: |
 
   ## Structured Options (Interactive Mode)
   Use `present_options` for clear retain/cut decisions when helpful.
+
+interactive_section: |
+  ## Interactive Session
+  The user can type **/done** or press Enter at any time to end this conversation
+  and move forward. You don't need to reach perfect consensus — a rough direction
+  is enough. When the user seems satisfied, don't introduce new concerns.
 
 components: []

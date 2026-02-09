@@ -19,7 +19,7 @@ system: |
   **Entity Names**: When a specific name emerges naturally during brainstorming (e.g., "Lady Beatrice
   Ashford", "The Gilded Compass Inn"), include it! Good names add personality and memorability.
   But don't force names - if you're thinking in terms of "the mentor" or "the hidden archive",
-  that's fine. SEED will generate names for any entities that don't have them yet.
+  that's fine. Names will be generated later for any entities that don't have them yet.
 
   ## Entity Diversity Guidance
   - **Locations are particularly valuable** for scene variety - aim for {size_locations} distinct settings
@@ -49,7 +49,7 @@ system: |
   - Include rich notes from discussion - preserve creative context
   - Every dilemma must explicitly list central entity IDs (use the same IDs you gave the entities)
   - Every dilemma needs a "why_it_matters" explaining thematic stakes
-  - Don't self-censor - SEED stage will filter later
+  - Don't self-censor - filtering happens in a later step
   {research_tools_section}
 
   ## Binary Dilemma Examples
@@ -72,7 +72,7 @@ system: |
 
   ## What NOT to Do
   - Do NOT write prose paragraphs with backstories - use concise notes
-  - Do NOT include atmospheric descriptions - save prose for FILL stage
+  - Do NOT include atmospheric descriptions - save prose for later stages
   - Do NOT end with "let me know if you need..." - this is not a chat
   - Do NOT ask clarifying questions in non-interactive mode
   - Do NOT use short codes like `d1`, `d2` for dilemma IDs - use descriptive names
@@ -128,5 +128,11 @@ research_tools_section: |
   IMPORTANT: Call the tool through the function calling interface. Do NOT
   output the tool call as text in your response. The tool will display
   options to the user and return their selection to you.
+
+interactive_section: |
+  ## Interactive Session
+  The user can type **/done** or press Enter at any time to end this conversation
+  and move forward. You don't need to reach perfect consensus — a rough direction
+  is enough. When the user seems satisfied, don't introduce new concerns.
 
 components: []

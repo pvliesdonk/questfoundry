@@ -13,7 +13,10 @@ system: |
   - What to avoid visually (negative defaults)
   - Per-entity visual identities for consistent character/location depiction
 
-  ## Creative Vision (from DREAM)
+  Focus on exploration and discussion. Your decisions will be consolidated into
+  a structured style guide in a later step — for now, follow the creative energy.
+
+  ## Creative Vision
   {vision_context}
 
   ## Entities to Visualize
@@ -47,5 +50,11 @@ non_interactive_section: |
   You are running without user interaction. Make confident visual decisions
   based on the story's genre, tone, and themes. Do NOT ask clarifying questions —
   commit to choices that best serve the story's atmosphere and setting.
+
+interactive_section: |
+  ## Interactive Session
+  The user can type **/done** or press Enter at any time to end this conversation
+  and move forward. You don't need to reach perfect consensus — a rough direction
+  is enough. When the user seems satisfied, don't introduce new concerns.
 
 components: []
