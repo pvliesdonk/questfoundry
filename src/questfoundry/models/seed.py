@@ -308,6 +308,18 @@ class EntitiesSection(BaseModel):
         description="Entity curation decisions",
     )
 
+    @model_validator(mode="after")
+    def _check_entity_ids_unique(self) -> EntitiesSection:
+        """Validate that entity IDs are unique."""
+        from collections import Counter
+
+        ids = [e.entity_id for e in self.entities]
+        dupes = [eid for eid, count in Counter(ids).items() if count > 1]
+        if dupes:
+            msg = f"Duplicate entity_ids found: {sorted(dupes)}. Each entity must appear exactly once."
+            raise ValueError(msg)
+        return self
+
 
 class DilemmasSection(BaseModel):
     """Wrapper for serializing dilemma decisions separately."""
@@ -316,6 +328,18 @@ class DilemmasSection(BaseModel):
         default_factory=list,
         description="Dilemma exploration decisions",
     )
+
+    @model_validator(mode="after")
+    def _check_dilemma_ids_unique(self) -> DilemmasSection:
+        """Validate that dilemma IDs are unique."""
+        from collections import Counter
+
+        ids = [d.dilemma_id for d in self.dilemmas]
+        dupes = [did for did, count in Counter(ids).items() if count > 1]
+        if dupes:
+            msg = f"Duplicate dilemma_ids found: {sorted(dupes)}. Each dilemma must appear exactly once."
+            raise ValueError(msg)
+        return self
 
 
 class PathsSection(BaseModel):
@@ -326,6 +350,18 @@ class PathsSection(BaseModel):
         description="Created plot paths",
     )
 
+    @model_validator(mode="after")
+    def _check_path_ids_unique(self) -> PathsSection:
+        """Validate that path IDs are unique."""
+        from collections import Counter
+
+        ids = [p.path_id for p in self.paths]
+        dupes = [pid for pid, count in Counter(ids).items() if count > 1]
+        if dupes:
+            msg = f"Duplicate path_ids found: {sorted(dupes)}. Each path must appear exactly once."
+            raise ValueError(msg)
+        return self
+
 
 class ConsequencesSection(BaseModel):
     """Wrapper for serializing consequences separately."""
@@ -334,6 +370,18 @@ class ConsequencesSection(BaseModel):
         default_factory=list,
         description="Narrative consequences for paths",
     )
+
+    @model_validator(mode="after")
+    def _check_consequence_ids_unique(self) -> ConsequencesSection:
+        """Validate that consequence IDs are unique."""
+        from collections import Counter
+
+        ids = [c.consequence_id for c in self.consequences]
+        dupes = [cid for cid, count in Counter(ids).items() if count > 1]
+        if dupes:
+            msg = f"Duplicate consequence_ids found: {sorted(dupes)}. Each consequence must appear exactly once."
+            raise ValueError(msg)
+        return self
 
 
 class BeatsSection(BaseModel):

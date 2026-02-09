@@ -56,6 +56,7 @@ entities_prompt: |
   - For RETAINED entities marked "(needs name)", provide a fitting `name`
 
   ## What NOT to Do
+  - Do NOT include the same entity_id more than once — each entity must appear EXACTLY once
   - Do NOT skip entities because they aren't mentioned in the brief
   - Do NOT invent entities not in the manifest
   - Do NOT partially complete the list
@@ -136,6 +137,7 @@ dilemmas_prompt: |
   overwhelming the GROW stage.
 
   ## What NOT to Do
+  - Do NOT include the same dilemma_id more than once — each dilemma must appear EXACTLY once
   - Do NOT skip dilemmas because they aren't mentioned in the brief
   - Do NOT invent dilemmas not in the manifest
   - Do NOT partially complete the list
@@ -219,6 +221,7 @@ paths_prompt: |
   - dilemma_id MUST include the `dilemma::` prefix
 
   ## What NOT to Do
+  - Do NOT include the same path_id more than once — each path must appear EXACTLY once
   - Do NOT reuse dilemma IDs as path IDs
   - Do NOT skip answers marked as "explored"
   - Do NOT create paths for "unexplored" answers (they become shadows, not paths)
