@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from questfoundry.graph import Graph, apply_mutations, save_snapshot
+from questfoundry.graph import Graph, apply_mutations
 from questfoundry.pipeline import (
     AutoApproveGate,
     PipelineOrchestrator,
@@ -1052,22 +1052,12 @@ def _simulate_mutation_block(
 ) -> Graph:
     """Simulate the orchestrator's mutation block with re-run detection.
 
-    Reproduces the logic from orchestrator.py run_stage() lines 680-710.
+    Calls the production _load_graph_for_mutation helper directly,
+    then applies mutations and saves — matching the orchestrator's run_stage() flow.
     """
-    from questfoundry.pipeline.orchestrator import _MUTATION_STAGE_PREREQUISITES
+    from questfoundry.pipeline.orchestrator import _load_graph_for_mutation
 
-    graph = Graph.load(project_path)
-    last_stage = graph.get_last_stage()
-    prerequisite = _MUTATION_STAGE_PREREQUISITES.get(stage_name)
-    snapshot_path = project_path / "snapshots" / f"pre-{stage_name}.json"
-
-    if last_stage == prerequisite:
-        save_snapshot(graph, project_path, stage_name)
-    elif snapshot_path.exists():
-        graph = Graph.load_from_file(snapshot_path)
-    else:
-        save_snapshot(graph, project_path, stage_name)
-
+    graph = _load_graph_for_mutation(project_path, stage_name)
     apply_mutations(graph, stage_name, artifact_data)
     graph.set_last_stage(stage_name)
     graph.save(project_path / "graph.json")
@@ -1184,8 +1174,8 @@ class TestMutationRerunDetection:
         prerequisite = _MUTATION_STAGE_PREREQUISITES["seed"]
         assert result.get_last_stage() == prerequisite  # First run condition
 
-    def test_rerun_no_snapshot_fallback(self, tmp_path: Path) -> None:
-        """Re-run without snapshot logs warning and saves current state."""
+    def test_rerun_no_snapshot_raises_error(self, tmp_path: Path) -> None:
+        """Re-run without snapshot raises ValueError with guidance."""
         # Set up: graph with last_stage=brainstorm but no snapshot file
         graph = Graph.empty()
         graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
@@ -1196,13 +1186,9 @@ class TestMutationRerunDetection:
         snapshot_path = tmp_path / "snapshots" / "pre-brainstorm.json"
         assert not snapshot_path.exists()
 
-        # This will use the fallback: save current state and try to apply.
-        # It may crash if entities already exist, but the snapshot should be saved.
-        # Since graph has no brainstorm nodes (just vision), it should succeed.
-        _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
-
-        # Snapshot was created as fallback
-        assert snapshot_path.exists()
+        # Re-run without snapshot should raise, not silently corrupt
+        with pytest.raises(ValueError, match="requires the pre-stage snapshot"):
+            _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
 
     def test_dream_first_run_none_prerequisite(self, tmp_path: Path) -> None:
         """Dream first run works with None prerequisite (empty graph)."""

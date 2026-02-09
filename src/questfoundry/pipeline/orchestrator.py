@@ -55,6 +55,46 @@ _MUTATION_STAGE_PREREQUISITES: dict[str, str | None] = {
 }
 
 
+def _load_graph_for_mutation(project_path: Path, stage_name: str) -> Graph:
+    """Load graph with re-run detection for orchestrator-managed mutation stages.
+
+    On first run (last_stage == prerequisite), saves a clean pre-stage snapshot.
+    On re-run, restores from the snapshot to avoid NodeExistsError from
+    create_node() on nodes that already exist.
+
+    Raises:
+        ValueError: If re-running but the pre-stage snapshot is missing.
+    """
+    graph = Graph.load(project_path)
+    last_stage = graph.get_last_stage()
+    prerequisite = _MUTATION_STAGE_PREREQUISITES.get(stage_name)
+    snapshot_path = project_path / "snapshots" / f"pre-{stage_name}.json"
+
+    if last_stage == prerequisite:
+        # First run: save clean pre-stage snapshot
+        save_snapshot(graph, project_path, stage_name)
+    elif snapshot_path.exists():
+        # Re-run: restore clean pre-stage graph
+        graph = Graph.load_from_file(snapshot_path)
+        log.info(
+            "rerun_restored_snapshot",
+            stage=stage_name,
+            from_last_stage=last_stage,
+            snapshot=str(snapshot_path),
+        )
+    else:
+        # No snapshot and not first run — cannot safely re-run.
+        # Matches GROW pattern (grow.py:347-351).
+        raise ValueError(
+            f"Re-running {stage_name} requires the pre-stage snapshot "
+            f"({snapshot_path}), but it doesn't exist. "
+            f"Re-run {prerequisite or 'the previous stage'} first to "
+            f"regenerate the snapshot."
+        )
+
+    return graph
+
+
 @dataclass
 class StageResult:
     """Result of a stage execution."""
@@ -679,38 +719,7 @@ class PipelineOrchestrator:
                 # Apply mutations to unified graph (only for stages with mutation handlers)
                 if has_mutation_handler(stage_name):
                     try:
-                        graph = Graph.load(self.project_path)
-
-                        # Re-run detection: check if this stage already ran.
-                        # On first run, save a clean pre-stage snapshot.
-                        # On re-run, restore from the snapshot to avoid
-                        # NodeExistsError from create_node() on existing nodes.
-                        last_stage = graph.get_last_stage()
-                        prerequisite = _MUTATION_STAGE_PREREQUISITES.get(stage_name)
-                        snapshot_path = self.project_path / "snapshots" / f"pre-{stage_name}.json"
-
-                        if last_stage == prerequisite:
-                            # First run: save clean pre-stage snapshot
-                            save_snapshot(graph, self.project_path, stage_name)
-                        elif snapshot_path.exists():
-                            # Re-run: restore clean pre-stage graph
-                            graph = Graph.load_from_file(snapshot_path)
-                            log.info(
-                                "rerun_restored_snapshot",
-                                stage=stage_name,
-                                from_last_stage=last_stage,
-                                snapshot=str(snapshot_path),
-                            )
-                        else:
-                            # No snapshot and not first run (e.g., snapshot deleted).
-                            # Save current state as best-effort fallback.
-                            log.warning(
-                                "rerun_no_snapshot",
-                                stage=stage_name,
-                                last_stage=last_stage,
-                            )
-                            save_snapshot(graph, self.project_path, stage_name)
-
+                        graph = _load_graph_for_mutation(self.project_path, stage_name)
                         apply_mutations(graph, stage_name, artifact_data)
 
                         # Post-mutation invariant check - catches code bugs, not LLM errors
