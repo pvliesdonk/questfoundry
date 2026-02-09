@@ -836,5 +836,5 @@ class TestPathBeatsSectionValidation:
             InitialBeat(beat_id="same_id", summary="First", paths=["path_a"]),
             InitialBeat(beat_id="same_id", summary="Second", paths=["path_a"]),
         ]
-        with pytest.raises(ValidationError, match="Duplicate beat IDs"):
+        with pytest.raises(ValidationError, match="Duplicates found for beat_id"):
             PathBeatsSection(initial_beats=beats)
