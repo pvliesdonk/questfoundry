@@ -461,6 +461,14 @@ class TestDetectModelVariant:
         assert variant.supports_reasoning_effort is False
         assert variant.rejects_temperature is False
 
+    def test_o4_mini_rejects_temperature(self) -> None:
+        """o4-mini rejects temperature (reasoning model)."""
+        variant = _detect_model_variant("openai", "o4-mini")
+        assert variant.rejects_temperature is True
+        assert variant.rejects_top_p is True
+        assert variant.supports_reasoning_effort is True
+        assert variant.supports_verbosity is False
+
     def test_non_openai_provider_default(self) -> None:
         """Non-OpenAI providers return default variant."""
         variant = _detect_model_variant("anthropic", "claude-3-opus")

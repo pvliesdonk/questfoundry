@@ -45,37 +45,54 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
     "ollama": {
         "qwen3:4b-instruct-32k": ModelProperties(context_window=32_768),
         "qwen3:8b": ModelProperties(context_window=32_768),
-        "qwen2.5:7b": ModelProperties(context_window=32_768),
+        "qwen2.5:7b": ModelProperties(context_window=128_000),
         "llama3:8b": ModelProperties(context_window=8_192),
         "llama3.1:8b": ModelProperties(context_window=128_000),
         "mistral:7b": ModelProperties(context_window=32_768),
         "deepseek-coder:6.7b": ModelProperties(context_window=16_384),
     },
     "openai": {
-        "gpt-5-mini": ModelProperties(
-            context_window=1_000_000,
+        # GPT-5 family: verbosity + reasoning_effort, rejects stop sequences
+        "gpt-5": ModelProperties(
+            context_window=400_000,
             supports_vision=True,
             supports_verbosity=True,
             supports_reasoning_effort=True,
         ),
+        "gpt-5-mini": ModelProperties(
+            context_window=400_000,
+            supports_vision=True,
+            supports_verbosity=True,
+            supports_reasoning_effort=True,
+        ),
+        "gpt-5-nano": ModelProperties(
+            context_window=400_000,
+            supports_vision=True,
+            supports_verbosity=True,
+            supports_reasoning_effort=True,
+        ),
+        "gpt-5.1": ModelProperties(
+            context_window=400_000,
+            supports_vision=True,
+            supports_verbosity=True,
+            supports_reasoning_effort=True,
+        ),
+        "gpt-5.2": ModelProperties(
+            context_window=400_000,
+            supports_vision=True,
+            supports_verbosity=True,
+            supports_reasoning_effort=True,
+        ),
+        # GPT-4.1 family
+        "gpt-4.1": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "gpt-4.1-mini": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "gpt-4.1-nano": ModelProperties(context_window=1_000_000, supports_vision=True),
+        # GPT-4o family
         "gpt-4o": ModelProperties(context_window=128_000, supports_vision=True),
         "gpt-4o-mini": ModelProperties(context_window=128_000, supports_vision=True),
-        "gpt-4-turbo": ModelProperties(context_window=128_000, supports_vision=True),
-        "gpt-4": ModelProperties(context_window=8_192),
-        "gpt-3.5-turbo": ModelProperties(context_window=16_385),
         # Reasoning models: no tool support, no temperature, no verbosity
         "o1": ModelProperties(
             context_window=200_000,
-            supports_tools=False,
-            supports_reasoning_effort=True,
-        ),
-        "o1-mini": ModelProperties(
-            context_window=128_000,
-            supports_tools=False,
-            supports_reasoning_effort=True,
-        ),
-        "o1-preview": ModelProperties(
-            context_window=128_000,
             supports_tools=False,
             supports_reasoning_effort=True,
         ),
@@ -89,19 +106,32 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
             supports_tools=False,
             supports_reasoning_effort=True,
         ),
+        "o3-pro": ModelProperties(
+            context_window=200_000,
+            supports_tools=False,
+            supports_reasoning_effort=True,
+        ),
+        "o4-mini": ModelProperties(
+            context_window=200_000,
+            supports_tools=False,
+            supports_reasoning_effort=True,
+        ),
     },
     "anthropic": {
+        "claude-opus-4-6": ModelProperties(context_window=200_000, supports_vision=True),
+        "claude-opus-4-5-20251101": ModelProperties(context_window=200_000, supports_vision=True),
+        "claude-sonnet-4-5-20250929": ModelProperties(context_window=200_000, supports_vision=True),
         "claude-sonnet-4-20250514": ModelProperties(context_window=200_000, supports_vision=True),
         "claude-opus-4-20250514": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-3-5-sonnet-latest": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-3-5-sonnet-20241022": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-3-opus-20240229": ModelProperties(context_window=200_000, supports_vision=True),
-        "claude-3-haiku-20240307": ModelProperties(context_window=200_000, supports_vision=True),
+        "claude-haiku-4-5-20251001": ModelProperties(context_window=200_000, supports_vision=True),
     },
     "google": {
         "gemini-2.5-flash": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "gemini-2.5-flash-lite": ModelProperties(context_window=1_000_000, supports_vision=True),
         "gemini-2.5-pro": ModelProperties(context_window=1_000_000, supports_vision=True),
         "gemini-2.0-flash": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "gemini-3-pro-preview": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "gemini-3-flash-preview": ModelProperties(context_window=1_000_000, supports_vision=True),
     },
 }
 
