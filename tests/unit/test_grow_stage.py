@@ -1470,10 +1470,10 @@ class TestPhase8cOverlays:
                 OverlayProposal(
                     entity_id="entity::mentor",
                     when=["codeword::mentor_trusted_committed"],
-                    details={
-                        "attitude": "Warm and supportive",
-                        "access": "Shares secret knowledge",
-                    },
+                    details=[
+                        {"key": "attitude", "value": "Warm and supportive"},
+                        {"key": "access", "value": "Shares secret knowledge"},
+                    ],
                 ),
             ]
         )
@@ -1528,7 +1528,7 @@ class TestPhase8cOverlays:
                 OverlayProposal(
                     entity_id="entity::nonexistent",
                     when=["codeword::cw1"],
-                    details={"attitude": "Changed"},
+                    details=[{"key": "attitude", "value": "Changed"}],
                 ),
             ]
         )
@@ -1575,7 +1575,7 @@ class TestPhase8cOverlays:
                 OverlayProposal(
                     entity_id="entity::hero",
                     when=["codeword::nonexistent"],
-                    details={"attitude": "Changed"},
+                    details=[{"key": "attitude", "value": "Changed"}],
                 ),
             ]
         )
@@ -1651,7 +1651,7 @@ class TestPhase8cOverlays:
                 OverlayProposal(
                     entity_id="mentor",  # No prefix
                     when=["codeword::cw1"],
-                    details={"attitude": "Friendly"},
+                    details=[{"key": "attitude", "value": "Friendly"}],
                 ),
             ]
         )

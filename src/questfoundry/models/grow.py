@@ -293,22 +293,30 @@ class Phase4bOutput(BaseModel):
     gaps: list[GapProposal] = Field(default_factory=list)
 
 
+class OverlayDetailItem(BaseModel):
+    """Single key-value pair for an entity overlay.
+
+    OpenAI strict mode forbids ``dict[str, str]`` (additionalProperties).
+    A list of explicit key/value objects is fully compatible.
+    """
+
+    key: str = Field(min_length=1, description="Attribute name being overridden")
+    value: str = Field(min_length=1, description="New value when codewords are active")
+
+
 class OverlayProposal(BaseModel):
     """Phase 8c: Proposes entity overlay conditions."""
 
     entity_id: str = Field(min_length=1)
     when: list[str] = Field(min_length=1)
-    details: dict[str, str] = Field(
-        description="Entity state changes when codewords are active (must have at least one key)"
+    details: list[OverlayDetailItem] = Field(
+        min_length=1,
+        description="Entity state changes when codewords are active",
     )
 
-    @model_validator(mode="after")
-    def details_not_empty(self) -> OverlayProposal:
-        """Reject empty details dict - must have at least one key."""
-        if not self.details:
-            msg = "details must contain at least one key-value pair"
-            raise ValueError(msg)
-        return self
+    def details_as_dict(self) -> dict[str, str]:
+        """Convert details list to dict for graph storage."""
+        return {d.key: d.value for d in self.details}
 
 
 class Phase8cOutput(BaseModel):
