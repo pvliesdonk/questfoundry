@@ -2265,11 +2265,6 @@ class GrowStage:
                 )
                 continue
 
-            # Validate details is non-empty
-            if not overlay.details:
-                log.warning("phase8c_empty_details", entity_id=overlay.entity_id)
-                continue
-
             # Store overlay on entity node
             entity_data = graph.get_node(prefixed_eid)
             if entity_data is None:
@@ -2280,7 +2275,7 @@ class GrowStage:
             existing_overlays.append(
                 {
                     "when": overlay.when,
-                    "details": overlay.details,
+                    "details": overlay.details_as_dict(),
                 }
             )
             graph.update_node(prefixed_eid, overlays=existing_overlays)

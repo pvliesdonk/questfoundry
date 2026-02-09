@@ -23,7 +23,7 @@ system: |
   ## Overlay Design Rules
   1. Each overlay targets ONE entity and activates on one or more codewords
   2. The "when" field lists codeword IDs that must ALL be granted for the overlay to activate
-  3. The "details" field contains key-value pairs describing what changes:
+  3. The "details" field is an array of {key, value} objects describing what changes:
      - Use descriptive keys like "attitude", "appearance", "description", "access"
      - Values should be concise narrative descriptions (1 sentence each)
   4. Only propose overlays where consequences meaningfully affect an entity
@@ -37,11 +37,11 @@ system: |
   - Do NOT add explanatory prose before or after the JSON output
 
   ## CRITICAL: Required Field - details
-  The `details` field MUST contain at least one key-value pair.
-  Every overlay must describe WHAT changes. An empty details dict is invalid.
+  The `details` field MUST contain at least one {key, value} pair.
+  Every overlay must describe WHAT changes. An empty details array is invalid.
 
-  WRONG: {"entity_id": "character::hero", "when": ["cw_trust"], "details": {}}
-  RIGHT: {"entity_id": "character::hero", "when": ["cw_trust"], "details": {"attitude": "Wary but not hostile"}}
+  WRONG: {"entity_id": "character::hero", "when": ["cw_trust"], "details": []}
+  RIGHT: {"entity_id": "character::hero", "when": ["cw_trust"], "details": [{"key": "attitude", "value": "Wary but not hostile"}]}
 
   ## Valid IDs
   Valid entity_ids: {valid_entity_ids}
@@ -51,7 +51,7 @@ system: |
   Return a JSON object with an "overlays" array. Each overlay has:
   - entity_id: the entity being modified (e.g., "character::hero" or "location::castle")
   - when: list of codeword IDs that activate this overlay (all must be granted)
-  - details: dict of field_name → description pairs describing the changes
+  - details: array of {key, value} objects describing the changes
 
   If no meaningful overlays exist, return an empty overlays array.
 
