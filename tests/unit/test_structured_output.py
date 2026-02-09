@@ -155,6 +155,75 @@ class TestMakeAllRequired:
         inner_def = result["$defs"]["Inner"]
         assert inner_def.get("additionalProperties") is False
 
+    def test_strips_ref_sibling_keywords(self) -> None:
+        """Should strip sibling keywords from $ref properties."""
+
+        class Inner(BaseModel):
+            field_a: str
+
+        class Outer(BaseModel):
+            inner: Inner = Field(description="An inner object")
+
+        schema = Outer.model_json_schema()
+        # Pydantic generates $ref + description siblings
+        assert "$ref" in schema["properties"]["inner"]
+        assert "description" in schema["properties"]["inner"]
+
+        result = _make_all_required(schema, schema_name="Outer")
+
+        # After processing, $ref should stand alone
+        assert "$ref" in result["properties"]["inner"]
+        assert "description" not in result["properties"]["inner"]
+
+    def test_strips_ref_siblings_in_array_items(self) -> None:
+        """Should strip sibling keywords from $ref in array item schemas."""
+
+        class Item(BaseModel):
+            name: str
+
+        class Container(BaseModel):
+            items: list[Item]
+
+        schema = Container.model_json_schema()
+        # Manually inject a $ref + description sibling (simulates Pydantic edge case)
+        schema["properties"]["items"]["items"] = {
+            "$ref": "#/$defs/Item",
+            "description": "An item",
+        }
+
+        result = _make_all_required(schema, schema_name="Container")
+
+        items_schema = result["properties"]["items"]["items"]
+        assert "$ref" in items_schema
+        assert "description" not in items_schema
+
+    def test_strips_ref_siblings_in_anyof(self) -> None:
+        """Should strip sibling keywords from $ref inside anyOf entries."""
+        schema: dict[str, Any] = {
+            "type": "object",
+            "properties": {
+                "value": {
+                    "anyOf": [
+                        {"$ref": "#/$defs/Inner", "description": "An inner"},
+                        {"type": "null"},
+                    ]
+                }
+            },
+            "$defs": {
+                "Inner": {
+                    "type": "object",
+                    "properties": {"x": {"type": "string"}},
+                    "required": ["x"],
+                }
+            },
+        }
+
+        result = _make_all_required(schema, schema_name="Root")
+
+        ref_entry = result["properties"]["value"]["anyOf"][0]
+        assert "$ref" in ref_entry
+        assert "description" not in ref_entry
+
     def test_handles_empty_schema(self) -> None:
         """Should handle schema without properties."""
         schema: dict[str, Any] = {"type": "object"}
