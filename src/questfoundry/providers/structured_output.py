@@ -84,6 +84,9 @@ def _make_all_required(
     1. All properties listed in the ``required`` array.
     2. ``additionalProperties: false`` on **every** object schema, including
        nested ``$defs`` entries.
+    3. ``$ref`` must not have sibling keywords (e.g., ``description``).
+       Pydantic adds ``description`` next to ``$ref`` when a field has
+       ``Field(description=...)``. We strip these siblings.
 
     This transforms schemas to satisfy both requirements recursively.
 
@@ -126,9 +129,14 @@ def _make_all_required(
             prop for prop in all_props if f"{schema_name}.{prop}" not in truly_optional
         )
 
-        # Recurse into nested object schemas
+        # Recurse into nested object schemas and fix $ref siblings
         for prop_name, prop_schema in schema.get("properties", {}).items():
             if isinstance(prop_schema, dict):
+                # OpenAI strict mode: $ref must not have sibling keywords
+                if "$ref" in prop_schema:
+                    siblings = [k for k in prop_schema if k != "$ref"]
+                    for key in siblings:
+                        del prop_schema[key]
                 _make_all_required(
                     prop_schema,
                     schema_name=f"{schema_name}.{prop_name}",

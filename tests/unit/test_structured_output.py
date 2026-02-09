@@ -155,6 +155,26 @@ class TestMakeAllRequired:
         inner_def = result["$defs"]["Inner"]
         assert inner_def.get("additionalProperties") is False
 
+    def test_strips_ref_sibling_keywords(self) -> None:
+        """Should strip sibling keywords from $ref properties."""
+
+        class Inner(BaseModel):
+            field_a: str
+
+        class Outer(BaseModel):
+            inner: Inner = Field(description="An inner object")
+
+        schema = Outer.model_json_schema()
+        # Pydantic generates $ref + description siblings
+        assert "$ref" in schema["properties"]["inner"]
+        assert "description" in schema["properties"]["inner"]
+
+        result = _make_all_required(schema, schema_name="Outer")
+
+        # After processing, $ref should stand alone
+        assert "$ref" in result["properties"]["inner"]
+        assert "description" not in result["properties"]["inner"]
+
     def test_handles_empty_schema(self) -> None:
         """Should handle schema without properties."""
         schema: dict[str, Any] = {"type": "object"}
