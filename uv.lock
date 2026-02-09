@@ -689,14 +689,14 @@ wheels = [
 
 [[package]]
 name = "ifcraftcorpus"
-version = "1.10.0"
+version = "1.10.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/66/3d/01135f898285a3bfd11427f3dc9bd01623d771f66c00495ed94a285dc442/ifcraftcorpus-1.10.0.tar.gz", hash = "sha256:0e40f26da136bf7d37d02d424f2766650b779dccdbe8062f38f7c075f8d22264", size = 343550, upload-time = "2026-02-09T14:23:39.206Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/c0/3a/24b7c0c7f74790ac8207c54716ad6c817a16a025f108179367fb4102a2fc/ifcraftcorpus-1.10.1.tar.gz", hash = "sha256:8e05a0652957a0d2baa15f2cdfb883234a2081a4230dc8edc4fc63b10c873313", size = 343633, upload-time = "2026-02-09T14:57:16.789Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/25/e6/5b68d2710f1ce74e31f899586d6cd2c2f7375c5c2e5d4edc5d5f4283d031/ifcraftcorpus-1.10.0-py3-none-any.whl", hash = "sha256:231f7de271f9e80e8042f4b1ac1115c014cc49022c49b3a62ba4e268622c5a87", size = 425824, upload-time = "2026-02-09T14:23:37.322Z" },
+    { url = "https://files.pythonhosted.org/packages/51/f5/8021c3530269ad08a6d3006e72a9b289ec5e2bc6edf2f461e8a877dcb1d4/ifcraftcorpus-1.10.1-py3-none-any.whl", hash = "sha256:16c41d9018112d020d0214694f94c7244e90b4e6695ddd79056cb84a3bc87a8d", size = 425916, upload-time = "2026-02-09T14:57:15.159Z" },
 ]
 
 [package.optional-dependencies]
