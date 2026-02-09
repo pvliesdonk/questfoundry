@@ -73,6 +73,19 @@ def get_default_strategy(provider_name: str) -> StructuredOutputStrategy:
     return StructuredOutputStrategy.JSON_MODE
 
 
+def _strip_ref_siblings(schema: dict[str, Any]) -> None:
+    """Strip sibling keywords from a ``$ref`` schema object.
+
+    OpenAI strict mode forbids keywords alongside ``$ref`` (e.g.,
+    ``{"$ref": "...", "description": "..."}``).  Pydantic adds ``description``
+    when a field uses ``Field(description=...)``.  This keeps only ``$ref``.
+    """
+    if "$ref" in schema and len(schema) > 1:
+        ref_value = schema["$ref"]
+        schema.clear()
+        schema["$ref"] = ref_value
+
+
 def _make_all_required(
     schema: dict[str, Any],
     schema_name: str = "root",
@@ -88,7 +101,7 @@ def _make_all_required(
        Pydantic adds ``description`` next to ``$ref`` when a field has
        ``Field(description=...)``. We strip these siblings.
 
-    This transforms schemas to satisfy both requirements recursively.
+    This transforms schemas to satisfy all three requirements recursively.
 
     Args:
         schema: JSON schema dict to modify in-place.
@@ -132,11 +145,7 @@ def _make_all_required(
         # Recurse into nested object schemas and fix $ref siblings
         for prop_name, prop_schema in schema.get("properties", {}).items():
             if isinstance(prop_schema, dict):
-                # OpenAI strict mode: $ref must not have sibling keywords
-                if "$ref" in prop_schema:
-                    siblings = [k for k in prop_schema if k != "$ref"]
-                    for key in siblings:
-                        del prop_schema[key]
+                _strip_ref_siblings(prop_schema)
                 _make_all_required(
                     prop_schema,
                     schema_name=f"{schema_name}.{prop_name}",
@@ -145,6 +154,7 @@ def _make_all_required(
 
     # Handle array items
     if "items" in schema and isinstance(schema["items"], dict):
+        _strip_ref_siblings(schema["items"])
         _make_all_required(
             schema["items"],
             schema_name=f"{schema_name}[]",
@@ -166,6 +176,7 @@ def _make_all_required(
         if keyword in schema:
             for item in schema[keyword]:
                 if isinstance(item, dict):
+                    _strip_ref_siblings(item)
                     _make_all_required(
                         item,
                         schema_name=schema_name,
