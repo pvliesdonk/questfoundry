@@ -1,6 +1,8 @@
-"""Tests for SEED stage Pydantic models, especially section uniqueness validators."""
+"""Tests for SEED stage Pydantic models, especially deduplication and uniqueness."""
 
 from __future__ import annotations
+
+from typing import ClassVar
 
 import pytest
 from pydantic import ValidationError
@@ -9,12 +11,13 @@ from questfoundry.models.seed import (
     ConsequencesSection,
     DilemmasSection,
     EntitiesSection,
+    PathBeatsSection,
     PathsSection,
 )
 
 
-class TestEntitiesSectionUniqueness:
-    """EntitiesSection should reject duplicate entity_ids."""
+class TestEntitiesSectionDedup:
+    """EntitiesSection should silently deduplicate identical entries."""
 
     def test_unique_entities_accepted(self) -> None:
         section = EntitiesSection(
@@ -25,12 +28,23 @@ class TestEntitiesSectionUniqueness:
         )
         assert len(section.entities) == 2
 
-    def test_duplicate_entities_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="Duplicate entity_id"):
+    def test_identical_duplicates_silently_deduplicated(self) -> None:
+        """Identical copies are dropped — no retry loop needed."""
+        section = EntitiesSection(
+            entities=[
+                {"entity_id": "character::alice", "disposition": "retained"},
+                {"entity_id": "character::alice", "disposition": "retained"},
+            ]
+        )
+        assert len(section.entities) == 1
+
+    def test_non_identical_duplicates_rejected(self) -> None:
+        """Same ID but different content is a real conflict."""
+        with pytest.raises(ValidationError, match="Duplicates found"):
             EntitiesSection(
                 entities=[
                     {"entity_id": "character::alice", "disposition": "retained"},
-                    {"entity_id": "character::alice", "disposition": "retained"},
+                    {"entity_id": "character::alice", "disposition": "cut"},
                 ]
             )
 
@@ -44,20 +58,22 @@ class TestEntitiesSectionUniqueness:
         )
         assert len(section.entities) == 1
 
-    def test_non_adjacent_duplicate_rejected(self) -> None:
-        """Duplicate not adjacent — ensures we check all items, not just neighbors."""
-        with pytest.raises(ValidationError, match="Duplicate entity_id"):
-            EntitiesSection(
-                entities=[
-                    {"entity_id": "character::alice", "disposition": "retained"},
-                    {"entity_id": "character::bob", "disposition": "cut"},
-                    {"entity_id": "character::alice", "disposition": "retained"},
-                ]
-            )
+    def test_non_adjacent_identical_deduplicated(self) -> None:
+        """Identical duplicates are caught even when separated by other items."""
+        section = EntitiesSection(
+            entities=[
+                {"entity_id": "character::alice", "disposition": "retained"},
+                {"entity_id": "character::bob", "disposition": "cut"},
+                {"entity_id": "character::alice", "disposition": "retained"},
+            ]
+        )
+        assert len(section.entities) == 2
+        assert section.entities[0].entity_id == "character::alice"
+        assert section.entities[1].entity_id == "character::bob"
 
 
-class TestDilemmasSectionUniqueness:
-    """DilemmasSection should reject duplicate dilemma_ids."""
+class TestDilemmasSectionDedup:
+    """DilemmasSection should deduplicate identical, reject conflicting."""
 
     def test_unique_dilemmas_accepted(self) -> None:
         section = DilemmasSection(
@@ -68,8 +84,17 @@ class TestDilemmasSectionUniqueness:
         )
         assert len(section.dilemmas) == 2
 
-    def test_duplicate_dilemmas_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="Duplicate dilemma_id"):
+    def test_identical_duplicates_silently_deduplicated(self) -> None:
+        section = DilemmasSection(
+            dilemmas=[
+                {"dilemma_id": "dilemma::trust_or_betray", "explored": ["trust"]},
+                {"dilemma_id": "dilemma::trust_or_betray", "explored": ["trust"]},
+            ]
+        )
+        assert len(section.dilemmas) == 1
+
+    def test_non_identical_duplicates_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="Duplicates found"):
             DilemmasSection(
                 dilemmas=[
                     {"dilemma_id": "dilemma::trust_or_betray", "explored": ["trust"]},
@@ -82,20 +107,23 @@ class TestDilemmasSectionUniqueness:
         assert len(section.dilemmas) == 0
 
 
-class TestPathsSectionUniqueness:
-    """PathsSection should reject duplicate path_ids."""
+_TRUST_PATH = {
+    "path_id": "path::trust_or_betray__trust",
+    "name": "Trust Path",
+    "dilemma_id": "dilemma::trust_or_betray",
+    "answer_id": "trust",
+    "path_importance": "major",
+    "description": "The trust storyline",
+}
+
+
+class TestPathsSectionDedup:
+    """PathsSection should deduplicate identical, reject conflicting."""
 
     def test_unique_paths_accepted(self) -> None:
         section = PathsSection(
             paths=[
-                {
-                    "path_id": "path::trust_or_betray__trust",
-                    "name": "Trust Path",
-                    "dilemma_id": "dilemma::trust_or_betray",
-                    "answer_id": "trust",
-                    "path_importance": "major",
-                    "description": "The trust storyline",
-                },
+                _TRUST_PATH,
                 {
                     "path_id": "path::trust_or_betray__betray",
                     "name": "Betray Path",
@@ -108,26 +136,16 @@ class TestPathsSectionUniqueness:
         )
         assert len(section.paths) == 2
 
-    def test_duplicate_paths_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="Duplicate path_id"):
+    def test_identical_duplicates_silently_deduplicated(self) -> None:
+        section = PathsSection(paths=[_TRUST_PATH, _TRUST_PATH])
+        assert len(section.paths) == 1
+
+    def test_non_identical_duplicates_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="Duplicates found"):
             PathsSection(
                 paths=[
-                    {
-                        "path_id": "path::trust_or_betray__trust",
-                        "name": "Trust Path",
-                        "dilemma_id": "dilemma::trust_or_betray",
-                        "answer_id": "trust",
-                        "path_importance": "major",
-                        "description": "The trust storyline",
-                    },
-                    {
-                        "path_id": "path::trust_or_betray__trust",
-                        "name": "Trust Path Duplicate",
-                        "dilemma_id": "dilemma::trust_or_betray",
-                        "answer_id": "trust",
-                        "path_importance": "major",
-                        "description": "Duplicate",
-                    },
+                    _TRUST_PATH,
+                    {**_TRUST_PATH, "name": "Different Name"},
                 ]
             )
 
@@ -136,17 +154,19 @@ class TestPathsSectionUniqueness:
         assert len(section.paths) == 0
 
 
-class TestConsequencesSectionUniqueness:
-    """ConsequencesSection should reject duplicate consequence_ids."""
+class TestConsequencesSectionDedup:
+    """ConsequencesSection should deduplicate identical, reject conflicting."""
+
+    _CONSEQUENCE: ClassVar[dict[str, str]] = {
+        "consequence_id": "trust_rewarded",
+        "path_id": "path::trust_or_betray__trust",
+        "description": "Trust pays off",
+    }
 
     def test_unique_consequences_accepted(self) -> None:
         section = ConsequencesSection(
             consequences=[
-                {
-                    "consequence_id": "trust_rewarded",
-                    "path_id": "path::trust_or_betray__trust",
-                    "description": "Trust pays off",
-                },
+                self._CONSEQUENCE,
                 {
                     "consequence_id": "betrayal_revealed",
                     "path_id": "path::trust_or_betray__betray",
@@ -156,23 +176,55 @@ class TestConsequencesSectionUniqueness:
         )
         assert len(section.consequences) == 2
 
-    def test_duplicate_consequences_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="Duplicate consequence_id"):
+    def test_identical_duplicates_silently_deduplicated(self) -> None:
+        section = ConsequencesSection(consequences=[self._CONSEQUENCE, self._CONSEQUENCE])
+        assert len(section.consequences) == 1
+
+    def test_non_identical_duplicates_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="Duplicates found"):
             ConsequencesSection(
                 consequences=[
-                    {
-                        "consequence_id": "trust_rewarded",
-                        "path_id": "path::trust_or_betray__trust",
-                        "description": "Trust pays off",
-                    },
-                    {
-                        "consequence_id": "trust_rewarded",
-                        "path_id": "path::trust_or_betray__trust",
-                        "description": "Duplicate consequence",
-                    },
+                    self._CONSEQUENCE,
+                    {**self._CONSEQUENCE, "description": "Different"},
                 ]
             )
 
     def test_empty_consequences_accepted(self) -> None:
         section = ConsequencesSection(consequences=[])
         assert len(section.consequences) == 0
+
+
+class TestPathBeatsSectionDedup:
+    """PathBeatsSection should deduplicate identical beats."""
+
+    _BEAT_A: ClassVar[dict[str, str | list[str]]] = {
+        "beat_id": "beat_a",
+        "summary": "Something happens",
+        "paths": ["path::trust_or_betray__trust"],
+    }
+    _BEAT_B: ClassVar[dict[str, str | list[str]]] = {
+        "beat_id": "beat_b",
+        "summary": "Something else happens",
+        "paths": ["path::trust_or_betray__trust"],
+    }
+
+    def test_unique_beats_accepted(self) -> None:
+        section = PathBeatsSection(initial_beats=[self._BEAT_A, self._BEAT_B])
+        assert len(section.initial_beats) == 2
+
+    def test_identical_duplicate_deduplicated(self) -> None:
+        """Three copies of A + one B → deduplicates to [A, B], passes min_length=2."""
+        section = PathBeatsSection(
+            initial_beats=[self._BEAT_A, self._BEAT_A, self._BEAT_A, self._BEAT_B]
+        )
+        assert len(section.initial_beats) == 2
+
+    def test_non_identical_duplicates_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="Duplicates found"):
+            PathBeatsSection(
+                initial_beats=[
+                    self._BEAT_A,
+                    {**self._BEAT_A, "summary": "Different summary"},
+                    self._BEAT_B,
+                ]
+            )
