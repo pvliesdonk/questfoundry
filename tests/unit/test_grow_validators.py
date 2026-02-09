@@ -222,7 +222,9 @@ class TestValidatePhase8cOutput:
         result = Phase8cOutput(
             overlays=[
                 OverlayProposal(
-                    entity_id="entity::e1", when=["cw::c1"], details={"state": "active"}
+                    entity_id="entity::e1",
+                    when=["cw::c1"],
+                    details=[{"key": "state", "value": "active"}],
                 ),
             ]
         )
@@ -237,7 +239,9 @@ class TestValidatePhase8cOutput:
         result = Phase8cOutput(
             overlays=[
                 OverlayProposal(
-                    entity_id="entity::bad", when=["cw::c1"], details={"state": "active"}
+                    entity_id="entity::bad",
+                    when=["cw::c1"],
+                    details=[{"key": "state", "value": "active"}],
                 ),
             ]
         )
@@ -253,7 +257,9 @@ class TestValidatePhase8cOutput:
         result = Phase8cOutput(
             overlays=[
                 OverlayProposal(
-                    entity_id="entity::e1", when=["cw::bad"], details={"state": "active"}
+                    entity_id="entity::e1",
+                    when=["cw::bad"],
+                    details=[{"key": "state", "value": "active"}],
                 ),
             ]
         )
@@ -271,7 +277,7 @@ class TestValidatePhase8cOutput:
                 OverlayProposal(
                     entity_id="entity::e1",
                     when=["cw::bad1", "cw::bad2"],
-                    details={"state": "active"},
+                    details=[{"key": "state", "value": "active"}],
                 ),
             ]
         )

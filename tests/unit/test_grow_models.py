@@ -329,14 +329,22 @@ class TestOverlayProposal:
         op = OverlayProposal(
             entity_id="e1",
             when=["cw1", "cw2"],
-            details={"state": "active"},
+            details=[{"key": "state", "value": "active"}],
         )
         assert op.entity_id == "e1"
         assert len(op.when) == 2
 
+    def test_details_as_dict(self) -> None:
+        op = OverlayProposal(
+            entity_id="e1",
+            when=["cw1"],
+            details=[{"key": "mood", "value": "hostile"}, {"key": "state", "value": "active"}],
+        )
+        assert op.details_as_dict() == {"mood": "hostile", "state": "active"}
+
     def test_empty_when_rejected(self) -> None:
         with pytest.raises(ValidationError, match="when"):
-            OverlayProposal(entity_id="e1", when=[], details={"state": "active"})
+            OverlayProposal(entity_id="e1", when=[], details=[{"key": "state", "value": "active"}])
 
     def test_details_required(self) -> None:
         """Details is required for overlay proposal (must describe what changes)."""
@@ -344,9 +352,21 @@ class TestOverlayProposal:
             OverlayProposal(entity_id="e1", when=["cw1"])  # type: ignore[call-arg]
 
     def test_empty_details_rejected(self) -> None:
-        """Empty details dict is rejected - must have at least one key."""
-        with pytest.raises(ValidationError, match="details must contain at least one"):
-            OverlayProposal(entity_id="e1", when=["cw1"], details={})
+        """Empty details list is rejected - must have at least one item."""
+        with pytest.raises(ValidationError, match="at least 1"):
+            OverlayProposal(entity_id="e1", when=["cw1"], details=[])
+
+    def test_duplicate_keys_rejected(self) -> None:
+        """Duplicate keys in details would cause silent data loss in details_as_dict()."""
+        with pytest.raises(ValidationError, match="Duplicate keys"):
+            OverlayProposal(
+                entity_id="e1",
+                when=["cw1"],
+                details=[
+                    {"key": "mood", "value": "happy"},
+                    {"key": "mood", "value": "angry"},
+                ],
+            )
 
 
 class TestChoiceLabel:
