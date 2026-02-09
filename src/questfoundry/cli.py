@@ -2601,6 +2601,67 @@ def _check_project(project_path: Path) -> bool:
     return all_ok
 
 
+@app.command(name="graph")
+def graph_cmd(
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    fmt: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            "-f",
+            help="Output format: dot (default), mermaid, or json.",
+        ),
+    ] = "dot",
+    output: Annotated[
+        Path | None,
+        typer.Option("--output", "-o", help="Output file (stdout if not specified)."),
+    ] = None,
+    spine_only: Annotated[
+        bool,
+        typer.Option("--spine-only", help="Only show passages on the spine arc."),
+    ] = False,
+    no_labels: Annotated[
+        bool,
+        typer.Option("--no-labels", help="Omit choice labels on edges."),
+    ] = False,
+) -> None:
+    """Visualize story graph as DOT, Mermaid, or JSON."""
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+
+    from questfoundry.graph.graph import Graph
+    from questfoundry.visualization import build_story_graph, render_dot, render_mermaid
+
+    graph = Graph.load(project_path)
+    sg = build_story_graph(graph, spine_only=spine_only)
+
+    if fmt == "dot":
+        result = render_dot(sg, no_labels=no_labels)
+    elif fmt == "mermaid":
+        result = render_mermaid(sg, no_labels=no_labels)
+    elif fmt == "json":
+        import dataclasses
+        import json
+
+        result = json.dumps(dataclasses.asdict(sg), indent=2)
+    else:
+        console.print(f"[red]Error:[/red] Unknown format: {fmt}")
+        raise typer.Exit(1)
+
+    if output:
+        output.write_text(result)
+        console.print(f"Written to {output}")
+    else:
+        console.print(result, soft_wrap=True, markup=False, highlight=False)
+
+
 @app.command()
 def inspect(
     project: Annotated[
