@@ -314,6 +314,16 @@ class OverlayProposal(BaseModel):
         description="Entity state changes when codewords are active",
     )
 
+    @model_validator(mode="after")
+    def _check_no_duplicate_keys(self) -> OverlayProposal:
+        """Reject duplicate keys — prevents silent data loss in details_as_dict()."""
+        keys = [d.key for d in self.details]
+        if len(keys) != len(set(keys)):
+            dupes = sorted({k for k in keys if keys.count(k) > 1})
+            msg = f"Duplicate keys in details: {dupes}"
+            raise ValueError(msg)
+        return self
+
     def details_as_dict(self) -> dict[str, str]:
         """Convert details list to dict for graph storage."""
         return {d.key: d.value for d in self.details}

@@ -353,8 +353,20 @@ class TestOverlayProposal:
 
     def test_empty_details_rejected(self) -> None:
         """Empty details list is rejected - must have at least one item."""
-        with pytest.raises(ValidationError):
+        with pytest.raises(ValidationError, match="at least 1"):
             OverlayProposal(entity_id="e1", when=["cw1"], details=[])
+
+    def test_duplicate_keys_rejected(self) -> None:
+        """Duplicate keys in details would cause silent data loss in details_as_dict()."""
+        with pytest.raises(ValidationError, match="Duplicate keys"):
+            OverlayProposal(
+                entity_id="e1",
+                when=["cw1"],
+                details=[
+                    {"key": "mood", "value": "happy"},
+                    {"key": "mood", "value": "angry"},
+                ],
+            )
 
 
 class TestChoiceLabel:
