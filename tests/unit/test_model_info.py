@@ -82,6 +82,15 @@ class TestModelPropertiesCapabilityFlags:
         assert props.supports_verbosity is True
         assert props.supports_reasoning_effort is True
 
+    def test_gpt5_family_supports_both(self) -> None:
+        """All GPT-5 family models support verbosity and reasoning_effort."""
+        for model in ("gpt-5", "gpt-5-mini", "gpt-5-nano", "gpt-5.1", "gpt-5.2"):
+            props = KNOWN_MODELS["openai"][model]
+            assert props.supports_verbosity is True, f"{model} should support verbosity"
+            assert props.supports_reasoning_effort is True, (
+                f"{model} should support reasoning_effort"
+            )
+
     def test_o1_supports_reasoning_only(self) -> None:
         """o1 supports reasoning_effort but not verbosity."""
         props = KNOWN_MODELS["openai"]["o1"]
@@ -94,11 +103,24 @@ class TestModelPropertiesCapabilityFlags:
         assert props.supports_reasoning_effort is True
         assert props.supports_verbosity is False
 
+    def test_o4_mini_supports_reasoning_only(self) -> None:
+        """o4-mini supports reasoning_effort but not verbosity."""
+        props = KNOWN_MODELS["openai"]["o4-mini"]
+        assert props.supports_reasoning_effort is True
+        assert props.supports_verbosity is False
+
     def test_gpt4o_no_special_support(self) -> None:
         """GPT-4o does not support verbosity or reasoning_effort."""
         props = KNOWN_MODELS["openai"]["gpt-4o"]
         assert props.supports_verbosity is False
         assert props.supports_reasoning_effort is False
+
+    def test_gpt41_family_no_special_support(self) -> None:
+        """GPT-4.1 family does not support verbosity or reasoning_effort."""
+        for model in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
+            props = KNOWN_MODELS["openai"][model]
+            assert props.supports_verbosity is False, f"{model}"
+            assert props.supports_reasoning_effort is False, f"{model}"
 
     def test_ollama_models_no_special_support(self) -> None:
         """Ollama models default to no verbosity/reasoning_effort support."""
@@ -117,3 +139,49 @@ class TestModelPropertiesCapabilityFlags:
         props = ModelProperties(context_window=32_768)
         assert props.supports_verbosity is False
         assert props.supports_reasoning_effort is False
+
+
+class TestModelRegistryContextWindows:
+    """Tests for correct context window values in KNOWN_MODELS."""
+
+    def test_gpt5_mini_context_window(self) -> None:
+        """GPT-5-mini has 400K context window."""
+        assert KNOWN_MODELS["openai"]["gpt-5-mini"].context_window == 400_000
+
+    def test_gpt41_family_context_window(self) -> None:
+        """GPT-4.1 family has 1M context window."""
+        for model in ("gpt-4.1", "gpt-4.1-mini", "gpt-4.1-nano"):
+            assert KNOWN_MODELS["openai"][model].context_window == 1_000_000, f"{model}"
+
+    def test_qwen25_7b_context_window(self) -> None:
+        """qwen2.5:7b has 128K context window (not 32K)."""
+        assert KNOWN_MODELS["ollama"]["qwen2.5:7b"].context_window == 128_000
+
+    def test_retired_models_removed(self) -> None:
+        """Retired models are no longer in the registry."""
+        assert "o1-mini" not in KNOWN_MODELS["openai"]
+        assert "o1-preview" not in KNOWN_MODELS["openai"]
+        assert "gpt-4" not in KNOWN_MODELS["openai"]
+        assert "gpt-4-turbo" not in KNOWN_MODELS["openai"]
+        assert "gpt-3.5-turbo" not in KNOWN_MODELS["openai"]
+        assert "claude-3-5-sonnet-latest" not in KNOWN_MODELS["anthropic"]
+        assert "claude-3-5-sonnet-20241022" not in KNOWN_MODELS["anthropic"]
+        assert "claude-3-opus-20240229" not in KNOWN_MODELS["anthropic"]
+        assert "claude-3-haiku-20240307" not in KNOWN_MODELS["anthropic"]
+
+    def test_new_models_present(self) -> None:
+        """New models are present in the registry."""
+        # OpenAI
+        for model in ("gpt-5", "gpt-5-nano", "gpt-5.1", "gpt-5.2", "o3-pro", "o4-mini"):
+            assert model in KNOWN_MODELS["openai"], f"{model} missing"
+        # Anthropic
+        for model in (
+            "claude-opus-4-6",
+            "claude-opus-4-5-20251101",
+            "claude-sonnet-4-5-20250929",
+            "claude-haiku-4-5-20251001",
+        ):
+            assert model in KNOWN_MODELS["anthropic"], f"{model} missing"
+        # Google
+        for model in ("gemini-2.5-flash-lite", "gemini-3-pro-preview", "gemini-3-flash-preview"):
+            assert model in KNOWN_MODELS["google"], f"{model} missing"

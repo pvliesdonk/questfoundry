@@ -251,7 +251,7 @@ def test_orchestrator_model_info_after_model_creation(tmp_path: Path) -> None:
     orchestrator._model_info = get_model_info("openai", "gpt-5-mini")
 
     assert orchestrator.model_info is not None
-    assert orchestrator.model_info.context_window == 1_000_000
+    assert orchestrator.model_info.context_window == 400_000
     assert orchestrator.model_info.supports_vision is True
 
 

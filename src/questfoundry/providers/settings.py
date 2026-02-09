@@ -181,8 +181,10 @@ def _detect_model_variant(provider: str, model: str) -> ModelVariant:
     """
     model_lower = model.lower()
 
-    # OpenAI reasoning models (o1, o3 families) don't support temperature/top_p
-    if provider == "openai" and (model_lower.startswith("o1") or model_lower.startswith("o3")):
+    # OpenAI reasoning models (o1, o3, o4 families) don't support temperature/top_p
+    if provider == "openai" and (
+        model_lower.startswith("o1") or model_lower.startswith("o3") or model_lower.startswith("o4")
+    ):
         return ModelVariant(
             rejects_temperature=True,
             rejects_top_p=True,

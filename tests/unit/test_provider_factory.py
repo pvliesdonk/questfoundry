@@ -707,7 +707,7 @@ def test_get_model_info_known_model() -> None:
     """get_model_info returns known context window for known models."""
     info = get_model_info("openai", "gpt-5-mini")
 
-    assert info.context_window == 1_000_000
+    assert info.context_window == 400_000
     assert info.supports_tools is True
     assert info.supports_vision is True
 
@@ -747,7 +747,7 @@ def test_get_model_info_case_insensitive_provider() -> None:
     """get_model_info is case insensitive for provider name."""
     info = get_model_info("OPENAI", "gpt-5-mini")
 
-    assert info.context_window == 1_000_000
+    assert info.context_window == 400_000
 
 
 def test_model_info_is_frozen() -> None:
@@ -766,18 +766,18 @@ def test_model_info_is_frozen() -> None:
     [
         # o1 family
         ("o1", True),
-        ("o1-mini", True),
-        ("o1-preview", True),
         ("O1", True),
-        ("O1-MINI", True),
         # o3 family
         ("o3", True),
         ("o3-mini", True),
+        ("o3-pro", True),
+        # o4 family
+        ("o4-mini", True),
+        ("O4-MINI", True),
         # Non-reasoning models
         ("gpt-5-mini", False),
         ("gpt-4o-mini", False),
-        ("gpt-4-turbo", False),
-        ("gpt-3.5-turbo", False),
+        ("gpt-4.1", False),
     ],
 )
 def test_is_reasoning_model(model_name: str, expected: bool) -> None:
@@ -789,7 +789,7 @@ def test_is_reasoning_model(model_name: str, expected: bool) -> None:
     assert variant.rejects_temperature is expected
 
 
-@pytest.mark.parametrize("model_name", ["o1", "o1-mini", "o1-preview", "o3", "o3-mini"])
+@pytest.mark.parametrize("model_name", ["o1", "o3", "o3-mini", "o3-pro", "o4-mini"])
 def test_create_chat_model_reasoning_model_no_temperature(model_name: str) -> None:
     """Factory creates reasoning models without temperature parameter."""
     mock_chat = MagicMock()
@@ -831,10 +831,10 @@ def test_create_chat_model_gpt4o_has_temperature() -> None:
     ("model_name", "expected_context", "expected_tools", "expected_vision"),
     [
         ("o1", 200_000, False, False),
-        ("o1-mini", 128_000, False, False),
-        ("o1-preview", 128_000, False, False),
         ("o3", 200_000, False, False),
         ("o3-mini", 200_000, False, False),
+        ("o3-pro", 200_000, False, False),
+        ("o4-mini", 200_000, False, False),
     ],
 )
 def test_get_model_info_reasoning_models_no_tools(
