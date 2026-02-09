@@ -803,15 +803,20 @@ class PipelineOrchestrator:
     def get_status(self) -> PipelineStatus:
         """Get the current pipeline status.
 
-        Stage completion is determined by artifact file existence.
-        Also loads graph.json metadata for debugging if available.
+        Stage completion is determined by artifact file existence cross-referenced
+        with graph.last_stage. A stage is only "completed" if:
+        1. Its artifact file exists, AND
+        2. The graph confirms it (last_stage is at or past this stage)
+
+        This prevents stale artifacts from failed runs (e.g., SEED artifact exists
+        but mutations failed) from being treated as completed stages.
 
         Returns:
             PipelineStatus with stage information.
         """
         stages: dict[str, StageInfo] = {}
 
-        # Load graph for metadata logging (may not exist or be corrupted)
+        # Load graph to determine the last truly completed stage
         graph_last_stage: str | None = None
         try:
             graph = Graph.load(self.project_path)
@@ -819,15 +824,31 @@ class PipelineOrchestrator:
         except Exception as e:
             log.warning("graph_load_failed_in_status", error=str(e))
 
-        for stage_name in self.config.stages:
+        # Determine the index boundary: stages after graph_last_stage cannot
+        # be "completed" even if their artifact file exists (stale from failed run).
+        max_completed_idx = -1
+        if graph_last_stage and graph_last_stage in self.config.stages:
+            max_completed_idx = self.config.stages.index(graph_last_stage)
+
+        for idx, stage_name in enumerate(self.config.stages):
             stage_artifact_path = self.project_path / "artifacts" / f"{stage_name}.yaml"
 
             if stage_artifact_path.exists():
-                # Get last modified time from artifact file
                 mtime = stage_artifact_path.stat().st_mtime
                 last_run: datetime | None = datetime.fromtimestamp(mtime)
-                status: Literal["pending", "completed", "failed"] = "completed"
                 info_artifact_path: Path | None = stage_artifact_path
+
+                if graph_last_stage is not None and idx > max_completed_idx:
+                    # Artifact exists but graph says this stage never completed.
+                    # Stale artifact from a failed run.
+                    status: Literal["pending", "completed", "failed"] = "pending"
+                    log.debug(
+                        "stale_artifact_detected",
+                        stage=stage_name,
+                        graph_last_stage=graph_last_stage,
+                    )
+                else:
+                    status = "completed"
             else:
                 info_artifact_path = None
                 last_run = None

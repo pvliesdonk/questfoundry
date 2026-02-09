@@ -340,6 +340,74 @@ pipeline:
     assert status.stages["seed"].artifact_path is None
 
 
+def test_stale_artifact_detected_as_pending(tmp_path: Path) -> None:
+    """Stage with artifact but graph.last_stage before it should be 'pending'.
+
+    Reproduces the bug where SEED fails at mutations (artifact written, graph
+    not updated), causing get_status() to report SEED as completed.
+    """
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: stale_test
+pipeline:
+  stages:
+    - dream
+    - brainstorm
+    - seed
+    - grow
+"""
+    )
+
+    # Create a graph at brainstorm stage (SEED never completed)
+    graph = Graph.empty()
+    graph.set_last_stage("brainstorm")
+    graph.save(tmp_path / "graph.json")
+
+    # Create artifacts for dream, brainstorm, AND seed (stale from failed run)
+    artifacts_dir = tmp_path / "artifacts"
+    artifacts_dir.mkdir()
+    (artifacts_dir / "dream.yaml").write_text("type: dream\nversion: 1")
+    (artifacts_dir / "brainstorm.yaml").write_text("type: brainstorm\nversion: 1")
+    (artifacts_dir / "seed.yaml").write_text("type: seed\nversion: 1")
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+    status = orchestrator.get_status()
+
+    assert status.stages["dream"].status == "completed"
+    assert status.stages["brainstorm"].status == "completed"
+    # SEED has an artifact but graph says last_stage=brainstorm → stale
+    assert status.stages["seed"].status == "pending"
+    # SEED artifact path should still be set (file exists, just not completed)
+    assert status.stages["seed"].artifact_path is not None
+    assert status.stages["grow"].status == "pending"
+
+
+def test_status_without_graph_falls_back_to_artifacts(tmp_path: Path) -> None:
+    """Without graph.json, status should use artifact existence (backwards compat)."""
+    config_file = tmp_path / "project.yaml"
+    config_file.write_text(
+        """
+name: no_graph_test
+pipeline:
+  stages:
+    - dream
+    - seed
+"""
+    )
+
+    artifacts_dir = tmp_path / "artifacts"
+    artifacts_dir.mkdir()
+    (artifacts_dir / "dream.yaml").write_text("type: dream\nversion: 1")
+
+    orchestrator = PipelineOrchestrator(tmp_path)
+    status = orchestrator.get_status()
+
+    # Without graph, falls back to artifact-only check
+    assert status.stages["dream"].status == "completed"
+    assert status.stages["seed"].status == "pending"
+
+
 @pytest.mark.asyncio
 async def test_orchestrator_gate_rejection(tmp_path: Path) -> None:
     """Orchestrator respects gate rejection."""
