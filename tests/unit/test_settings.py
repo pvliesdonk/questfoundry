@@ -7,8 +7,13 @@ import pytest
 from questfoundry.providers.settings import (
     PHASE_CREATIVITY,
     TEMPERATURE_MAP,
+    VALID_REASONING_EFFORT,
+    VALID_VERBOSITY,
     CreativityLevel,
+    ModelVariant,
     PhaseSettings,
+    _detect_model_variant,
+    filter_model_kwargs,
     get_default_phase_settings,
     get_max_temperature,
     get_temperature_for_phase,
@@ -152,6 +157,8 @@ class TestPhaseSettings:
         assert settings.temperature is None
         assert settings.top_p is None
         assert settings.seed is None
+        assert settings.reasoning_effort is None
+        assert settings.verbosity is None
 
     def test_from_dict_empty(self) -> None:
         """from_dict with empty dict returns defaults."""
@@ -159,6 +166,8 @@ class TestPhaseSettings:
         assert settings.temperature is None
         assert settings.top_p is None
         assert settings.seed is None
+        assert settings.reasoning_effort is None
+        assert settings.verbosity is None
 
     def test_from_dict_none(self) -> None:
         """from_dict with None returns defaults."""
@@ -221,6 +230,59 @@ class TestPhaseSettings:
         """from_dict accepts integer seed."""
         settings = PhaseSettings.from_dict({"seed": 42})
         assert settings.seed == 42
+
+    # --- reasoning_effort ---
+
+    @pytest.mark.parametrize("value", sorted(VALID_REASONING_EFFORT))
+    def test_from_dict_accepts_valid_reasoning_effort(self, value: str) -> None:
+        """from_dict accepts all valid reasoning_effort values."""
+        settings = PhaseSettings.from_dict({"reasoning_effort": value})
+        assert settings.reasoning_effort == value
+
+    def test_from_dict_normalizes_reasoning_effort_case(self) -> None:
+        """from_dict lowercases reasoning_effort."""
+        settings = PhaseSettings.from_dict({"reasoning_effort": "HIGH"})
+        assert settings.reasoning_effort == "high"
+
+    def test_from_dict_rejects_invalid_reasoning_effort(self) -> None:
+        """from_dict rejects invalid reasoning_effort values."""
+        with pytest.raises(ValueError, match="reasoning_effort must be one of"):
+            PhaseSettings.from_dict({"reasoning_effort": "ultra"})
+
+    # --- verbosity ---
+
+    @pytest.mark.parametrize("value", sorted(VALID_VERBOSITY))
+    def test_from_dict_accepts_valid_verbosity(self, value: str) -> None:
+        """from_dict accepts all valid verbosity values."""
+        settings = PhaseSettings.from_dict({"verbosity": value})
+        assert settings.verbosity == value
+
+    def test_from_dict_normalizes_verbosity_case(self) -> None:
+        """from_dict lowercases verbosity."""
+        settings = PhaseSettings.from_dict({"verbosity": "Low"})
+        assert settings.verbosity == "low"
+
+    def test_from_dict_rejects_invalid_verbosity(self) -> None:
+        """from_dict rejects invalid verbosity values."""
+        with pytest.raises(ValueError, match="verbosity must be one of"):
+            PhaseSettings.from_dict({"verbosity": "extreme"})
+
+    def test_from_dict_with_all_fields(self) -> None:
+        """from_dict parses all fields including reasoning_effort and verbosity."""
+        settings = PhaseSettings.from_dict(
+            {
+                "temperature": 0.5,
+                "top_p": 0.9,
+                "seed": 42,
+                "reasoning_effort": "high",
+                "verbosity": "low",
+            }
+        )
+        assert settings.temperature == 0.5
+        assert settings.top_p == 0.9
+        assert settings.seed == 42
+        assert settings.reasoning_effort == "high"
+        assert settings.verbosity == "low"
 
 
 class TestPhaseSettingsToModelKwargs:
@@ -286,6 +348,56 @@ class TestPhaseSettingsToModelKwargs:
         kwargs = settings.to_model_kwargs("discuss", "openai")
         assert kwargs["temperature"] == 1.5  # OpenAI allows up to 2.0
 
+    # --- reasoning_effort in kwargs ---
+
+    def test_includes_reasoning_effort(self) -> None:
+        """Includes reasoning_effort in kwargs when set."""
+        settings = PhaseSettings(reasoning_effort="high")
+        kwargs = settings.to_model_kwargs("serialize", "openai")
+        assert kwargs["reasoning_effort"] == "high"
+
+    def test_reasoning_effort_suppresses_temperature(self) -> None:
+        """reasoning_effort != 'none' suppresses temperature from kwargs."""
+        settings = PhaseSettings(temperature=0.5, reasoning_effort="high")
+        kwargs = settings.to_model_kwargs("discuss", "openai")
+        assert "temperature" not in kwargs
+        assert kwargs["reasoning_effort"] == "high"
+
+    def test_reasoning_effort_suppresses_top_p(self) -> None:
+        """reasoning_effort != 'none' suppresses top_p from kwargs."""
+        settings = PhaseSettings(top_p=0.9, reasoning_effort="medium")
+        kwargs = settings.to_model_kwargs("discuss", "openai")
+        assert "top_p" not in kwargs
+        assert kwargs["reasoning_effort"] == "medium"
+
+    def test_reasoning_effort_none_keeps_temperature(self) -> None:
+        """reasoning_effort='none' does NOT suppress temperature."""
+        settings = PhaseSettings(temperature=0.5, reasoning_effort="none")
+        kwargs = settings.to_model_kwargs("discuss", "openai")
+        assert kwargs["temperature"] == 0.5
+        assert kwargs["reasoning_effort"] == "none"
+
+    def test_reasoning_effort_suppresses_phase_default_temperature(self) -> None:
+        """reasoning_effort suppresses even auto-calculated phase temperature."""
+        settings = PhaseSettings(reasoning_effort="high")
+        kwargs = settings.to_model_kwargs("discuss", "openai")
+        # Phase default would add temperature=0.9, but reasoning_effort suppresses it
+        assert "temperature" not in kwargs
+
+    # --- verbosity in kwargs ---
+
+    def test_includes_verbosity_in_model_kwargs(self) -> None:
+        """Includes verbosity inside model_kwargs sub-dict."""
+        settings = PhaseSettings(verbosity="low")
+        kwargs = settings.to_model_kwargs("summarize", "openai")
+        assert kwargs["model_kwargs"] == {"verbosity": "low"}
+
+    def test_no_model_kwargs_without_verbosity(self) -> None:
+        """model_kwargs key absent when verbosity is None."""
+        settings = PhaseSettings()
+        kwargs = settings.to_model_kwargs("discuss", "openai")
+        assert "model_kwargs" not in kwargs
+
 
 class TestGetDefaultPhaseSettings:
     """Tests for get_default_phase_settings function."""
@@ -307,3 +419,98 @@ class TestGetDefaultPhaseSettings:
         """Works for unknown phases (returns defaults)."""
         settings = get_default_phase_settings("unknown")
         assert isinstance(settings, PhaseSettings)
+
+
+class TestDetectModelVariant:
+    """Tests for _detect_model_variant with GPT-5 and reasoning models."""
+
+    def test_gpt5_mini_supports_verbosity(self) -> None:
+        """GPT-5-mini supports verbosity."""
+        variant = _detect_model_variant("openai", "gpt-5-mini")
+        assert variant.supports_verbosity is True
+
+    def test_gpt5_mini_supports_reasoning_effort(self) -> None:
+        """GPT-5-mini supports reasoning_effort."""
+        variant = _detect_model_variant("openai", "gpt-5-mini")
+        assert variant.supports_reasoning_effort is True
+
+    def test_gpt5_mini_rejects_stop(self) -> None:
+        """GPT-5 family rejects stop sequences."""
+        variant = _detect_model_variant("openai", "gpt-5-mini")
+        assert variant.rejects_stop is True
+
+    def test_gpt5_does_not_reject_temperature(self) -> None:
+        """GPT-5 family allows temperature (unlike o1/o3)."""
+        variant = _detect_model_variant("openai", "gpt-5-mini")
+        assert variant.rejects_temperature is False
+
+    def test_o1_no_verbosity(self) -> None:
+        """o1 models do NOT support verbosity."""
+        variant = _detect_model_variant("openai", "o1")
+        assert variant.supports_verbosity is False
+
+    def test_o1_supports_reasoning_effort(self) -> None:
+        """o1 models support reasoning_effort."""
+        variant = _detect_model_variant("openai", "o1")
+        assert variant.supports_reasoning_effort is True
+
+    def test_gpt4o_no_special_features(self) -> None:
+        """GPT-4o has no special reasoning/verbosity support."""
+        variant = _detect_model_variant("openai", "gpt-4o")
+        assert variant.supports_verbosity is False
+        assert variant.supports_reasoning_effort is False
+        assert variant.rejects_temperature is False
+
+    def test_non_openai_provider_default(self) -> None:
+        """Non-OpenAI providers return default variant."""
+        variant = _detect_model_variant("anthropic", "claude-3-opus")
+        assert variant == ModelVariant()
+
+
+class TestFilterModelKwargs:
+    """Tests for filter_model_kwargs with reasoning_effort and verbosity."""
+
+    def test_passes_reasoning_effort_for_gpt5(self) -> None:
+        """reasoning_effort passes through for GPT-5-mini."""
+        result = filter_model_kwargs("openai", "gpt-5-mini", {"reasoning_effort": "high"})
+        assert result["reasoning_effort"] == "high"
+
+    def test_filters_reasoning_effort_for_gpt4o(self) -> None:
+        """reasoning_effort is filtered out for GPT-4o (not supported)."""
+        result = filter_model_kwargs("openai", "gpt-4o", {"reasoning_effort": "high"})
+        assert "reasoning_effort" not in result
+
+    def test_filters_reasoning_effort_for_ollama(self) -> None:
+        """reasoning_effort is filtered out for Ollama models."""
+        result = filter_model_kwargs("ollama", "qwen3:4b", {"reasoning_effort": "medium"})
+        assert "reasoning_effort" not in result
+
+    def test_passes_verbosity_for_gpt5(self) -> None:
+        """verbosity in model_kwargs passes through for GPT-5-mini."""
+        result = filter_model_kwargs("openai", "gpt-5-mini", {"model_kwargs": {"verbosity": "low"}})
+        assert result["model_kwargs"] == {"verbosity": "low"}
+
+    def test_filters_verbosity_for_gpt4o(self) -> None:
+        """verbosity in model_kwargs is stripped for GPT-4o."""
+        result = filter_model_kwargs("openai", "gpt-4o", {"model_kwargs": {"verbosity": "low"}})
+        # model_kwargs should be stripped entirely since verbosity was the only key
+        assert "model_kwargs" not in result
+
+    def test_filters_verbosity_keeps_other_model_kwargs(self) -> None:
+        """Strips only verbosity from model_kwargs, keeps other keys."""
+        result = filter_model_kwargs(
+            "openai",
+            "gpt-4o",
+            {"model_kwargs": {"verbosity": "low", "other_param": "value"}},
+        )
+        assert result["model_kwargs"] == {"other_param": "value"}
+
+    def test_passes_reasoning_effort_for_o1(self) -> None:
+        """reasoning_effort passes through for o1 models."""
+        result = filter_model_kwargs("openai", "o1", {"reasoning_effort": "high"})
+        assert result["reasoning_effort"] == "high"
+
+    def test_filters_verbosity_for_o1(self) -> None:
+        """verbosity in model_kwargs is stripped for o1 (only GPT-5 supports it)."""
+        result = filter_model_kwargs("openai", "o1", {"model_kwargs": {"verbosity": "low"}})
+        assert "model_kwargs" not in result
