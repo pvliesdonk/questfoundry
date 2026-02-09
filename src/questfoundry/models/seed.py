@@ -309,7 +309,11 @@ def _check_ids_unique(items: list[Any], id_attr: str, type_name: str) -> None:
     ids = [getattr(item, id_attr) for item in items]
     dupes = [item_id for item_id, count in Counter(ids).items() if count > 1]
     if dupes:
-        msg = f"Duplicate {type_name}s found: {sorted(dupes)}. Each {type_name.split('_')[0]} must appear exactly once."
+        msg = (
+            f"Duplicate {type_name}s found: {sorted(dupes)}. "
+            f"REMOVE the duplicate entries so each {type_name} appears exactly once. "
+            f"Do NOT rename duplicates — delete the extra copy."
+        )
         raise ValueError(msg)
 
 
