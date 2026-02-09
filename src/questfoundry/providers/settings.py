@@ -166,6 +166,7 @@ class ModelVariant:
     rejects_stop: bool = False
     rejects_top_p: bool = False
     supports_reasoning_effort: bool = False
+    supports_verbosity: bool = False
 
 
 def _detect_model_variant(provider: str, model: str) -> ModelVariant:
@@ -188,9 +189,13 @@ def _detect_model_variant(provider: str, model: str) -> ModelVariant:
             supports_reasoning_effort=True,
         )
 
-    # GPT-5-mini currently rejects stop sequences
-    if provider == "openai" and "gpt-5-mini" in model_lower:
-        return ModelVariant(rejects_stop=True)
+    # GPT-5 family: supports verbosity + reasoning_effort, rejects stop sequences
+    if provider == "openai" and model_lower.startswith("gpt-5"):
+        return ModelVariant(
+            rejects_stop=True,
+            supports_reasoning_effort=True,
+            supports_verbosity=True,
+        )
 
     return ModelVariant()
 
@@ -275,6 +280,34 @@ def filter_model_kwargs(
             )
             continue
 
+        # Filter reasoning_effort for models that don't support it
+        if key == "reasoning_effort" and not variant.supports_reasoning_effort:
+            log.warning(
+                "param_not_supported",
+                param=key,
+                model=model,
+                reason="model_does_not_support_reasoning_effort",
+            )
+            continue
+
+        # Filter verbosity for models that don't support it.
+        # Also strip verbosity from model_kwargs sub-dict.
+        if (
+            key == "model_kwargs"
+            and isinstance(value, dict)
+            and "verbosity" in value
+            and not variant.supports_verbosity
+        ):
+            log.warning(
+                "param_not_supported",
+                param="verbosity",
+                model=model,
+                reason="model_does_not_support_verbosity",
+            )
+            value = {k: v for k, v in value.items() if k != "verbosity"}
+            if not value:
+                continue  # Skip empty model_kwargs
+
         # Translate max_tokens to provider-specific param name
         if key == "max_tokens" and caps.max_tokens_param != "max_tokens":
             filtered[caps.max_tokens_param] = value
@@ -285,6 +318,10 @@ def filter_model_kwargs(
     return filtered
 
 
+VALID_REASONING_EFFORT = {"none", "minimal", "low", "medium", "high", "xhigh"}
+VALID_VERBOSITY = {"low", "medium", "high"}
+
+
 @dataclass
 class PhaseSettings:
     """Model settings for a specific pipeline phase.
@@ -293,11 +330,15 @@ class PhaseSettings:
         temperature: Override temperature, or None to use phase/provider default.
         top_p: Nucleus sampling parameter, or None to use provider default.
         seed: Random seed for reproducibility, or None.
+        reasoning_effort: OpenAI reasoning depth (GPT-5/o1/o3), or None.
+        verbosity: OpenAI output verbosity (GPT-5 family), or None.
     """
 
     temperature: float | None = None
     top_p: float | None = None
     seed: int | None = None
+    reasoning_effort: str | None = None
+    verbosity: str | None = None
 
     def to_model_kwargs(self, phase: str, provider: str) -> dict[str, Any]:
         """Convert to kwargs for model creation.
@@ -344,6 +385,22 @@ class PhaseSettings:
             else:
                 kwargs["seed"] = self.seed
 
+        if self.reasoning_effort is not None:
+            kwargs["reasoning_effort"] = self.reasoning_effort
+            # GPT-5 family rejects temperature/top_p when reasoning_effort != "none"
+            if self.reasoning_effort != "none":
+                for param in ("temperature", "top_p"):
+                    if param in kwargs:
+                        log.debug(
+                            "param_suppressed_by_reasoning_effort",
+                            param=param,
+                            reasoning_effort=self.reasoning_effort,
+                        )
+                        del kwargs[param]
+
+        if self.verbosity is not None:
+            kwargs.setdefault("model_kwargs", {})["verbosity"] = self.verbosity
+
         return kwargs
 
     @classmethod
@@ -365,6 +422,8 @@ class PhaseSettings:
         temperature = data.get("temperature")
         top_p = data.get("top_p")
         seed = data.get("seed")
+        reasoning_effort = data.get("reasoning_effort")
+        verbosity = data.get("verbosity")
 
         # Validate temperature (non-negative)
         if temperature is not None and temperature < 0:
@@ -381,10 +440,26 @@ class PhaseSettings:
             msg = f"seed must be an integer, got {type(seed).__name__}"
             raise ValueError(msg)
 
+        # Validate reasoning_effort
+        if reasoning_effort is not None:
+            reasoning_effort = str(reasoning_effort).lower()
+            if reasoning_effort not in VALID_REASONING_EFFORT:
+                msg = f"reasoning_effort must be one of {sorted(VALID_REASONING_EFFORT)}, got '{reasoning_effort}'"
+                raise ValueError(msg)
+
+        # Validate verbosity
+        if verbosity is not None:
+            verbosity = str(verbosity).lower()
+            if verbosity not in VALID_VERBOSITY:
+                msg = f"verbosity must be one of {sorted(VALID_VERBOSITY)}, got '{verbosity}'"
+                raise ValueError(msg)
+
         return cls(
             temperature=temperature,
             top_p=top_p,
             seed=seed,
+            reasoning_effort=reasoning_effort,
+            verbosity=verbosity,
         )
 
 

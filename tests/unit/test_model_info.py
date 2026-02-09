@@ -4,7 +4,12 @@ from __future__ import annotations
 
 from unittest.mock import patch
 
-from questfoundry.providers.model_info import ModelInfo, get_model_info
+from questfoundry.providers.model_info import (
+    KNOWN_MODELS,
+    ModelInfo,
+    ModelProperties,
+    get_model_info,
+)
 
 
 class TestModelInfoDefaults:
@@ -66,3 +71,49 @@ class TestModelInfoDataclass:
         info = ModelInfo(context_window=32_768, max_concurrency=5)
         with __import__("pytest").raises(AttributeError):
             info.max_concurrency = 10  # type: ignore[misc]
+
+
+class TestModelPropertiesCapabilityFlags:
+    """Tests for supports_verbosity and supports_reasoning_effort flags."""
+
+    def test_gpt5_mini_supports_both(self) -> None:
+        """GPT-5-mini supports both verbosity and reasoning_effort."""
+        props = KNOWN_MODELS["openai"]["gpt-5-mini"]
+        assert props.supports_verbosity is True
+        assert props.supports_reasoning_effort is True
+
+    def test_o1_supports_reasoning_only(self) -> None:
+        """o1 supports reasoning_effort but not verbosity."""
+        props = KNOWN_MODELS["openai"]["o1"]
+        assert props.supports_reasoning_effort is True
+        assert props.supports_verbosity is False
+
+    def test_o3_mini_supports_reasoning_only(self) -> None:
+        """o3-mini supports reasoning_effort but not verbosity."""
+        props = KNOWN_MODELS["openai"]["o3-mini"]
+        assert props.supports_reasoning_effort is True
+        assert props.supports_verbosity is False
+
+    def test_gpt4o_no_special_support(self) -> None:
+        """GPT-4o does not support verbosity or reasoning_effort."""
+        props = KNOWN_MODELS["openai"]["gpt-4o"]
+        assert props.supports_verbosity is False
+        assert props.supports_reasoning_effort is False
+
+    def test_ollama_models_no_special_support(self) -> None:
+        """Ollama models default to no verbosity/reasoning_effort support."""
+        props = KNOWN_MODELS["ollama"]["qwen3:4b-instruct-32k"]
+        assert props.supports_verbosity is False
+        assert props.supports_reasoning_effort is False
+
+    def test_anthropic_models_no_special_support(self) -> None:
+        """Anthropic models default to no verbosity/reasoning_effort support."""
+        props = KNOWN_MODELS["anthropic"]["claude-sonnet-4-20250514"]
+        assert props.supports_verbosity is False
+        assert props.supports_reasoning_effort is False
+
+    def test_model_properties_default_flags(self) -> None:
+        """ModelProperties defaults both flags to False."""
+        props = ModelProperties(context_window=32_768)
+        assert props.supports_verbosity is False
+        assert props.supports_reasoning_effort is False

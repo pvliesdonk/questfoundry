@@ -35,6 +35,8 @@ class ModelProperties:
     context_window: int
     supports_vision: bool = False
     supports_tools: bool = True  # Most models support tools; o1 family doesn't
+    supports_verbosity: bool = False  # GPT-5 family only
+    supports_reasoning_effort: bool = False  # GPT-5 family + o1/o3
 
 
 # Known model properties by provider and model name.
@@ -50,18 +52,43 @@ KNOWN_MODELS: dict[str, dict[str, ModelProperties]] = {
         "deepseek-coder:6.7b": ModelProperties(context_window=16_384),
     },
     "openai": {
-        "gpt-5-mini": ModelProperties(context_window=1_000_000, supports_vision=True),
+        "gpt-5-mini": ModelProperties(
+            context_window=1_000_000,
+            supports_vision=True,
+            supports_verbosity=True,
+            supports_reasoning_effort=True,
+        ),
         "gpt-4o": ModelProperties(context_window=128_000, supports_vision=True),
         "gpt-4o-mini": ModelProperties(context_window=128_000, supports_vision=True),
         "gpt-4-turbo": ModelProperties(context_window=128_000, supports_vision=True),
         "gpt-4": ModelProperties(context_window=8_192),
         "gpt-3.5-turbo": ModelProperties(context_window=16_385),
-        # Reasoning models: no tool support, no temperature parameter
-        "o1": ModelProperties(context_window=200_000, supports_tools=False),
-        "o1-mini": ModelProperties(context_window=128_000, supports_tools=False),
-        "o1-preview": ModelProperties(context_window=128_000, supports_tools=False),
-        "o3": ModelProperties(context_window=200_000, supports_tools=False),
-        "o3-mini": ModelProperties(context_window=200_000, supports_tools=False),
+        # Reasoning models: no tool support, no temperature, no verbosity
+        "o1": ModelProperties(
+            context_window=200_000,
+            supports_tools=False,
+            supports_reasoning_effort=True,
+        ),
+        "o1-mini": ModelProperties(
+            context_window=128_000,
+            supports_tools=False,
+            supports_reasoning_effort=True,
+        ),
+        "o1-preview": ModelProperties(
+            context_window=128_000,
+            supports_tools=False,
+            supports_reasoning_effort=True,
+        ),
+        "o3": ModelProperties(
+            context_window=200_000,
+            supports_tools=False,
+            supports_reasoning_effort=True,
+        ),
+        "o3-mini": ModelProperties(
+            context_window=200_000,
+            supports_tools=False,
+            supports_reasoning_effort=True,
+        ),
     },
     "anthropic": {
         "claude-sonnet-4-20250514": ModelProperties(context_window=200_000, supports_vision=True),

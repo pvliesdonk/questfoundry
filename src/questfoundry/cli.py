@@ -2507,6 +2507,8 @@ def _show_available_models(discovered: dict[str, list[str]]) -> None:
     table.add_column("Context", justify="right", style="dim")
     table.add_column("Vision", justify="center")
     table.add_column("Tools", justify="center")
+    table.add_column("Verbose", justify="center")
+    table.add_column("Reason", justify="center")
 
     for provider in sorted(discovered.keys()):
         models = discovered[provider]
@@ -2518,12 +2520,16 @@ def _show_available_models(discovered: dict[str, list[str]]) -> None:
                 ctx = _format_context_window(props.context_window)
                 vision = "[green]✓[/green]" if props.supports_vision else "[dim]-[/dim]"
                 tools = "[green]✓[/green]" if props.supports_tools else "[dim]-[/dim]"
+                verbose = "[green]✓[/green]" if props.supports_verbosity else "[dim]-[/dim]"
+                reason = "[green]✓[/green]" if props.supports_reasoning_effort else "[dim]-[/dim]"
             else:
                 ctx = "[dim]?[/dim]"
                 vision = "[dim]?[/dim]"
                 tools = "[dim]?[/dim]"
+                verbose = "[dim]?[/dim]"
+                reason = "[dim]?[/dim]"
 
-            table.add_row(provider, model_name, ctx, vision, tools)
+            table.add_row(provider, model_name, ctx, vision, tools, verbose, reason)
 
     console.print(table)
     console.print()
