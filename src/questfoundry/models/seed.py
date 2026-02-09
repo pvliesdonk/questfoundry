@@ -301,20 +301,40 @@ class SeedOutput(BaseModel):
 # These allow serializing SEED output in chunks to avoid output truncation
 
 
-def _check_ids_unique(items: list[Any], id_attr: str, type_name: str) -> None:
-    """Check that IDs are unique in a collection of Pydantic models.
+def _deduplicate_and_check(items: list[Any], id_attr: str, type_name: str) -> list[Any]:
+    """Silently drop identical duplicates; raise on non-identical ones.
 
-    Raises ValueError with a descriptive message listing duplicates.
+    LLMs sometimes emit the same item twice verbatim. Wasting a retry loop
+    on that is pointless, so identical copies are silently dropped (keeping
+    the first occurrence). Non-identical duplicates (same ID, different
+    content) are real conflicts and still raise ValueError.
+
+    Returns the deduplicated list.
     """
-    ids = [getattr(item, id_attr) for item in items]
+    seen: dict[str, Any] = {}
+    result: list[Any] = []
+    for item in items:
+        item_id = getattr(item, id_attr)
+        if item_id not in seen:
+            seen[item_id] = item
+            result.append(item)
+        elif item == seen[item_id]:
+            # Identical duplicate — silently drop
+            continue
+        else:
+            # Same ID, different content — keep so the check below catches it
+            result.append(item)
+
+    ids = [getattr(item, id_attr) for item in result]
     dupes = [item_id for item_id, count in Counter(ids).items() if count > 1]
     if dupes:
         msg = (
-            f"Duplicate {type_name}s found: {sorted(dupes)}. "
+            f"Duplicate {type_name}s found with conflicting content: {sorted(dupes)}. "
             f"REMOVE the duplicate entries so each {type_name} appears exactly once. "
             f"Do NOT rename duplicates — delete the extra copy."
         )
         raise ValueError(msg)
+    return result
 
 
 class EntitiesSection(BaseModel):
@@ -326,9 +346,9 @@ class EntitiesSection(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_entity_ids_unique(self) -> EntitiesSection:
-        """Validate that entity IDs are unique."""
-        _check_ids_unique(self.entities, "entity_id", "entity_id")
+    def _deduplicate_entities(self) -> EntitiesSection:
+        """Drop identical duplicate entities; raise on conflicting ones."""
+        self.entities = _deduplicate_and_check(self.entities, "entity_id", "entity_id")
         return self
 
 
@@ -341,9 +361,9 @@ class DilemmasSection(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_dilemma_ids_unique(self) -> DilemmasSection:
-        """Validate that dilemma IDs are unique."""
-        _check_ids_unique(self.dilemmas, "dilemma_id", "dilemma_id")
+    def _deduplicate_dilemmas(self) -> DilemmasSection:
+        """Drop identical duplicate dilemmas; raise on conflicting ones."""
+        self.dilemmas = _deduplicate_and_check(self.dilemmas, "dilemma_id", "dilemma_id")
         return self
 
 
@@ -356,9 +376,9 @@ class PathsSection(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_path_ids_unique(self) -> PathsSection:
-        """Validate that path IDs are unique."""
-        _check_ids_unique(self.paths, "path_id", "path_id")
+    def _deduplicate_paths(self) -> PathsSection:
+        """Drop identical duplicate paths; raise on conflicting ones."""
+        self.paths = _deduplicate_and_check(self.paths, "path_id", "path_id")
         return self
 
 
@@ -371,9 +391,11 @@ class ConsequencesSection(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_consequence_ids_unique(self) -> ConsequencesSection:
-        """Validate that consequence IDs are unique."""
-        _check_ids_unique(self.consequences, "consequence_id", "consequence_id")
+    def _deduplicate_consequences(self) -> ConsequencesSection:
+        """Drop identical duplicate consequences; raise on conflicting ones."""
+        self.consequences = _deduplicate_and_check(
+            self.consequences, "consequence_id", "consequence_id"
+        )
         return self
 
 
@@ -402,17 +424,9 @@ class PathBeatsSection(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _check_beat_ids_unique(self) -> PathBeatsSection:
-        """Validate that beat IDs are unique within this path's beats."""
-        from collections import Counter
-
-        ids = [b.beat_id for b in self.initial_beats]
-        dupes = [bid for bid, count in Counter(ids).items() if count > 1]
-        if dupes:
-            msg = (
-                f"Duplicate beat IDs found: {sorted(dupes)}. Each beat must have a unique beat_id."
-            )
-            raise ValueError(msg)
+    def _deduplicate_beats(self) -> PathBeatsSection:
+        """Drop identical duplicate beats; raise on conflicting ones."""
+        self.initial_beats = _deduplicate_and_check(self.initial_beats, "beat_id", "beat_id")
         return self
 
 
