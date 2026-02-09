@@ -443,14 +443,19 @@ class DressStage:
                     "Make confident visual decisions based on the story's genre and tone."
                 )
 
+        # Phase 1: Discuss
+        tools = get_all_research_tools()
+
+        # Include corpus research section only when tools are available
+        research_section = getattr(discuss_template, "research_tools_section", "") if tools else ""
+
         system_prompt = discuss_template.system.format(
             vision_context=vision_context,
             entity_list=entity_list,
+            research_tools_section=research_section,
             mode_section=mode_section,
         )
 
-        # Phase 1: Discuss
-        tools = get_all_research_tools()
         if self._interactive:
             tools = [*tools, *get_interactive_tools()]
 

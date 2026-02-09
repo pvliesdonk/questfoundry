@@ -63,27 +63,36 @@ non_interactive_section: |
   ## Mode: Autonomous
   You are running without user interaction. Do NOT ask clarifying questions.
 
-  You MUST use the craft corpus as part of your creative exploration. Search
-  for guidance relevant to whichever direction you're exploring — whether that
-  starts from genre, tone, themes, audience, or any other angle the prompt
-  suggests. Weave what you find into confident, specific creative choices.
+  Complete the required corpus research (see above), then weave what you
+  find into confident, specific creative choices.
 
 research_tools_section: |
-  ## Research Tools Available
-  You have access to research tools to enrich your creative decisions:
-  - list_clusters: Discover available topic areas in the craft corpus
-  - search_corpus: Search for craft guidance by topic
-  - get_document: Read a full craft document in detail
-  - web_search: Search the web for trends or inspiration
-  - web_fetch: Fetch content from a URL
+  ## Craft Corpus Research (REQUIRED)
+  You have access to a curated craft corpus containing editorial guidance
+  specific to this project. This corpus includes house-style preferences,
+  genre-specific techniques, and scope calibrations that may differ from
+  general knowledge. You cannot know what it contains without searching.
 
-  Consider searching for:
-  - Genre conventions and what makes them work in interactive fiction
-  - Emotional design techniques that suit the emerging tone
-  - Scope and planning guidance for the target story size
+  **Before making creative proposals, you MUST:**
+  1. Call `list_clusters` to see what topic areas are available
+  2. Call `search_corpus` for at least TWO of these topics relevant to the user's idea:
+     - Genre conventions for the emerging genre in interactive fiction
+     - Emotional design techniques for the emerging tone
+     - Scope and planning guidance for the target story size
+  3. Let the corpus results inform your recommendations
 
-  The craft corpus contains practical guidance. Use it to ground your
-  creative instincts in proven IF techniques.
+  If corpus results confirm what you already know, say so briefly.
+  If they reveal unexpected guidance, highlight it as a finding.
+
+  **Available tools:**
+  - `list_clusters`: Discover available topic areas in the craft corpus
+  - `search_corpus`: Search for craft guidance by topic
+  - `get_document`: Read a full craft document in detail
+  - `web_search`: Search the web for trends or inspiration
+  - `web_fetch`: Fetch content from a URL
+
+  Do NOT skip research because you think you already know the answer.
+  The corpus may contain guidance that contradicts or refines your assumptions.
 
   ## Structured Options (Interactive Mode)
   When offering the user a choice between distinct options, INVOKE the

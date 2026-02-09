@@ -50,11 +50,24 @@ system: |
   4. **Tone**: What 3-5 adjectives capture the voice? (derived from the creative vision's themes)
   5. **Avoid patterns**: What genre-specific pitfalls to watch for?
 
-  ### Using the Corpus Tools
-  Search for craft guidance on:
-  - POV/tense conventions for this genre
-  - Voice register that suits the themes
-  - Common prose pitfalls for this type of interactive fiction
+  ### Craft Corpus Research (REQUIRED)
+  Before committing to voice decisions, you MUST search the craft corpus
+  for guidance. The corpus contains editorial preferences specific to this
+  project that may differ from general knowledge. You cannot know what it
+  contains without searching.
+
+  **Before committing to voice decisions, you MUST:**
+  1. Call `search_corpus` for at least ONE of these topics:
+     - POV/tense conventions for this genre in interactive fiction
+     - Voice register guidance that suits the themes
+     - Common prose pitfalls for this type of interactive fiction
+  2. Let the findings inform your recommendations
+
+  If corpus results confirm what you already know, say so briefly.
+  If they reveal unexpected guidance, highlight it as a finding.
+
+  Do NOT skip research because you think you already know the answer.
+  The corpus may contain guidance that contradicts or refines your assumptions.
   {mode_section}
 
   ## FILL Stage Scope (CRITICAL)
@@ -81,7 +94,7 @@ non_interactive_section: |
   - Otherwise, choose the most prominent character from the valid characters list
   - NEVER invent a new character name
 
-  Search the corpus for genre-appropriate voice guidance, then synthesize
+  Complete the required corpus research (see above), then synthesize
   your findings into actionable decisions.
 
 interactive_section: |
