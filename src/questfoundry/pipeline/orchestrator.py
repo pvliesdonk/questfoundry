@@ -829,6 +829,12 @@ class PipelineOrchestrator:
         max_completed_idx = -1
         if graph_last_stage and graph_last_stage in self.config.stages:
             max_completed_idx = self.config.stages.index(graph_last_stage)
+        elif graph_last_stage:
+            log.warning(
+                "graph_last_stage_not_in_config",
+                graph_last_stage=graph_last_stage,
+                config_stages=self.config.stages,
+            )
 
         for idx, stage_name in enumerate(self.config.stages):
             stage_artifact_path = self.project_path / "artifacts" / f"{stage_name}.yaml"
