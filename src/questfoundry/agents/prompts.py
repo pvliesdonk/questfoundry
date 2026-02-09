@@ -141,7 +141,10 @@ def _render_discuss_template(
     research_section = (
         raw_data.get("research_tools_section", "") if research_tools_available else ""
     )
-    mode_section = raw_data.get("non_interactive_section", "") if not interactive else ""
+    if interactive:
+        mode_section = raw_data.get("interactive_section", "")
+    else:
+        mode_section = raw_data.get("non_interactive_section", "")
     size_presets_section = raw_data.get("size_presets_section", "")
 
     system_template = raw_data.get("system", "")
