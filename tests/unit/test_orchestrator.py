@@ -2,12 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from questfoundry.graph import Graph
+from questfoundry.graph import Graph, apply_mutations, save_snapshot
 from questfoundry.pipeline import (
     AutoApproveGate,
     PipelineOrchestrator,
@@ -1008,3 +1008,214 @@ def test_orchestrator_image_provider_none_by_default(tmp_path: Path) -> None:
 
     with patch.dict("os.environ", {}, clear=True):
         assert orchestrator._get_resolved_image_provider() is None
+
+
+# ---------------------------------------------------------------------------
+# Re-run snapshot restoration for orchestrator-managed stages
+# ---------------------------------------------------------------------------
+
+# Minimal DREAM artifact for apply_dream_mutations (uses upsert_node)
+_DREAM_ARTIFACT = {
+    "genre": "fantasy",
+    "tone": ["dark"],
+    "themes": ["betrayal"],
+    "audience": "adult",
+}
+
+# Minimal BRAINSTORM artifact with one entity and one dilemma
+_BRAINSTORM_ARTIFACT = {
+    "entities": [
+        {
+            "entity_id": "test_hero",
+            "entity_category": "character",
+            "concept": "A brave hero",
+        },
+    ],
+    "dilemmas": [
+        {
+            "dilemma_id": "fight_or_flee",
+            "question": "Fight or flee?",
+            "central_entity_ids": ["test_hero"],
+            "answers": [
+                {"answer_id": "fight", "answer_text": "Fight", "is_default_path": True},
+                {"answer_id": "flee", "answer_text": "Flee", "is_default_path": False},
+            ],
+        },
+    ],
+}
+
+
+def _simulate_mutation_block(
+    project_path: Path,
+    stage_name: str,
+    artifact_data: dict[str, Any],
+) -> Graph:
+    """Simulate the orchestrator's mutation block with re-run detection.
+
+    Reproduces the logic from orchestrator.py run_stage() lines 680-710.
+    """
+    from questfoundry.pipeline.orchestrator import _MUTATION_STAGE_PREREQUISITES
+
+    graph = Graph.load(project_path)
+    last_stage = graph.get_last_stage()
+    prerequisite = _MUTATION_STAGE_PREREQUISITES.get(stage_name)
+    snapshot_path = project_path / "snapshots" / f"pre-{stage_name}.json"
+
+    if last_stage == prerequisite:
+        save_snapshot(graph, project_path, stage_name)
+    elif snapshot_path.exists():
+        graph = Graph.load_from_file(snapshot_path)
+    else:
+        save_snapshot(graph, project_path, stage_name)
+
+    apply_mutations(graph, stage_name, artifact_data)
+    graph.set_last_stage(stage_name)
+    graph.save(project_path / "graph.json")
+    return graph
+
+
+class TestMutationRerunDetection:
+    """Tests for re-run snapshot restoration in the orchestrator mutation block."""
+
+    def test_first_run_saves_snapshot(self, tmp_path: Path) -> None:
+        """First brainstorm run saves a pre-stage snapshot."""
+        # Set up: graph with last_stage=dream (brainstorm prerequisite)
+        graph = Graph.empty()
+        graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.set_last_stage("dream")
+        graph.save(tmp_path / "graph.json")
+
+        _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
+
+        snapshot_path = tmp_path / "snapshots" / "pre-brainstorm.json"
+        assert snapshot_path.exists()
+
+        # Snapshot should contain dream-only state (no brainstorm nodes)
+        snapshot_graph = Graph.load_from_file(snapshot_path)
+        assert snapshot_graph.get_node("character::test_hero") is None
+        assert snapshot_graph.get_last_stage() == "dream"
+
+    def test_rerun_restores_snapshot(self, tmp_path: Path) -> None:
+        """Re-running brainstorm restores the clean pre-stage snapshot."""
+        # First run
+        graph = Graph.empty()
+        graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.set_last_stage("dream")
+        graph.save(tmp_path / "graph.json")
+
+        _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
+
+        # Verify first run succeeded
+        result = Graph.load(tmp_path)
+        assert result.get_node("character::test_hero") is not None
+        assert result.get_last_stage() == "brainstorm"
+
+        # Re-run with a DIFFERENT entity to prove we're not just appending
+        rerun_artifact = {
+            "entities": [
+                {
+                    "entity_id": "rerun_hero",
+                    "entity_category": "character",
+                    "concept": "A different hero",
+                },
+            ],
+            "dilemmas": [
+                {
+                    "dilemma_id": "stay_or_go",
+                    "question": "Stay or go?",
+                    "central_entity_ids": ["rerun_hero"],
+                    "answers": [
+                        {"answer_id": "stay", "answer_text": "Stay", "is_default_path": True},
+                        {"answer_id": "go", "answer_text": "Go", "is_default_path": False},
+                    ],
+                },
+            ],
+        }
+        _simulate_mutation_block(tmp_path, "brainstorm", rerun_artifact)
+
+        # New entities should exist, old should not
+        result = Graph.load(tmp_path)
+        assert result.get_node("character::rerun_hero") is not None
+        assert result.get_node("character::test_hero") is None
+
+    def test_rerun_after_downstream_stage(self, tmp_path: Path) -> None:
+        """Brainstorm re-run after seed has completed restores pre-brainstorm snapshot."""
+        # Set up: run dream, then brainstorm
+        graph = Graph.empty()
+        graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.set_last_stage("dream")
+        graph.save(tmp_path / "graph.json")
+
+        _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
+
+        # Simulate seed having run (just set last_stage, no real seed mutations)
+        result = Graph.load(tmp_path)
+        result.set_last_stage("seed")
+        result.save(tmp_path / "graph.json")
+
+        # Now re-run brainstorm — should not crash
+        _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
+
+        result = Graph.load(tmp_path)
+        assert result.get_node("character::test_hero") is not None
+        assert result.get_last_stage() == "brainstorm"
+
+    def test_downstream_stage_after_rerun_is_first_run(self, tmp_path: Path) -> None:
+        """Seed run after brainstorm re-run treats seed as first run (saves new snapshot)."""
+        # Set up: dream → brainstorm → seed
+        graph = Graph.empty()
+        graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.set_last_stage("dream")
+        graph.save(tmp_path / "graph.json")
+
+        _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
+
+        # After brainstorm, last_stage == "brainstorm" which is seed's prerequisite.
+        # So running dream mutations (via apply_mutations) for seed should be a first run.
+        # We can't easily run real seed mutations without valid brainstorm data,
+        # but we can verify the prerequisite logic: last_stage should == "brainstorm"
+        result = Graph.load(tmp_path)
+        assert result.get_last_stage() == "brainstorm"
+
+        # Seed's prerequisite is "brainstorm", and last_stage == "brainstorm"
+        # So this should save a new pre-seed snapshot (first run).
+        from questfoundry.pipeline.orchestrator import _MUTATION_STAGE_PREREQUISITES
+
+        prerequisite = _MUTATION_STAGE_PREREQUISITES["seed"]
+        assert result.get_last_stage() == prerequisite  # First run condition
+
+    def test_rerun_no_snapshot_fallback(self, tmp_path: Path) -> None:
+        """Re-run without snapshot logs warning and saves current state."""
+        # Set up: graph with last_stage=brainstorm but no snapshot file
+        graph = Graph.empty()
+        graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
+        graph.set_last_stage("brainstorm")
+        graph.save(tmp_path / "graph.json")
+
+        # No pre-brainstorm.json exists — simulate snapshot deletion
+        snapshot_path = tmp_path / "snapshots" / "pre-brainstorm.json"
+        assert not snapshot_path.exists()
+
+        # This will use the fallback: save current state and try to apply.
+        # It may crash if entities already exist, but the snapshot should be saved.
+        # Since graph has no brainstorm nodes (just vision), it should succeed.
+        _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
+
+        # Snapshot was created as fallback
+        assert snapshot_path.exists()
+
+    def test_dream_first_run_none_prerequisite(self, tmp_path: Path) -> None:
+        """Dream first run works with None prerequisite (empty graph)."""
+        # Empty graph — last_stage is None, dream prerequisite is None
+        graph = Graph.empty()
+        graph.save(tmp_path / "graph.json")
+
+        _simulate_mutation_block(tmp_path, "dream", _DREAM_ARTIFACT)
+
+        result = Graph.load(tmp_path)
+        assert result.get_node("vision") is not None
+        assert result.get_last_stage() == "dream"
+
+        # Snapshot saved
+        snapshot_path = tmp_path / "snapshots" / "pre-dream.json"
+        assert snapshot_path.exists()

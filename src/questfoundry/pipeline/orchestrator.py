@@ -45,6 +45,15 @@ if TYPE_CHECKING:
 
 log = get_logger(__name__)
 
+# Prerequisite stage for orchestrator-managed mutation stages.
+# Used for re-run detection: if last_stage != prerequisite, restore snapshot.
+# Matches the GROW/FILL/DRESS pattern (grow.py:338-365).
+_MUTATION_STAGE_PREREQUISITES: dict[str, str | None] = {
+    "dream": None,
+    "brainstorm": "dream",
+    "seed": "brainstorm",
+}
+
 
 @dataclass
 class StageResult:
@@ -671,8 +680,37 @@ class PipelineOrchestrator:
                 if has_mutation_handler(stage_name):
                     try:
                         graph = Graph.load(self.project_path)
-                        # Pre-stage snapshot enables rollback if mutations fail or stage is rejected
-                        save_snapshot(graph, self.project_path, stage_name)
+
+                        # Re-run detection: check if this stage already ran.
+                        # On first run, save a clean pre-stage snapshot.
+                        # On re-run, restore from the snapshot to avoid
+                        # NodeExistsError from create_node() on existing nodes.
+                        last_stage = graph.get_last_stage()
+                        prerequisite = _MUTATION_STAGE_PREREQUISITES.get(stage_name)
+                        snapshot_path = self.project_path / "snapshots" / f"pre-{stage_name}.json"
+
+                        if last_stage == prerequisite:
+                            # First run: save clean pre-stage snapshot
+                            save_snapshot(graph, self.project_path, stage_name)
+                        elif snapshot_path.exists():
+                            # Re-run: restore clean pre-stage graph
+                            graph = Graph.load_from_file(snapshot_path)
+                            log.info(
+                                "rerun_restored_snapshot",
+                                stage=stage_name,
+                                from_last_stage=last_stage,
+                                snapshot=str(snapshot_path),
+                            )
+                        else:
+                            # No snapshot and not first run (e.g., snapshot deleted).
+                            # Save current state as best-effort fallback.
+                            log.warning(
+                                "rerun_no_snapshot",
+                                stage=stage_name,
+                                last_stage=last_stage,
+                            )
+                            save_snapshot(graph, self.project_path, stage_name)
+
                         apply_mutations(graph, stage_name, artifact_data)
 
                         # Post-mutation invariant check - catches code bugs, not LLM errors
