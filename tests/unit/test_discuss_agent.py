@@ -15,13 +15,13 @@ class TestGetDiscussPrompt:
     """Test prompt template creation."""
 
     def test_prompt_includes_core_discussion_topics(self) -> None:
-        """Prompt should include key discussion areas."""
+        """Prompt should include key creative questions as deliverables."""
         prompt = get_discuss_prompt()
 
-        assert "Genre and tone" in prompt
-        assert "Themes and motifs" in prompt
-        assert "Target audience" in prompt
-        assert "Scope and complexity" in prompt
+        assert "genre and subgenre" in prompt
+        assert "emotional tone" in prompt
+        assert "target audience" in prompt.lower()
+        assert "themes" in prompt
 
     def test_prompt_includes_tools_section_when_available(self) -> None:
         """Prompt should list research tools when available."""
@@ -94,7 +94,7 @@ class TestCreateDiscussAgent:
         call_kwargs = mock_create.call_args.kwargs
         # System prompt should contain discussion guidelines, not user prompt
         assert "creative collaborator" in call_kwargs["system_prompt"]
-        assert "Genre and tone" in call_kwargs["system_prompt"]
+        assert "genre and subgenre" in call_kwargs["system_prompt"]
 
 
 class TestRunDiscussPhase:
