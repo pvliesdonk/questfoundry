@@ -329,8 +329,8 @@ def _deduplicate_and_check(items: list[Any], id_attr: str, type_name: str) -> li
     dupes = [item_id for item_id, count in Counter(ids).items() if count > 1]
     if dupes:
         msg = (
-            f"Duplicate {type_name}s found with conflicting content: {sorted(dupes)}. "
-            f"REMOVE the duplicate entries so each {type_name} appears exactly once. "
+            f"Duplicates found for {type_name}: {sorted(dupes)}. "
+            f"REMOVE the duplicate entries so that each item has a unique {type_name}. "
             f"Do NOT rename duplicates — delete the extra copy."
         )
         raise ValueError(msg)

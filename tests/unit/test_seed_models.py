@@ -40,7 +40,7 @@ class TestEntitiesSectionDedup:
 
     def test_non_identical_duplicates_rejected(self) -> None:
         """Same ID but different content is a real conflict."""
-        with pytest.raises(ValidationError, match="conflicting content"):
+        with pytest.raises(ValidationError, match="Duplicates found"):
             EntitiesSection(
                 entities=[
                     {"entity_id": "character::alice", "disposition": "retained"},
@@ -94,7 +94,7 @@ class TestDilemmasSectionDedup:
         assert len(section.dilemmas) == 1
 
     def test_non_identical_duplicates_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="conflicting content"):
+        with pytest.raises(ValidationError, match="Duplicates found"):
             DilemmasSection(
                 dilemmas=[
                     {"dilemma_id": "dilemma::trust_or_betray", "explored": ["trust"]},
@@ -141,7 +141,7 @@ class TestPathsSectionDedup:
         assert len(section.paths) == 1
 
     def test_non_identical_duplicates_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="conflicting content"):
+        with pytest.raises(ValidationError, match="Duplicates found"):
             PathsSection(
                 paths=[
                     _TRUST_PATH,
@@ -181,7 +181,7 @@ class TestConsequencesSectionDedup:
         assert len(section.consequences) == 1
 
     def test_non_identical_duplicates_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="conflicting content"):
+        with pytest.raises(ValidationError, match="Duplicates found"):
             ConsequencesSection(
                 consequences=[
                     self._CONSEQUENCE,
@@ -220,7 +220,7 @@ class TestPathBeatsSectionDedup:
         assert len(section.initial_beats) == 2
 
     def test_non_identical_duplicates_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="conflicting content"):
+        with pytest.raises(ValidationError, match="Duplicates found"):
             PathBeatsSection(
                 initial_beats=[
                     self._BEAT_A,
