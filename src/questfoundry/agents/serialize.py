@@ -1109,6 +1109,9 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
             if "exceeds limit" in error.issue.lower() or "maximum" in error.issue.lower():
                 corrections.append(f"- LIMIT EXCEEDED: {error.issue}")
                 continue
+            if "duplicate" in error.issue.lower():
+                corrections.append(f"- DUPLICATE: {error.issue}")
+                continue
             # Skip other errors without available suggestions
             continue
 

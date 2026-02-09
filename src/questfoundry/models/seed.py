@@ -16,6 +16,7 @@ Terminology (v5):
 
 from __future__ import annotations
 
+from collections import Counter
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -300,6 +301,18 @@ class SeedOutput(BaseModel):
 # These allow serializing SEED output in chunks to avoid output truncation
 
 
+def _check_ids_unique(items: list[Any], id_attr: str, type_name: str) -> None:
+    """Check that IDs are unique in a collection of Pydantic models.
+
+    Raises ValueError with a descriptive message listing duplicates.
+    """
+    ids = [getattr(item, id_attr) for item in items]
+    dupes = [item_id for item_id, count in Counter(ids).items() if count > 1]
+    if dupes:
+        msg = f"Duplicate {type_name}s found: {sorted(dupes)}. Each {type_name.split('_')[0]} must appear exactly once."
+        raise ValueError(msg)
+
+
 class EntitiesSection(BaseModel):
     """Wrapper for serializing entity decisions separately."""
 
@@ -307,6 +320,12 @@ class EntitiesSection(BaseModel):
         default_factory=list,
         description="Entity curation decisions",
     )
+
+    @model_validator(mode="after")
+    def _check_entity_ids_unique(self) -> EntitiesSection:
+        """Validate that entity IDs are unique."""
+        _check_ids_unique(self.entities, "entity_id", "entity_id")
+        return self
 
 
 class DilemmasSection(BaseModel):
@@ -317,6 +336,12 @@ class DilemmasSection(BaseModel):
         description="Dilemma exploration decisions",
     )
 
+    @model_validator(mode="after")
+    def _check_dilemma_ids_unique(self) -> DilemmasSection:
+        """Validate that dilemma IDs are unique."""
+        _check_ids_unique(self.dilemmas, "dilemma_id", "dilemma_id")
+        return self
+
 
 class PathsSection(BaseModel):
     """Wrapper for serializing paths separately."""
@@ -326,6 +351,12 @@ class PathsSection(BaseModel):
         description="Created plot paths",
     )
 
+    @model_validator(mode="after")
+    def _check_path_ids_unique(self) -> PathsSection:
+        """Validate that path IDs are unique."""
+        _check_ids_unique(self.paths, "path_id", "path_id")
+        return self
+
 
 class ConsequencesSection(BaseModel):
     """Wrapper for serializing consequences separately."""
@@ -334,6 +365,12 @@ class ConsequencesSection(BaseModel):
         default_factory=list,
         description="Narrative consequences for paths",
     )
+
+    @model_validator(mode="after")
+    def _check_consequence_ids_unique(self) -> ConsequencesSection:
+        """Validate that consequence IDs are unique."""
+        _check_ids_unique(self.consequences, "consequence_id", "consequence_id")
+        return self
 
 
 class BeatsSection(BaseModel):
