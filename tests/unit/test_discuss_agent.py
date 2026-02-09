@@ -29,14 +29,14 @@ class TestGetDiscussPrompt:
 
         assert "search_corpus" in prompt
         assert "web_search" in prompt
-        assert "Research Tools Available" in prompt
+        assert "Craft Corpus Research (REQUIRED)" in prompt
 
     def test_prompt_excludes_tools_section_when_unavailable(self) -> None:
         """Prompt should not list research tools when unavailable."""
         prompt = get_discuss_prompt(research_tools_available=False)
 
         assert "search_corpus" not in prompt
-        assert "Research Tools Available" not in prompt
+        assert "Craft Corpus Research" not in prompt
 
     def test_prompt_includes_guidelines(self) -> None:
         """Prompt should include interaction guidelines."""

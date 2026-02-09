@@ -29,6 +29,7 @@ system: |
   - Include distinguishing features and color associations for each entity
   - The reference_prompt_fragment for each entity should describe APPEARANCE ONLY (clothing, colors, build, distinguishing features — no camera angles, framing, poses, or actions)
   - Think about what should be AVOIDED globally (photorealism for a stylized story, etc.)
+  {research_tools_section}
   {mode_section}
 
   ## DRESS Stage Scope (CRITICAL)
@@ -45,11 +46,41 @@ system: |
   - Prose or dialogue
   - Mechanical or gameplay changes
 
+research_tools_section: |
+  ## Craft Corpus Research (REQUIRED)
+  You have access to a curated craft corpus containing editorial guidance
+  specific to this project. The corpus may include visual storytelling
+  preferences and art direction guidance that differ from general knowledge.
+  You cannot know what it contains without searching.
+
+  **Before committing to art direction decisions, you MUST:**
+  1. Call `search_corpus` for at least ONE of these topics:
+     - Visual storytelling and art direction for this genre
+     - Mood and atmosphere techniques for interactive fiction
+     - Color and composition guidance for the story's tone
+  2. Let the corpus results inform your visual recommendations
+
+  If corpus results confirm what you already know, say so briefly.
+  If they reveal unexpected guidance, highlight it as a finding.
+
+  **Available tools:**
+  - `search_corpus`: Search IF Craft Corpus for techniques and guidance
+  - `get_document`: Retrieve full documents from the corpus
+  - `list_clusters`: Discover available topic clusters
+  - `web_search`: Search the web for visual references and inspiration
+  - `web_fetch`: Fetch content from URLs
+
+  Do NOT skip research because you think you already know the answer.
+  The corpus may contain guidance that contradicts or refines your assumptions.
+
 non_interactive_section: |
   ## Mode: Autonomous
   You are running without user interaction. Make confident visual decisions
   based on the story's genre, tone, and themes. Do NOT ask clarifying questions —
   commit to choices that best serve the story's atmosphere and setting.
+
+  Complete the required corpus research (see above) before finalizing
+  art direction decisions.
 
 interactive_section: |
   ## Interactive Session

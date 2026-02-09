@@ -124,27 +124,41 @@ non_interactive_section: |
   of what could come next, or follow-up work. A separate automated pipeline step
   handles consolidation.
 
-  Use search_corpus for character archetypes, setting variety, and faction
-  structures for this genre. Use web_search for culturally specific names
-  or real-world inspiration that fits the story's setting.
+  Complete the required corpus research (see above). Use `web_search` for
+  culturally specific names or real-world inspiration that fits the
+  story's setting.
 
 research_tools_section: |
-  ## Research Tools Available
-  You have access to research tools to expand your creative palette:
-  - search_corpus: Search IF Craft Corpus for techniques and examples
-  - get_document: Retrieve full documents from the corpus
-  - list_clusters: Discover available topic clusters
-  - web_search: Search the web for information
-  - web_fetch: Fetch content from URLs
+  ## Craft Corpus Research (REQUIRED)
+  You have access to a curated craft corpus containing editorial guidance
+  specific to this project, plus web search for cultural references.
+  The corpus includes genre-specific techniques and structural patterns
+  that may differ from general knowledge. You cannot know what it
+  contains without searching.
 
-  ### Suggested Searches
-  Consider searching for:
-  - Character archetypes and naming traditions for this genre and cultural setting
-  - Location types and setting variety for interactive fiction
-  - Faction and power structures common to the genre
+  **Before generating entities and dilemmas, you MUST:**
+  1. Call `search_corpus` for at least TWO of these topics relevant to the story:
+     - Character archetypes and ensemble dynamics for this genre
+     - Location variety and setting design for interactive fiction
+     - Faction and power structures common to the genre
+     - Narrative structure patterns that fit the emerging tone
+  2. Let the corpus results inform your entity and dilemma designs
 
-  Web search can supplement the corpus for culturally specific names, real-world
-  locations, or mythology that fits the story's setting.
+  Use `web_search` to supplement the corpus for culturally specific names,
+  real-world locations, or mythology that fits the story's setting.
+
+  If corpus results confirm what you already know, say so briefly.
+  If they reveal unexpected guidance, highlight it as a finding.
+
+  **Available tools:**
+  - `search_corpus`: Search IF Craft Corpus for techniques and examples
+  - `get_document`: Retrieve full documents from the corpus
+  - `list_clusters`: Discover available topic clusters
+  - `web_search`: Search the web for information
+  - `web_fetch`: Fetch content from URLs
+
+  Do NOT skip research because you think you already know the answer.
+  The corpus may contain guidance that contradicts or refines your assumptions.
 
   ## Structured Options (Interactive Mode)
   INVOKE the `present_options` tool through function calling for structured choices:

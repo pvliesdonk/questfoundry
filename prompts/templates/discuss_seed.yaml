@@ -169,10 +169,29 @@ non_interactive_section: |
   Do NOT ask clarifying questions - commit to choices that serve the story.
 
 research_tools_section: |
-  ## Research Tools Available
-  - search_corpus: Search IF Craft Corpus for story structure guidance
-  - get_document: Retrieve full documents from the corpus
-  - list_clusters: Discover available topic clusters
+  ## Craft Corpus Research (REQUIRED)
+  You have access to a curated craft corpus containing editorial guidance
+  specific to this project. The corpus includes structural techniques
+  and branching patterns that may differ from general knowledge. You
+  cannot know what it contains without searching.
+
+  **Before committing to curation decisions, you MUST:**
+  1. Call `search_corpus` for at least ONE of these topics:
+     - Branching structure and path design for interactive fiction
+     - Convergence patterns and how paths reconnect meaningfully
+     - Pacing and scope management for the story's target size
+  2. Let the corpus results inform your retain/cut and path decisions
+
+  If corpus results confirm what you already know, say so briefly.
+  If they reveal unexpected guidance, highlight it as a finding.
+
+  **Available tools:**
+  - `search_corpus`: Search IF Craft Corpus for story structure guidance
+  - `get_document`: Retrieve full documents from the corpus
+  - `list_clusters`: Discover available topic clusters
+
+  Do NOT skip research because you think you already know the answer.
+  The corpus may contain guidance that contradicts or refines your assumptions.
 
   ## Structured Options (Interactive Mode)
   Use `present_options` for clear retain/cut decisions when helpful.
