@@ -56,14 +56,15 @@ system: |
   project that may differ from general knowledge. You cannot know what it
   contains without searching.
 
-  **You MUST call `search_corpus` for at least ONE of:**
-  - POV/tense conventions for this genre in interactive fiction
-  - Voice register guidance that suits the themes
-  - Common prose pitfalls for this type of interactive fiction
+  **Before committing to voice decisions, you MUST:**
+  1. Call `search_corpus` for at least ONE of these topics:
+     - POV/tense conventions for this genre in interactive fiction
+     - Voice register guidance that suits the themes
+     - Common prose pitfalls for this type of interactive fiction
+  2. Let the findings inform your recommendations
 
-  Let the findings inform your recommendations. If corpus results confirm
-  what you already know, say so briefly. If they reveal unexpected
-  guidance, highlight it as a finding.
+  If corpus results confirm what you already know, say so briefly.
+  If they reveal unexpected guidance, highlight it as a finding.
 
   Do NOT skip research because you think you already know the answer.
   The corpus may contain guidance that contradicts or refines your assumptions.
