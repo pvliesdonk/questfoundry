@@ -86,6 +86,7 @@ async def test_execute_calls_all_three_phases() -> None:
         patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
         patch("questfoundry.pipeline.stages.seed.summarize_discussion") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.serialize_post_prune_analysis") as mock_analysis,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):
         MockGraph.load.return_value = mock_graph
@@ -120,6 +121,8 @@ async def test_execute_calls_all_three_phases() -> None:
         mock_serialize.return_value = SerializeResult(
             artifact=mock_artifact, tokens_used=200, semantic_errors=[]
         )
+        # Post-prune analysis: (analyses, constraints, tokens, llm_calls)
+        mock_analysis.return_value = ([], [], 50, 1)
 
         artifact, llm_calls, tokens = await stage.execute(
             model=mock_model,
@@ -131,15 +134,15 @@ async def test_execute_calls_all_three_phases() -> None:
         mock_discuss.assert_called_once()
         mock_summarize.assert_called_once()
         mock_serialize.assert_called_once()
+        mock_analysis.assert_called_once()
 
         # Verify result
         assert len(artifact["entities"]) == 1
         assert len(artifact["paths"]) == 1
         assert len(artifact["initial_beats"]) == 1
-        # Stage counts: 2 discuss + 1 summarize + 6 (hardcoded for iterative serialize)
-        # Note: This tests the stage's call accounting, not internal serialize behavior
-        assert llm_calls == 9
-        assert tokens == 800  # 500 + 100 + 200
+        # Stage counts: 2 discuss + 1 summarize + 6 serialize + 1 analysis
+        assert llm_calls == 10
+        assert tokens == 850  # 500 + 100 + 200 + 50
 
 
 @pytest.mark.asyncio

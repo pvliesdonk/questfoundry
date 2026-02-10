@@ -471,7 +471,12 @@ class SeedStage:
 
         # Phase 5: Post-prune convergence analysis (sections 7+8)
         log.debug("seed_phase", phase="post_prune_analysis")
-        analyses, constraints, analysis_tokens = await serialize_post_prune_analysis(
+        (
+            analyses,
+            constraints,
+            analysis_tokens,
+            analysis_calls,
+        ) = await serialize_post_prune_analysis(
             model=serialize_model or model,
             pruned_artifact=pruned_artifact,
             graph=graph,
@@ -479,7 +484,7 @@ class SeedStage:
             callbacks=callbacks,
             on_phase_progress=on_phase_progress,
         )
-        total_llm_calls += 2
+        total_llm_calls += analysis_calls
         total_tokens += analysis_tokens
 
         # Merge analysis into pruned artifact

@@ -1808,10 +1808,17 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             if not graph.has_node(dilemma_node_id):
                 continue
             analysis = analysis_by_id.get(raw_id)
+            if analysis is None:
+                log.warning(
+                    "dilemma_analysis_missing",
+                    dilemma_id=raw_id,
+                    fallback="soft/2",
+                )
+            data = analysis or {}
             graph.update_node(
                 dilemma_node_id,
-                convergence_policy=analysis["convergence_policy"] if analysis else "soft",
-                payoff_budget=analysis.get("payoff_budget", 2) if analysis else 2,
+                convergence_policy=data.get("convergence_policy", "soft"),
+                payoff_budget=data.get("payoff_budget", 2),
             )
 
     # Create interaction constraint edges between dilemma pairs

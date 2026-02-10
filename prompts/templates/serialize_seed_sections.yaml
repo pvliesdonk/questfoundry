@@ -622,9 +622,9 @@ dilemma_analyses_prompt: |
   ## payoff_budget
 
   Minimum number of exclusive beats before paths can converge (2-6).
-  - 2: Minimal divergence (flavor-adjacent soft). Use for `flavor` dilemmas.
-  - 3-4: Standard (most soft dilemmas)
-  - 5-6: Deep divergence (hard-adjacent soft). Use for `hard` dilemmas.
+  - 2: Use for `flavor` dilemmas (paths converge immediately, budget is minimal).
+  - 3-4: Standard for most `soft` dilemmas.
+  - 5-6: Deep divergence for `hard` dilemmas (paths stay separate longer).
 
   ## Context
 
