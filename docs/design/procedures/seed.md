@@ -428,6 +428,61 @@ Human performs final review of complete SEED output:
 
 ---
 
+### Phase 7: Dilemma Analysis (Convergence Classification)
+
+**Operation:** Classify each dilemma's convergence behavior.
+
+**Position:** After all 6 core sections are serialized, post-prune. Requires full context (dilemmas, paths, consequences, entities).
+
+**LLM Involvement:** Serialize (single call per section)
+
+LLM produces a `DilemmaAnalysisSection` — one `DilemmaAnalysis` per dilemma:
+
+```yaml
+dilemma_analyses:
+  - dilemma_id: "dilemma::mentor_trust"
+    convergence_policy: soft
+    payoff_budget: 3
+    reasoning: "Mentor relationship affects dialogue but not plot structure"
+```
+
+Uses the `structured` provider role. Soft failure: if the LLM call fails, SEED continues with defaults (`soft`/budget=2 per dilemma). GROW still works, just with less guidance.
+
+**Human Gate:** No (automated, with defaults on failure)
+
+**Artifacts Modified:**
+- Graph: `convergence_policy` and `payoff_budget` stored on dilemma nodes
+
+---
+
+### Phase 8: Interaction Constraints
+
+**Operation:** Identify pairwise dilemma relationships.
+
+**Position:** After Phase 7.
+
+**LLM Involvement:** Serialize (single call)
+
+LLM produces an `InteractionConstraintsSection` — sparse pairwise constraints for dilemma pairs that share `central_entity_ids` or have causal dependencies:
+
+```yaml
+interaction_constraints:
+  - dilemma_a: "dilemma::mentor_trust"
+    dilemma_b: "dilemma::power_source"
+    constraint_type: shared_entity
+    description: "Both dilemmas involve the mentor character"
+    reasoning: "Mentor's trust level affects power training willingness"
+```
+
+Only relevant pairs are included (not O(n^2)). Soft failure → empty list.
+
+**Human Gate:** No (automated, with empty default on failure)
+
+**Artifacts Modified:**
+- Graph: interaction constraint edges between dilemma nodes
+
+---
+
 ## Human Gates Summary
 
 | Phase | Gate | Decision |
@@ -439,6 +494,8 @@ Human performs final review of complete SEED output:
 | 4 | Convergence Sketching | Approve convergence strategy |
 | 5 | Viability Analysis | Accept scope or loop back |
 | 6 | Path Freeze | Final approval, SEED complete |
+| 7 | Dilemma Analysis | Automated (soft failure → defaults) |
+| 8 | Interaction Constraints | Automated (soft failure → empty) |
 
 ---
 
