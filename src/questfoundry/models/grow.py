@@ -386,6 +386,10 @@ class SpokeProposal(BaseModel):
         default="functional",
         description="Style hint for FILL-generated labels",
     )
+    grants: list[str] = Field(
+        default_factory=list,
+        description="Codewords this spoke grants when visited (wiring deferred to #746)",
+    )
 
 
 class HubProposal(BaseModel):
