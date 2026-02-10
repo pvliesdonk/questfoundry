@@ -10,6 +10,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 from questfoundry.inspection import (
     InspectionReport,
+    _branching_quality_score,
     _branching_stats,
     _coverage_stats,
     _graph_summary,
@@ -401,3 +402,83 @@ class TestInspectProject:
         # Should not raise
         result = json.dumps(dataclasses.asdict(report))
         assert isinstance(result, str)
+
+
+# ---------------------------------------------------------------------------
+# Branching quality score
+# ---------------------------------------------------------------------------
+
+
+class TestBranchingQualityScore:
+    def test_no_arcs_returns_none(self) -> None:
+        graph = Graph.empty()
+        result = _branching_quality_score(graph, None)
+        assert result is None
+
+    def test_quality_score_with_arcs(self) -> None:
+        graph = Graph.empty()
+        spine_beats = [f"beat::s{i}" for i in range(5)]
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": spine_beats,
+                "paths": ["path::canon"],
+            },
+        )
+        graph.create_node(
+            "arc::branch_0",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "sequence": ["beat::s0", "beat::s1", "beat::b0", "beat::b1", "beat::b2"],
+                "diverges_at": "beat::s1",
+                "convergence_policy": "soft",
+                "payoff_budget": 2,
+                "paths": ["path::rebel"],
+            },
+        )
+        # Add passages for endings
+        for pid in ["a", "b"]:
+            graph.create_node(
+                f"passage::{pid}",
+                {
+                    "type": "passage",
+                    "raw_id": pid,
+                    "from_beat": f"beat::s{0 if pid == 'a' else 4}",
+                    "summary": pid,
+                },
+            )
+
+        result = _branching_quality_score(graph, None)
+        assert result is not None
+        assert result.policy_distribution == {"soft": 1}
+        assert result.avg_exclusive_beats == 3.0
+        assert result.terminal_count == 2  # both passages have no outgoing choices
+        assert result.meaningful_choice_ratio == 0.0  # no branching stats
+
+    def test_json_includes_quality(self, tmp_path: Path) -> None:
+        """branching_quality appears in JSON-serialized report."""
+        import dataclasses
+        import json
+
+        graph = _make_full_graph()
+        # Add an arc so branching_quality is non-None
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": ["beat::p1", "beat::p2"],
+                "paths": ["path::canon"],
+            },
+        )
+        graph_file = tmp_path / "graph.json"
+        graph_file.write_text(json.dumps(graph.to_dict()))
+        (tmp_path / "project.yaml").write_text("name: test\nversion: 1\n")
+
+        report = inspect_project(tmp_path)
+        data = dataclasses.asdict(report)
+        assert "branching_quality" in data
+        assert data["branching_quality"] is not None
