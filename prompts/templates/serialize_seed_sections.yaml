@@ -231,6 +231,87 @@ paths_prompt: |
   ## Output
   Return ONLY valid JSON with the "paths" array.
 
+# Section 3b: Per-Dilemma Paths (used by per-dilemma path serialization)
+# This prompt generates paths for a single dilemma with a fixed dilemma_id.
+# The dilemma_id, explored answers, and expected path IDs are injected at runtime.
+per_dilemma_paths_prompt: |
+  You are generating PATHS for ONE SPECIFIC DILEMMA.
+
+  ## YOUR DILEMMA (MEMORIZE THIS)
+
+  Dilemma ID: `{dilemma_id}`
+  Question: {dilemma_question}
+
+  ## EXPLORED ANSWERS (generate a path for EACH)
+
+  {explored_answers}
+
+  ## UNEXPLORED ANSWERS (do NOT generate paths for these)
+
+  {unexplored_answers}
+
+  ## EXPECTED PATH IDs (use EXACTLY these)
+
+  You MUST generate exactly {path_count} path(s) with these IDs:
+  {expected_path_ids}
+
+  ## Scoped ID Format (CRITICAL)
+  All IDs use type prefixes for disambiguation:
+  - path_id: Use `path::` prefix (e.g., `path::host_benevolent_or_selfish__protector`)
+  - dilemma_id: Use `dilemma::` prefix (e.g., `dilemma::host_benevolent_or_selfish`)
+
+  Path IDs embed their parent dilemma: `path::[dilemma_name]__[answer_id]`
+
+  ## CRITICAL INVARIANT: answer_id MUST match explored
+  Each path's `answer_id` MUST be one of the explored answer IDs listed above.
+
+  ## Schema
+  Return a JSON object with a "paths" array. Each item is a Path:
+  ```json
+  {{
+    "paths": [
+      {{
+        "path_id": "path::{dilemma_name}__{answer_id_example}",
+        "name": "Human-readable path name",
+        "dilemma_id": "{dilemma_id}",
+        "answer_id": "the_explored_answer_id",
+        "unexplored_answer_ids": ["other_answer_ids"],
+        "path_importance": "major",
+        "description": "What this path is about",
+        "consequence_ids": []
+      }}
+    ]
+  }}
+  ```
+
+  Note: `answer_id`, `unexplored_answer_ids`, and `consequence_ids` are raw
+  IDs without prefixes since they are local identifiers.
+
+  ## Rules
+  - Generate exactly {path_count} path(s) — one per explored answer
+  - path_importance must be exactly "major" or "minor" (lowercase)
+  - answer_id MUST be one of the explored answers listed above
+  - unexplored_answer_ids: IDs of answers NOT explored
+  - consequence_ids: Leave empty (will be populated by consequences section)
+  - path_id MUST include the `path::` prefix
+  - dilemma_id MUST be exactly `{dilemma_id}`
+
+  ## What NOT to Do
+  - Do NOT generate paths for unexplored answers
+  - Do NOT generate paths for other dilemmas
+  - Do NOT use answer_ids that aren't in the explored list
+  - Do NOT change the dilemma_id
+  - Do NOT omit the `path::` or `dilemma::` prefixes
+
+  ## FINAL CHECK (verify before output)
+  1. You generated exactly {path_count} path(s)
+  2. Each path's dilemma_id is `{dilemma_id}`
+  3. Each path's answer_id is in the explored list
+  4. Each path_id matches the expected IDs listed above
+
+  ## Output
+  Return ONLY valid JSON with the "paths" array.
+
 # Section 4: Consequences
 consequences_prompt: |
   You are generating CONSEQUENCES for a SEED stage based on paths.

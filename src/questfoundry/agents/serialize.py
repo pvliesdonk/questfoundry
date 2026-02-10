@@ -487,6 +487,7 @@ _REQUIRED_SECTION_PROMPT_KEYS = [
     "entities_prompt",
     "dilemmas_prompt",
     "paths_prompt",
+    "per_dilemma_paths_prompt",
     "consequences_prompt",
     "beats_prompt",
     "per_path_beats_prompt",
@@ -540,10 +541,227 @@ def _load_seed_section_prompts() -> dict[str, str]:
         "consequences": data["consequences_prompt"],
         "beats": data["beats_prompt"],
         "per_path_beats": data["per_path_beats_prompt"],
+        "per_dilemma_paths": data["per_dilemma_paths_prompt"],
         "convergence": data["convergence_prompt"],
         "dilemma_analyses": data["dilemma_analyses_prompt"],
         "interaction_constraints": data["interaction_constraints_prompt"],
     }
+
+
+def _build_per_dilemma_path_context(
+    dilemma_decision: dict[str, Any],
+    entity_context: str,
+) -> str:
+    """Build a brief for generating paths for a single dilemma.
+
+    Creates a minimal context containing only:
+    - The dilemma's ID and question
+    - Explored/unexplored answer lists
+    - Entity IDs for character/location references
+
+    Args:
+        dilemma_decision: Dilemma decision dict with dilemma_id, explored, unexplored.
+        entity_context: Entity IDs section from the full brief.
+
+    Returns:
+        Per-dilemma brief for path generation.
+    """
+    dilemma_id = dilemma_decision.get("dilemma_id", "")
+    question = dilemma_decision.get("question", "")
+    explored = dilemma_decision.get("explored", [])
+    unexplored = dilemma_decision.get("unexplored", [])
+
+    prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
+
+    lines = [
+        "## Dilemma Context",
+        f"You are generating paths for dilemma: `{prefixed_dilemma_id}`",
+        f"- Question: {question}",
+        f"- Explored answers: {explored}",
+        f"- Unexplored answers: {unexplored}",
+        "",
+        entity_context,
+    ]
+
+    return "\n".join(lines)
+
+
+async def _serialize_dilemma_paths(
+    model: BaseChatModel,
+    dilemma_decision: dict[str, Any],
+    per_dilemma_prompt_template: str,
+    entity_context: str,
+    provider_name: str | None,
+    max_retries: int,
+    callbacks: list[BaseCallbackHandler] | None,
+) -> tuple[list[dict[str, Any]], int]:
+    """Serialize paths for a single dilemma.
+
+    Uses a constrained prompt with the dilemma's ID and explored answers hard-coded.
+
+    Args:
+        model: Chat model to use.
+        dilemma_decision: Dilemma decision dict with dilemma_id, explored, unexplored.
+        per_dilemma_prompt_template: Prompt template with placeholders.
+        entity_context: Entity IDs context for character/location references.
+        provider_name: Provider name for strategy selection.
+        max_retries: Maximum Pydantic validation retries.
+        callbacks: LangChain callback handlers.
+
+    Returns:
+        Tuple of (list of path dicts, tokens used).
+    """
+    from questfoundry.models.seed import DilemmaPathsSection
+
+    dilemma_id = dilemma_decision.get("dilemma_id", "")
+    question = dilemma_decision.get("question", "")
+    explored = dilemma_decision.get("explored", [])
+    unexplored = dilemma_decision.get("unexplored", [])
+
+    prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
+    # Extract raw dilemma name (without prefix) for path ID construction
+    dilemma_name = dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
+
+    # Build explored/unexplored answer text
+    explored_text = "\n".join(f"- `{a}` — generate a path for this answer" for a in explored)
+    unexplored_text = "\n".join(f"- `{a}`" for a in unexplored) if unexplored else "(none)"
+
+    # Build expected path IDs
+    expected_ids = [f"- `path::{dilemma_name}__{a}`" for a in explored]
+    expected_text = "\n".join(expected_ids)
+
+    # Pick a representative answer_id for the schema example
+    answer_example = explored[0] if explored else "answer_id"
+
+    # Format prompt with dilemma-specific values
+    prompt = per_dilemma_prompt_template.format(
+        dilemma_id=prefixed_dilemma_id,
+        dilemma_name=dilemma_name,
+        dilemma_question=question,
+        explored_answers=explored_text,
+        unexplored_answers=unexplored_text,
+        expected_path_ids=expected_text,
+        path_count=len(explored),
+        answer_id_example=answer_example,
+    )
+
+    brief = _build_per_dilemma_path_context(dilemma_decision, entity_context)
+
+    log.debug(
+        "serialize_dilemma_paths_started",
+        dilemma_id=dilemma_id,
+        explored_count=len(explored),
+    )
+
+    result, tokens = await serialize_to_artifact(
+        model=model,
+        brief=brief,
+        schema=DilemmaPathsSection,
+        provider_name=provider_name,
+        max_retries=max_retries,
+        system_prompt=prompt,
+        callbacks=callbacks,
+        stage="seed",
+    )
+
+    paths = result.model_dump().get("paths", [])
+
+    log.debug(
+        "serialize_dilemma_paths_completed",
+        dilemma_id=dilemma_id,
+        path_count=len(paths),
+        tokens=tokens,
+    )
+
+    return paths, tokens
+
+
+async def _serialize_paths_per_dilemma(
+    model: BaseChatModel,
+    dilemma_decisions: list[dict[str, Any]],
+    per_dilemma_prompt: str,
+    entity_context: str,
+    provider_name: str | None,
+    max_retries: int,
+    callbacks: list[BaseCallbackHandler] | None,
+    on_phase_progress: PhaseProgressFn | None = None,
+    max_concurrency: int = 2,
+) -> tuple[list[dict[str, Any]], int]:
+    """Serialize paths for all dilemmas with bounded concurrency.
+
+    Filters to dilemmas with explored answers, then generates paths for each
+    using semaphore-gated concurrency.
+
+    Args:
+        model: Chat model to use.
+        dilemma_decisions: List of dilemma decision dicts.
+        per_dilemma_prompt: Prompt template for per-dilemma path generation.
+        entity_context: Entity IDs context for character/location references.
+        provider_name: Provider name for strategy selection.
+        max_retries: Maximum Pydantic validation retries per dilemma.
+        callbacks: LangChain callback handlers.
+        on_phase_progress: Callback for progress reporting.
+        max_concurrency: Max parallel LLM requests (default 2).
+
+    Returns:
+        Tuple of (all paths merged, total tokens used).
+    """
+    # Filter to dilemmas with explored answers
+    active_dilemmas = [d for d in dilemma_decisions if d.get("explored")]
+
+    log.info(
+        "serialize_paths_per_dilemma_started",
+        dilemma_count=len(active_dilemmas),
+        max_concurrency=max_concurrency,
+    )
+
+    if not active_dilemmas:
+        return [], 0
+
+    semaphore = asyncio.Semaphore(max_concurrency)
+
+    async def _limited_serialize(
+        dilemma: dict[str, Any],
+    ) -> tuple[list[dict[str, Any]], int]:
+        async with semaphore:
+            return await _serialize_dilemma_paths(
+                model=model,
+                dilemma_decision=dilemma,
+                per_dilemma_prompt_template=per_dilemma_prompt,
+                entity_context=entity_context,
+                provider_name=provider_name,
+                max_retries=max_retries,
+                callbacks=callbacks,
+            )
+
+    tasks: list[asyncio.Future[tuple[list[dict[str, Any]], int]]] = []
+    task_to_dilemma_id: dict[asyncio.Future[tuple[list[dict[str, Any]], int]], str] = {}
+    for dilemma in active_dilemmas:
+        task = asyncio.create_task(_limited_serialize(dilemma))
+        tasks.append(task)
+        task_to_dilemma_id[task] = str(dilemma.get("dilemma_id", ""))
+
+    all_paths: list[dict[str, Any]] = []
+    total_tokens = 0
+    dilemma_count = len(active_dilemmas)
+
+    for i, future in enumerate(asyncio.as_completed(tasks), start=1):
+        paths, tokens = await future
+        all_paths.extend(paths)
+        total_tokens += tokens
+        if on_phase_progress is not None:
+            did = task_to_dilemma_id.get(future, "")
+            detail = f"{did} ({len(paths)} paths)" if did else f"{len(paths)} paths"
+            on_phase_progress(f"serialize paths (dilemma {i}/{dilemma_count})", "completed", detail)
+
+    log.info(
+        "serialize_paths_per_dilemma_completed",
+        dilemma_count=len(active_dilemmas),
+        total_paths=len(all_paths),
+        total_tokens=total_tokens,
+    )
+
+    return all_paths, total_tokens
 
 
 def _build_per_path_beat_context(
@@ -1229,7 +1447,6 @@ async def serialize_seed_as_function(
         ConvergenceSection,
         DilemmasSection,
         EntitiesSection,
-        PathsSection,
         SeedOutput,
     )
 
@@ -1247,11 +1464,12 @@ async def serialize_seed_as_function(
             log.debug("valid_ids_context_injected", context_length=len(valid_ids_context))
 
     # Section configuration: (section_name, schema, output_field)
-    # Note: "beats" is handled specially with per-path serialization
+    # Note: "paths" handled via per-dilemma serialization after dilemmas
+    # Note: "beats" handled via per-path serialization after paths
     sections: list[tuple[str, type[BaseModel], str]] = [
         ("entities", EntitiesSection, "entities"),
         ("dilemmas", DilemmasSection, "dilemmas"),
-        ("paths", PathsSection, "paths"),
+        # paths handled via per-dilemma serialization after dilemmas
         ("consequences", ConsequencesSection, "consequences"),
         # beats handled via per-path serialization after paths
         ("convergence", ConvergenceSection, "convergence_sketch"),
@@ -1315,8 +1533,11 @@ async def serialize_seed_as_function(
                 entity_decisions=len(collected["entities"]),
             )
 
-        # After dilemmas are serialized, inject answer ID manifest so the
-        # paths section knows which answer_ids are valid per dilemma.
+        # After dilemmas are serialized:
+        # 1. Inject answer ID manifest for downstream sections
+        # 2. Generate paths per-dilemma (replaces all-at-once path serialization)
+        # 3. Inject path IDs for consequences/beats
+        # 4. Generate beats per-path
         if section_name == "dilemmas" and collected.get("dilemmas"):
             answer_ids_context = format_answer_ids_by_dilemma(collected["dilemmas"])
             if answer_ids_context:
@@ -1326,29 +1547,41 @@ async def serialize_seed_as_function(
                     dilemma_count=len(collected["dilemmas"]),
                 )
 
-        # After paths are serialized:
-        # 1. Inject path IDs for subsequent sections (consequences)
-        # 2. Generate beats per-path in parallel
-        if section_name == "paths" and collected.get("paths"):
-            path_ids_context = format_path_ids_context(collected["paths"])
-            if path_ids_context:
-                brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
-                log.debug("path_ids_context_injected", path_count=len(collected["paths"]))
-
-            # Generate beats per-path in parallel
-            # This replaces the old all-at-once beats serialization
-            beats, beats_tokens = await _serialize_beats_per_path(
+            # Generate paths per-dilemma
+            paths, paths_tokens = await _serialize_paths_per_dilemma(
                 model=model,
-                paths=collected["paths"],
-                per_path_prompt=prompts["per_path_beats"],
+                dilemma_decisions=collected["dilemmas"],
+                per_dilemma_prompt=prompts["per_dilemma_paths"],
                 entity_context=entity_context,
                 provider_name=provider_name,
                 max_retries=max_retries,
                 callbacks=callbacks,
                 on_phase_progress=on_phase_progress,
             )
-            collected["initial_beats"] = beats
-            total_tokens += beats_tokens
+            collected["paths"] = paths
+            total_tokens += paths_tokens
+
+            # Inject path IDs for consequences and beats
+            if collected.get("paths"):
+                path_ids_context = format_path_ids_context(collected["paths"])
+                if path_ids_context:
+                    brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
+                    log.debug("path_ids_context_injected", path_count=len(collected["paths"]))
+
+            # Generate beats per-path
+            if collected.get("paths"):
+                beats, beats_tokens = await _serialize_beats_per_path(
+                    model=model,
+                    paths=collected["paths"],
+                    per_path_prompt=prompts["per_path_beats"],
+                    entity_context=entity_context,
+                    provider_name=provider_name,
+                    max_retries=max_retries,
+                    callbacks=callbacks,
+                    on_phase_progress=on_phase_progress,
+                )
+                collected["initial_beats"] = beats
+                total_tokens += beats_tokens
 
         log.debug(
             "serialize_section_completed",
@@ -1449,18 +1682,45 @@ async def serialize_seed_as_function(
                                 enhanced_brief = f"{enhanced_brief}\n\n{answer_ids_ctx}"
                                 log.debug("answer_ids_context_refreshed_on_retry")
 
-                        if section_name == "paths":
-                            path_ids_context = format_path_ids_context(collected["paths"])
-                            if path_ids_context:
-                                brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
-                                log.debug("path_context_refreshed_on_retry")
-
                 except SerializationError as e:
                     log.warning(
                         "serialize_section_retry_failed",
                         section=section_name,
                         error=str(e),
                     )
+
+            # Handle paths separately - not in sections list but generated per-dilemma
+            if "paths" in section_errors:
+                path_corrections = _format_section_corrections(section_errors["paths"])
+                log.debug(
+                    "serialize_paths_retry",
+                    attempt=semantic_attempt,
+                    error_count=len(section_errors["paths"]),
+                    has_corrections=bool(path_corrections),
+                )
+                path_prompt = prompts["per_dilemma_paths"]
+                if path_corrections:
+                    path_prompt = f"{path_prompt}\n\n{path_corrections}"
+                try:
+                    paths, paths_tokens = await _serialize_paths_per_dilemma(
+                        model=model,
+                        dilemma_decisions=collected["dilemmas"],
+                        per_dilemma_prompt=path_prompt,
+                        entity_context=entity_context,
+                        provider_name=provider_name,
+                        max_retries=max_retries,
+                        callbacks=callbacks,
+                        on_phase_progress=on_phase_progress,
+                    )
+                    collected["paths"] = paths
+                    total_tokens += paths_tokens
+                    # Refresh path_ids_context
+                    path_ids_context = format_path_ids_context(collected["paths"])
+                    if path_ids_context:
+                        brief_with_paths = f"{enhanced_brief}\n\n{path_ids_context}"
+                    retried_any = True
+                except SerializationError as e:
+                    log.warning("serialize_paths_retry_failed", error=str(e))
 
             # Handle beats separately - not in sections list but generated per-path
             if "beats" in section_errors:

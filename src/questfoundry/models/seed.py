@@ -471,6 +471,27 @@ class PathsSection(BaseModel):
         return self
 
 
+class DilemmaPathsSection(BaseModel):
+    """Wrapper for serializing paths for a single dilemma.
+
+    Used by per-dilemma path serialization to constrain the LLM to generating
+    paths for exactly one dilemma. This prevents trailing dilemmas from being
+    dropped when serializing all paths at once.
+    """
+
+    paths: list[Path] = Field(
+        min_length=1,
+        max_length=4,
+        description="1-4 paths for this specific dilemma",
+    )
+
+    @model_validator(mode="after")
+    def _deduplicate_paths(self) -> DilemmaPathsSection:
+        """Drop identical duplicate paths; raise on conflicting ones."""
+        self.paths = _deduplicate_and_check(self.paths, "path_id", "path_id")
+        return self
+
+
 class ConsequencesSection(BaseModel):
     """Wrapper for serializing consequences separately."""
 
