@@ -491,6 +491,8 @@ _REQUIRED_SECTION_PROMPT_KEYS = [
     "beats_prompt",
     "per_path_beats_prompt",
     "convergence_prompt",
+    "dilemma_analyses_prompt",
+    "interaction_constraints_prompt",
 ]
 
 
@@ -539,6 +541,8 @@ def _load_seed_section_prompts() -> dict[str, str]:
         "beats": data["beats_prompt"],
         "per_path_beats": data["per_path_beats_prompt"],
         "convergence": data["convergence_prompt"],
+        "dilemma_analyses": data["dilemma_analyses_prompt"],
+        "interaction_constraints": data["interaction_constraints_prompt"],
     }
 
 
