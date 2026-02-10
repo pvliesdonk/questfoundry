@@ -25,6 +25,8 @@ from pydantic import BaseModel, Field, model_validator
 EntityDisposition = Literal["retained", "cut"]
 PathTier = Literal["major", "minor"]
 DilemmaEffect = Literal["advances", "reveals", "commits", "complicates"]
+ConvergencePolicy = Literal["hard", "soft", "flavor"]
+ConstraintType = Literal["shared_entity", "causal_chain", "resource_conflict"]
 
 
 class EntityDecision(BaseModel):
@@ -256,6 +258,78 @@ class ConvergenceSketch(BaseModel):
     )
 
 
+class DilemmaAnalysis(BaseModel):
+    """Per-dilemma convergence classification from SEED.
+
+    Serialized as Section 7 (after prune). Tells GROW how strictly
+    to enforce path separation for this dilemma.
+
+    Attributes:
+        dilemma_id: References a dilemma from Section 2.
+        convergence_policy: How strictly paths must stay separate.
+        payoff_budget: Minimum exclusive beats before convergence (>=2).
+        reasoning: Chain-of-thought for the classification.
+    """
+
+    dilemma_id: str = Field(min_length=1, description="Dilemma ID from Section 2")
+    convergence_policy: ConvergencePolicy = Field(
+        description="How strictly paths must stay separate (hard|soft|flavor)",
+    )
+    payoff_budget: int = Field(
+        ge=2,
+        le=6,
+        default=2,
+        description="Minimum exclusive beats before convergence",
+    )
+    reasoning: str = Field(
+        min_length=10,
+        max_length=300,
+        description="Chain-of-thought for the classification",
+    )
+
+
+class InteractionConstraint(BaseModel):
+    """Sparse pairwise dilemma relationship from SEED.
+
+    Serialized as Section 8 (after prune). Tells GROW about
+    cross-dilemma interactions that affect arc enumeration.
+
+    Canonical pair ordering: dilemma_a < dilemma_b (normalized
+    silently to prevent A-B / B-A duplicates).
+
+    Attributes:
+        dilemma_a: First dilemma ID (lexicographically smaller after normalization).
+        dilemma_b: Second dilemma ID (lexicographically larger after normalization).
+        constraint_type: Kind of interaction between the dilemmas.
+        description: What the interaction means narratively.
+        reasoning: Chain-of-thought for the classification.
+    """
+
+    dilemma_a: str = Field(min_length=1, description="First dilemma ID")
+    dilemma_b: str = Field(min_length=1, description="Second dilemma ID")
+    constraint_type: ConstraintType = Field(
+        description="Kind of interaction (shared_entity|causal_chain|resource_conflict)",
+    )
+    description: str = Field(min_length=1, description="Narrative meaning of the interaction")
+    reasoning: str = Field(
+        min_length=10,
+        max_length=300,
+        description="Chain-of-thought for the classification",
+    )
+
+    @model_validator(mode="after")
+    def _normalize_pair_order(self) -> InteractionConstraint:
+        """Silently swap to canonical order (a < b)."""
+        if self.dilemma_a > self.dilemma_b:
+            self.dilemma_a, self.dilemma_b = self.dilemma_b, self.dilemma_a
+        return self
+
+    @property
+    def pair_key(self) -> str:
+        """Composite dedup key for the (dilemma_a, dilemma_b) pair."""
+        return f"{self.dilemma_a}__{self.dilemma_b}"
+
+
 class SeedOutput(BaseModel):
     """Complete output of the SEED stage.
 
@@ -269,6 +343,8 @@ class SeedOutput(BaseModel):
         consequences: Narrative consequences for paths.
         initial_beats: Initial beats for each path.
         convergence_sketch: Guidance for GROW about convergence.
+        dilemma_analyses: Per-dilemma convergence classifications (Section 7).
+        interaction_constraints: Pairwise dilemma interactions (Section 8).
     """
 
     entities: list[EntityDecision] = Field(
@@ -294,6 +370,14 @@ class SeedOutput(BaseModel):
     convergence_sketch: ConvergenceSketch = Field(
         default_factory=ConvergenceSketch,
         description="Guidance for GROW about path convergence",
+    )
+    dilemma_analyses: list[DilemmaAnalysis] = Field(
+        default_factory=list,
+        description="Per-dilemma convergence classifications (Section 7, post-prune)",
+    )
+    interaction_constraints: list[InteractionConstraint] = Field(
+        default_factory=list,
+        description="Pairwise dilemma interactions (Section 8, post-prune)",
     )
 
 
@@ -437,3 +521,37 @@ class ConvergenceSection(BaseModel):
         default_factory=ConvergenceSketch,
         description="Guidance for GROW about path convergence",
     )
+
+
+class DilemmaAnalysisSection(BaseModel):
+    """Wrapper for serializing dilemma analyses separately (Section 7)."""
+
+    dilemma_analyses: list[DilemmaAnalysis] = Field(
+        default_factory=list,
+        description="Per-dilemma convergence classifications",
+    )
+
+    @model_validator(mode="after")
+    def _deduplicate_analyses(self) -> DilemmaAnalysisSection:
+        """Drop identical duplicate analyses; raise on conflicting ones."""
+        self.dilemma_analyses = _deduplicate_and_check(
+            self.dilemma_analyses, "dilemma_id", "dilemma_id"
+        )
+        return self
+
+
+class InteractionConstraintsSection(BaseModel):
+    """Wrapper for serializing interaction constraints separately (Section 8)."""
+
+    interaction_constraints: list[InteractionConstraint] = Field(
+        default_factory=list,
+        description="Pairwise dilemma interactions",
+    )
+
+    @model_validator(mode="after")
+    def _deduplicate_constraints(self) -> InteractionConstraintsSection:
+        """Drop identical duplicate constraints; raise on conflicting ones."""
+        self.interaction_constraints = _deduplicate_and_check(
+            self.interaction_constraints, "pair_key", "pair_key"
+        )
+        return self
