@@ -447,9 +447,116 @@ class TestPassageDagCycles:
         assert result.severity == "pass"
 
 
+def _make_timing_graph_with_arc(
+    beat_count: int,
+    effects_map: dict[int, list[dict[str, str]]],
+    arc_type: str = "spine",
+) -> Graph:
+    """Helper: graph with a dilemma, path, beats, and an arc with sequence."""
+    graph = Graph.empty()
+    graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
+    graph.create_node(
+        "path::th1",
+        {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
+    )
+    graph.add_edge("explores", "path::th1", "dilemma::t1")
+
+    beat_ids = []
+    for i in range(beat_count):
+        beat_id = f"beat::b{i}"
+        beat_ids.append(beat_id)
+        graph.create_node(
+            beat_id,
+            {
+                "type": "beat",
+                "raw_id": f"b{i}",
+                "summary": f"Beat {i}",
+                "dilemma_impacts": effects_map.get(i, []),
+            },
+        )
+        graph.add_edge("belongs_to", beat_id, "path::th1")
+        if i > 0:
+            graph.add_edge("requires", beat_id, f"beat::b{i - 1}")
+
+    # Arc with the beat sequence
+    graph.create_node(
+        "arc::a1",
+        {
+            "type": "arc",
+            "arc_type": arc_type,
+            "sequence": beat_ids,
+            "paths": ["path::th1"],
+        },
+    )
+    return graph
+
+
 class TestCommitsTiming:
     def test_commits_timing_too_early(self) -> None:
-        """Commits at beat 2 of 6 should warn (< 3 beats)."""
+        """Commits at arc position 2 of 6 should warn (< 3 beats)."""
+        graph = _make_timing_graph_with_arc(
+            beat_count=6,
+            effects_map={1: [{"dilemma_id": "dilemma::t1", "effect": "commits"}]},
+        )
+        checks = check_commits_timing(graph)
+        warnings = [c for c in checks if "too early" in c.message]
+        assert len(warnings) == 1
+        assert warnings[0].severity == "warn"
+
+    def test_commits_timing_too_late(self) -> None:
+        """Commits at arc position 9 of 10 should warn (> 80%)."""
+        graph = _make_timing_graph_with_arc(
+            beat_count=10,
+            effects_map={
+                2: [{"dilemma_id": "dilemma::t1", "effect": "reveals"}],
+                8: [{"dilemma_id": "dilemma::t1", "effect": "commits"}],
+            },
+        )
+        checks = check_commits_timing(graph)
+        warnings = [c for c in checks if "too late" in c.message]
+        assert len(warnings) == 1
+        assert warnings[0].severity == "warn"
+
+    def test_commits_no_buildup(self) -> None:
+        """No reveals/advances before commits should warn."""
+        graph = _make_timing_graph_with_arc(
+            beat_count=8,
+            effects_map={5: [{"dilemma_id": "dilemma::t1", "effect": "commits"}]},
+        )
+        checks = check_commits_timing(graph)
+        warnings = [c for c in checks if "no reveals/advances" in c.message]
+        assert len(warnings) == 1
+        assert warnings[0].severity == "warn"
+
+    def test_commits_timing_gap_before_commits(self) -> None:
+        """Large gap (>5 beats) between last reveals and commits should warn."""
+        graph = _make_timing_graph_with_arc(
+            beat_count=12,
+            effects_map={
+                1: [{"dilemma_id": "dilemma::t1", "effect": "reveals"}],
+                10: [{"dilemma_id": "dilemma::t1", "effect": "commits"}],
+            },
+        )
+        checks = check_commits_timing(graph)
+        warnings = [c for c in checks if "gap" in c.message]
+        assert len(warnings) == 1
+        assert warnings[0].severity == "warn"
+
+    def test_commits_timing_no_issues(self) -> None:
+        """Well-paced path in arc produces no warnings."""
+        graph = _make_timing_graph_with_arc(
+            beat_count=8,
+            effects_map={
+                2: [{"dilemma_id": "dilemma::t1", "effect": "reveals"}],
+                4: [{"dilemma_id": "dilemma::t1", "effect": "advances"}],
+                5: [{"dilemma_id": "dilemma::t1", "effect": "commits"}],
+            },
+        )
+        checks = check_commits_timing(graph)
+        assert len(checks) == 0
+
+    def test_commits_timing_short_path_in_long_arc(self) -> None:
+        """5-beat path in 15-beat arc with commits at arc beat 10 should NOT warn."""
         graph = Graph.empty()
         graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
         graph.create_node(
@@ -458,7 +565,58 @@ class TestCommitsTiming:
         )
         graph.add_edge("explores", "path::th1", "dilemma::t1")
 
-        # 6 beats, commits at beat index 1 (beat 2)
+        # 15 beats in the arc, path only owns beats 8-12
+        beat_ids = []
+        for i in range(15):
+            beat_id = f"beat::b{i}"
+            beat_ids.append(beat_id)
+            effects: list[dict[str, str]] = []
+            if i == 3:
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "reveals"}]
+            elif i == 7:
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "advances"}]
+            elif i == 10:
+                effects = [{"dilemma_id": "dilemma::t1", "effect": "commits"}]
+            graph.create_node(
+                beat_id,
+                {
+                    "type": "beat",
+                    "raw_id": f"b{i}",
+                    "summary": f"Beat {i}",
+                    "dilemma_impacts": effects,
+                },
+            )
+
+        # Path only has 5 beats (8-12)
+        for i in range(8, 13):
+            graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
+
+        # Arc has all 15 beats
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": beat_ids,
+                "paths": ["path::th1"],
+            },
+        )
+
+        checks = check_commits_timing(graph)
+        # commits at arc position 11/15 = 73%, reveals at 4/15, advances at 8/15
+        # All checks should pass: not too early, not too late, has buildup, gap=3
+        assert len(checks) == 0
+
+    def test_commits_timing_no_arcs_skips(self) -> None:
+        """No arc nodes means timing checks are skipped entirely."""
+        graph = Graph.empty()
+        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
+        graph.create_node(
+            "path::th1",
+            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
+        )
+        graph.add_edge("explores", "path::th1", "dilemma::t1")
+
         for i in range(6):
             effects: list[dict[str, str]] = []
             if i == 1:
@@ -473,148 +631,8 @@ class TestCommitsTiming:
                 },
             )
             graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
-            if i > 0:
-                graph.add_edge("requires", f"beat::b{i}", f"beat::b{i - 1}")
 
-        checks = check_commits_timing(graph)
-        warnings = [c for c in checks if "too early" in c.message]
-        assert len(warnings) == 1
-        assert warnings[0].severity == "warn"
-
-    def test_commits_timing_too_late(self) -> None:
-        """Commits at beat 9 of 10 should warn (> 80%)."""
-        graph = Graph.empty()
-        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
-        graph.create_node(
-            "path::th1",
-            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
-        )
-        graph.add_edge("explores", "path::th1", "dilemma::t1")
-
-        for i in range(10):
-            effects: list[dict[str, str]] = []
-            if i == 8:
-                effects = [{"dilemma_id": "dilemma::t1", "effect": "commits"}]
-            elif i == 2:
-                effects = [{"dilemma_id": "dilemma::t1", "effect": "reveals"}]
-            graph.create_node(
-                f"beat::b{i}",
-                {
-                    "type": "beat",
-                    "raw_id": f"b{i}",
-                    "summary": f"Beat {i}",
-                    "dilemma_impacts": effects,
-                },
-            )
-            graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
-            if i > 0:
-                graph.add_edge("requires", f"beat::b{i}", f"beat::b{i - 1}")
-
-        checks = check_commits_timing(graph)
-        warnings = [c for c in checks if "too late" in c.message]
-        assert len(warnings) == 1
-        assert warnings[0].severity == "warn"
-
-    def test_commits_no_buildup(self) -> None:
-        """No reveals/advances before commits should warn."""
-        graph = Graph.empty()
-        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
-        graph.create_node(
-            "path::th1",
-            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
-        )
-        graph.add_edge("explores", "path::th1", "dilemma::t1")
-
-        # 5 beats, commits at index 3, no reveals/advances
-        for i in range(5):
-            effects: list[dict[str, str]] = []
-            if i == 3:
-                effects = [{"dilemma_id": "dilemma::t1", "effect": "commits"}]
-            graph.create_node(
-                f"beat::b{i}",
-                {
-                    "type": "beat",
-                    "raw_id": f"b{i}",
-                    "summary": f"Beat {i}",
-                    "dilemma_impacts": effects,
-                },
-            )
-            graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
-            if i > 0:
-                graph.add_edge("requires", f"beat::b{i}", f"beat::b{i - 1}")
-
-        checks = check_commits_timing(graph)
-        warnings = [c for c in checks if "no reveals/advances" in c.message]
-        assert len(warnings) == 1
-        assert warnings[0].severity == "warn"
-
-    def test_commits_timing_gap_before_commits(self) -> None:
-        """Large gap (>5 beats) between last reveals and commits should warn."""
-        graph = Graph.empty()
-        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
-        graph.create_node(
-            "path::th1",
-            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
-        )
-        graph.add_edge("explores", "path::th1", "dilemma::t1")
-
-        # 12 beats: reveals at 1, commits at 10 (gap = 9)
-        for i in range(12):
-            effects: list[dict[str, str]] = []
-            if i == 1:
-                effects = [{"dilemma_id": "dilemma::t1", "effect": "reveals"}]
-            elif i == 10:
-                effects = [{"dilemma_id": "dilemma::t1", "effect": "commits"}]
-            graph.create_node(
-                f"beat::b{i}",
-                {
-                    "type": "beat",
-                    "raw_id": f"b{i}",
-                    "summary": f"Beat {i}",
-                    "dilemma_impacts": effects,
-                },
-            )
-            graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
-            if i > 0:
-                graph.add_edge("requires", f"beat::b{i}", f"beat::b{i - 1}")
-
-        checks = check_commits_timing(graph)
-        warnings = [c for c in checks if "gap" in c.message]
-        assert len(warnings) == 1
-        assert warnings[0].severity == "warn"
-
-    def test_commits_timing_no_issues(self) -> None:
-        """Well-paced path produces no warnings."""
-        graph = Graph.empty()
-        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
-        graph.create_node(
-            "path::th1",
-            {"type": "path", "raw_id": "th1", "dilemma_id": "t1", "is_canonical": True},
-        )
-        graph.add_edge("explores", "path::th1", "dilemma::t1")
-
-        # 8 beats: reveals at 2, advances at 4, commits at 5
-        for i in range(8):
-            effects: list[dict[str, str]] = []
-            if i == 2:
-                effects = [{"dilemma_id": "dilemma::t1", "effect": "reveals"}]
-            elif i == 4:
-                effects = [{"dilemma_id": "dilemma::t1", "effect": "advances"}]
-            elif i == 5:
-                effects = [{"dilemma_id": "dilemma::t1", "effect": "commits"}]
-            graph.create_node(
-                f"beat::b{i}",
-                {
-                    "type": "beat",
-                    "raw_id": f"b{i}",
-                    "summary": f"Beat {i}",
-                    "dilemma_impacts": effects,
-                },
-            )
-            graph.add_edge("belongs_to", f"beat::b{i}", "path::th1")
-            if i > 0:
-                graph.add_edge("requires", f"beat::b{i}", f"beat::b{i - 1}")
-
+        # No arc nodes — should return empty
         checks = check_commits_timing(graph)
         assert len(checks) == 0
 
@@ -786,6 +804,12 @@ class TestRunAllChecks:
         graph.add_edge("belongs_to", "beat::b2", "path::th1")
         graph.add_edge("requires", "beat::b1", "beat::b0")
         graph.add_edge("requires", "beat::b2", "beat::b1")
+        # Update existing spine arc to include the test path and its beats
+        graph.update_node(
+            "arc::spine",
+            sequence=["beat::b0", "beat::b1", "beat::b2"],
+            paths=["path::d1__a1", "path::th1"],
+        )
 
         report = run_all_checks(graph)
         assert isinstance(report, ValidationReport)
@@ -904,6 +928,12 @@ class TestPhase10Integration:
         graph.add_edge("belongs_to", "beat::b2", "path::th1")
         graph.add_edge("requires", "beat::b1", "beat::b0")
         graph.add_edge("requires", "beat::b2", "beat::b1")
+        # Update existing spine arc to include the test path and its beats
+        graph.update_node(
+            "arc::spine",
+            sequence=["beat::b0", "beat::b1", "beat::b2"],
+            paths=["path::d1__a1", "path::th1"],
+        )
 
         stage = GrowStage()
         mock_model = MagicMock()
