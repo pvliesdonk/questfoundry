@@ -1204,13 +1204,13 @@ class TestComputeAllChoiceRequires:
         # pb is spine-only → no requires
         assert result.get("passage::pb", []) == []
 
-    def test_hard_branch_target_gets_codewords(self) -> None:
-        """Target exclusive to hard-policy branch gets codeword requirements."""
+    def test_hard_branch_target_no_requires(self) -> None:
+        """Hard-policy branch target gets no requires (structural enforcement)."""
         graph, passage_arcs = self._make_requires_graph("hard")
         result = compute_all_choice_requires(graph, passage_arcs)
 
-        # px is exclusive to branch (hard policy) → requires codeword
-        assert "codeword::alt_outcome_committed" in result.get("passage::px", [])
+        # Structural isolation enforces hard policy; no codeword gating (#757)
+        assert result.get("passage::px", []) == []
 
     def test_soft_branch_target_no_requires(self) -> None:
         """Target exclusive to soft-policy branch gets no requires."""

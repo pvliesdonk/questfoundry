@@ -998,11 +998,11 @@ def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
 
 
 def check_codeword_gate_coverage(graph: Graph) -> ValidationCheck:
-    """Check that every codeword appears in at least one choice.requires gate.
+    """Check that every codeword is consumed by a gate or overlay condition.
 
-    Implements the "Residue Must Be Read" invariant (narrow scope):
-    only checks ``choice.requires`` gates. Does not check overlays,
-    ending scoring, or conditional prose.
+    Implements the "Residue Must Be Read" invariant: checks that each
+    codeword appears in at least one ``choice.requires`` gate or
+    ``overlay.when`` condition.
     """
     codeword_nodes = graph.get_nodes_by_type("codeword")
     if not codeword_nodes:
@@ -1017,19 +1017,23 @@ def check_codeword_gate_coverage(graph: Graph) -> ValidationCheck:
     for choice_data in choice_nodes.values():
         consumed.update(choice_data.get("requires") or [])
 
+    overlay_nodes = graph.get_nodes_by_type("overlay")
+    for overlay_data in overlay_nodes.values():
+        consumed.update(overlay_data.get("when") or [])
+
     unconsumed = sorted(set(codeword_nodes.keys()) - consumed)
     if not unconsumed:
         return ValidationCheck(
             name="codeword_gate_coverage",
             severity="pass",
-            message=f"All {len(codeword_nodes)} codeword(s) gated by at least one choice",
+            message=f"All {len(codeword_nodes)} codeword(s) consumed by gates or overlays",
         )
     return ValidationCheck(
         name="codeword_gate_coverage",
         severity="warn",
         message=(
             f"{len(unconsumed)} of {len(codeword_nodes)} codeword(s) not consumed "
-            f"by any choice.requires: {', '.join(unconsumed[:5])}"
+            f"by any choice.requires or overlay.when: {', '.join(unconsumed[:5])}"
             f"{'...' if len(unconsumed) > 5 else ''}"
         ),
     )

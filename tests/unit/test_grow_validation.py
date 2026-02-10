@@ -1246,6 +1246,23 @@ class TestCodewordGateCoverage:
         result = check_codeword_gate_coverage(graph)
         assert result.severity == "pass"
 
+    def test_overlay_when_counts_as_consumed(self) -> None:
+        """Codewords referenced in overlay.when are counted as consumed."""
+        graph = Graph.empty()
+        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
+        graph.create_node(
+            "overlay::o1",
+            {
+                "type": "overlay",
+                "entity_id": "character::hero",
+                "when": ["codeword::cw1"],
+                "description": "Hero looks weary",
+            },
+        )
+        result = check_codeword_gate_coverage(graph)
+        assert result.severity == "pass"
+        assert "consumed" in result.message
+
 
 # ---------------------------------------------------------------------------
 # Forward path reachability
