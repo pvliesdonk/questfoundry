@@ -1977,10 +1977,18 @@ class GrowStage:
         # Update arc nodes and create converges_at edges
         convergence_count = 0
         for arc_id_raw, info in convergence_map.items():
+            arc_node_id = f"arc::{arc_id_raw}"
+
+            # Always store policy metadata on the arc node
+            graph.update_node(
+                arc_node_id,
+                convergence_policy=info.convergence_policy,
+                payoff_budget=info.payoff_budget,
+            )
+
             if not info.converges_at:
                 continue
 
-            arc_node_id = f"arc::{arc_id_raw}"
             graph.update_node(
                 arc_node_id,
                 converges_to=f"arc::{info.converges_to}" if info.converges_to else None,
@@ -2301,6 +2309,8 @@ class GrowStage:
         """
         from questfoundry.graph.grow_algorithms import (
             PassageSuccessor,
+            compute_all_choice_requires,
+            compute_passage_arc_membership,
             find_passage_successors,
         )
         from questfoundry.models.grow import Phase9Output
@@ -2312,6 +2322,10 @@ class GrowStage:
                 status="completed",
                 detail="No passages to process",
             )
+
+        # Pre-compute requires BEFORE find_passage_successors deduplication
+        passage_arcs = compute_passage_arc_membership(graph)
+        choice_requires = compute_all_choice_requires(graph, passage_arcs)
 
         successors = find_passage_successors(graph)
         if not successors:
@@ -2542,7 +2556,7 @@ class GrowStage:
                             "from_passage": p_id,
                             "to_passage": succ.to_passage,
                             "label": multi_label,
-                            "requires": [],
+                            "requires": choice_requires.get(succ.to_passage, []),
                             "grants": succ.grants,
                         },
                     )

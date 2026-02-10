@@ -11,7 +11,9 @@ from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_algorithms import (
     bfs_reachable,
     build_dilemma_paths,
+    compute_all_choice_requires,
     compute_divergence_points,
+    compute_passage_arc_membership,
     enumerate_arcs,
     find_convergence_points,
     topological_sort_beats,
@@ -791,6 +793,474 @@ class TestFindConvergencePoints:
         result = find_convergence_points(graph, [spine, branch])
 
         assert result["branch"].converges_at == "beat::end"
+
+
+class TestFindConvergencePointsPolicyAware:
+    """Tests for policy-aware convergence with dilemma metadata on graph."""
+
+    @staticmethod
+    def _make_policy_graph(
+        policy: str = "soft",
+        budget: int = 2,
+        dilemma_id: str = "d1",
+        path_ids: list[str] | None = None,
+    ) -> Graph:
+        """Build a graph with dilemma + path nodes for convergence policy testing."""
+        graph = Graph.empty()
+        graph.create_node(
+            f"dilemma::{dilemma_id}",
+            {
+                "type": "dilemma",
+                "raw_id": dilemma_id,
+                "convergence_policy": policy,
+                "payoff_budget": budget,
+            },
+        )
+        for pid in path_ids or []:
+            graph.create_node(
+                f"path::{pid}",
+                {"type": "path", "raw_id": pid, "dilemma_id": f"dilemma::{dilemma_id}"},
+            )
+        return graph
+
+    def test_soft_policy_backward_scan(self) -> None:
+        """Soft policy finds true convergence boundary, not first intersection."""
+        # Branch has intersection at c but later exclusive beat y.
+        # True convergence boundary: d (last exclusive = y, next shared = d).
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::c", "beat::d", "beat::e"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p_alt"],
+            sequence=["beat::a", "beat::b", "beat::x", "beat::c", "beat::y", "beat::d", "beat::e"],
+        )
+        graph = self._make_policy_graph("soft", 2, path_ids=["p_canon", "p_alt"])
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at == "beat::d"
+        assert result["branch"].convergence_policy == "soft"
+
+    def test_soft_payoff_budget_enforced(self) -> None:
+        """Soft policy with high budget: not enough exclusive beats → no convergence."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p_alt"],
+            sequence=["beat::a", "beat::x", "beat::end"],
+        )
+        # Budget=3 but only 1 exclusive beat (x)
+        graph = self._make_policy_graph("soft", 3, path_ids=["p_canon", "p_alt"])
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at is None
+        assert result["branch"].payoff_budget == 3
+
+    def test_soft_all_shared_beats_budget_not_met(self) -> None:
+        """Soft policy with all shared beats and non-zero budget -> no convergence."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::c"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p_alt"],
+            sequence=["beat::a", "beat::b", "beat::c"],  # All shared
+        )
+        graph = self._make_policy_graph("soft", 2, path_ids=["p_canon", "p_alt"])
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at is None  # Budget not met
+
+    def test_hard_policy_no_convergence(self) -> None:
+        """Hard policy: converges_at is always None regardless of shared beats."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p_alt"],
+            sequence=["beat::a", "beat::x", "beat::end"],
+        )
+        graph = self._make_policy_graph("hard", 5, path_ids=["p_canon", "p_alt"])
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at is None
+        assert result["branch"].convergence_policy == "hard"
+
+    def test_flavor_policy_first_shared(self) -> None:
+        """Flavor policy: first shared beat (original behavior)."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::c", "beat::d"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p_alt"],
+            sequence=["beat::a", "beat::x", "beat::c", "beat::y", "beat::d"],
+        )
+        graph = self._make_policy_graph("flavor", 2, path_ids=["p_canon", "p_alt"])
+        result = find_convergence_points(graph, [spine, branch])
+
+        # Flavor finds first shared beat (c), not backward-scan boundary (d)
+        assert result["branch"].converges_at == "beat::c"
+        assert result["branch"].convergence_policy == "flavor"
+
+    def test_multi_dilemma_hard_dominates(self) -> None:
+        """Arc with two dilemmas: hard dominates over soft."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "convergence_policy": "soft",
+                "payoff_budget": 2,
+            },
+        )
+        graph.create_node(
+            "dilemma::d2",
+            {
+                "type": "dilemma",
+                "raw_id": "d2",
+                "convergence_policy": "hard",
+                "payoff_budget": 4,
+            },
+        )
+        graph.create_node(
+            "path::p1",
+            {
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+            },
+        )
+        graph.create_node(
+            "path::p2",
+            {
+                "type": "path",
+                "raw_id": "p2",
+                "dilemma_id": "dilemma::d2",
+            },
+        )
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p1", "p2"],
+            sequence=["beat::a", "beat::x", "beat::end"],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at is None
+        assert result["branch"].convergence_policy == "hard"
+        assert result["branch"].payoff_budget == 4
+
+    def test_effective_policy_defaults_to_flavor_when_no_metadata(self) -> None:
+        """No dilemma metadata on graph → flavor/0 (backward compat)."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p1"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p2"],
+            sequence=["beat::a", "beat::x", "beat::end"],
+        )
+        graph = Graph.empty()  # no dilemma/path nodes
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at == "beat::end"
+        assert result["branch"].convergence_policy == "flavor"
+        assert result["branch"].payoff_budget == 0
+
+
+class TestComputePassageArcMembership:
+    """Tests for passage → arc membership mapping."""
+
+    def test_basic_membership(self) -> None:
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": [],
+                "sequence": ["beat::a", "beat::b"],
+            },
+        )
+        graph.create_node(
+            "passage::p1",
+            {
+                "type": "passage",
+                "raw_id": "p1",
+                "from_beat": "beat::a",
+            },
+        )
+        graph.create_node(
+            "passage::p2",
+            {
+                "type": "passage",
+                "raw_id": "p2",
+                "from_beat": "beat::b",
+            },
+        )
+
+        result = compute_passage_arc_membership(graph)
+
+        assert result["passage::p1"] == {"arc::spine"}
+        assert result["passage::p2"] == {"arc::spine"}
+
+    def test_passage_on_multiple_arcs(self) -> None:
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": [],
+                "sequence": ["beat::a", "beat::shared"],
+            },
+        )
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "arc_type": "branch",
+                "paths": [],
+                "sequence": ["beat::a", "beat::x", "beat::shared"],
+            },
+        )
+        graph.create_node(
+            "passage::ps",
+            {
+                "type": "passage",
+                "raw_id": "ps",
+                "from_beat": "beat::shared",
+            },
+        )
+
+        result = compute_passage_arc_membership(graph)
+
+        assert result["passage::ps"] == {"arc::spine", "arc::branch"}
+
+
+class TestComputeAllChoiceRequires:
+    """Tests for codeword requires computation."""
+
+    @staticmethod
+    def _make_requires_graph(
+        branch_policy: str = "hard",
+    ) -> tuple[Graph, dict[str, set[str]]]:
+        """Build a graph with arcs, paths, consequences, and codewords."""
+        graph = Graph.empty()
+
+        # Dilemma
+        graph.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "convergence_policy": branch_policy,
+                "payoff_budget": 2,
+            },
+        )
+
+        # Paths
+        graph.create_node(
+            "path::p_canon",
+            {
+                "type": "path",
+                "raw_id": "p_canon",
+                "dilemma_id": "dilemma::d1",
+            },
+        )
+        graph.create_node(
+            "path::p_alt",
+            {
+                "type": "path",
+                "raw_id": "p_alt",
+                "dilemma_id": "dilemma::d1",
+            },
+        )
+
+        # Consequences (on the alt path)
+        graph.create_node(
+            "consequence::alt_outcome",
+            {
+                "type": "consequence",
+                "raw_id": "alt_outcome",
+                "path_id": "p_alt",
+            },
+        )
+        graph.add_edge("has_consequence", "path::p_alt", "consequence::alt_outcome")
+
+        # Codeword tracking the consequence
+        graph.create_node(
+            "codeword::alt_outcome_committed",
+            {
+                "type": "codeword",
+                "raw_id": "alt_outcome_committed",
+                "tracks": "consequence::alt_outcome",
+                "codeword_type": "granted",
+            },
+        )
+        graph.add_edge("tracks", "codeword::alt_outcome_committed", "consequence::alt_outcome")
+
+        # Arc nodes
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["p_canon"],
+                "sequence": ["beat::a", "beat::b", "beat::end"],
+                "convergence_policy": "flavor",
+                "payoff_budget": 0,
+            },
+        )
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "arc_type": "branch",
+                "paths": ["p_alt"],
+                "sequence": ["beat::a", "beat::x", "beat::y"],
+                "convergence_policy": branch_policy,
+                "payoff_budget": 2,
+            },
+        )
+
+        # Passages
+        graph.create_node(
+            "passage::pa",
+            {
+                "type": "passage",
+                "raw_id": "pa",
+                "from_beat": "beat::a",
+            },
+        )
+        graph.create_node(
+            "passage::pb",
+            {
+                "type": "passage",
+                "raw_id": "pb",
+                "from_beat": "beat::b",
+            },
+        )
+        graph.create_node(
+            "passage::px",
+            {
+                "type": "passage",
+                "raw_id": "px",
+                "from_beat": "beat::x",
+            },
+        )
+
+        passage_arcs = compute_passage_arc_membership(graph)
+        return graph, passage_arcs
+
+    def test_spine_target_no_requires(self) -> None:
+        """Passages reachable from spine never get requires."""
+        graph, passage_arcs = self._make_requires_graph("hard")
+        result = compute_all_choice_requires(graph, passage_arcs)
+
+        # pa is on both spine and branch — spine-accessible → no requires
+        assert result.get("passage::pa", []) == []
+        # pb is spine-only → no requires
+        assert result.get("passage::pb", []) == []
+
+    def test_hard_branch_target_gets_codewords(self) -> None:
+        """Target exclusive to hard-policy branch gets codeword requirements."""
+        graph, passage_arcs = self._make_requires_graph("hard")
+        result = compute_all_choice_requires(graph, passage_arcs)
+
+        # px is exclusive to branch (hard policy) → requires codeword
+        assert "codeword::alt_outcome_committed" in result.get("passage::px", [])
+
+    def test_soft_branch_target_no_requires(self) -> None:
+        """Target exclusive to soft-policy branch gets no requires."""
+        graph, passage_arcs = self._make_requires_graph("soft")
+        result = compute_all_choice_requires(graph, passage_arcs)
+
+        # px is exclusive to branch (soft policy) → no requires
+        assert result.get("passage::px", []) == []
+
+    def test_no_codewords_returns_empty(self) -> None:
+        """Branch with hard policy but no consequences/codewords → empty requires."""
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": [],
+                "sequence": ["beat::a"],
+                "convergence_policy": "flavor",
+                "payoff_budget": 0,
+            },
+        )
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "arc_type": "branch",
+                "paths": ["p_alt"],
+                "sequence": ["beat::x"],
+                "convergence_policy": "hard",
+                "payoff_budget": 2,
+            },
+        )
+        graph.create_node(
+            "passage::px",
+            {
+                "type": "passage",
+                "raw_id": "px",
+                "from_beat": "beat::x",
+            },
+        )
+
+        passage_arcs = compute_passage_arc_membership(graph)
+        result = compute_all_choice_requires(graph, passage_arcs)
+
+        # No consequences → no codewords → empty
+        assert result.get("passage::px", []) == []
 
 
 # ---------------------------------------------------------------------------
