@@ -1007,7 +1007,10 @@ class ConvergenceInfo:
     Attributes:
         arc_id: The branch arc that converges.
         converges_to: The arc it converges to (spine).
-        converges_at: The beat where shared content begins (policy-dependent).
+        converges_at: The beat where convergence occurs (None if no convergence).
+            flavor: first shared beat after divergence.
+            soft: first shared beat after last exclusive beat (if payoff_budget met).
+            hard: always None.
         convergence_policy: Effective policy applied to this arc.
         payoff_budget: Effective payoff budget applied to this arc.
     """
@@ -1032,10 +1035,7 @@ def _find_arc_dilemma_policies(
     for raw_path_id in arc.paths:
         path_node_id = normalize_scoped_id(raw_path_id, "path")
         path_node = graph.get_node(path_node_id)
-        if not path_node:
-            continue
-        dilemma_id = path_node.get("dilemma_id", "")
-        if not dilemma_id:
+        if not path_node or not (dilemma_id := path_node.get("dilemma_id")):
             continue
         dilemma_node = graph.get_node(normalize_scoped_id(dilemma_id, "dilemma"))
         if dilemma_node:
@@ -1092,7 +1092,9 @@ def _find_convergence_for_soft(
             break
 
     if last_exclusive_idx is None:
-        # All beats are shared — degenerate case, converge at first beat
+        # All beats are shared — budget must still be satisfied
+        if payoff_budget > 0:
+            return None
         return branch_after_div[0] if branch_after_div else None
 
     # converges_at = the beat immediately after the last exclusive beat

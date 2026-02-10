@@ -866,6 +866,25 @@ class TestFindConvergencePointsPolicyAware:
         assert result["branch"].converges_at is None
         assert result["branch"].payoff_budget == 3
 
+    def test_soft_all_shared_beats_budget_not_met(self) -> None:
+        """Soft policy with all shared beats and non-zero budget -> no convergence."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::c"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p_alt"],
+            sequence=["beat::a", "beat::b", "beat::c"],  # All shared
+        )
+        graph = self._make_policy_graph("soft", 2, path_ids=["p_canon", "p_alt"])
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at is None  # Budget not met
+
     def test_hard_policy_no_convergence(self) -> None:
         """Hard policy: converges_at is always None regardless of shared beats."""
         spine = Arc(
