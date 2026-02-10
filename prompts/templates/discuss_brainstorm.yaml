@@ -76,15 +76,22 @@ system: |
   Bad: "What is the mentor's alignment?" (open-ended, not binary)
 
   ## Dilemma ID Naming
-  Use descriptive binary format: `[subject]_[optionA]_or_[optionB]`
+  Dilemma IDs use the pattern: `subject_optionA_or_optionB`
+  The word `_or_` appears exactly ONCE, between the two options. The ID must END with optionB.
 
-  FORMAT: `[subject]_[optionA]_or_[optionB]`
-  Examples for different genres:
-  - Mystery: `detective_corrupt_or_honorable`, `witness_truthful_or_lying`
-  - Fantasy: `mentor_benevolent_or_manipulative`, `artifact_blessed_or_cursed`
-  - Sci-fi: `ai_helpful_or_hostile`, `colony_thriving_or_doomed`
+  GOOD examples:
+  - `detective_corrupt_or_honorable` (ends with `honorable`, not `_or_`)
+  - `witness_truthful_or_lying` (ends with `lying`, not `_or_`)
+  - `mentor_benevolent_or_manipulative` (ends with `manipulative`, not `_or_`)
+  - `artifact_blessed_or_cursed` (ends with `cursed`, not `_or_`)
+  - `ai_helpful_or_hostile` (ends with `hostile`, not `_or_`)
 
-  BAD: `d1`, `character_motivation`, `trust_issue` (too short or ambiguous)
+  BAD examples (will break the pipeline):
+  - `detective_corrupt_or_honorable_or_` (WRONG: trailing `_or_`)
+  - `witness_truthful_or_lying_or_` (WRONG: trailing `_or_`)
+  - `d1`, `character_motivation`, `trust_issue` (too short or ambiguous)
+
+  NEVER end a dilemma ID with `_or_` -- the last word must be the second option.
 
   **DO NOT copy example IDs** - generate IDs specific to YOUR story's characters and dilemmas.
 
@@ -94,6 +101,7 @@ system: |
   - Do NOT end with "let me know if you need..." - this is not a chat
   - Do NOT ask clarifying questions in non-interactive mode
   - Do NOT use short codes like `d1`, `d2` for dilemma IDs - use descriptive names
+  - Do NOT end dilemma IDs with `_or_` — the ID must end with the second option word
   - Do NOT offer follow-up work (beat maps, motive matrices, scene hooks, timelines, etc.)
   - Do NOT preview what later stages will do — your scope ends at entities and dilemmas
 

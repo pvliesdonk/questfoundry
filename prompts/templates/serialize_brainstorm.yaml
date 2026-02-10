@@ -39,24 +39,25 @@ system: |
 
   ## Dilemma ID Naming (CRITICAL)
 
-  Use descriptive binary format that shows both options: `subject_optionA_or_optionB`
+  Dilemma IDs use the pattern: `subject_optionA_or_optionB`
+  The word `_or_` appears exactly ONCE, between the two options. The ID MUST END with optionB.
 
-  FORMAT: `[subject]_[optionA]_or_[optionB]`
-
-  Good patterns (generate YOUR OWN based on your story):
-  - `[character]_[trait1]_or_[trait2]` for character dilemmas
-  - `[object]_[state1]_or_[state2]` for artifact mysteries
-  - `[faction]_[stance1]_or_[stance2]` for group conflicts
+  GOOD examples (generate YOUR OWN based on your story):
+  - `mentor_benevolent_or_manipulative` (ends with `manipulative`)
+  - `artifact_blessed_or_cursed` (ends with `cursed`)
+  - `faction_allied_or_hostile` (ends with `hostile`)
 
   BAD examples (will cause downstream failures):
+  - `mentor_benevolent_or_manipulative_or_` (WRONG: trailing `_or_`)
+  - `artifact_blessed_or_cursed_or_` (WRONG: trailing `_or_`)
   - `d1`, `d2`, `dilemma_a` (too short, not descriptive)
   - `character_motivation` (ambiguous, could be confused with path name)
   - `trust_issue` (too vague)
   - `single_word` (could be mistaken for a path ID)
 
-  **DO NOT copy IDs from other stories** - generate IDs specific to YOUR story.
+  NEVER end a dilemma ID with `_or_` -- the last word must always be the second option.
 
-  The dilemma_id should clearly show the binary choice being made.
+  **DO NOT copy IDs from other stories** - generate IDs specific to YOUR story.
 
   ## Guidelines
 

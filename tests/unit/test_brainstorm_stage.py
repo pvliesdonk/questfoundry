@@ -487,6 +487,45 @@ def test_dilemma_requires_one_default_path_answer() -> None:
         )
 
 
+def test_dilemma_rejects_trailing_or_in_id() -> None:
+    """Dilemma model rejects IDs ending with '_or_' (common LLM error)."""
+    from pydantic import ValidationError
+
+    from questfoundry.models.brainstorm import Dilemma
+
+    _TWO_ANSWERS = [
+        {"answer_id": "benevolent", "description": "Kind", "is_default_path": True},
+        {"answer_id": "selfish", "description": "Mean", "is_default_path": False},
+    ]
+
+    # Trailing _or_ with underscore
+    with pytest.raises(ValidationError, match="ends with '_or_'"):
+        Dilemma(
+            dilemma_id="dilemma::host_benevolent_or_selfish_or_",
+            question="Is the host benevolent?",
+            answers=_TWO_ANSWERS,
+            why_it_matters="Trust",
+        )
+
+    # Trailing _or without underscore
+    with pytest.raises(ValidationError, match="ends with '_or_'"):
+        Dilemma(
+            dilemma_id="dilemma::host_benevolent_or_selfish_or",
+            question="Is the host benevolent?",
+            answers=_TWO_ANSWERS,
+            why_it_matters="Trust",
+        )
+
+    # Valid ID passes
+    d = Dilemma(
+        dilemma_id="dilemma::host_benevolent_or_selfish",
+        question="Is the host benevolent?",
+        answers=_TWO_ANSWERS,
+        why_it_matters="Trust",
+    )
+    assert d.dilemma_id == "dilemma::host_benevolent_or_selfish"
+
+
 def test_entity_types() -> None:
     """Entity model accepts all valid category types."""
     from questfoundry.models.brainstorm import Entity
