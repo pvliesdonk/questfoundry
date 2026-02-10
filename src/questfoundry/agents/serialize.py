@@ -619,8 +619,16 @@ async def _serialize_dilemma_paths(
     unexplored = dilemma_decision.get("unexplored", [])
 
     prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
-    # Extract raw dilemma name (without prefix) for path ID construction
-    dilemma_name = dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
+    # Extract raw dilemma name from normalized ID for path ID construction
+    dilemma_name = prefixed_dilemma_id.removeprefix(f"{SCOPE_DILEMMA}::")
+
+    if not explored:
+        log.warning(
+            "serialize_dilemma_paths_skipped",
+            dilemma_id=dilemma_id,
+            reason="no_explored_answers",
+        )
+        return [], 0
 
     # Build explored/unexplored answer text
     explored_text = "\n".join(f"- `{a}` — generate a path for this answer" for a in explored)
@@ -631,7 +639,7 @@ async def _serialize_dilemma_paths(
     expected_text = "\n".join(expected_ids)
 
     # Pick a representative answer_id for the schema example
-    answer_example = explored[0] if explored else "answer_id"
+    answer_example = explored[0]
 
     # Format prompt with dilemma-specific values
     prompt = per_dilemma_prompt_template.format(
@@ -734,23 +742,20 @@ async def _serialize_paths_per_dilemma(
                 callbacks=callbacks,
             )
 
-    tasks: list[asyncio.Future[tuple[list[dict[str, Any]], int]]] = []
-    task_to_dilemma_id: dict[asyncio.Future[tuple[list[dict[str, Any]], int]], str] = {}
-    for dilemma in active_dilemmas:
-        task = asyncio.create_task(_limited_serialize(dilemma))
-        tasks.append(task)
-        task_to_dilemma_id[task] = str(dilemma.get("dilemma_id", ""))
+    tasks = [asyncio.create_task(_limited_serialize(d)) for d in active_dilemmas]
+    dilemma_ids = [str(d.get("dilemma_id", "")) for d in active_dilemmas]
+
+    results = await asyncio.gather(*tasks)
 
     all_paths: list[dict[str, Any]] = []
     total_tokens = 0
     dilemma_count = len(active_dilemmas)
 
-    for i, future in enumerate(asyncio.as_completed(tasks), start=1):
-        paths, tokens = await future
+    for i, (paths, tokens) in enumerate(results, start=1):
         all_paths.extend(paths)
         total_tokens += tokens
         if on_phase_progress is not None:
-            did = task_to_dilemma_id.get(future, "")
+            did = dilemma_ids[i - 1]
             detail = f"{did} ({len(paths)} paths)" if did else f"{len(paths)} paths"
             on_phase_progress(f"serialize paths (dilemma {i}/{dilemma_count})", "completed", detail)
 
@@ -1546,6 +1551,14 @@ async def serialize_seed_as_function(
                     "answer_ids_context_injected",
                     dilemma_count=len(collected["dilemmas"]),
                 )
+
+            # Enrich dilemma decisions with question from graph for prompt
+            if graph is not None:
+                for d in collected["dilemmas"]:
+                    node_id = normalize_scoped_id(d.get("dilemma_id", ""), SCOPE_DILEMMA)
+                    node = graph.get_node(node_id)
+                    if node:
+                        d["question"] = node.get("question", "")
 
             # Generate paths per-dilemma
             paths, paths_tokens = await _serialize_paths_per_dilemma(
