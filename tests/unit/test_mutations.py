@@ -4185,3 +4185,184 @@ class TestValidateSeedPovCharacter:
         assert "kay" in pov_errors[0].available
         assert "mentor" in pov_errors[0].available
         assert "manor" not in pov_errors[0].available
+
+
+class TestApplySeedConvergenceAnalysis:
+    """Test convergence analysis mutations (sections 7+8) in apply_seed_mutations."""
+
+    def _graph_with_dilemmas(self) -> Graph:
+        """Build a graph with two brainstorm dilemmas and entities."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::kay",
+            {"type": "entity", "raw_id": "kay", "entity_type": "character"},
+        )
+        graph.create_node(
+            "dilemma::trust_or_not",
+            {
+                "type": "dilemma",
+                "raw_id": "trust_or_not",
+                "question": "Trust the mentor?",
+                "central_entity_ids": ["entity::kay"],
+            },
+        )
+        graph.create_node(
+            "dilemma::trust_or_not::alt::trust",
+            {"type": "answer", "raw_id": "trust", "is_default_path": True},
+        )
+        graph.add_edge("has_answer", "dilemma::trust_or_not", "dilemma::trust_or_not::alt::trust")
+        graph.create_node(
+            "dilemma::stay_or_go",
+            {
+                "type": "dilemma",
+                "raw_id": "stay_or_go",
+                "question": "Stay or leave?",
+                "central_entity_ids": ["entity::kay"],
+            },
+        )
+        graph.create_node(
+            "dilemma::stay_or_go::alt::stay",
+            {"type": "answer", "raw_id": "stay", "is_default_path": True},
+        )
+        graph.add_edge("has_answer", "dilemma::stay_or_go", "dilemma::stay_or_go::alt::stay")
+        return graph
+
+    def _base_output(self) -> dict:
+        """Minimal SEED output dict with two dilemmas, paths, and beats."""
+        return {
+            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "dilemmas": [
+                {"dilemma_id": "trust_or_not", "explored": ["trust"], "unexplored": []},
+                {"dilemma_id": "stay_or_go", "explored": ["stay"], "unexplored": []},
+            ],
+            "paths": [
+                {
+                    "path_id": "trust_or_not__trust",
+                    "name": "Trust Path",
+                    "dilemma_id": "trust_or_not",
+                    "answer_id": "trust",
+                    "path_importance": "major",
+                    "description": "Trust the mentor",
+                },
+                {
+                    "path_id": "stay_or_go__stay",
+                    "name": "Stay Path",
+                    "dilemma_id": "stay_or_go",
+                    "answer_id": "stay",
+                    "path_importance": "major",
+                    "description": "Stay at the location",
+                },
+            ],
+            "consequences": [],
+            "initial_beats": [
+                {
+                    "beat_id": "b_trust",
+                    "summary": "Commit trust",
+                    "paths": ["trust_or_not__trust"],
+                    "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b_stay",
+                    "summary": "Commit stay",
+                    "paths": ["stay_or_go__stay"],
+                    "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "commits"}],
+                },
+            ],
+        }
+
+    def test_convergence_policy_stored_on_dilemma_node(self) -> None:
+        """Convergence policy from analysis is stored on the dilemma graph node."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        output["dilemma_analyses"] = [
+            {
+                "dilemma_id": "trust_or_not",
+                "convergence_policy": "hard",
+                "payoff_budget": 4,
+                "reasoning": "Mutually exclusive outcomes",
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        node = graph.get_node("dilemma::trust_or_not")
+        assert node["convergence_policy"] == "hard"
+
+    def test_payoff_budget_stored_on_dilemma_node(self) -> None:
+        """Payoff budget from analysis is stored on the dilemma graph node."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        output["dilemma_analyses"] = [
+            {
+                "dilemma_id": "stay_or_go",
+                "convergence_policy": "soft",
+                "payoff_budget": 3,
+                "reasoning": "Shared beats after divergence",
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        node = graph.get_node("dilemma::stay_or_go")
+        assert node["payoff_budget"] == 3
+
+    def test_unanalyzed_dilemma_gets_defaults(self) -> None:
+        """Dilemma not in analyses gets default soft/2."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        # Only analyze trust_or_not; stay_or_go is unanalyzed
+        output["dilemma_analyses"] = [
+            {
+                "dilemma_id": "trust_or_not",
+                "convergence_policy": "hard",
+                "payoff_budget": 4,
+                "reasoning": "test",
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        node = graph.get_node("dilemma::stay_or_go")
+        assert node["convergence_policy"] == "soft"
+        assert node["payoff_budget"] == 2
+
+    def test_interaction_constraint_edge_created(self) -> None:
+        """Interaction constraint creates an edge between dilemma nodes."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        output["interaction_constraints"] = [
+            {
+                "dilemma_a": "stay_or_go",
+                "dilemma_b": "trust_or_not",
+                "constraint_type": "shared_entity",
+                "description": "Both involve Kay",
+                "reasoning": "test",
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        edges = graph.get_edges(
+            from_id="dilemma::stay_or_go",
+            edge_type="interaction_constraint",
+        )
+        assert len(edges) == 1
+        assert edges[0]["to"] == "dilemma::trust_or_not"
+        assert edges[0]["constraint_type"] == "shared_entity"
+        assert edges[0]["description"] == "Both involve Kay"
+
+    def test_constraint_edge_skipped_if_node_missing(self) -> None:
+        """Constraint edge is not created when a dilemma node is missing."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        output["interaction_constraints"] = [
+            {
+                "dilemma_a": "trust_or_not",
+                "dilemma_b": "nonexistent_dilemma",
+                "constraint_type": "causal_chain",
+                "description": "Should be skipped",
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        edges = graph.get_edges(
+            from_id="dilemma::trust_or_not",
+            edge_type="interaction_constraint",
+        )
+        assert len(edges) == 0
