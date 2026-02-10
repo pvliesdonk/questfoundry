@@ -36,9 +36,13 @@ system: |
      based on the prose it writes. This ensures labels match actual content.
   5. If you DO provide labels: 3-6 words, action phrases in imperative form
   6. Forward label: describes continuing the main story (required)
+  7. Spokes may optionally grant codewords when visited. Only use IDs from
+     the Valid Codewords list. Most spokes should NOT grant — only grant when
+     exploring that spoke naturally reveals something tracked by a codeword.
 
   ## What NOT to Do
   - Do NOT use passage IDs not listed in the Valid IDs section
+  - Do NOT use codeword IDs not listed in the Valid Codewords section
   - Do NOT make spokes plot-critical (they are OPTIONAL)
   - Do NOT add explanatory prose before or after the JSON output
   - Do NOT propose hubs at ending passages (no outgoing choices)
@@ -46,6 +50,9 @@ system: |
 
   ## Valid IDs
   Valid passage IDs: {valid_passage_ids}
+
+  ## Valid Codewords
+  Valid codeword IDs: {valid_codeword_ids}
 
   ## Output Format
   Return a JSON object with a "hubs" array. Each hub has:
@@ -58,6 +65,7 @@ system: |
       - "evocative": Atmospheric — "Trace the faded ink", "Listen to the silence"
       - "character_voice": Internal thought — "That clock... why did it stop?"
       If omitted, defaults to "functional"
+    - grants: (optional) list of codeword IDs this spoke grants when visited (default: empty)
   - forward_label: choice label for continuing the story (3-6 words)
 
 user: |
