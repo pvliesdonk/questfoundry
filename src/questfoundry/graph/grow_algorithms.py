@@ -1433,6 +1433,14 @@ def build_intersection_candidates(graph: Graph) -> list[IntersectionCandidate]:
     # Build beat → dilemma mapping via belongs_to → path → dilemma
     beat_dilemmas = _build_beat_dilemmas(graph, beat_nodes)
 
+    # Filter out beats from hard-policy dilemmas (topology isolation)
+    hard_beats = _get_hard_policy_beats(graph, list(beat_nodes.keys()), beat_dilemmas)
+    if hard_beats:
+        beat_nodes = {bid: d for bid, d in beat_nodes.items() if bid not in hard_beats}
+        beat_dilemmas = {bid: ds for bid, ds in beat_dilemmas.items() if bid not in hard_beats}
+        if not beat_nodes:
+            return []
+
     # Group by location overlap (highest priority)
     location_groups = _group_by_location(beat_nodes, beat_dilemmas)
 
@@ -1470,6 +1478,37 @@ def _build_beat_dilemmas(graph: Graph, beat_nodes: dict[str, Any]) -> dict[str, 
             beat_dilemmas[beat_id].add(path_dilemma[path_id])
 
     return beat_dilemmas
+
+
+def _get_hard_policy_beats(
+    graph: Graph,
+    beat_ids: list[str],
+    beat_dilemma_map: dict[str, set[str]],
+) -> set[str]:
+    """Identify beats belonging to hard-policy dilemmas.
+
+    A beat is hard-policy if any of its dilemmas has
+    ``convergence_policy == "hard"``.
+
+    Returns:
+        Set of beat IDs from hard-policy dilemmas.
+    """
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    # raw_id → prefixed ID lookup
+    raw_to_prefixed: dict[str, str] = {}
+    for did, ddata in dilemma_nodes.items():
+        raw = ddata.get("raw_id", did)
+        raw_to_prefixed[raw] = did
+
+    hard_beats: set[str] = set()
+    for bid in beat_ids:
+        for raw in beat_dilemma_map.get(bid, set()):
+            prefixed = raw_to_prefixed.get(raw)
+            if prefixed and dilemma_nodes[prefixed].get("convergence_policy") == "hard":
+                hard_beats.add(bid)
+                break
+    return hard_beats
 
 
 def _group_by_location(
@@ -1843,6 +1882,23 @@ def check_intersection_compatibility(
                 category=GrowErrorCategory.STRUCTURAL,
             )
         )
+
+    # Reject intersections involving hard-policy dilemmas (topology isolation)
+    hard_beats = _get_hard_policy_beats(graph, beat_ids, beat_dilemma_map)
+    if hard_beats:
+        hard_dilemmas = sorted({d for bid in hard_beats for d in beat_dilemma_map.get(bid, set())})
+        errors.append(
+            GrowValidationError(
+                field_path="intersection.hard_policy",
+                issue=(
+                    f"Beat(s) {sorted(hard_beats)} belong to hard-policy dilemma(s) "
+                    f"{hard_dilemmas}. Hard-policy paths require topology isolation "
+                    f"and cannot form intersections."
+                ),
+                category=GrowErrorCategory.STRUCTURAL,
+            )
+        )
+        return errors
 
     # Check requires edges originating from intersection beats.
     # Two checks in one pass: (1) no circular requires between intersection
