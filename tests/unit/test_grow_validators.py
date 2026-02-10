@@ -11,11 +11,13 @@ from questfoundry.graph.grow_validators import (
     validate_phase4f_output,
     validate_phase8c_output,
     validate_phase9_output,
+    validate_phase9c_output,
 )
 from questfoundry.graph.mutations import GrowValidationError
 from questfoundry.models.grow import (
     ChoiceLabel,
     EntityArcDescriptor,
+    HubProposal,
     IntersectionProposal,
     OverlayProposal,
     PathAgnosticAssessment,
@@ -24,8 +26,10 @@ from questfoundry.models.grow import (
     Phase4aOutput,
     Phase4fOutput,
     Phase8cOutput,
+    Phase9cOutput,
     Phase9Output,
     SceneTypeTag,
+    SpokeProposal,
 )
 
 
@@ -593,3 +597,64 @@ class TestCountEntries:
 
     def test_fallback_for_unknown_object(self) -> None:
         assert count_entries(object()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Phase 9c: Hub-spoke spoke grants validation
+# ---------------------------------------------------------------------------
+
+
+class TestValidatePhase9cGrants:
+    """Tests for spoke grant ID validation in Phase 9c."""
+
+    def _make_phase9c_output(self, grants: list[str] | None = None) -> Phase9cOutput:
+        spoke_with_grants = SpokeProposal(
+            summary="Examine the ancient mural.",
+            grants=grants or [],
+        )
+        spoke_plain = SpokeProposal(summary="Listen to the crowd.")
+        hub = HubProposal(
+            passage_id="passage::market",
+            spokes=[spoke_with_grants, spoke_plain],
+            forward_label="Continue onward",
+        )
+        return Phase9cOutput(hubs=[hub])
+
+    def test_valid_spoke_grants_pass(self) -> None:
+        result = self._make_phase9c_output(grants=["codeword::cw_mural"])
+        errors = validate_phase9c_output(
+            result,
+            valid_passage_ids={"passage::market"},
+            valid_codeword_ids={"codeword::cw_mural"},
+        )
+        assert not errors
+
+    def test_invalid_spoke_grants_rejected(self) -> None:
+        result = self._make_phase9c_output(grants=["codeword::nonexistent"])
+        errors = validate_phase9c_output(
+            result,
+            valid_passage_ids={"passage::market"},
+            valid_codeword_ids={"codeword::cw_mural"},
+        )
+        assert len(errors) == 1
+        assert "nonexistent" in errors[0].issue
+
+    def test_no_codeword_validation_when_none(self) -> None:
+        """When valid_codeword_ids is None, grants are not validated."""
+        result = self._make_phase9c_output(grants=["codeword::anything"])
+        errors = validate_phase9c_output(
+            result,
+            valid_passage_ids={"passage::market"},
+            valid_codeword_ids=None,
+        )
+        assert not errors
+
+    def test_unscoped_grant_id_normalized(self) -> None:
+        """Grant IDs without 'codeword::' prefix are normalized."""
+        result = self._make_phase9c_output(grants=["cw_mural"])
+        errors = validate_phase9c_output(
+            result,
+            valid_passage_ids={"passage::market"},
+            valid_codeword_ids={"codeword::cw_mural"},
+        )
+        assert not errors

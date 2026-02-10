@@ -12,6 +12,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.graph.mutations import GrowValidationError
 
 if TYPE_CHECKING:
@@ -323,12 +324,15 @@ def validate_phase9b_output(
 def validate_phase9c_output(
     result: Phase9cOutput,
     valid_passage_ids: set[str],
+    valid_codeword_ids: set[str] | None = None,
 ) -> list[GrowValidationError]:
     """Validate Phase 9c hub-spoke proposals.
 
     Checks:
     - passage_id exists in valid passage IDs (which excludes ending passages,
       ensuring hubs have outgoing choices)
+    - spoke grant IDs reference existing codeword nodes (when valid_codeword_ids
+      is provided)
     """
     errors: list[GrowValidationError] = []
     for i, hub in enumerate(result.hubs):
@@ -341,6 +345,19 @@ def validate_phase9c_output(
                     available=sorted(valid_passage_ids)[:10],
                 )
             )
+        if valid_codeword_ids is not None:
+            for j, spoke in enumerate(hub.spokes):
+                for k, grant_id in enumerate(spoke.grants):
+                    scoped = normalize_scoped_id(grant_id, "codeword")
+                    if scoped not in valid_codeword_ids:
+                        errors.append(
+                            GrowValidationError(
+                                field_path=f"hubs.{i}.spokes.{j}.grants.{k}",
+                                issue=f"Codeword ID not found: {grant_id}",
+                                provided=grant_id,
+                                available=sorted(valid_codeword_ids)[:10],
+                            )
+                        )
     return errors
 
 

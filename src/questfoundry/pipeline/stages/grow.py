@@ -2871,9 +2871,15 @@ class GrowStage:
                 detail="No non-ending passages found",
             )
 
+        codeword_nodes = graph.get_nodes_by_type("codeword")
+        valid_codeword_ids = set(codeword_nodes.keys())
+
         context = {
             "passage_context": "\n".join(passage_lines),
             "valid_passage_ids": ", ".join(valid_ids),
+            "valid_codeword_ids": ", ".join(sorted(valid_codeword_ids))
+            if valid_codeword_ids
+            else "none",
             "output_language_instruction": self._lang_instruction,
         }
 
@@ -2882,6 +2888,7 @@ class GrowStage:
         validator = partial(
             validate_phase9c_output,
             valid_passage_ids=set(valid_ids),
+            valid_codeword_ids=valid_codeword_ids,
         )
 
         try:
@@ -2946,7 +2953,7 @@ class GrowStage:
                     "from_passage": hub_id,
                     "to_passage": spoke_pid,
                     "requires": [],
-                    "grants": [],
+                    "grants": spoke.grants,
                     "label_style": spoke.label_style,
                 }
                 if spoke.label:
