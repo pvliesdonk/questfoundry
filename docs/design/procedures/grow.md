@@ -405,27 +405,28 @@ arc:
 
 ---
 
-### Phase 7: Convergence Identification
+### Phase 7: Convergence Identification (Policy-Aware)
 
-**Purpose:** Find where arcs can rejoin.
+**Purpose:** Find where arcs can rejoin, respecting the branching contract.
 
-**Input:** Arcs with divergence metadata
+**Input:** Arcs with divergence metadata, dilemma convergence policies from SEED
 
 **Operations:**
-1. For each pair of diverged arcs:
-   - Find their differing dilemmas
-   - Check if both arcs have `commits` beats for all differing dilemmas
-   - If yes: arcs can potentially converge after both commits
-2. Find convergence points:
-   - Beats that appear in both arcs after their commits
-   - Or: ending beats shared by both arcs
-3. Human reviews convergence proposals:
-   - Approve: mark convergence
-   - Reject: arcs stay separate to end
+1. For each branch arc, determine the **effective policy**:
+   - Traverse arc's paths → path's `dilemma_id` → dilemma node's `convergence_policy` and `payoff_budget`
+   - Multi-dilemma combine rule: `hard` dominates; `payoff_budget = max(...)` across all dilemmas
+   - Default (no SEED metadata): `flavor`/budget=0 (backward compatible)
+2. Apply per-policy convergence logic:
+   - **`flavor`**: First shared beat after divergence (original behavior)
+   - **`soft`**: Backward scan — find last exclusive beat in branch sequence; `converges_at` = the beat immediately after, if shared. Reject if exclusive beat count < `payoff_budget`.
+   - **`hard`**: `converges_at` is never set. Arc stays separate.
+3. Store `convergence_policy` and `payoff_budget` on arc nodes for downstream use.
 
-**Output:** Arcs with convergence metadata
+**`converges_at` semantics:** "From this beat onward, all remaining content on this arc is shared with the spine." It is NOT set at intersections (shared beats that have later exclusive beats).
 
-**LLM involvement:** None for identification (deterministic). May involve LLM to write transition beats if convergence needs bridging.
+**Output:** Arcs with convergence metadata (including policy fields)
+
+**LLM involvement:** None (deterministic). Policy comes from SEED dilemma analysis.
 
 ---
 
@@ -501,16 +502,25 @@ entity:
 **Input:** Passages, arc structure
 
 **Operations:**
+
+**9a. Codeword requires pre-computation** (before passage successor deduplication):
+1. Compute passage → arc membership mapping
+2. For each passage exclusive to hard-policy branch arcs, collect codeword IDs from the branch's consequences
+3. This must happen BEFORE `find_passage_successors()` deduplicates passages across arcs
+
+**9b. Choice creation:**
 1. For each beat B appearing in arcs:
    - Find successor beats in each arc
    - Group by unique successors
 2. If single successor across all arcs:
    - Single choice edge (may be implicit "continue")
+   - `requires` is always empty (single-outgoing-choice = never gated, prevents soft-locks)
 3. If multiple successors:
    - Create choice per successor
    - LLM generates diegetic label: "What does the player do/say to reach this?"
-   - Set `requires` from codewords needed for that arc
+   - Set `requires` from pre-computed codeword requirements (hard-policy branch targets only)
    - Set `grants` from codewords the choice provides
+4. Spoke choices (hub-spoke patterns): `requires` is always empty (spokes are flavor-only)
 
 **Choice schema:**
 ```yaml

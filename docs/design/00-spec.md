@@ -822,10 +822,47 @@ seed:
       location: entity_id | null            # primary location
       location_alternatives: entity_id[]    # other valid locations (enables intersection flexibility)
 
-  convergence_sketch:                 # informal guidance for GROW
+  convergence_sketch:                 # informal creative guidance for GROW
     convergence_points: string[]      # "paths should merge by act 2 climax"
     residue_notes: string[]           # "mentor demeanor differs after convergence"
+
+  # --- Convergence Analysis (Sections 7-8) ---
+  # Machine-actionable structural contracts. Generated post-prune,
+  # after all 6 core sections are serialized. See ADR-013.
+
+  dilemma_analyses:
+    - dilemma_id: dilemma_id
+      convergence_policy: hard | soft | flavor
+      payoff_budget: int (2-6)        # minimum exclusive beats before convergence
+      reasoning: string               # chain-of-thought justification
+
+  interaction_constraints:             # sparse — only related dilemma pairs
+    - dilemma_a: dilemma_id
+      dilemma_b: dilemma_id
+      constraint_type: shared_entity | causal_chain | resource_conflict
+      description: string
+      reasoning: string
 ```
+
+#### Convergence Policies (Branching Contract)
+
+Per-dilemma `convergence_policy` declared by SEED, enforced by GROW. Determines how and whether branch arcs reconverge with the spine.
+
+| Policy | Meaning | GROW Behavior |
+|--------|---------|---------------|
+| `hard` | Paths never reconverge structurally | `converges_at` is not set. Uses codeword gating at divergence points and encourages separate endings. Shared beats are topologically allowed but gated (see #751). |
+| `soft` | Paths reconverge after `payoff_budget` exclusive beats | Backward scan: last exclusive beat marks convergence boundary. If exclusive beats < budget, no convergence. |
+| `flavor` | Same structure, different prose via overlays | Immediate convergence at first shared beat. Overlays provide tonal variation. |
+
+**Multi-dilemma arcs:** When an arc spans multiple dilemmas, `hard` dominates; `payoff_budget = max(...)` across all dilemmas.
+
+**`convergence_sketch` vs `convergence_policy`:** These are complementary, not redundant. `convergence_policy` is a machine-actionable structural contract enforced by GROW algorithms. `convergence_sketch` is freeform creative guidance from the LLM to itself, used for narrative hints during prose generation.
+
+#### "Residue Must Be Read" Invariant
+
+Every codeword granted must appear in at least one `choice.requires` gate. Current scope: choice gating only. Future extensions may include overlays, ending scoring, and conditional prose as additional "read" mechanisms.
+
+**`converges_at` semantics:** "From this beat onward, all remaining content on this arc is shared with the spine." It is NOT set at intersections (shared beats with later exclusive beats). For `hard` policy, it is never set.
 
 **Human Gate:** Approve seed. After this point, no new paths can be created.
 

@@ -476,6 +476,45 @@ See `docs/design/procedures/dress.md` for the full algorithm specification.
 
 ---
 
+## ADR-013: Branching Contract Design
+
+**Date**: 2026-02-10
+**Status**: Accepted
+
+### Context
+
+GROW produces near-linear stories because nothing constrains when or whether branches converge. The convergence algorithm accepts the first shared beat unconditionally, codewords are write-only (`requires: []` hardcoded), and SEED provides no guidance about which dilemmas demand structural divergence vs. flavor-only differences.
+
+### Decision
+
+Add per-dilemma `convergence_policy` as a branching contract that SEED declares and GROW enforces. Three policy levels: `hard` (never reconverge, codeword gating), `soft` (reconverge after payoff_budget exclusive beats), `flavor` (immediate convergence, overlay-only differences).
+
+Key design choices:
+
+- **SEED extension, not new stage** — Adds 1-2 serialize calls to existing SEED flow. No pipeline plumbing changes.
+- **Separate `DilemmaAnalysis` model** — Not added to `DilemmaDecision` because dilemmas serialize in Section 2 (before paths/consequences exist). Analysis needs full context → serializes after all 6 existing sections.
+- **Sparse interactions only** — `InteractionConstraint` records only for dilemma pairs sharing entities or causal chains. Not O(n^2).
+- **Gating, not topology** — `hard` policy enforces codeword gating at divergence points. Topology enforcement (beat cloning, preventing shared beats) is deferred (#751).
+- **Soft failure** — If the analysis LLM call fails, SEED continues with defaults (`soft`/budget=2). GROW still works with reduced guidance.
+
+### Rationale
+
+- **SEED extension**: Creating a new pipeline stage for 2 serialize calls is over-engineering. The analysis needs the same context SEED already has.
+- **Separate model**: `DilemmaDecision` serializes in Section 2 when only dilemma IDs and answers exist. The analysis needs paths, consequences, and entities — available only after Section 6.
+- **Gating over topology**: Full topology enforcement requires cloning beats and preventing intersection merging — a significant algorithmic change. Gating achieves the narrative goal (players can't access hard-divergent content without committing) with minimal graph changes.
+- **Soft failure**: Backward compatibility with pre-contract graphs and resilience to LLM output failures.
+
+### Consequences
+
+- New fields on dilemma nodes: `convergence_policy`, `payoff_budget`
+- New fields on arc nodes: `convergence_policy`, `payoff_budget` (effective combined policy)
+- Choice nodes gain meaningful `requires` lists (no longer always empty)
+- `qf inspect` gains convergence compliance, codeword gate coverage, and forward-path reachability checks
+- Topology enforcement for `hard` policy deferred to #751
+- Spoke grants wiring deferred to #752
+
+---
+
 ## Template
 
 ```markdown
