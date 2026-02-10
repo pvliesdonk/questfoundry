@@ -2309,6 +2309,8 @@ class GrowStage:
         """
         from questfoundry.graph.grow_algorithms import (
             PassageSuccessor,
+            compute_all_choice_requires,
+            compute_passage_arc_membership,
             find_passage_successors,
         )
         from questfoundry.models.grow import Phase9Output
@@ -2320,6 +2322,10 @@ class GrowStage:
                 status="completed",
                 detail="No passages to process",
             )
+
+        # Pre-compute requires BEFORE find_passage_successors deduplication
+        passage_arcs = compute_passage_arc_membership(graph)
+        choice_requires = compute_all_choice_requires(graph, passage_arcs)
 
         successors = find_passage_successors(graph)
         if not successors:
@@ -2550,7 +2556,7 @@ class GrowStage:
                             "from_passage": p_id,
                             "to_passage": succ.to_passage,
                             "label": multi_label,
-                            "requires": [],
+                            "requires": choice_requires.get(succ.to_passage, []),
                             "grants": succ.grants,
                         },
                     )

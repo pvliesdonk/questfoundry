@@ -1208,6 +1208,91 @@ def find_convergence_points(
 
 
 # ---------------------------------------------------------------------------
+# Phase 9 helpers: passage-arc membership and choice requires
+# ---------------------------------------------------------------------------
+
+
+def compute_passage_arc_membership(graph: Graph) -> dict[str, set[str]]:
+    """Map each passage to the set of (prefixed) arc IDs whose sequences include it.
+
+    Converts beat sequences to passage IDs via passage ``from_beat`` fields.
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+    passage_nodes = graph.get_nodes_by_type("passage")
+
+    # Build beat → passage mapping
+    beat_to_passage: dict[str, str] = {}
+    for p_id, p_data in passage_nodes.items():
+        from_beat = p_data.get("from_beat", "")
+        if from_beat:
+            beat_to_passage[from_beat] = p_id
+
+    membership: dict[str, set[str]] = {}
+    for arc_id, arc_data in arc_nodes.items():
+        for beat_id in arc_data.get("sequence", []):
+            passage_id = beat_to_passage.get(beat_id)
+            if passage_id:
+                membership.setdefault(passage_id, set()).add(arc_id)
+
+    return membership
+
+
+def compute_all_choice_requires(
+    graph: Graph,
+    passage_arcs: dict[str, set[str]],
+) -> dict[str, list[str]]:
+    """Compute codeword ``requires`` lists for all target passages at once.
+
+    Only target passages exclusive to hard-policy branch arcs get non-empty
+    lists.  Passages reachable from the spine always return ``[]``.
+
+    The caller is responsible for only applying requires at multi-choice
+    divergence points (single-outgoing-choice passages must never be gated).
+
+    Returns:
+        Mapping of ``passage_id`` → list of required codeword IDs.
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+
+    # Pre-build consequence → codeword lookup from tracks edges
+    tracks_edges = graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
+    cons_to_codeword: dict[str, str] = {}
+    for edge in tracks_edges:
+        cons_to_codeword[edge["to"]] = edge["from"]
+
+    # Pre-build path → consequences lookup from has_consequence edges
+    has_cons_edges = graph.get_edges(from_id=None, to_id=None, edge_type="has_consequence")
+    path_consequences: dict[str, list[str]] = {}
+    for edge in has_cons_edges:
+        path_consequences.setdefault(edge["from"], []).append(edge["to"])
+
+    requires: dict[str, list[str]] = {}
+
+    for passage_id, arc_ids in passage_arcs.items():
+        # If reachable from spine, no gating needed
+        if any(arc_nodes.get(a, {}).get("arc_type") == "spine" for a in arc_ids):
+            continue
+
+        codewords: list[str] = []
+        for arc_id in sorted(arc_ids):
+            arc_data = arc_nodes.get(arc_id, {})
+            if arc_data.get("convergence_policy") != "hard":
+                continue
+
+            for raw_path_id in arc_data.get("paths", []):
+                path_id = normalize_scoped_id(raw_path_id, "path")
+                for cons_id in path_consequences.get(path_id, []):
+                    cw = cons_to_codeword.get(cons_id)
+                    if cw and cw not in codewords:
+                        codewords.append(cw)
+
+        if codewords:
+            requires[passage_id] = codewords
+
+    return requires
+
+
+# ---------------------------------------------------------------------------
 # Phase 11: BFS Reachability
 # ---------------------------------------------------------------------------
 
