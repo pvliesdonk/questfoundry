@@ -2696,6 +2696,21 @@ def _render_inspection_report(report: InspectionReport) -> None:
         console.print(f"  Start passages: {b.start_passages}  Endings: {b.ending_passages}")
         console.print()
 
+    # Branching quality score
+    if report.branching_quality:
+        q = report.branching_quality
+        console.print("[bold]Branching Quality[/bold]")
+        if q.policy_distribution:
+            dist = ", ".join(f"{k}={v}" for k, v in q.policy_distribution.items())
+            console.print(f"  Policy distribution: {dist}")
+        console.print(f"  Avg exclusive beats per branch: [bold]{q.avg_exclusive_beats}[/bold]")
+        console.print(f"  Meaningful choice ratio: [bold]{q.meaningful_choice_ratio}[/bold]")
+        console.print(
+            f"  Terminal passages: [bold]{q.terminal_count}[/bold]  "
+            f"Ending variants: [bold]{q.ending_variants}[/bold]"
+        )
+        console.print()
+
     # Coverage stats
     c = report.coverage
     if c.entity_count:

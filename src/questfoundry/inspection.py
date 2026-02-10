@@ -65,6 +65,21 @@ class BranchingStats:
 
 
 @dataclass
+class BranchingQualityScore:
+    """Informational branching quality metrics (not pass/fail).
+
+    Provides a quantitative view of story structure diversity:
+    convergence policy mix, beat exclusivity, and ending variety.
+    """
+
+    terminal_count: int = 0
+    ending_variants: int = 0
+    policy_distribution: dict[str, int] = field(default_factory=dict)
+    avg_exclusive_beats: float = 0.0
+    meaningful_choice_ratio: float = 0.0
+
+
+@dataclass
 class CoverageStats:
     """Entity, codex, and illustration coverage."""
 
@@ -84,6 +99,7 @@ class InspectionReport:
     summary: GraphSummary
     prose: ProseStats | None = None
     branching: BranchingStats | None = None
+    branching_quality: BranchingQualityScore | None = None
     coverage: CoverageStats = field(default_factory=CoverageStats)
     validation_checks: list[dict[str, str]] = field(default_factory=list)
 
@@ -102,6 +118,7 @@ def inspect_project(project_path: Path) -> InspectionReport:
     summary = _graph_summary(graph, project_path)
     prose = _prose_stats(graph)
     branching = _branching_stats(graph)
+    branching_quality = _branching_quality_score(graph, branching)
     coverage = _coverage_stats(graph, project_path)
     validation = _run_validation(graph)
 
@@ -116,6 +133,7 @@ def inspect_project(project_path: Path) -> InspectionReport:
         summary=summary,
         prose=prose,
         branching=branching,
+        branching_quality=branching_quality,
         coverage=coverage,
         validation_checks=validation,
     )
@@ -278,6 +296,103 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
         partially_explored=partially_explored,
         start_passages=start_count,
         ending_passages=ending_count,
+    )
+
+
+def _branching_quality_score(
+    graph: Graph, branching: BranchingStats | None
+) -> BranchingQualityScore | None:
+    """Compute informational branching quality metrics.
+
+    Returns None if the graph has no arc nodes (pre-GROW or degenerate).
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+    if not arc_nodes:
+        return None
+
+    # Find spine sequence
+    spine_seq_set: set[str] = set()
+    for data in arc_nodes.values():
+        if data.get("arc_type") == "spine":
+            spine_seq_set = set(data.get("sequence", []))
+            break
+
+    # Policy distribution + exclusive beat counts across branch arcs
+    policy_counts: dict[str, int] = Counter()
+    exclusive_counts: list[int] = []
+    for data in arc_nodes.values():
+        if data.get("arc_type") == "spine":
+            continue
+        policy = data.get("convergence_policy", "unknown")
+        policy_counts[policy] += 1
+        seq: list[str] = data.get("sequence", [])
+        diverges_at = data.get("diverges_at")
+        if seq and diverges_at:
+            try:
+                div_idx = seq.index(diverges_at)
+            except ValueError:
+                continue
+            exclusive = [b for b in seq[div_idx + 1 :] if b not in spine_seq_set]
+            exclusive_counts.append(len(exclusive))
+
+    avg_exclusive = (
+        round(sum(exclusive_counts) / len(exclusive_counts), 1) if exclusive_counts else 0.0
+    )
+
+    # Terminal count + ending variants
+    choice_from_edges = graph.get_edges(edge_type="choice_from")
+    has_outgoing = {e["to"] for e in choice_from_edges}
+    passages = graph.get_nodes_by_type("passage")
+    ending_ids = [pid for pid in passages if pid not in has_outgoing]
+
+    # Ending variants: distinct codeword signatures per ending
+    # For each ending, find which arcs cover its from_beat, then collect codewords
+    beat_to_arcs: dict[str, list[str]] = {}
+    for arc_id, data in arc_nodes.items():
+        for beat_id in data.get("sequence", []):
+            beat_to_arcs.setdefault(beat_id, []).append(arc_id)
+
+    # Build arc → codewords: arc paths → consequences → codewords via tracks edges
+    arc_codewords: dict[str, frozenset[str]] = {}
+    tracks_edges = graph.get_edges(edge_type="tracks")
+    consequence_to_codeword: dict[str, str] = {}
+    for edge in tracks_edges:
+        consequence_to_codeword[edge["to"]] = edge["from"]
+
+    has_consequence_edges = graph.get_edges(edge_type="has_consequence")
+    path_consequences: dict[str, list[str]] = {}
+    for edge in has_consequence_edges:
+        path_consequences.setdefault(edge["from"], []).append(edge["to"])
+
+    for arc_id, data in arc_nodes.items():
+        cws: set[str] = set()
+        for path_raw in data.get("paths", []):
+            path_id = f"path::{path_raw}" if not path_raw.startswith("path::") else path_raw
+            for cons_id in path_consequences.get(path_id, []):
+                if cw := consequence_to_codeword.get(cons_id):
+                    cws.add(cw)
+        arc_codewords[arc_id] = frozenset(cws)
+
+    variant_signatures: set[frozenset[str]] = set()
+    for pid in ending_ids:
+        from_beat = passages[pid].get("from_beat", "")
+        covering_arcs = beat_to_arcs.get(from_beat, [])
+        sig: set[str] = set()
+        for arc_id in covering_arcs:
+            sig.update(arc_codewords.get(arc_id, frozenset()))
+        variant_signatures.add(frozenset(sig))
+
+    # Meaningful choice ratio
+    ratio = 0.0
+    if branching and branching.total_choices > 0:
+        ratio = round(branching.meaningful_choices / branching.total_choices, 2)
+
+    return BranchingQualityScore(
+        terminal_count=len(ending_ids),
+        ending_variants=len(variant_signatures),
+        policy_distribution=dict(sorted(policy_counts.items())),
+        avg_exclusive_beats=avg_exclusive,
+        meaningful_choice_ratio=ratio,
     )
 
 
