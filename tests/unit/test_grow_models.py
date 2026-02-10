@@ -27,6 +27,7 @@ from questfoundry.models.grow import (
     Phase4eOutput,
     Phase4fOutput,
     SceneTypeTag,
+    SpokeProposal,
 )
 
 
@@ -712,3 +713,21 @@ class TestPhase4fOutput:
                     ),
                 ],
             )
+
+
+class TestSpokeProposal:
+    """SpokeProposal.grants field added for branching contract (#741)."""
+
+    def test_grants_default_empty(self) -> None:
+        spoke = SpokeProposal(summary="A dusty corner of the library.")
+        assert spoke.grants == []
+        assert spoke.label is None
+        assert spoke.label_style == "functional"
+
+    def test_with_grants(self) -> None:
+        spoke = SpokeProposal(
+            summary="The hidden alcove behind the bookshelf.",
+            grants=["cw_library_secret", "cw_dust_allergy"],
+        )
+        assert spoke.grants == ["cw_library_secret", "cw_dust_allergy"]
+        assert len(spoke.grants) == 2

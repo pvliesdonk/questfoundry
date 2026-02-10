@@ -9,10 +9,15 @@ from pydantic import ValidationError
 
 from questfoundry.models.seed import (
     ConsequencesSection,
+    DilemmaAnalysis,
+    DilemmaAnalysisSection,
     DilemmasSection,
     EntitiesSection,
+    InteractionConstraint,
+    InteractionConstraintsSection,
     PathBeatsSection,
     PathsSection,
+    SeedOutput,
 )
 
 
@@ -228,3 +233,228 @@ class TestPathBeatsSectionDedup:
                     self._BEAT_B,
                 ]
             )
+
+
+# ---------------------------------------------------------------------------
+# Branching contract models (#741)
+# ---------------------------------------------------------------------------
+
+_ANALYSIS_KWARGS: dict[str, str | int] = {
+    "dilemma_id": "dilemma::trust_or_betray",
+    "convergence_policy": "soft",
+    "payoff_budget": 3,
+    "reasoning": "Trust path needs several exclusive beats to develop before rejoining.",
+}
+
+_CONSTRAINT_KWARGS: dict[str, str] = {
+    "dilemma_a": "dilemma::alpha",
+    "dilemma_b": "dilemma::beta",
+    "constraint_type": "shared_entity",
+    "description": "Both dilemmas involve the mentor character.",
+    "reasoning": "The mentor appears in both dilemma paths, creating narrative coupling.",
+}
+
+
+class TestDilemmaAnalysis:
+    """DilemmaAnalysis validates convergence policy fields."""
+
+    def test_valid_analysis(self) -> None:
+        da = DilemmaAnalysis(**_ANALYSIS_KWARGS)
+        assert da.dilemma_id == "dilemma::trust_or_betray"
+        assert da.convergence_policy == "soft"
+        assert da.payoff_budget == 3
+
+    def test_payoff_budget_default(self) -> None:
+        da = DilemmaAnalysis(
+            dilemma_id="d1",
+            convergence_policy="hard",
+            reasoning="Hard policy needs at least the default budget.",
+        )
+        assert da.payoff_budget == 2
+
+    @pytest.mark.parametrize(
+        ("budget", "should_pass"),
+        [
+            pytest.param(1, False, id="below_min"),
+            pytest.param(2, True, id="at_min"),
+            pytest.param(6, True, id="at_max"),
+            pytest.param(7, False, id="above_max"),
+        ],
+    )
+    def test_payoff_budget_range(self, budget: int, *, should_pass: bool) -> None:
+        if should_pass:
+            da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "payoff_budget": budget})
+            assert da.payoff_budget == budget
+        else:
+            with pytest.raises(ValidationError, match="payoff_budget"):
+                DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "payoff_budget": budget})
+
+    def test_empty_dilemma_id_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="dilemma_id"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "dilemma_id": ""})
+
+    def test_reasoning_too_short_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="reasoning"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "reasoning": "short"})
+
+    def test_invalid_policy_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="convergence_policy"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_policy": "extreme"})
+
+    @pytest.mark.parametrize(
+        "policy",
+        [
+            pytest.param("hard", id="hard"),
+            pytest.param("soft", id="soft"),
+            pytest.param("flavor", id="flavor"),
+        ],
+    )
+    def test_valid_policies(self, policy: str) -> None:
+        da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_policy": policy})
+        assert da.convergence_policy == policy
+
+
+class TestInteractionConstraint:
+    """InteractionConstraint normalizes pair order and validates fields."""
+
+    def test_valid_constraint(self) -> None:
+        ic = InteractionConstraint(**_CONSTRAINT_KWARGS)
+        assert ic.dilemma_a == "dilemma::alpha"
+        assert ic.dilemma_b == "dilemma::beta"
+        assert ic.constraint_type == "shared_entity"
+
+    def test_pair_order_normalized(self) -> None:
+        """Reversed pair is silently swapped to canonical order."""
+        ic = InteractionConstraint(
+            **{**_CONSTRAINT_KWARGS, "dilemma_a": "dilemma::zeta", "dilemma_b": "dilemma::alpha"}
+        )
+        assert ic.dilemma_a == "dilemma::alpha"
+        assert ic.dilemma_b == "dilemma::zeta"
+
+    def test_already_ordered_unchanged(self) -> None:
+        ic = InteractionConstraint(**_CONSTRAINT_KWARGS)
+        assert ic.dilemma_a == "dilemma::alpha"
+        assert ic.dilemma_b == "dilemma::beta"
+
+    def test_pair_key_property(self) -> None:
+        ic = InteractionConstraint(**_CONSTRAINT_KWARGS)
+        assert ic.pair_key == "dilemma::alpha__dilemma::beta"
+
+    def test_empty_dilemma_a_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="dilemma_a"):
+            InteractionConstraint(**{**_CONSTRAINT_KWARGS, "dilemma_a": ""})
+
+    def test_empty_dilemma_b_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="dilemma_b"):
+            InteractionConstraint(**{**_CONSTRAINT_KWARGS, "dilemma_b": ""})
+
+    def test_invalid_constraint_type_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="constraint_type"):
+            InteractionConstraint(**{**_CONSTRAINT_KWARGS, "constraint_type": "magical"})
+
+    @pytest.mark.parametrize(
+        "ctype",
+        [
+            pytest.param("shared_entity", id="shared_entity"),
+            pytest.param("causal_chain", id="causal_chain"),
+            pytest.param("resource_conflict", id="resource_conflict"),
+        ],
+    )
+    def test_valid_constraint_types(self, ctype: str) -> None:
+        ic = InteractionConstraint(**{**_CONSTRAINT_KWARGS, "constraint_type": ctype})
+        assert ic.constraint_type == ctype
+
+
+class TestDilemmaAnalysisSectionDedup:
+    """DilemmaAnalysisSection should deduplicate identical, reject conflicting."""
+
+    def test_unique_analyses_accepted(self) -> None:
+        section = DilemmaAnalysisSection(
+            dilemma_analyses=[
+                _ANALYSIS_KWARGS,
+                {**_ANALYSIS_KWARGS, "dilemma_id": "dilemma::fight_or_flee"},
+            ]
+        )
+        assert len(section.dilemma_analyses) == 2
+
+    def test_identical_duplicates_silently_deduplicated(self) -> None:
+        section = DilemmaAnalysisSection(dilemma_analyses=[_ANALYSIS_KWARGS, _ANALYSIS_KWARGS])
+        assert len(section.dilemma_analyses) == 1
+
+    def test_non_identical_duplicates_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="Duplicates found"):
+            DilemmaAnalysisSection(
+                dilemma_analyses=[
+                    _ANALYSIS_KWARGS,
+                    {**_ANALYSIS_KWARGS, "convergence_policy": "hard"},
+                ]
+            )
+
+    def test_empty_accepted(self) -> None:
+        section = DilemmaAnalysisSection(dilemma_analyses=[])
+        assert len(section.dilemma_analyses) == 0
+
+
+class TestInteractionConstraintsSectionDedup:
+    """InteractionConstraintsSection deduplicates on (dilemma_a, dilemma_b) pair."""
+
+    def test_unique_constraints_accepted(self) -> None:
+        section = InteractionConstraintsSection(
+            interaction_constraints=[
+                _CONSTRAINT_KWARGS,
+                {**_CONSTRAINT_KWARGS, "dilemma_a": "dilemma::gamma"},
+            ]
+        )
+        assert len(section.interaction_constraints) == 2
+
+    def test_identical_duplicates_silently_deduplicated(self) -> None:
+        section = InteractionConstraintsSection(
+            interaction_constraints=[_CONSTRAINT_KWARGS, _CONSTRAINT_KWARGS]
+        )
+        assert len(section.interaction_constraints) == 1
+
+    def test_non_identical_duplicates_rejected(self) -> None:
+        """Same pair_key, different content → conflict."""
+        with pytest.raises(ValidationError, match="Duplicates found"):
+            InteractionConstraintsSection(
+                interaction_constraints=[
+                    _CONSTRAINT_KWARGS,
+                    {**_CONSTRAINT_KWARGS, "constraint_type": "causal_chain"},
+                ]
+            )
+
+    def test_reversed_pair_treated_as_duplicate(self) -> None:
+        """(a,b) and (b,a) with identical content normalize to same pair → deduplicated."""
+        reversed_kwargs = {
+            **_CONSTRAINT_KWARGS,
+            "dilemma_a": _CONSTRAINT_KWARGS["dilemma_b"],
+            "dilemma_b": _CONSTRAINT_KWARGS["dilemma_a"],
+        }
+        section = InteractionConstraintsSection(
+            interaction_constraints=[_CONSTRAINT_KWARGS, reversed_kwargs]
+        )
+        assert len(section.interaction_constraints) == 1
+
+    def test_empty_accepted(self) -> None:
+        section = InteractionConstraintsSection(interaction_constraints=[])
+        assert len(section.interaction_constraints) == 0
+
+
+class TestSeedOutputBackwardCompat:
+    """New fields on SeedOutput must not break existing data."""
+
+    def test_new_fields_default_empty(self) -> None:
+        output = SeedOutput()
+        assert output.dilemma_analyses == []
+        assert output.interaction_constraints == []
+
+    def test_with_analyses_roundtrip(self) -> None:
+        output = SeedOutput(
+            dilemma_analyses=[DilemmaAnalysis(**_ANALYSIS_KWARGS)],
+            interaction_constraints=[InteractionConstraint(**_CONSTRAINT_KWARGS)],
+        )
+        data = output.model_dump()
+        restored = SeedOutput.model_validate(data)
+        assert len(restored.dilemma_analyses) == 1
+        assert len(restored.interaction_constraints) == 1
+        assert restored.dilemma_analyses[0].convergence_policy == "soft"
