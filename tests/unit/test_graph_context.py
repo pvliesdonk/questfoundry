@@ -9,7 +9,9 @@ from questfoundry.graph.context import (
     SCOPE_PATH,
     check_structural_completeness,
     format_answer_ids_by_dilemma,
+    format_dilemma_analysis_context,
     format_hierarchical_path_id,
+    format_interaction_candidates_context,
     format_path_ids_context,
     format_scoped_id,
     get_expected_counts,
@@ -17,6 +19,7 @@ from questfoundry.graph.context import (
     parse_scoped_id,
     strip_scope_prefix,
 )
+from questfoundry.models.seed import DilemmaDecision, Path, SeedOutput
 
 
 class TestFormatValidIdsContext:
@@ -1216,3 +1219,142 @@ class TestFormatAnswerIdsByDilemma:
         ]
         result = format_answer_ids_by_dilemma(dilemmas)
         assert "dilemma::host_benevolent_or_selfish" in result
+
+
+# ---------------------------------------------------------------------------
+# Helper to build minimal SeedOutput for context tests
+# ---------------------------------------------------------------------------
+
+
+def _seed_output(
+    dilemmas: list[DilemmaDecision] | None = None,
+    paths: list[Path] | None = None,
+) -> SeedOutput:
+    """Build a minimal SeedOutput for testing context functions."""
+    return SeedOutput(
+        dilemmas=dilemmas or [],
+        paths=paths or [],
+    )
+
+
+def _dilemma(
+    dilemma_id: str,
+    explored: list[str] | None = None,
+    unexplored: list[str] | None = None,
+) -> DilemmaDecision:
+    return DilemmaDecision(
+        dilemma_id=dilemma_id,
+        explored=explored or ["answer_a"],
+        unexplored=unexplored or [],
+    )
+
+
+def _path(path_id: str, dilemma_id: str, answer_id: str) -> Path:
+    return Path(
+        path_id=path_id,
+        name=f"Path {answer_id}",
+        dilemma_id=dilemma_id,
+        answer_id=answer_id,
+        path_importance="major",
+        description=f"Explores {answer_id}",
+    )
+
+
+class TestFormatDilemmaAnalysisContext:
+    """Tests for format_dilemma_analysis_context."""
+
+    def test_empty_dilemmas_returns_empty(self) -> None:
+        """No dilemmas returns empty string."""
+        result = format_dilemma_analysis_context(_seed_output())
+        assert result == ""
+
+    def test_formats_surviving_dilemmas(self) -> None:
+        """Two dilemmas with paths produce formatted markdown."""
+        seed = _seed_output(
+            dilemmas=[
+                _dilemma("alpha", explored=["trust", "betray"], unexplored=[]),
+                _dilemma("beta", explored=["help"], unexplored=["ignore"]),
+            ],
+            paths=[
+                _path("path::alpha__trust", "alpha", "trust"),
+                _path("path::alpha__betray", "alpha", "betray"),
+                _path("path::beta__help", "beta", "help"),
+            ],
+        )
+        result = format_dilemma_analysis_context(seed)
+        assert "## Dilemma Summary" in result
+        assert "dilemma::alpha" in result
+        assert "dilemma::beta" in result
+        assert "paths=2" in result  # alpha has 2 paths
+        assert "paths=1" in result  # beta has 1 path
+
+    def test_includes_valid_ids_section(self) -> None:
+        """Output includes Valid Dilemma IDs section."""
+        seed = _seed_output(dilemmas=[_dilemma("gamma")])
+        result = format_dilemma_analysis_context(seed)
+        assert "### Valid Dilemma IDs" in result
+        assert "`dilemma::gamma`" in result
+
+    def test_path_count_per_dilemma(self) -> None:
+        """Path counts are correctly computed per dilemma."""
+        seed = _seed_output(
+            dilemmas=[_dilemma("only_one", explored=["a", "b"])],
+            paths=[
+                _path("path::only_one__a", "only_one", "a"),
+                _path("path::only_one__b", "only_one", "b"),
+            ],
+        )
+        result = format_dilemma_analysis_context(seed)
+        assert "paths=2" in result
+
+
+class TestFormatInteractionCandidatesContext:
+    """Tests for format_interaction_candidates_context."""
+
+    def _graph_with_dilemmas(self, dilemma_entities: dict[str, list[str]]) -> Graph:
+        """Build a graph with dilemma nodes having central_entity_ids."""
+        graph = Graph.empty()
+        for did, entities in dilemma_entities.items():
+            graph.create_node(
+                f"dilemma::{did}",
+                {
+                    "type": "dilemma",
+                    "raw_id": did,
+                    "central_entity_ids": entities,
+                },
+            )
+        return graph
+
+    def test_shared_entity_pair_found(self) -> None:
+        """Two dilemmas sharing an entity produce a candidate pair."""
+        graph = self._graph_with_dilemmas(
+            {
+                "alpha": ["entity::hero", "entity::castle"],
+                "beta": ["entity::hero", "entity::forest"],
+            }
+        )
+        seed = _seed_output(dilemmas=[_dilemma("alpha"), _dilemma("beta")])
+        result = format_interaction_candidates_context(seed, graph)
+        assert "### Candidate Pairs" in result
+        assert "dilemma::alpha" in result
+        assert "dilemma::beta" in result
+        assert "hero" in result
+
+    def test_no_shared_entities_returns_no_candidates(self) -> None:
+        """Disjoint entities produce no-candidates message."""
+        graph = self._graph_with_dilemmas(
+            {
+                "alpha": ["entity::hero"],
+                "beta": ["entity::villain"],
+            }
+        )
+        seed = _seed_output(dilemmas=[_dilemma("alpha"), _dilemma("beta")])
+        result = format_interaction_candidates_context(seed, graph)
+        assert "No candidate pairs" in result
+
+    def test_single_dilemma_returns_no_candidates(self) -> None:
+        """Fewer than 2 dilemmas cannot have pairs."""
+        graph = self._graph_with_dilemmas({"alpha": ["entity::hero"]})
+        seed = _seed_output(dilemmas=[_dilemma("alpha")])
+        result = format_interaction_candidates_context(seed, graph)
+        assert "No candidate pairs" in result

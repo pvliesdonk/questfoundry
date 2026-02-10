@@ -782,6 +782,121 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
     }
 
 
+def format_dilemma_analysis_context(seed_output: SeedOutput) -> str:
+    """Format surviving dilemmas as context for convergence analysis (Section 7).
+
+    Builds a brief listing each surviving dilemma with its question,
+    explored/unexplored answers, and path count. Used as the ``brief``
+    parameter when calling ``serialize_to_artifact`` for Section 7.
+
+    Args:
+        seed_output: Pruned SEED output with surviving dilemmas and paths.
+
+    Returns:
+        Formatted markdown context, or empty string if no dilemmas.
+    """
+    if not seed_output.dilemmas:
+        return ""
+
+    paths_per_dilemma = count_paths_per_dilemma(seed_output)
+
+    dilemma_lines: list[str] = []
+    for d in sorted(seed_output.dilemmas, key=lambda x: x.dilemma_id):
+        raw_id = strip_scope_prefix(d.dilemma_id)
+        path_count = paths_per_dilemma.get(raw_id, 0)
+        explored = ", ".join(d.explored) if d.explored else "(none)"
+        unexplored = ", ".join(d.unexplored) if d.unexplored else "(none)"
+        dilemma_lines.append(
+            f"- `dilemma::{raw_id}`: explored=[{explored}], "
+            f"unexplored=[{unexplored}], paths={path_count}"
+        )
+
+    valid_ids = [f"`dilemma::{strip_scope_prefix(d.dilemma_id)}`" for d in seed_output.dilemmas]
+
+    lines = [
+        "## Dilemma Summary",
+        "",
+        *dilemma_lines,
+        "",
+        "### Valid Dilemma IDs",
+        "",
+        "You MUST use only these dilemma IDs: " + ", ".join(sorted(valid_ids)),
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def format_interaction_candidates_context(
+    seed_output: SeedOutput,
+    graph: Graph,
+) -> str:
+    """Format pre-filtered candidate pairs for interaction analysis (Section 8).
+
+    Reads ``central_entity_ids`` from brainstorm dilemma nodes in the graph,
+    filters to surviving dilemmas, and computes candidate pairs that share
+    at least one central entity.
+
+    Args:
+        seed_output: Pruned SEED output with surviving dilemmas.
+        graph: Graph containing brainstorm dilemma nodes with central_entity_ids.
+
+    Returns:
+        Formatted markdown context with candidate pairs, or a message
+        indicating no candidates if fewer than 2 dilemmas or no shared entities.
+    """
+    surviving_ids = {strip_scope_prefix(d.dilemma_id) for d in seed_output.dilemmas}
+
+    if len(surviving_ids) < 2:
+        return "No candidate pairs — fewer than 2 surviving dilemmas. Return an empty list."
+
+    # Read central_entity_ids from graph dilemma nodes
+    dilemma_entities: dict[str, set[str]] = {}
+    for raw_id in sorted(surviving_ids):
+        node_id = f"{SCOPE_DILEMMA}::{raw_id}"
+        node = graph.get_node(node_id)
+        if node is None:
+            continue
+        central = node.get("central_entity_ids", [])
+        # Strip scope prefixes for readability
+        dilemma_entities[raw_id] = {strip_scope_prefix(eid) for eid in central}
+
+    # Compute candidate pairs (shared central entities)
+    candidate_pairs: list[tuple[str, str, list[str]]] = []
+    sorted_ids = sorted(dilemma_entities.keys())
+    for i, id_a in enumerate(sorted_ids):
+        for id_b in sorted_ids[i + 1 :]:
+            shared = dilemma_entities[id_a] & dilemma_entities[id_b]
+            if shared:
+                candidate_pairs.append((id_a, id_b, sorted(shared)))
+
+    if not candidate_pairs:
+        return "No candidate pairs — no dilemmas share central entities. Return an empty list."
+
+    pair_lines = [
+        f"- `dilemma::{a}` + `dilemma::{b}` (shared: {', '.join(entities)})"
+        for a, b, entities in candidate_pairs
+    ]
+
+    valid_ids = [f"`dilemma::{rid}`" for rid in sorted(surviving_ids)]
+
+    lines = [
+        "## Interaction Candidates",
+        "",
+        "Only consider these pre-filtered pairs (they share central entities).",
+        "Do NOT invent pairs outside this list.",
+        "",
+        "### Candidate Pairs",
+        "",
+        *pair_lines,
+        "",
+        "### Valid Dilemma IDs",
+        "",
+        "You MUST use only these dilemma IDs: " + ", ".join(valid_ids),
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def check_structural_completeness(
     output: dict[str, Any],
     expected: dict[str, int],
