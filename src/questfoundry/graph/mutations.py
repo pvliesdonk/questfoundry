@@ -23,9 +23,12 @@ from questfoundry.graph.context import (
     parse_scoped_id,
     strip_scope_prefix,
 )
+from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
+
+log = get_logger(__name__)
 
 # Display limits for error messages
 _MAX_ERRORS_DISPLAY = 8
@@ -1790,6 +1793,54 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 "convergence_points": sketch.get("convergence_points", []),
                 "residue_notes": sketch.get("residue_notes", []),
             },
+        )
+
+    # Store convergence analysis on dilemma nodes (from sections 7+8)
+    analysis_by_id: dict[str, dict[str, Any]] = {}
+    for analysis in output.get("dilemma_analyses", []):
+        raw_did = analysis.get("dilemma_id", "")
+        analysis_by_id[raw_did] = analysis
+
+    if analysis_by_id:
+        for dilemma_decision in output.get("dilemmas", []):
+            raw_id = dilemma_decision.get("dilemma_id", "")
+            dilemma_node_id = _prefix_id("dilemma", raw_id)
+            if not graph.has_node(dilemma_node_id):
+                continue
+            analysis = analysis_by_id.get(raw_id)
+            if analysis is None:
+                log.warning(
+                    "dilemma_analysis_missing",
+                    dilemma_id=raw_id,
+                    fallback="soft/2",
+                )
+            data = analysis or {}
+            graph.update_node(
+                dilemma_node_id,
+                convergence_policy=data.get("convergence_policy", "soft"),
+                payoff_budget=data.get("payoff_budget", 2),
+            )
+
+    # Create interaction constraint edges between dilemma pairs
+    for constraint in output.get("interaction_constraints", []):
+        a_raw = constraint.get("dilemma_a", "")
+        b_raw = constraint.get("dilemma_b", "")
+        a_node = _prefix_id("dilemma", a_raw)
+        b_node = _prefix_id("dilemma", b_raw)
+        if not graph.has_node(a_node) or not graph.has_node(b_node):
+            log.warning(
+                "interaction_constraint_edge_skipped",
+                dilemma_a=a_raw,
+                dilemma_b=b_raw,
+                reason="node_missing",
+            )
+            continue
+        graph.add_edge(
+            "interaction_constraint",
+            a_node,
+            b_node,
+            constraint_type=constraint.get("constraint_type", "shared_entity"),
+            description=constraint.get("description", ""),
         )
 
 

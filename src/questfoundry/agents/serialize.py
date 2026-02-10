@@ -491,6 +491,8 @@ _REQUIRED_SECTION_PROMPT_KEYS = [
     "beats_prompt",
     "per_path_beats_prompt",
     "convergence_prompt",
+    "dilemma_analyses_prompt",
+    "interaction_constraints_prompt",
 ]
 
 
@@ -539,6 +541,8 @@ def _load_seed_section_prompts() -> dict[str, str]:
         "beats": data["beats_prompt"],
         "per_path_beats": data["per_path_beats_prompt"],
         "convergence": data["convergence_prompt"],
+        "dilemma_analyses": data["dilemma_analyses_prompt"],
+        "interaction_constraints": data["interaction_constraints_prompt"],
     }
 
 
@@ -1525,3 +1529,151 @@ async def serialize_seed_as_function(
         tokens_used=total_tokens,
         semantic_errors=[],
     )
+
+
+async def serialize_post_prune_analysis(
+    model: BaseChatModel,
+    pruned_artifact: SeedOutput,
+    graph: Graph,
+    provider_name: str | None = None,
+    max_retries: int = 3,
+    callbacks: list[BaseCallbackHandler] | None = None,
+    on_phase_progress: PhaseProgressFn | None = None,
+) -> tuple[list[Any], list[Any], int, int]:
+    """Run post-prune convergence analysis (Sections 7+8).
+
+    Classifies each surviving dilemma's convergence policy and identifies
+    pairwise dilemma interactions. Runs AFTER prune so only surviving
+    dilemmas/paths are analyzed.
+
+    Soft failure: if either section's LLM call fails, logs a WARNING
+    and returns empty defaults for that section.
+
+    Args:
+        model: LLM model for structured output.
+        pruned_artifact: SEED output after pruning.
+        graph: Graph with brainstorm dilemma nodes (for central_entity_ids).
+        provider_name: Provider name for structured output strategy.
+        max_retries: Max retries per serialize call.
+        callbacks: LangChain callbacks.
+        on_phase_progress: Progress callback.
+
+    Returns:
+        Tuple of (dilemma_analyses, interaction_constraints, tokens_used, llm_calls).
+    """
+    from questfoundry.graph.context import (
+        format_dilemma_analysis_context,
+        format_interaction_candidates_context,
+        strip_scope_prefix,
+    )
+    from questfoundry.models.seed import (
+        DilemmaAnalysisSection,
+        InteractionConstraintsSection,
+    )
+
+    total_tokens = 0
+    llm_calls = 0
+
+    # Early return: nothing to analyze
+    if not pruned_artifact.dilemmas:
+        log.debug("post_prune_analysis_skipped", reason="no_dilemmas")
+        return [], [], 0, 0
+
+    prompts = _load_seed_section_prompts()
+
+    # --- Section 7: Dilemma Convergence Analysis ---
+    dilemma_analyses: list[Any] = []
+    try:
+        dilemma_context = format_dilemma_analysis_context(pruned_artifact)
+        section7_prompt = prompts["dilemma_analyses"].format(dilemma_context=dilemma_context)
+
+        if on_phase_progress is not None:
+            on_phase_progress("Classifying dilemma convergence", "section_7", "")
+
+        section7_result, section7_tokens = await serialize_to_artifact(
+            model=model,
+            brief=dilemma_context,
+            schema=DilemmaAnalysisSection,
+            provider_name=provider_name,
+            max_retries=max_retries,
+            system_prompt=section7_prompt,
+            callbacks=callbacks,
+            stage="seed",
+        )
+        total_tokens += section7_tokens
+        llm_calls += 1
+        dilemma_analyses = [a.model_dump() for a in section7_result.dilemma_analyses]
+        log.info(
+            "post_prune_section7_complete",
+            analyses=len(dilemma_analyses),
+            tokens=section7_tokens,
+        )
+    except Exception as e:
+        log.warning(
+            "seed_analysis_defaulted",
+            section="dilemma_analyses",
+            reason="serialization_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+
+    # --- Section 8: Interaction Constraints ---
+    interaction_constraints: list[Any] = []
+    try:
+        candidates_context = format_interaction_candidates_context(pruned_artifact, graph)
+
+        # Short-circuit: no candidate pairs → skip LLM call
+        if "No candidate pairs" in candidates_context:
+            log.debug("post_prune_section8_skipped", reason="no_candidates")
+        else:
+            if on_phase_progress is not None:
+                on_phase_progress("Identifying dilemma interactions", "section_8", "")
+
+            section8_prompt = prompts["interaction_constraints"].format(
+                candidate_pairs_context=candidates_context
+            )
+
+            section8_result, section8_tokens = await serialize_to_artifact(
+                model=model,
+                brief=candidates_context,
+                schema=InteractionConstraintsSection,
+                provider_name=provider_name,
+                max_retries=max_retries,
+                system_prompt=section8_prompt,
+                callbacks=callbacks,
+                stage="seed",
+            )
+            total_tokens += section8_tokens
+            llm_calls += 1
+
+            # Validate: reject pairs not in candidate set
+            surviving_ids = {strip_scope_prefix(d.dilemma_id) for d in pruned_artifact.dilemmas}
+            valid_constraints = []
+            for c in section8_result.interaction_constraints:
+                a_raw = strip_scope_prefix(c.dilemma_a)
+                b_raw = strip_scope_prefix(c.dilemma_b)
+                if a_raw in surviving_ids and b_raw in surviving_ids:
+                    valid_constraints.append(c.model_dump())
+                else:
+                    log.warning(
+                        "interaction_constraint_rejected",
+                        dilemma_a=c.dilemma_a,
+                        dilemma_b=c.dilemma_b,
+                        reason="pair_not_in_candidate_set",
+                    )
+            interaction_constraints = valid_constraints
+            log.info(
+                "post_prune_section8_complete",
+                constraints=len(interaction_constraints),
+                tokens=section8_tokens,
+            )
+    except Exception as e:
+        log.warning(
+            "seed_analysis_defaulted",
+            section="interaction_constraints",
+            reason="serialization_failed",
+            error=str(e),
+            error_type=type(e).__name__,
+        )
+
+    return dilemma_analyses, interaction_constraints, total_tokens, llm_calls
