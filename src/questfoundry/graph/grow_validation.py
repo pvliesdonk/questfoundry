@@ -442,7 +442,12 @@ def check_passage_dag_cycles(graph: Graph) -> ValidationCheck:
 def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
     """Check narrative pacing heuristics around commits beats.
 
-    For each path, checks:
+    The player walks the *arc* sequence (all beats from all paths in the arc),
+    not individual path beats. Measuring commits position against path-local
+    beats produces false positives on short branch paths that sit inside
+    longer arcs.
+
+    For each path, checks against its arc's beat sequence:
     1. commits too early (<3 beats from arc start)
     2. No reveals/advances before commits (no buildup)
     3. commits too late (final 20% of arc)
@@ -453,8 +458,13 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
     path_nodes = graph.get_nodes_by_type("path")
     beat_nodes = graph.get_nodes_by_type("beat")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    arc_nodes = graph.get_nodes_by_type("arc")
 
     if not path_nodes or not beat_nodes:
+        return []
+
+    # No arcs = pre-GROW or incomplete graph; skip timing checks
+    if not arc_nodes:
         return []
 
     # Build path → dilemma node ID mapping for beat impact comparison
@@ -466,41 +476,38 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
             if prefixed in dilemma_nodes:
                 path_dilemma[path_id] = prefixed
 
-    # Build path → beats mapping (ordered by requires)
-    path_beats: dict[str, list[str]] = {}
-    belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
-    for edge in belongs_to_edges:
-        beat_id = edge["from"]
-        path_id = edge["to"]
-        if beat_id in beat_nodes:
-            path_beats.setdefault(path_id, []).append(beat_id)
-
-    # Sort beats within each path by topological order if possible.
-    # Import here to avoid circular dependency (grow_algorithms imports Graph types).
-    from questfoundry.graph.grow_algorithms import topological_sort_beats
-
-    for path_id in path_beats:
-        try:
-            path_beats[path_id] = topological_sort_beats(graph, path_beats[path_id])
-        except ValueError:
-            path_beats[path_id] = sorted(path_beats[path_id])
+    # Build path → arc sequence mapping (prefer spine arc)
+    path_to_arc_seq: dict[str, list[str]] = {}
+    for _arc_id, arc_data in arc_nodes.items():
+        seq = arc_data.get("sequence", [])
+        is_spine = arc_data.get("arc_type") == "spine"
+        for path_raw in arc_data.get("paths", []):
+            path_id = normalize_scoped_id(path_raw, "path")
+            if is_spine:
+                path_to_arc_seq[path_id] = seq  # spine takes priority
+            elif path_id not in path_to_arc_seq:
+                path_to_arc_seq[path_id] = seq  # branch as fallback
 
     checks: list[ValidationCheck] = []
 
-    for path_id, beat_sequence in sorted(path_beats.items()):
+    for path_id in sorted(path_nodes):
         if path_id not in path_dilemma:
             continue
         dilemma_node_id = path_dilemma[path_id]
         path_raw = path_nodes[path_id].get("raw_id", path_id)
 
-        # Find commits beat index and buildup beats
+        # Get arc sequence for this path
+        arc_seq = path_to_arc_seq.get(path_id)
+        if not arc_seq or len(arc_seq) < 2:
+            continue
+
+        # Scan arc sequence for this dilemma's commits/buildup beats
         commits_idx: int | None = None
         last_buildup_idx: int | None = None
 
-        for idx, beat_id in enumerate(beat_sequence):
+        for idx, beat_id in enumerate(arc_seq):
             beat_data = beat_nodes.get(beat_id, {})
-            impacts = beat_data.get("dilemma_impacts", [])
-            for impact in impacts:
+            for impact in beat_data.get("dilemma_impacts", []):
                 if impact.get("dilemma_id") != dilemma_node_id:
                     continue
                 effect = impact.get("effect", "")
@@ -512,9 +519,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
         if commits_idx is None:
             continue
 
-        total_beats = len(beat_sequence)
-        if total_beats < 2:
-            continue
+        total_beats = len(arc_seq)
 
         # Check 1: commits too early
         if commits_idx < MIN_BEATS_BEFORE_COMMITS:
@@ -522,7 +527,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
                 ValidationCheck(
                     name="commits_timing",
                     severity="warn",
-                    message=f"Path '{path_raw}': commits at beat {commits_idx + 1}/{total_beats} (too early, <{MIN_BEATS_BEFORE_COMMITS} beats)",
+                    message=f"Path '{path_raw}': commits at arc position {commits_idx + 1}/{total_beats} (too early, <{MIN_BEATS_BEFORE_COMMITS} beats of setup)",
                 )
             )
 
@@ -543,7 +548,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
                 ValidationCheck(
                     name="commits_timing",
                     severity="warn",
-                    message=f"Path '{path_raw}': commits at beat {commits_idx + 1}/{total_beats} (too late, >80%)",
+                    message=f"Path '{path_raw}': commits at arc position {commits_idx + 1}/{total_beats} (too late, >80%)",
                 )
             )
 
