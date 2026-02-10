@@ -740,6 +740,15 @@ class TestSerializeResult:
             result.tokens_used = 200  # type: ignore[misc]
 
 
+# Mock dilemma decision for tests that need non-empty dilemmas to trigger
+# per-dilemma path and per-path beat serialization in the section loop.
+_MOCK_DILEMMA = {
+    "dilemma_id": "test_dilemma",
+    "explored": ["alt1"],
+    "unexplored": [],
+}
+
+
 class TestSerializeSeedAsFunction:
     """Tests for serialize_seed_as_function."""
 
@@ -766,16 +775,19 @@ class TestSerializeSeedAsFunction:
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 15),  # Returns (paths_list, tokens)
+            ),
+            patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),  # Returns (beats_list, tokens)
             ),
         ):
-            # Per-path serialization: entities, dilemmas, paths, consequences, convergence
-            # (beats handled separately by _serialize_beats_per_path)
+            # Sections: entities, dilemmas, consequences, convergence
+            # (paths handled by _serialize_paths_per_dilemma, beats by _serialize_beats_per_path)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
-                (MagicMock(model_dump=lambda: {"paths": [mock_path]}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (
                     MagicMock(
@@ -798,8 +810,8 @@ class TestSerializeSeedAsFunction:
                 assert result.success is True
                 assert result.artifact is not None
                 assert result.semantic_errors == []
-                # 5 sections * 10 tokens + 20 from beats
-                assert result.tokens_used == 70
+                # 4 sections * 10 tokens + 15 from paths + 20 from beats
+                assert result.tokens_used == 75
 
     @pytest.mark.asyncio
     async def test_returns_result_with_errors_when_semantic_validation_fails(self) -> None:
@@ -822,15 +834,18 @@ class TestSerializeSeedAsFunction:
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([], 15),
+            ),
+            patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),
             ),
         ):
             mock_serialize.side_effect = [
-                # Initial 5 sections (beats handled separately)
+                # Initial 4 sections (paths + beats handled separately)
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
-                (MagicMock(model_dump=lambda: {"paths": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (
                     MagicMock(
@@ -840,9 +855,6 @@ class TestSerializeSeedAsFunction:
                     ),
                     10,
                 ),
-                # Semantic retry calls for paths section (max_semantic_retries=2)
-                (MagicMock(model_dump=lambda: {"paths": []}), 10),
-                (MagicMock(model_dump=lambda: {"paths": []}), 10),
             ]
 
             with patch(
@@ -870,15 +882,18 @@ class TestSerializeSeedAsFunction:
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([], 15),
+            ),
+            patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),
             ),
         ):
-            # 5 sections (beats handled separately)
+            # 4 sections (paths + beats handled separately)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
-                (MagicMock(model_dump=lambda: {"paths": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (
                     MagicMock(
@@ -922,20 +937,20 @@ class TestSerializeSeedAsFunction:
 
         def create_section_mock(section_name: str) -> MagicMock:
             """Create a mock with model_dump returning the section data."""
-            return MagicMock(model_dump=lambda: {section_name: []})
+            data = [_MOCK_DILEMMA] if section_name == "dilemmas" else []
+            return MagicMock(model_dump=lambda d=data, s=section_name: {s: d})
 
         def mock_serialize_side_effect(*_args, **_kwargs):
             call_count[0] += 1
-            # 5 sections (beats handled separately), then retries
+            # 4 sections (paths + beats handled separately), then retries
             section_map = {
                 1: "entities",
                 2: "dilemmas",
-                3: "paths",
-                4: "consequences",
-                5: "convergence_sketch",
+                3: "consequences",
+                4: "convergence_sketch",
                 # Semantic retry calls (2 retries for entities section)
+                5: "entities",
                 6: "entities",
-                7: "entities",
             }
             section = section_map.get(call_count[0], "unknown")
             if section == "convergence_sketch":
@@ -955,6 +970,10 @@ class TestSerializeSeedAsFunction:
                 side_effect=mock_serialize_side_effect,
             ),
             patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([], 15),
+            ),
+            patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
                 return_value=([], 20),
             ),
@@ -967,8 +986,8 @@ class TestSerializeSeedAsFunction:
                 max_semantic_retries=2,
             )
 
-            # 5 initial + 2 retries for entities (max_semantic_retries=2)
-            assert call_count[0] == 7
+            # 4 initial + 2 retries for entities (max_semantic_retries=2)
+            assert call_count[0] == 6
             # Still fails because validate always returns errors in this mock
             assert result.success is False
             assert len(result.semantic_errors) == 1
@@ -996,13 +1015,12 @@ class TestSerializeSeedAsFunction:
 
         def mock_serialize_side_effect(*_args, **_kwargs):
             call_count[0] += 1
-            # 5 sections (beats handled separately)
+            # 4 sections (paths + beats handled separately)
             section_map = {
                 1: "entities",
                 2: "dilemmas",
-                3: "paths",
-                4: "consequences",
-                5: "convergence_sketch",
+                3: "consequences",
+                4: "convergence_sketch",
             }
             section = section_map.get(call_count[0], "unknown")
             if section == "convergence_sketch":
@@ -1014,12 +1032,17 @@ class TestSerializeSeedAsFunction:
                     ),
                     10,
                 )
-            return (MagicMock(model_dump=lambda s=section: {s: []}), 10)
+            data = [_MOCK_DILEMMA] if section == "dilemmas" else []
+            return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10)
 
         with (
             patch(
                 "questfoundry.agents.serialize.serialize_to_artifact",
                 side_effect=mock_serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([], 15),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
@@ -1034,7 +1057,7 @@ class TestSerializeSeedAsFunction:
             )
 
             # No retries — corrections not possible (empty available list)
-            assert call_count[0] == 5
+            assert call_count[0] == 4
             assert result.success is False
             assert len(result.semantic_errors) == 1
 
@@ -1062,16 +1085,15 @@ class TestSerializeSeedAsFunction:
 
         def mock_serialize_side_effect(*_args, **_kwargs):
             call_count[0] += 1
-            # 5 sections (beats handled separately)
+            # 4 sections (paths + beats handled separately)
             section_map = {
                 1: "entities",
                 2: "dilemmas",
-                3: "paths",
-                4: "consequences",
-                5: "convergence_sketch",
-                # Retry calls for entities (calls 6, 7 after max_semantic_retries=2)
+                3: "consequences",
+                4: "convergence_sketch",
+                # Retry calls for entities (calls 5, 6 after max_semantic_retries=2)
+                5: "entities",
                 6: "entities",
-                7: "entities",
             }
             section = section_map.get(call_count[0], "unknown")
             if section == "convergence_sketch":
@@ -1083,12 +1105,17 @@ class TestSerializeSeedAsFunction:
                     ),
                     10,
                 )
-            return (MagicMock(model_dump=lambda s=section: {s: []}), 10)
+            data = [_MOCK_DILEMMA] if section == "dilemmas" else []
+            return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10)
 
         with (
             patch(
                 "questfoundry.agents.serialize.serialize_to_artifact",
                 side_effect=mock_serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([], 15),
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
@@ -1104,8 +1131,8 @@ class TestSerializeSeedAsFunction:
             )
 
             # Should retry entities section for COMPLETENESS errors
-            # 5 initial sections + 2 retries for entities = 7 calls
-            assert call_count[0] == 7
+            # 4 initial sections + 2 retries for entities = 6 calls
+            assert call_count[0] == 6
             assert result.success is False
             assert len(result.semantic_errors) == 1
 
@@ -1274,6 +1301,10 @@ class TestBeatRetryAndContextRefresh:
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 15),
+            ),
+            patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
                 new=mock_beats,
             ),
@@ -1282,11 +1313,10 @@ class TestBeatRetryAndContextRefresh:
                 side_effect=mock_validate,
             ),
         ):
-            # 5 sections (beats handled separately)
+            # 4 sections (paths + beats handled separately)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
-                (MagicMock(model_dump=lambda: {"paths": [mock_path]}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (
                     MagicMock(
@@ -1312,12 +1342,23 @@ class TestBeatRetryAndContextRefresh:
 
     @pytest.mark.asyncio
     async def test_path_retry_refreshes_context(self) -> None:
-        """Should refresh brief_with_paths when paths are retried."""
+        """Should refresh brief_with_paths when paths are retried via per-dilemma."""
         from questfoundry.agents.serialize import serialize_seed_as_function
         from questfoundry.graph.mutations import SeedValidationError
 
         mock_model = MagicMock()
         mock_graph = MagicMock()
+
+        mock_path = {
+            "path_id": "path::test_dilemma__alt1",
+            "name": "Test Path",
+            "dilemma_id": "dilemma::test_dilemma",
+            "answer_id": "alt1",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
+            "description": "desc",
+            "consequence_ids": [],
+        }
 
         # Path serialization error (semantic)
         path_errors = [
@@ -1329,58 +1370,11 @@ class TestBeatRetryAndContextRefresh:
             )
         ]
 
-        # Track briefs used in serialize_to_artifact calls
-        briefs_used = []
+        path_call_count = [0]
 
-        call_count = [0]
-
-        def mock_serialize_side_effect(*args, **kwargs):
-            call_count[0] += 1
-            brief = kwargs.get("brief", args[1] if len(args) > 1 else "")
-            briefs_used.append((call_count[0], brief[:50] if brief else ""))
-
-            section_map = {
-                1: "entities",
-                2: "dilemmas",
-                3: "paths",
-                4: "consequences",
-                5: "convergence_sketch",
-                # Retry call for paths
-                6: "paths",
-            }
-            section = section_map.get(call_count[0], "unknown")
-
-            if section == "convergence_sketch":
-                return (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                )
-            if section == "paths":
-                # Return a path so format_path_ids_context has something
-                return (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "paths": [
-                                {
-                                    "path_id": "path::test_dilemma__alt1",
-                                    "name": "Test Path",
-                                    "dilemma_id": "dilemma::test_dilemma",
-                                    "answer_id": "alt1",
-                                    "unexplored_answer_ids": [],
-                                    "path_importance": "major",
-                                    "description": "desc",
-                                    "consequence_ids": [],
-                                }
-                            ]
-                        }
-                    ),
-                    10,
-                )
-            return (MagicMock(model_dump=lambda s=section: {s: []}), 10)
+        async def mock_paths_fn(*_args, **_kwargs):
+            path_call_count[0] += 1
+            return ([mock_path], 15)
 
         validation_call_count = [0]
 
@@ -1390,10 +1384,37 @@ class TestBeatRetryAndContextRefresh:
                 return path_errors
             return []
 
+        call_count = [0]
+
+        def mock_serialize_side_effect(*_args, **_kwargs):
+            call_count[0] += 1
+            section_map = {
+                1: "entities",
+                2: "dilemmas",
+                3: "consequences",
+                4: "convergence_sketch",
+            }
+            section = section_map.get(call_count[0], "unknown")
+            if section == "convergence_sketch":
+                return (
+                    MagicMock(
+                        model_dump=lambda: {
+                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
+                        }
+                    ),
+                    10,
+                )
+            data = [_MOCK_DILEMMA] if section == "dilemmas" else []
+            return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10)
+
         with (
             patch(
                 "questfoundry.agents.serialize.serialize_to_artifact",
                 side_effect=mock_serialize_side_effect,
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                side_effect=mock_paths_fn,
             ),
             patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
@@ -1411,18 +1432,9 @@ class TestBeatRetryAndContextRefresh:
                 max_semantic_retries=2,
             )
 
-            # Path retry happened
-            assert call_count[0] == 6
+            # Path retry happened (initial + retry = 2 calls)
+            assert path_call_count[0] == 2
             assert result.success is True
-
-            # Verify context was refreshed with path IDs after path retry
-            # After the path retry (call 6), consequences brief should contain path context
-            # Check that at least one brief after call 3 contains path ID reference
-            assert len(briefs_used) >= 4
-            # The consequences call (4) should have had the original brief
-            # After path retry, any subsequent calls should have updated context
-            # Note: In this test structure, the retry happens at call 6, and the
-            # brief_with_paths update occurs during path retry processing
 
     @pytest.mark.asyncio
     async def test_beat_retry_failure_continues_gracefully(self) -> None:
@@ -1487,6 +1499,10 @@ class TestBeatRetryAndContextRefresh:
         with (
             patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize,
             patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 15),
+            ),
+            patch(
                 "questfoundry.agents.serialize._serialize_beats_per_path",
                 new=mock_beats,
             ),
@@ -1495,11 +1511,10 @@ class TestBeatRetryAndContextRefresh:
                 side_effect=mock_validate,
             ),
         ):
-            # 5 sections (beats handled separately)
+            # 4 sections (paths + beats handled separately)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
-                (MagicMock(model_dump=lambda: {"dilemmas": []}), 10),
-                (MagicMock(model_dump=lambda: {"paths": [mock_path]}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (
                     MagicMock(
