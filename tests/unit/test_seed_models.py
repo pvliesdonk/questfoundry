@@ -340,6 +340,13 @@ class TestInteractionConstraint:
         ic = InteractionConstraint(**_CONSTRAINT_KWARGS)
         assert ic.pair_key == "dilemma::alpha__dilemma::beta"
 
+    def test_self_referential_rejected(self) -> None:
+        """A constraint between a dilemma and itself is semantically invalid."""
+        with pytest.raises(ValidationError, match="cannot be the same"):
+            InteractionConstraint(
+                **{**_CONSTRAINT_KWARGS, "dilemma_b": _CONSTRAINT_KWARGS["dilemma_a"]}
+            )
+
     def test_empty_dilemma_a_rejected(self) -> None:
         with pytest.raises(ValidationError, match="dilemma_a"):
             InteractionConstraint(**{**_CONSTRAINT_KWARGS, "dilemma_a": ""})
@@ -434,6 +441,19 @@ class TestInteractionConstraintsSectionDedup:
             interaction_constraints=[_CONSTRAINT_KWARGS, reversed_kwargs]
         )
         assert len(section.interaction_constraints) == 1
+
+    def test_reversed_non_identical_duplicate_rejected(self) -> None:
+        """Reversed pair with different content is a conflict after normalization."""
+        reversed_different = {
+            **_CONSTRAINT_KWARGS,
+            "dilemma_a": _CONSTRAINT_KWARGS["dilemma_b"],
+            "dilemma_b": _CONSTRAINT_KWARGS["dilemma_a"],
+            "description": "A completely different narrative meaning.",
+        }
+        with pytest.raises(ValidationError, match="Duplicates found"):
+            InteractionConstraintsSection(
+                interaction_constraints=[_CONSTRAINT_KWARGS, reversed_different]
+            )
 
     def test_empty_accepted(self) -> None:
         section = InteractionConstraintsSection(interaction_constraints=[])

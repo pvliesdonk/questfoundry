@@ -310,7 +310,9 @@ class InteractionConstraint(BaseModel):
     constraint_type: ConstraintType = Field(
         description="Kind of interaction (shared_entity|causal_chain|resource_conflict)",
     )
-    description: str = Field(min_length=1, description="Narrative meaning of the interaction")
+    description: str = Field(
+        min_length=1, max_length=500, description="Narrative meaning of the interaction"
+    )
     reasoning: str = Field(
         min_length=10,
         max_length=300,
@@ -318,8 +320,11 @@ class InteractionConstraint(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _normalize_pair_order(self) -> InteractionConstraint:
-        """Silently swap to canonical order (a < b)."""
+    def _validate_and_normalize_pair(self) -> InteractionConstraint:
+        """Reject self-referential pairs and normalize to canonical order (a < b)."""
+        if self.dilemma_a == self.dilemma_b:
+            msg = f"dilemma_a and dilemma_b cannot be the same: {self.dilemma_a}"
+            raise ValueError(msg)
         if self.dilemma_a > self.dilemma_b:
             self.dilemma_a, self.dilemma_b = self.dilemma_b, self.dilemma_a
         return self
