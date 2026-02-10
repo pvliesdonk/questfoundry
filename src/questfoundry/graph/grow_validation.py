@@ -478,7 +478,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
 
     # Build path → arc sequence mapping (prefer spine arc)
     path_to_arc_seq: dict[str, list[str]] = {}
-    for _arc_id, arc_data in arc_nodes.items():
+    for _arc_id, arc_data in sorted(arc_nodes.items()):
         seq = arc_data.get("sequence", [])
         is_spine = arc_data.get("arc_type") == "spine"
         for path_raw in arc_data.get("paths", []):
