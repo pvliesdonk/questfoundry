@@ -4197,3 +4197,96 @@ class TestCollapseLinearPassages:
 
         assert result.chains_collapsed == 0
         assert result.passages_removed == 0
+
+
+# ---------------------------------------------------------------------------
+# Hard-policy intersection rejection
+# ---------------------------------------------------------------------------
+
+
+class TestHardPolicyIntersectionRejection:
+    """check_intersection_compatibility rejects intersections involving hard-policy beats."""
+
+    def _make_two_dilemma_graph(
+        self,
+        d1_policy: str = "hard",
+        d2_policy: str = "soft",
+    ) -> Graph:
+        """Graph with 2 dilemmas, each with 1 path and 1 beat sharing a location."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "convergence_policy": d1_policy,
+                "payoff_budget": 3,
+            },
+        )
+        graph.create_node(
+            "dilemma::d2",
+            {
+                "type": "dilemma",
+                "raw_id": "d2",
+                "convergence_policy": d2_policy,
+                "payoff_budget": 2,
+            },
+        )
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1", "dilemma_id": "d1"})
+        graph.create_node("path::p2", {"type": "path", "raw_id": "p2", "dilemma_id": "d2"})
+        graph.create_node("beat::b1", {"type": "beat", "summary": "Scene A", "location": "tavern"})
+        graph.create_node("beat::b2", {"type": "beat", "summary": "Scene B", "location": "tavern"})
+        graph.add_edge("belongs_to", "beat::b1", "path::p1")
+        graph.add_edge("belongs_to", "beat::b2", "path::p2")
+        return graph
+
+    def test_hard_policy_beat_rejected(self) -> None:
+        """Intersection containing a hard-policy beat is rejected."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+
+        graph = self._make_two_dilemma_graph(d1_policy="hard", d2_policy="soft")
+        errors = check_intersection_compatibility(graph, ["beat::b1", "beat::b2"])
+        hard_errors = [e for e in errors if "hard_policy" in e.field_path]
+        assert len(hard_errors) == 1
+        assert "hard" in hard_errors[0].issue.lower()
+
+    def test_soft_policy_beats_accepted(self) -> None:
+        """Intersection of two soft-policy beats passes hard-policy check."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+
+        graph = self._make_two_dilemma_graph(d1_policy="soft", d2_policy="soft")
+        errors = check_intersection_compatibility(graph, ["beat::b1", "beat::b2"])
+        hard_errors = [e for e in errors if "hard_policy" in e.field_path]
+        assert not hard_errors
+
+    def test_flavor_policy_beats_accepted(self) -> None:
+        """Intersection of flavor-policy beats passes hard-policy check."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+
+        graph = self._make_two_dilemma_graph(d1_policy="flavor", d2_policy="flavor")
+        errors = check_intersection_compatibility(graph, ["beat::b1", "beat::b2"])
+        hard_errors = [e for e in errors if "hard_policy" in e.field_path]
+        assert not hard_errors
+
+    def test_no_policy_defaults_to_non_hard(self) -> None:
+        """Beats from dilemmas without convergence_policy pass the hard check."""
+        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
+
+        graph = self._make_two_dilemma_graph(d1_policy="soft", d2_policy="soft")
+        # Remove convergence_policy to simulate pre-policy graph
+        graph.update_node("dilemma::d1", convergence_policy=None)
+        graph.update_node("dilemma::d2", convergence_policy=None)
+        errors = check_intersection_compatibility(graph, ["beat::b1", "beat::b2"])
+        hard_errors = [e for e in errors if "hard_policy" in e.field_path]
+        assert not hard_errors
+
+    def test_build_candidates_excludes_hard(self) -> None:
+        """Hard-policy beats are excluded from intersection candidates."""
+        from questfoundry.graph.grow_algorithms import build_intersection_candidates
+
+        graph = self._make_two_dilemma_graph(d1_policy="hard", d2_policy="soft")
+        candidates = build_intersection_candidates(graph)
+        # Hard beat should be filtered out; only soft beat remains.
+        # A single beat can't form an intersection, so no candidates expected.
+        for c in candidates:
+            assert "beat::b1" not in c.beat_ids
