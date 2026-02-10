@@ -340,6 +340,34 @@ class TestBranchingStats:
         assert stats.fully_explored == 1
         assert stats.partially_explored == 0
 
+    def test_partially_explored_three_answers(self) -> None:
+        """A dilemma with 3 answers where only 2 have paths is partially explored."""
+        graph = Graph.empty()
+        graph.create_node("dilemma::d1", {"type": "dilemma", "question": "A, B, or C?"})
+        graph.create_node("answer::d1_a", {"type": "answer", "answer_id": "a"})
+        graph.create_node("answer::d1_b", {"type": "answer", "answer_id": "b"})
+        graph.create_node("answer::d1_c", {"type": "answer", "answer_id": "c"})
+        graph.add_edge("has_answer", "dilemma::d1", "answer::d1_a")
+        graph.add_edge("has_answer", "dilemma::d1", "answer::d1_b")
+        graph.add_edge("has_answer", "dilemma::d1", "answer::d1_c")
+
+        # Only 2 of 3 answers have paths
+        graph.create_node("path::pa", {"type": "path", "path_id": "pa", "dilemma_id": "d1"})
+        graph.create_node("path::pb", {"type": "path", "path_id": "pb", "dilemma_id": "d1"})
+        graph.add_edge("explores", "path::pa", "answer::d1_a")
+        graph.add_edge("explores", "path::pb", "answer::d1_b")
+        # answer::d1_c has no path
+
+        graph.create_node(
+            "passage::p0",
+            {"type": "passage", "raw_id": "p0", "from_beat": "beat::b0", "summary": "p0"},
+        )
+
+        stats = _branching_stats(graph)
+        assert stats is not None
+        assert stats.fully_explored == 0
+        assert stats.partially_explored == 1
+
 
 class TestCoverageStats:
     def test_entity_counts(self, tmp_path: Path) -> None:

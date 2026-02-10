@@ -256,8 +256,7 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
         answer_ids = answers_by_dilemma.get(did, [])
         answer_results: list[bool] = []
         for aid in answer_ids:
-            if answer_to_path.get(aid):
-                answer_results.append(True)
+            answer_results.append(bool(answer_to_path.get(aid)))
 
         if len(answer_results) >= 2 and all(answer_results):
             fully_explored += 1
@@ -370,7 +369,7 @@ def _branching_quality_score(
 
     variant_signatures: set[frozenset[str]] = set()
     for pid in ending_ids:
-        from_beat = passages[pid].get("from_beat") or passages[pid].get("primary_beat", "")
+        from_beat = passages[pid].get("from_beat") or passages[pid].get("primary_beat") or ""
         covering_arcs = beat_to_arcs.get(from_beat, [])
         sig: set[str] = set()
         for arc_id in covering_arcs:
