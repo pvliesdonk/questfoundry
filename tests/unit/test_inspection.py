@@ -313,6 +313,61 @@ class TestBranchingStats:
         assert stats is not None
         assert stats.start_passages == 1
 
+    def test_fully_explored_structural_no_prose(self) -> None:
+        """A dilemma with 2 answers both having paths is fully explored, even without prose."""
+        graph = Graph.empty()
+        # Dilemma with 2 answers
+        graph.create_node("dilemma::d1", {"type": "dilemma", "question": "A or B?"})
+        graph.create_node("answer::d1_a", {"type": "answer", "answer_id": "a"})
+        graph.create_node("answer::d1_b", {"type": "answer", "answer_id": "b"})
+        graph.add_edge("has_answer", "dilemma::d1", "answer::d1_a")
+        graph.add_edge("has_answer", "dilemma::d1", "answer::d1_b")
+
+        # Two paths exploring the two answers — no prose on passages
+        graph.create_node("path::pa", {"type": "path", "path_id": "pa", "dilemma_id": "d1"})
+        graph.create_node("path::pb", {"type": "path", "path_id": "pb", "dilemma_id": "d1"})
+        graph.add_edge("explores", "path::pa", "answer::d1_a")
+        graph.add_edge("explores", "path::pb", "answer::d1_b")
+
+        # Passages without prose (post-GROW, pre-FILL)
+        graph.create_node(
+            "passage::p0",
+            {"type": "passage", "raw_id": "p0", "from_beat": "beat::b0", "summary": "p0"},
+        )
+
+        stats = _branching_stats(graph)
+        assert stats is not None
+        assert stats.fully_explored == 1
+        assert stats.partially_explored == 0
+
+    def test_partially_explored_three_answers(self) -> None:
+        """A dilemma with 3 answers where only 2 have paths is partially explored."""
+        graph = Graph.empty()
+        graph.create_node("dilemma::d1", {"type": "dilemma", "question": "A, B, or C?"})
+        graph.create_node("answer::d1_a", {"type": "answer", "answer_id": "a"})
+        graph.create_node("answer::d1_b", {"type": "answer", "answer_id": "b"})
+        graph.create_node("answer::d1_c", {"type": "answer", "answer_id": "c"})
+        graph.add_edge("has_answer", "dilemma::d1", "answer::d1_a")
+        graph.add_edge("has_answer", "dilemma::d1", "answer::d1_b")
+        graph.add_edge("has_answer", "dilemma::d1", "answer::d1_c")
+
+        # Only 2 of 3 answers have paths
+        graph.create_node("path::pa", {"type": "path", "path_id": "pa", "dilemma_id": "d1"})
+        graph.create_node("path::pb", {"type": "path", "path_id": "pb", "dilemma_id": "d1"})
+        graph.add_edge("explores", "path::pa", "answer::d1_a")
+        graph.add_edge("explores", "path::pb", "answer::d1_b")
+        # answer::d1_c has no path
+
+        graph.create_node(
+            "passage::p0",
+            {"type": "passage", "raw_id": "p0", "from_beat": "beat::b0", "summary": "p0"},
+        )
+
+        stats = _branching_stats(graph)
+        assert stats is not None
+        assert stats.fully_explored == 0
+        assert stats.partially_explored == 1
+
 
 class TestCoverageStats:
     def test_entity_counts(self, tmp_path: Path) -> None:
@@ -482,3 +537,58 @@ class TestBranchingQualityScore:
         data = dataclasses.asdict(report)
         assert "branching_quality" in data
         assert data["branching_quality"] is not None
+
+    def test_ending_variants_merged_passage(self) -> None:
+        """Merged passages (primary_beat instead of from_beat) contribute to ending variants."""
+        graph = Graph.empty()
+        spine_beats = [f"beat::s{i}" for i in range(5)]
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": spine_beats,
+                "paths": ["path::canon"],
+            },
+        )
+        # Ending passage using merged passage format (from_beats + primary_beat, no from_beat)
+        graph.create_node(
+            "passage::ending",
+            {
+                "type": "passage",
+                "raw_id": "ending",
+                "from_beats": ["beat::s3", "beat::s4"],
+                "primary_beat": "beat::s4",
+                "summary": "The end",
+            },
+        )
+        # Non-ending passage with outgoing choice (so it's NOT a terminal)
+        graph.create_node(
+            "passage::mid",
+            {
+                "type": "passage",
+                "raw_id": "mid",
+                "from_beat": "beat::s2",
+                "summary": "Middle",
+            },
+        )
+        graph.create_node(
+            "choice::mid__ending",
+            {
+                "type": "choice",
+                "from_passage": "passage::mid",
+                "to_passage": "passage::ending",
+                "label": "Finish",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::mid__ending", "passage::mid")
+        graph.add_edge("choice_to", "choice::mid__ending", "passage::ending")
+
+        result = _branching_quality_score(graph, None)
+        assert result is not None
+        # The ending passage should be detected as a terminal (no outgoing choices)
+        assert result.terminal_count == 1
+        # Its primary_beat should map to the spine arc, contributing a codeword signature
+        assert result.ending_variants >= 1
