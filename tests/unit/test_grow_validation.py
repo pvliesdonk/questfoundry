@@ -13,8 +13,11 @@ from questfoundry.graph.grow_validation import (
     check_all_endings_reachable,
     check_all_passages_reachable,
     check_arc_divergence,
+    check_codeword_gate_coverage,
     check_commits_timing,
+    check_convergence_policy_compliance,
     check_dilemmas_resolved,
+    check_forward_path_reachability,
     check_gate_satisfiability,
     check_max_consecutive_linear,
     check_passage_dag_cycles,
@@ -1058,3 +1061,252 @@ class TestMaxConsecutiveLinear:
         report = run_all_checks(graph)
         check_names = [c.name for c in report.checks]
         assert "max_consecutive_linear" in check_names
+
+
+# ---------------------------------------------------------------------------
+# Convergence policy compliance
+# ---------------------------------------------------------------------------
+
+
+def _make_compliance_graph(
+    policy: str,
+    budget: int,
+    *,
+    shared_after_div: int = 0,
+    exclusive_count: int = 3,
+) -> Graph:
+    """Build a graph with spine + one branch arc for compliance testing.
+
+    Args:
+        policy: Convergence policy for the branch arc.
+        budget: payoff_budget for the branch arc.
+        shared_after_div: Number of spine beats shared after divergence.
+        exclusive_count: Number of beats exclusive to the branch.
+    """
+    graph = Graph.empty()
+    spine_beats = [f"beat::s{i}" for i in range(6)]
+    graph.create_node(
+        "arc::spine",
+        {
+            "type": "arc",
+            "arc_type": "spine",
+            "sequence": spine_beats,
+            "paths": ["path::canon"],
+        },
+    )
+    # Branch diverges after s1; has exclusive beats, then optionally shares
+    branch_seq = ["beat::s0", "beat::s1"]
+    for i in range(exclusive_count):
+        branch_seq.append(f"beat::b{i}")
+    for i in range(shared_after_div):
+        branch_seq.append(spine_beats[2 + i])
+    graph.create_node(
+        "arc::branch_0",
+        {
+            "type": "arc",
+            "arc_type": "branch",
+            "sequence": branch_seq,
+            "diverges_at": "beat::s1",
+            "convergence_policy": policy,
+            "payoff_budget": budget,
+            "paths": ["path::rebel"],
+        },
+    )
+    return graph
+
+
+class TestConvergencePolicyCompliance:
+    def test_hard_no_shared_passes(self) -> None:
+        graph = _make_compliance_graph("hard", 2, shared_after_div=0)
+        results = check_convergence_policy_compliance(graph)
+        assert len(results) == 1
+        assert results[0].severity == "pass"
+
+    def test_hard_shared_fails(self) -> None:
+        graph = _make_compliance_graph("hard", 2, shared_after_div=2)
+        results = check_convergence_policy_compliance(graph)
+        assert any(r.severity == "fail" for r in results)
+        assert "hard policy violated" in results[0].message
+
+    def test_soft_budget_met_passes(self) -> None:
+        graph = _make_compliance_graph("soft", 2, exclusive_count=3)
+        results = check_convergence_policy_compliance(graph)
+        assert all(r.severity == "pass" for r in results)
+
+    def test_soft_budget_not_met_warns(self) -> None:
+        graph = _make_compliance_graph("soft", 5, exclusive_count=2)
+        results = check_convergence_policy_compliance(graph)
+        assert any(r.severity == "warn" for r in results)
+        assert "2 exclusive" in results[0].message
+
+    def test_flavor_always_passes(self) -> None:
+        graph = _make_compliance_graph("flavor", 0, shared_after_div=3)
+        results = check_convergence_policy_compliance(graph)
+        assert all(r.severity == "pass" for r in results)
+
+    def test_no_policy_metadata_skipped(self) -> None:
+        """Arc without convergence_policy field passes silently."""
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::spine",
+            {"type": "arc", "arc_type": "spine", "sequence": ["b1", "b2"], "paths": []},
+        )
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "sequence": ["b1", "b3"],
+                "diverges_at": "b1",
+                "paths": [],
+            },
+        )
+        results = check_convergence_policy_compliance(graph)
+        assert all(r.severity == "pass" for r in results)
+        assert "No branch arcs with convergence metadata" in results[0].message
+
+    def test_no_arcs_passes(self) -> None:
+        graph = Graph.empty()
+        results = check_convergence_policy_compliance(graph)
+        assert results[0].severity == "pass"
+
+
+# ---------------------------------------------------------------------------
+# Codeword gate coverage
+# ---------------------------------------------------------------------------
+
+
+class TestCodewordGateCoverage:
+    def test_all_consumed_passes(self) -> None:
+        graph = Graph.empty()
+        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
+        graph.create_node(
+            "choice::a_b",
+            {
+                "type": "choice",
+                "from_passage": "passage::a",
+                "to_passage": "passage::b",
+                "label": "go",
+                "requires": ["codeword::cw1"],
+                "grants": [],
+            },
+        )
+        result = check_codeword_gate_coverage(graph)
+        assert result.severity == "pass"
+
+    def test_unconsumed_warns(self) -> None:
+        graph = Graph.empty()
+        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
+        graph.create_node("codeword::cw2", {"type": "codeword", "raw_id": "cw2"})
+        graph.create_node(
+            "choice::a_b",
+            {
+                "type": "choice",
+                "from_passage": "passage::a",
+                "to_passage": "passage::b",
+                "label": "go",
+                "requires": ["codeword::cw1"],
+                "grants": [],
+            },
+        )
+        result = check_codeword_gate_coverage(graph)
+        assert result.severity == "warn"
+        assert "1 of 2" in result.message
+        assert "codeword::cw2" in result.message
+
+    def test_no_codewords_passes(self) -> None:
+        graph = Graph.empty()
+        result = check_codeword_gate_coverage(graph)
+        assert result.severity == "pass"
+
+
+# ---------------------------------------------------------------------------
+# Forward path reachability
+# ---------------------------------------------------------------------------
+
+
+class TestForwardPathReachability:
+    def _make_passage_graph(self) -> Graph:
+        """Create a minimal passage graph for reachability tests."""
+        graph = Graph.empty()
+        for pid in ["a", "b", "c"]:
+            graph.create_node(
+                f"passage::{pid}",
+                {"type": "passage", "raw_id": pid, "from_beat": f"beat::{pid}", "summary": pid},
+            )
+        return graph
+
+    def test_ungated_path_passes(self) -> None:
+        graph = self._make_passage_graph()
+        graph.create_node(
+            "choice::a_b",
+            {
+                "type": "choice",
+                "from_passage": "passage::a",
+                "to_passage": "passage::b",
+                "label": "go",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::a_b", "passage::a")
+        result = check_forward_path_reachability(graph)
+        assert result.severity == "pass"
+
+    def test_all_gated_warns(self) -> None:
+        graph = self._make_passage_graph()
+        graph.create_node(
+            "choice::a_b",
+            {
+                "type": "choice",
+                "from_passage": "passage::a",
+                "to_passage": "passage::b",
+                "label": "go",
+                "requires": ["codeword::x"],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::a_b", "passage::a")
+        result = check_forward_path_reachability(graph)
+        assert result.severity == "warn"
+        assert "passage::a" in result.message
+
+    def test_ending_not_flagged(self) -> None:
+        """Ending passages (no outgoing choices) should not be flagged."""
+        graph = self._make_passage_graph()
+        # passage::a has no outgoing choices → it's an ending, not soft-locked
+        result = check_forward_path_reachability(graph)
+        assert result.severity == "pass"
+
+    def test_return_links_excluded(self) -> None:
+        """is_return choices should not count as forward paths."""
+        graph = self._make_passage_graph()
+        graph.create_node(
+            "choice::a_b",
+            {
+                "type": "choice",
+                "from_passage": "passage::a",
+                "to_passage": "passage::b",
+                "label": "return",
+                "requires": [],
+                "grants": [],
+                "is_return": True,
+            },
+        )
+        graph.add_edge("choice_from", "choice::a_b", "passage::a")
+        graph.create_node(
+            "choice::a_c",
+            {
+                "type": "choice",
+                "from_passage": "passage::a",
+                "to_passage": "passage::c",
+                "label": "go",
+                "requires": ["codeword::x"],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::a_c", "passage::a")
+        # Only non-return choice is gated, but the return link doesn't count
+        result = check_forward_path_reachability(graph)
+        assert result.severity == "warn"
+        assert "passage::a" in result.message

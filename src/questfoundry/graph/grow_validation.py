@@ -899,6 +899,189 @@ def check_max_consecutive_linear(graph: Graph, max_run: int = 2) -> ValidationCh
     )
 
 
+def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
+    """Verify branch arcs honor their declared convergence_policy.
+
+    For each branch arc with convergence metadata:
+    - ``hard``: no beats shared with spine after divergence point
+    - ``soft``: at least ``payoff_budget`` exclusive beats before convergence
+    - ``flavor``: always passes (no structural constraint)
+
+    Arcs without a ``convergence_policy`` field (pre-policy graphs) are skipped.
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+    if not arc_nodes:
+        return [
+            ValidationCheck(
+                name="convergence_policy_compliance",
+                severity="pass",
+                message="No arcs to check",
+            )
+        ]
+
+    spine_seq_set: set[str] = set()
+    for _arc_id, data in arc_nodes.items():
+        if data.get("arc_type") == "spine":
+            spine_seq_set = set(data.get("sequence", []))
+            break
+
+    violations: list[ValidationCheck] = []
+    checked = 0
+
+    for arc_id, data in sorted(arc_nodes.items()):
+        if data.get("arc_type") == "spine":
+            continue
+        policy = data.get("convergence_policy")
+        if policy is None:
+            continue  # pre-policy arc — skip
+
+        sequence: list[str] = data.get("sequence", [])
+        diverges_at = data.get("diverges_at")
+        if not sequence or not diverges_at:
+            continue
+
+        checked += 1
+        # Beats after the divergence point
+        try:
+            div_idx = sequence.index(diverges_at)
+        except ValueError:
+            continue
+        branch_after_div = sequence[div_idx + 1 :]
+
+        exclusive = [b for b in branch_after_div if b not in spine_seq_set]
+        shared_after = [b for b in branch_after_div if b in spine_seq_set]
+
+        if policy == "hard" and shared_after:
+            violations.append(
+                ValidationCheck(
+                    name="convergence_policy_compliance",
+                    severity="fail",
+                    message=(
+                        f"{arc_id}: hard policy violated — "
+                        f"{len(shared_after)} shared beat(s) after divergence"
+                    ),
+                )
+            )
+        elif policy == "soft":
+            budget = data.get("payoff_budget", 2)
+            if len(exclusive) < budget:
+                violations.append(
+                    ValidationCheck(
+                        name="convergence_policy_compliance",
+                        severity="warn",
+                        message=(
+                            f"{arc_id}: soft policy — "
+                            f"{len(exclusive)} exclusive beat(s), needs {budget}"
+                        ),
+                    )
+                )
+
+    if violations:
+        return violations
+    return [
+        ValidationCheck(
+            name="convergence_policy_compliance",
+            severity="pass",
+            message=f"All {checked} branch arc(s) comply with convergence policy"
+            if checked
+            else "No branch arcs with convergence metadata to check",
+        )
+    ]
+
+
+def check_codeword_gate_coverage(graph: Graph) -> ValidationCheck:
+    """Check that every codeword appears in at least one choice.requires gate.
+
+    Implements the "Residue Must Be Read" invariant (narrow scope):
+    only checks ``choice.requires`` gates. Does not check overlays,
+    ending scoring, or conditional prose.
+    """
+    codeword_nodes = graph.get_nodes_by_type("codeword")
+    if not codeword_nodes:
+        return ValidationCheck(
+            name="codeword_gate_coverage",
+            severity="pass",
+            message="No codewords in graph",
+        )
+
+    choice_nodes = graph.get_nodes_by_type("choice")
+    consumed: set[str] = set()
+    for choice_data in choice_nodes.values():
+        consumed.update(choice_data.get("requires") or [])
+
+    unconsumed = sorted(set(codeword_nodes.keys()) - consumed)
+    if not unconsumed:
+        return ValidationCheck(
+            name="codeword_gate_coverage",
+            severity="pass",
+            message=f"All {len(codeword_nodes)} codeword(s) gated by at least one choice",
+        )
+    return ValidationCheck(
+        name="codeword_gate_coverage",
+        severity="warn",
+        message=(
+            f"{len(unconsumed)} of {len(codeword_nodes)} codeword(s) not consumed "
+            f"by any choice.requires: {', '.join(unconsumed[:5])}"
+            f"{'...' if len(unconsumed) > 5 else ''}"
+        ),
+    )
+
+
+def check_forward_path_reachability(graph: Graph) -> ValidationCheck:
+    """Warn when a non-ending passage has only gated outgoing choices.
+
+    Catches soft-lock risks where ``requires`` wiring accidentally gates
+    ALL forward paths from a passage. Excludes ``is_return`` choices
+    (spoke-to-hub return links) from the forward-path count.
+
+    v1 simplification: does not check whether requires are already
+    satisfiable (would require path simulation).
+    """
+    choice_nodes = graph.get_nodes_by_type("choice")
+    if not choice_nodes:
+        return ValidationCheck(
+            name="forward_path_reachability",
+            severity="pass",
+            message="No choices in graph",
+        )
+
+    # Build from_passage → list of choice data
+    from_passage_choices: dict[str, list[dict[str, object]]] = {}
+    for choice_data in choice_nodes.values():
+        fp = choice_data.get("from_passage")
+        if fp:
+            from_passage_choices.setdefault(fp, []).append(choice_data)
+
+    # Identify endings (no outgoing choices at all, or only return links)
+    passages = graph.get_nodes_by_type("passage")
+    soft_locked: list[str] = []
+
+    for pid in sorted(passages):
+        choices = from_passage_choices.get(pid, [])
+        forward = [c for c in choices if not c.get("is_return")]
+        if not forward:
+            continue  # ending passage — no forward choices
+        ungated = [c for c in forward if not c.get("requires")]
+        if not ungated:
+            soft_locked.append(pid)
+
+    if not soft_locked:
+        return ValidationCheck(
+            name="forward_path_reachability",
+            severity="pass",
+            message="All non-ending passages have at least one ungated forward choice",
+        )
+    return ValidationCheck(
+        name="forward_path_reachability",
+        severity="warn",
+        message=(
+            f"{len(soft_locked)} passage(s) have only gated forward choices "
+            f"(potential soft-lock): {', '.join(soft_locked[:5])}"
+            f"{'...' if len(soft_locked) > 5 else ''}"
+        ),
+    )
+
+
 def run_all_checks(graph: Graph) -> ValidationReport:
     """Run all Phase 10 validation checks and aggregate results.
 
@@ -914,6 +1097,9 @@ def run_all_checks(graph: Graph) -> ValidationReport:
         check_gate_satisfiability(graph),
         check_passage_dag_cycles(graph),
         check_max_consecutive_linear(graph),
+        check_codeword_gate_coverage(graph),
+        check_forward_path_reachability(graph),
     ]
     checks.extend(check_commits_timing(graph))
+    checks.extend(check_convergence_policy_compliance(graph))
     return ValidationReport(checks=checks)
