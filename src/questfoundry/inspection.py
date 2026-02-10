@@ -10,10 +10,15 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
+from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.graph.fill_context import compute_lexical_diversity
 from questfoundry.graph.fill_validation import path_has_prose
 from questfoundry.graph.graph import Graph
-from questfoundry.graph.grow_validation import find_max_consecutive_linear, run_all_checks
+from questfoundry.graph.grow_validation import (
+    _get_spine_sequence,
+    find_max_consecutive_linear,
+    run_all_checks,
+)
 from questfoundry.observability.logging import get_logger
 from questfoundry.pipeline.config import ProjectConfigError, load_project_config
 
@@ -310,12 +315,7 @@ def _branching_quality_score(
     if not arc_nodes:
         return None
 
-    # Find spine sequence
-    spine_seq_set: set[str] = set()
-    for data in arc_nodes.values():
-        if data.get("arc_type") == "spine":
-            spine_seq_set = set(data.get("sequence", []))
-            break
+    spine_seq_set = _get_spine_sequence(arc_nodes)
 
     # Policy distribution + exclusive beat counts across branch arcs
     policy_counts: dict[str, int] = Counter()
@@ -335,6 +335,7 @@ def _branching_quality_score(
             exclusive = [b for b in seq[div_idx + 1 :] if b not in spine_seq_set]
             exclusive_counts.append(len(exclusive))
 
+    # 0.0 when no branch arcs have divergence metadata (pre-policy graphs)
     avg_exclusive = (
         round(sum(exclusive_counts) / len(exclusive_counts), 1) if exclusive_counts else 0.0
     )
@@ -367,7 +368,7 @@ def _branching_quality_score(
     for arc_id, data in arc_nodes.items():
         cws: set[str] = set()
         for path_raw in data.get("paths", []):
-            path_id = f"path::{path_raw}" if not path_raw.startswith("path::") else path_raw
+            path_id = normalize_scoped_id(path_raw, "path")
             for cons_id in path_consequences.get(path_id, []):
                 if cw := consequence_to_codeword.get(cons_id):
                     cws.add(cw)

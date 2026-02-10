@@ -1070,7 +1070,7 @@ class TestMaxConsecutiveLinear:
 
 def _make_compliance_graph(
     policy: str,
-    budget: int,
+    payoff_budget: int,
     *,
     shared_after_div: int = 0,
     exclusive_count: int = 3,
@@ -1079,7 +1079,7 @@ def _make_compliance_graph(
 
     Args:
         policy: Convergence policy for the branch arc.
-        budget: payoff_budget for the branch arc.
+        payoff_budget: payoff_budget for the branch arc.
         shared_after_div: Number of spine beats shared after divergence.
         exclusive_count: Number of beats exclusive to the branch.
     """
@@ -1108,7 +1108,7 @@ def _make_compliance_graph(
             "sequence": branch_seq,
             "diverges_at": "beat::s1",
             "convergence_policy": policy,
-            "payoff_budget": budget,
+            "payoff_budget": payoff_budget,
             "paths": ["path::rebel"],
         },
     )
@@ -1164,6 +1164,33 @@ class TestConvergencePolicyCompliance:
         results = check_convergence_policy_compliance(graph)
         assert all(r.severity == "pass" for r in results)
         assert "No branch arcs with convergence metadata" in results[0].message
+
+    def test_diverges_at_end_of_sequence(self) -> None:
+        """diverges_at is the last beat — no beats after divergence → passes."""
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": ["beat::s0", "beat::s1"],
+                "paths": [],
+            },
+        )
+        graph.create_node(
+            "arc::branch_0",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "sequence": ["beat::s0", "beat::s1"],
+                "diverges_at": "beat::s1",
+                "convergence_policy": "hard",
+                "payoff_budget": 2,
+                "paths": [],
+            },
+        )
+        results = check_convergence_policy_compliance(graph)
+        assert all(r.severity == "pass" for r in results)
 
     def test_no_arcs_passes(self) -> None:
         graph = Graph.empty()

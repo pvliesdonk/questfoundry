@@ -899,6 +899,18 @@ def check_max_consecutive_linear(graph: Graph, max_run: int = 2) -> ValidationCh
     )
 
 
+def _get_spine_sequence(arc_nodes: dict[str, dict[str, object]]) -> set[str]:
+    """Extract the spine arc's beat sequence as a set.
+
+    Returns an empty set if no spine arc is found.
+    """
+    for data in arc_nodes.values():
+        if data.get("arc_type") == "spine":
+            seq = data.get("sequence", [])
+            return set(seq) if isinstance(seq, list) else set()
+    return set()
+
+
 def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
     """Verify branch arcs honor their declared convergence_policy.
 
@@ -919,11 +931,7 @@ def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
             )
         ]
 
-    spine_seq_set: set[str] = set()
-    for _arc_id, data in arc_nodes.items():
-        if data.get("arc_type") == "spine":
-            spine_seq_set = set(data.get("sequence", []))
-            break
+    spine_seq_set = _get_spine_sequence(arc_nodes)
 
     violations: list[ValidationCheck] = []
     checked = 0
