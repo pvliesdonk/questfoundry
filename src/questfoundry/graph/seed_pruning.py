@@ -231,6 +231,8 @@ def _prune_demoted_dilemmas(
         consequences=pruned_consequences,
         initial_beats=pruned_beats,
         convergence_sketch=seed_output.convergence_sketch,
+        dilemma_analyses=seed_output.dilemma_analyses,
+        interaction_constraints=seed_output.interaction_constraints,
     )
 
 

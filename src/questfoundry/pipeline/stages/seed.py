@@ -24,6 +24,7 @@ from questfoundry.agents import (
     get_seed_discuss_prompt,
     get_seed_summarize_prompt,
     run_discuss_phase,
+    serialize_post_prune_analysis,
     serialize_seed_as_function,
     summarize_discussion,
 )
@@ -467,6 +468,24 @@ class SeedStage:
                 original_paths=len(result.artifact.paths),
                 final_paths=len(pruned_artifact.paths),
             )
+
+        # Phase 5: Post-prune convergence analysis (sections 7+8)
+        log.debug("seed_phase", phase="post_prune_analysis")
+        analyses, constraints, analysis_tokens = await serialize_post_prune_analysis(
+            model=serialize_model or model,
+            pruned_artifact=pruned_artifact,
+            graph=graph,
+            provider_name=serialize_provider_name or provider_name,
+            callbacks=callbacks,
+            on_phase_progress=on_phase_progress,
+        )
+        total_llm_calls += 2
+        total_tokens += analysis_tokens
+
+        # Merge analysis into pruned artifact
+        pruned_artifact = pruned_artifact.model_copy(
+            update={"dilemma_analyses": analyses, "interaction_constraints": constraints}
+        )
 
         # Convert to dict for return
         artifact_data = pruned_artifact.model_dump()
