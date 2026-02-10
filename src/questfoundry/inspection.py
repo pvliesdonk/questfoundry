@@ -12,7 +12,6 @@ from typing import TYPE_CHECKING
 
 from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.graph.fill_context import compute_lexical_diversity
-from questfoundry.graph.fill_validation import path_has_prose
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_validation import (
     _get_spine_sequence,
@@ -249,21 +248,16 @@ def _branching_stats(graph: Graph) -> BranchingStats | None:
     for edge in explores_edges:
         answer_to_path[edge["to"]] = edge["from"]
 
-    # Build path→has_prose lookup
-    paths = graph.get_nodes_by_type("path")
-    prose_by_path: dict[str, bool] = {}
-    for path_id in paths:
-        prose_by_path[path_id] = path_has_prose(graph, path_id)
-
+    # Structural exploration: a dilemma answer is explored when it has a path,
+    # regardless of whether prose has been generated (prose is a FILL concern).
     fully_explored = 0
     partially_explored = 0
     for did in dilemmas:
         answer_ids = answers_by_dilemma.get(did, [])
         answer_results: list[bool] = []
         for aid in answer_ids:
-            answer_path = answer_to_path.get(aid)
-            if answer_path:
-                answer_results.append(prose_by_path.get(answer_path, False))
+            if answer_to_path.get(aid):
+                answer_results.append(True)
 
         if len(answer_results) >= 2 and all(answer_results):
             fully_explored += 1
@@ -376,7 +370,7 @@ def _branching_quality_score(
 
     variant_signatures: set[frozenset[str]] = set()
     for pid in ending_ids:
-        from_beat = passages[pid].get("from_beat", "")
+        from_beat = passages[pid].get("from_beat") or passages[pid].get("primary_beat", "")
         covering_arcs = beat_to_arcs.get(from_beat, [])
         sig: set[str] = set()
         for arc_id in covering_arcs:
