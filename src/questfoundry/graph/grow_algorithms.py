@@ -1505,7 +1505,8 @@ def _get_hard_policy_beats(
     for bid in beat_ids:
         for raw in beat_dilemma_map.get(bid, set()):
             prefixed = raw_to_prefixed.get(raw)
-            if prefixed and dilemma_nodes[prefixed].get("convergence_policy") == "hard":
+            dnode = dilemma_nodes.get(prefixed) if prefixed else None
+            if dnode and dnode.get("convergence_policy") == "hard":
                 hard_beats.add(bid)
                 break
     return hard_beats
@@ -1898,6 +1899,8 @@ def check_intersection_compatibility(
                 category=GrowErrorCategory.STRUCTURAL,
             )
         )
+        # Early return: hard-policy violations are structural and block all
+        # downstream checks (requires edges, conditional prerequisites).
         return errors
 
     # Check requires edges originating from intersection beats.

@@ -4246,8 +4246,9 @@ class TestHardPolicyIntersectionRejection:
 
         graph = self._make_two_dilemma_graph(d1_policy="hard", d2_policy="soft")
         errors = check_intersection_compatibility(graph, ["beat::b1", "beat::b2"])
-        assert len(errors) == 1
-        assert "hard_policy" in errors[0].field_path
+        hard_errors = [e for e in errors if "hard_policy" in e.field_path]
+        assert len(hard_errors) == 1
+        assert "hard" in hard_errors[0].issue.lower()
 
     def test_soft_policy_beats_accepted(self) -> None:
         """Intersection of two soft-policy beats passes hard-policy check."""
