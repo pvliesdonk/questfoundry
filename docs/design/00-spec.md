@@ -850,7 +850,7 @@ Per-dilemma `convergence_policy` declared by SEED, enforced by GROW. Determines 
 
 | Policy | Meaning | GROW Behavior |
 |--------|---------|---------------|
-| `hard` | Paths never reconverge structurally | `converges_at` not set. Codeword gating at branch divergence points. Separate endings encouraged. Shared beats (intersections) are still topologically allowed — enforcement is at the gating level, not topology level (see #751). |
+| `hard` | Paths never reconverge structurally | `converges_at` is not set. Uses codeword gating at divergence points and encourages separate endings. Shared beats are topologically allowed but gated (see #751). |
 | `soft` | Paths reconverge after `payoff_budget` exclusive beats | Backward scan: last exclusive beat marks convergence boundary. If exclusive beats < budget, no convergence. |
 | `flavor` | Same structure, different prose via overlays | Immediate convergence at first shared beat. Overlays provide tonal variation. |
 
