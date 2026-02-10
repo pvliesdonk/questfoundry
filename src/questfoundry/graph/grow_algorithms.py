@@ -1007,28 +1007,134 @@ class ConvergenceInfo:
     Attributes:
         arc_id: The branch arc that converges.
         converges_to: The arc it converges to (spine).
-        converges_at: The first shared beat after divergence.
+        converges_at: The beat where shared content begins (policy-dependent).
+        convergence_policy: Effective policy applied to this arc.
+        payoff_budget: Effective payoff budget applied to this arc.
     """
 
     arc_id: str
     converges_to: str
     converges_at: str | None = None
+    convergence_policy: str = "soft"
+    payoff_budget: int = 2
+
+
+def _find_arc_dilemma_policies(
+    graph: Graph,
+    arc: Arc,
+) -> list[tuple[str, int]]:
+    """Collect (convergence_policy, payoff_budget) for each dilemma an arc touches.
+
+    Traverses arc.paths → path node → dilemma node to read policy metadata
+    stored by SEED's post-prune analysis.
+    """
+    policies: list[tuple[str, int]] = []
+    for raw_path_id in arc.paths:
+        path_node_id = normalize_scoped_id(raw_path_id, "path")
+        path_node = graph.get_node(path_node_id)
+        if not path_node:
+            continue
+        dilemma_id = path_node.get("dilemma_id", "")
+        if not dilemma_id:
+            continue
+        dilemma_node = graph.get_node(normalize_scoped_id(dilemma_id, "dilemma"))
+        if dilemma_node:
+            policies.append(
+                (
+                    dilemma_node.get("convergence_policy", "soft"),
+                    dilemma_node.get("payoff_budget", 2),
+                )
+            )
+    return policies
+
+
+def _get_effective_policy(graph: Graph, arc: Arc) -> tuple[str, int]:
+    """Combine convergence policies for a (possibly multi-dilemma) arc.
+
+    Combine rule per issue #743: hard dominates; payoff_budget = max across
+    all dilemmas the arc diverges on.  Falls back to ("soft", 2) when no
+    dilemma metadata is found.
+    """
+    policies = _find_arc_dilemma_policies(graph, arc)
+    if not policies:
+        # No SEED convergence metadata — preserve pre-policy behavior
+        # (first shared beat, no budget constraint).
+        return ("flavor", 0)
+
+    max_budget = max(b for _, b in policies)
+    if any(p == "hard" for p, _ in policies):
+        return ("hard", max_budget)
+    if any(p == "soft" for p, _ in policies):
+        return ("soft", max_budget)
+    return ("flavor", max_budget)
+
+
+def _find_convergence_for_soft(
+    branch_after_div: list[str],
+    spine_seq_set: set[str],
+    payoff_budget: int,
+) -> str | None:
+    """Find converges_at using backward scan for soft policy.
+
+    Scans from the end of the branch sequence backward to find the true
+    convergence boundary — the first shared beat that has NO later exclusive
+    beats.  Then verifies the payoff_budget is met (enough exclusive beats
+    before convergence).
+    """
+    if not branch_after_div:
+        return None
+
+    # Find the index of the last exclusive beat
+    last_exclusive_idx: int | None = None
+    for i in range(len(branch_after_div) - 1, -1, -1):
+        if branch_after_div[i] not in spine_seq_set:
+            last_exclusive_idx = i
+            break
+
+    if last_exclusive_idx is None:
+        # All beats are shared — degenerate case, converge at first beat
+        return branch_after_div[0] if branch_after_div else None
+
+    # converges_at = the beat immediately after the last exclusive beat
+    next_idx = last_exclusive_idx + 1
+    if next_idx >= len(branch_after_div):
+        # Last exclusive beat is at the very end — no convergence
+        return None
+    candidate = branch_after_div[next_idx]
+    if candidate not in spine_seq_set:
+        # Shouldn't happen since everything after last_exclusive should be shared,
+        # but guard defensively.
+        return None
+
+    # Check payoff_budget: count exclusive beats before convergence
+    exclusive_count = sum(1 for b in branch_after_div[:next_idx] if b not in spine_seq_set)
+    if exclusive_count < payoff_budget:
+        log.debug(
+            "convergence_budget_not_met",
+            exclusive_count=exclusive_count,
+            payoff_budget=payoff_budget,
+        )
+        return None
+
+    return candidate
 
 
 def find_convergence_points(
-    graph: Graph,  # noqa: ARG001 - available for future validation
+    graph: Graph,
     arcs: list[Arc],
     divergence_map: dict[str, DivergenceInfo] | None = None,
     spine_arc_id: str | None = None,
 ) -> dict[str, ConvergenceInfo]:
     """Find where branch arcs converge back to the spine.
 
-    For each diverged branch arc, looks for shared beats that appear in
-    both the spine and branch sequences AFTER the divergence point.
-    The first such shared beat is the convergence point.
+    Policy-aware convergence:
+    - **flavor**: First shared beat after divergence (immediate convergence).
+    - **soft**: Last-exclusive-beat boundary via backward scan, respecting
+      payoff_budget.
+    - **hard**: No convergence metadata (converges_at is always None).
 
     Args:
-        graph: Graph (reserved for future validation).
+        graph: Graph with dilemma nodes containing convergence_policy/payoff_budget.
         arcs: List of Arc models.
         divergence_map: Pre-computed divergence info. If None, computed internally.
         spine_arc_id: ID of the spine arc. If None, detected from arc_type.
@@ -1065,27 +1171,37 @@ def find_convergence_points(
         if not div_info:
             continue
 
+        policy, budget = _get_effective_policy(graph, arc)
+
         # Find beats in branch after divergence point
         diverge_at = div_info.diverges_at
         if diverge_at and diverge_at in arc.sequence:
             div_idx = arc.sequence.index(diverge_at)
-            # Look at beats after the divergence point in the branch
             branch_after_div = arc.sequence[div_idx + 1 :]
         else:
-            # No divergence point means they diverge from the start
             branch_after_div = arc.sequence
 
-        # Find first shared beat after divergence
+        # Apply policy-specific convergence logic
         converges_at: str | None = None
-        for beat_id in branch_after_div:
-            if beat_id in spine_seq_set:
-                converges_at = beat_id
-                break
+        if policy == "hard":
+            # Hard: never set convergence metadata
+            pass
+        elif policy == "flavor":
+            # Flavor: first shared beat (immediate convergence)
+            for beat_id in branch_after_div:
+                if beat_id in spine_seq_set:
+                    converges_at = beat_id
+                    break
+        else:
+            # Soft: backward scan for true convergence boundary
+            converges_at = _find_convergence_for_soft(branch_after_div, spine_seq_set, budget)
 
         result[arc.arc_id] = ConvergenceInfo(
             arc_id=arc.arc_id,
             converges_to=spine.arc_id,
             converges_at=converges_at,
+            convergence_policy=policy,
+            payoff_budget=budget,
         )
 
     return result

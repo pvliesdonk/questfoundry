@@ -1977,10 +1977,18 @@ class GrowStage:
         # Update arc nodes and create converges_at edges
         convergence_count = 0
         for arc_id_raw, info in convergence_map.items():
+            arc_node_id = f"arc::{arc_id_raw}"
+
+            # Always store policy metadata on the arc node
+            graph.update_node(
+                arc_node_id,
+                convergence_policy=info.convergence_policy,
+                payoff_budget=info.payoff_budget,
+            )
+
             if not info.converges_at:
                 continue
 
-            arc_node_id = f"arc::{arc_id_raw}"
             graph.update_node(
                 arc_node_id,
                 converges_to=f"arc::{info.converges_to}" if info.converges_to else None,

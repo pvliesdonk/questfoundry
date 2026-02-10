@@ -793,6 +793,196 @@ class TestFindConvergencePoints:
         assert result["branch"].converges_at == "beat::end"
 
 
+class TestFindConvergencePointsPolicyAware:
+    """Tests for policy-aware convergence with dilemma metadata on graph."""
+
+    @staticmethod
+    def _make_policy_graph(
+        policy: str = "soft",
+        budget: int = 2,
+        dilemma_id: str = "d1",
+        path_ids: list[str] | None = None,
+    ) -> Graph:
+        """Build a graph with dilemma + path nodes for convergence policy testing."""
+        graph = Graph.empty()
+        graph.create_node(
+            f"dilemma::{dilemma_id}",
+            {
+                "type": "dilemma",
+                "raw_id": dilemma_id,
+                "convergence_policy": policy,
+                "payoff_budget": budget,
+            },
+        )
+        for pid in path_ids or []:
+            graph.create_node(
+                f"path::{pid}",
+                {"type": "path", "raw_id": pid, "dilemma_id": f"dilemma::{dilemma_id}"},
+            )
+        return graph
+
+    def test_soft_policy_backward_scan(self) -> None:
+        """Soft policy finds true convergence boundary, not first intersection."""
+        # Branch has intersection at c but later exclusive beat y.
+        # True convergence boundary: d (last exclusive = y, next shared = d).
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::c", "beat::d", "beat::e"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p_alt"],
+            sequence=["beat::a", "beat::b", "beat::x", "beat::c", "beat::y", "beat::d", "beat::e"],
+        )
+        graph = self._make_policy_graph("soft", 2, path_ids=["p_canon", "p_alt"])
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at == "beat::d"
+        assert result["branch"].convergence_policy == "soft"
+
+    def test_soft_payoff_budget_enforced(self) -> None:
+        """Soft policy with high budget: not enough exclusive beats → no convergence."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p_alt"],
+            sequence=["beat::a", "beat::x", "beat::end"],
+        )
+        # Budget=3 but only 1 exclusive beat (x)
+        graph = self._make_policy_graph("soft", 3, path_ids=["p_canon", "p_alt"])
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at is None
+        assert result["branch"].payoff_budget == 3
+
+    def test_hard_policy_no_convergence(self) -> None:
+        """Hard policy: converges_at is always None regardless of shared beats."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p_alt"],
+            sequence=["beat::a", "beat::x", "beat::end"],
+        )
+        graph = self._make_policy_graph("hard", 5, path_ids=["p_canon", "p_alt"])
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at is None
+        assert result["branch"].convergence_policy == "hard"
+
+    def test_flavor_policy_first_shared(self) -> None:
+        """Flavor policy: first shared beat (original behavior)."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::c", "beat::d"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p_alt"],
+            sequence=["beat::a", "beat::x", "beat::c", "beat::y", "beat::d"],
+        )
+        graph = self._make_policy_graph("flavor", 2, path_ids=["p_canon", "p_alt"])
+        result = find_convergence_points(graph, [spine, branch])
+
+        # Flavor finds first shared beat (c), not backward-scan boundary (d)
+        assert result["branch"].converges_at == "beat::c"
+        assert result["branch"].convergence_policy == "flavor"
+
+    def test_multi_dilemma_hard_dominates(self) -> None:
+        """Arc with two dilemmas: hard dominates over soft."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "convergence_policy": "soft",
+                "payoff_budget": 2,
+            },
+        )
+        graph.create_node(
+            "dilemma::d2",
+            {
+                "type": "dilemma",
+                "raw_id": "d2",
+                "convergence_policy": "hard",
+                "payoff_budget": 4,
+            },
+        )
+        graph.create_node(
+            "path::p1",
+            {
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+            },
+        )
+        graph.create_node(
+            "path::p2",
+            {
+                "type": "path",
+                "raw_id": "p2",
+                "dilemma_id": "dilemma::d2",
+            },
+        )
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p_canon"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p1", "p2"],
+            sequence=["beat::a", "beat::x", "beat::end"],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at is None
+        assert result["branch"].convergence_policy == "hard"
+        assert result["branch"].payoff_budget == 4
+
+    def test_effective_policy_defaults_to_flavor_when_no_metadata(self) -> None:
+        """No dilemma metadata on graph → flavor/0 (backward compat)."""
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p1"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p2"],
+            sequence=["beat::a", "beat::x", "beat::end"],
+        )
+        graph = Graph.empty()  # no dilemma/path nodes
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at == "beat::end"
+        assert result["branch"].convergence_policy == "flavor"
+        assert result["branch"].payoff_budget == 0
+
+
 # ---------------------------------------------------------------------------
 # bfs_reachable
 # ---------------------------------------------------------------------------
