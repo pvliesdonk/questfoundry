@@ -1052,8 +1052,8 @@ def _get_effective_policy(graph: Graph, arc: Arc) -> tuple[str, int]:
     """Combine convergence policies for a (possibly multi-dilemma) arc.
 
     Combine rule per issue #743: hard dominates; payoff_budget = max across
-    all dilemmas the arc diverges on.  Falls back to ("soft", 2) when no
-    dilemma metadata is found.
+    all dilemmas the arc diverges on.  Falls back to ("flavor", 0) when no
+    dilemma metadata is found (preserves pre-policy behavior).
     """
     policies = _find_arc_dilemma_policies(graph, arc)
     if not policies:
