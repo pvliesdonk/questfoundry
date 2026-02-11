@@ -15,7 +15,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 EntityType = Literal["character", "location", "object", "faction"]
 
@@ -118,6 +118,21 @@ class Dilemma(BaseModel):
         ),
     )
     question: str = Field(min_length=1, description="Dramatic question (should end with ?)")
+
+    @field_validator("dilemma_id")
+    @classmethod
+    def validate_dilemma_id_no_trailing_or(cls, v: str) -> str:
+        """Reject dilemma IDs ending with '_or_' (common LLM generation error)."""
+        raw = v.removeprefix("dilemma::")
+        if raw.endswith("_or_") or raw.endswith("_or"):
+            msg = (
+                f"dilemma_id '{v}' ends with '_or_' — "
+                "the ID must end with the second option word "
+                "(e.g., 'host_benevolent_or_selfish', not 'host_benevolent_or_selfish_or_')"
+            )
+            raise ValueError(msg)
+        return v
+
     answers: list[Answer] = Field(
         min_length=2,
         max_length=2,
