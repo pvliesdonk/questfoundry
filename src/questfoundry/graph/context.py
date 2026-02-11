@@ -669,6 +669,52 @@ def get_expected_counts(graph: Graph) -> dict[str, int]:
     }
 
 
+def get_brainstorm_answer_ids(graph: Graph) -> dict[str, list[str]]:
+    """Get authoritative answer IDs per dilemma from the brainstorm graph.
+
+    Returns the ground-truth answer IDs as defined during BRAINSTORM,
+    not the LLM's serialized output. Used for early validation after
+    dilemma serialization to catch answer ID mismatches before they
+    cascade to path generation.
+
+    Args:
+        graph: Graph containing BRAINSTORM dilemma and answer nodes.
+
+    Returns:
+        Dict mapping raw dilemma ID to list of raw answer IDs.
+        Example: {"trust_or_betray": ["trust", "betray"]}
+    """
+    dilemmas = graph.get_nodes_by_type("dilemma")
+    if not dilemmas:
+        return {}
+
+    # Pre-build answer edges map
+    answer_edges_by_dilemma: dict[str, list[dict[str, Any]]] = {}
+    for edge in graph.get_edges(edge_type="has_answer"):
+        from_id = edge.get("from")
+        if from_id:
+            answer_edges_by_dilemma.setdefault(from_id, []).append(edge)
+
+    result: dict[str, list[str]] = {}
+    for did, ddata in dilemmas.items():
+        raw_id = ddata.get("raw_id")
+        if not raw_id:
+            continue
+
+        answers: list[str] = []
+        for edge in answer_edges_by_dilemma.get(did, []):
+            answer_node = graph.get_node(edge.get("to", ""))
+            if answer_node:
+                ans_id = answer_node.get("raw_id")
+                if ans_id:
+                    answers.append(str(ans_id))
+
+        if answers:
+            result[raw_id] = sorted(answers)
+
+    return result
+
+
 def format_retained_entity_ids(
     graph: Graph,
     entity_decisions: list[dict[str, Any]],
