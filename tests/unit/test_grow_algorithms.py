@@ -4105,6 +4105,72 @@ class TestSelectEntitiesForArc:
 
 
 # ---------------------------------------------------------------------------
+# Phase 9c2: mark_terminal_passages
+# ---------------------------------------------------------------------------
+
+
+class TestMarkTerminalPassages:
+    def test_marks_passages_without_outgoing_choices(self) -> None:
+        """Passages with no outgoing choices are marked as endings."""
+        from questfoundry.graph.grow_algorithms import mark_terminal_passages
+
+        graph = Graph.empty()
+        for pid in ["a", "b", "c"]:
+            graph.create_node(
+                f"passage::{pid}",
+                {"type": "passage", "raw_id": pid},
+            )
+        # a -> b and b -> c via choices; c has no outgoing choice
+        graph.create_node(
+            "choice::a_b",
+            {
+                "type": "choice",
+                "choice_from": "passage::a",
+                "choice_to": "passage::b",
+                "label": "go",
+            },
+        )
+        graph.create_node(
+            "choice::b_c",
+            {
+                "type": "choice",
+                "choice_from": "passage::b",
+                "choice_to": "passage::c",
+                "label": "go",
+            },
+        )
+
+        count = mark_terminal_passages(graph)
+        assert count == 1
+        assert graph.get_node("passage::c").get("is_ending") is True
+        assert graph.get_node("passage::a").get("is_ending") is None
+        assert graph.get_node("passage::b").get("is_ending") is None
+
+    def test_all_terminal_when_no_choices(self) -> None:
+        """All passages are terminal when no choice nodes exist."""
+        from questfoundry.graph.grow_algorithms import mark_terminal_passages
+
+        graph = Graph.empty()
+        for pid in ["a", "b"]:
+            graph.create_node(
+                f"passage::{pid}",
+                {"type": "passage", "raw_id": pid},
+            )
+
+        count = mark_terminal_passages(graph)
+        assert count == 2
+        assert graph.get_node("passage::a").get("is_ending") is True
+        assert graph.get_node("passage::b").get("is_ending") is True
+
+    def test_no_passages_returns_zero(self) -> None:
+        """Empty graph returns zero."""
+        from questfoundry.graph.grow_algorithms import mark_terminal_passages
+
+        graph = Graph.empty()
+        assert mark_terminal_passages(graph) == 0
+
+
+# ---------------------------------------------------------------------------
 # Phase 9d: collapse_linear_passages
 # ---------------------------------------------------------------------------
 

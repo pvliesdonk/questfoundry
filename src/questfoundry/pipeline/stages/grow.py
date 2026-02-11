@@ -246,6 +246,7 @@ class GrowStage:
             (self._phase_9_choices, "choices"),
             (self._phase_9b_fork_beats, "fork_beats"),
             (self._phase_9c_hub_spokes, "hub_spokes"),
+            (self._phase_9c2_mark_endings, "mark_endings"),
             (self._phase_9d_collapse_passages, "collapse_passages"),
             (self._phase_10_validation, "validation"),
             (self._phase_11_prune, "prune"),
@@ -3105,6 +3106,25 @@ class GrowStage:
             detail=f"Inserted {hubs_inserted} hub(s) with spokes",
             llm_calls=llm_calls,
             tokens_used=tokens,
+        )
+
+    async def _phase_9c2_mark_endings(
+        self,
+        graph: Graph,
+        model: BaseChatModel,  # noqa: ARG002
+    ) -> GrowPhaseResult:
+        """Phase 9c2: Mark terminal passages with is_ending flag.
+
+        Derives ending status from graph structure (no outgoing choices).
+        Must run before collapse so endings are exempt from merging.
+        """
+        from questfoundry.graph.grow_algorithms import mark_terminal_passages
+
+        count = mark_terminal_passages(graph)
+        return GrowPhaseResult(
+            phase="mark_endings",
+            status="completed",
+            detail=f"Marked {count} terminal passage(s) as endings",
         )
 
     async def _phase_9d_collapse_passages(
