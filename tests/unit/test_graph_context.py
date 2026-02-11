@@ -19,7 +19,7 @@ from questfoundry.graph.context import (
     parse_scoped_id,
     strip_scope_prefix,
 )
-from questfoundry.models.seed import DilemmaDecision, Path, SeedOutput
+from questfoundry.models.seed import Consequence, DilemmaDecision, Path, SeedOutput
 
 
 class TestFormatValidIdsContext:
@@ -1229,11 +1229,13 @@ class TestFormatAnswerIdsByDilemma:
 def _seed_output(
     dilemmas: list[DilemmaDecision] | None = None,
     paths: list[Path] | None = None,
+    consequences: list[Consequence] | None = None,
 ) -> SeedOutput:
     """Build a minimal SeedOutput for testing context functions."""
     return SeedOutput(
         dilemmas=dilemmas or [],
         paths=paths or [],
+        consequences=consequences or [],
     )
 
 
@@ -1249,14 +1251,35 @@ def _dilemma(
     )
 
 
-def _path(path_id: str, dilemma_id: str, answer_id: str) -> Path:
+def _path(
+    path_id: str,
+    dilemma_id: str,
+    answer_id: str,
+    description: str | None = None,
+    consequence_ids: list[str] | None = None,
+) -> Path:
     return Path(
         path_id=path_id,
         name=f"Path {answer_id}",
         dilemma_id=dilemma_id,
         answer_id=answer_id,
         path_importance="major",
-        description=f"Explores {answer_id}",
+        description=description or f"Explores {answer_id}",
+        consequence_ids=consequence_ids or [],
+    )
+
+
+def _consequence(
+    consequence_id: str,
+    path_id: str,
+    description: str,
+    narrative_effects: list[str] | None = None,
+) -> Consequence:
+    return Consequence(
+        consequence_id=consequence_id,
+        path_id=path_id,
+        description=description,
+        narrative_effects=narrative_effects or [],
     )
 
 
@@ -1282,11 +1305,11 @@ class TestFormatDilemmaAnalysisContext:
             ],
         )
         result = format_dilemma_analysis_context(seed)
-        assert "## Dilemma Summary" in result
+        assert "## Dilemma Convergence Brief" in result
         assert "dilemma::alpha" in result
         assert "dilemma::beta" in result
-        assert "paths=2" in result  # alpha has 2 paths
-        assert "paths=1" in result  # beta has 1 path
+        assert "Paths (2)" in result  # alpha has 2 paths
+        assert "Paths (1)" in result  # beta has 1 path
 
     def test_includes_valid_ids_section(self) -> None:
         """Output includes Valid Dilemma IDs section."""
@@ -1305,7 +1328,130 @@ class TestFormatDilemmaAnalysisContext:
             ],
         )
         result = format_dilemma_analysis_context(seed)
-        assert "paths=2" in result
+        assert "Paths (2)" in result
+
+    def test_includes_path_descriptions(self) -> None:
+        """Path descriptions are included in the output."""
+        seed = _seed_output(
+            dilemmas=[_dilemma("d1", explored=["a", "b"])],
+            paths=[
+                _path("path::d1__a", "d1", "a", description="Take the red pill"),
+                _path("path::d1__b", "d1", "b", description="Take the blue pill"),
+            ],
+        )
+        result = format_dilemma_analysis_context(seed)
+        assert "Take the red pill" in result
+        assert "Take the blue pill" in result
+
+    def test_enriched_with_graph_data(self) -> None:
+        """Graph data enriches output with question and stakes."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::alive_or_dead",
+            {
+                "type": "dilemma",
+                "raw_id": "alive_or_dead",
+                "question": "Should the hero sacrifice themselves?",
+                "why_it_matters": "Life versus duty defines the entire story",
+                "central_entity_ids": ["character::hero"],
+            },
+        )
+        seed = _seed_output(
+            dilemmas=[_dilemma("alive_or_dead", explored=["alive", "dead"])],
+            paths=[
+                _path("path::alive_or_dead__alive", "alive_or_dead", "alive"),
+                _path("path::alive_or_dead__dead", "alive_or_dead", "dead"),
+            ],
+        )
+        result = format_dilemma_analysis_context(seed, graph)
+        assert "**Question:** Should the hero sacrifice themselves?" in result
+        assert "**Stakes:** Life versus duty defines the entire story" in result
+
+    def test_enriched_with_consequence_effects(self) -> None:
+        """Consequence narrative effects are included per path."""
+        seed = _seed_output(
+            dilemmas=[_dilemma("key_destroy_or_keep", explored=["destroy", "keep"])],
+            paths=[
+                _path(
+                    "path::key_destroy_or_keep__destroy",
+                    "key_destroy_or_keep",
+                    "destroy",
+                    consequence_ids=["cons::destroy_result"],
+                ),
+                _path(
+                    "path::key_destroy_or_keep__keep",
+                    "key_destroy_or_keep",
+                    "keep",
+                    consequence_ids=["cons::keep_result"],
+                ),
+            ],
+            consequences=[
+                _consequence(
+                    "cons::destroy_result",
+                    "path::key_destroy_or_keep__destroy",
+                    "The key is destroyed permanently",
+                    narrative_effects=["Library sealed forever", "Knowledge lost"],
+                ),
+                _consequence(
+                    "cons::keep_result",
+                    "path::key_destroy_or_keep__keep",
+                    "The key unlocks forbidden secrets",
+                    narrative_effects=["Dark knowledge accessed"],
+                ),
+            ],
+        )
+        result = format_dilemma_analysis_context(seed)
+        assert "Library sealed forever" in result
+        assert "Knowledge lost" in result
+        assert "Dark knowledge accessed" in result
+
+    def test_consequence_with_empty_effects(self) -> None:
+        """Consequence with empty narrative_effects produces no Effects line."""
+        seed = _seed_output(
+            dilemmas=[_dilemma("d1", explored=["a"])],
+            paths=[
+                _path(
+                    "path::d1__a",
+                    "d1",
+                    "a",
+                    consequence_ids=["cons::empty_fx"],
+                ),
+            ],
+            consequences=[
+                _consequence(
+                    "cons::empty_fx",
+                    "path::d1__a",
+                    "Something happens",
+                    narrative_effects=[],
+                ),
+            ],
+        )
+        result = format_dilemma_analysis_context(seed)
+        assert "Explores a" in result  # path description present
+        assert "Effects:" not in result  # no effects → no Effects line
+
+    def test_missing_graph_node_falls_back(self) -> None:
+        """Missing graph node falls back to paths-only listing."""
+        graph = Graph.empty()
+        # Graph has no dilemma node for "orphan"
+        seed = _seed_output(
+            dilemmas=[_dilemma("orphan", explored=["x"])],
+            paths=[_path("path::orphan__x", "orphan", "x")],
+        )
+        result = format_dilemma_analysis_context(seed, graph)
+        assert "dilemma::orphan" in result
+        assert "Paths (1)" in result
+        # No Question or Stakes lines
+        assert "**Question:**" not in result
+
+    def test_no_paths_shows_explored_fallback(self) -> None:
+        """Dilemma with no paths shows explored answers as fallback."""
+        seed = _seed_output(
+            dilemmas=[_dilemma("lonely", explored=["opt_a", "opt_b"])],
+        )
+        result = format_dilemma_analysis_context(seed)
+        assert "no paths yet" in result
+        assert "opt_a" in result
 
 
 class TestFormatInteractionCandidatesContext:
