@@ -828,15 +828,21 @@ def format_summarize_manifest(graph: Graph) -> dict[str, str]:
     }
 
 
-def format_dilemma_analysis_context(seed_output: SeedOutput) -> str:
-    """Format surviving dilemmas as context for convergence analysis (Section 7).
+def format_dilemma_analysis_context(
+    seed_output: SeedOutput,
+    graph: Graph | None = None,
+) -> str:
+    """Format surviving dilemmas with narrative context for convergence analysis.
 
-    Builds a brief listing each surviving dilemma with its question,
-    explored/unexplored answers, and path count. Used as the ``brief``
+    Builds a rich brief per dilemma including question, stakes, path
+    descriptions, and consequence effects. This gives the LLM the signal
+    needed to distinguish hard/soft/flavor policies. Used as the ``brief``
     parameter when calling ``serialize_to_artifact`` for Section 7.
 
     Args:
         seed_output: Pruned SEED output with surviving dilemmas and paths.
+        graph: Graph containing brainstorm dilemma nodes (for question,
+            why_it_matters). If ``None``, falls back to bare listings.
 
     Returns:
         Formatted markdown context, or empty string if no dilemmas.
@@ -846,23 +852,71 @@ def format_dilemma_analysis_context(seed_output: SeedOutput) -> str:
 
     paths_per_dilemma = count_paths_per_dilemma(seed_output)
 
-    dilemma_lines: list[str] = []
+    # Build path lookup: dilemma raw_id → list of paths
+    paths_by_dilemma: dict[str, list[Any]] = {}
+    for p in seed_output.paths:
+        d_raw = strip_scope_prefix(p.dilemma_id)
+        paths_by_dilemma.setdefault(d_raw, []).append(p)
+
+    # Build consequence lookup: consequence_id → Consequence
+    cons_by_id: dict[str, Any] = {}
+    for c in seed_output.consequences:
+        c_raw = strip_scope_prefix(c.consequence_id)
+        cons_by_id[c_raw] = c
+        cons_by_id[c.consequence_id] = c  # Also store with prefix
+
+    dilemma_blocks: list[str] = []
     for d in sorted(seed_output.dilemmas, key=lambda x: x.dilemma_id):
         raw_id = strip_scope_prefix(d.dilemma_id)
         path_count = paths_per_dilemma.get(raw_id, 0)
-        explored = ", ".join(d.explored) if d.explored else "(none)"
-        unexplored = ", ".join(d.unexplored) if d.unexplored else "(none)"
-        dilemma_lines.append(
-            f"- `dilemma::{raw_id}`: explored=[{explored}], "
-            f"unexplored=[{unexplored}], paths={path_count}"
-        )
+
+        block_lines: list[str] = [f"### `dilemma::{raw_id}`"]
+
+        # Fetch brainstorm data from graph if available
+        if graph is not None:
+            node_id = f"{SCOPE_DILEMMA}::{raw_id}"
+            node = graph.get_node(node_id)
+            if node is not None:
+                question = node.get("question", "")
+                if question:
+                    block_lines.append(f"**Question:** {question}")
+                why = node.get("why_it_matters", "")
+                if why:
+                    block_lines.append(f"**Stakes:** {why}")
+
+        # Path details with consequences
+        dilemma_paths = paths_by_dilemma.get(raw_id, [])
+        block_lines.append(f"**Paths ({path_count}):**")
+        for p in sorted(dilemma_paths, key=lambda x: x.answer_id):
+            importance = getattr(p, "path_importance", "major")
+            block_lines.append(f"  - `{p.answer_id}` [{importance}]: {p.description}")
+            # Collect consequence effects for this path
+            effects: list[str] = []
+            for cid in getattr(p, "consequence_ids", []):
+                cons = cons_by_id.get(cid) or cons_by_id.get(strip_scope_prefix(cid))
+                if cons is not None:
+                    for eff in getattr(cons, "narrative_effects", []):
+                        if eff:
+                            effects.append(eff)
+            if effects:
+                block_lines.append(f"    Effects: {' | '.join(effects)}")
+
+        if not dilemma_paths:
+            explored = ", ".join(d.explored) if d.explored else "(none)"
+            block_lines.append(f"  (no paths yet — explored: [{explored}])")
+
+        dilemma_blocks.append("\n".join(block_lines))
 
     valid_ids = [f"`dilemma::{strip_scope_prefix(d.dilemma_id)}`" for d in seed_output.dilemmas]
 
     lines = [
-        "## Dilemma Summary",
+        "## Dilemma Convergence Brief",
         "",
-        *dilemma_lines,
+        "Classify each dilemma below. Focus on whether the path EFFECTS create",
+        "different world states (hard), different approaches (soft), or just",
+        "different flavor text (flavor).",
+        "",
+        *dilemma_blocks,
         "",
         "### Valid Dilemma IDs",
         "",

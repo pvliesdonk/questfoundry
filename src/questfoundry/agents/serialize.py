@@ -2102,7 +2102,7 @@ async def serialize_post_prune_analysis(
     # --- Section 7: Dilemma Convergence Analysis ---
     dilemma_analyses: list[Any] = []
     try:
-        dilemma_context = format_dilemma_analysis_context(pruned_artifact)
+        dilemma_context = format_dilemma_analysis_context(pruned_artifact, graph)
         section7_prompt = prompts["dilemma_analyses"].format(dilemma_context=dilemma_context)
 
         if on_phase_progress is not None:
