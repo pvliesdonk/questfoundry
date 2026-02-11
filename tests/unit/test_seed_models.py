@@ -18,6 +18,7 @@ from questfoundry.models.seed import (
     PathBeatsSection,
     PathsSection,
     SeedOutput,
+    make_constrained_dilemmas_section,
 )
 
 
@@ -478,3 +479,182 @@ class TestSeedOutputBackwardCompat:
         assert len(restored.dilemma_analyses) == 1
         assert len(restored.interaction_constraints) == 1
         assert restored.dilemma_analyses[0].convergence_policy == "soft"
+
+
+# ---------------------------------------------------------------------------
+# Constrained dilemma schema factory (#777)
+# ---------------------------------------------------------------------------
+
+_ANSWER_IDS_BY_DILEMMA: dict[str, list[str]] = {
+    "trust_or_betray": ["trust", "betray"],
+    "fight_or_flee": ["fight", "flee"],
+}
+
+
+class TestMakeConstrainedDilemmasSection:
+    """make_constrained_dilemmas_section produces enum-constrained models."""
+
+    def test_valid_input_accepted(self) -> None:
+        """Valid dilemma/answer IDs pass validation."""
+        schema = make_constrained_dilemmas_section(_ANSWER_IDS_BY_DILEMMA)
+        result = schema.model_validate(
+            {
+                "dilemmas": [
+                    {
+                        "dilemma_id": "dilemma::trust_or_betray",
+                        "explored": ["trust"],
+                        "unexplored": ["betray"],
+                    },
+                    {
+                        "dilemma_id": "dilemma::fight_or_flee",
+                        "explored": ["fight", "flee"],
+                    },
+                ]
+            }
+        )
+        assert len(result.dilemmas) == 2
+
+    def test_invalid_answer_id_rejected(self) -> None:
+        """An answer ID not in the brainstorm enum is rejected."""
+        schema = make_constrained_dilemmas_section(_ANSWER_IDS_BY_DILEMMA)
+        with pytest.raises(ValidationError, match="trust_strength"):
+            schema.model_validate(
+                {
+                    "dilemmas": [
+                        {
+                            "dilemma_id": "dilemma::trust_or_betray",
+                            "explored": ["trust_strength"],
+                        },
+                    ]
+                }
+            )
+
+    def test_invalid_dilemma_id_rejected(self) -> None:
+        """A dilemma ID not in the brainstorm enum is rejected."""
+        schema = make_constrained_dilemmas_section(_ANSWER_IDS_BY_DILEMMA)
+        with pytest.raises(ValidationError, match="dilemma_id"):
+            schema.model_validate(
+                {
+                    "dilemmas": [
+                        {
+                            "dilemma_id": "dilemma::unknown",
+                            "explored": ["trust"],
+                        },
+                    ]
+                }
+            )
+
+    def test_empty_input_returns_unconstrained(self) -> None:
+        """Empty answer map falls back to plain DilemmasSection."""
+        schema = make_constrained_dilemmas_section({})
+        assert schema is DilemmasSection
+
+    def test_json_schema_has_enum_constraint(self) -> None:
+        """Generated JSON schema includes enum arrays for constrained decoding."""
+        schema = make_constrained_dilemmas_section(_ANSWER_IDS_BY_DILEMMA)
+        json_schema = schema.model_json_schema()
+
+        # Navigate to the dilemma decision definition
+        defs = json_schema.get("$defs", {})
+        decision_schema = defs.get("ConstrainedDilemmaDecision", {})
+        props = decision_schema.get("properties", {})
+
+        # Check dilemma_id has enum
+        dilemma_id_ref = props.get("dilemma_id", {})
+        # Could be a direct enum or a $ref — resolve either way
+        if "$ref" in dilemma_id_ref:
+            ref_name = dilemma_id_ref["$ref"].split("/")[-1]
+            dilemma_id_schema = defs[ref_name]
+        else:
+            dilemma_id_schema = dilemma_id_ref
+        assert "enum" in dilemma_id_schema
+        assert "dilemma::trust_or_betray" in dilemma_id_schema["enum"]
+
+        # Check explored items have enum
+        explored_items = props.get("explored", {}).get("items", {})
+        if "$ref" in explored_items:
+            ref_name = explored_items["$ref"].split("/")[-1]
+            answer_schema = defs[ref_name]
+        else:
+            answer_schema = explored_items
+        assert "enum" in answer_schema
+        assert set(answer_schema["enum"]) == {"trust", "betray", "fight", "flee"}
+
+    def test_model_dump_returns_plain_strings(self) -> None:
+        """model_dump() produces plain strings, not StrEnum objects."""
+        schema = make_constrained_dilemmas_section(_ANSWER_IDS_BY_DILEMMA)
+        result = schema.model_validate(
+            {
+                "dilemmas": [
+                    {
+                        "dilemma_id": "dilemma::trust_or_betray",
+                        "explored": ["trust"],
+                        "unexplored": ["betray"],
+                    },
+                ]
+            }
+        )
+        data = result.model_dump()
+        dilemma = data["dilemmas"][0]
+        assert dilemma["dilemma_id"] == "dilemma::trust_or_betray"
+        assert isinstance(dilemma["dilemma_id"], str)
+        assert dilemma["explored"] == ["trust"]
+
+    def test_deduplication_preserved(self) -> None:
+        """Constrained section still deduplicates identical entries."""
+        schema = make_constrained_dilemmas_section(_ANSWER_IDS_BY_DILEMMA)
+        result = schema.model_validate(
+            {
+                "dilemmas": [
+                    {
+                        "dilemma_id": "dilemma::trust_or_betray",
+                        "explored": ["trust"],
+                    },
+                    {
+                        "dilemma_id": "dilemma::trust_or_betray",
+                        "explored": ["trust"],
+                    },
+                ]
+            }
+        )
+        assert len(result.dilemmas) == 1
+
+    def test_considered_field_migration(self) -> None:
+        """Old 'considered' field is migrated to 'explored'."""
+        schema = make_constrained_dilemmas_section(_ANSWER_IDS_BY_DILEMMA)
+        result = schema.model_validate(
+            {
+                "dilemmas": [
+                    {
+                        "dilemma_id": "dilemma::trust_or_betray",
+                        "considered": ["trust"],
+                    },
+                ]
+            }
+        )
+        data = result.model_dump()
+        assert data["dilemmas"][0]["explored"] == ["trust"]
+
+    def test_conflicting_duplicates_raise_error(self) -> None:
+        """Same dilemma ID with different content is a conflict."""
+        schema = make_constrained_dilemmas_section(_ANSWER_IDS_BY_DILEMMA)
+        with pytest.raises(ValidationError, match="Duplicates found"):
+            schema.model_validate(
+                {
+                    "dilemmas": [
+                        {
+                            "dilemma_id": "dilemma::trust_or_betray",
+                            "explored": ["trust"],
+                        },
+                        {
+                            "dilemma_id": "dilemma::trust_or_betray",
+                            "explored": ["betray"],
+                        },
+                    ]
+                }
+            )
+
+    def test_empty_answer_lists_filtered(self) -> None:
+        """Dilemmas with empty answer lists fall back to unconstrained."""
+        schema = make_constrained_dilemmas_section({"trust_or_betray": [], "fight_or_flee": []})
+        assert schema is DilemmasSection

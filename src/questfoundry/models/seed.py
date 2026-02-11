@@ -17,6 +17,7 @@ Terminology (v5):
 from __future__ import annotations
 
 from collections import Counter
+from enum import StrEnum
 from typing import Any, Literal
 
 from pydantic import BaseModel, Field, model_validator
@@ -581,3 +582,75 @@ class InteractionConstraintsSection(BaseModel):
             self.interaction_constraints, "pair_key", "pair_key"
         )
         return self
+
+
+def make_constrained_dilemmas_section(
+    answer_ids_by_dilemma: dict[str, list[str]],
+) -> type[BaseModel]:
+    """Create a DilemmasSection with enum-constrained answer and dilemma IDs.
+
+    Builds dynamic Pydantic models where ``dilemma_id``, ``explored``, and
+    ``unexplored`` fields use StrEnum values derived from the brainstorm graph.
+    The resulting JSON schema contains ``enum`` constraints that prevent the LLM
+    from emitting invalid IDs at the token level (constrained decoding in
+    llama.cpp / Ollama).
+
+    The enum covers *all* answer IDs across all dilemmas (a global pool).
+    Per-dilemma validation (answer X belongs to dilemma Y) is handled by
+    ``_early_validate_dilemma_answers`` in the serialize layer.
+
+    Args:
+        answer_ids_by_dilemma: Mapping of raw dilemma IDs to their valid
+            raw answer IDs (as returned by ``get_brainstorm_answer_ids``).
+
+    Returns:
+        A BaseModel subclass structurally identical to ``DilemmasSection``
+        but with enum-constrained ID fields.  Falls back to the unconstrained
+        ``DilemmasSection`` when the input is empty.
+    """
+    # Filter out dilemmas with no answers (defensive — get_brainstorm_answer_ids
+    # only includes dilemmas that have answers, but callers may pass other data).
+    valid_dilemmas = {d: a for d, a in answer_ids_by_dilemma.items() if a}
+    if not valid_dilemmas:
+        return DilemmasSection
+
+    all_answers = sorted({aid for aids in valid_dilemmas.values() for aid in aids})
+    all_dilemma_ids = sorted(valid_dilemmas)
+
+    # Build StrEnum types — these surface as JSON schema ``enum`` arrays.
+    # mypy cannot statically determine members from dict comprehensions,
+    # but the enums are correct at runtime.
+    AnswerIdEnum = StrEnum("AnswerIdEnum", {a: a for a in all_answers})  # type: ignore[misc]
+    # Dilemma IDs are scoped (e.g., "dilemma::trust_or_betray") per v5 conventions.
+    # Answer IDs remain unscoped (e.g., "trust") as they're local to their dilemma.
+    DilemmaIdEnum = StrEnum(  # type: ignore[misc]
+        "DilemmaIdEnum",
+        {d: f"dilemma::{d}" for d in all_dilemma_ids},
+    )
+
+    # Use inheritance so validators (migrate_considered_field, _deduplicate_dilemmas)
+    # are inherited from the base classes rather than duplicated.
+    class ConstrainedDilemmaDecision(DilemmaDecision):
+        """DilemmaDecision with enum-constrained IDs."""
+
+        dilemma_id: DilemmaIdEnum = Field(
+            description="Dilemma ID from BRAINSTORM",
+        )
+        explored: list[AnswerIdEnum] = Field(  # type: ignore[assignment]
+            min_length=1,
+            description="Answer IDs the LLM intended to explore as paths",
+        )
+        unexplored: list[AnswerIdEnum] = Field(  # type: ignore[assignment]
+            default_factory=list,
+            description="Answer IDs not explored (become shadows)",
+        )
+
+    class ConstrainedDilemmasSection(DilemmasSection):
+        """DilemmasSection with enum-constrained IDs."""
+
+        dilemmas: list[ConstrainedDilemmaDecision] = Field(  # type: ignore[assignment]
+            default_factory=list,
+            description="Dilemma exploration decisions",
+        )
+
+    return ConstrainedDilemmasSection
