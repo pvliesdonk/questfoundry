@@ -634,3 +634,27 @@ class TestMakeConstrainedDilemmasSection:
         )
         data = result.model_dump()
         assert data["dilemmas"][0]["explored"] == ["trust"]
+
+    def test_conflicting_duplicates_raise_error(self) -> None:
+        """Same dilemma ID with different content is a conflict."""
+        schema = make_constrained_dilemmas_section(_ANSWER_IDS_BY_DILEMMA)
+        with pytest.raises(ValidationError, match="Duplicates found"):
+            schema.model_validate(
+                {
+                    "dilemmas": [
+                        {
+                            "dilemma_id": "dilemma::trust_or_betray",
+                            "explored": ["trust"],
+                        },
+                        {
+                            "dilemma_id": "dilemma::trust_or_betray",
+                            "explored": ["betray"],
+                        },
+                    ]
+                }
+            )
+
+    def test_empty_answer_lists_filtered(self) -> None:
+        """Dilemmas with empty answer lists fall back to unconstrained."""
+        schema = make_constrained_dilemmas_section({"trust_or_betray": [], "fight_or_flee": []})
+        assert schema is DilemmasSection

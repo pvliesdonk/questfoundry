@@ -608,60 +608,49 @@ def make_constrained_dilemmas_section(
         but with enum-constrained ID fields.  Falls back to the unconstrained
         ``DilemmasSection`` when the input is empty.
     """
-    all_answers = sorted({aid for aids in answer_ids_by_dilemma.values() for aid in aids})
-    all_dilemma_ids = sorted(answer_ids_by_dilemma)
-
-    if not all_answers or not all_dilemma_ids:
+    # Filter out dilemmas with no answers (defensive — get_brainstorm_answer_ids
+    # only includes dilemmas that have answers, but callers may pass other data).
+    valid_dilemmas = {d: a for d, a in answer_ids_by_dilemma.items() if a}
+    if not valid_dilemmas:
         return DilemmasSection
+
+    all_answers = sorted({aid for aids in valid_dilemmas.values() for aid in aids})
+    all_dilemma_ids = sorted(valid_dilemmas)
 
     # Build StrEnum types — these surface as JSON schema ``enum`` arrays.
     # mypy cannot statically determine members from dict comprehensions,
     # but the enums are correct at runtime.
     AnswerIdEnum = StrEnum("AnswerIdEnum", {a: a for a in all_answers})  # type: ignore[misc]
+    # Dilemma IDs are scoped (e.g., "dilemma::trust_or_betray") per v5 conventions.
+    # Answer IDs remain unscoped (e.g., "trust") as they're local to their dilemma.
     DilemmaIdEnum = StrEnum(  # type: ignore[misc]
         "DilemmaIdEnum",
         {d: f"dilemma::{d}" for d in all_dilemma_ids},
     )
 
-    class ConstrainedDilemmaDecision(BaseModel):
+    # Use inheritance so validators (migrate_considered_field, _deduplicate_dilemmas)
+    # are inherited from the base classes rather than duplicated.
+    class ConstrainedDilemmaDecision(DilemmaDecision):
         """DilemmaDecision with enum-constrained IDs."""
 
         dilemma_id: DilemmaIdEnum = Field(
             description="Dilemma ID from BRAINSTORM",
         )
-        explored: list[AnswerIdEnum] = Field(
+        explored: list[AnswerIdEnum] = Field(  # type: ignore[assignment]
             min_length=1,
             description="Answer IDs the LLM intended to explore as paths",
         )
-        unexplored: list[AnswerIdEnum] = Field(
+        unexplored: list[AnswerIdEnum] = Field(  # type: ignore[assignment]
             default_factory=list,
             description="Answer IDs not explored (become shadows)",
         )
 
-        @model_validator(mode="before")
-        @classmethod
-        def migrate_considered_field(cls, data: dict[str, Any]) -> dict[str, Any]:
-            """Migrate old 'considered' field to 'explored'."""
-            if isinstance(data, dict) and "considered" in data and "explored" not in data:
-                data = dict(data)
-                data["explored"] = data.pop("considered")
-            if isinstance(data, dict) and "implicit" in data and "unexplored" not in data:
-                data = dict(data)
-                data["unexplored"] = data.pop("implicit")
-            return data
-
-    class ConstrainedDilemmasSection(BaseModel):
+    class ConstrainedDilemmasSection(DilemmasSection):
         """DilemmasSection with enum-constrained IDs."""
 
-        dilemmas: list[ConstrainedDilemmaDecision] = Field(
+        dilemmas: list[ConstrainedDilemmaDecision] = Field(  # type: ignore[assignment]
             default_factory=list,
             description="Dilemma exploration decisions",
         )
-
-        @model_validator(mode="after")
-        def _deduplicate_dilemmas(self) -> ConstrainedDilemmasSection:
-            """Drop identical duplicate dilemmas; raise on conflicting ones."""
-            self.dilemmas = _deduplicate_and_check(self.dilemmas, "dilemma_id", "dilemma_id")
-            return self
 
     return ConstrainedDilemmasSection

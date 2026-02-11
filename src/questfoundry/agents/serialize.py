@@ -1421,6 +1421,7 @@ async def _early_validate_dilemma_answers(
     callbacks: list[BaseCallbackHandler] | None,
     max_early_retries: int = 1,
     dilemma_schema: type[BaseModel] | None = None,
+    brainstorm_answers: dict[str, list[str]] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Validate dilemma answer IDs against brainstorm truth and fix if needed.
 
@@ -1441,6 +1442,9 @@ async def _early_validate_dilemma_answers(
         dilemma_schema: Pydantic model class for dilemma section. When provided
             (e.g., an enum-constrained schema), uses it for re-serialization
             to enforce ID constraints at the token level.
+        brainstorm_answers: Precomputed answer IDs per dilemma. When provided,
+            avoids recomputing from graph (optimization for callers that
+            already have this data).
 
     Returns:
         Tuple of (corrected dilemma decisions, tokens used for corrections).
@@ -1449,7 +1453,8 @@ async def _early_validate_dilemma_answers(
 
     schema = dilemma_schema or DilemmasSection
 
-    brainstorm_answers = get_brainstorm_answer_ids(graph)
+    if brainstorm_answers is None:
+        brainstorm_answers = get_brainstorm_answer_ids(graph)
     total_tokens = 0
 
     for attempt in range(max_early_retries):
@@ -1656,7 +1661,10 @@ async def serialize_seed_as_function(
     # This adds enum constraints to the JSON schema so that constrained
     # decoding (llama.cpp / Ollama) prevents invalid answer IDs at the
     # token level — the LLM literally cannot emit non-existent IDs.
+    # brainstorm_answers is also reused by _early_validate_dilemma_answers
+    # to avoid a duplicate graph traversal.
     dilemma_schema: type[BaseModel] = DilemmasSection
+    brainstorm_answers: dict[str, list[str]] = {}
     if graph is not None:
         brainstorm_answers = get_brainstorm_answer_ids(graph)
         if brainstorm_answers:
@@ -1783,6 +1791,7 @@ async def serialize_seed_as_function(
                     max_retries=max_retries,
                     callbacks=callbacks,
                     dilemma_schema=dilemma_schema,
+                    brainstorm_answers=brainstorm_answers,
                 )
                 total_tokens += early_tokens
 
