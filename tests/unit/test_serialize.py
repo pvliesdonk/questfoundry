@@ -1709,3 +1709,174 @@ class TestSerializeStageParam:
             captured_tags = call_kwargs.kwargs.get("tags", [])
 
         assert "unknown" in captured_tags
+
+
+# --- Early Dilemma Validation Tests ---
+
+
+class TestSuggestClosest:
+    """Tests for _suggest_closest helper."""
+
+    def test_substring_match(self) -> None:
+        """Valid ID that is a substring of bad ID is returned."""
+        from questfoundry.agents.serialize import _suggest_closest
+
+        assert _suggest_closest("trust_strength", ["strength", "weakness"]) == "strength"
+
+    def test_reverse_substring_match(self) -> None:
+        """Bad ID that is a substring of valid ID is returned."""
+        from questfoundry.agents.serialize import _suggest_closest
+
+        assert _suggest_closest("trust", ["trust_or_betray", "x"]) == "trust_or_betray"
+
+    def test_no_match_returns_none(self) -> None:
+        """Returns None when no close match."""
+        from questfoundry.agents.serialize import _suggest_closest
+
+        assert _suggest_closest("foo", ["bar", "baz"]) is None
+
+    def test_empty_valid_ids(self) -> None:
+        """Returns None for empty valid list."""
+        from questfoundry.agents.serialize import _suggest_closest
+
+        assert _suggest_closest("foo", []) is None
+
+
+class TestEarlyValidateDilemmaAnswers:
+    """Tests for _early_validate_dilemma_answers."""
+
+    @pytest.mark.asyncio
+    async def test_valid_answers_pass_without_reserialize(self) -> None:
+        """Dilemmas with valid answer IDs pass without re-serialization."""
+        from questfoundry.agents.serialize import _early_validate_dilemma_answers
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        # Set up graph with brainstorm answer IDs
+        mock_graph.get_nodes_by_type.return_value = {
+            "dilemma::trust_or_betray": {"raw_id": "trust_or_betray"}
+        }
+        mock_graph.get_edges.return_value = [
+            {"from": "dilemma::trust_or_betray", "to": "answer::trust"},
+            {"from": "dilemma::trust_or_betray", "to": "answer::betray"},
+        ]
+        mock_graph.get_node.side_effect = lambda nid: (
+            {"raw_id": "trust"} if nid == "answer::trust" else {"raw_id": "betray"}
+        )
+
+        decisions = [
+            {"dilemma_id": "trust_or_betray", "explored": ["trust"], "unexplored": ["betray"]}
+        ]
+
+        result, tokens = await _early_validate_dilemma_answers(
+            model=mock_model,
+            dilemma_decisions=decisions,
+            graph=mock_graph,
+            section_prompt="Serialize dilemmas",
+            build_brief_fn=lambda: "Brief",
+            provider_name=None,
+            max_retries=1,
+            callbacks=None,
+        )
+
+        assert result == decisions
+        assert tokens == 0
+
+    @pytest.mark.asyncio
+    async def test_invalid_answer_triggers_reserialize(self) -> None:
+        """Invalid answer IDs trigger re-serialization with corrections."""
+        from questfoundry.agents.serialize import _early_validate_dilemma_answers
+        from questfoundry.models.seed import DilemmasSection
+
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        mock_graph.get_nodes_by_type.return_value = {
+            "dilemma::trust_or_betray": {"raw_id": "trust_or_betray"}
+        }
+        mock_graph.get_edges.return_value = [
+            {"from": "dilemma::trust_or_betray", "to": "answer::trust"},
+            {"from": "dilemma::trust_or_betray", "to": "answer::betray"},
+        ]
+        mock_graph.get_node.side_effect = lambda nid: (
+            {"raw_id": "trust"} if nid == "answer::trust" else {"raw_id": "betray"}
+        )
+
+        # Decisions with invalid answer "trust_strength" (should be "trust")
+        decisions = [
+            {
+                "dilemma_id": "trust_or_betray",
+                "explored": ["trust_strength"],
+                "unexplored": ["betray"],
+            }
+        ]
+
+        # Mock serialize_to_artifact to return corrected dilemmas
+        corrected = DilemmasSection(
+            dilemmas=[
+                {
+                    "dilemma_id": "trust_or_betray",
+                    "explored": ["trust"],
+                    "unexplored": ["betray"],
+                }
+            ]
+        )
+
+        with patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_serialize:
+            mock_serialize.return_value = (corrected, 50)
+
+            result, tokens = await _early_validate_dilemma_answers(
+                model=mock_model,
+                dilemma_decisions=decisions,
+                graph=mock_graph,
+                section_prompt="Serialize dilemmas",
+                build_brief_fn=lambda: "Brief",
+                provider_name=None,
+                max_retries=1,
+                callbacks=None,
+            )
+
+        # Should have re-serialized and returned corrected data
+        assert tokens == 50
+        assert result[0]["explored"] == ["trust"]
+        mock_serialize.assert_called_once()
+
+        # Verify corrections were included in the prompt
+        call_kwargs = mock_serialize.call_args.kwargs
+        assert "trust_strength" in call_kwargs["system_prompt"]
+        assert "trust" in call_kwargs["system_prompt"]
+
+
+# --- Chunked Brief Tests ---
+
+
+class TestGetBrainstormAnswerIds:
+    """Tests for get_brainstorm_answer_ids in context.py."""
+
+    def test_returns_answer_ids_per_dilemma(self) -> None:
+        """Returns correct answer IDs mapped by dilemma."""
+        from questfoundry.graph.context import get_brainstorm_answer_ids
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::trust_or_betray", {"type": "dilemma", "raw_id": "trust_or_betray"}
+        )
+        graph.create_node("answer::trust", {"type": "answer", "raw_id": "trust"})
+        graph.create_node("answer::betray", {"type": "answer", "raw_id": "betray"})
+        graph.add_edge("has_answer", "dilemma::trust_or_betray", "answer::trust")
+        graph.add_edge("has_answer", "dilemma::trust_or_betray", "answer::betray")
+
+        result = get_brainstorm_answer_ids(graph)
+
+        assert "trust_or_betray" in result
+        assert sorted(result["trust_or_betray"]) == ["betray", "trust"]
+
+    def test_empty_graph_returns_empty(self) -> None:
+        """Empty graph returns empty dict."""
+        from questfoundry.graph.context import get_brainstorm_answer_ids
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        assert get_brainstorm_answer_ids(graph) == {}
