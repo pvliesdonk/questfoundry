@@ -1501,7 +1501,11 @@ async def _early_validate_dilemma_answers(
             )
             total_tokens += tokens
             section_data = result.model_dump()
-            dilemma_decisions = section_data.get("dilemmas", dilemma_decisions)
+            corrected_dilemmas = section_data.get("dilemmas")
+            if not corrected_dilemmas:
+                log.warning("early_dilemma_correction_returned_empty", attempt=attempt + 1)
+                break
+            dilemma_decisions = corrected_dilemmas
             log.info(
                 "early_dilemma_validation_corrected",
                 attempt=attempt + 1,
@@ -1528,7 +1532,11 @@ def _suggest_closest(bad_id: str, valid_ids: list[str]) -> str | None:
     Returns:
         Best matching valid ID, or None if no close match found.
     """
-    # Check if any valid ID is a substring of the bad ID (most common case)
+    # Prefer exact token-boundary matches (e.g., "_strength" in "trust_strength")
+    for vid in valid_ids:
+        if f"_{vid}" in bad_id or bad_id.endswith(vid) or bad_id.startswith(vid):
+            return vid
+    # Fall back to simple substring (valid ID appears within bad ID)
     for vid in valid_ids:
         if vid in bad_id:
             return vid
@@ -1624,6 +1632,8 @@ async def serialize_seed_as_function(
         """
         if chunked:
             section_brief = brief_dict.get(section_name, "")
+            if not section_brief:
+                log.warning("missing_section_brief", section=section_name)
             if valid_ids_context:
                 return f"{valid_ids_context}\n\n---\n\n{section_brief}"
             return section_brief

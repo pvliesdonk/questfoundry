@@ -707,7 +707,7 @@ def get_brainstorm_answer_ids(graph: Graph) -> dict[str, list[str]]:
             if answer_node:
                 ans_id = answer_node.get("raw_id")
                 if ans_id:
-                    answers.append(str(ans_id))
+                    answers.append(ans_id)
 
         if answers:
             result[raw_id] = sorted(answers)
