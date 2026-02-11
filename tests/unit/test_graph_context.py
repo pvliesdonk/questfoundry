@@ -1405,6 +1405,31 @@ class TestFormatDilemmaAnalysisContext:
         assert "Knowledge lost" in result
         assert "Dark knowledge accessed" in result
 
+    def test_consequence_with_empty_effects(self) -> None:
+        """Consequence with empty narrative_effects produces no Effects line."""
+        seed = _seed_output(
+            dilemmas=[_dilemma("d1", explored=["a"])],
+            paths=[
+                _path(
+                    "path::d1__a",
+                    "d1",
+                    "a",
+                    consequence_ids=["cons::empty_fx"],
+                ),
+            ],
+            consequences=[
+                _consequence(
+                    "cons::empty_fx",
+                    "path::d1__a",
+                    "Something happens",
+                    narrative_effects=[],
+                ),
+            ],
+        )
+        result = format_dilemma_analysis_context(seed)
+        assert "Explores a" in result  # path description present
+        assert "Effects:" not in result  # no effects → no Effects line
+
     def test_missing_graph_node_falls_back(self) -> None:
         """Missing graph node falls back to paths-only listing."""
         graph = Graph.empty()

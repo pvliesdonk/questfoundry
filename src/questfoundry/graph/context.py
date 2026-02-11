@@ -12,7 +12,7 @@ from questfoundry.graph.grow_context import format_grow_valid_ids
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
-    from questfoundry.models.seed import SeedOutput
+    from questfoundry.models.seed import Consequence, Path, SeedOutput
 
 # Entity categories - used as scope prefixes for entity IDs
 # Format: category::name (e.g., character::pim, location::manor)
@@ -853,17 +853,15 @@ def format_dilemma_analysis_context(
     paths_per_dilemma = count_paths_per_dilemma(seed_output)
 
     # Build path lookup: dilemma raw_id → list of paths
-    paths_by_dilemma: dict[str, list[Any]] = {}
+    paths_by_dilemma: dict[str, list[Path]] = {}
     for p in seed_output.paths:
         d_raw = strip_scope_prefix(p.dilemma_id)
         paths_by_dilemma.setdefault(d_raw, []).append(p)
 
-    # Build consequence lookup: consequence_id → Consequence
-    cons_by_id: dict[str, Any] = {}
+    # Build consequence lookup: normalized raw_id → Consequence
+    cons_by_id: dict[str, Consequence] = {}
     for c in seed_output.consequences:
-        c_raw = strip_scope_prefix(c.consequence_id)
-        cons_by_id[c_raw] = c
-        cons_by_id[c.consequence_id] = c  # Also store with prefix
+        cons_by_id[strip_scope_prefix(c.consequence_id)] = c
 
     dilemma_blocks: list[str] = []
     for d in sorted(seed_output.dilemmas, key=lambda x: x.dilemma_id):
@@ -888,14 +886,13 @@ def format_dilemma_analysis_context(
         dilemma_paths = paths_by_dilemma.get(raw_id, [])
         block_lines.append(f"**Paths ({path_count}):**")
         for p in sorted(dilemma_paths, key=lambda x: x.answer_id):
-            importance = getattr(p, "path_importance", "major")
-            block_lines.append(f"  - `{p.answer_id}` [{importance}]: {p.description}")
+            block_lines.append(f"  - `{p.answer_id}` [{p.path_importance}]: {p.description}")
             # Collect consequence effects for this path
             effects: list[str] = []
-            for cid in getattr(p, "consequence_ids", []):
-                cons = cons_by_id.get(cid) or cons_by_id.get(strip_scope_prefix(cid))
+            for cid in p.consequence_ids:
+                cons = cons_by_id.get(strip_scope_prefix(cid))
                 if cons is not None:
-                    for eff in getattr(cons, "narrative_effects", []):
+                    for eff in cons.narrative_effects:
                         if eff:
                             effects.append(eff)
             if effects:
