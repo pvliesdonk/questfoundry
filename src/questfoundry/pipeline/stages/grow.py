@@ -1558,6 +1558,8 @@ class GrowStage:
             dilemma_id = pdata.get("dilemma_id", "")
             dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
             dilemma_question = dilemma_node.get("question", "") if dilemma_node else ""
+            dilemma_stakes = dilemma_node.get("why_it_matters", "") if dilemma_node else ""
+            path_description = pdata.get("description", "")
 
             try:
                 beat_ids = get_path_beat_sequence(graph, pid)
@@ -1569,6 +1571,8 @@ class GrowStage:
                 log.warning("phase4e_no_beats_for_path", path_id=pid)
                 continue
 
+            # Collect entity IDs from all beats in this path
+            beat_entity_ids: set[str] = set()
             beat_lines: list[str] = []
             for i, bid in enumerate(beat_ids, 1):
                 bdata = graph.get_node(bid)
@@ -1580,11 +1584,43 @@ class GrowStage:
                 beat_lines.append(
                     f"{i}. {bid}: {summary} [function={narrative_fn}, scene_type={scene_type}]"
                 )
+                for eid in bdata.get("entities", []):
+                    beat_entity_ids.add(eid)
+
+            # Format entity context (name + concept for all entities)
+            entity_lines: list[str] = []
+            for eid in sorted(beat_entity_ids):
+                enode = graph.get_node(eid)
+                if enode:
+                    name = enode.get("name") or enode.get("raw_id", eid)
+                    concept = enode.get("concept", "")
+                    entity_lines.append(
+                        f"- {name}: {concept}" if concept else f"- {name}: (no concept yet)"
+                    )
+                else:
+                    entity_lines.append(f"- {eid}: (not in graph)")
+
+            # Format entity arcs from path node (subset: entity_id + arc_line only;
+            # pivot_beat and arc_type are not needed for thematic context)
+            arc_lines: list[str] = []
+            for arc in pdata.get("entity_arcs", []):
+                arc_entity = arc.get("entity_id", "")
+                arc_line = arc.get("arc_line", "")
+                if arc_entity and arc_line:
+                    ename = arc_entity
+                    enode = graph.get_node(arc_entity)
+                    if enode:
+                        ename = enode.get("name") or enode.get("raw_id", arc_entity)
+                    arc_lines.append(f"- {ename}: {arc_line}")
 
             context = {
                 "path_id": pid,
-                "dilemma_question": dilemma_question or "(no dilemma question)",
-                "beat_sequence": "\n".join(beat_lines) if beat_lines else "(no beats)",
+                "dilemma_question": dilemma_question or "(none)",
+                "dilemma_stakes": dilemma_stakes or "(none)",
+                "path_description": path_description or "(none)",
+                "entity_context": "\n".join(entity_lines) if entity_lines else "(none)",
+                "entity_arcs": "\n".join(arc_lines) if arc_lines else "(none)",
+                "beat_sequence": "\n".join(beat_lines) if beat_lines else "(none)",
             }
             path_items.append((pid, context))
 
