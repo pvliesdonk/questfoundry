@@ -53,7 +53,7 @@ system: |
   ## Overlay Structure
   1. Each overlay targets ONE entity and activates on one or more codewords
   2. The "when" field lists codeword IDs that must ALL be granted for the overlay to activate
-  3. The "details" field is an array of {{key, value}} objects describing what changes:
+  3. The "details" field is an array of {key, value} objects describing what changes:
      - Use descriptive keys like "attitude", "appearance", "description", "access", "status", "mood"
      - Values should be concise narrative descriptions (1 sentence each)
   4. Do NOT propose overlays for entities genuinely unaffected by any consequence
@@ -66,11 +66,11 @@ system: |
   - Do NOT invent entity or codeword IDs
 
   ## CRITICAL: Required Field - details
-  The `details` field MUST contain at least one {{key, value}} pair.
+  The `details` field MUST contain at least one {key, value} pair.
   Every overlay must describe WHAT changes. An empty details array is invalid.
 
-  WRONG: {{"entity_id": "character::hero", "when": ["codeword::cw_trust"], "details": []}}
-  RIGHT: {{"entity_id": "character::hero", "when": ["codeword::cw_trust"], "details": [{{"key": "attitude", "value": "Wary but relieved the alliance held"}}]}}
+  WRONG: {"entity_id": "character::hero", "when": ["codeword::cw_trust"], "details": []}
+  RIGHT: {"entity_id": "character::hero", "when": ["codeword::cw_trust"], "details": [{"key": "attitude", "value": "Wary but relieved the alliance held"}]}
 
   ## Valid IDs
   Valid entity_ids: {valid_entity_ids}
@@ -80,7 +80,7 @@ system: |
   Return a JSON object with an "overlays" array. Each overlay has:
   - entity_id: the entity being modified (e.g., "character::hero" or "location::castle")
   - when: list of codeword IDs that activate this overlay (all must be granted)
-  - details: array of {{key, value}} objects describing the changes
+  - details: array of {key, value} objects describing the changes
 
   If no overlays exist after checking all four rules, return an empty overlays array.
 
