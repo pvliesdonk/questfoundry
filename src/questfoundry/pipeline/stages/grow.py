@@ -1471,12 +1471,12 @@ class GrowStage:
             dilemma = pdata.get("dilemma_id", "")
             theme = pdata.get("path_theme", "")
             mood = pdata.get("path_mood", "")
-            parts = [f"- {pid}: dilemma={dilemma}"]
+            line = f"- {pid} [dilemma={dilemma}]"
             if theme:
-                parts.append(f"theme={theme}")
+                line += f"\n    theme: {theme}"
             if mood:
-                parts.append(f"mood={mood}")
-            path_info_lines.append(", ".join(parts))
+                line += f"\n    mood: {mood}"
+            path_info_lines.append(line)
 
         context = {
             "narrative_frame": narrative_frame,
