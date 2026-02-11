@@ -101,6 +101,34 @@ class TestCompactItems:
         assert result == "hello"
 
 
+class TestFromContextWindow:
+    """Tests for CompactContextConfig.from_context_window."""
+
+    def test_default_model_yields_near_6k(self) -> None:
+        """qwen3:4b-instruct-32k (32768 tokens) → ~5734 chars."""
+        cfg = CompactContextConfig.from_context_window(32_768)
+        assert 5000 <= cfg.max_chars <= 7000
+
+    def test_small_context_hits_floor(self) -> None:
+        """Tiny context window should clamp to minimum."""
+        cfg = CompactContextConfig.from_context_window(2_048)
+        assert cfg.max_chars == 2000
+
+    def test_huge_context_hits_ceiling(self) -> None:
+        """1M-token model should cap at 50K."""
+        cfg = CompactContextConfig.from_context_window(1_000_000)
+        assert cfg.max_chars == 50_000
+
+    def test_custom_fraction(self) -> None:
+        cfg = CompactContextConfig.from_context_window(32_768, budget_fraction=0.10)
+        assert cfg.max_chars == int(32_768 * 0.10 * 3.5)
+
+    def test_preserves_other_defaults(self) -> None:
+        cfg = CompactContextConfig.from_context_window(32_768)
+        assert cfg.summary_truncate == 80
+        assert cfg.truncation_suffix == "..."
+
+
 class TestEnrichBeatLine:
     """Tests for enrich_beat_line."""
 

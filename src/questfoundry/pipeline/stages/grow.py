@@ -162,6 +162,7 @@ class GrowStage:
         self._serialize_provider_name: str | None = None
         self._size_profile: SizeProfile | None = None
         self._max_concurrency: int = 2
+        self._context_window: int | None = None
         self._lang_instruction: str = ""
         self._on_connectivity_error: ConnectivityRetryFn | None = None
 
@@ -199,6 +200,15 @@ class GrowStage:
             )
         log.info("checkpoint_loaded", phase=phase_name, path=str(path))
         return Graph.load_from_file(path)
+
+    def _compact_config(self) -> CompactContextConfig:
+        """Build a compaction config from the model's context window.
+
+        Falls back to the default (6000 chars) if context_window is unknown.
+        """
+        if self._context_window is not None:
+            return CompactContextConfig.from_context_window(self._context_window)
+        return CompactContextConfig()
 
     def _phase_order(self) -> list[tuple[PhaseFunc, str]]:
         """Return ordered list of (phase_function, phase_name) tuples.
@@ -307,6 +317,7 @@ class GrowStage:
         self._serialize_provider_name = serialize_provider_name
         self._size_profile = kwargs.get("size_profile")
         self._max_concurrency = kwargs.get("max_concurrency", 2)
+        self._context_window = kwargs.get("context_window")
         self._on_connectivity_error = kwargs.get("on_connectivity_error")
         self._lang_instruction = get_output_language_instruction(kwargs.get("language", "en"))
         log.info("stage_start", stage="grow")
@@ -1049,7 +1060,7 @@ class GrowStage:
             beat_items.append(ContextItem(id=bid, text=line))
 
         context = {
-            "beat_summaries": compact_items(beat_items, CompactContextConfig(max_chars=6000)),
+            "beat_summaries": compact_items(beat_items, self._compact_config()),
             "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
             "beat_count": str(len(beat_nodes)),
         }
@@ -1480,7 +1491,7 @@ class GrowStage:
 
         context = {
             "narrative_frame": narrative_frame,
-            "beat_summaries": compact_items(beat_items, CompactContextConfig(max_chars=6000)),
+            "beat_summaries": compact_items(beat_items, self._compact_config()),
             "beat_count": str(len(beat_nodes)),
             "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
             "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
@@ -2520,9 +2531,7 @@ class GrowStage:
                 transition_items.append(ContextItem(id=p_id, text=line))
 
             context = {
-                "transition_context": compact_items(
-                    transition_items, CompactContextConfig(max_chars=6000)
-                ),
+                "transition_context": compact_items(transition_items, self._compact_config()),
                 "valid_from_ids": ", ".join(valid_from_ids),
                 "valid_to_ids": ", ".join(valid_to_ids),
                 "output_language_instruction": self._lang_instruction,
@@ -2785,7 +2794,7 @@ class GrowStage:
             stretch_items.append(ContextItem(id=f"stretch_{i}", text="\n".join(lines)))
 
         context = {
-            "stretch_context": compact_items(stretch_items, CompactContextConfig(max_chars=6000)),
+            "stretch_context": compact_items(stretch_items, self._compact_config()),
             "valid_passage_ids": ", ".join(sorted(set(all_passage_ids))),
             "output_language_instruction": self._lang_instruction,
         }
@@ -2983,7 +2992,7 @@ class GrowStage:
         valid_codeword_ids = set(codeword_nodes.keys())
 
         context = {
-            "passage_context": compact_items(passage_items, CompactContextConfig(max_chars=6000)),
+            "passage_context": compact_items(passage_items, self._compact_config()),
             "valid_passage_ids": ", ".join(valid_ids),
             "valid_codeword_ids": ", ".join(sorted(valid_codeword_ids))
             if valid_codeword_ids

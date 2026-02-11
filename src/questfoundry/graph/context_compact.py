@@ -46,6 +46,36 @@ class CompactContextConfig:
     summary_truncate: int = 80
     truncation_suffix: str = "..."
 
+    # Approximate chars per token for English text.
+    _CHARS_PER_TOKEN: float = 3.5
+    # Fraction of context window reserved for injected data.
+    # System prompt, template text, and response need the rest.
+    _BUDGET_FRACTION: float = 0.05
+    _MIN_CHARS: int = 2000
+    _MAX_CHARS: int = 50_000
+
+    @classmethod
+    def from_context_window(
+        cls,
+        context_window_tokens: int,
+        budget_fraction: float | None = None,
+    ) -> CompactContextConfig:
+        """Derive config from model context window size.
+
+        Args:
+            context_window_tokens: Model's context window in tokens.
+            budget_fraction: Fraction of context for injected data.
+                Defaults to 0.05 (~5%), which yields ~6K chars for a
+                32K-token model.
+
+        Returns:
+            Config with max_chars proportional to context window.
+        """
+        frac = budget_fraction if budget_fraction is not None else cls._BUDGET_FRACTION
+        raw = int(context_window_tokens * frac * cls._CHARS_PER_TOKEN)
+        max_chars = max(cls._MIN_CHARS, min(raw, cls._MAX_CHARS))
+        return cls(max_chars=max_chars)
+
 
 def truncate_summary(text: str, max_chars: int = 80, suffix: str = "...") -> str:
     """Truncate text to max_chars, preserving word boundaries.
