@@ -281,8 +281,14 @@ class GapProposal(BaseModel):
     """Phase 4b/4c: Proposes new beats to fill structural gaps."""
 
     path_id: str = Field(min_length=1)
-    after_beat: str | None = None
-    before_beat: str | None = None
+    after_beat: str | None = Field(
+        default=None,
+        description="The EARLIER beat — new beat is inserted AFTER this one",
+    )
+    before_beat: str | None = Field(
+        default=None,
+        description="The LATER beat — new beat is inserted BEFORE this one",
+    )
     summary: str = Field(min_length=1)
     scene_type: Literal["scene", "sequel", "micro_beat"] = "sequel"
 
