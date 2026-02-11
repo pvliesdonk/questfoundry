@@ -9,6 +9,14 @@ system: |
   ## Path Information
   **Path ID:** {path_id}
   **Dilemma:** {dilemma_question}
+  **Stakes:** {dilemma_stakes}
+  **Path Description:** {path_description}
+
+  ## Key Entities
+  {entity_context}
+
+  ## Entity Arcs (character transformations on this path)
+  {entity_arcs}
 
   ## Beat Sequence (in order)
   {beat_sequence}
