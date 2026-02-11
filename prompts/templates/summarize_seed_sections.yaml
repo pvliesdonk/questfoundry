@@ -1,0 +1,155 @@
+name: summarize_seed_sections
+description: Per-section summarize prompts for chunked SEED summarization
+
+# Each section gets its own focused summarize call instead of one monolithic call.
+# This reduces context size for downstream serialize calls from ~33K to ~4-10K chars.
+# Prior sections' output is injected at runtime into the user message.
+
+entities_system: |
+  You are extracting entity decisions from a story architecture discussion.
+  This is the SEED stage - you are committing which brainstorm entities to keep.
+
+  ## NO DELEGATION
+  Write the actual decisions directly. Do not suggest or delegate.
+
+  ## CRITICAL: Exact ID Matching
+  Use IDs EXACTLY as they appear below. Copy-paste, do not paraphrase.
+  Typos like `dr_elara_vinoss` vs `dr_elara_voss` cause validation failure.
+
+  ## Required Entity IDs ({entity_count} total)
+  {entity_manifest}
+
+  ## Your Task
+  For EACH entity listed above, extract the decision from the discussion:
+  - entity_id: the exact entity ID from the manifest above
+  - disposition: "retained" or "cut"
+  - reason: brief justification (1 sentence)
+
+  If an entity was not discussed, write disposition "retained" with reason "not discussed, kept by default".
+
+  ## Output Format
+  List EVERY entity with its decision:
+  ```
+  - character::hero: retained - protagonist
+  - location::castle: retained - main setting
+  - object::unused_item: cut - not relevant to core story
+  ```
+  VERIFY: Your list MUST have exactly {entity_count} items.
+  {output_language_instruction}
+
+dilemmas_system: |
+  You are extracting dilemma exploration decisions from a story architecture discussion.
+  This is the SEED stage - you are deciding which dilemma answers become story paths.
+
+  ## NO DELEGATION
+  Write the actual decisions directly. Do not suggest or delegate.
+
+  ## CRITICAL: Exact ID Matching
+  Use dilemma IDs and answer IDs EXACTLY as listed below. Copy-paste them.
+  Do NOT reconstruct IDs from dilemma names or descriptions.
+
+  ## Required Dilemma IDs ({dilemma_count} total)
+  {dilemma_manifest}
+
+  ## Valid Answer IDs per Dilemma
+  {dilemma_answers}
+
+  ## Your Task
+  For EACH dilemma listed above, extract from the discussion:
+  - dilemma_id: the exact dilemma ID from the manifest
+  - explored: list of answer IDs that become paths (copy from Valid Answer IDs above)
+  - unexplored: remaining answer IDs not explored
+
+  CRITICAL: The answer IDs in `explored` and `unexplored` MUST come from the
+  Valid Answer IDs list above. Do NOT invent answer IDs or derive them from
+  dilemma names.
+
+  ## Output Format
+  List EVERY dilemma with its decision:
+  ```
+  - dilemma::trust_or_betray: explored=[trust, betray], unexplored=[]
+  - dilemma::weather_storm_or_clear: explored=[storm], unexplored=[clear]
+  ```
+  VERIFY: Your list MUST have exactly {dilemma_count} items.
+  VERIFY: For each dilemma, EVERY answer ID MUST appear in EITHER explored OR unexplored (not both, not missing).
+  {output_language_instruction}
+
+paths_system: |
+  You are describing story paths from a story architecture discussion.
+  Each explored dilemma answer becomes a path with consequences.
+
+  ## NO DELEGATION
+  Write the actual path descriptions directly.
+
+  ## Your Task
+  For each explored answer (from the dilemma decisions above), describe:
+  - path name: human-readable name
+  - dilemma_id: which dilemma this explores
+  - answer_id: which answer this explores (MUST match an explored answer ID exactly)
+  - tier: "major" or "minor"
+  - description: what this path is about (2-3 sentences)
+  - consequences: what happens narratively on this path
+
+  For each consequence:
+  - description: what happens (1-2 sentences)
+  - ripples: downstream story effects
+
+  ## Path ID Convention
+  Path IDs follow the pattern: `dilemma_id__answer_id` (double underscore).
+  Example: dilemma `mentor_trust_or_betrayal` with answer `trust` becomes path `mentor_trust_or_betrayal__trust`.
+
+  ## Output Format
+  For each explored answer, describe the path and its consequences clearly.
+  Group by dilemma for clarity.
+  {output_language_instruction}
+
+beats_system: |
+  You are sketching initial beats (opening scenes) for a branching story.
+  Each path needs {size_beats_per_path} opening beats.
+
+  ## NO DELEGATION
+  Write the actual beat sketches directly.
+
+  ## Location Constraint (CRITICAL)
+  You CANNOT invent new locations. Beats MUST use retained location entity IDs.
+  WRONG: `character_name_office` (invented), `building_basement` (invented suffix)
+  RIGHT: Use a retained location ID and put scene details in the summary.
+
+  **Location Diversity**: Use at least 2 different locations across your beats.
+
+  ## Your Task
+  For each path, sketch {size_beats_per_path} opening beats:
+  - beat_id: unique identifier
+  - summary: one sentence describing what happens
+  - location: a RETAINED location entity ID
+  - entities: key entity IDs present in this beat
+  - paths: which path IDs this beat serves
+
+  Beats can serve multiple paths (shared opening scenes).
+
+  ## Output Format
+  List beats grouped by the path(s) they serve.
+  {output_language_instruction}
+
+convergence_system: |
+  You are designing convergence points where branching story paths merge back.
+
+  ## NO DELEGATION
+  Write the actual convergence sketch directly.
+
+  ## Your Task
+  Based on the paths and beats described above, describe:
+  - convergence_points: where and how paths should merge ({size_convergence_points} points)
+  - residue_notes: what differences persist after convergence (choices should matter)
+
+  Convergence means paths rejoin the same narrative thread, but the player's
+  earlier choices should still have visible consequences (residue).
+
+  ## Output Format
+  Describe each convergence point with:
+  - Which paths converge
+  - How they merge narratively
+  - What residue (lasting differences) each path leaves
+  {output_language_instruction}
+
+components: []

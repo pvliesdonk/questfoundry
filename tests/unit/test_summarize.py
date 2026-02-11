@@ -7,8 +7,15 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
-from questfoundry.agents.prompts import get_summarize_prompt
-from questfoundry.agents.summarize import _format_messages_for_summary, summarize_discussion
+from questfoundry.agents.prompts import get_seed_section_summarize_prompts, get_summarize_prompt
+from questfoundry.agents.summarize import (
+    SEED_SUMMARY_SECTIONS,
+    _extract_tokens,
+    _format_dilemma_answers_from_graph,
+    _format_messages_for_summary,
+    summarize_discussion,
+    summarize_seed_chunked,
+)
 
 
 class TestGetSummarizePrompt:
@@ -378,3 +385,299 @@ class TestFormatMessagesToolCalls:
         # Tool calls should still be included
         assert "[Tool Call: search]" in result
         assert '"q": "test"' in result
+
+
+class TestExtractTokens:
+    """Test _extract_tokens helper."""
+
+    def test_extract_from_usage_metadata(self) -> None:
+        """Should extract tokens from usage_metadata (Ollama-style)."""
+        msg = AIMessage(content="test")
+        msg.usage_metadata = {"total_tokens": 42}
+        assert _extract_tokens(msg) == 42
+
+    def test_extract_from_response_metadata(self) -> None:
+        """Should extract tokens from response_metadata (OpenAI-style)."""
+        msg = AIMessage(content="test")
+        msg.response_metadata = {"token_usage": {"total_tokens": 99}}
+        assert _extract_tokens(msg) == 99
+
+    def test_returns_zero_when_no_metadata(self) -> None:
+        """Should return 0 when no token metadata is available."""
+        msg = AIMessage(content="test")
+        assert _extract_tokens(msg) == 0
+
+    def test_handles_none_total_tokens(self) -> None:
+        """Should return 0 when total_tokens is None."""
+        msg = AIMessage(content="test")
+        msg.usage_metadata = {"total_tokens": None}
+        assert _extract_tokens(msg) == 0
+
+
+def _make_mock_graph() -> MagicMock:
+    """Build a mock graph with brainstorm entities, dilemmas, and answers.
+
+    Creates 2 entities and 1 dilemma with 2 answers for testing.
+    """
+    graph = MagicMock()
+
+    entities = {
+        "character::hero": {
+            "raw_id": "hero",
+            "entity_type": "character",
+            "concept": "Protagonist",
+        },
+        "location::castle": {
+            "raw_id": "castle",
+            "entity_type": "location",
+            "concept": "Main setting",
+        },
+    }
+    dilemmas = {
+        "dilemma::trust_or_betray": {
+            "raw_id": "trust_or_betray",
+            "question": "Trust or betray?",
+        },
+    }
+
+    def get_nodes_by_type(t: str) -> dict:
+        if t == "entity":
+            return entities
+        if t == "dilemma":
+            return dilemmas
+        return {}
+
+    graph.get_nodes_by_type.side_effect = get_nodes_by_type
+
+    # Answer edges and nodes
+    answer_edges = [
+        {"from": "dilemma::trust_or_betray", "to": "answer::trust", "type": "has_answer"},
+        {"from": "dilemma::trust_or_betray", "to": "answer::betray", "type": "has_answer"},
+    ]
+    answer_nodes = {
+        "answer::trust": {"raw_id": "trust", "is_default_path": True},
+        "answer::betray": {"raw_id": "betray", "is_default_path": False},
+    }
+
+    def get_edges(*, edge_type: str = "", from_id: str = "") -> list:
+        if edge_type == "has_answer":
+            if from_id:
+                return [e for e in answer_edges if e["from"] == from_id]
+            return answer_edges
+        return []
+
+    graph.get_edges.side_effect = get_edges
+
+    def get_node(node_id: str) -> dict | None:
+        return answer_nodes.get(node_id)
+
+    graph.get_node.side_effect = get_node
+
+    return graph
+
+
+class TestFormatDilemmaAnswersFromGraph:
+    """Test _format_dilemma_answers_from_graph."""
+
+    def test_formats_dilemma_answers(self) -> None:
+        """Should format dilemma answer IDs from graph."""
+        graph = _make_mock_graph()
+        result = _format_dilemma_answers_from_graph(graph)
+
+        assert "dilemma::trust_or_betray" in result
+        assert "`betray`" in result
+        assert "`trust`" in result
+
+    def test_handles_empty_graph(self) -> None:
+        """Should return placeholder for graph with no dilemmas."""
+        graph = MagicMock()
+        graph.get_nodes_by_type.return_value = {}
+        result = _format_dilemma_answers_from_graph(graph)
+        assert result == "(No dilemmas)"
+
+    def test_marks_default_answer(self) -> None:
+        """Should mark the default answer."""
+        graph = _make_mock_graph()
+        result = _format_dilemma_answers_from_graph(graph)
+        assert "(default)" in result
+
+
+class TestGetSeedSectionSummarizePrompts:
+    """Test get_seed_section_summarize_prompts loader."""
+
+    def test_returns_all_sections(self) -> None:
+        """Should return prompts for all 5 sections."""
+        prompts = get_seed_section_summarize_prompts(
+            entity_count=2,
+            dilemma_count=1,
+            entity_manifest="- hero\n- castle",
+            dilemma_manifest="- trust_or_betray",
+        )
+        assert set(prompts.keys()) == set(SEED_SUMMARY_SECTIONS)
+
+    def test_entities_prompt_has_manifest(self) -> None:
+        """Entities section should include entity manifest."""
+        prompts = get_seed_section_summarize_prompts(
+            entity_count=2,
+            entity_manifest="- character::hero\n- location::castle",
+        )
+        assert "character::hero" in prompts["entities"]
+        assert "2" in prompts["entities"]
+
+    def test_dilemmas_prompt_has_answers(self) -> None:
+        """Dilemmas section should include answer IDs."""
+        prompts = get_seed_section_summarize_prompts(
+            dilemma_count=1,
+            dilemma_manifest="- dilemma::trust_or_betray",
+            dilemma_answers="- `dilemma::trust_or_betray` -> [trust, betray]",
+        )
+        assert "trust_or_betray" in prompts["dilemmas"]
+        assert "trust" in prompts["dilemmas"]
+
+    def test_all_prompts_are_nonempty_strings(self) -> None:
+        """All section prompts should be non-empty strings."""
+        prompts = get_seed_section_summarize_prompts()
+        for section, prompt in prompts.items():
+            assert isinstance(prompt, str), f"{section} should be a string"
+            assert len(prompt) > 50, f"{section} should be non-trivial"
+
+
+class TestSummarizeSeedChunked:
+    """Test summarize_seed_chunked function."""
+
+    @pytest.mark.asyncio
+    async def test_returns_all_sections(self) -> None:
+        """Should return briefs for all 5 sections."""
+        graph = _make_mock_graph()
+        mock_model = MagicMock()
+
+        # Each call returns a different brief
+        responses = []
+        for section in SEED_SUMMARY_SECTIONS:
+            msg = AIMessage(content=f"Brief for {section}")
+            msg.usage_metadata = {"total_tokens": 50}
+            responses.append(msg)
+
+        mock_model.ainvoke = AsyncMock(side_effect=responses)
+
+        messages = [HumanMessage(content="Let's triage the brainstorm")]
+
+        briefs, tokens = await summarize_seed_chunked(
+            model=mock_model,
+            messages=messages,
+            graph=graph,
+        )
+
+        assert set(briefs.keys()) == set(SEED_SUMMARY_SECTIONS)
+        assert tokens == 250  # 5 sections * 50 tokens
+
+    @pytest.mark.asyncio
+    async def test_makes_five_sequential_calls(self) -> None:
+        """Should make exactly 5 model calls (one per section)."""
+        graph = _make_mock_graph()
+        mock_model = MagicMock()
+
+        response = AIMessage(content="Section brief")
+        response.usage_metadata = {"total_tokens": 10}
+        mock_model.ainvoke = AsyncMock(return_value=response)
+
+        messages = [HumanMessage(content="Test")]
+
+        await summarize_seed_chunked(
+            model=mock_model,
+            messages=messages,
+            graph=graph,
+        )
+
+        assert mock_model.ainvoke.call_count == 5
+
+    @pytest.mark.asyncio
+    async def test_each_call_has_system_and_human_messages(self) -> None:
+        """Each call should have a SystemMessage and HumanMessage."""
+        graph = _make_mock_graph()
+        mock_model = MagicMock()
+
+        captured_calls: list[list] = []
+
+        async def capture_calls(call_messages, config=None):  # noqa: ARG001
+            captured_calls.append(list(call_messages))
+            msg = AIMessage(content="Brief")
+            msg.usage_metadata = {"total_tokens": 10}
+            return msg
+
+        mock_model.ainvoke = capture_calls
+
+        messages = [HumanMessage(content="Discussion content")]
+
+        await summarize_seed_chunked(
+            model=mock_model,
+            messages=messages,
+            graph=graph,
+        )
+
+        assert len(captured_calls) == 5
+        for call_msgs in captured_calls:
+            assert len(call_msgs) == 2
+            assert isinstance(call_msgs[0], SystemMessage)
+            assert isinstance(call_msgs[1], HumanMessage)
+
+    @pytest.mark.asyncio
+    async def test_later_calls_accumulate_prior_context(self) -> None:
+        """Later calls should receive all prior sections' output as context."""
+        graph = _make_mock_graph()
+        mock_model = MagicMock()
+
+        captured_calls: list[list] = []
+
+        async def capture_calls(call_messages, config=None):  # noqa: ARG001
+            captured_calls.append(list(call_messages))
+            idx = len(captured_calls) - 1
+            section = list(SEED_SUMMARY_SECTIONS)[idx]
+            msg = AIMessage(
+                content="Entities are retained" if section == "entities" else f"Brief for {section}"
+            )
+            msg.usage_metadata = {"total_tokens": 10}
+            return msg
+
+        mock_model.ainvoke = capture_calls
+
+        messages = [HumanMessage(content="Test")]
+
+        await summarize_seed_chunked(
+            model=mock_model,
+            messages=messages,
+            graph=graph,
+        )
+
+        # First call (entities) should NOT have prior decisions
+        entities_msg = captured_calls[0][1].content
+        assert "Prior Decisions" not in entities_msg
+
+        # Second call (dilemmas) SHOULD have entities prior context
+        dilemmas_msg = captured_calls[1][1].content
+        assert "Prior Decisions" in dilemmas_msg
+        assert "Entities are retained" in dilemmas_msg
+
+        # Third call (paths) SHOULD have both entities and dilemmas context
+        paths_msg = captured_calls[2][1].content
+        assert "Prior Decisions" in paths_msg
+        assert "Entities are retained" in paths_msg
+        assert "Brief for dilemmas" in paths_msg
+
+    @pytest.mark.asyncio
+    async def test_handles_empty_messages(self) -> None:
+        """Should handle empty message list."""
+        graph = _make_mock_graph()
+        mock_model = MagicMock()
+
+        response = AIMessage(content="Brief")
+        response.usage_metadata = {"total_tokens": 10}
+        mock_model.ainvoke = AsyncMock(return_value=response)
+
+        briefs, _tokens = await summarize_seed_chunked(
+            model=mock_model,
+            messages=[],
+            graph=graph,
+        )
+
+        assert len(briefs) == 5
