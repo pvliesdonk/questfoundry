@@ -36,6 +36,14 @@ from questfoundry.graph.context import (
     normalize_scoped_id,
     strip_scope_prefix,
 )
+from questfoundry.graph.context_compact import (
+    CompactContextConfig,
+    ContextItem,
+    build_narrative_frame,
+    compact_items,
+    enrich_beat_line,
+    truncate_summary,
+)
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
@@ -1031,19 +1039,17 @@ class GrowStage:
                 detail="No beats to classify",
             )
 
-        # Build beat summaries with position context
-        beat_summaries: list[str] = []
+        # Build compact beat summaries (drop paths/impacts arrays, truncate)
+        beat_items: list[ContextItem] = []
         for bid in sorted(beat_nodes.keys()):
             data = beat_nodes[bid]
-            summary = data.get("summary", "")
-            paths = data.get("paths", [])
-            impacts = data.get("dilemma_impacts", [])
-            beat_summaries.append(
-                f'- {bid}: summary="{summary}", paths={paths}, dilemma_impacts={impacts}'
-            )
+            summary = truncate_summary(data.get("summary", ""), 80)
+            n_impacts = len(data.get("dilemma_impacts", []))
+            line = f'- {bid}: "{summary}" [impacts={n_impacts}]'
+            beat_items.append(ContextItem(id=bid, text=line))
 
         context = {
-            "beat_summaries": "\n".join(beat_summaries),
+            "beat_summaries": compact_items(beat_items, CompactContextConfig(max_chars=6000)),
             "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
             "beat_count": str(len(beat_nodes)),
         }
@@ -1234,7 +1240,7 @@ class GrowStage:
                 detail="No paths to check for gaps",
             )
 
-        # Build path sequences with summaries
+        # Build path sequences with truncated summaries
         path_sequences: list[str] = []
         valid_beat_ids: set[str] = set()
         for pid in sorted(path_nodes.keys()):
@@ -1244,7 +1250,7 @@ class GrowStage:
             beat_list: list[str] = []
             for bid in sequence:
                 node = graph.get_node(bid)
-                summary = node.get("summary", "") if node else ""
+                summary = truncate_summary(node.get("summary", ""), 80) if node else ""
                 scene_type = node.get("scene_type", "untagged") if node else "untagged"
                 beat_list.append(f"    {bid} [{scene_type}]: {summary}")
                 valid_beat_ids.add(bid)
@@ -1337,7 +1343,7 @@ class GrowStage:
                 detail="No pacing issues detected",
             )
 
-        # Build full path sequences for affected paths (same pattern as Phase 4b)
+        # Build path sequences for affected paths with truncated summaries
         path_nodes = graph.get_nodes_by_type("path")
         affected_pids = {issue.path_id for issue in issues}
         path_sequences: list[str] = []
@@ -1349,25 +1355,25 @@ class GrowStage:
             beat_list: list[str] = []
             for idx, bid in enumerate(sequence, 1):
                 node = graph.get_node(bid)
-                summary = node.get("summary", "") if node else ""
+                summary = truncate_summary(node.get("summary", ""), 80) if node else ""
                 scene_type = node.get("scene_type", "untagged") if node else "untagged"
                 beat_list.append(f"    #{idx} {bid} [{scene_type}]: {summary}")
                 valid_beat_ids.add(bid)
             raw_pid = pid.removeprefix("path::")
             path_sequences.append(f"  Path: {raw_pid} ({pid})\n" + "\n".join(beat_list))
 
-        # Build issue descriptions
+        # Build issue descriptions with truncated summaries
         issue_descriptions: list[str] = []
         for issue in issues:
-            beat_summaries: list[str] = []
+            issue_beats: list[str] = []
             for bid in issue.beat_ids:
                 node = graph.get_node(bid)
-                summary = node.get("summary", "") if node else ""
-                beat_summaries.append(f"    {bid}: {summary}")
+                summary = truncate_summary(node.get("summary", ""), 80) if node else ""
+                issue_beats.append(f"    {bid}: {summary}")
             raw_pid = issue.path_id.removeprefix("path::")
             issue_descriptions.append(
                 f"  Path {raw_pid}: {len(issue.beat_ids)} consecutive "
-                f"'{issue.scene_type}' beats:\n" + "\n".join(beat_summaries)
+                f"'{issue.scene_type}' beats:\n" + "\n".join(issue_beats)
             )
 
         context = {
@@ -1443,29 +1449,38 @@ class GrowStage:
 
         path_nodes = graph.get_nodes_by_type("path")
 
-        # Build beat summaries and identify shared beats
-        beat_summaries: list[str] = []
+        # Build enriched beat summaries with entity names
+        beat_items: list[ContextItem] = []
         shared_beats: list[str] = []
         for bid in sorted(beat_nodes.keys()):
             data = beat_nodes[bid]
-            summary = data.get("summary", "")
-            scene_type = data.get("scene_type", "")
-            narrative_fn = data.get("narrative_function", "")
-            beat_summaries.append(
-                f"- {bid}: {summary} [scene_type={scene_type}, function={narrative_fn}]"
-            )
+            line = enrich_beat_line(graph, bid, data, include_entities=True)
+            beat_items.append(ContextItem(id=bid, text=line))
             if data.get("path_agnostic_for"):
                 shared_beats.append(bid)
 
-        # Build path info for entry state context
+        # Build narrative frame from dilemmas and paths
+        dilemma_ids = sorted(graph.get_nodes_by_type("dilemma").keys())
+        path_ids = sorted(path_nodes.keys())
+        narrative_frame = build_narrative_frame(graph, dilemma_ids=dilemma_ids, path_ids=path_ids)
+
+        # Build path info with theme/mood for entry state context
         path_info_lines: list[str] = []
         for pid in sorted(path_nodes.keys()):
             pdata = path_nodes[pid]
             dilemma = pdata.get("dilemma_id", "")
-            path_info_lines.append(f"- {pid}: dilemma={dilemma}")
+            theme = pdata.get("path_theme", "")
+            mood = pdata.get("path_mood", "")
+            line = f"- {pid} [dilemma={dilemma}]"
+            if theme:
+                line += f"\n    theme: {theme}"
+            if mood:
+                line += f"\n    mood: {mood}"
+            path_info_lines.append(line)
 
         context = {
-            "beat_summaries": "\n".join(beat_summaries),
+            "narrative_frame": narrative_frame,
+            "beat_summaries": compact_items(beat_items, CompactContextConfig(max_chars=6000)),
             "beat_count": str(len(beat_nodes)),
             "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
             "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
