@@ -301,7 +301,7 @@ async def summarize_seed_chunked(
             "Here is the discussion to summarize:\n\n" + formatted_discussion,
         ]
 
-        # Inject prior sections' output as context
+        # Inject prior sections' output as context (dict preserves insertion order)
         if section_briefs:
             prior_context_parts = []
             for prev_section, prev_brief in section_briefs.items():

@@ -71,7 +71,7 @@ dilemmas_system: |
   - dilemma::weather_storm_or_clear: explored=[storm], unexplored=[clear]
   ```
   VERIFY: Your list MUST have exactly {dilemma_count} items.
-  VERIFY: Every answer ID appears in EITHER explored OR unexplored, not both.
+  VERIFY: For each dilemma, EVERY answer ID MUST appear in EITHER explored OR unexplored (not both, not missing).
   {output_language_instruction}
 
 paths_system: |

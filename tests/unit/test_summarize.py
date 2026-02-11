@@ -592,34 +592,6 @@ class TestSummarizeSeedChunked:
         assert mock_model.ainvoke.call_count == 5
 
     @pytest.mark.asyncio
-    async def test_later_sections_include_prior_context(self) -> None:
-        """Later sections should receive prior sections' output as context."""
-        graph = _make_mock_graph()
-        mock_model = MagicMock()
-
-        call_count = [0]
-
-        async def track_calls(messages, config=None):  # noqa: ARG001
-            call_count[0] += 1
-            msg = AIMessage(content=f"Brief {call_count[0]}")
-            msg.usage_metadata = {"total_tokens": 10}
-            return msg
-
-        mock_model.ainvoke = track_calls
-
-        messages = [HumanMessage(content="Test")]
-
-        await summarize_seed_chunked(
-            model=mock_model,
-            messages=messages,
-            graph=graph,
-        )
-
-        # We can't easily inspect the calls since ainvoke is a plain async function,
-        # but we verify the function completes and returns all sections
-        assert call_count[0] == 5
-
-    @pytest.mark.asyncio
     async def test_each_call_has_system_and_human_messages(self) -> None:
         """Each call should have a SystemMessage and HumanMessage."""
         graph = _make_mock_graph()
@@ -650,8 +622,8 @@ class TestSummarizeSeedChunked:
             assert isinstance(call_msgs[1], HumanMessage)
 
     @pytest.mark.asyncio
-    async def test_second_call_includes_first_output(self) -> None:
-        """The dilemmas call should include entities brief as prior context."""
+    async def test_later_calls_accumulate_prior_context(self) -> None:
+        """Later calls should receive all prior sections' output as context."""
         graph = _make_mock_graph()
         mock_model = MagicMock()
 
@@ -685,6 +657,12 @@ class TestSummarizeSeedChunked:
         dilemmas_msg = captured_calls[1][1].content
         assert "Prior Decisions" in dilemmas_msg
         assert "Entities are retained" in dilemmas_msg
+
+        # Third call (paths) SHOULD have both entities and dilemmas context
+        paths_msg = captured_calls[2][1].content
+        assert "Prior Decisions" in paths_msg
+        assert "Entities are retained" in paths_msg
+        assert "Brief for dilemmas" in paths_msg
 
     @pytest.mark.asyncio
     async def test_handles_empty_messages(self) -> None:
