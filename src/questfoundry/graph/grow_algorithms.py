@@ -571,18 +571,16 @@ def mark_terminal_passages(graph: Graph) -> int:
     passages = graph.get_nodes_by_type("passage")
     choices = graph.get_nodes_by_type("choice")
 
-    has_outgoing: set[str] = set()
-    for choice_data in choices.values():
-        src = choice_data.get("choice_from")
-        if src:
-            has_outgoing.add(str(src))
+    has_outgoing = {
+        choice_data["choice_from"]
+        for choice_data in choices.values()
+        if choice_data.get("choice_from")
+    }
 
-    marked = 0
-    for pid in passages:
-        if pid not in has_outgoing:
-            graph.update_node(pid, is_ending=True)
-            marked += 1
-    return marked
+    terminal = set(passages.keys()) - has_outgoing
+    for pid in terminal:
+        graph.update_node(pid, is_ending=True)
+    return len(terminal)
 
 
 def _build_collapse_exempt_passages(
