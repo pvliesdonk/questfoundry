@@ -2503,7 +2503,7 @@ class GrowStage:
         single_expected_pairs: set[tuple[str, str]] = set()
 
         if single_successors:
-            transition_lines: list[str] = []
+            transition_items: list[ContextItem] = []
             valid_from_ids: list[str] = []
             valid_to_ids: list[str] = []
 
@@ -2512,14 +2512,17 @@ class GrowStage:
                 valid_from_ids.append(p_id)
                 valid_to_ids.append(succ.to_passage)
                 single_expected_pairs.add((p_id, succ.to_passage))
-                p_summary = passage_nodes.get(p_id, {}).get("summary", "")
-                succ_summary = passage_nodes.get(succ.to_passage, {}).get("summary", "")
-                transition_lines.append(
-                    f'- {p_id} ("{p_summary}") → {succ.to_passage} ("{succ_summary}")'
+                p_summary = truncate_summary(passage_nodes.get(p_id, {}).get("summary", ""), 60)
+                succ_summary = truncate_summary(
+                    passage_nodes.get(succ.to_passage, {}).get("summary", ""), 60
                 )
+                line = f'- {p_id} ("{p_summary}") → {succ.to_passage} ("{succ_summary}")'
+                transition_items.append(ContextItem(id=p_id, text=line))
 
             context = {
-                "transition_context": "\n".join(transition_lines),
+                "transition_context": compact_items(
+                    transition_items, CompactContextConfig(max_chars=6000)
+                ),
                 "valid_from_ids": ", ".join(valid_from_ids),
                 "valid_to_ids": ", ".join(valid_to_ids),
                 "output_language_instruction": self._lang_instruction,
@@ -2582,7 +2585,7 @@ class GrowStage:
         tokens = 0
 
         if multi_successors:
-            # Build context for LLM
+            # Build context for LLM with truncated summaries
             divergence_lines: list[str] = []
             multi_from_ids: list[str] = []
             multi_to_ids: list[str] = []
@@ -2590,13 +2593,15 @@ class GrowStage:
 
             for p_id, succ_list in sorted(multi_successors.items()):
                 multi_from_ids.append(p_id)
-                p_summary = passage_nodes.get(p_id, {}).get("summary", "")
+                p_summary = truncate_summary(passage_nodes.get(p_id, {}).get("summary", ""), 80)
                 divergence_lines.append(f'\nDivergence at {p_id}: "{p_summary}"')
                 divergence_lines.append("  Successors:")
                 for succ in succ_list:
                     multi_to_ids.append(succ.to_passage)
                     multi_expected_pairs.add((p_id, succ.to_passage))
-                    succ_summary = passage_nodes.get(succ.to_passage, {}).get("summary", "")
+                    succ_summary = truncate_summary(
+                        passage_nodes.get(succ.to_passage, {}).get("summary", ""), 80
+                    )
                     divergence_lines.append(f'  - {succ.to_passage}: "{succ_summary}"')
 
             context = {
@@ -2768,18 +2773,19 @@ class GrowStage:
                 detail="No linear stretches found (3+ consecutive)",
             )
 
-        # Build context for LLM
-        stretch_lines: list[str] = []
+        # Build context for LLM with truncated summaries (one item per stretch)
+        stretch_items: list[ContextItem] = []
         all_passage_ids: list[str] = []
         for i, stretch in enumerate(stretches[:10]):  # Cap context at 10 stretches
-            stretch_lines.append(f"\nStretch {i + 1} ({len(stretch)} passages):")
+            lines = [f"Stretch {i + 1} ({len(stretch)} passages):"]
             for pid in stretch:
-                summary = passages.get(pid, {}).get("summary", "")
-                stretch_lines.append(f'  - {pid}: "{summary}"')
+                summary = truncate_summary(passages.get(pid, {}).get("summary", ""), 60)
+                lines.append(f'  - {pid}: "{summary}"')
                 all_passage_ids.append(pid)
+            stretch_items.append(ContextItem(id=f"stretch_{i}", text="\n".join(lines)))
 
         context = {
-            "stretch_context": "\n".join(stretch_lines),
+            "stretch_context": compact_items(stretch_items, CompactContextConfig(max_chars=6000)),
             "valid_passage_ids": ", ".join(sorted(set(all_passage_ids))),
             "output_language_instruction": self._lang_instruction,
         }
@@ -2956,14 +2962,14 @@ class GrowStage:
         choice_from_edges = graph.get_edges(edge_type="choice_from")
         has_outgoing = {e["to"] for e in choice_from_edges}
 
-        # Build passage context for LLM (non-ending passages only)
-        passage_lines: list[str] = []
+        # Build passage context for LLM (non-ending passages only, truncated)
+        passage_items: list[ContextItem] = []
         valid_ids: list[str] = []
         for pid in sorted(passages):
             if pid not in has_outgoing:
                 continue  # Skip ending passages
-            summary = passages[pid].get("summary", "")
-            passage_lines.append(f'- {pid}: "{summary}"')
+            summary = truncate_summary(passages[pid].get("summary", ""), 60)
+            passage_items.append(ContextItem(id=pid, text=f'- {pid}: "{summary}"'))
             valid_ids.append(pid)
 
         if not valid_ids:
@@ -2977,7 +2983,7 @@ class GrowStage:
         valid_codeword_ids = set(codeword_nodes.keys())
 
         context = {
-            "passage_context": "\n".join(passage_lines),
+            "passage_context": compact_items(passage_items, CompactContextConfig(max_chars=6000)),
             "valid_passage_ids": ", ".join(valid_ids),
             "valid_codeword_ids": ", ".join(sorted(valid_codeword_ids))
             if valid_codeword_ids
