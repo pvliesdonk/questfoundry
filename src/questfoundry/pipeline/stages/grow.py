@@ -2172,7 +2172,8 @@ class GrowStage:
                 detail="No codewords or entities to process",
             )
 
-        # Build consequence context: consequence description + its codeword
+        # Build enriched consequence context per codeword:
+        # codeword → consequence → path → dilemma (with central entities + effects)
         consequence_nodes = graph.get_nodes_by_type("consequence")
         consequence_lines: list[str] = []
         valid_codeword_ids: list[str] = []
@@ -2182,7 +2183,35 @@ class GrowStage:
             tracks_id = cw_data.get("tracks", "")
             cons_data = consequence_nodes.get(tracks_id, {})
             cons_desc = cons_data.get("description", "unknown consequence")
-            consequence_lines.append(f"- {cw_id}: tracks '{tracks_id}' ({cons_desc})")
+
+            # Trace: consequence → path → dilemma for rich context
+            path_id = cons_data.get("path_id", "")
+            path_node = graph.get_node(path_id) if path_id else None
+            dilemma_node = None
+            if path_node:
+                dilemma_id = path_node.get("dilemma_id", "")
+                dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
+
+            narrative_effects = cons_data.get("narrative_effects", [])
+
+            # Build multi-line block per codeword
+            block = [f"- {cw_id}"]
+            if path_node:
+                path_name = path_node.get("name", path_id)
+                block.append(f'  Path: {path_id} ("{path_name}")')
+            if dilemma_node:
+                question = dilemma_node.get("question", "")
+                block.append(f'  Dilemma: "{question}"')
+                central = dilemma_node.get("central_entity_ids", [])
+                if central:
+                    block.append(f"  Central entities: {', '.join(central)}")
+            block.append(f"  Consequence: {cons_desc}")
+            if narrative_effects:
+                block.append("  Effects:")
+                for effect in narrative_effects:
+                    block.append(f"    - {effect}")
+
+            consequence_lines.append("\n".join(block))
 
         consequence_context = "\n".join(consequence_lines)
 

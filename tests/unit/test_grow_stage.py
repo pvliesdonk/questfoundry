@@ -1670,6 +1670,198 @@ class TestPhase8cOverlays:
         assert entity_data is not None
         assert len(entity_data["overlays"]) == 1
 
+    @pytest.mark.asyncio
+    async def test_phase8c_consequence_context_full_chain(self) -> None:
+        """Enriched context traces codeword → consequence → path → dilemma."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import Phase8cOutput
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::mentor",
+            {
+                "type": "entity",
+                "raw_id": "mentor",
+                "entity_category": "character",
+                "concept": "A guide",
+            },
+        )
+        graph.create_node(
+            "dilemma::trust_or_betray",
+            {
+                "type": "dilemma",
+                "raw_id": "trust_or_betray",
+                "question": "Do you trust or betray the mentor?",
+                "central_entity_ids": ["entity::mentor", "entity::hero"],
+            },
+        )
+        graph.create_node(
+            "path::trust_or_betray__trust",
+            {
+                "type": "path",
+                "raw_id": "trust_or_betray__trust",
+                "dilemma_id": "dilemma::trust_or_betray",
+                "name": "The Trusting Path",
+            },
+        )
+        graph.create_node(
+            "consequence::mentor_trusted",
+            {
+                "type": "consequence",
+                "raw_id": "mentor_trusted",
+                "description": "Mentor becomes your ally",
+                "path_id": "path::trust_or_betray__trust",
+                "narrative_effects": [
+                    "Trust grows between you",
+                    "Mentor reveals hidden knowledge",
+                ],
+            },
+        )
+        graph.create_node(
+            "codeword::mentor_trusted_committed",
+            {
+                "type": "codeword",
+                "raw_id": "mentor_trusted_committed",
+                "tracks": "consequence::mentor_trusted",
+                "codeword_type": "granted",
+            },
+        )
+
+        stage = GrowStage()
+        captured_context: dict[str, str] = {}
+
+        async def capture_llm_call(
+            _model: object,
+            _template_name: str,
+            context: dict[str, str],
+            _output_schema: type,
+            **_kwargs: object,
+        ) -> tuple[Phase8cOutput, int, int]:
+            captured_context.update(context)
+            return Phase8cOutput(overlays=[]), 1, 0
+
+        with patch.object(stage, "_grow_llm_call", side_effect=capture_llm_call):
+            await stage._phase_8c_overlays(graph, MagicMock())
+
+        ctx = captured_context["consequence_context"]
+        assert "codeword::mentor_trusted_committed" in ctx
+        assert 'Path: path::trust_or_betray__trust ("The Trusting Path")' in ctx
+        assert 'Dilemma: "Do you trust or betray the mentor?"' in ctx
+        assert "Central entities: entity::mentor, entity::hero" in ctx
+        assert "Consequence: Mentor becomes your ally" in ctx
+        assert "Trust grows between you" in ctx
+        assert "Mentor reveals hidden knowledge" in ctx
+
+    @pytest.mark.asyncio
+    async def test_phase8c_consequence_context_missing_path(self) -> None:
+        """Context falls back gracefully when path node is missing."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import Phase8cOutput
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_category": "character", "concept": "Hero"},
+        )
+        graph.create_node(
+            "consequence::hero_saved",
+            {
+                "type": "consequence",
+                "raw_id": "hero_saved",
+                "description": "The hero survives the ordeal",
+                "path_id": "path::nonexistent_path",
+            },
+        )
+        graph.create_node(
+            "codeword::hero_saved_committed",
+            {
+                "type": "codeword",
+                "raw_id": "hero_saved_committed",
+                "tracks": "consequence::hero_saved",
+                "codeword_type": "granted",
+            },
+        )
+
+        stage = GrowStage()
+        captured_context: dict[str, str] = {}
+
+        async def capture_llm_call(
+            _model: object,
+            _template_name: str,
+            context: dict[str, str],
+            _output_schema: type,
+            **_kwargs: object,
+        ) -> tuple[Phase8cOutput, int, int]:
+            captured_context.update(context)
+            return Phase8cOutput(overlays=[]), 1, 0
+
+        with patch.object(stage, "_grow_llm_call", side_effect=capture_llm_call):
+            await stage._phase_8c_overlays(graph, MagicMock())
+
+        ctx = captured_context["consequence_context"]
+        assert "codeword::hero_saved_committed" in ctx
+        assert "Consequence: The hero survives the ordeal" in ctx
+        # No path/dilemma lines since path node is missing
+        assert "Path:" not in ctx
+        assert "Dilemma:" not in ctx
+
+    @pytest.mark.asyncio
+    async def test_phase8c_consequence_context_no_effects(self) -> None:
+        """Context omits Effects section when narrative_effects is empty."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import Phase8cOutput
+
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_category": "character", "concept": "Hero"},
+        )
+        graph.create_node(
+            "consequence::secret_revealed",
+            {
+                "type": "consequence",
+                "raw_id": "secret_revealed",
+                "description": "A benign secret comes to light",
+                "narrative_effects": [],
+            },
+        )
+        graph.create_node(
+            "codeword::secret_revealed_committed",
+            {
+                "type": "codeword",
+                "raw_id": "secret_revealed_committed",
+                "tracks": "consequence::secret_revealed",
+                "codeword_type": "granted",
+            },
+        )
+
+        stage = GrowStage()
+        captured_context: dict[str, str] = {}
+
+        async def capture_llm_call(
+            _model: object,
+            _template_name: str,
+            context: dict[str, str],
+            _output_schema: type,
+            **_kwargs: object,
+        ) -> tuple[Phase8cOutput, int, int]:
+            captured_context.update(context)
+            return Phase8cOutput(overlays=[]), 1, 0
+
+        with patch.object(stage, "_grow_llm_call", side_effect=capture_llm_call):
+            await stage._phase_8c_overlays(graph, MagicMock())
+
+        ctx = captured_context["consequence_context"]
+        assert "Consequence: A benign secret comes to light" in ctx
+        # No Effects section for empty list
+        assert "Effects:" not in ctx
+
 
 class TestPhase9Choices:
     @pytest.mark.asyncio
