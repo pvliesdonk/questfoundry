@@ -842,6 +842,36 @@ BAD: `host_motivation` (ambiguous, could be confused with path name)
 These patterns help chat-optimized models (like GPT-4o) avoid over-helpful behaviors
 that hurt structured output quality.
 
+### 8. Context Enrichment Principle
+
+> **Every LLM call MUST receive all relevant graph data available at call time.
+> Never strip narrative context down to bare IDs and labels.**
+
+Small models (4B parameters) cannot infer narrative meaning from identifiers alone.
+When a `format_*_context()` function builds context for an LLM call, it MUST include
+all fields from the graph that would inform the model's decision. Bare ID listings
+(e.g., `dilemma::X: explored=[a, b]`) are insufficient when the graph also has
+`question`, `why_it_matters`, `consequence.description`, `narrative_effects`,
+`path_theme`, and `central_entity_ids`.
+
+**Recurring pattern to avoid** (see #772, #783):
+- A context builder strips a rich graph node down to just its ID and one field
+- The LLM lacks information to make a meaningful classification
+- Output quality is poor; the model defaults to the safest/vaguest option
+- Someone eventually notices and enriches the context
+
+**When writing or modifying any `format_*_context()` function:**
+1. List every field available on the relevant graph nodes
+2. Include all fields that would help the LLM make an informed decision
+3. Keep it compact (5-8 lines per item) but never strip to bare IDs
+4. Use the `prompt-engineer` subagent for advice on context design and prompt structure
+
+**When writing or modifying any LLM prompt template:**
+1. Use the `prompt-engineer` subagent to review prompt design before implementation
+2. Verify the injected context actually contains the data the prompt references
+3. Test with `logs/llm_calls.jsonl` — inspect the `messages` array to confirm
+   the model receives rich context, not bare listings
+
 ## DREAM Stage Implementation
 
 The DREAM stage is the reference implementation for new stages (see [ADR-009](docs/architecture/decisions.md#adr-009-langchain-native-dream-pipeline)). Key patterns:
