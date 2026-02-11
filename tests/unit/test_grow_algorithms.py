@@ -1350,13 +1350,38 @@ class TestComputeAllChoiceRequires:
         # pb is spine-only → no requires
         assert result.get("passage::pb", []) == []
 
-    def test_hard_branch_target_no_requires(self) -> None:
-        """Hard-policy branch target gets no requires (structural enforcement)."""
+    def test_hard_branch_no_spine_consequences(self) -> None:
+        """Hard branch with no spine-path consequences gets no requires."""
         graph, passage_arcs = self._make_requires_graph("hard")
         result = compute_all_choice_requires(graph, passage_arcs)
 
-        # Structural isolation enforces hard policy; no codeword gating (#757)
+        # px is branch-only, hard policy, but spine path p_canon has no
+        # consequences → no spine-exclusive codewords to require.
         assert result.get("passage::px", []) == []
+
+    def test_hard_branch_with_spine_consequences(self) -> None:
+        """Hard branch passages get spine-exclusive codewords when spine has consequences."""
+        graph, passage_arcs = self._make_requires_graph("hard")
+
+        # Add a consequence + codeword on the spine path (p_canon)
+        graph.create_node(
+            "consequence::spine_outcome",
+            {"type": "consequence", "raw_id": "spine_outcome", "path_id": "p_canon"},
+        )
+        graph.add_edge("has_consequence", "path::p_canon", "consequence::spine_outcome")
+        graph.create_node(
+            "codeword::spine_outcome_committed",
+            {"type": "codeword", "raw_id": "spine_outcome_committed"},
+        )
+        graph.add_edge("tracks", "codeword::spine_outcome_committed", "consequence::spine_outcome")
+
+        result = compute_all_choice_requires(graph, passage_arcs)
+
+        # px is branch-only, hard policy → requires spine-exclusive codeword
+        assert "passage::px" in result
+        assert "codeword::spine_outcome_committed" in result["passage::px"]
+        # Must NOT require the branch's own codeword
+        assert "codeword::alt_outcome_committed" not in result["passage::px"]
 
     def test_soft_branch_target_no_requires(self) -> None:
         """Target exclusive to soft-policy branch gets no requires."""
@@ -1407,6 +1432,30 @@ class TestComputeAllChoiceRequires:
 
         # No consequences → no codewords → empty
         assert result.get("passage::px", []) == []
+
+    def test_no_spine_arc_returns_empty(self) -> None:
+        """No spine arc in graph produces empty requirements."""
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::branch_only",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "paths": ["p1"],
+                "convergence_policy": "hard",
+                "sequence": ["beat::b1"],
+            },
+        )
+        graph.create_node("passage::p1", {"type": "passage", "from_beat": "beat::b1"})
+        passage_arcs = compute_passage_arc_membership(graph)
+        result = compute_all_choice_requires(graph, passage_arcs)
+        assert result == {}
+
+    def test_empty_graph_returns_empty(self) -> None:
+        """Empty graph with no arcs returns empty dict."""
+        graph = Graph.empty()
+        result = compute_all_choice_requires(graph, {})
+        assert result == {}
 
 
 # ---------------------------------------------------------------------------
