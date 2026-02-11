@@ -10,6 +10,7 @@ from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_validation import (
     ValidationCheck,
     ValidationReport,
+    _compute_linear_threshold,
     check_all_endings_reachable,
     check_all_passages_reachable,
     check_arc_divergence,
@@ -1091,6 +1092,75 @@ class TestMaxConsecutiveLinear:
         report = run_all_checks(graph)
         check_names = [c.name for c in report.checks]
         assert "max_consecutive_linear" in check_names
+
+
+class TestLinearThresholdScaling:
+    """Verify _compute_linear_threshold scales with passage count."""
+
+    def test_small_story_uses_default(self) -> None:
+        graph = Graph.empty()
+        for i in range(10):
+            graph.create_node(f"passage::p{i}", {"type": "passage"})
+        assert _compute_linear_threshold(graph) == 2
+
+    def test_medium_story_scales_up(self) -> None:
+        graph = Graph.empty()
+        for i in range(60):
+            graph.create_node(f"passage::p{i}", {"type": "passage"})
+        assert _compute_linear_threshold(graph) == 3
+
+    def test_large_story_scales_further(self) -> None:
+        graph = Graph.empty()
+        for i in range(100):
+            graph.create_node(f"passage::p{i}", {"type": "passage"})
+        assert _compute_linear_threshold(graph) == 5
+
+    def test_empty_graph_uses_default(self) -> None:
+        graph = Graph.empty()
+        assert _compute_linear_threshold(graph) == 2
+
+
+class TestCommitsTimingScaling:
+    """Verify commits timing thresholds scale with arc length."""
+
+    def test_long_arc_wider_gap_tolerance(self) -> None:
+        """40-beat arc allows gap of 6 (max(5, 40//8)=5 still catches it, but 48-beat allows 6)."""
+        graph = _make_timing_graph_with_arc(
+            beat_count=48,
+            effects_map={
+                3: [{"dilemma_id": "dilemma::t1", "effect": "reveals"}],
+                10: [{"dilemma_id": "dilemma::t1", "effect": "commits"}],
+            },
+        )
+        checks = check_commits_timing(graph)
+        # gap = 10 - 3 = 7; max_gap = max(5, 48//8) = 6 → still warns
+        gap_warnings = [c for c in checks if "gap" in c.message]
+        assert len(gap_warnings) == 1
+
+    def test_very_long_arc_accepts_larger_gap(self) -> None:
+        """80-beat arc allows gap of 10 (max(5, 80//8)=10)."""
+        graph = _make_timing_graph_with_arc(
+            beat_count=80,
+            effects_map={
+                5: [{"dilemma_id": "dilemma::t1", "effect": "reveals"}],
+                15: [{"dilemma_id": "dilemma::t1", "effect": "commits"}],
+            },
+        )
+        checks = check_commits_timing(graph)
+        # gap = 15 - 5 = 10; max_gap = max(5, 80//8) = 10 → exactly at threshold, no warn
+        gap_warnings = [c for c in checks if "gap" in c.message]
+        assert len(gap_warnings) == 0
+
+    def test_short_arc_uses_default_thresholds(self) -> None:
+        """6-beat arc uses defaults (same as existing tests)."""
+        graph = _make_timing_graph_with_arc(
+            beat_count=6,
+            effects_map={1: [{"dilemma_id": "dilemma::t1", "effect": "commits"}]},
+        )
+        checks = check_commits_timing(graph)
+        # commits at position 2/6 — too early (< max(3, 6//10)=3)
+        early_warnings = [c for c in checks if "too early" in c.message]
+        assert len(early_warnings) == 1
 
 
 # ---------------------------------------------------------------------------
