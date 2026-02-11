@@ -36,7 +36,7 @@ system: |
     #1 beat::example_01 [scene]
     #2 beat::example_02 [scene]
     #3 beat::example_03 [scene]
-  To insert a sequel between beat_01 and beat_02:
+  To insert a sequel between beat::example_01 and beat::example_02:
     CORRECT: after_beat = "beat::example_01", before_beat = "beat::example_02"
     WRONG:   after_beat = "beat::example_02", before_beat = "beat::example_01"
 
