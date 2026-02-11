@@ -1121,6 +1121,35 @@ def _find_convergence_for_soft(
     return candidate
 
 
+def _build_beat_dilemma_map_for_convergence(
+    graph: Graph,
+) -> dict[str, set[str]]:
+    """Map each beat to its prefixed dilemma IDs via belongs_to → path → dilemma.
+
+    Similar to ``_build_beat_dilemmas`` but returns prefixed dilemma IDs
+    (e.g. ``dilemma::foo``) for direct comparison with dilemma node keys.
+    """
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    path_to_dilemma: dict[str, str] = {}
+    for path_id, path_data in path_nodes.items():
+        did = path_data.get("dilemma_id")
+        if did:
+            prefixed = normalize_scoped_id(did, "dilemma")
+            if prefixed in dilemma_nodes:
+                path_to_dilemma[path_id] = prefixed
+
+    beat_dilemmas: dict[str, set[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        if path_id in path_to_dilemma:
+            beat_dilemmas.setdefault(beat_id, set()).add(path_to_dilemma[path_id])
+
+    return beat_dilemmas
+
+
 def find_convergence_points(
     graph: Graph,
     arcs: list[Arc],
@@ -1129,11 +1158,15 @@ def find_convergence_points(
 ) -> dict[str, ConvergenceInfo]:
     """Find where branch arcs converge back to the spine.
 
-    Policy-aware convergence:
+    For multi-dilemma arcs, computes convergence from non-hard dilemma beats
+    only.  Hard dilemmas never converge (by spec), but non-hard dilemmas in
+    the same arc DO converge, and FILL should know about it.
+
+    Policy-aware convergence (applied to non-hard beats):
     - **flavor**: First shared beat after divergence (immediate convergence).
     - **soft**: Last-exclusive-beat boundary via backward scan, respecting
       payoff_budget.
-    - **hard**: No convergence metadata (converges_at is always None).
+    - **hard** (all dilemmas hard): No convergence (converges_at = None).
 
     Args:
         graph: Graph with dilemma nodes containing convergence_policy/payoff_budget.
@@ -1164,6 +1197,8 @@ def find_convergence_points(
 
     result: dict[str, ConvergenceInfo] = {}
     spine_seq_set = set(spine.sequence)
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    beat_dilemma_map = _build_beat_dilemma_map_for_convergence(graph)
 
     for arc in arcs:
         if arc.arc_type == "spine":
@@ -1173,7 +1208,8 @@ def find_convergence_points(
         if not div_info:
             continue
 
-        policy, budget = _get_effective_policy(graph, arc)
+        # Get the full arc-level effective policy (for storage on the node)
+        eff_policy, eff_budget = _get_effective_policy(graph, arc)
 
         # Find beats in branch after divergence point
         diverge_at = div_info.diverges_at
@@ -1183,27 +1219,83 @@ def find_convergence_points(
         else:
             branch_after_div = arc.sequence
 
-        # Apply policy-specific convergence logic
+        # Separate hard vs non-hard dilemma policies
+        policies = _find_arc_dilemma_policies(graph, arc)
+        non_hard = [(p, b) for p, b in policies if p != "hard"]
+
         converges_at: str | None = None
-        if policy == "hard":
-            # Hard: never set convergence metadata
+        if not policies:
+            # No dilemma metadata → use arc-level effective policy (backward compat)
+            if eff_policy == "flavor":
+                for beat_id in branch_after_div:
+                    if beat_id in spine_seq_set:
+                        converges_at = beat_id
+                        break
+            elif eff_policy == "soft":
+                converges_at = _find_convergence_for_soft(
+                    branch_after_div, spine_seq_set, eff_budget
+                )
+            # else: hard with no metadata shouldn't happen, but safe
+        elif not non_hard:
+            # All policies are hard → no convergence
             pass
-        elif policy == "flavor":
-            # Flavor: first shared beat (immediate convergence)
-            for beat_id in branch_after_div:
-                if beat_id in spine_seq_set:
-                    converges_at = beat_id
-                    break
         else:
-            # Soft: backward scan for true convergence boundary
-            converges_at = _find_convergence_for_soft(branch_after_div, spine_seq_set, budget)
+            # Compute effective non-hard policy
+            non_hard_policy = "soft" if any(p == "soft" for p, _ in non_hard) else "flavor"
+            non_hard_budget = max(b for _, b in non_hard)
+
+            # Find hard dilemma IDs to filter beats
+            hard_dilemma_ids: set[str] = set()
+            for raw_path_id in arc.paths:
+                path_node_id = normalize_scoped_id(raw_path_id, "path")
+                path_node = graph.get_node(path_node_id)
+                if not path_node:
+                    continue
+                did = path_node.get("dilemma_id")
+                if not did:
+                    continue
+                prefixed = normalize_scoped_id(did, "dilemma")
+                dnode = dilemma_nodes.get(prefixed)
+                if dnode and dnode.get("convergence_policy") == "hard":
+                    hard_dilemma_ids.add(prefixed)
+
+            # Filter branch_after_div to non-hard dilemma beats only.
+            # A beat is kept if it has no dilemma association (neutral) or
+            # has ANY non-hard dilemma association.  Beats exclusively
+            # owned by hard dilemmas are removed.
+            if hard_dilemma_ids:
+                hard_ids = hard_dilemma_ids  # bind for closure
+                filtered_branch = [
+                    b
+                    for b in branch_after_div
+                    if not (beat_dilemma_map.get(b) and beat_dilemma_map[b] <= hard_ids)
+                ]
+                filtered_spine = {
+                    b
+                    for b in spine_seq_set
+                    if not (beat_dilemma_map.get(b) and beat_dilemma_map[b] <= hard_ids)
+                }
+            else:
+                filtered_branch = branch_after_div
+                filtered_spine = spine_seq_set
+
+            # Apply policy-specific convergence logic on filtered beats
+            if non_hard_policy == "flavor":
+                for beat_id in filtered_branch:
+                    if beat_id in filtered_spine:
+                        converges_at = beat_id
+                        break
+            else:
+                converges_at = _find_convergence_for_soft(
+                    filtered_branch, filtered_spine, non_hard_budget
+                )
 
         result[arc.arc_id] = ConvergenceInfo(
             arc_id=arc.arc_id,
             converges_to=spine.arc_id,
             converges_at=converges_at,
-            convergence_policy=policy,
-            payoff_budget=budget,
+            convergence_policy=eff_policy,
+            payoff_budget=eff_budget,
         )
 
     return result

@@ -926,8 +926,8 @@ class TestFindConvergencePointsPolicyAware:
         assert result["branch"].converges_at == "beat::c"
         assert result["branch"].convergence_policy == "flavor"
 
-    def test_multi_dilemma_hard_dominates(self) -> None:
-        """Arc with two dilemmas: hard dominates over soft."""
+    def test_multi_dilemma_hard_plus_soft_no_belongs_to(self) -> None:
+        """Mixed hard+soft without belongs_to edges: soft budget not met → None."""
         graph = Graph.empty()
         graph.create_node(
             "dilemma::d1",
@@ -978,9 +978,155 @@ class TestFindConvergencePointsPolicyAware:
         )
         result = find_convergence_points(graph, [spine, branch])
 
+        # Only 1 exclusive beat (x) vs budget=2 → None
         assert result["branch"].converges_at is None
         assert result["branch"].convergence_policy == "hard"
         assert result["branch"].payoff_budget == 4
+
+    @staticmethod
+    def _make_multi_dilemma_graph(
+        d1_policy: str,
+        d1_budget: int,
+        d2_policy: str,
+        d2_budget: int,
+        beat_to_paths: dict[str, list[str]],
+    ) -> Graph:
+        """Build graph with 2 dilemmas, 4 paths, and belongs_to edges."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "convergence_policy": d1_policy,
+                "payoff_budget": d1_budget,
+            },
+        )
+        graph.create_node(
+            "dilemma::d2",
+            {
+                "type": "dilemma",
+                "raw_id": "d2",
+                "convergence_policy": d2_policy,
+                "payoff_budget": d2_budget,
+            },
+        )
+        for pid, did in [
+            ("p1_canon", "d1"),
+            ("p1_alt", "d1"),
+            ("p2_canon", "d2"),
+            ("p2_alt", "d2"),
+        ]:
+            graph.create_node(
+                f"path::{pid}",
+                {"type": "path", "raw_id": pid, "dilemma_id": f"dilemma::{did}"},
+            )
+        for beat_id, paths in beat_to_paths.items():
+            for pid in paths:
+                graph.add_edge("belongs_to", beat_id, f"path::{pid}", validate=False)
+        return graph
+
+    def test_mixed_hard_soft_converges_from_soft_beats(self) -> None:
+        """Mixed hard+soft with belongs_to: convergence computed from soft beats only."""
+        # d1=soft(budget=1), d2=hard.
+        # Spine: a, b, c, d, e.  Branch: a, b, x_soft, y_hard, c, d, e.
+        # x_soft belongs to d1 only, y_hard belongs to d2 only.
+        # Shared beats belong to both d1 and d2.
+        beat_to_paths: dict[str, list[str]] = {
+            "beat::a": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+            "beat::b": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+            "beat::x_soft": ["p1_alt"],
+            "beat::y_hard": ["p2_alt"],
+            "beat::c": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+            "beat::d": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+            "beat::e": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+        }
+        graph = self._make_multi_dilemma_graph("soft", 1, "hard", 5, beat_to_paths)
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p1_canon", "p2_canon"],
+            sequence=["beat::a", "beat::b", "beat::c", "beat::d", "beat::e"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p1_alt", "p2_alt"],
+            sequence=[
+                "beat::a",
+                "beat::b",
+                "beat::x_soft",
+                "beat::y_hard",
+                "beat::c",
+                "beat::d",
+                "beat::e",
+            ],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        # y_hard filtered out (hard-only beat). Soft convergence from
+        # [x_soft, c, d, e] with budget=1 → converges at c.
+        assert result["branch"].converges_at == "beat::c"
+        # Stored policy is arc-level effective (hard dominates)
+        assert result["branch"].convergence_policy == "hard"
+
+    def test_all_hard_no_convergence(self) -> None:
+        """All-hard multi-dilemma arc: converges_at is None."""
+        beat_to_paths: dict[str, list[str]] = {
+            "beat::a": ["p1_alt", "p2_alt"],
+            "beat::x": ["p1_alt"],
+            "beat::y": ["p2_alt"],
+            "beat::end": ["p1_alt", "p2_alt"],
+        }
+        graph = self._make_multi_dilemma_graph("hard", 3, "hard", 5, beat_to_paths)
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p1_canon", "p2_canon"],
+            sequence=["beat::a", "beat::b", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p1_alt", "p2_alt"],
+            sequence=["beat::a", "beat::x", "beat::y", "beat::end"],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        assert result["branch"].converges_at is None
+        assert result["branch"].convergence_policy == "hard"
+
+    def test_all_soft_multi_dilemma_converges(self) -> None:
+        """All-soft multi-dilemma: convergence uses max budget across dilemmas."""
+        beat_to_paths: dict[str, list[str]] = {
+            "beat::a": ["p1_alt", "p2_alt"],
+            "beat::x": ["p1_alt"],
+            "beat::y": ["p2_alt"],
+            "beat::c": ["p1_alt", "p2_alt"],
+            "beat::d": ["p1_alt", "p2_alt"],
+        }
+        graph = self._make_multi_dilemma_graph("soft", 1, "soft", 2, beat_to_paths)
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p1_canon", "p2_canon"],
+            sequence=["beat::a", "beat::c", "beat::d"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p1_alt", "p2_alt"],
+            sequence=["beat::a", "beat::x", "beat::y", "beat::c", "beat::d"],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        # 2 exclusive beats (x, y), max budget=2 → met. Converges at c.
+        assert result["branch"].converges_at == "beat::c"
+        assert result["branch"].convergence_policy == "soft"
+        assert result["branch"].payoff_budget == 2
 
     def test_effective_policy_defaults_to_flavor_when_no_metadata(self) -> None:
         """No dilemma metadata on graph → flavor/0 (backward compat)."""
