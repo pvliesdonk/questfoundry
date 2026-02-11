@@ -1361,10 +1361,10 @@ def compute_all_choice_requires(
         return {}
 
     # 2. Build consequence→codeword lookup (reverse of tracks edges)
-    tracks_edges = graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
-    cons_to_codeword: dict[str, str] = {}
-    for edge in tracks_edges:
-        cons_to_codeword[edge["to"]] = edge["from"]
+    cons_to_codeword = {
+        edge["to"]: edge["from"]
+        for edge in graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
+    }
 
     # 3. Build path→consequences lookup
     has_cons_edges = graph.get_edges(from_id=None, to_id=None, edge_type="has_consequence")
