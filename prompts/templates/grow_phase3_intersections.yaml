@@ -19,13 +19,6 @@ system: |
     debates in the city (political dilemma). Same time, but different locations
     and no shared scene -- these beats do not form a natural combined moment.
 
-  ## Your Task
-  Each candidate group below contains beats that share a connection -- either the
-  same location or a common entity -- and come from different dilemmas. For each
-  group, decide whether the beats form a natural scene when combined.
-
-  Accept groups that work. Reject groups that feel forced.
-
   ## Rules
   1. Keep intersections SMALL: prefer 2 beats; 3 beats maximum.
   2. Beats in an intersection must share a plausible location or moment.
@@ -36,6 +29,13 @@ system: |
      accepting a forced one.
   5. Use ONLY beat IDs from the Valid IDs section. Do not invent or modify IDs.
 
+  ## Candidate Groups
+  {candidate_groups}
+
+  ## Valid IDs
+  Valid beat_ids (use ONLY these): {valid_beat_ids}
+  Total candidate groups: {candidate_count}
+
   ## Output Format
   Return a JSON object with an "intersections" array. Each element has:
   - beat_ids: list of 2-3 beat IDs that form the intersection (from DIFFERENT dilemmas)
@@ -43,24 +43,17 @@ system: |
   - rationale: one sentence explaining why these beats form a natural scene
 
   Example (do not copy these IDs -- use the real IDs from the candidate groups):
-  {
+  {{
     "intersections": [
-      {
+      {{
         "beat_ids": ["beat::market_encounter", "beat::artifact_reveal"],
         "resolved_location": "the central market",
         "rationale": "The mentor introduction and artifact discovery both occur at the market."
-      }
+      }}
     ]
-  }
+  }}
 
-  If no groups form natural intersections, return: {"intersections": []}
-
-  ## Candidate Groups
-  {candidate_groups}
-
-  ## Valid IDs
-  Valid beat_ids (use ONLY these): {valid_beat_ids}
-  Total candidate groups: {candidate_count}
+  If no groups form natural intersections, return: {{"intersections": []}}
 
 user: |
   Select which candidate groups form natural intersection scenes.

@@ -5,39 +5,36 @@ system: |
   You are analyzing path beat sequences to find narrative gaps --
   places where the story jumps too abruptly between beats.
 
-  ## What is a Narrative Gap?
-  A gap occurs when a path's beat sequence lacks a natural transition.
-  For example:
-  - Setup directly to climax (missing development/escalation)
-  - Decision directly to consequence (missing reaction/processing)
-  - Introduction directly to commitment (missing exploration)
-
-  ## Path Sequences (in execution order)
-  {path_sequences}
-
-  ## Gap Detection Rules
-  1. Look for jumps in narrative intensity (setup to climax with nothing between)
-  2. Look for missing emotional transitions (big decision to next action without reflection)
-  3. Default to sequel type for gap beats. Use scene type only when the gap
-     requires a concrete action to bridge (e.g., a character must physically
-     travel or make a visible choice to connect the surrounding beats)
-  4. Each gap beat must specify where it goes (after_beat and/or before_beat)
-  5. Gap beats should be concise transitions, not major story events
-
-  ## Beat Ordering (CRITICAL)
+  ## Beat Ordering (CRITICAL — read this first)
   after_beat = the EARLIER beat (the new beat goes AFTER it)
   before_beat = the LATER beat (the new beat goes BEFORE it)
 
   The new beat is inserted BETWEEN after_beat and before_beat.
   after_beat MUST appear earlier in the path sequence than before_beat.
 
+  ## What is a Narrative Gap?
+  A gap occurs when a path's beat sequence lacks a natural transition:
+  - Setup → climax (missing development/escalation)
+  - Decision → consequence (missing reaction/processing)
+  - Introduction → commitment (missing exploration)
+
+  ## Gap Detection Checklist
+  1. Jump in narrative intensity? (setup to climax with nothing between)
+  2. Missing emotional transition? (big decision to next action without reflection)
+  3. Default to sequel type for gap beats — use scene only when the gap
+     requires concrete action (travel, visible choice)
+  4. Gap beats should be concise transitions, not major story events
+  5. Maximum 2 gap beats per path
+
+  ## Path Sequences (in execution order)
+  {path_sequences}
+
   ## What NOT to Do
-  - Do NOT propose gaps for paths with only 1-2 beats (those are minimal by design)
+  - Do NOT propose gaps for paths with only 1-2 beats
   - Do NOT propose gaps between beats that already flow naturally
   - Do NOT use IDs not listed in the Valid IDs section
-  - Do NOT propose more than 2 gap beats per path
   - Do NOT swap after_beat and before_beat — after_beat is ALWAYS earlier
-  - Do NOT add explanatory prose before or after the JSON output
+  - Do NOT add prose before or after the JSON output
 
   ## Valid IDs
   Valid path_ids: {valid_path_ids}
@@ -45,11 +42,11 @@ system: |
 
   ## Output Format
   Return a JSON object with a "gaps" array. Each gap has:
-  - path_id: the path this gap belongs to (use prefixed form, e.g., "path::dilemma__answer")
-  - after_beat: the EARLIER beat (new beat goes after this one, or null for start of path)
-  - before_beat: the LATER beat (new beat goes before this one, or null for end of path)
-  - summary: a concise description of the gap beat (1 sentence)
-  - scene_type: "scene", "sequel", or "micro_beat" (default: "sequel")
+  - path_id: the path (prefixed form, e.g., "path::dilemma__answer")
+  - after_beat: the EARLIER beat (or null for start of path)
+  - before_beat: the LATER beat (or null for end of path)
+  - summary: concise description of the gap beat (1 sentence)
+  - scene_type: scene | sequel | micro_beat (default: sequel)
 
   If no gaps are needed, return an empty gaps array.
 

@@ -4,8 +4,12 @@ description: Create entity overlays conditioned on codewords
 system: |
   You are creating entity overlays -- conditional details that change
   based on which narrative path the player has taken. Overlays activate
-  when specific codewords are granted (i.e., when certain consequences
-  have been committed to).
+  when specific codewords are granted.
+
+  ## CRITICAL: Every Overlay Needs Details
+  The `details` field MUST contain at least one {{key, value}} pair.
+  WRONG: {{"entity_id": "character::hero", "when": ["codeword::cw_trust"], "details": []}}
+  RIGHT: {{"entity_id": "character::hero", "when": ["codeword::cw_trust"], "details": [{{"key": "attitude", "value": "Wary but relieved the alliance held"}}]}}
 
   ## What is an Entity Overlay?
   An overlay modifies how an entity appears or behaves depending on
@@ -15,62 +19,42 @@ system: |
   - An object becomes unavailable after it is destroyed
 
   ## Consequences, Codewords, and Their Context
-  Each codeword tracks a specific consequence. Below you will find
-  the path it belongs to, the dilemma question, central entities,
-  the consequence description, and its narrative effects.
-
   {consequence_context}
 
   ## Entities Available for Overlays
   {entity_context}
 
   ## When to Create an Overlay
-  For EACH codeword above, check these four rules against each entity.
+  For EACH codeword above, check these rules against each entity.
   If ANY rule is satisfied, propose an overlay.
 
-  1. **Direct mention**: The consequence or its narrative effects
-     NAME an entity (by ID or by role) --> overlay that entity.
-  2. **State change**: An entity's availability, status, condition, or
-     access changes --> overlay it.
-  3. **Atmosphere shift**: A place feels or functions differently as a
-     result --> overlay that location.
-  4. **Ripple effect**: Think ONE step outward. If a consequence affects
-     entity A, does entity B's relationship to A change? If yes, overlay B.
+  1. **Direct mention**: Consequence names an entity → overlay it
+  2. **State change**: Entity's availability/status/condition changes → overlay it
+  3. **Atmosphere shift**: A place feels different as a result → overlay it
+  4. **Ripple effect**: One step outward — if consequence affects entity A,
+     does entity B's relationship to A change? If yes, overlay B
 
-  The central entities listed per codeword are the strongest candidates,
-  but other entities may also be affected.
+  Central entities per codeword are the strongest candidates.
 
-  ## Common Mistakes to Avoid
-  - **Default-state bias**: "The ally stays loyal" seems like no change,
-    but it IS a state -- the player CONFIRMED the alliance. Overlay it.
-    The default world has uncertainty; a committed codeword resolves it.
-  - **Absence bias**: "The object is destroyed" means the entity still
-    needs an overlay (status: unavailable, description: charred remains).
-    Removal is a change, not a non-event.
-  - **Dramatic bias**: "A benign secret is revealed" feels undramatic,
-    but it still changes what characters know and how they behave.
+  ## Common Mistakes
+  - "Ally stays loyal" seems like no change, but it IS a state — the player
+    CONFIRMED the alliance. Overlay it. Uncertainty is the default; resolution is change.
+  - "Object destroyed" — the entity still needs an overlay
+    (status: unavailable, description: charred remains). Removal is a change.
+  - "Benign secret revealed" — still changes what characters know and how they behave.
 
   ## Overlay Structure
-  1. Each overlay targets ONE entity and activates on one or more codewords
-  2. The "when" field lists codeword IDs that must ALL be granted for the overlay to activate
-  3. The "details" field is an array of {key, value} objects describing what changes:
-     - Use descriptive keys like "attitude", "appearance", "description", "access", "status", "mood"
-     - Values should be concise narrative descriptions (1 sentence each)
-  4. Do NOT propose overlays for entities genuinely unaffected by any consequence
-  5. Maximum 3 overlays per entity
+  - Each overlay targets ONE entity, activates on one or more codewords
+  - "when" lists codeword IDs that must ALL be granted
+  - "details" is an array of {{key, value}} describing changes:
+    keys like "attitude", "appearance", "description", "access", "status", "mood"
+  - Maximum 3 overlays per entity
 
   ## What NOT to Do
   - Do NOT use IDs not listed in the Valid IDs section
   - Do NOT propose overlays with empty details
-  - Do NOT add explanatory prose before or after the JSON output
   - Do NOT invent entity or codeword IDs
-
-  ## CRITICAL: Required Field - details
-  The `details` field MUST contain at least one {key, value} pair.
-  Every overlay must describe WHAT changes. An empty details array is invalid.
-
-  WRONG: {"entity_id": "character::hero", "when": ["codeword::cw_trust"], "details": []}
-  RIGHT: {"entity_id": "character::hero", "when": ["codeword::cw_trust"], "details": [{"key": "attitude", "value": "Wary but relieved the alliance held"}]}
+  - Do NOT add prose before or after the JSON output
 
   ## Valid IDs
   Valid entity_ids: {valid_entity_ids}
@@ -78,20 +62,19 @@ system: |
 
   ## Output Format
   Return a JSON object with an "overlays" array. Each overlay has:
-  - entity_id: the entity being modified (e.g., "character::hero" or "location::castle")
-  - when: list of codeword IDs that activate this overlay (all must be granted)
-  - details: array of {key, value} objects describing the changes
+  - entity_id: the entity being modified (e.g., "character::hero")
+  - when: list of codeword IDs that activate this overlay
+  - details: array of {{key, value}} objects describing changes (MUST NOT be empty)
 
-  If no overlays exist after checking all four rules, return an empty overlays array.
+  If no overlays exist after checking all rules, return an empty overlays array.
 
 user: |
   Propose entity overlays based on the consequences and codewords above.
 
   For each codeword, apply the four rules (direct mention, state change,
-  atmosphere shift, ripple effect) to every entity. If any rule fires, create an overlay.
+  atmosphere shift, ripple effect) to every entity.
 
-  Remember: confirmed alliances, destroyed objects, and quiet reveals all deserve overlays.
-
-  REMINDER: Every overlay MUST have a non-empty details array. Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section.
+  REMINDER: Every overlay MUST have a non-empty details array.
+  Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section.
 
 components: []
