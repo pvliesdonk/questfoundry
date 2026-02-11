@@ -22,19 +22,14 @@ from langchain_core.messages import AIMessage, HumanMessage
 from questfoundry.agents import (
     SerializeResult,
     get_seed_discuss_prompt,
-    get_seed_summarize_prompt,
     run_discuss_phase,
     serialize_post_prune_analysis,
     serialize_seed_as_function,
-    summarize_discussion,
+    summarize_seed_chunked,
 )
 from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph import Graph
-from questfoundry.graph.context import (
-    format_summarize_manifest,
-    get_expected_counts,
-    strip_scope_prefix,
-)
+from questfoundry.graph.context import strip_scope_prefix
 from questfoundry.graph.mutations import format_semantic_errors_as_content
 from questfoundry.graph.seed_pruning import compute_arc_count, prune_to_arc_limit
 from questfoundry.observability.logging import get_logger
@@ -350,20 +345,6 @@ class SeedStage:
         # Load graph once for summarize manifest and serialize validation
         graph = Graph.load(resolved_path)
 
-        # Get manifest info for summarize prompt (manifest-first freeze)
-        counts = get_expected_counts(graph)
-        manifests = format_summarize_manifest(graph)
-
-        summarize_prompt = get_seed_summarize_prompt(
-            brainstorm_context=brainstorm_context,
-            entity_count=counts["entities"],
-            dilemma_count=counts["dilemmas"],
-            entity_manifest=manifests["entity_manifest"],
-            dilemma_manifest=manifests["dilemma_manifest"],
-            size_profile=size_profile,
-            output_language_instruction=lang_instruction,
-        )
-
         # Outer loop: conversation-level retry for semantic errors
         # Each iteration runs summarize -> serialize; on semantic errors,
         # we append feedback to messages and retry the whole cycle.
@@ -373,12 +354,15 @@ class SeedStage:
         unload_after_summarize = kwargs.get("unload_after_summarize")
 
         for outer_attempt in range(max_outer_retries + 1):
-            # Phase 2: Summarize (use summarize_model if provided)
+            # Phase 2: Chunked Summarize (5 sequential calls, one per section)
+            # Each section receives the discussion + prior sections' output as context.
             log.debug("seed_phase", phase="summarize", outer_attempt=outer_attempt + 1)
-            brief, summarize_tokens = await summarize_discussion(
+            section_briefs, summarize_tokens = await summarize_seed_chunked(
                 model=summarize_model or model,
                 messages=messages,
-                system_prompt=summarize_prompt,
+                graph=graph,
+                size_profile=size_profile,
+                output_language_instruction=lang_instruction,
                 stage_name="seed",
                 callbacks=callbacks,
             )
@@ -386,24 +370,29 @@ class SeedStage:
                 on_phase_progress(
                     "summarize",
                     "completed",
-                    f"attempt {outer_attempt + 1}/{max_outer_retries + 1}",
+                    f"attempt {outer_attempt + 1}/{max_outer_retries + 1}, "
+                    f"{len(section_briefs)} sections",
                 )
-            total_llm_calls += 1
+            # Chunked summarize makes 5 sequential LLM calls (one per section)
+            total_llm_calls += len(section_briefs)
             total_tokens += summarize_tokens
 
-            # Track brief in conversation history as assistant output
-            messages.append(AIMessage(content=brief))
+            # Track combined brief in conversation history for outer loop retries
+            combined_brief = "\n\n---\n\n".join(f"## {k}\n{v}" for k, v in section_briefs.items())
+            messages.append(AIMessage(content=combined_brief))
 
             # Unload summarize model once before first serialize call
             if unload_after_summarize is not None and not _summarize_unloaded:
                 await unload_after_summarize()
                 _summarize_unloaded = True
 
-            # Phase 3: Serialize (use serialize_model if provided)
+            # Phase 3: Serialize with per-section briefs
+            # Each section receives only its relevant brief (~4-10K chars)
+            # instead of the full monolithic brief (~33K chars).
             log.debug("seed_phase", phase="serialize", outer_attempt=outer_attempt + 1)
             result = await serialize_seed_as_function(
                 model=serialize_model or model,
-                brief=brief,
+                brief=section_briefs,
                 provider_name=serialize_provider_name or provider_name,
                 callbacks=callbacks,
                 graph=graph,  # Enables semantic validation

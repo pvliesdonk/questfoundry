@@ -22,7 +22,9 @@ from questfoundry.graph.context import (
     format_path_ids_context,
     format_retained_entity_ids,
     format_valid_ids_context,
+    get_brainstorm_answer_ids,
     normalize_scoped_id,
+    strip_scope_prefix,
 )
 from questfoundry.graph.mutations import (
     SeedErrorCategory,
@@ -1408,12 +1410,149 @@ def _format_section_corrections(errors: list[SeedValidationError]) -> str:
     return "\n".join(lines)
 
 
+async def _early_validate_dilemma_answers(
+    model: BaseChatModel,
+    dilemma_decisions: list[dict[str, Any]],
+    graph: Graph,
+    section_prompt: str,
+    build_brief_fn: Callable[[], str],
+    provider_name: str | None,
+    max_retries: int,
+    callbacks: list[BaseCallbackHandler] | None,
+    max_early_retries: int = 1,
+) -> tuple[list[dict[str, Any]], int]:
+    """Validate dilemma answer IDs against brainstorm truth and fix if needed.
+
+    Checks every explored/unexplored answer ID against the authoritative
+    brainstorm graph. If invalid IDs are found, re-serializes the dilemmas
+    section with targeted corrections.
+
+    Args:
+        model: Chat model for re-serialization.
+        dilemma_decisions: List of dilemma decision dicts from serialization.
+        graph: Graph containing brainstorm answer nodes.
+        section_prompt: Base system prompt for dilemma serialization.
+        build_brief_fn: Function that returns the brief for dilemma section.
+        provider_name: Provider name for strategy selection.
+        max_retries: Max Pydantic validation retries for re-serialization.
+        callbacks: LangChain callback handlers.
+        max_early_retries: Max correction attempts (default 1).
+
+    Returns:
+        Tuple of (corrected dilemma decisions, tokens used for corrections).
+    """
+    from questfoundry.models.seed import DilemmasSection
+
+    brainstorm_answers = get_brainstorm_answer_ids(graph)
+    total_tokens = 0
+
+    for attempt in range(max_early_retries):
+        # Collect invalid answer IDs
+        invalid: list[tuple[str, str, list[str]]] = []  # (dilemma_id, bad_answer, valid_answers)
+        for d in dilemma_decisions:
+            did = strip_scope_prefix(d.get("dilemma_id", ""))
+            valid = brainstorm_answers.get(did, [])
+            if not valid:
+                continue
+            for ans in [*d.get("explored", []), *d.get("unexplored", [])]:
+                if ans not in valid:
+                    invalid.append((did, ans, valid))
+
+        if not invalid:
+            return dilemma_decisions, total_tokens
+
+        log.warning(
+            "early_dilemma_validation_failed",
+            attempt=attempt + 1,
+            invalid_count=len(invalid),
+            details=[(did, bad, valid) for did, bad, valid in invalid[:5]],
+        )
+
+        # Build correction feedback
+        correction_lines = [
+            "## ANSWER ID CORRECTIONS (CRITICAL)",
+            "",
+            "The following answer IDs do NOT exist in the brainstorm.",
+            "Use ONLY valid answer IDs from the list provided.",
+            "",
+        ]
+        for did, bad_ans, valid_answers in invalid:
+            suggestion = _suggest_closest(bad_ans, valid_answers)
+            if suggestion:
+                correction_lines.append(f"- dilemma `{did}`: '{bad_ans}' → '{suggestion}'")
+            else:
+                correction_lines.append(
+                    f"- dilemma `{did}`: '{bad_ans}' is INVALID. Valid: {', '.join(valid_answers)}"
+                )
+        corrections = "\n".join(correction_lines)
+
+        # Re-serialize dilemmas with corrections
+        corrected_prompt = f"{section_prompt}\n\n{corrections}"
+        try:
+            result, tokens = await serialize_to_artifact(
+                model=model,
+                brief=build_brief_fn(),
+                schema=DilemmasSection,
+                provider_name=provider_name,
+                max_retries=max_retries,
+                system_prompt=corrected_prompt,
+                callbacks=callbacks,
+                stage="seed",
+            )
+            total_tokens += tokens
+            section_data = result.model_dump()
+            corrected_dilemmas = section_data.get("dilemmas")
+            if not corrected_dilemmas:
+                log.warning("early_dilemma_correction_returned_empty", attempt=attempt + 1)
+                break
+            dilemma_decisions = corrected_dilemmas
+            log.info(
+                "early_dilemma_validation_corrected",
+                attempt=attempt + 1,
+                tokens=tokens,
+            )
+        except SerializationError as e:
+            log.warning("early_dilemma_correction_failed", error=str(e))
+            break
+
+    return dilemma_decisions, total_tokens
+
+
+def _suggest_closest(bad_id: str, valid_ids: list[str]) -> str | None:
+    """Find the closest valid ID to a bad one using simple substring matching.
+
+    Returns the best match if one valid ID is a substring of the bad ID
+    or vice versa. Used for correction suggestions like
+    'trust_strength' → 'strength'.
+
+    Args:
+        bad_id: The invalid answer ID.
+        valid_ids: List of valid answer IDs.
+
+    Returns:
+        Best matching valid ID, or None if no close match found.
+    """
+    # Prefer exact token-boundary matches (e.g., "_strength" in "trust_strength")
+    for vid in valid_ids:
+        if f"_{vid}" in bad_id or bad_id.endswith(vid) or bad_id.startswith(vid):
+            return vid
+    # Fall back to simple substring (valid ID appears within bad ID)
+    for vid in valid_ids:
+        if vid in bad_id:
+            return vid
+    # Check reverse (bad ID is substring of valid)
+    for vid in valid_ids:
+        if bad_id in vid:
+            return vid
+    return None
+
+
 @traceable(
     name="Serialize SEED (Function)", run_type="chain", tags=["phase:serialize", "stage:seed"]
 )
 async def serialize_seed_as_function(
     model: BaseChatModel,
-    brief: str,
+    brief: str | dict[str, str],
     provider_name: str | None = None,
     max_retries: int = 3,
     callbacks: list[BaseCallbackHandler] | None = None,
@@ -1433,7 +1572,12 @@ async def serialize_seed_as_function(
 
     Args:
         model: Chat model to use for generation.
-        brief: The summary brief from the Summarize phase.
+        brief: The summary brief from the Summarize phase. Can be either:
+            - str: Monolithic brief (backward-compatible, all sections receive same brief)
+            - dict[str, str]: Per-section briefs from summarize_seed_chunked(),
+              with keys "entities", "dilemmas", "paths", "beats", "convergence".
+              Each section receives only its relevant brief, reducing context from
+              ~33K to ~4-10K chars.
         provider_name: Provider name for strategy auto-detection.
         max_retries: Maximum retries per section (Pydantic validation).
         callbacks: LangChain callback handlers for logging LLM calls.
@@ -1455,18 +1599,51 @@ async def serialize_seed_as_function(
         SeedOutput,
     )
 
-    log.info("serialize_seed_as_function_started")
+    # Normalize brief to support both str and dict[str, str]
+    if isinstance(brief, dict):
+        chunked = True
+        brief_dict: dict[str, str] = brief
+        # For backward-compat fallback, join all sections as monolithic brief
+        monolithic_brief = "\n\n---\n\n".join(brief_dict.values())
+        log.info(
+            "serialize_seed_as_function_started",
+            brief_mode="chunked",
+            sections=list(brief_dict.keys()),
+        )
+    else:
+        chunked = False
+        brief_dict = {}
+        monolithic_brief = brief
+        log.info("serialize_seed_as_function_started", brief_mode="monolithic")
 
     prompts = _load_seed_section_prompts()
     total_tokens = 0
 
-    # Inject valid IDs context if graph is provided
-    enhanced_brief = brief
+    # Build valid IDs context from graph
+    valid_ids_context = ""
     if graph is not None:
         valid_ids_context = format_valid_ids_context(graph, stage="seed")
+
+    def _build_section_brief(section_name: str) -> str:
+        """Build the brief for a specific section.
+
+        When chunked: uses per-section brief + valid IDs context.
+        When monolithic: uses full brief + valid IDs context (old behavior).
+        """
+        if chunked:
+            section_brief = brief_dict.get(section_name, "")
+            if not section_brief:
+                log.warning("missing_section_brief", section=section_name)
+            if valid_ids_context:
+                return f"{valid_ids_context}\n\n---\n\n{section_brief}"
+            return section_brief
+        # Monolithic fallback
         if valid_ids_context:
-            enhanced_brief = f"{valid_ids_context}\n\n---\n\n{brief}"
-            log.debug("valid_ids_context_injected", context_length=len(valid_ids_context))
+            return f"{valid_ids_context}\n\n---\n\n{monolithic_brief}"
+        return monolithic_brief
+
+    # Initial enhanced_brief for the monolithic code path and downstream use
+    enhanced_brief = _build_section_brief("entities")
 
     # Section configuration: (section_name, schema, output_field)
     # Note: "paths" handled via per-dilemma serialization after dilemmas
@@ -1493,8 +1670,18 @@ async def serialize_seed_as_function(
     for section_name, schema, output_field in sections:
         log.debug("serialize_section_started", section=section_name)
 
-        # Use brief with path IDs for consequences
-        current_brief = brief_with_paths if section_name == "consequences" else enhanced_brief
+        # Build per-section brief (chunked mode uses scoped briefs)
+        if section_name == "consequences":
+            # Consequences need path IDs context, plus the paths brief in chunked mode
+            if chunked:
+                paths_brief = brief_dict.get("paths", "")
+                current_brief = (
+                    f"{valid_ids_context}\n\n{paths_brief}" if valid_ids_context else paths_brief
+                )
+            else:
+                current_brief = brief_with_paths
+        else:
+            current_brief = _build_section_brief(section_name)
 
         section_prompt = prompts[section_name]
 
@@ -1559,6 +1746,22 @@ async def serialize_seed_as_function(
                     node = graph.get_node(node_id)
                     if node:
                         d["question"] = node.get("question", "")
+
+            # Early validation: check answer IDs against brainstorm truth.
+            # Catches hallucinated answer IDs (e.g., "trust_strength" instead of
+            # "strength") before they cascade to path generation.
+            if graph is not None:
+                collected["dilemmas"], early_tokens = await _early_validate_dilemma_answers(
+                    model=model,
+                    dilemma_decisions=collected["dilemmas"],
+                    graph=graph,
+                    section_prompt=prompts["dilemmas"],
+                    build_brief_fn=lambda: _build_section_brief("dilemmas"),
+                    provider_name=provider_name,
+                    max_retries=max_retries,
+                    callbacks=callbacks,
+                )
+                total_tokens += early_tokens
 
             # Generate paths per-dilemma
             paths, paths_tokens = await _serialize_paths_per_dilemma(
@@ -1661,11 +1864,21 @@ async def serialize_seed_as_function(
                 )
 
                 corrected_prompt = f"{prompts[section_name]}\n\n{corrections}"
-                current_brief = (
-                    brief_with_paths
-                    if section_name in ("beats", "consequences")
-                    else enhanced_brief
-                )
+                # Build brief for retry (mirrors initial section loop logic)
+                if section_name == "consequences":
+                    if chunked:
+                        paths_brief = brief_dict.get("paths", "")
+                        current_brief = (
+                            f"{valid_ids_context}\n\n{paths_brief}"
+                            if valid_ids_context
+                            else paths_brief
+                        )
+                    else:
+                        current_brief = brief_with_paths
+                elif chunked:
+                    current_brief = _build_section_brief(section_name)
+                else:
+                    current_brief = enhanced_brief
 
                 try:
                     section_result, section_tokens = await serialize_to_artifact(
