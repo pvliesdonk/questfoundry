@@ -2124,7 +2124,7 @@ async def serialize_post_prune_analysis(
         )
         total_tokens += section7_tokens
         llm_calls += 1
-        dilemma_analyses = list(section7_result.dilemma_analyses)
+        dilemma_analyses = section7_result.dilemma_analyses
         log.info(
             "post_prune_section7_complete",
             analyses=len(dilemma_analyses),
