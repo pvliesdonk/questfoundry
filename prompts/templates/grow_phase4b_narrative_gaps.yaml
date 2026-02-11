@@ -12,6 +12,10 @@ system: |
   The new beat is inserted BETWEEN after_beat and before_beat.
   after_beat MUST appear earlier in the path sequence than before_beat.
 
+  Example: if a path has beats #1 beat::setup, #2 beat::climax:
+    CORRECT: after_beat = "beat::setup", before_beat = "beat::climax"
+    WRONG:   after_beat = "beat::climax", before_beat = "beat::setup"
+
   ## What is a Narrative Gap?
   A gap occurs when a path's beat sequence lacks a natural transition:
   - Setup → climax (missing development/escalation)
@@ -50,10 +54,24 @@ system: |
 
   If no gaps are needed, return an empty gaps array.
 
+  Example (do not copy these IDs):
+  {{
+    "gaps": [
+      {{
+        "path_id": "path::dilemma__answer",
+        "after_beat": "beat::setup_01",
+        "before_beat": "beat::climax_01",
+        "summary": "Hero reflects on the stakes before the confrontation",
+        "scene_type": "sequel"
+      }}
+    ]
+  }}
+
 user: |
   Analyze the path sequences above and propose gap beats where needed.
 
   REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section.
   REMINDER: after_beat is the EARLIER beat, before_beat is the LATER beat. Do NOT reverse them.
+  Maximum 2 gap beats per path.
 
 components: []

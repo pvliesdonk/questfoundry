@@ -55,12 +55,25 @@ system: |
 
   Classify ALL beats listed above. Every beat must get exactly one tag.
 
+  Example (do not copy these IDs -- use the real IDs listed above):
+  {{
+    "tags": [
+      {{
+        "beat_id": "beat::market_encounter",
+        "scene_type": "scene",
+        "narrative_function": "introduce",
+        "exit_mood": "curious unease"
+      }}
+    ]
+  }}
+
 user: |
   Classify each beat by scene type, narrative function, and exit mood.
 
   REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs
   section. Every beat needs scene_type + narrative_function + exit_mood.
   Do NOT assign the same narrative_function to 4+ consecutive beats.
+  When in doubt between scene and sequel, prefer scene.
   Do NOT add prose before or after the JSON.
 
 components: []

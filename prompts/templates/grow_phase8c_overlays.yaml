@@ -75,6 +75,7 @@ user: |
   atmosphere shift, ripple effect) to every entity.
 
   REMINDER: Every overlay MUST have a non-empty details array.
+  Maximum 3 overlays per entity.
   Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section.
 
 components: []
