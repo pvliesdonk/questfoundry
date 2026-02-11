@@ -2,42 +2,36 @@ name: grow_phase4a_scene_types
 description: Classify beats by scene type, narrative function, and exit mood
 
 system: |
-  You are classifying story beats on two axes, and assigning an exit mood.
+  You are classifying story beats on three axes.
 
-  ## Axis 1: Scene Type (how the prose flows)
+  ## Scene Type (how the prose flows)
   - **scene**: Active conflict, action, confrontation, or decision moment.
-    The protagonist faces opposition or makes a critical choice.
-  - **sequel**: Reaction, reflection, or processing. The protagonist
-    absorbs what happened and considers next steps.
-  - **micro_beat**: Brief transitional moment (travel, time skip, minor
-    observation) that connects larger beats without standalone drama.
+  - **sequel**: Reaction, reflection, or processing of what happened.
+  - **micro_beat**: Brief transition (travel, time skip, minor observation).
 
-  ## Axis 2: Narrative Function (what dramatic role the beat plays)
-  - **introduce**: Establishes something new (character, setting, threat, question).
+  ## Narrative Function (dramatic role)
+  - **introduce**: Establishes something new (character, setting, threat).
   - **develop**: Deepens understanding of established elements.
   - **complicate**: Adds obstacles, reversals, or new stakes.
   - **confront**: Direct engagement with the central tension.
-  - **resolve**: Settles a question, closes a thread, or reveals truth.
+  - **resolve**: Settles a question, closes a thread, reveals truth.
 
-  A beat's scene_type and narrative_function are independent:
-  a sequel can "complicate" (processing that reveals new stakes),
-  a scene can "introduce" (action that establishes a new threat).
+  Scene type and function are independent: a sequel can "complicate"
+  (processing reveals new stakes), a scene can "introduce" (action
+  establishes a new threat).
 
-  ## Axis 3: Exit Mood (2-3 words for how the reader feels leaving this beat)
-  Examples: "quiet dread", "shaken resolve", "grim determination",
-  "reluctant hope", "cold clarity", "breathless tension", "numb acceptance",
-  "fierce defiance", "bitter calm", "fragile trust"
-
-  Write a SHORT emotional phrase (2-3 words, 2-40 characters). Not a sentence.
+  ## Exit Mood (2-3 words, 2-40 characters)
+  A short emotional phrase for how the reader feels leaving this beat.
   GOOD: "bitter resolve" (14 chars)
-  BAD: "The reader feels a sense of growing unease about what comes next" (too long)
+  BAD: "The reader feels growing unease about what comes next" (too long)
 
-  ## Classification Guidelines
-  1. Beats with dilemma_impacts (commits/escalates) are scenes — they drive conflict forward
-  2. Opening/setup beats are scenes with function "introduce"
-  3. Beats after major decisions are sequels
-  4. Short connecting beats with no named characters acting are micro_beats
-  5. When in doubt between scene and sequel, prefer scene
+  ## Quick Reference
+  - Beats with dilemma_impacts → scene (drives conflict forward)
+  - Opening/setup beats → scene + "introduce"
+  - Beats after major decisions → sequel
+  - Short connecting beats with no named characters → micro_beat
+  - When in doubt between scene and sequel → prefer scene
+  - Do NOT assign the same narrative_function to 4+ consecutive beats
 
   ## Beats to Classify
   {beat_summaries}
@@ -45,9 +39,8 @@ system: |
   ## What NOT to Do
   - Do NOT use IDs not listed in the Valid IDs section
   - Do NOT leave any beat unclassified
-  - Do NOT add explanatory prose before or after the JSON output
-  - Do NOT assign the same narrative_function to 4+ consecutive beats
   - Do NOT write exit_mood as a full sentence
+  - Do NOT add prose before or after the JSON output
 
   ## Valid IDs
   Valid beat_ids (use ONLY these): {valid_beat_ids}
@@ -56,11 +49,23 @@ system: |
   ## Output Format
   Return a JSON object with a "tags" array. Each tag has:
   - beat_id: the beat ID being classified
-  - scene_type: one of "scene", "sequel", or "micro_beat"
-  - narrative_function: one of "introduce", "develop", "complicate", "confront", or "resolve"
-  - exit_mood: 2-3 word emotional descriptor
+  - scene_type: scene | sequel | micro_beat
+  - narrative_function: introduce | develop | complicate | confront | resolve
+  - exit_mood: 2-3 word emotional descriptor (2-40 chars)
 
   Classify ALL beats listed above. Every beat must get exactly one tag.
+
+  Example (do not copy these IDs -- use the real IDs listed above):
+  {{
+    "tags": [
+      {{
+        "beat_id": "beat::market_encounter",
+        "scene_type": "scene",
+        "narrative_function": "introduce",
+        "exit_mood": "curious unease"
+      }}
+    ]
+  }}
 
 user: |
   Classify each beat by scene type, narrative function, and exit mood.
@@ -68,6 +73,7 @@ user: |
   REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs
   section. Every beat needs scene_type + narrative_function + exit_mood.
   Do NOT assign the same narrative_function to 4+ consecutive beats.
+  When in doubt between scene and sequel, prefer scene.
   Do NOT add prose before or after the JSON.
 
 components: []

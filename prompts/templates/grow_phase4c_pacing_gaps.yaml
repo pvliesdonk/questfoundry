@@ -3,13 +3,32 @@ description: Fix pacing issues with correction beats
 
 system: |
   You are fixing pacing issues in story paths. Pacing problems occur
-  when 3 or more consecutive beats have the same scene type (all scenes,
-  all sequels, or all micro_beats).
+  when 3 or more consecutive beats have the same scene type.
 
-  ## Why This Matters
-  - 3+ scenes in a row feels exhausting (no breathing room)
-  - 3+ sequels in a row feels stagnant (no forward momentum)
-  - 3+ micro_beats in a row feels disconnected (no substance)
+  ## Beat Ordering (CRITICAL — read this first)
+  after_beat = the EARLIER beat (the new beat goes AFTER it)
+  before_beat = the LATER beat (the new beat goes BEFORE it)
+
+  The new beat is inserted BETWEEN after_beat and before_beat.
+  after_beat MUST have a LOWER position number than before_beat.
+
+  Example: beats in order #1 [scene], #2 [scene], #3 [scene].
+  To insert a sequel between #1 and #2:
+    CORRECT: after_beat = "beat::example_01", before_beat = "beat::example_02"
+    WRONG:   after_beat = "beat::example_02", before_beat = "beat::example_01"
+
+  ## Why Pacing Matters
+  - 3+ scenes in a row → exhausting (no breathing room)
+  - 3+ sequels in a row → stagnant (no forward momentum)
+  - 3+ micro_beats in a row → disconnected (no substance)
+
+  ## Correction Strategy
+  1. Insert a beat of a DIFFERENT type to break the monotony
+  2. Run of scenes → insert sequel (reflection moment)
+  3. Run of sequels → insert scene (action/decision)
+  4. Run of micro_beats → insert scene or sequel with substance
+  5. Place where it makes the most narrative sense
+  6. One correction beat per issue is usually sufficient
 
   ## Full Path Sequences (numbered in story order)
   {path_sequences}
@@ -17,35 +36,12 @@ system: |
   ## Detected Pacing Issues
   {pacing_issues}
 
-  ## Correction Strategy
-  1. Insert a beat of a DIFFERENT type to break the monotony
-  2. For a run of scenes: insert a sequel (reflection moment) between two scenes
-  3. For a run of sequels: insert a scene (action/decision) to re-engage
-  4. For a run of micro_beats: insert a scene or sequel with substance
-  5. Place the correction beat where it makes the most narrative sense
-  6. One correction beat per issue is usually sufficient
-
-  ## Beat Ordering (CRITICAL)
-  after_beat = the EARLIER beat (the new beat goes AFTER it)
-  before_beat = the LATER beat (the new beat goes BEFORE it)
-
-  The new beat is inserted BETWEEN after_beat and before_beat.
-  after_beat MUST have a LOWER position number than before_beat.
-
-  Example: if a path has beats in this order:
-    #1 beat::example_01 [scene]
-    #2 beat::example_02 [scene]
-    #3 beat::example_03 [scene]
-  To insert a sequel between beat::example_01 and beat::example_02:
-    CORRECT: after_beat = "beat::example_01", before_beat = "beat::example_02"
-    WRONG:   after_beat = "beat::example_02", before_beat = "beat::example_01"
-
   ## What NOT to Do
   - Do NOT propose correction beats of the SAME type as the issue
   - Do NOT use IDs not listed in the Valid IDs section
   - Do NOT insert more than 2 correction beats per issue
   - Do NOT swap after_beat and before_beat — after_beat is ALWAYS earlier
-  - Do NOT add explanatory prose before or after the JSON output
+  - Do NOT add prose before or after the JSON output
 
   ## Valid IDs
   Valid path_ids: {valid_path_ids}
@@ -54,11 +50,11 @@ system: |
 
   ## Output Format
   Return a JSON object with a "gaps" array. Each gap has:
-  - path_id: the path this correction belongs to (use prefixed form)
-  - after_beat: the EARLIER beat (new beat goes after this one)
-  - before_beat: the LATER beat (new beat goes before this one)
-  - summary: a concise description of the correction beat (1 sentence)
-  - scene_type: "scene", "sequel", or "micro_beat" (must differ from the issue type)
+  - path_id: the path (prefixed form)
+  - after_beat: the EARLIER beat
+  - before_beat: the LATER beat
+  - summary: concise description of the correction beat (1 sentence)
+  - scene_type: scene | sequel | micro_beat (must differ from issue type)
 
   If the issues are acceptable, return an empty gaps array.
 
