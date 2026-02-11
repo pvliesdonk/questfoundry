@@ -1022,26 +1022,42 @@ class ConvergenceInfo:
     payoff_budget: int = 2
 
 
+def _count_dilemma_explored_paths(graph: Graph) -> dict[str, int]:
+    """Count total explored paths per dilemma across the whole graph.
+
+    Returns a mapping from scoped dilemma ID to path count.
+    Compute once and pass to ``_find_arc_dilemma_policies`` to avoid
+    repeated full-graph scans.
+    """
+    counts: dict[str, int] = {}
+    for path_data in graph.get_nodes_by_type("path").values():
+        did = path_data.get("dilemma_id")
+        if did:
+            scoped = normalize_scoped_id(did, "dilemma")
+            counts[scoped] = counts.get(scoped, 0) + 1
+    return counts
+
+
 def _find_arc_dilemma_policies(
     graph: Graph,
     arc: Arc,
+    dilemma_path_counts: dict[str, int] | None = None,
 ) -> list[tuple[str, int]]:
     """Collect (convergence_policy, payoff_budget) for divergent dilemmas only.
 
     Only considers dilemmas that have 2+ explored paths in the graph.
     Single-explored dilemmas contribute universal beats but should not
     influence convergence policy — the story doesn't diverge on them.
-    """
-    # Count total explored paths per dilemma across the whole graph
-    all_paths = graph.get_nodes_by_type("path")
-    dilemma_total_paths: dict[str, int] = {}
-    for path_data in all_paths.values():
-        did = path_data.get("dilemma_id")
-        if did:
-            scoped = normalize_scoped_id(did, "dilemma")
-            dilemma_total_paths[scoped] = dilemma_total_paths.get(scoped, 0) + 1
 
-    # Collect policies only from dilemmas this arc touches that actually diverge
+    Args:
+        graph: Graph with dilemma and path nodes.
+        arc: Arc to inspect.
+        dilemma_path_counts: Pre-computed counts from
+            ``_count_dilemma_explored_paths``. Computed on demand if None.
+    """
+    if dilemma_path_counts is None:
+        dilemma_path_counts = _count_dilemma_explored_paths(graph)
+
     seen_dilemmas: set[str] = set()
     policies: list[tuple[str, int]] = []
     for raw_path_id in arc.paths:
@@ -1054,7 +1070,7 @@ def _find_arc_dilemma_policies(
             continue
         seen_dilemmas.add(scoped_did)
         # Skip single-explored dilemmas (universal beats, no actual divergence)
-        if dilemma_total_paths.get(scoped_did, 0) < 2:
+        if dilemma_path_counts.get(scoped_did, 0) < 2:
             continue
         dilemma_node = graph.get_node(scoped_did)
         if dilemma_node:
@@ -1067,14 +1083,18 @@ def _find_arc_dilemma_policies(
     return policies
 
 
-def _get_effective_policy(graph: Graph, arc: Arc) -> tuple[str, int]:
+def _get_effective_policy(
+    graph: Graph,
+    arc: Arc,
+    dilemma_path_counts: dict[str, int] | None = None,
+) -> tuple[str, int]:
     """Combine convergence policies for a (possibly multi-dilemma) arc.
 
     Combine rule per issue #743: hard dominates; payoff_budget = max across
     all dilemmas the arc diverges on.  Falls back to ("flavor", 0) when no
     dilemma metadata is found (preserves pre-policy behavior).
     """
-    policies = _find_arc_dilemma_policies(graph, arc)
+    policies = _find_arc_dilemma_policies(graph, arc, dilemma_path_counts)
     if not policies:
         # No SEED convergence metadata — preserve pre-policy behavior
         # (first shared beat, no budget constraint).
@@ -1218,6 +1238,7 @@ def find_convergence_points(
     spine_seq_set = set(spine.sequence)
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
     beat_dilemma_map = _build_beat_dilemma_map_for_convergence(graph)
+    dilemma_path_counts = _count_dilemma_explored_paths(graph)
 
     for arc in arcs:
         if arc.arc_type == "spine":
@@ -1228,7 +1249,7 @@ def find_convergence_points(
             continue
 
         # Get the full arc-level effective policy (for storage on the node)
-        eff_policy, eff_budget = _get_effective_policy(graph, arc)
+        eff_policy, eff_budget = _get_effective_policy(graph, arc, dilemma_path_counts)
 
         # Find beats in branch after divergence point
         diverge_at = div_info.diverges_at
@@ -1239,7 +1260,7 @@ def find_convergence_points(
             branch_after_div = arc.sequence
 
         # Separate hard vs non-hard dilemma policies
-        policies = _find_arc_dilemma_policies(graph, arc)
+        policies = _find_arc_dilemma_policies(graph, arc, dilemma_path_counts)
         non_hard = [(p, b) for p, b in policies if p != "hard"]
 
         converges_at: str | None = None
