@@ -2593,14 +2593,14 @@ class GrowStage:
 
             for p_id, succ_list in sorted(multi_successors.items()):
                 multi_from_ids.append(p_id)
-                p_summary = truncate_summary(passage_nodes.get(p_id, {}).get("summary", ""), 60)
+                p_summary = truncate_summary(passage_nodes.get(p_id, {}).get("summary", ""), 80)
                 divergence_lines.append(f'\nDivergence at {p_id}: "{p_summary}"')
                 divergence_lines.append("  Successors:")
                 for succ in succ_list:
                     multi_to_ids.append(succ.to_passage)
                     multi_expected_pairs.add((p_id, succ.to_passage))
                     succ_summary = truncate_summary(
-                        passage_nodes.get(succ.to_passage, {}).get("summary", ""), 60
+                        passage_nodes.get(succ.to_passage, {}).get("summary", ""), 80
                     )
                     divergence_lines.append(f'  - {succ.to_passage}: "{succ_summary}"')
 
@@ -2773,21 +2773,19 @@ class GrowStage:
                 detail="No linear stretches found (3+ consecutive)",
             )
 
-        # Build context for LLM with truncated summaries
-        stretch_lines: list[str] = []
+        # Build context for LLM with truncated summaries (one item per stretch)
+        stretch_items: list[ContextItem] = []
         all_passage_ids: list[str] = []
         for i, stretch in enumerate(stretches[:10]):  # Cap context at 10 stretches
-            stretch_lines.append(f"\nStretch {i + 1} ({len(stretch)} passages):")
+            lines = [f"Stretch {i + 1} ({len(stretch)} passages):"]
             for pid in stretch:
                 summary = truncate_summary(passages.get(pid, {}).get("summary", ""), 60)
-                stretch_lines.append(f'  - {pid}: "{summary}"')
+                lines.append(f'  - {pid}: "{summary}"')
                 all_passage_ids.append(pid)
+            stretch_items.append(ContextItem(id=f"stretch_{i}", text="\n".join(lines)))
 
         context = {
-            "stretch_context": compact_items(
-                [ContextItem(id="stretches", text="\n".join(stretch_lines))],
-                CompactContextConfig(max_chars=6000),
-            ),
+            "stretch_context": compact_items(stretch_items, CompactContextConfig(max_chars=6000)),
             "valid_passage_ids": ", ".join(sorted(set(all_passage_ids))),
             "output_language_instruction": self._lang_instruction,
         }
