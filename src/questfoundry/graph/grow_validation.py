@@ -20,11 +20,10 @@ from questfoundry.graph.context import normalize_scoped_id
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
-# Narrative pacing thresholds for commits timing validation.
-# Based on three-act structure: setup requires buildup before resolution.
-MIN_BEATS_BEFORE_COMMITS = 3  # Minimum beats for narrative setup
-MAX_COMMITS_POSITION_RATIO = 0.8  # Commits should allow 20% for denouement
-MAX_BUILDUP_GAP_BEATS = 5  # Maximum beats between last buildup and commits
+# Default narrative pacing thresholds (used as minimums for scaling).
+_DEFAULT_MIN_BEATS_BEFORE_COMMITS = 3
+_DEFAULT_MAX_COMMITS_POSITION_RATIO = 0.8
+_DEFAULT_MAX_BUILDUP_GAP_BEATS = 5
 
 
 @dataclass
@@ -521,13 +520,18 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
 
         total_beats = len(arc_seq)
 
+        # Scale thresholds with arc length — larger arcs get slightly wider
+        # tolerances since beats are spread across more dilemmas.
+        min_beats = max(_DEFAULT_MIN_BEATS_BEFORE_COMMITS, total_beats // 10)
+        max_gap = max(_DEFAULT_MAX_BUILDUP_GAP_BEATS, total_beats // 8)
+
         # Check 1: commits too early
-        if commits_idx < MIN_BEATS_BEFORE_COMMITS:
+        if commits_idx < min_beats:
             checks.append(
                 ValidationCheck(
                     name="commits_timing",
                     severity="warn",
-                    message=f"Path '{path_raw}': commits at arc position {commits_idx + 1}/{total_beats} (too early, <{MIN_BEATS_BEFORE_COMMITS} beats of setup)",
+                    message=f"Path '{path_raw}': commits at arc position {commits_idx + 1}/{total_beats} (too early, <{min_beats} beats of setup)",
                 )
             )
 
@@ -542,7 +546,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
             )
 
         # Check 3: commits too late (final portion of arc)
-        threshold = total_beats * MAX_COMMITS_POSITION_RATIO
+        threshold = total_beats * _DEFAULT_MAX_COMMITS_POSITION_RATIO
         if commits_idx >= threshold:
             checks.append(
                 ValidationCheck(
@@ -553,7 +557,7 @@ def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
             )
 
         # Check 4: Large gap after last buildup
-        if last_buildup_idx is not None and commits_idx - last_buildup_idx > MAX_BUILDUP_GAP_BEATS:
+        if last_buildup_idx is not None and commits_idx - last_buildup_idx > max_gap:
             gap = commits_idx - last_buildup_idx
             checks.append(
                 ValidationCheck(
@@ -1099,11 +1103,23 @@ def check_forward_path_reachability(graph: Graph) -> ValidationCheck:
     )
 
 
+def _compute_linear_threshold(graph: Graph) -> int:
+    """Scale max consecutive linear threshold with passage count.
+
+    Larger stories naturally have longer linear stretches between branch
+    points (each dilemma adds ~10 passages). The default of 2 is kept for
+    small stories; larger stories get proportionally wider tolerance.
+    """
+    passage_count = len(graph.get_nodes_by_type("passage"))
+    return max(2, passage_count // 20)
+
+
 def run_all_checks(graph: Graph) -> ValidationReport:
     """Run all Phase 10 validation checks and aggregate results.
 
     Returns a ValidationReport containing all structural and timing checks.
     """
+    linear_threshold = _compute_linear_threshold(graph)
     checks: list[ValidationCheck] = [
         check_single_start(graph),
         check_all_passages_reachable(graph),
@@ -1113,7 +1129,7 @@ def run_all_checks(graph: Graph) -> ValidationReport:
         check_dilemmas_resolved(graph),
         check_gate_satisfiability(graph),
         check_passage_dag_cycles(graph),
-        check_max_consecutive_linear(graph),
+        check_max_consecutive_linear(graph, max_run=linear_threshold),
         check_codeword_gate_coverage(graph),
         check_forward_path_reachability(graph),
     ]
