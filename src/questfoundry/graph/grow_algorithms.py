@@ -1026,18 +1026,37 @@ def _find_arc_dilemma_policies(
     graph: Graph,
     arc: Arc,
 ) -> list[tuple[str, int]]:
-    """Collect (convergence_policy, payoff_budget) for each dilemma an arc touches.
+    """Collect (convergence_policy, payoff_budget) for divergent dilemmas only.
 
-    Traverses arc.paths → path node → dilemma node to read policy metadata
-    stored by SEED's post-prune analysis.
+    Only considers dilemmas that have 2+ explored paths in the graph.
+    Single-explored dilemmas contribute universal beats but should not
+    influence convergence policy — the story doesn't diverge on them.
     """
+    # Count total explored paths per dilemma across the whole graph
+    all_paths = graph.get_nodes_by_type("path")
+    dilemma_total_paths: dict[str, int] = {}
+    for path_data in all_paths.values():
+        did = path_data.get("dilemma_id")
+        if did:
+            scoped = normalize_scoped_id(did, "dilemma")
+            dilemma_total_paths[scoped] = dilemma_total_paths.get(scoped, 0) + 1
+
+    # Collect policies only from dilemmas this arc touches that actually diverge
+    seen_dilemmas: set[str] = set()
     policies: list[tuple[str, int]] = []
     for raw_path_id in arc.paths:
         path_node_id = normalize_scoped_id(raw_path_id, "path")
         path_node = graph.get_node(path_node_id)
         if not path_node or not (dilemma_id := path_node.get("dilemma_id")):
             continue
-        dilemma_node = graph.get_node(normalize_scoped_id(dilemma_id, "dilemma"))
+        scoped_did = normalize_scoped_id(dilemma_id, "dilemma")
+        if scoped_did in seen_dilemmas:
+            continue
+        seen_dilemmas.add(scoped_did)
+        # Skip single-explored dilemmas (universal beats, no actual divergence)
+        if dilemma_total_paths.get(scoped_did, 0) < 2:
+            continue
+        dilemma_node = graph.get_node(scoped_did)
         if dilemma_node:
             policies.append(
                 (
