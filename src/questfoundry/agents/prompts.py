@@ -281,6 +281,73 @@ def get_seed_summarize_prompt(
     )
 
 
+def get_seed_section_summarize_prompts(
+    entity_count: int = 0,
+    dilemma_count: int = 0,
+    entity_manifest: str = "",
+    dilemma_manifest: str = "",
+    dilemma_answers: str = "",
+    size_profile: SizeProfile | None = None,
+    output_language_instruction: str = "",
+) -> dict[str, str]:
+    """Build per-section SEED summarize prompts for chunked summarization.
+
+    Loads section templates from prompts/templates/summarize_seed_sections.yaml
+    and renders each with its required variables.
+
+    Args:
+        entity_count: Total number of entities requiring decisions.
+        dilemma_count: Total number of dilemmas requiring decisions.
+        entity_manifest: Formatted list of entity IDs for manifest.
+        dilemma_manifest: Formatted list of dilemma IDs for manifest.
+        dilemma_answers: Formatted list of valid answer IDs per dilemma.
+        size_profile: Size profile for parameterizing count guidance.
+        output_language_instruction: Language instruction for non-English output.
+
+    Returns:
+        Dict mapping section name to rendered system prompt string.
+        Keys: "entities", "dilemmas", "paths", "beats", "convergence".
+    """
+    raw_data = _load_raw_template("summarize_seed_sections")
+    svars = size_template_vars(size_profile)
+    lang = output_language_instruction
+
+    def _render(key: str, **kwargs: Any) -> str:
+        template_str = raw_data.get(key, "")
+        prompt = PromptTemplate.from_template(template_str)
+        return prompt.format(**kwargs)
+
+    return {
+        "entities": _render(
+            "entities_system",
+            entity_count=entity_count,
+            entity_manifest=entity_manifest or "(No entities)",
+            output_language_instruction=lang,
+        ),
+        "dilemmas": _render(
+            "dilemmas_system",
+            dilemma_count=dilemma_count,
+            dilemma_manifest=dilemma_manifest or "(No dilemmas)",
+            dilemma_answers=dilemma_answers or "(No answer IDs available)",
+            output_language_instruction=lang,
+        ),
+        "paths": _render(
+            "paths_system",
+            output_language_instruction=lang,
+        ),
+        "beats": _render(
+            "beats_system",
+            output_language_instruction=lang,
+            **svars,
+        ),
+        "convergence": _render(
+            "convergence_system",
+            output_language_instruction=lang,
+            **svars,
+        ),
+    }
+
+
 def get_brainstorm_serialize_prompt(
     output_language_instruction: str = "",
 ) -> str:
