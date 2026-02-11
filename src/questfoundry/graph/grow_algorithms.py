@@ -1380,7 +1380,7 @@ def compute_all_choice_requires(
         if any(arc_nodes.get(a, {}).get("arc_type") == "spine" for a in arc_ids):
             continue
 
-        codewords: list[str] = []
+        codewords: set[str] = set()
         for arc_id in sorted(arc_ids):
             arc_data = arc_nodes.get(arc_id, {})
             if arc_data.get("convergence_policy") != "hard":
@@ -1393,11 +1393,11 @@ def compute_all_choice_requires(
             for path_id in sorted(spine_exclusive):
                 for cons_id in path_consequences.get(path_id, []):
                     cw = cons_to_codeword.get(cons_id)
-                    if cw and cw not in codewords:
-                        codewords.append(cw)
+                    if cw:
+                        codewords.add(cw)
 
         if codewords:
-            requires[passage_id] = codewords
+            requires[passage_id] = sorted(codewords)
 
     return requires
 
