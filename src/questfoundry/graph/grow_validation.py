@@ -979,7 +979,7 @@ def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
     for pid, pdata in path_nodes.items():
         did = pdata.get("dilemma_id")
         if did:
-            raw_id = pdata.get("raw_id", pid)
+            raw_id = pdata.get("raw_id") or pid
             raw_path_to_dilemma[raw_id] = normalize_scoped_id(did, "dilemma")
 
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
