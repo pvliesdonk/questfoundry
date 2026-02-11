@@ -1177,14 +1177,43 @@ def _make_compliance_graph(
 ) -> Graph:
     """Build a graph with spine + one branch arc for compliance testing.
 
+    Creates full graph topology: dilemma → answer → path → beat (belongs_to)
+    so the per-dilemma validation can trace beats back to their dilemma.
+
     Args:
-        policy: Convergence policy for the branch arc.
-        payoff_budget: payoff_budget for the branch arc.
+        policy: Convergence policy for the dilemma.
+        payoff_budget: payoff_budget for the dilemma.
         shared_after_div: Number of spine beats shared after divergence.
         exclusive_count: Number of beats exclusive to the branch.
     """
     graph = Graph.empty()
+
+    # Dilemma with the given policy
+    graph.create_node(
+        "dilemma::d1",
+        {
+            "type": "dilemma",
+            "raw_id": "dilemma::d1",
+            "convergence_policy": policy,
+            "payoff_budget": payoff_budget,
+        },
+    )
+    # Two paths: canon (spine) and rebel (branch)
+    graph.create_node(
+        "path::canon",
+        {"type": "path", "raw_id": "path::canon", "dilemma_id": "dilemma::d1"},
+    )
+    graph.create_node(
+        "path::rebel",
+        {"type": "path", "raw_id": "path::rebel", "dilemma_id": "dilemma::d1"},
+    )
+
+    # Spine beats — all belong to canon path
     spine_beats = [f"beat::s{i}" for i in range(6)]
+    for bid in spine_beats:
+        graph.create_node(bid, {"type": "beat"})
+        graph.add_edge("belongs_to", bid, "path::canon")
+
     graph.create_node(
         "arc::spine",
         {
@@ -1194,12 +1223,21 @@ def _make_compliance_graph(
             "paths": ["path::canon"],
         },
     )
-    # Branch diverges after s1; has exclusive beats, then optionally shares
+
+    # Branch: diverges after s1; has exclusive beats, then optionally shares
     branch_seq = ["beat::s0", "beat::s1"]
-    for i in range(exclusive_count):
-        branch_seq.append(f"beat::b{i}")
+    exclusive_beats = [f"beat::b{i}" for i in range(exclusive_count)]
+    for bid in exclusive_beats:
+        graph.create_node(bid, {"type": "beat"})
+        graph.add_edge("belongs_to", bid, "path::rebel")
+    branch_seq.extend(exclusive_beats)
+
+    # Shared beats after divergence belong to BOTH paths
     for i in range(shared_after_div):
-        branch_seq.append(spine_beats[2 + i])
+        shared_bid = spine_beats[2 + i]
+        graph.add_edge("belongs_to", shared_bid, "path::rebel")
+        branch_seq.append(shared_bid)
+
     graph.create_node(
         "arc::branch_0",
         {
@@ -1207,8 +1245,6 @@ def _make_compliance_graph(
             "arc_type": "branch",
             "sequence": branch_seq,
             "diverges_at": "beat::s1",
-            "convergence_policy": policy,
-            "payoff_budget": payoff_budget,
             "paths": ["path::rebel"],
         },
     )
@@ -1296,6 +1332,234 @@ class TestConvergencePolicyCompliance:
         graph = Graph.empty()
         results = check_convergence_policy_compliance(graph)
         assert results[0].severity == "pass"
+
+    def test_hard_policy_per_dilemma_passes(self) -> None:
+        """Multi-dilemma arc: hard dilemma beats are exclusive, soft beats are shared → passes.
+
+        Each beat belongs to ONE dilemma's path (like in real graphs).
+        The arc flips both dilemmas but d1-hard's beats are all exclusive.
+        """
+        graph = Graph.empty()
+
+        # Dilemma 1: hard policy
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "convergence_policy": "hard", "payoff_budget": 0},
+        )
+        graph.create_node(
+            "path::d1_canon",
+            {"type": "path", "raw_id": "path::d1_canon", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "path::d1_rebel",
+            {"type": "path", "raw_id": "path::d1_rebel", "dilemma_id": "dilemma::d1"},
+        )
+
+        # Dilemma 2: soft policy
+        graph.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "convergence_policy": "soft", "payoff_budget": 1},
+        )
+        graph.create_node(
+            "path::d2_canon",
+            {"type": "path", "raw_id": "path::d2_canon", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "path::d2_rebel",
+            {"type": "path", "raw_id": "path::d2_rebel", "dilemma_id": "dilemma::d2"},
+        )
+
+        # Spine beats — each belongs to ONE dilemma's canon path
+        # d1 canon beats
+        graph.create_node("beat::d1s0", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::d1s0", "path::d1_canon")
+        graph.create_node("beat::d1s1", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::d1s1", "path::d1_canon")
+        # d2 canon beats
+        graph.create_node("beat::d2s0", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::d2s0", "path::d2_canon")
+        graph.create_node("beat::d2s1", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::d2s1", "path::d2_canon")
+
+        # Exclusive branch beats for d1_rebel (hard dilemma — NOT in spine)
+        graph.create_node("beat::h1", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::h1", "path::d1_rebel")
+        graph.create_node("beat::h2", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::h2", "path::d1_rebel")
+
+        # Exclusive beat for d2_rebel (soft dilemma — sufficient for budget=1)
+        graph.create_node("beat::x1", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::x1", "path::d2_rebel")
+
+        spine_beats = ["beat::d1s0", "beat::d1s1", "beat::d2s0", "beat::d2s1"]
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": spine_beats,
+                "paths": ["path::d1_canon", "path::d2_canon"],
+            },
+        )
+
+        # Branch: flips both dilemmas
+        # d1 canon beats replaced by h1, h2; d2 canon beats partly replaced by x1
+        # d2s1 still appears (shared from spine, but belongs to d2_canon not d2_rebel)
+        graph.create_node(
+            "arc::branch_0",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "sequence": [
+                    "beat::d1s0",  # before divergence
+                    "beat::h1",
+                    "beat::h2",  # d1 rebel beats (exclusive)
+                    "beat::x1",  # d2 rebel beat (exclusive)
+                    "beat::d2s1",  # d2 canon beat (shared with spine)
+                ],
+                "diverges_at": "beat::d1s0",
+                "paths": ["path::d1_rebel", "path::d2_rebel"],
+            },
+        )
+
+        results = check_convergence_policy_compliance(graph)
+        # d1 hard: h1, h2 belong to d1_rebel → not in spine → passes
+        # d2 soft: x1 belongs to d2_rebel (exclusive); d2s1 belongs to d2_canon (shared)
+        #          1 exclusive >= budget 1 → passes
+        assert all(r.severity == "pass" for r in results)
+
+    def test_hard_policy_fails_when_hard_beats_shared(self) -> None:
+        """Multi-dilemma arc: hard dilemma has shared beats after divergence → fails."""
+        graph = Graph.empty()
+
+        # Dilemma 1: hard policy
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "convergence_policy": "hard", "payoff_budget": 0},
+        )
+        graph.create_node(
+            "path::d1_canon",
+            {"type": "path", "raw_id": "path::d1_canon", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "path::d1_rebel",
+            {"type": "path", "raw_id": "path::d1_rebel", "dilemma_id": "dilemma::d1"},
+        )
+
+        # Dilemma 2: flavor (no constraint)
+        graph.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "convergence_policy": "flavor", "payoff_budget": 0},
+        )
+        graph.create_node(
+            "path::d2_canon",
+            {"type": "path", "raw_id": "path::d2_canon", "dilemma_id": "dilemma::d2"},
+        )
+
+        # Spine beats belong to d1_canon and d2_canon
+        spine_beats = ["beat::s0", "beat::s1", "beat::s2", "beat::s3"]
+        for bid in spine_beats:
+            graph.create_node(bid, {"type": "beat"})
+            graph.add_edge("belongs_to", bid, "path::d1_canon")
+            graph.add_edge("belongs_to", bid, "path::d2_canon")
+
+        # Make s2 also belong to d1_rebel — this is the hard dilemma beat that IS shared
+        graph.add_edge("belongs_to", "beat::s2", "path::d1_rebel")
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": spine_beats,
+                "paths": ["path::d1_canon", "path::d2_canon"],
+            },
+        )
+
+        # Branch: flips only d1 (d2 stays canon, so it's NOT in flipped_dilemmas)
+        graph.create_node(
+            "arc::branch_0",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "sequence": ["beat::s0", "beat::s1", "beat::s2", "beat::s3"],
+                "diverges_at": "beat::s1",
+                "paths": ["path::d1_rebel", "path::d2_canon"],
+            },
+        )
+
+        results = check_convergence_policy_compliance(graph)
+        assert any(r.severity == "fail" for r in results)
+        assert "hard policy violated" in results[0].message
+        assert "dilemma::d1" in results[0].message
+
+    def test_soft_policy_per_dilemma_passes(self) -> None:
+        """Multi-dilemma arc: soft dilemma has enough exclusive beats → passes."""
+        graph = Graph.empty()
+
+        # Dilemma 1: flavor (no constraint)
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "convergence_policy": "flavor", "payoff_budget": 0},
+        )
+        graph.create_node(
+            "path::d1_canon",
+            {"type": "path", "raw_id": "path::d1_canon", "dilemma_id": "dilemma::d1"},
+        )
+
+        # Dilemma 2: soft policy with budget=2
+        graph.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "convergence_policy": "soft", "payoff_budget": 2},
+        )
+        graph.create_node(
+            "path::d2_canon",
+            {"type": "path", "raw_id": "path::d2_canon", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "path::d2_rebel",
+            {"type": "path", "raw_id": "path::d2_rebel", "dilemma_id": "dilemma::d2"},
+        )
+
+        # Spine beats
+        spine_beats = ["beat::s0", "beat::s1", "beat::s2", "beat::s3"]
+        for bid in spine_beats:
+            graph.create_node(bid, {"type": "beat"})
+            graph.add_edge("belongs_to", bid, "path::d1_canon")
+            graph.add_edge("belongs_to", bid, "path::d2_canon")
+
+        # Two exclusive beats for d2_rebel (meets budget of 2)
+        graph.create_node("beat::x1", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::x1", "path::d2_rebel")
+        graph.create_node("beat::x2", {"type": "beat"})
+        graph.add_edge("belongs_to", "beat::x2", "path::d2_rebel")
+
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": spine_beats,
+                "paths": ["path::d1_canon", "path::d2_canon"],
+            },
+        )
+
+        # Branch: flips only d2 (d1 stays canon)
+        graph.create_node(
+            "arc::branch_0",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "sequence": ["beat::s0", "beat::s1", "beat::x1", "beat::x2", "beat::s2"],
+                "diverges_at": "beat::s1",
+                "paths": ["path::d1_canon", "path::d2_rebel"],
+            },
+        )
+
+        results = check_convergence_policy_compliance(graph)
+        # d2 soft: x1, x2 exclusive (2 >= budget 2) → passes
+        # d1 flavor: not checked
+        assert all(r.severity == "pass" for r in results)
 
 
 # ---------------------------------------------------------------------------

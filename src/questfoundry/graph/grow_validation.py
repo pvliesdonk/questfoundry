@@ -920,15 +920,41 @@ def _get_spine_sequence(arc_nodes: dict[str, dict[str, object]]) -> set[str]:
     return set()
 
 
-def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
-    """Verify branch arcs honor their declared convergence_policy.
+def _build_beat_dilemma_map(graph: Graph) -> dict[str, set[str]]:
+    """Map each beat to its prefixed dilemma IDs via belongs_to → path → dilemma."""
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
 
-    For each branch arc with convergence metadata:
-    - ``hard``: no beats shared with spine after divergence point
-    - ``soft``: at least ``payoff_budget`` exclusive beats before convergence
+    path_to_dilemma: dict[str, str] = {}
+    for path_id, path_data in path_nodes.items():
+        did = path_data.get("dilemma_id")
+        if did:
+            prefixed = normalize_scoped_id(did, "dilemma")
+            if prefixed in dilemma_nodes:
+                path_to_dilemma[path_id] = prefixed
+
+    beat_dilemmas: dict[str, set[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        if path_id in path_to_dilemma:
+            beat_dilemmas.setdefault(beat_id, set()).add(path_to_dilemma[path_id])
+
+    return beat_dilemmas
+
+
+def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
+    """Verify branch arcs honor their declared convergence_policy per-dilemma.
+
+    For each branch arc, identifies which dilemma paths differ from the spine.
+    For each differing dilemma, checks only THAT dilemma's beats against its policy:
+    - ``hard``: no beats from this dilemma shared with spine after divergence
+    - ``soft``: at least ``payoff_budget`` exclusive beats for this dilemma
     - ``flavor``: always passes (no structural constraint)
 
-    Arcs without a ``convergence_policy`` field (pre-policy graphs) are skipped.
+    This per-dilemma approach is necessary because combinatorial arcs contain
+    beats from ALL dilemmas, and only the flipped dilemma's beats should be
+    checked against its policy.
     """
     arc_nodes = graph.get_nodes_by_type("arc")
     if not arc_nodes:
@@ -942,56 +968,92 @@ def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
 
     spine_seq_set = _get_spine_sequence(arc_nodes)
 
+    # Get spine path set for comparison
+    spine_paths: set[str] = set()
+    for _aid, adata in arc_nodes.items():
+        if adata.get("arc_type") == "spine":
+            spine_paths = set(adata.get("paths", []))
+            break
+
+    beat_dilemmas = _build_beat_dilemma_map(graph)
+
+    # Build path (raw ID) → prefixed dilemma mapping
+    path_nodes = graph.get_nodes_by_type("path")
+    raw_path_to_dilemma: dict[str, str] = {}
+    for pid, pdata in path_nodes.items():
+        did = pdata.get("dilemma_id")
+        if did:
+            raw_id = pdata.get("raw_id") or pid
+            raw_path_to_dilemma[raw_id] = normalize_scoped_id(did, "dilemma")
+
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
     violations: list[ValidationCheck] = []
     checked = 0
 
     for arc_id, data in sorted(arc_nodes.items()):
         if data.get("arc_type") == "spine":
             continue
-        policy = data.get("convergence_policy")
-        if policy is None:
-            continue  # pre-policy arc — skip
 
         sequence: list[str] = data.get("sequence", [])
         diverges_at = data.get("diverges_at")
         if not sequence or not diverges_at:
             continue
 
-        checked += 1
-        # Beats after the divergence point
         try:
             div_idx = sequence.index(diverges_at)
         except ValueError:
             continue
         branch_after_div = sequence[div_idx + 1 :]
 
-        exclusive = [b for b in branch_after_div if b not in spine_seq_set]
-        shared_after = [b for b in branch_after_div if b in spine_seq_set]
+        # Find which dilemmas differ from spine (symmetric difference of path sets)
+        arc_paths = set(data.get("paths", []))
+        flipped_dilemmas: set[str] = set()
+        for path_raw in arc_paths.symmetric_difference(spine_paths):
+            if did := raw_path_to_dilemma.get(path_raw):
+                flipped_dilemmas.add(did)
 
-        if policy == "hard" and shared_after:
-            violations.append(
-                ValidationCheck(
-                    name="convergence_policy_compliance",
-                    severity="fail",
-                    message=(
-                        f"{arc_id}: hard policy violated — "
-                        f"{len(shared_after)} shared beat(s) after divergence"
-                    ),
-                )
-            )
-        elif policy == "soft":
-            budget = data.get("payoff_budget", 2)
-            if len(exclusive) < budget:
+        # Check each flipped dilemma's beats against ITS policy
+        for dilemma_id in sorted(flipped_dilemmas):
+            dnode = dilemma_nodes.get(dilemma_id)
+            if not dnode:
+                continue
+            policy = dnode.get("convergence_policy")
+            if policy is None or policy == "flavor":
+                continue
+
+            checked += 1
+            # Filter to beats belonging to this dilemma only
+            dilemma_beats_after = [
+                b for b in branch_after_div if dilemma_id in beat_dilemmas.get(b, set())
+            ]
+            shared = [b for b in dilemma_beats_after if b in spine_seq_set]
+            exclusive = [b for b in dilemma_beats_after if b not in spine_seq_set]
+
+            if policy == "hard" and shared:
                 violations.append(
                     ValidationCheck(
                         name="convergence_policy_compliance",
-                        severity="warn",
+                        severity="fail",
                         message=(
-                            f"{arc_id}: soft policy — "
-                            f"{len(exclusive)} exclusive beat(s), needs {budget}"
+                            f"{arc_id}: hard policy violated for {dilemma_id} — "
+                            f"{len(shared)} shared beat(s) after divergence"
                         ),
                     )
                 )
+            elif policy == "soft":
+                budget = dnode.get("payoff_budget", 2)
+                if len(exclusive) < budget:
+                    violations.append(
+                        ValidationCheck(
+                            name="convergence_policy_compliance",
+                            severity="warn",
+                            message=(
+                                f"{arc_id}: soft policy for {dilemma_id} — "
+                                f"{len(exclusive)} exclusive beat(s), needs {budget}"
+                            ),
+                        )
+                    )
 
     if violations:
         return violations
@@ -999,7 +1061,7 @@ def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
         ValidationCheck(
             name="convergence_policy_compliance",
             severity="pass",
-            message=f"All {checked} branch arc(s) comply with convergence policy"
+            message=f"All {checked} dilemma-arc pair(s) comply with convergence policy"
             if checked
             else "No branch arcs with convergence metadata to check",
         )
