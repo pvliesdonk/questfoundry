@@ -1332,20 +1332,74 @@ def compute_passage_arc_membership(graph: Graph) -> dict[str, set[str]]:
 
 
 def compute_all_choice_requires(
-    graph: Graph,  # noqa: ARG001
-    passage_arcs: dict[str, set[str]],  # noqa: ARG001
+    graph: Graph,
+    passage_arcs: dict[str, set[str]],
 ) -> dict[str, list[str]]:
-    """Compute codeword ``requires`` lists for target passages.
+    """Compute codeword ``requires`` for hard-policy branch entry passages.
 
-    Currently returns empty — hard-policy topology isolation is enforced
-    structurally (Phase 3 intersection rejection, separate arc sequences).
-    Codeword gating for branch entries is reserved for future opt-in
-    support (see issue #758).
+    For each passage that appears exclusively in hard-policy branch arcs
+    (not on the spine), collects codewords from **spine-exclusive** paths —
+    paths on the spine that are NOT shared with the branch arc.  These
+    codewords are earnable before the branch divergence point, making the
+    gate satisfiable in a single playthrough.
 
     Returns:
         Mapping of ``passage_id`` → list of required codeword IDs.
+        Empty dict if no spine arc exists or no hard-policy branches.
     """
-    return {}
+    arc_nodes = graph.get_nodes_by_type("arc")
+    if not arc_nodes:
+        return {}
+
+    # 1. Find spine arc and its paths
+    spine_paths: set[str] = set()
+    for arc_data in arc_nodes.values():
+        if arc_data.get("arc_type") == "spine":
+            spine_paths = {normalize_scoped_id(p, "path") for p in arc_data.get("paths", [])}
+            break
+    if not spine_paths:
+        return {}
+
+    # 2. Build consequence→codeword lookup (reverse of tracks edges)
+    cons_to_codeword = {
+        edge["to"]: edge["from"]
+        for edge in graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
+    }
+
+    # 3. Build path→consequences lookup
+    has_cons_edges = graph.get_edges(from_id=None, to_id=None, edge_type="has_consequence")
+    path_consequences: dict[str, list[str]] = {}
+    for edge in has_cons_edges:
+        path_consequences.setdefault(edge["from"], []).append(edge["to"])
+
+    # 4. For each passage exclusive to hard-policy branches, collect
+    #    codewords from spine-exclusive paths.
+    requires: dict[str, list[str]] = {}
+    for passage_id, arc_ids in passage_arcs.items():
+        # Skip passages reachable via the spine — no gating needed
+        if any(arc_nodes.get(a, {}).get("arc_type") == "spine" for a in arc_ids):
+            continue
+
+        codewords: set[str] = set()
+        for arc_id in sorted(arc_ids):
+            arc_data = arc_nodes.get(arc_id, {})
+            if arc_data.get("convergence_policy") != "hard":
+                continue
+
+            # Spine-exclusive = spine paths NOT shared with this branch
+            branch_paths = {normalize_scoped_id(p, "path") for p in arc_data.get("paths", [])}
+            spine_exclusive = spine_paths - branch_paths
+
+            for path_id in sorted(spine_exclusive):
+                for cons_id in path_consequences.get(path_id, []):
+                    cw = cons_to_codeword.get(cons_id)
+                    if cw:
+                        codewords.add(cw)
+
+        if codewords:
+            requires[passage_id] = sorted(codewords)
+
+    return requires
 
 
 # ---------------------------------------------------------------------------
