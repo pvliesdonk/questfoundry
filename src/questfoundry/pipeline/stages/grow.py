@@ -1306,7 +1306,10 @@ class GrowStage:
         asks the LLM to propose correction beats. Only proceeds if
         Phase 4a has tagged beats with scene types.
         """
-        from questfoundry.graph.grow_algorithms import detect_pacing_issues
+        from questfoundry.graph.grow_algorithms import (
+            detect_pacing_issues,
+            get_path_beat_sequence,
+        )
         from questfoundry.models.grow import Phase4bOutput
 
         beat_nodes = graph.get_nodes_by_type("beat")
@@ -1334,7 +1337,26 @@ class GrowStage:
                 detail="No pacing issues detected",
             )
 
-        # Build context for LLM
+        # Build full path sequences for affected paths (same pattern as Phase 4b)
+        path_nodes = graph.get_nodes_by_type("path")
+        affected_pids = {issue.path_id for issue in issues}
+        path_sequences: list[str] = []
+        valid_beat_ids: set[str] = set()
+        for pid in sorted(affected_pids):
+            sequence = get_path_beat_sequence(graph, pid)
+            if len(sequence) < 2:
+                continue
+            beat_list: list[str] = []
+            for idx, bid in enumerate(sequence, 1):
+                node = graph.get_node(bid)
+                summary = node.get("summary", "") if node else ""
+                scene_type = node.get("scene_type", "untagged") if node else "untagged"
+                beat_list.append(f"    #{idx} {bid} [{scene_type}]: {summary}")
+                valid_beat_ids.add(bid)
+            raw_pid = pid.removeprefix("path::")
+            path_sequences.append(f"  Path: {raw_pid} ({pid})\n" + "\n".join(beat_list))
+
+        # Build issue descriptions
         issue_descriptions: list[str] = []
         for issue in issues:
             beat_summaries: list[str] = []
@@ -1348,11 +1370,11 @@ class GrowStage:
                 f"'{issue.scene_type}' beats:\n" + "\n".join(beat_summaries)
             )
 
-        path_nodes = graph.get_nodes_by_type("path")
         context = {
+            "path_sequences": "\n\n".join(path_sequences),
             "pacing_issues": "\n\n".join(issue_descriptions),
             "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
-            "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
+            "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
             "issue_count": str(len(issues)),
         }
 
@@ -1361,7 +1383,7 @@ class GrowStage:
         validator = partial(
             validate_phase4_output,
             valid_path_ids=set(path_nodes.keys()),
-            valid_beat_ids=set(beat_nodes.keys()),
+            valid_beat_ids=valid_beat_ids,
         )
         try:
             result, llm_calls, tokens = await self._grow_llm_call(
@@ -1380,7 +1402,7 @@ class GrowStage:
 
         # Insert correction beats
         report = self._validate_and_insert_gaps(
-            graph, result.gaps, path_nodes, beat_nodes, "phase4c"
+            graph, result.gaps, path_nodes, valid_beat_ids, "phase4c"
         )
         if report.total_invalid > 0:
             log.warning(
