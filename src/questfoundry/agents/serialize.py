@@ -1420,6 +1420,7 @@ async def _early_validate_dilemma_answers(
     max_retries: int,
     callbacks: list[BaseCallbackHandler] | None,
     max_early_retries: int = 1,
+    dilemma_schema: type[BaseModel] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Validate dilemma answer IDs against brainstorm truth and fix if needed.
 
@@ -1437,11 +1438,16 @@ async def _early_validate_dilemma_answers(
         max_retries: Max Pydantic validation retries for re-serialization.
         callbacks: LangChain callback handlers.
         max_early_retries: Max correction attempts (default 1).
+        dilemma_schema: Pydantic model class for dilemma section. When provided
+            (e.g., an enum-constrained schema), uses it for re-serialization
+            to enforce ID constraints at the token level.
 
     Returns:
         Tuple of (corrected dilemma decisions, tokens used for corrections).
     """
     from questfoundry.models.seed import DilemmasSection
+
+    schema = dilemma_schema or DilemmasSection
 
     brainstorm_answers = get_brainstorm_answer_ids(graph)
     total_tokens = 0
@@ -1492,7 +1498,7 @@ async def _early_validate_dilemma_answers(
             result, tokens = await serialize_to_artifact(
                 model=model,
                 brief=build_brief_fn(),
-                schema=DilemmasSection,
+                schema=schema,
                 provider_name=provider_name,
                 max_retries=max_retries,
                 system_prompt=corrected_prompt,
@@ -1597,6 +1603,7 @@ async def serialize_seed_as_function(
         DilemmasSection,
         EntitiesSection,
         SeedOutput,
+        make_constrained_dilemmas_section,
     )
 
     # Normalize brief to support both str and dict[str, str]
@@ -1645,12 +1652,27 @@ async def serialize_seed_as_function(
     # Initial enhanced_brief for the monolithic code path and downstream use
     enhanced_brief = _build_section_brief("entities")
 
+    # Build constrained dilemma schema when graph is available.
+    # This adds enum constraints to the JSON schema so that constrained
+    # decoding (llama.cpp / Ollama) prevents invalid answer IDs at the
+    # token level — the LLM literally cannot emit non-existent IDs.
+    dilemma_schema: type[BaseModel] = DilemmasSection
+    if graph is not None:
+        brainstorm_answers = get_brainstorm_answer_ids(graph)
+        if brainstorm_answers:
+            dilemma_schema = make_constrained_dilemmas_section(brainstorm_answers)
+            log.debug(
+                "constrained_dilemma_schema_built",
+                dilemma_count=len(brainstorm_answers),
+                answer_count=sum(len(a) for a in brainstorm_answers.values()),
+            )
+
     # Section configuration: (section_name, schema, output_field)
     # Note: "paths" handled via per-dilemma serialization after dilemmas
     # Note: "beats" handled via per-path serialization after paths
     sections: list[tuple[str, type[BaseModel], str]] = [
         ("entities", EntitiesSection, "entities"),
-        ("dilemmas", DilemmasSection, "dilemmas"),
+        ("dilemmas", dilemma_schema, "dilemmas"),
         # paths handled via per-dilemma serialization after dilemmas
         ("consequences", ConsequencesSection, "consequences"),
         # beats handled via per-path serialization after paths
@@ -1760,6 +1782,7 @@ async def serialize_seed_as_function(
                     provider_name=provider_name,
                     max_retries=max_retries,
                     callbacks=callbacks,
+                    dilemma_schema=dilemma_schema,
                 )
                 total_tokens += early_tokens
 
