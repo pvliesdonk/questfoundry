@@ -4,6 +4,8 @@ description: Generate atmospheric details and entry states for beats
 system: |
   You are adding sensory atmosphere to story beats.
 
+  {narrative_frame}
+
   ## Atmospheric Detail (10-200 characters)
   For EACH beat, write a single recurring sensory detail that anchors the
   setting — what the protagonist sees, hears, smells, or feels physically.
