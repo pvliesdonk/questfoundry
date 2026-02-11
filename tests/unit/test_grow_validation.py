@@ -1611,21 +1611,54 @@ class TestCodewordGateCoverage:
         assert result.severity == "pass"
 
     def test_overlay_when_counts_as_consumed(self) -> None:
-        """Codewords referenced in overlay.when are counted as consumed."""
+        """Codewords in entity overlay.when are counted as consumed."""
         graph = Graph.empty()
         graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
         graph.create_node(
-            "overlay::o1",
+            "character::hero",
             {
-                "type": "overlay",
-                "entity_id": "character::hero",
-                "when": ["codeword::cw1"],
-                "description": "Hero looks weary",
+                "type": "character",
+                "raw_id": "hero",
+                "name": "Hero",
+                "overlays": [
+                    {"when": ["codeword::cw1"], "details": {"attitude": "weary"}},
+                ],
             },
         )
         result = check_codeword_gate_coverage(graph)
         assert result.severity == "pass"
         assert "consumed" in result.message
+
+    def test_overlay_multiple_entity_categories_consumed(self) -> None:
+        """Overlays on different entity categories all contribute to consumption."""
+        graph = Graph.empty()
+        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
+        graph.create_node("codeword::cw2", {"type": "codeword", "raw_id": "cw2"})
+        graph.create_node(
+            "character::hero",
+            {
+                "type": "character",
+                "raw_id": "hero",
+                "name": "Hero",
+                "overlays": [
+                    {"when": ["codeword::cw1"], "details": {"attitude": "weary"}},
+                ],
+            },
+        )
+        graph.create_node(
+            "location::village",
+            {
+                "type": "location",
+                "raw_id": "village",
+                "name": "Village",
+                "overlays": [
+                    {"when": ["codeword::cw2"], "details": {"mood": "tense"}},
+                ],
+            },
+        )
+        result = check_codeword_gate_coverage(graph)
+        assert result.severity == "pass"
+        assert "2 codeword(s) consumed" in result.message
 
 
 # ---------------------------------------------------------------------------
