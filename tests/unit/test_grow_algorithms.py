@@ -2401,12 +2401,12 @@ class TestFormatIntersectionCandidates:
         result = format_intersection_candidates(candidates, beat_nodes, beat_dilemmas)
 
         assert '### Candidate Group 1 (shared location: "market")' in result
-        assert "Dilemmas represented: artifact_quest, mentor_trust" in result
-        assert "beat::mentor_meet [dilemma: mentor_trust]:" in result
-        assert "beat::artifact_discover [dilemma: artifact_quest]:" in result
-        assert 'summary="Hero meets mentor"' in result
-        assert 'location="market"' in result
-        assert "entities=['mentor', 'hero']" in result
+        assert "artifact_quest" in result
+        assert "mentor_trust" in result
+        assert "beat::mentor_meet [mentor_trust" in result
+        assert "beat::artifact_discover [artifact_quest" in result
+        assert "Hero meets mentor" in result
+        assert "(loc: market)" in result
 
     def test_formats_entity_group(self) -> None:
         """Entity-based candidate group shows entity signal in header."""
@@ -2434,7 +2434,8 @@ class TestFormatIntersectionCandidates:
         result = format_intersection_candidates(candidates, beat_nodes, beat_dilemmas)
 
         assert '### Candidate Group 1 (shared entity: "hero")' in result
-        assert "Dilemmas represented: dilemma_x, dilemma_y" in result
+        assert "dilemma_x" in result
+        assert "dilemma_y" in result
 
     def test_multiple_groups_numbered(self) -> None:
         """Multiple candidate groups are numbered sequentially."""
@@ -2543,8 +2544,8 @@ class TestFormatIntersectionCandidates:
         result = format_intersection_candidates(candidates, beat_nodes, beat_dilemmas)
 
         assert "beat::missing" in result
-        assert 'summary=""' in result
-        assert 'location="unspecified"' in result
+        assert '""' in result  # empty summary
+        assert "(loc: unspecified)" in result
 
 
 # ---------------------------------------------------------------------------

@@ -854,7 +854,7 @@ class GrowStage:
 
         # Format candidates as pre-clustered groups for the LLM
         candidate_groups_text = format_intersection_candidates(
-            candidates, beat_nodes, beat_dilemmas
+            candidates, beat_nodes, beat_dilemmas, graph=graph
         )
 
         context: dict[str, str] = {

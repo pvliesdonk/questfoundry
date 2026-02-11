@@ -1467,21 +1467,30 @@ def format_intersection_candidates(
     candidates: list[IntersectionCandidate],
     beat_nodes: dict[str, Any],
     beat_dilemmas: dict[str, set[str]],
+    graph: Graph | None = None,
 ) -> str:
     """Format intersection candidates as numbered groups for the LLM prompt.
 
-    Each group shows the shared signal, involved dilemmas, and beat details.
-    Beats appearing in multiple candidate groups are included in all of them.
+    Each group shows the shared signal, involved dilemmas, and compact
+    beat details. Beats appearing in multiple candidate groups are
+    included in all of them.
+
+    When ``graph`` is provided, dilemma context (question, stakes) is
+    included per group and beat summaries are enriched with
+    narrative_function.
 
     Args:
         candidates: Pre-screened cross-dilemma candidate groups.
         beat_nodes: Beat node data keyed by beat ID.
         beat_dilemmas: Mapping of beat_id to set of dilemma IDs.
+        graph: Optional graph for dilemma/entity context enrichment.
 
     Returns:
         Formatted string with numbered candidate groups, or empty string
         if no candidates.
     """
+    from questfoundry.graph.context_compact import truncate_summary
+
     if not candidates:
         return ""
 
@@ -1495,29 +1504,37 @@ def format_intersection_candidates(
         for bid in candidate.beat_ids:
             group_dilemmas.update(beat_dilemmas.get(bid, set()))
 
-        dilemma_line = f"Dilemmas represented: {', '.join(sorted(group_dilemmas))}"
+        # Dilemma context block (enriched when graph is available)
+        dilemma_lines: list[str] = []
+        for did in sorted(group_dilemmas):
+            if graph:
+                dnode = graph.get_node(did) or graph.get_node(f"dilemma::{did}")
+                if dnode:
+                    question = dnode.get("question", "")
+                    stakes = dnode.get("why_it_matters", "")
+                    label = f'- {did}: "{question}"'
+                    if stakes:
+                        label += f" (Stakes: {truncate_summary(stakes, 100)})"
+                    dilemma_lines.append(label)
+                    continue
+            dilemma_lines.append(f"- {did}")
 
-        # Format each beat
+        dilemma_block = "Dilemmas:\n" + "\n".join(dilemma_lines)
+
+        # Format each beat compactly
         beat_lines: list[str] = []
         for bid in candidate.beat_ids:
             data = beat_nodes.get(bid, {})
             dilemma_ids = sorted(beat_dilemmas.get(bid, set()))
             dilemma_tag = dilemma_ids[0] if dilemma_ids else "unknown"
-            summary = data.get("summary", "")
+            summary = truncate_summary(data.get("summary", ""), 80)
             location = data.get("location", "unspecified")
-            alternatives = data.get("location_alternatives", [])
-            entities = data.get("entities", [])
+            narrative_fn = data.get("narrative_function", "")
 
-            parts = [
-                f"- {bid} [dilemma: {dilemma_tag}]:",
-                f'  summary="{summary}",',
-                f'  location="{location}",',
-                f"  location_alternatives={alternatives},",
-                f"  entities={entities}",
-            ]
-            beat_lines.append("\n".join(parts))
+            fn_tag = f", {narrative_fn}" if narrative_fn else ""
+            beat_lines.append(f'- {bid} [{dilemma_tag}{fn_tag}]: "{summary}" (loc: {location})')
 
-        sections.append("\n".join([header, dilemma_line, "", *beat_lines]))
+        sections.append("\n".join([header, dilemma_block, "", *beat_lines]))
 
     return "\n\n".join(sections)
 
