@@ -51,7 +51,11 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.graph.graph import Graph
-    from questfoundry.models.seed import SeedOutput
+    from questfoundry.models.seed import (
+        DilemmaAnalysis,
+        InteractionConstraint,
+        SeedOutput,
+    )
     from questfoundry.pipeline.stages.base import PhaseProgressFn
 
 log = get_logger(__name__)
@@ -2057,7 +2061,7 @@ async def serialize_post_prune_analysis(
     max_retries: int = 3,
     callbacks: list[BaseCallbackHandler] | None = None,
     on_phase_progress: PhaseProgressFn | None = None,
-) -> tuple[list[Any], list[Any], int, int]:
+) -> tuple[list[DilemmaAnalysis], list[InteractionConstraint], int, int]:
     """Run post-prune convergence analysis (Sections 7+8).
 
     Classifies each surviving dilemma's convergence policy and identifies
@@ -2100,7 +2104,7 @@ async def serialize_post_prune_analysis(
     prompts = _load_seed_section_prompts()
 
     # --- Section 7: Dilemma Convergence Analysis ---
-    dilemma_analyses: list[Any] = []
+    dilemma_analyses: list[DilemmaAnalysis] = []
     try:
         dilemma_context = format_dilemma_analysis_context(pruned_artifact, graph)
         section7_prompt = prompts["dilemma_analyses"].format(dilemma_context=dilemma_context)
@@ -2120,7 +2124,7 @@ async def serialize_post_prune_analysis(
         )
         total_tokens += section7_tokens
         llm_calls += 1
-        dilemma_analyses = [a.model_dump() for a in section7_result.dilemma_analyses]
+        dilemma_analyses = section7_result.dilemma_analyses
         log.info(
             "post_prune_section7_complete",
             analyses=len(dilemma_analyses),
@@ -2136,7 +2140,7 @@ async def serialize_post_prune_analysis(
         )
 
     # --- Section 8: Interaction Constraints ---
-    interaction_constraints: list[Any] = []
+    interaction_constraints: list[InteractionConstraint] = []
     try:
         candidates_context = format_interaction_candidates_context(pruned_artifact, graph)
 
@@ -2171,7 +2175,7 @@ async def serialize_post_prune_analysis(
                 a_raw = strip_scope_prefix(c.dilemma_a)
                 b_raw = strip_scope_prefix(c.dilemma_b)
                 if a_raw in surviving_ids and b_raw in surviving_ids:
-                    valid_constraints.append(c.model_dump())
+                    valid_constraints.append(c)
                 else:
                     log.warning(
                         "interaction_constraint_rejected",
