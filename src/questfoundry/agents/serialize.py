@@ -497,7 +497,6 @@ _REQUIRED_SECTION_PROMPT_KEYS = [
     "consequences_prompt",
     "beats_prompt",
     "per_path_beats_prompt",
-    "convergence_prompt",
     "dilemma_analyses_prompt",
     "interaction_constraints_prompt",
 ]
@@ -548,7 +547,6 @@ def _load_seed_section_prompts() -> dict[str, str]:
         "beats": data["beats_prompt"],
         "per_path_beats": data["per_path_beats_prompt"],
         "per_dilemma_paths": data["per_dilemma_paths_prompt"],
-        "convergence": data["convergence_prompt"],
         "dilemma_analyses": data["dilemma_analyses_prompt"],
         "interaction_constraints": data["interaction_constraints_prompt"],
     }
@@ -1004,8 +1002,6 @@ async def serialize_seed_iteratively(
     3. paths (Path list)
     4. consequences (Consequence list)
     5. initial_beats (InitialBeat list)
-    6. convergence_sketch (ConvergenceSketch)
-
     After all sections are merged, if a graph is provided, semantic validation
     runs to check cross-references against BRAINSTORM data. If validation fails,
     the problematic sections are re-serialized with feedback.
@@ -1035,7 +1031,6 @@ async def serialize_seed_iteratively(
     from questfoundry.models.seed import (
         BeatsSection,
         ConsequencesSection,
-        ConvergenceSection,
         DilemmasSection,
         EntitiesSection,
         PathsSection,
@@ -1064,7 +1059,6 @@ async def serialize_seed_iteratively(
         ("paths", PathsSection, "paths"),
         ("consequences", ConsequencesSection, "consequences"),
         ("beats", BeatsSection, "initial_beats"),
-        ("convergence", ConvergenceSection, "convergence_sketch"),
     ]
 
     collected: dict[str, Any] = {}
@@ -1209,7 +1203,6 @@ _FIELD_PATH_TO_SECTION = {
     "paths": "paths",
     "consequences": "consequences",
     "initial_beats": "beats",
-    "convergence_sketch": "convergence",
 }
 
 
@@ -1608,7 +1601,6 @@ async def serialize_seed_as_function(
     """
     from questfoundry.models.seed import (
         ConsequencesSection,
-        ConvergenceSection,
         DilemmasSection,
         EntitiesSection,
         SeedOutput,
@@ -1688,7 +1680,6 @@ async def serialize_seed_as_function(
         # paths handled via per-dilemma serialization after dilemmas
         ("consequences", ConsequencesSection, "consequences"),
         # beats handled via per-path serialization after paths
-        ("convergence", ConvergenceSection, "convergence_sketch"),
     ]
 
     collected: dict[str, Any] = {}

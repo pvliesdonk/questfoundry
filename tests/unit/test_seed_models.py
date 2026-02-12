@@ -314,6 +314,27 @@ class TestDilemmaAnalysis:
         da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_policy": policy})
         assert da.convergence_policy == policy
 
+    def test_convergence_point_accepted(self) -> None:
+        da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_point": "The river crossing camp"})
+        assert da.convergence_point == "The river crossing camp"
+
+    def test_residue_note_accepted(self) -> None:
+        da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "residue_note": "Trust levels differ"})
+        assert da.residue_note == "Trust levels differ"
+
+    def test_convergence_point_empty_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="convergence_point"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_point": ""})
+
+    def test_residue_note_empty_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="residue_note"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "residue_note": ""})
+
+    def test_convergence_fields_default_none(self) -> None:
+        da = DilemmaAnalysis(**_ANALYSIS_KWARGS)
+        assert da.convergence_point is None
+        assert da.residue_note is None
+
 
 class TestInteractionConstraint:
     """InteractionConstraint normalizes pair order and validates fields."""

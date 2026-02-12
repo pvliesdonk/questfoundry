@@ -1783,18 +1783,6 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             prefixed_path_id = _prefix_id("path", raw_path_id)
             graph.add_edge("belongs_to", beat_id, prefixed_path_id)
 
-    # Store convergence sketch as metadata (upsert allows re-running SEED)
-    if "convergence_sketch" in output:
-        sketch = output["convergence_sketch"]
-        graph.upsert_node(
-            "convergence_sketch",
-            {
-                "type": "convergence_sketch",
-                "convergence_points": sketch.get("convergence_points", []),
-                "residue_notes": sketch.get("residue_notes", []),
-            },
-        )
-
     # Store convergence analysis on dilemma nodes (from sections 7+8)
     analysis_by_id: dict[str, dict[str, Any]] = {}
     for analysis in output.get("dilemma_analyses", []):
@@ -1815,11 +1803,14 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                     fallback="soft/2",
                 )
             data = analysis or {}
-            graph.update_node(
-                dilemma_node_id,
-                convergence_policy=data.get("convergence_policy", "soft"),
-                payoff_budget=data.get("payoff_budget", 2),
-            )
+            update_fields: dict[str, Any] = {
+                "convergence_policy": data.get("convergence_policy", "soft"),
+                "payoff_budget": data.get("payoff_budget", 2),
+            }
+            for key in ("convergence_point", "residue_note"):
+                if key in data:
+                    update_fields[key] = data[key]
+            graph.update_node(dilemma_node_id, **update_fields)
 
     # Create interaction constraint edges between dilemma pairs
     for constraint in output.get("interaction_constraints", []):
