@@ -2065,11 +2065,21 @@ class GrowStage:
             arc_node_id = f"arc::{arc_id_raw}"
 
             # Always store policy metadata on the arc node
-            graph.update_node(
-                arc_node_id,
-                convergence_policy=info.convergence_policy,
-                payoff_budget=info.payoff_budget,
-            )
+            update_fields: dict[str, object] = {
+                "convergence_policy": info.convergence_policy,
+                "payoff_budget": info.payoff_budget,
+            }
+            if info.dilemma_convergences:
+                update_fields["dilemma_convergences"] = [
+                    {
+                        "dilemma_id": dc.dilemma_id,
+                        "policy": dc.policy,
+                        "budget": dc.budget,
+                        "converges_at": dc.converges_at,
+                    }
+                    for dc in info.dilemma_convergences
+                ]
+            graph.update_node(arc_node_id, **update_fields)
 
             if not info.converges_at:
                 continue
