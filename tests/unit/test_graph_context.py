@@ -1343,6 +1343,26 @@ class TestFormatDilemmaAnalysisContext:
         assert "Take the red pill" in result
         assert "Take the blue pill" in result
 
+    def test_unexplored_answers_displayed(self) -> None:
+        """Dilemmas with unexplored answers show them in the output."""
+        seed = _seed_output(
+            dilemmas=[
+                _dilemma("d1", explored=["trust"], unexplored=["betray", "ignore"]),
+            ],
+            paths=[_path("path::d1__trust", "d1", "trust")],
+        )
+        result = format_dilemma_analysis_context(seed)
+        assert "**Unexplored answers:** betray, ignore" in result
+
+    def test_no_unexplored_answers_omits_line(self) -> None:
+        """Dilemmas with no unexplored answers omit the line entirely."""
+        seed = _seed_output(
+            dilemmas=[_dilemma("d1", explored=["a"], unexplored=[])],
+            paths=[_path("path::d1__a", "d1", "a")],
+        )
+        result = format_dilemma_analysis_context(seed)
+        assert "Unexplored answers" not in result
+
     def test_enriched_with_graph_data(self) -> None:
         """Graph data enriches output with question and stakes."""
         graph = Graph.empty()
