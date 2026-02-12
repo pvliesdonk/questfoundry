@@ -718,7 +718,8 @@ dilemma_analyses_prompt: |
         "payoff_budget": 5,
         "reasoning": "Murder vs accident produces incompatible crime scenes, suspect lists, and endings.",
         "convergence_point": null,
-        "residue_note": null
+        "residue_note": null,
+        "ending_tone": "cold justice"
       }},
       {{
         "dilemma_id": "dilemma::example_soft",
@@ -726,7 +727,8 @@ dilemma_analyses_prompt: |
         "payoff_budget": 3,
         "reasoning": "Trust vs suspicion changes the relationship tone but both paths lead to the same confrontation.",
         "convergence_point": "paths converge at council_chamber for the final confrontation",
-        "residue_note": "suspicious-path characters remain wary of the host"
+        "residue_note": "suspicious-path characters remain wary of the host",
+        "ending_tone": null
       }}
     ]
   }}
@@ -741,6 +743,7 @@ dilemma_analyses_prompt: |
   - BAD reasoning: "It is soft." / "Only one path."
   - `convergence_point`: null for `hard`; location-based description for `soft`/`flavor`
   - `residue_note`: null for `hard` or if no differences persist; short description otherwise
+  - `ending_tone`: 2-5 word emotional descriptor for how endings shaped by this dilemma should feel (e.g. "cold justice", "bittersweet triumph", "quiet dread"). Required for `hard` dilemmas (they multiply endings). null for `soft`/`flavor` (their paths converge, so ending tone comes from the shared continuation).
 
   ## REMINDER
   Classify ALL dilemmas. Ask: "Could the SAME scene follow both answers?"

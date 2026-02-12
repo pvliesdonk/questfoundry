@@ -1523,6 +1523,20 @@ class TestEndingGuidance:
     def test_non_ending_returns_empty(self) -> None:
         assert format_ending_guidance(False) == ""
 
+    def test_ending_with_tone(self) -> None:
+        guidance = format_ending_guidance(True, ending_tone="cold justice")
+        assert "FINAL PASSAGE" in guidance
+        assert "## Ending Tone" in guidance
+        assert "cold justice" in guidance
+
+    def test_ending_without_tone(self) -> None:
+        guidance = format_ending_guidance(True, ending_tone="")
+        assert "FINAL PASSAGE" in guidance
+        assert "Ending Tone" not in guidance
+
+    def test_non_ending_ignores_tone(self) -> None:
+        assert format_ending_guidance(False, ending_tone="cold justice") == ""
+
 
 # ---------------------------------------------------------------------------
 # Echo prompt at convergence

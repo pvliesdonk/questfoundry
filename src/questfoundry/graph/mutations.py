@@ -1807,7 +1807,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 "convergence_policy": data.get("convergence_policy", "soft"),
                 "payoff_budget": data.get("payoff_budget", 2),
             }
-            for key in ("convergence_point", "residue_note"):
+            for key in ("convergence_point", "residue_note", "ending_tone"):
                 if key in data:
                     update_fields[key] = data[key]
             graph.update_node(dilemma_node_id, **update_fields)

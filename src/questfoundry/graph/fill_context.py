@@ -1671,7 +1671,7 @@ def compute_is_ending(graph: Graph, passage_id: str) -> bool:
     return len(choice_from_edges) == 0
 
 
-def format_ending_guidance(is_ending: bool) -> str:
+def format_ending_guidance(is_ending: bool, *, ending_tone: str = "") -> str:
     """Format ending-specific prose guidance.
 
     When a passage is a story ending, returns craft instructions for
@@ -1679,13 +1679,15 @@ def format_ending_guidance(is_ending: bool) -> str:
 
     Args:
         is_ending: Whether this passage is a story ending.
+        ending_tone: Optional emotional tone hint from SEED's DilemmaAnalysis
+            (e.g. "bittersweet triumph"). Appended to guidance when present.
 
     Returns:
         Ending guidance string, or empty string.
     """
     if not is_ending:
         return ""
-    return (
+    guidance = (
         "## Ending Passage (THIS IS A FINAL PASSAGE)\n\n"
         "This passage ends the reader's journey on this path. "
         "It must feel like an ending, not a chapter break or a pause.\n\n"
@@ -1703,6 +1705,13 @@ def format_ending_guidance(is_ending: bool) -> str:
         "GOOD: A final gesture or physical action that echoes the path's theme\n"
         "GOOD: A line of dialogue that lands with double meaning"
     )
+    if ending_tone:
+        guidance += (
+            f"\n\n## Ending Tone\n"
+            f"This ending should feel: **{ending_tone}**\n"
+            f"Let this emotional quality infuse the final image and rhythm."
+        )
+    return guidance
 
 
 def compute_first_appearances(

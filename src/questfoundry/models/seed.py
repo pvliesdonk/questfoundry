@@ -280,6 +280,15 @@ class DilemmaAnalysis(BaseModel):
         max_length=200,
         description="Differences that persist after convergence for this dilemma",
     )
+    ending_tone: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=80,
+        description=(
+            "Emotional quality of endings shaped by this dilemma's resolution "
+            "(2-5 words, e.g. 'bittersweet triumph', 'cold justice')"
+        ),
+    )
 
 
 class InteractionConstraint(BaseModel):

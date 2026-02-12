@@ -649,6 +649,32 @@ class EndingSplitResult:
     passages_already_unique: int
 
 
+def _collect_family_tones(
+    graph: Graph,
+    family_arcs: list[str],
+    arc_nodes: dict[str, dict[str, Any]],
+) -> list[str]:
+    """Collect ending_tone values from dilemmas reachable by a family's arcs.
+
+    Traces arc → paths → path.dilemma_id → dilemma node → ending_tone.
+    Returns a sorted deduplicated list of tone strings.
+    """
+    tones: set[str] = set()
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    path_nodes = graph.get_nodes_by_type("path")
+    for arc_id in family_arcs:
+        for path_raw in arc_nodes[arc_id].get("paths", []):
+            path_id = normalize_scoped_id(path_raw, "path")
+            path_data = path_nodes.get(path_id, {})
+            did = path_data.get("dilemma_id", "")
+            if did:
+                dilemma_data = dilemma_nodes.get(normalize_scoped_id(did, "dilemma"), {})
+                tone = dilemma_data.get("ending_tone")
+                if tone:
+                    tones.add(str(tone))
+    return sorted(tones)
+
+
 def split_ending_families(graph: Graph) -> EndingSplitResult:
     """Split shared terminal passages into per-arc-family ending passages.
 
@@ -738,18 +764,19 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
                 counter += 1
 
             summary = t_data.get("summary", "")
-            graph.create_node(
-                ending_pid,
-                {
-                    "type": "passage",
-                    "raw_id": ending_pid.removeprefix("passage::"),
-                    "is_ending": True,
-                    "is_synthetic": True,
-                    "summary": summary,
-                    "family_codewords": distinguishing,
-                    "family_arc_count": len(family_arcs),
-                },
-            )
+            node_data: dict[str, Any] = {
+                "type": "passage",
+                "raw_id": ending_pid.removeprefix("passage::"),
+                "is_ending": True,
+                "is_synthetic": True,
+                "summary": summary,
+                "family_codewords": distinguishing,
+                "family_arc_count": len(family_arcs),
+            }
+            tones = _collect_family_tones(graph, family_arcs, arc_nodes)
+            if tones:
+                node_data["ending_tone"] = "; ".join(tones)
+            graph.create_node(ending_pid, node_data)
 
             # Create gated choice from terminal → ending
             choice_id = f"choice::{raw_id}__ending_{i}"
