@@ -6,7 +6,8 @@ Phase orchestration lives in pipeline/stages/grow.py.
 Algorithm summary:
 - validate_beat_dag: Kahn's algorithm for cycle detection in requires edges
 - validate_commits_beats: Verify each explored dilemma has commits beat per path
-- topological_sort_beats: Stable topological sort with alphabetical tie-breaking
+- topological_sort_beats: Stable topological sort with priority + alphabetical tie-breaking
+- compute_shared_beats: Find beats common to all arc combinations
 - enumerate_arcs: Cartesian product of paths across dilemmas
 - compute_divergence_points: Find where arcs diverge from the spine
 - split_ending_families: Split shared terminal passages into per-arc-family endings
@@ -208,15 +209,25 @@ def validate_commits_beats(graph: Graph) -> list[GrowValidationError]:
 # ---------------------------------------------------------------------------
 
 
-def topological_sort_beats(graph: Graph, beat_ids: list[str]) -> list[str]:
+def topological_sort_beats(
+    graph: Graph,
+    beat_ids: list[str],
+    *,
+    priority_beats: set[str] | None = None,
+) -> list[str]:
     """Topologically sort a subset of beats using requires edges.
 
-    Uses Kahn's algorithm with alphabetical tie-breaking for determinism.
-    Only considers requires edges between beats in the provided set.
+    Uses Kahn's algorithm with deterministic tie-breaking. When multiple beats
+    have in-degree 0, beats in *priority_beats* sort first, then alphabetically.
+    This lets callers push shared/common beats early in the sequence and
+    exclusive beats late, so arcs naturally diverge toward the end.
 
     Args:
         graph: Graph containing requires edges.
         beat_ids: Subset of beat node IDs to sort.
+        priority_beats: Optional set of beat IDs that should sort before
+            non-priority beats when topological constraints allow. When
+            ``None``, falls back to purely alphabetical tie-breaking.
 
     Returns:
         Sorted list of beat IDs (prerequisites first).
@@ -228,6 +239,9 @@ def topological_sort_beats(graph: Graph, beat_ids: list[str]) -> list[str]:
         return []
 
     beat_set = set(beat_ids)
+
+    def _sort_key(bid: str) -> tuple[int, str]:
+        return (0 if priority_beats and bid in priority_beats else 1, bid)
 
     # Build adjacency within the subset
     in_degree: dict[str, int] = dict.fromkeys(beat_set, 0)
@@ -241,27 +255,64 @@ def topological_sort_beats(graph: Graph, beat_ids: list[str]) -> list[str]:
             in_degree[from_id] += 1
             successors[to_id].append(from_id)
 
-    # Kahn's with alphabetical tie-breaking (using sorted heap simulation)
-    # Use a sorted list as a priority queue for determinism
-    queue = sorted(bid for bid, deg in in_degree.items() if deg == 0)
+    # Kahn's with priority + alphabetical tie-breaking
+    queue = sorted((bid for bid, deg in in_degree.items() if deg == 0), key=_sort_key)
     result: list[str] = []
 
     while queue:
-        node = queue.pop(0)  # Take alphabetically first
+        node = queue.pop(0)  # Take highest-priority first
         result.append(node)
         new_ready = []
         for successor in successors[node]:
             in_degree[successor] -= 1
             if in_degree[successor] == 0:
                 new_ready.append(successor)
-        # Insert new ready nodes maintaining sorted order
-        queue = sorted(queue + new_ready)
+        # Insert new ready nodes maintaining priority + alphabetical order
+        queue = sorted(queue + new_ready, key=_sort_key)
 
     if len(result) != len(beat_set):
         remaining = beat_set - set(result)
         raise ValueError(f"Cycle detected in beat subset: {sorted(remaining)}")
 
     return result
+
+
+def compute_shared_beats(
+    path_beat_sets: dict[str, set[str]],
+    path_lists: list[list[str]],
+) -> set[str]:
+    """Find beats shared by all arc combinations (Cartesian product of path lists).
+
+    A beat is "shared" if it appears in the beat set of at least one path
+    from every dilemma. Such beats are common to ALL arcs and cannot
+    differentiate between arc families.
+
+    Args:
+        path_beat_sets: Mapping from path ID to the set of beat IDs
+            that belong to that path (via ``belongs_to`` edges).
+        path_lists: Per-dilemma lists of path IDs (one list per dilemma,
+            in the same order used by ``enumerate_arcs``).
+
+    Returns:
+        Set of beat IDs present in every possible arc combination.
+        Empty set if *path_lists* is empty.
+    """
+    if not path_lists:
+        return set()
+
+    # For each dilemma, collect the union of beats across all its paths
+    per_dilemma_unions: list[set[str]] = []
+    for paths_in_dilemma in path_lists:
+        union: set[str] = set()
+        for pid in paths_in_dilemma:
+            union.update(path_beat_sets.get(pid, set()))
+        per_dilemma_unions.append(union)
+
+    # Shared = intersection across all dilemmas
+    shared = per_dilemma_unions[0]
+    for s in per_dilemma_unions[1:]:
+        shared = shared & s
+    return shared
 
 
 # ---------------------------------------------------------------------------
@@ -1103,6 +1154,11 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
         path_id = edge["to"]
         path_beat_sets[path_id].add(beat_id)
 
+    # Compute shared beats (present in every arc) for priority ordering.
+    # Shared beats sort first so exclusive beats land at the end of sequences,
+    # causing arcs to diverge naturally toward distinct endings.
+    shared = compute_shared_beats(dict(path_beat_sets), path_lists)
+
     # Cartesian product of paths
     arcs: list[Arc] = []
     for combo in product(*path_lists):
@@ -1116,9 +1172,9 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
         for pid in path_combo:
             beat_set.update(path_beat_sets.get(pid, set()))
 
-        # Topological sort of the beats
+        # Topological sort of the beats (shared beats get priority)
         try:
-            sequence = topological_sort_beats(graph, list(beat_set))
+            sequence = topological_sort_beats(graph, list(beat_set), priority_beats=shared)
         except ValueError:
             sequence = sorted(beat_set)  # Fallback for cycles (Phase 1 should catch)
 
