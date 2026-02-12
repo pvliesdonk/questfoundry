@@ -2874,6 +2874,10 @@ class GrowStage:
                 log.warning("phase9b_no_choice_found", from_p=fork_at, to_p=next_passage)
                 continue
 
+            # Preserve grants from old choice before removing it
+            old_choice_data = graph.get_node(old_choice_id) or {}
+            old_grants = old_choice_data.get("grants", [])
+
             # Remove old choice node and its edges
             graph.delete_node(old_choice_id, cascade=True)
             forked_passages.add(fork_at)
@@ -2936,7 +2940,7 @@ class GrowStage:
                         "to_passage": next_passage,
                         "label": "continue",
                         "requires": [],
-                        "grants": [],
+                        "grants": old_grants,
                     },
                 )
                 graph.add_edge("choice_from", choice_id, opt_id)

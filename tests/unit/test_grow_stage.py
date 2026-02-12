@@ -3310,6 +3310,80 @@ class TestPhase9bForkBeats:
         choices = graph.get_nodes_by_type("choice")
         assert len(choices) == 3  # Original 3 choices unchanged
 
+    @pytest.mark.asyncio
+    async def test_fork_preserves_grants_on_reconverge(self) -> None:
+        """Fork reconverge choices carry grants from the replaced choice."""
+        from unittest.mock import patch
+
+        from questfoundry.graph.graph import Graph
+        from questfoundry.models.grow import ForkProposal, Phase9bOutput
+
+        graph = Graph.empty()
+        pids = ["p1", "p2", "p3"]
+        for pid in pids:
+            graph.create_node(
+                f"passage::{pid}",
+                {"type": "passage", "raw_id": pid, "summary": f"Passage {pid}"},
+            )
+
+        # p1→p2 grants a codeword (simulates commits beat transition)
+        graph.create_node(
+            "choice::p1__p2",
+            {
+                "type": "choice",
+                "from_passage": "passage::p1",
+                "to_passage": "passage::p2",
+                "label": "continue",
+                "requires": [],
+                "grants": ["codeword::truth_committed"],
+            },
+        )
+        graph.add_edge("choice_from", "choice::p1__p2", "passage::p1")
+        graph.add_edge("choice_to", "choice::p1__p2", "passage::p2")
+
+        graph.create_node(
+            "choice::p2__p3",
+            {
+                "type": "choice",
+                "from_passage": "passage::p2",
+                "to_passage": "passage::p3",
+                "label": "continue",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::p2__p3", "passage::p2")
+        graph.add_edge("choice_to", "choice::p2__p3", "passage::p3")
+
+        stage = GrowStage()
+        fork_output = Phase9bOutput(
+            proposals=[
+                ForkProposal(
+                    fork_at="passage::p1",
+                    reconverge_at="passage::p3",
+                    option_a_summary="Option A",
+                    option_b_summary="Option B",
+                    label_a="Choose A",
+                    label_b="Choose B",
+                ),
+            ]
+        )
+
+        with patch.object(
+            stage,
+            "_grow_llm_call",
+            return_value=(fork_output, 1, 100),
+        ):
+            result = await stage._phase_9b_fork_beats(graph, MagicMock())
+
+        assert result.status == "completed"
+
+        choices = graph.get_nodes_by_type("choice")
+        reconverge_choices = {cid: cdata for cid, cdata in choices.items() if "reconverge" in cid}
+        assert len(reconverge_choices) == 2
+        for _cid, cdata in reconverge_choices.items():
+            assert cdata["grants"] == ["codeword::truth_committed"]
+
 
 class TestPhase9cHubSpokes:
     """Tests for Phase 9c hub-and-spoke insertion."""
