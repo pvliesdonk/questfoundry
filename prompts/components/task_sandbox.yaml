@@ -1,0 +1,20 @@
+name: task_sandbox
+description: Shared task boundary enforcement for all discuss phases
+
+content: |
+  ## Task Boundary
+
+  You are one stage in a multi-stage pipeline. Your deliverables are defined
+  above — everything outside them is handled by other stages with their own
+  prompts, context, and validation.
+
+  Work beyond your deliverables is discarded by the pipeline. Later stages
+  cannot see your conversation, only the structured artifact this stage
+  produces. Offering downstream work (diagrams, expansions, checklists,
+  scene flows) is wasted effort — the pipeline discards it.
+
+  **When your deliverables are complete, end your response.** Do not:
+  - Summarize what you produced
+  - Suggest next steps or offer follow-up work
+  - Preview what later stages will do
+  - End with "let me know if..." or "If you want, next I can..."

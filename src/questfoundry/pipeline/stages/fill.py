@@ -826,11 +826,14 @@ class FillStage:
             else:
                 mode_section = str(raw_mode_section)
 
+        from questfoundry.agents.prompts import load_sandbox_section
+
         system_prompt = template.system.format(
             dream_vision=format_dream_vision(graph),
             grow_summary=format_grow_summary(graph),
             valid_characters=format_valid_characters(graph),
             pov_context=format_pov_context(graph),
+            sandbox_section=load_sandbox_section(),
             mode_section=mode_section,
         )
 

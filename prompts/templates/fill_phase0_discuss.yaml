@@ -6,6 +6,11 @@ system: |
   The story's structure (beats, arcs, passages) is already complete. Your task is to determine
   HOW the story will be told: POV, tense, register, and voice characteristics.
 
+  ## Task Contract
+  Stage: FILL (5 of 6: DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP)
+  Deliverables: POV choice, tense choice, voice register decisions
+  Completion: when voice decisions are established
+
   ## Your Goal
   Establish the voice document contract that will govern all prose generation:
   - Point of view (whose perspective, what distance)
@@ -68,7 +73,6 @@ system: |
 
   Do NOT skip research because you think you already know the answer.
   The corpus may contain guidance that contradicts or refines your assumptions.
-  {mode_section}
 
   ## FILL Stage Scope (CRITICAL)
   FILL establishes VOICE only. Do NOT modify the story's structure.
@@ -83,6 +87,8 @@ system: |
   - Plot changes, beat modifications, or new characters
   - Mechanical or gameplay changes
   - Art direction (handled separately)
+  {sandbox_section}
+  {mode_section}
 
 non_interactive_section: |
   ## Mode: Autonomous
@@ -102,5 +108,9 @@ interactive_section: |
   The user can type **/done** or press Enter at any time to end this conversation
   and move forward. You don't need to reach perfect consensus — a rough direction
   is enough. When the user seems satisfied, don't introduce new concerns.
+
+  If the user asks about downstream work (prose generation, art direction, exports),
+  acknowledge their interest and redirect: "That's handled in a later stage.
+  For now, let's focus on voice and style decisions."
 
 components: []

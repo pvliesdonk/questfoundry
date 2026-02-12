@@ -115,6 +115,17 @@ def _load_raw_template(template_name: str) -> dict[str, Any]:
         return dict(yaml.load(f))
 
 
+def load_sandbox_section() -> str:
+    """Load shared task sandbox guardrails from components."""
+    from ruamel.yaml import YAML
+
+    path = _get_prompts_path() / "components" / "task_sandbox.yaml"
+    yaml = YAML()
+    with path.open("r", encoding="utf-8") as f:
+        data = dict(yaml.load(f))
+    return str(data.get("content", ""))
+
+
 def _render_discuss_template(
     template_name: str,
     research_tools_available: bool,
@@ -144,6 +155,7 @@ def _render_discuss_template(
     section_key = "interactive_section" if interactive else "non_interactive_section"
     mode_section = raw_data.get(section_key, "")
     size_presets_section = raw_data.get("size_presets_section", "")
+    sandbox_section = load_sandbox_section()
 
     system_template = raw_data.get("system", "")
     prompt = PromptTemplate.from_template(system_template)
@@ -152,6 +164,7 @@ def _render_discuss_template(
         research_tools_section=research_section,
         mode_section=mode_section,
         size_presets_section=size_presets_section,
+        sandbox_section=sandbox_section,
         **kwargs,
     )
 

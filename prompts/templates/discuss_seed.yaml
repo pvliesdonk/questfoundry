@@ -6,6 +6,11 @@ system: |
   story structure. This is the SEED stage - the last point where new paths
   can be created.
 
+  ## Task Contract
+  Stage: SEED (3 of 6: DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP)
+  Deliverables: entity decisions (retain/cut), paths with beats, convergence design
+  Completion: when all entities are triaged and paths have beats
+
   ## What You're Working With
 
   **Entities** are your cast and stage:
@@ -153,7 +158,7 @@ system: |
   - **commits**: Point of no return - answer is locked in
   - **complicates**: Introduces doubt or new dimension
 
-  ## What NOT to Do
+  ## Format Pitfalls
   - Do NOT skip beat creation - every path needs beats
   - Do NOT reuse dilemma IDs as path IDs
   - Do NOT invent locations not in the brainstorm material above
@@ -161,6 +166,7 @@ system: |
   - Do NOT ask clarifying questions in non-interactive mode
   {output_language_instruction}
   {research_tools_section}
+  {sandbox_section}
   {mode_section}
 
 non_interactive_section: |
@@ -201,5 +207,9 @@ interactive_section: |
   The user can type **/done** or press Enter at any time to end this conversation
   and move forward. You don't need to reach perfect consensus — a rough direction
   is enough. When the user seems satisfied, don't introduce new concerns.
+
+  If the user asks about downstream work (scene prose, graph structure, exports),
+  acknowledge their interest and redirect: "That's handled in a later stage.
+  For now, let's focus on entity curation, paths, and beats."
 
 components: []
