@@ -715,8 +715,8 @@ dilemma_analyses_prompt: |
   - `reasoning` must be 1-2 sentences explaining WHY you chose that policy
   - GOOD reasoning: "Trust vs betrayal creates genuinely different arcs needing 3 exclusive beats to develop."
   - BAD reasoning: "It is soft." (too short, no justification)
-  - `convergence_point`: null for hard, location-based description for soft/flavor
-  - `residue_note`: null if no differences persist, otherwise a short description
+  - `convergence_point`: null for hard dilemmas or when convergence location is unspecified; location-based description for soft/flavor with known convergence
+  - `residue_note`: null if no differences persist or if unspecified; otherwise a short description
 
   ## REMINDER
   Classify ALL dilemmas. hard = mutually exclusive, soft = meaningful but mergeable (DEFAULT), flavor = cosmetic only.

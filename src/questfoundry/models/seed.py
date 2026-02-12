@@ -270,11 +270,13 @@ class DilemmaAnalysis(BaseModel):
     )
     convergence_point: str | None = Field(
         default=None,
+        min_length=1,
         max_length=200,
         description="Where this dilemma's paths converge (location-based, concrete)",
     )
     residue_note: str | None = Field(
         default=None,
+        min_length=1,
         max_length=200,
         description="Differences that persist after convergence for this dilemma",
     )

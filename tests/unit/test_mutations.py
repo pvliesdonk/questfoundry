@@ -4323,6 +4323,64 @@ class TestApplySeedConvergenceAnalysis:
         assert node["convergence_policy"] == "soft"
         assert node["payoff_budget"] == 2
 
+    def test_convergence_point_stored_on_dilemma_node(self) -> None:
+        """convergence_point from analysis is stored on the dilemma graph node."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        output["dilemma_analyses"] = [
+            {
+                "dilemma_id": "stay_or_go",
+                "convergence_policy": "soft",
+                "payoff_budget": 3,
+                "reasoning": "Paths diverge then merge at the river crossing",
+                "convergence_point": "The river crossing camp",
+                "residue_note": "Trust levels differ based on choice",
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        node = graph.get_node("dilemma::stay_or_go")
+        assert node["convergence_point"] == "The river crossing camp"
+        assert node["residue_note"] == "Trust levels differ based on choice"
+
+    def test_null_convergence_fields_stored_explicitly(self) -> None:
+        """Explicit null convergence_point/residue_note are stored on node."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        output["dilemma_analyses"] = [
+            {
+                "dilemma_id": "trust_or_not",
+                "convergence_policy": "hard",
+                "payoff_budget": 4,
+                "reasoning": "Mutually exclusive world states",
+                "convergence_point": None,
+                "residue_note": None,
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        node = graph.get_node("dilemma::trust_or_not")
+        assert node.get("convergence_point") is None
+        assert node.get("residue_note") is None
+
+    def test_absent_convergence_fields_not_stored(self) -> None:
+        """When convergence_point/residue_note are absent, they are not added."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        output["dilemma_analyses"] = [
+            {
+                "dilemma_id": "stay_or_go",
+                "convergence_policy": "soft",
+                "payoff_budget": 2,
+                "reasoning": "test",
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        node = graph.get_node("dilemma::stay_or_go")
+        assert "convergence_point" not in node
+        assert "residue_note" not in node
+
     def test_interaction_constraint_edge_created(self) -> None:
         """Interaction constraint creates an edge between dilemma nodes."""
         graph = self._graph_with_dilemmas()
