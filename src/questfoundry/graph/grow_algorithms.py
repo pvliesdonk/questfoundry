@@ -642,6 +642,8 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
         from_beat = t_data.get("from_beat") or t_data.get("primary_beat") or ""
         covering_arcs = beat_to_arcs.get(from_beat, [])
         if not covering_arcs:
+            if not from_beat:
+                log.debug("terminal_missing_beat", passage=terminal_id)
             already_unique += 1
             continue
 
@@ -668,9 +670,13 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
             distinguishing = sorted(sig - other_sigs_intersection)
 
             if not distinguishing:
-                # Degenerate: no distinguishing codewords, use full signature
-                # This can happen when families share all codewords (shouldn't
-                # normally occur since different sigs means different codewords)
+                # Degenerate: families share all codewords but have different
+                # signatures — shouldn't occur, indicates upstream issue
+                log.warning(
+                    "degenerate_ending_split",
+                    terminal=terminal_id,
+                    family_count=len(sig_to_arcs),
+                )
                 distinguishing = sorted(sig)
 
             ending_pid = f"passage::ending_{raw_id}_{i}"

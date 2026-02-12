@@ -2946,8 +2946,8 @@ class TestPhaseIntegrationEndToEnd:
         assert len(result_dict["arcs"]) == 4  # 2x2 = 4 arcs
         assert any(a.get("arc_type") == "spine" for a in result_dict["arcs"])
 
-        # Should have passages (one per beat)
-        assert len(result_dict["passages"]) == 8  # 8 beats in two-dilemma graph
+        # Should have passages (8 from beats + 4 ending families from split_endings)
+        assert len(result_dict["passages"]) == 12
 
         # Should have codewords (one per consequence)
         assert len(result_dict["codewords"]) == 4  # 4 consequences
@@ -3001,7 +3001,7 @@ class TestPhaseIntegrationEndToEnd:
 
         # Verify node types exist
         assert len(saved_graph.get_nodes_by_type("arc")) == 4
-        assert len(saved_graph.get_nodes_by_type("passage")) == 8
+        assert len(saved_graph.get_nodes_by_type("passage")) == 12  # 8 + 4 ending families
         assert len(saved_graph.get_nodes_by_type("codeword")) == 4
         assert len(saved_graph.get_nodes_by_type("beat")) == 8
         assert len(saved_graph.get_nodes_by_type("dilemma")) == 2
