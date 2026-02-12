@@ -6,6 +6,7 @@ import asyncio
 import atexit
 import sys
 from collections.abc import Callable
+from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
 
@@ -2601,6 +2602,14 @@ def _check_project(project_path: Path) -> bool:
     return all_ok
 
 
+class _GraphFormat(StrEnum):
+    """Output format for the graph command."""
+
+    dot = "dot"
+    mermaid = "mermaid"
+    json = "json"
+
+
 @app.command(name="graph")
 def graph_cmd(
     project: Annotated[
@@ -2612,13 +2621,13 @@ def graph_cmd(
         ),
     ] = None,
     fmt: Annotated[
-        str,
+        _GraphFormat,
         typer.Option(
             "--format",
             "-f",
-            help="Output format: dot (default), mermaid, or json.",
+            help="Output format.",
         ),
-    ] = "dot",
+    ] = _GraphFormat.dot,
     output: Annotated[
         Path | None,
         typer.Option("--output", "-o", help="Output file (stdout if not specified)."),
@@ -2642,18 +2651,15 @@ def graph_cmd(
     graph = Graph.load(project_path)
     sg = build_story_graph(graph, spine_only=spine_only)
 
-    if fmt == "dot":
+    if fmt == _GraphFormat.dot:
         result = render_dot(sg, no_labels=no_labels)
-    elif fmt == "mermaid":
+    elif fmt == _GraphFormat.mermaid:
         result = render_mermaid(sg, no_labels=no_labels)
-    elif fmt == "json":
+    else:
         import dataclasses
         import json
 
         result = json.dumps(dataclasses.asdict(sg), indent=2)
-    else:
-        console.print(f"[red]Error:[/red] Unknown format: {fmt}")
-        raise typer.Exit(1)
 
     if output:
         output.write_text(result)

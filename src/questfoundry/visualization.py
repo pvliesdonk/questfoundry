@@ -108,8 +108,11 @@ def build_story_graph(
     hub_passages: set[str] = set()
 
     for _cid, cdata in choices.items():
-        from_p = cdata.get("from_passage", "")
-        to_p = cdata.get("to_passage", "")
+        from_p = cdata.get("from_passage")
+        to_p = cdata.get("to_passage")
+        if not from_p or not to_p:
+            log.warning("choice_missing_passage", choice_id=_cid, from_p=from_p, to_p=to_p)
+            continue
         if cdata.get("is_return"):
             hub_passages.add(to_p)
         else:
@@ -140,8 +143,10 @@ def build_story_graph(
     # Build edges
     edges: list[VizEdge] = []
     for _cid, cdata in sorted(choices.items()):
-        from_p = cdata.get("from_passage", "")
-        to_p = cdata.get("to_passage", "")
+        from_p = cdata.get("from_passage")
+        to_p = cdata.get("to_passage")
+        if not from_p or not to_p:
+            continue  # Already warned above
         if from_p not in visible_passages or to_p not in visible_passages:
             continue
         edges.append(
@@ -274,24 +279,24 @@ def _truncate(text: str, max_len: int) -> str:
 def _assign_arc_colors(arc_names: dict[str, str]) -> dict[str, str]:
     """Assign a color to each arc ID. Spine gets index 0."""
     color_map: dict[str, str] = {}
-    idx = 0
-    # Spine first
+    branch_colors = _ARC_COLORS[1:]
+
+    branch_idx = 0
     for arc_id, arc_type in sorted(arc_names.items()):
         if arc_type == "spine":
             color_map[arc_id] = _ARC_COLORS[0]
-    # Then branches
-    idx = 1
-    for arc_id, arc_type in sorted(arc_names.items()):
-        if arc_type != "spine":
-            color_map[arc_id] = _ARC_COLORS[idx % len(_ARC_COLORS)]
-            idx += 1
+        else:
+            if branch_colors:
+                color_map[arc_id] = branch_colors[branch_idx % len(branch_colors)]
+                branch_idx += 1
+            else:
+                color_map[arc_id] = _SHARED_COLOR
     return color_map
 
 
 def _dot_node_attrs(node: VizNode, arc_color: dict[str, str]) -> dict[str, str]:
     """Build DOT attribute dict for a node."""
     attrs: dict[str, str] = {}
-    label_parts = [node.label]
 
     if node.is_start:
         attrs["shape"] = "doubleoctagon"
@@ -308,8 +313,7 @@ def _dot_node_attrs(node: VizNode, arc_color: dict[str, str]) -> dict[str, str]:
         color = arc_color.get(node.arc_id, _SHARED_COLOR) if node.arc_id else _SHARED_COLOR
         attrs["fillcolor"] = f'"{color}"'
 
-    joined_label = "\\n".join(label_parts)
-    attrs["label"] = f'"{_dot_escape(joined_label)}"'
+    attrs["label"] = f'"{_dot_escape(node.label)}"'
     return attrs
 
 
@@ -325,4 +329,4 @@ def _mermaid_id(node_id: str) -> str:
 
 def _mermaid_escape(text: str) -> str:
     """Escape special characters for Mermaid labels."""
-    return text.replace('"', "'").replace("\n", " ")
+    return text.replace('"', "&quot;").replace("\n", " ")
