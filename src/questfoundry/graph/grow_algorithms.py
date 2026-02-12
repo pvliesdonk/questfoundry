@@ -281,11 +281,12 @@ def compute_shared_beats(
     path_beat_sets: dict[str, set[str]],
     path_lists: list[list[str]],
 ) -> set[str]:
-    """Find beats shared by all arc combinations (Cartesian product of path lists).
+    """Find beats guaranteed to appear in every possible arc.
 
-    A beat is "shared" if it appears in the beat set of at least one path
-    from every dilemma. Such beats are common to ALL arcs and cannot
-    differentiate between arc families.
+    A beat is "shared" if it appears on **every** path of the dilemma it
+    belongs to.  Such beats cannot differentiate arcs because every arc
+    must include them.  For single-path (partially-explored) dilemmas all
+    beats qualify automatically.
 
     Args:
         path_beat_sets: Mapping from path ID to the set of beat IDs
@@ -300,18 +301,13 @@ def compute_shared_beats(
     if not path_lists:
         return set()
 
-    # For each dilemma, collect the union of beats across all its paths
-    per_dilemma_unions: list[set[str]] = []
+    shared: set[str] = set()
     for paths_in_dilemma in path_lists:
-        union: set[str] = set()
-        for pid in paths_in_dilemma:
-            union.update(path_beat_sets.get(pid, set()))
-        per_dilemma_unions.append(union)
-
-    # Shared = intersection across all dilemmas
-    shared = per_dilemma_unions[0]
-    for s in per_dilemma_unions[1:]:
-        shared = shared & s
+        if not paths_in_dilemma:
+            continue
+        # Beats on EVERY path of this dilemma appear in all arcs
+        beat_sets = [path_beat_sets.get(pid, set()) for pid in paths_in_dilemma]
+        shared |= set.intersection(*beat_sets)
     return shared
 
 

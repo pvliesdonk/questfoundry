@@ -327,17 +327,16 @@ class TestTopologicalSortBeats:
 
 
 class TestComputeSharedBeats:
-    def test_single_dilemma_all_beats_shared(self) -> None:
-        """With one dilemma, all beats reachable from its paths are shared."""
+    def test_single_dilemma_overlap_shared(self) -> None:
+        """Only beats on EVERY path of a dilemma are shared."""
         path_beat_sets = {
             "path::a": {"beat::1", "beat::2", "beat::3"},
             "path::b": {"beat::2", "beat::3", "beat::4"},
         }
-        # Single dilemma: both paths belong to the same dilemma
         path_lists = [["path::a", "path::b"]]
         shared = compute_shared_beats(path_beat_sets, path_lists)
-        # Union of all beats in the single dilemma
-        assert shared == {"beat::1", "beat::2", "beat::3", "beat::4"}
+        # Intersection within the dilemma: {2, 3} on both paths
+        assert shared == {"beat::2", "beat::3"}
 
     def test_two_dilemmas_shared_and_exclusive(self) -> None:
         """Only beats in paths of BOTH dilemmas are shared."""
@@ -361,13 +360,26 @@ class TestComputeSharedBeats:
         """Empty path_lists returns empty set."""
         assert compute_shared_beats({}, []) == set()
 
-    def test_disjoint_dilemmas(self) -> None:
-        """Dilemmas with no overlapping beats produce empty shared set."""
+    def test_single_path_dilemmas_all_shared(self) -> None:
+        """Single-path dilemmas contribute all beats to the shared set."""
         path_beat_sets = {
             "path::a": {"beat::x"},
             "path::b": {"beat::y"},
         }
         path_lists = [["path::a"], ["path::b"]]
+        shared = compute_shared_beats(path_beat_sets, path_lists)
+        # Each dilemma has 1 path → all beats are in every arc
+        assert shared == {"beat::x", "beat::y"}
+
+    def test_multi_path_disjoint_dilemmas(self) -> None:
+        """Multi-path dilemmas with disjoint beats have no shared beats."""
+        path_beat_sets = {
+            "path::d1_yes": {"beat::a"},
+            "path::d1_no": {"beat::b"},
+            "path::d2_yes": {"beat::c"},
+            "path::d2_no": {"beat::d"},
+        }
+        path_lists = [["path::d1_yes", "path::d1_no"], ["path::d2_yes", "path::d2_no"]]
         shared = compute_shared_beats(path_beat_sets, path_lists)
         assert shared == set()
 
@@ -513,8 +525,8 @@ class TestEnumerateArcs:
         """Shared beats (present in all arcs) sort before exclusive beats.
 
         Without requires edges, the only ordering constraint is the priority
-        tie-breaking. Shared beats (present in all path unions) should appear
-        earlier in sequences than exclusive beats.
+        tie-breaking.  A beat on EVERY path of its dilemma appears in all
+        arcs (shared); a beat on only ONE path is exclusive to some arcs.
         """
         graph = Graph.empty()
 
@@ -538,31 +550,39 @@ class TestEnumerateArcs:
                 },
             )
 
-        # Beats: shared (belongs to paths in BOTH dilemmas)
-        # Named "z_shared" so alphabetical would put it LAST
+        # Shared beat: on ALL paths of BOTH dilemmas → in every arc
+        # Named "z_shared" so alphabetical order would put it LAST
         graph.create_node("beat::z_shared", {"type": "beat", "raw_id": "z_shared"})
         for pid in ["d1_yes", "d1_no", "d2_yes", "d2_no"]:
             graph.add_edge("belongs_to", "beat::z_shared", f"path::{pid}")
 
-        # Exclusive beats for d1 paths only (alphabetically before z_shared)
-        graph.create_node("beat::a_d1_only", {"type": "beat", "raw_id": "a_d1_only"})
-        graph.add_edge("belongs_to", "beat::a_d1_only", "path::d1_yes")
-        graph.add_edge("belongs_to", "beat::a_d1_only", "path::d1_no")
+        # Exclusive beats: each on only ONE path of its dilemma
+        # (alphabetically before z_shared)
+        graph.create_node("beat::a_d1_yes_only", {"type": "beat", "raw_id": "a_d1_yes_only"})
+        graph.add_edge("belongs_to", "beat::a_d1_yes_only", "path::d1_yes")
 
-        # Exclusive beats for d2 paths only
-        graph.create_node("beat::b_d2_only", {"type": "beat", "raw_id": "b_d2_only"})
-        graph.add_edge("belongs_to", "beat::b_d2_only", "path::d2_yes")
-        graph.add_edge("belongs_to", "beat::b_d2_only", "path::d2_no")
+        graph.create_node("beat::b_d2_yes_only", {"type": "beat", "raw_id": "b_d2_yes_only"})
+        graph.add_edge("belongs_to", "beat::b_d2_yes_only", "path::d2_yes")
+
+        graph.create_node("beat::c_d1_no_only", {"type": "beat", "raw_id": "c_d1_no_only"})
+        graph.add_edge("belongs_to", "beat::c_d1_no_only", "path::d1_no")
+
+        graph.create_node("beat::d_d2_no_only", {"type": "beat", "raw_id": "d_d2_no_only"})
+        graph.add_edge("belongs_to", "beat::d_d2_no_only", "path::d2_no")
 
         arcs = enumerate_arcs(graph)
         assert len(arcs) == 4  # 2 x 2 Cartesian product
 
         # In every arc, z_shared should come FIRST despite alphabetical order
-        # because it's a shared beat (priority). The exclusive beats follow.
+        # because it's a shared beat (priority 0).  Exclusive beats follow.
         for arc in arcs:
             assert arc.sequence[0] == "beat::z_shared", (
                 f"Arc {arc.arc_id}: expected z_shared first, got {arc.sequence}"
             )
+
+        # Different arcs should have different final beats (ending differentiation)
+        final_beats = {arc.sequence[-1] for arc in arcs}
+        assert len(final_beats) > 1, f"All arcs share the same final beat: {final_beats}"
 
 
 # ---------------------------------------------------------------------------
