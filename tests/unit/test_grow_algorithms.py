@@ -4200,8 +4200,8 @@ class TestMarkTerminalPassages:
             "choice::a_b",
             {
                 "type": "choice",
-                "choice_from": "passage::a",
-                "choice_to": "passage::b",
+                "from_passage": "passage::a",
+                "to_passage": "passage::b",
                 "label": "go",
             },
         )
@@ -4209,8 +4209,8 @@ class TestMarkTerminalPassages:
             "choice::b_c",
             {
                 "type": "choice",
-                "choice_from": "passage::b",
-                "choice_to": "passage::c",
+                "from_passage": "passage::b",
+                "to_passage": "passage::c",
                 "label": "go",
             },
         )

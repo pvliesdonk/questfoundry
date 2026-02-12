@@ -562,7 +562,7 @@ def _build_passage_outgoing_count(graph: Graph) -> dict[str, int]:
 def mark_terminal_passages(graph: Graph) -> int:
     """Derive and persist is_ending on passages with no outgoing choices.
 
-    A passage is terminal if no choice node has choice_from pointing to it.
+    A passage is terminal if no choice has from_passage pointing to it.
     Must be called before collapse so that endings are exempt from merging.
 
     Returns:
@@ -572,9 +572,9 @@ def mark_terminal_passages(graph: Graph) -> int:
     choices = graph.get_nodes_by_type("choice")
 
     has_outgoing = {
-        choice_data["choice_from"]
+        choice_data["from_passage"]
         for choice_data in choices.values()
-        if choice_data.get("choice_from")
+        if choice_data.get("from_passage")
     }
 
     terminal = set(passages.keys()) - has_outgoing
