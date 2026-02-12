@@ -1224,6 +1224,151 @@ class TestFindConvergencePointsPolicyAware:
         assert result["branch"].convergence_policy == "flavor"
         assert result["branch"].payoff_budget == 0
 
+    def test_per_dilemma_different_convergence_points(self) -> None:
+        """Two soft dilemmas with beats at different positions converge differently."""
+        # d1 exclusive beats: x1, x2 (near start). d2 exclusive beats: y1, y2 (near end).
+        # Both soft with budget=1.
+        # d1 should converge at mid (after x2), d2 should converge at end (after y2).
+        beat_to_paths: dict[str, list[str]] = {
+            "beat::a": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+            "beat::x1": ["p1_alt"],
+            "beat::x2": ["p1_alt"],
+            "beat::mid": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+            "beat::y1": ["p2_alt"],
+            "beat::y2": ["p2_alt"],
+            "beat::end": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+        }
+        graph = self._make_multi_dilemma_graph("soft", 1, "soft", 1, beat_to_paths)
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p1_canon", "p2_canon"],
+            sequence=["beat::a", "beat::mid", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p1_alt", "p2_alt"],
+            sequence=[
+                "beat::a",
+                "beat::x1",
+                "beat::x2",
+                "beat::mid",
+                "beat::y1",
+                "beat::y2",
+                "beat::end",
+            ],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        info = result["branch"]
+        assert len(info.dilemma_convergences) == 2
+
+        dc_map = {dc.dilemma_id: dc for dc in info.dilemma_convergences}
+        # d1 converges at mid (after x1, x2)
+        assert dc_map["dilemma::d1"].converges_at == "beat::mid"
+        # d2 converges at end (after y1, y2)
+        assert dc_map["dilemma::d2"].converges_at == "beat::end"
+        # Arc-level: earliest = mid
+        assert info.converges_at == "beat::mid"
+
+    def test_per_dilemma_mixed_hard_soft(self) -> None:
+        """One hard + one soft dilemma: per-dilemma has None for hard, beat for soft."""
+        beat_to_paths: dict[str, list[str]] = {
+            "beat::a": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+            "beat::x_soft": ["p1_alt"],
+            "beat::y_hard": ["p2_alt"],
+            "beat::end": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+        }
+        graph = self._make_multi_dilemma_graph("soft", 1, "hard", 5, beat_to_paths)
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p1_canon", "p2_canon"],
+            sequence=["beat::a", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p1_alt", "p2_alt"],
+            sequence=["beat::a", "beat::x_soft", "beat::y_hard", "beat::end"],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        info = result["branch"]
+        dc_map = {dc.dilemma_id: dc for dc in info.dilemma_convergences}
+        assert dc_map["dilemma::d1"].converges_at == "beat::end"
+        assert dc_map["dilemma::d1"].policy == "soft"
+        assert dc_map["dilemma::d2"].converges_at is None
+        assert dc_map["dilemma::d2"].policy == "hard"
+        # Arc-level: earliest non-None = end
+        assert info.converges_at == "beat::end"
+
+    def test_per_dilemma_all_hard(self) -> None:
+        """All hard dilemmas: all per-dilemma convergences are None, arc-level None."""
+        beat_to_paths: dict[str, list[str]] = {
+            "beat::a": ["p1_alt", "p2_alt"],
+            "beat::x": ["p1_alt"],
+            "beat::y": ["p2_alt"],
+            "beat::end": ["p1_alt", "p2_alt"],
+        }
+        graph = self._make_multi_dilemma_graph("hard", 3, "hard", 5, beat_to_paths)
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p1_canon", "p2_canon"],
+            sequence=["beat::a", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p1_alt", "p2_alt"],
+            sequence=["beat::a", "beat::x", "beat::y", "beat::end"],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        info = result["branch"]
+        assert info.converges_at is None
+        assert len(info.dilemma_convergences) == 2
+        assert all(dc.converges_at is None for dc in info.dilemma_convergences)
+        assert all(dc.policy == "hard" for dc in info.dilemma_convergences)
+
+    def test_per_dilemma_result_populated(self) -> None:
+        """Basic check that dilemma_convergences list is populated with correct entries."""
+        beat_to_paths: dict[str, list[str]] = {
+            "beat::a": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+            "beat::x": ["p1_alt"],
+            "beat::y": ["p2_alt"],
+            "beat::end": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
+        }
+        graph = self._make_multi_dilemma_graph("flavor", 0, "soft", 1, beat_to_paths)
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["p1_canon", "p2_canon"],
+            sequence=["beat::a", "beat::end"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["p1_alt", "p2_alt"],
+            sequence=["beat::a", "beat::x", "beat::y", "beat::end"],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        info = result["branch"]
+        assert len(info.dilemma_convergences) == 2
+        dc_ids = {dc.dilemma_id for dc in info.dilemma_convergences}
+        assert dc_ids == {"dilemma::d1", "dilemma::d2"}
+        # Each entry has correct fields
+        for dc in info.dilemma_convergences:
+            assert dc.policy in ("flavor", "soft", "hard")
+            assert isinstance(dc.budget, int)
+
 
 class TestComputePassageArcMembership:
     """Tests for passage → arc membership mapping."""
@@ -1641,6 +1786,10 @@ class TestPhase7Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
+        # Set budget=1 so per-dilemma convergence can be met
+        # (each dilemma has exactly 1 exclusive beat in the fixture)
+        graph.update_node("dilemma::mentor_trust", convergence_policy="soft", payoff_budget=1)
+        graph.update_node("dilemma::artifact_quest", convergence_policy="soft", payoff_budget=1)
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
@@ -1667,6 +1816,9 @@ class TestPhase7Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
+        # Set budget=1 so per-dilemma convergence can be met
+        graph.update_node("dilemma::mentor_trust", convergence_policy="soft", payoff_budget=1)
+        graph.update_node("dilemma::artifact_quest", convergence_policy="soft", payoff_budget=1)
         stage = GrowStage()
         mock_model = MagicMock()
         await stage._phase_5_enumerate_arcs(graph, mock_model)
