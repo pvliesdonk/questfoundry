@@ -947,27 +947,28 @@ class TestFindConvergencePointsPolicyAware:
                 "payoff_budget": 4,
             },
         )
+        # Each dilemma needs 2 explored paths so they count as divergent
         graph.create_node(
             "path::p1",
-            {
-                "type": "path",
-                "raw_id": "p1",
-                "dilemma_id": "dilemma::d1",
-            },
+            {"type": "path", "raw_id": "p1", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "path::p1_alt",
+            {"type": "path", "raw_id": "p1_alt", "dilemma_id": "dilemma::d1"},
         )
         graph.create_node(
             "path::p2",
-            {
-                "type": "path",
-                "raw_id": "p2",
-                "dilemma_id": "dilemma::d2",
-            },
+            {"type": "path", "raw_id": "p2", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "path::p2_alt",
+            {"type": "path", "raw_id": "p2_alt", "dilemma_id": "dilemma::d2"},
         )
 
         spine = Arc(
             arc_id="spine",
             arc_type="spine",
-            paths=["p_canon"],
+            paths=["p1_alt", "p2_alt"],
             sequence=["beat::a", "beat::b", "beat::end"],
         )
         branch = Arc(
@@ -1146,6 +1147,80 @@ class TestFindConvergencePointsPolicyAware:
         result = find_convergence_points(graph, [spine, branch])
 
         assert result["branch"].converges_at == "beat::end"
+        assert result["branch"].convergence_policy == "flavor"
+        assert result["branch"].payoff_budget == 0
+
+    def test_single_explored_dilemma_ignored_for_policy(self) -> None:
+        """A dilemma with only 1 explored path should not influence policy.
+
+        d1 has 2 explored paths (soft policy) → counts.
+        d2 has 1 explored path (hard policy) → ignored.
+        Effective policy should be soft, not hard.
+        """
+        graph = Graph.empty()
+        # Dilemma d1: soft policy, 2 explored paths
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "convergence_policy": "soft", "payoff_budget": 2},
+        )
+        graph.create_node(
+            "path::d1_yes", {"type": "path", "raw_id": "d1_yes", "dilemma_id": "dilemma::d1"}
+        )
+        graph.create_node(
+            "path::d1_no", {"type": "path", "raw_id": "d1_no", "dilemma_id": "dilemma::d1"}
+        )
+        # Dilemma d2: hard policy, but only 1 explored path (universal)
+        graph.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "raw_id": "d2", "convergence_policy": "hard", "payoff_budget": 3},
+        )
+        graph.create_node(
+            "path::d2_only", {"type": "path", "raw_id": "d2_only", "dilemma_id": "dilemma::d2"}
+        )
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["d1_yes", "d2_only"],
+            sequence=["beat::a", "beat::b", "beat::c"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["d1_no", "d2_only"],
+            sequence=["beat::a", "beat::x", "beat::c"],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        # d2 should be ignored (single-explored), so policy = soft from d1
+        assert result["branch"].convergence_policy == "soft"
+
+    def test_all_single_explored_falls_back_to_flavor(self) -> None:
+        """When every dilemma has only 1 explored path, falls back to flavor."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "convergence_policy": "hard", "payoff_budget": 5},
+        )
+        graph.create_node(
+            "path::d1_only", {"type": "path", "raw_id": "d1_only", "dilemma_id": "dilemma::d1"}
+        )
+
+        spine = Arc(
+            arc_id="spine",
+            arc_type="spine",
+            paths=["d1_only"],
+            sequence=["beat::a", "beat::b"],
+        )
+        branch = Arc(
+            arc_id="branch",
+            arc_type="branch",
+            paths=["d1_only"],
+            sequence=["beat::a", "beat::x", "beat::b"],
+        )
+        result = find_convergence_points(graph, [spine, branch])
+
+        # All dilemmas are single-explored → flavor fallback
         assert result["branch"].convergence_policy == "flavor"
         assert result["branch"].payoff_budget == 0
 
