@@ -15,7 +15,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal
 
-from questfoundry.graph.context import ENTITY_CATEGORIES, normalize_scoped_id
+from questfoundry.graph.context import normalize_scoped_id
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
@@ -1088,11 +1088,14 @@ def check_codeword_gate_coverage(graph: Graph) -> ValidationCheck:
     for choice_data in choice_nodes.values():
         consumed.update(choice_data.get("requires") or [])
 
-    # Overlays are embedded arrays on entity nodes, not separate typed nodes.
-    for category in ENTITY_CATEGORIES:
-        for entity_data in graph.get_nodes_by_type(category).values():
-            for overlay in entity_data.get("overlays") or []:
-                consumed.update(overlay.get("when") or [])
+    # Overlays are embedded arrays on entity nodes (type="entity"),
+    # not separate typed nodes.
+    consumed.update(
+        cw
+        for entity_data in graph.get_nodes_by_type("entity").values()
+        for overlay in entity_data.get("overlays") or []
+        for cw in overlay.get("when") or []
+    )
 
     unconsumed = sorted(set(codeword_nodes.keys()) - consumed)
     if not unconsumed:
