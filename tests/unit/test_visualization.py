@@ -418,3 +418,186 @@ class TestRenderMermaid:
         mmd = render_mermaid(sg)
         return_lines = [row for row in mmd.split("\n") if "passage_spoke" in row and "-.->" in row]
         assert len(return_lines) == 1
+
+
+def _make_overlay_graph() -> Graph:
+    """Build a graph with overlay-affected entities on passages."""
+    graph = _make_simple_graph()
+
+    # Entity with overlays
+    graph.create_node(
+        "character::alice",
+        {
+            "type": "entity",
+            "entity_type": "character",
+            "name": "Alice",
+            "overlays": [{"codeword": "saw_truth", "field": "mood", "value": "angry"}],
+        },
+    )
+
+    # Attach entity to intro passage
+    graph.update_node("passage::intro", entities=["character::alice"])
+
+    return graph
+
+
+def _make_grants_graph() -> Graph:
+    """Build a graph with a choice that grants codewords."""
+    graph = _make_simple_graph()
+
+    # Update existing choice to grant a codeword
+    graph.update_node("choice::intro_middle", grants=["saw_truth"])
+
+    return graph
+
+
+class TestOverlayPassages:
+    """Tests for overlay-affected passage detection."""
+
+    def test_overlay_passage_detected(self) -> None:
+        graph = _make_overlay_graph()
+        sg = build_story_graph(graph)
+        node_map = {n.id: n for n in sg.nodes}
+        assert node_map["passage::intro"].has_overlays is True
+
+    def test_non_overlay_passage_clean(self) -> None:
+        graph = _make_overlay_graph()
+        sg = build_story_graph(graph)
+        node_map = {n.id: n for n in sg.nodes}
+        assert node_map["passage::middle"].has_overlays is False
+        assert node_map["passage::ending"].has_overlays is False
+
+    def test_dot_overlay_border(self) -> None:
+        graph = _make_overlay_graph()
+        sg = build_story_graph(graph)
+        dot = render_dot(sg)
+        intro_line = next(
+            row for row in dot.split("\n") if '"passage::intro"' in row and "->" not in row
+        )
+        assert "#FF4500" in intro_line
+        assert "penwidth" in intro_line
+
+    def test_mermaid_overlay_class(self) -> None:
+        graph = _make_overlay_graph()
+        sg = build_story_graph(graph)
+        mmd = render_mermaid(sg)
+        # Start node with overlay gets startOverlay class
+        assert ":::startOverlay" in mmd
+        assert "classDef overlay" in mmd
+
+    def test_overlay_detected_via_raw_id(self) -> None:
+        """Passages referencing entities by raw ID (without prefix) are detected."""
+        graph = _make_simple_graph()
+        graph.create_node(
+            "character::bob",
+            {
+                "type": "entity",
+                "entity_type": "character",
+                "name": "Bob",
+                "overlays": [{"codeword": "met_bob", "field": "mood", "value": "happy"}],
+            },
+        )
+        # Passage references entity by raw ID "bob" (not "character::bob")
+        graph.update_node("passage::middle", entities=["bob"])
+        sg = build_story_graph(graph)
+        node_map = {n.id: n for n in sg.nodes}
+        assert node_map["passage::middle"].has_overlays is True
+
+    def test_entities_none_does_not_crash(self) -> None:
+        """Passage with entities=None doesn't crash overlay detection."""
+        graph = _make_simple_graph()
+        graph.update_node("passage::intro", entities=None)
+        sg = build_story_graph(graph)
+        node_map = {n.id: n for n in sg.nodes}
+        assert node_map["passage::intro"].has_overlays is False
+
+
+class TestGrantsEdges:
+    """Tests for state-changing choice edges."""
+
+    def test_grants_field_populated(self) -> None:
+        graph = _make_grants_graph()
+        sg = build_story_graph(graph)
+        edge = next(e for e in sg.edges if e.from_id == "passage::intro")
+        assert edge.grants == ["saw_truth"]
+
+    def test_dot_grants_color(self) -> None:
+        graph = _make_grants_graph()
+        sg = build_story_graph(graph)
+        dot = render_dot(sg)
+        grants_line = next(
+            row for row in dot.split("\n") if '"passage::intro" -> "passage::middle"' in row
+        )
+        assert "#6A5ACD" in grants_line
+
+    def test_mermaid_grants_linkstyle(self) -> None:
+        graph = _make_grants_graph()
+        sg = build_story_graph(graph)
+        mmd = render_mermaid(sg)
+        assert "linkStyle" in mmd
+        assert "#6A5ACD" in mmd
+
+    def test_return_edge_with_grants_keeps_dashed_style(self) -> None:
+        """Return edges that also have grants keep grey dashed style, not grants color."""
+        graph = _make_hub_graph()
+        # Add grants to the return choice
+        graph.update_node("choice::spoke_middle", grants=["explored_alcove"])
+        sg = build_story_graph(graph)
+
+        # DOT: return edge should be dashed grey, not slate blue
+        dot = render_dot(sg)
+        return_line = next(
+            row for row in dot.split("\n") if '"passage::spoke" -> "passage::middle"' in row
+        )
+        assert "dashed" in return_line
+        assert "#6A5ACD" not in return_line
+
+        # Mermaid: grants linkStyle should exclude the return edge
+        mmd = render_mermaid(sg)
+        # The return edge should NOT appear in grants linkStyle
+        if "linkStyle" in mmd:
+            # If there are other grants edges they may produce linkStyle,
+            # but the return edge index should not be listed
+            return_idx = next(i for i, e in enumerate(sg.edges) if e.is_return)
+            link_line = next(row for row in mmd.split("\n") if "linkStyle" in row)
+            assert str(return_idx) not in link_line.split()
+
+    def test_requires_takes_precedence_over_grants(self) -> None:
+        """Edge with both requires and grants gets orange (requires) styling, not grants."""
+        graph = _make_simple_graph()
+        graph.update_node(
+            "choice::intro_middle",
+            requires=["has_key"],
+            grants=["saw_truth"],
+        )
+        sg = build_story_graph(graph)
+        dot = render_dot(sg)
+        edge_line = next(
+            row for row in dot.split("\n") if '"passage::intro" -> "passage::middle"' in row
+        )
+        assert "orange" in edge_line
+        assert "#6A5ACD" not in edge_line
+
+
+class TestOutgoingCount:
+    """Tests for outgoing edge counting."""
+
+    def test_linear_passage_count(self) -> None:
+        graph = _make_simple_graph()
+        sg = build_story_graph(graph)
+        node_map = {n.id: n for n in sg.nodes}
+        assert node_map["passage::intro"].outgoing_count == 1
+        assert node_map["passage::middle"].outgoing_count == 1
+
+    def test_branching_passage_count(self) -> None:
+        graph = _make_branching_graph()
+        sg = build_story_graph(graph)
+        node_map = {n.id: n for n in sg.nodes}
+        # intro has 2 outgoing: middle + branch
+        assert node_map["passage::intro"].outgoing_count == 2
+
+    def test_ending_passage_zero_count(self) -> None:
+        graph = _make_simple_graph()
+        sg = build_story_graph(graph)
+        node_map = {n.id: n for n in sg.nodes}
+        assert node_map["passage::ending"].outgoing_count == 0
