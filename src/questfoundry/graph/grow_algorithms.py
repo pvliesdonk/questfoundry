@@ -306,10 +306,8 @@ def compute_shared_beats(
         if not paths_in_dilemma:
             continue
         # Beats on EVERY path of this dilemma appear in all arcs
-        intersection = path_beat_sets.get(paths_in_dilemma[0], set()).copy()
-        for pid in paths_in_dilemma[1:]:
-            intersection &= path_beat_sets.get(pid, set())
-        shared |= intersection
+        beat_sets = [path_beat_sets.get(pid, set()) for pid in paths_in_dilemma]
+        shared |= set.intersection(*beat_sets)
     return shared
 
 
