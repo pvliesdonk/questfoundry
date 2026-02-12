@@ -371,10 +371,8 @@ def _branching_quality_score(
     for pid in ending_ids:
         from_beat = passages[pid].get("from_beat") or passages[pid].get("primary_beat") or ""
         covering_arcs = beat_to_arcs.get(from_beat, [])
-        sig: set[str] = set()
         for arc_id in covering_arcs:
-            sig.update(arc_codewords.get(arc_id, frozenset()))
-        variant_signatures.add(frozenset(sig))
+            variant_signatures.add(arc_codewords.get(arc_id, frozenset()))
 
     # Meaningful choice ratio
     ratio = 0.0

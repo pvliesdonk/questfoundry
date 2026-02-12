@@ -538,6 +538,103 @@ class TestBranchingQualityScore:
         assert "branching_quality" in data
         assert data["branching_quality"] is not None
 
+    def test_ending_variants_per_arc(self) -> None:
+        """Each arc's codeword signature counts as a separate ending variant."""
+        graph = Graph.empty()
+        spine_beats = [f"beat::s{i}" for i in range(3)]
+        # Two arcs sharing the same ending beat but with different codeword paths
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": spine_beats,
+                "paths": ["path::canon"],
+            },
+        )
+        graph.create_node(
+            "arc::branch_0",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "sequence": ["beat::s0", "beat::b0", "beat::s2"],
+                "diverges_at": "beat::s0",
+                "convergence_policy": "soft",
+                "payoff_budget": 1,
+                "paths": ["path::rebel"],
+            },
+        )
+        # Ending passage from shared final beat
+        graph.create_node(
+            "passage::ending",
+            {
+                "type": "passage",
+                "raw_id": "ending",
+                "from_beat": "beat::s2",
+                "summary": "The end",
+                "is_ending": True,
+            },
+        )
+        # Non-ending passage with outgoing choice
+        graph.create_node(
+            "passage::mid",
+            {
+                "type": "passage",
+                "raw_id": "mid",
+                "from_beat": "beat::s0",
+                "summary": "Middle",
+            },
+        )
+        graph.create_node(
+            "choice::mid__ending",
+            {
+                "type": "choice",
+                "from_passage": "passage::mid",
+                "to_passage": "passage::ending",
+                "label": "Continue",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::mid__ending", "passage::mid")
+        graph.add_edge("choice_to", "choice::mid__ending", "passage::ending")
+
+        # Give each path a different codeword via consequence
+        graph.create_node(
+            "path::canon",
+            {"type": "path", "tier": "major", "description": "Canon"},
+        )
+        graph.create_node(
+            "path::rebel",
+            {"type": "path", "tier": "major", "description": "Rebel"},
+        )
+        graph.create_node(
+            "consequence::c_canon",
+            {"type": "consequence", "description": "Canon wins"},
+        )
+        graph.create_node(
+            "consequence::c_rebel",
+            {"type": "consequence", "description": "Rebel wins"},
+        )
+        graph.create_node(
+            "codeword::canon_flag",
+            {"type": "codeword", "label": "canon_flag"},
+        )
+        graph.create_node(
+            "codeword::rebel_flag",
+            {"type": "codeword", "label": "rebel_flag"},
+        )
+        graph.add_edge("has_consequence", "path::canon", "consequence::c_canon")
+        graph.add_edge("has_consequence", "path::rebel", "consequence::c_rebel")
+        graph.add_edge("tracks", "codeword::canon_flag", "consequence::c_canon")
+        graph.add_edge("tracks", "codeword::rebel_flag", "consequence::c_rebel")
+
+        result = _branching_quality_score(graph, None)
+        assert result is not None
+        assert result.terminal_count == 1
+        # Two arcs with different codewords → 2 ending variants, not 1
+        assert result.ending_variants == 2
+
     def test_ending_variants_merged_passage(self) -> None:
         """Merged passages (primary_beat instead of from_beat) contribute to ending variants."""
         graph = Graph.empty()
