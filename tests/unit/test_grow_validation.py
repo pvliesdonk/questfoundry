@@ -1617,9 +1617,10 @@ class TestCodewordGateCoverage:
         graph.create_node(
             "character::hero",
             {
-                "type": "character",
+                "type": "entity",
                 "raw_id": "hero",
                 "name": "Hero",
+                "category": "character",
                 "overlays": [
                     {"when": ["codeword::cw1"], "details": {"attitude": "weary"}},
                 ],
@@ -1637,9 +1638,10 @@ class TestCodewordGateCoverage:
         graph.create_node(
             "character::hero",
             {
-                "type": "character",
+                "type": "entity",
                 "raw_id": "hero",
                 "name": "Hero",
+                "category": "character",
                 "overlays": [
                     {"when": ["codeword::cw1"], "details": {"attitude": "weary"}},
                 ],
@@ -1648,9 +1650,10 @@ class TestCodewordGateCoverage:
         graph.create_node(
             "location::village",
             {
-                "type": "location",
+                "type": "entity",
                 "raw_id": "village",
                 "name": "Village",
+                "category": "location",
                 "overlays": [
                     {"when": ["codeword::cw2"], "details": {"mood": "tense"}},
                 ],
