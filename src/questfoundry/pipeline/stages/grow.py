@@ -247,6 +247,7 @@ class GrowStage:
             (self._phase_9b_fork_beats, "fork_beats"),
             (self._phase_9c_hub_spokes, "hub_spokes"),
             (self._phase_9c2_mark_endings, "mark_endings"),
+            (self._phase_9c3_split_endings, "split_endings"),
             (self._phase_9d_collapse_passages, "collapse_passages"),
             (self._phase_10_validation, "validation"),
             (self._phase_11_prune, "prune"),
@@ -3139,6 +3140,37 @@ class GrowStage:
             phase="mark_endings",
             status="completed",
             detail=f"Marked {count} terminal passage(s) as endings",
+        )
+
+    async def _phase_9c3_split_endings(
+        self,
+        graph: Graph,
+        model: BaseChatModel,  # noqa: ARG002
+    ) -> GrowPhaseResult:
+        """Phase 9c3: Split shared endings into per-arc-family passages.
+
+        When multiple arcs with different codeword signatures share a terminal
+        passage, creates distinct ending passages gated by distinguishing
+        codewords.  No LLM call — pure graph manipulation.
+        """
+        from questfoundry.graph.grow_algorithms import split_ending_families
+
+        result = split_ending_families(graph)
+
+        if result.families_created == 0:
+            return GrowPhaseResult(
+                phase="split_endings",
+                status="completed",
+                detail=(f"{result.terminal_passages} terminal passage(s), all already unique"),
+            )
+
+        return GrowPhaseResult(
+            phase="split_endings",
+            status="completed",
+            detail=(
+                f"Split {result.terminal_passages - result.passages_already_unique} "
+                f"terminal passage(s) into {result.families_created} ending families"
+            ),
         )
 
     async def _phase_9d_collapse_passages(
