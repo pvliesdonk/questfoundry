@@ -449,10 +449,13 @@ class DressStage:
         # Include corpus research section only when tools are available
         research_section = getattr(discuss_template, "research_tools_section", "") if tools else ""
 
+        from questfoundry.agents.prompts import load_sandbox_section
+
         system_prompt = discuss_template.system.format(
             vision_context=vision_context,
             entity_list=entity_list,
             research_tools_section=research_section,
+            sandbox_section=load_sandbox_section(),
             mode_section=mode_section,
         )
 
