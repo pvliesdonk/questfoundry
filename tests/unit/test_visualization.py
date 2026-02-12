@@ -503,6 +503,14 @@ class TestOverlayPassages:
         node_map = {n.id: n for n in sg.nodes}
         assert node_map["passage::middle"].has_overlays is True
 
+    def test_entities_none_does_not_crash(self) -> None:
+        """Passage with entities=None doesn't crash overlay detection."""
+        graph = _make_simple_graph()
+        graph.update_node("passage::intro", entities=None)
+        sg = build_story_graph(graph)
+        node_map = {n.id: n for n in sg.nodes}
+        assert node_map["passage::intro"].has_overlays is False
+
 
 class TestGrantsEdges:
     """Tests for state-changing choice edges."""
@@ -553,6 +561,22 @@ class TestGrantsEdges:
             return_idx = next(i for i, e in enumerate(sg.edges) if e.is_return)
             link_line = next(row for row in mmd.split("\n") if "linkStyle" in row)
             assert str(return_idx) not in link_line.split()
+
+    def test_requires_takes_precedence_over_grants(self) -> None:
+        """Edge with both requires and grants gets orange (requires) styling, not grants."""
+        graph = _make_simple_graph()
+        graph.update_node(
+            "choice::intro_middle",
+            requires=["has_key"],
+            grants=["saw_truth"],
+        )
+        sg = build_story_graph(graph)
+        dot = render_dot(sg)
+        edge_line = next(
+            row for row in dot.split("\n") if '"passage::intro" -> "passage::middle"' in row
+        )
+        assert "orange" in edge_line
+        assert "#6A5ACD" not in edge_line
 
 
 class TestOutgoingCount:

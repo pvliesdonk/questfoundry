@@ -118,7 +118,7 @@ def build_story_graph(
     # Track which passages contain overlay-affected entities
     overlay_passages: set[str] = set()
     for pid, pdata in passages.items():
-        for ent in pdata.get("entities", []):
+        for ent in pdata.get("entities") or []:
             # Check both raw ID and scoped forms
             if ent in overlay_entity_ids:
                 overlay_passages.add(pid)
