@@ -216,7 +216,6 @@ def _make_complete_seed_output(entities: list[dict[str, Any]]) -> dict[str, Any]
         "paths": [],
         "consequences": [],
         "initial_beats": [],
-        "convergence_sketch": {"convergence_points": [], "residue_notes": []},
     }
 
 

@@ -497,14 +497,6 @@ class TestSerializeSeedIterativelySemanticValidation:
                 (MagicMock(model_dump=lambda: {"paths": []}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
-                (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                ),
             ]
 
             with patch("questfoundry.agents.serialize.validate_seed_mutations") as mock_validate:
@@ -534,14 +526,6 @@ class TestSerializeSeedIterativelySemanticValidation:
                 (MagicMock(model_dump=lambda: {"paths": []}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
                 (MagicMock(model_dump=lambda: {"initial_beats": []}), 10),
-                (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                ),
             ]
 
             with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
@@ -551,8 +535,8 @@ class TestSerializeSeedIterativelySemanticValidation:
                     graph=mock_graph,
                 )
 
-                # Should only call serialize 6 times (once per section)
-                assert mock_serialize.call_count == 6
+                # Should only call serialize 5 times (once per section)
+                assert mock_serialize.call_count == 5
 
     @pytest.mark.asyncio
     async def test_semantic_validation_retries_on_error(self) -> None:
@@ -576,22 +560,12 @@ class TestSerializeSeedIterativelySemanticValidation:
                 3: "paths",
                 4: "consequences",
                 5: "initial_beats",
-                6: "convergence_sketch",
                 # Retry calls
-                7: "paths",  # Retry paths section
+                6: "paths",  # Retry paths section
             }
             call_num = call_count[0]
             section = section_map.get(call_num, "unknown")
 
-            if section == "convergence_sketch":
-                return (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                )
             return (MagicMock(model_dump=lambda s=section: {s: []}), 10)
 
         validation_call_count = [0]
@@ -627,8 +601,8 @@ class TestSerializeSeedIterativelySemanticValidation:
                 graph=mock_graph,
             )
 
-            # Should have called serialize 7 times (6 initial + 1 retry for paths)
-            assert call_count[0] == 7
+            # Should have called serialize 6 times (5 initial + 1 retry for paths)
+            assert call_count[0] == 6
             # Should have validated twice
             assert validation_call_count[0] == 2
 
@@ -666,7 +640,6 @@ class TestSerializeSeedIterativelySemanticValidation:
                         "paths": [],
                         "consequences": [],
                         "initial_beats": [],
-                        "convergence_sketch": {"convergence_points": [], "residue_notes": []},
                     }
                 ),
                 10,
@@ -783,20 +756,12 @@ class TestSerializeSeedAsFunction:
                 return_value=([], 20),  # Returns (beats_list, tokens)
             ),
         ):
-            # Sections: entities, dilemmas, consequences, convergence
+            # Sections: entities, dilemmas, consequences
             # (paths handled by _serialize_paths_per_dilemma, beats by _serialize_beats_per_path)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
                 (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                ),
             ]
 
             with patch("questfoundry.agents.serialize.validate_seed_mutations", return_value=[]):
@@ -810,8 +775,8 @@ class TestSerializeSeedAsFunction:
                 assert result.success is True
                 assert result.artifact is not None
                 assert result.semantic_errors == []
-                # 4 sections * 10 tokens + 15 from paths + 20 from beats
-                assert result.tokens_used == 75
+                # 3 sections * 10 tokens + 15 from paths + 20 from beats
+                assert result.tokens_used == 65
 
     @pytest.mark.asyncio
     async def test_returns_result_with_errors_when_semantic_validation_fails(self) -> None:
@@ -843,18 +808,10 @@ class TestSerializeSeedAsFunction:
             ),
         ):
             mock_serialize.side_effect = [
-                # Initial 4 sections (paths + beats handled separately)
+                # Initial 3 sections (paths + beats handled separately)
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
                 (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                ),
             ]
 
             with patch(
@@ -890,19 +847,11 @@ class TestSerializeSeedAsFunction:
                 return_value=([], 20),
             ),
         ):
-            # 4 sections (paths + beats handled separately)
+            # 3 sections (paths + beats handled separately)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
                 (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                ),
             ]
 
             with patch("questfoundry.agents.serialize.validate_seed_mutations") as mock_validate:
@@ -942,26 +891,16 @@ class TestSerializeSeedAsFunction:
 
         def mock_serialize_side_effect(*_args, **_kwargs):
             call_count[0] += 1
-            # 4 sections (paths + beats handled separately), then retries
+            # 3 sections (paths + beats handled separately), then retries
             section_map = {
                 1: "entities",
                 2: "dilemmas",
                 3: "consequences",
-                4: "convergence_sketch",
                 # Semantic retry calls (2 retries for entities section)
+                4: "entities",
                 5: "entities",
-                6: "entities",
             }
             section = section_map.get(call_count[0], "unknown")
-            if section == "convergence_sketch":
-                return (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                )
             return (create_section_mock(section), 10)
 
         with (
@@ -986,8 +925,8 @@ class TestSerializeSeedAsFunction:
                 max_semantic_retries=2,
             )
 
-            # 4 initial + 2 retries for entities (max_semantic_retries=2)
-            assert call_count[0] == 6
+            # 3 initial + 2 retries for entities (max_semantic_retries=2)
+            assert call_count[0] == 5
             # Still fails because validate always returns errors in this mock
             assert result.success is False
             assert len(result.semantic_errors) == 1
@@ -1015,23 +954,13 @@ class TestSerializeSeedAsFunction:
 
         def mock_serialize_side_effect(*_args, **_kwargs):
             call_count[0] += 1
-            # 4 sections (paths + beats handled separately)
+            # 3 sections (paths + beats handled separately)
             section_map = {
                 1: "entities",
                 2: "dilemmas",
                 3: "consequences",
-                4: "convergence_sketch",
             }
             section = section_map.get(call_count[0], "unknown")
-            if section == "convergence_sketch":
-                return (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                )
             data = [_MOCK_DILEMMA] if section == "dilemmas" else []
             return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10)
 
@@ -1057,7 +986,7 @@ class TestSerializeSeedAsFunction:
             )
 
             # No retries — corrections not possible (empty available list)
-            assert call_count[0] == 4
+            assert call_count[0] == 3
             assert result.success is False
             assert len(result.semantic_errors) == 1
 
@@ -1085,26 +1014,16 @@ class TestSerializeSeedAsFunction:
 
         def mock_serialize_side_effect(*_args, **_kwargs):
             call_count[0] += 1
-            # 4 sections (paths + beats handled separately)
+            # 3 sections (paths + beats handled separately)
             section_map = {
                 1: "entities",
                 2: "dilemmas",
                 3: "consequences",
-                4: "convergence_sketch",
-                # Retry calls for entities (calls 5, 6 after max_semantic_retries=2)
+                # Retry calls for entities (calls 4, 5 after max_semantic_retries=2)
+                4: "entities",
                 5: "entities",
-                6: "entities",
             }
             section = section_map.get(call_count[0], "unknown")
-            if section == "convergence_sketch":
-                return (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                )
             data = [_MOCK_DILEMMA] if section == "dilemmas" else []
             return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10)
 
@@ -1131,8 +1050,8 @@ class TestSerializeSeedAsFunction:
             )
 
             # Should retry entities section for COMPLETENESS errors
-            # 4 initial sections + 2 retries for entities = 6 calls
-            assert call_count[0] == 6
+            # 3 initial sections + 2 retries for entities = 5 calls
+            assert call_count[0] == 5
             assert result.success is False
             assert len(result.semantic_errors) == 1
 
@@ -1313,19 +1232,11 @@ class TestBeatRetryAndContextRefresh:
                 side_effect=mock_validate,
             ),
         ):
-            # 4 sections (paths + beats handled separately)
+            # 3 sections (paths + beats handled separately)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
                 (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                ),
             ]
 
             result = await serialize_seed_as_function(
@@ -1392,18 +1303,8 @@ class TestBeatRetryAndContextRefresh:
                 1: "entities",
                 2: "dilemmas",
                 3: "consequences",
-                4: "convergence_sketch",
             }
             section = section_map.get(call_count[0], "unknown")
-            if section == "convergence_sketch":
-                return (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                )
             data = [_MOCK_DILEMMA] if section == "dilemmas" else []
             return (MagicMock(model_dump=lambda d=data, s=section: {s: d}), 10)
 
@@ -1511,19 +1412,11 @@ class TestBeatRetryAndContextRefresh:
                 side_effect=mock_validate,
             ),
         ):
-            # 4 sections (paths + beats handled separately)
+            # 3 sections (paths + beats handled separately)
             mock_serialize.side_effect = [
                 (MagicMock(model_dump=lambda: {"entities": []}), 10),
                 (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
                 (MagicMock(model_dump=lambda: {"consequences": []}), 10),
-                (
-                    MagicMock(
-                        model_dump=lambda: {
-                            "convergence_sketch": {"convergence_points": [], "residue_notes": []}
-                        }
-                    ),
-                    10,
-                ),
             ]
 
             result = await serialize_seed_as_function(

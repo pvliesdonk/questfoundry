@@ -585,7 +585,6 @@ Updated mutation handlers to use new API:
 - DREAM: `set_node()` → `upsert_node()` (allows re-running stage)
 - BRAINSTORM: `add_node()` → `create_node()` (entities, dilemmas, answers)
 - SEED: `add_node()` → `create_node()` (paths, consequences, beats)
-- SEED: `set_node()` → `upsert_node()` (convergence_sketch)
 
 ### Design Decisions Made During Implementation
 

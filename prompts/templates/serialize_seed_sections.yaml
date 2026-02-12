@@ -640,53 +640,14 @@ per_path_beats_prompt: |
   ## Output
   Return ONLY valid JSON with the "initial_beats" array (2-4 beats).
 
-# Section 6: Convergence Sketch
-convergence_prompt: |
-  You are generating the CONVERGENCE SKETCH from a SEED stage brief.
-
-  ## What Makes Good Convergence
-
-  Convergence points must be **location-based and concrete**, not abstract narrative moments.
-
-  GOOD convergence points:
-  - "paths converge at archive_vault where evidence from both dilemmas is revealed"
-  - "all characters are forced to the council_chamber for a confrontation"
-  - "investigation trails from separate dilemmas lead to the same lighthouse"
-
-  BAD convergence points:
-  - "paths merge emotionally in the final act" (abstract, no location)
-  - "the story reaches a climax" (no specific convergence mechanism)
-  - "thematic arcs align" (not actionable for scene generation)
-
-  Each convergence point should name a specific location (from your entity list)
-  and explain which dilemma storylines are forced together there.
-
-  ## Schema
-  Return a JSON object with a "convergence_sketch" object:
-  ```json
-  {
-    "convergence_sketch": {
-      "convergence_points": ["location-based convergence description"],
-      "residue_notes": ["differences that persist after convergence"]
-    }
-  }
-  ```
-
-  ## Rules
-  - convergence_points: Where paths physically converge (name the location and which dilemmas meet)
-  - residue_notes: What differences persist after convergence (path-specific consequences)
-  - convergence_points should have at least 1-2 entries referencing specific locations
-  - residue_notes can be empty if not specified in brief
-
-  ## Output
-  Return ONLY valid JSON with the "convergence_sketch" object.
-
 # Section 7: Dilemma Convergence Analysis (post-prune)
 dilemma_analyses_prompt: |
   You are classifying dilemma convergence policies for a SEED stage.
 
   Each dilemma has a convergence policy that tells GROW how strictly to
-  enforce path separation. Classify EVERY dilemma listed below.
+  enforce path separation. Classify EVERY dilemma listed below. Also provide
+  per-dilemma convergence guidance: where paths physically converge and what
+  differences persist afterward.
 
   ## Convergence Policies
 
@@ -707,6 +668,25 @@ dilemma_analyses_prompt: |
   - 3-4: Standard for most `soft` dilemmas.
   - 5-6: Deep divergence for `hard` dilemmas (paths stay separate longer).
 
+  ## Convergence Point Guidance
+
+  For `soft` and `flavor` dilemmas, provide a **location-based, concrete**
+  convergence_point describing where paths physically merge.
+
+  GOOD convergence_point examples:
+  - "paths converge at archive_vault where evidence from both choices is revealed"
+  - "characters are forced to the council_chamber for a confrontation"
+  - "investigation trails lead to the same lighthouse"
+
+  BAD convergence_point examples:
+  - "paths merge emotionally in the final act" (abstract, no location)
+  - "the story reaches a climax" (no specific mechanism)
+
+  For `hard` dilemmas, set convergence_point to null (paths never merge).
+
+  The residue_note describes what differences persist AFTER convergence
+  (e.g., "trust-path characters remain suspicious"). Set to null if none.
+
   ## Context
 
   {dilemma_context}
@@ -720,7 +700,9 @@ dilemma_analyses_prompt: |
         "dilemma_id": "dilemma::example_id",
         "convergence_policy": "soft",
         "payoff_budget": 3,
-        "reasoning": "Explain your classification in 1-2 sentences."
+        "reasoning": "Explain your classification in 1-2 sentences.",
+        "convergence_point": "paths converge at archive_vault where evidence is revealed",
+        "residue_note": "trust-path characters remain wary of the host"
       }}
     ]
   }}
@@ -733,6 +715,8 @@ dilemma_analyses_prompt: |
   - `reasoning` must be 1-2 sentences explaining WHY you chose that policy
   - GOOD reasoning: "Trust vs betrayal creates genuinely different arcs needing 3 exclusive beats to develop."
   - BAD reasoning: "It is soft." (too short, no justification)
+  - `convergence_point`: null for hard, location-based description for soft/flavor
+  - `residue_note`: null if no differences persist, otherwise a short description
 
   ## REMINDER
   Classify ALL dilemmas. hard = mutually exclusive, soft = meaningful but mergeable (DEFAULT), flavor = cosmetic only.

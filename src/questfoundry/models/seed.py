@@ -238,38 +238,19 @@ class InitialBeat(BaseModel):
     )
 
 
-class ConvergenceSketch(BaseModel):
-    """Informal guidance for GROW about path convergence.
-
-    Provides hints about where paths should merge and what differences
-    should persist after convergence.
-
-    Attributes:
-        convergence_points: Where paths should merge.
-        residue_notes: What differences persist after convergence.
-    """
-
-    convergence_points: list[str] = Field(
-        default_factory=list,
-        description="Where paths should merge (e.g., 'by act 2 climax')",
-    )
-    residue_notes: list[str] = Field(
-        default_factory=list,
-        description="Differences that persist after convergence",
-    )
-
-
 class DilemmaAnalysis(BaseModel):
-    """Per-dilemma convergence classification from SEED.
+    """Per-dilemma convergence classification and guidance from SEED.
 
     Serialized as Section 7 (after prune). Tells GROW how strictly
-    to enforce path separation for this dilemma.
+    to enforce path separation for this dilemma and where paths converge.
 
     Attributes:
         dilemma_id: References a dilemma from Section 2.
         convergence_policy: How strictly paths must stay separate.
         payoff_budget: Minimum exclusive beats before convergence (>=2).
         reasoning: Chain-of-thought for the classification.
+        convergence_point: Where this dilemma's paths physically converge.
+        residue_note: Differences that persist after convergence.
     """
 
     dilemma_id: str = Field(min_length=1, description="Dilemma ID from Section 2")
@@ -286,6 +267,16 @@ class DilemmaAnalysis(BaseModel):
         min_length=10,
         max_length=300,
         description="Chain-of-thought for the classification",
+    )
+    convergence_point: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Where this dilemma's paths converge (location-based, concrete)",
+    )
+    residue_note: str | None = Field(
+        default=None,
+        max_length=200,
+        description="Differences that persist after convergence for this dilemma",
     )
 
 
@@ -348,7 +339,6 @@ class SeedOutput(BaseModel):
         paths: Created plot paths.
         consequences: Narrative consequences for paths.
         initial_beats: Initial beats for each path.
-        convergence_sketch: Guidance for GROW about convergence.
         dilemma_analyses: Per-dilemma convergence classifications (Section 7).
         interaction_constraints: Pairwise dilemma interactions (Section 8).
     """
@@ -372,10 +362,6 @@ class SeedOutput(BaseModel):
     initial_beats: list[InitialBeat] = Field(
         default_factory=list,
         description="Initial beats for each path",
-    )
-    convergence_sketch: ConvergenceSketch = Field(
-        default_factory=ConvergenceSketch,
-        description="Guidance for GROW about path convergence",
     )
     dilemma_analyses: list[DilemmaAnalysis] = Field(
         default_factory=list,
@@ -539,15 +525,6 @@ class PathBeatsSection(BaseModel):
         """Drop identical duplicate beats; raise on conflicting ones."""
         self.initial_beats = _deduplicate_and_check(self.initial_beats, "beat_id", "beat_id")
         return self
-
-
-class ConvergenceSection(BaseModel):
-    """Wrapper for serializing convergence sketch separately."""
-
-    convergence_sketch: ConvergenceSketch = Field(
-        default_factory=ConvergenceSketch,
-        description="Guidance for GROW about path convergence",
-    )
 
 
 class DilemmaAnalysisSection(BaseModel):

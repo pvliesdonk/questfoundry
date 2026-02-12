@@ -90,14 +90,6 @@ system: |
   }}
   ```
 
-  ### 6. convergence_sketch
-  ```json
-  {{
-    "convergence_points": ["where paths should merge"],
-    "residue_notes": ["differences that persist after convergence"]
-  }}
-  ```
-
   ## Mapping Rules
 
   | Brief Section      | SeedOutput Field    |
@@ -107,7 +99,6 @@ system: |
   | Paths              | paths               |
   | Consequences       | consequences        |
   | Initial Beats      | initial_beats       |
-  | Convergence Sketch | convergence_sketch  |
 
   ## Guidelines
 
