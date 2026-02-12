@@ -14,6 +14,7 @@ from questfoundry.graph.grow_algorithms import (
     compute_all_choice_requires,
     compute_divergence_points,
     compute_passage_arc_membership,
+    compute_shared_beats,
     enumerate_arcs,
     find_convergence_points,
     topological_sort_beats,
@@ -278,6 +279,98 @@ class TestTopologicalSortBeats:
         # b before c alphabetically
         assert result == ["beat::a", "beat::b", "beat::c"]
 
+    def test_priority_beats_sort_first(self) -> None:
+        """Priority beats should sort before non-priority when no requires edges."""
+        graph = Graph.empty()
+        graph.create_node("beat::x", {"type": "beat"})
+        graph.create_node("beat::a", {"type": "beat"})
+        graph.create_node("beat::m", {"type": "beat"})
+        # No edges — purely alphabetical would give [a, m, x]
+        # With x and m as priority, they should come first: [m, x, a]
+        result = topological_sort_beats(
+            graph,
+            ["beat::x", "beat::a", "beat::m"],
+            priority_beats={"beat::x", "beat::m"},
+        )
+        assert result == ["beat::m", "beat::x", "beat::a"]
+
+    def test_priority_beats_respects_requires(self) -> None:
+        """Priority must not override topological (requires) constraints."""
+        graph = Graph.empty()
+        graph.create_node("beat::a", {"type": "beat"})
+        graph.create_node("beat::b", {"type": "beat"})
+        graph.create_node("beat::c", {"type": "beat"})
+        # b requires a → a must come before b regardless of priority
+        graph.add_edge("requires", "beat::b", "beat::a")
+        # Mark b as priority but a is not — a still must come first
+        result = topological_sort_beats(
+            graph,
+            ["beat::a", "beat::b", "beat::c"],
+            priority_beats={"beat::b", "beat::c"},
+        )
+        # a has in-degree 0 but is non-priority; c has in-degree 0 and IS priority
+        # So c sorts first, then a (non-priority, in-degree 0), then b (released after a)
+        assert result == ["beat::c", "beat::a", "beat::b"]
+
+    def test_priority_beats_none_is_alphabetical(self) -> None:
+        """priority_beats=None preserves purely alphabetical tie-breaking."""
+        graph = Graph.empty()
+        graph.create_node("beat::z", {"type": "beat"})
+        graph.create_node("beat::a", {"type": "beat"})
+        result = topological_sort_beats(graph, ["beat::z", "beat::a"], priority_beats=None)
+        assert result == ["beat::a", "beat::z"]
+
+
+# ---------------------------------------------------------------------------
+# compute_shared_beats
+# ---------------------------------------------------------------------------
+
+
+class TestComputeSharedBeats:
+    def test_single_dilemma_all_beats_shared(self) -> None:
+        """With one dilemma, all beats reachable from its paths are shared."""
+        path_beat_sets = {
+            "path::a": {"beat::1", "beat::2", "beat::3"},
+            "path::b": {"beat::2", "beat::3", "beat::4"},
+        }
+        # Single dilemma: both paths belong to the same dilemma
+        path_lists = [["path::a", "path::b"]]
+        shared = compute_shared_beats(path_beat_sets, path_lists)
+        # Union of all beats in the single dilemma
+        assert shared == {"beat::1", "beat::2", "beat::3", "beat::4"}
+
+    def test_two_dilemmas_shared_and_exclusive(self) -> None:
+        """Only beats in paths of BOTH dilemmas are shared."""
+        path_beat_sets = {
+            "path::d1_canon": {"beat::opening", "beat::d1_commit"},
+            "path::d1_alt": {"beat::opening", "beat::d1_reject"},
+            "path::d2_canon": {"beat::opening", "beat::d2_commit"},
+            "path::d2_alt": {"beat::opening", "beat::d2_reject"},
+        }
+        path_lists = [
+            ["path::d1_canon", "path::d1_alt"],  # Dilemma 1
+            ["path::d2_canon", "path::d2_alt"],  # Dilemma 2
+        ]
+        shared = compute_shared_beats(path_beat_sets, path_lists)
+        # Dilemma 1 union: {opening, d1_commit, d1_reject}
+        # Dilemma 2 union: {opening, d2_commit, d2_reject}
+        # Intersection: {opening}
+        assert shared == {"beat::opening"}
+
+    def test_empty_path_lists(self) -> None:
+        """Empty path_lists returns empty set."""
+        assert compute_shared_beats({}, []) == set()
+
+    def test_disjoint_dilemmas(self) -> None:
+        """Dilemmas with no overlapping beats produce empty shared set."""
+        path_beat_sets = {
+            "path::a": {"beat::x"},
+            "path::b": {"beat::y"},
+        }
+        path_lists = [["path::a"], ["path::b"]]
+        shared = compute_shared_beats(path_beat_sets, path_lists)
+        assert shared == set()
+
 
 # ---------------------------------------------------------------------------
 # enumerate_arcs
@@ -415,6 +508,61 @@ class TestEnumerateArcs:
         assert len(arcs) == 2
         spine_arcs = [a for a in arcs if a.arc_type == "spine"]
         assert len(spine_arcs) == 1
+
+    def test_shared_beats_sort_before_exclusive(self) -> None:
+        """Shared beats (present in all arcs) sort before exclusive beats.
+
+        Without requires edges, the only ordering constraint is the priority
+        tie-breaking. Shared beats (present in all path unions) should appear
+        earlier in sequences than exclusive beats.
+        """
+        graph = Graph.empty()
+
+        # Two dilemmas, two paths each, NO requires edges
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node("dilemma::d2", {"type": "dilemma", "raw_id": "d2"})
+
+        for pid, did, canon in [
+            ("d1_yes", "d1", True),
+            ("d1_no", "d1", False),
+            ("d2_yes", "d2", True),
+            ("d2_no", "d2", False),
+        ]:
+            graph.create_node(
+                f"path::{pid}",
+                {
+                    "type": "path",
+                    "raw_id": pid,
+                    "dilemma_id": f"dilemma::{did}",
+                    "is_canonical": canon,
+                },
+            )
+
+        # Beats: shared (belongs to paths in BOTH dilemmas)
+        # Named "z_shared" so alphabetical would put it LAST
+        graph.create_node("beat::z_shared", {"type": "beat", "raw_id": "z_shared"})
+        for pid in ["d1_yes", "d1_no", "d2_yes", "d2_no"]:
+            graph.add_edge("belongs_to", "beat::z_shared", f"path::{pid}")
+
+        # Exclusive beats for d1 paths only (alphabetically before z_shared)
+        graph.create_node("beat::a_d1_only", {"type": "beat", "raw_id": "a_d1_only"})
+        graph.add_edge("belongs_to", "beat::a_d1_only", "path::d1_yes")
+        graph.add_edge("belongs_to", "beat::a_d1_only", "path::d1_no")
+
+        # Exclusive beats for d2 paths only
+        graph.create_node("beat::b_d2_only", {"type": "beat", "raw_id": "b_d2_only"})
+        graph.add_edge("belongs_to", "beat::b_d2_only", "path::d2_yes")
+        graph.add_edge("belongs_to", "beat::b_d2_only", "path::d2_no")
+
+        arcs = enumerate_arcs(graph)
+        assert len(arcs) == 4  # 2 x 2 Cartesian product
+
+        # In every arc, z_shared should come FIRST despite alphabetical order
+        # because it's a shared beat (priority). The exclusive beats follow.
+        for arc in arcs:
+            assert arc.sequence[0] == "beat::z_shared", (
+                f"Arc {arc.arc_id}: expected z_shared first, got {arc.sequence}"
+            )
 
 
 # ---------------------------------------------------------------------------
