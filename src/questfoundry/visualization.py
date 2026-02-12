@@ -30,6 +30,8 @@ _ARC_COLORS = [
 _SHARED_COLOR = "#D3D3D3"  # light grey for multi-arc passages
 _START_COLOR = "#90EE90"  # light green
 _ENDING_COLOR = "#FFB6C1"  # light pink
+_GRANTS_COLOR = "#6A5ACD"  # slate blue for state-changing choices
+_OVERLAY_BORDER = "#FF4500"  # orange-red border for overlay passages
 
 
 @dataclass
@@ -42,6 +44,8 @@ class VizNode:
     is_start: bool = False
     is_ending: bool = False
     is_hub: bool = False
+    has_overlays: bool = False
+    outgoing_count: int = 0
 
 
 @dataclass
@@ -53,6 +57,7 @@ class VizEdge:
     label: str = ""
     is_return: bool = False
     requires: list[str] = field(default_factory=list)
+    grants: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -102,10 +107,31 @@ def build_story_graph(
             else:
                 passage_to_arc[pid] = arc_id
 
-    # Determine start/ending passages
+    # Identify entities with overlays (codeword-dependent content)
+    entities = graph.get_nodes_by_type("entity")
+    overlay_entity_ids: set[str] = set()
+    for eid, edata in entities.items():
+        if edata.get("overlays"):
+            overlay_entity_ids.add(eid)
+
+    # Track which passages contain overlay-affected entities
+    overlay_passages: set[str] = set()
+    for pid, pdata in passages.items():
+        for ent in pdata.get("entities", []):
+            # Check both raw ID and scoped forms
+            if ent in overlay_entity_ids:
+                overlay_passages.add(pid)
+                break
+            for prefix in ("character::", "location::", "object::", "faction::"):
+                if f"{prefix}{ent}" in overlay_entity_ids:
+                    overlay_passages.add(pid)
+                    break
+
+    # Determine start/ending passages and outgoing counts
     has_incoming: set[str] = set()
     has_outgoing: set[str] = set()
     hub_passages: set[str] = set()
+    outgoing_count: dict[str, int] = {}
 
     for _cid, cdata in choices.items():
         from_p = cdata.get("from_passage")
@@ -117,6 +143,7 @@ def build_story_graph(
             hub_passages.add(to_p)
         else:
             has_incoming.add(to_p)
+            outgoing_count[from_p] = outgoing_count.get(from_p, 0) + 1
         has_outgoing.add(from_p)
 
     # Filter passages if spine_only
@@ -137,6 +164,8 @@ def build_story_graph(
                 is_start=pid not in has_incoming,
                 is_ending=pid not in has_outgoing,
                 is_hub=pid in hub_passages,
+                has_overlays=pid in overlay_passages,
+                outgoing_count=outgoing_count.get(pid, 0),
             )
         )
 
@@ -156,6 +185,7 @@ def build_story_graph(
                 label=cdata.get("label", ""),
                 is_return=cdata.get("is_return", False),
                 requires=cdata.get("requires", []),
+                grants=cdata.get("grants", []),
             )
         )
 
@@ -186,7 +216,7 @@ def render_dot(sg: StoryGraph, *, no_labels: bool = False) -> str:
     lines = [
         "digraph story {",
         "  rankdir=LR;",
-        '  node [fontname="Helvetica" fontsize=10 style=filled];',
+        '  node [fontname="Helvetica" fontsize=10 style="filled,solid"];',
         '  edge [fontname="Helvetica" fontsize=8];',
         "",
     ]
@@ -209,6 +239,9 @@ def render_dot(sg: StoryGraph, *, no_labels: bool = False) -> str:
             edge_attrs["color"] = '"grey"'
         if edge.requires:
             edge_attrs["color"] = '"orange"'
+            edge_attrs["penwidth"] = '"2"'
+        elif edge.grants:
+            edge_attrs["color"] = f'"{_GRANTS_COLOR}"'
             edge_attrs["penwidth"] = '"2"'
         edge_attr_str = " ".join(f"{k}={v}" for k, v in edge_attrs.items())
         suffix = f" [{edge_attr_str}]" if edge_attr_str else ""
@@ -235,11 +268,17 @@ def render_mermaid(sg: StoryGraph, *, no_labels: bool = False) -> str:
         safe_id = _mermaid_id(node.id)
         label = _mermaid_escape(node.label)
         if node.is_start:
-            lines.append(f'  {safe_id}["{label}"]:::start')
+            cls = ":::startOverlay" if node.has_overlays else ":::start"
+            lines.append(f'  {safe_id}["{label}"]{cls}')
         elif node.is_ending:
-            lines.append(f'  {safe_id}["{label}"]:::ending')
+            cls = ":::endingOverlay" if node.has_overlays else ":::ending"
+            lines.append(f'  {safe_id}["{label}"]{cls}')
         elif node.is_hub:
             lines.append(f"  {safe_id}{{{{{label}}}}}")
+            if node.has_overlays:
+                lines.append(f"  class {safe_id} overlay")
+        elif node.has_overlays:
+            lines.append(f'  {safe_id}["{label}"]:::overlay')
         else:
             lines.append(f'  {safe_id}["{label}"]')
 
@@ -260,6 +299,16 @@ def render_mermaid(sg: StoryGraph, *, no_labels: bool = False) -> str:
     lines.append("")
     lines.append("  classDef start fill:#90EE90,stroke:#333")
     lines.append("  classDef ending fill:#FFB6C1,stroke:#333")
+    lines.append(f"  classDef overlay stroke:{_OVERLAY_BORDER},stroke-width:3px")
+    lines.append(f"  classDef startOverlay fill:#90EE90,stroke:{_OVERLAY_BORDER},stroke-width:3px")
+    lines.append(f"  classDef endingOverlay fill:#FFB6C1,stroke:{_OVERLAY_BORDER},stroke-width:3px")
+    # Mermaid has limited edge styling; grants edges use linkStyle below
+    grants_indices = [
+        i for i, e in enumerate(sg.edges) if e.grants and not e.is_return and not e.requires
+    ]
+    if grants_indices:
+        idx_list = ",".join(str(i) for i in grants_indices)
+        lines.append(f"  linkStyle {idx_list} stroke:{_GRANTS_COLOR},stroke-width:2px")
 
     return "\n".join(lines)
 
@@ -312,6 +361,11 @@ def _dot_node_attrs(node: VizNode, arc_color: dict[str, str]) -> dict[str, str]:
         attrs["shape"] = "box"
         color = arc_color.get(node.arc_id, _SHARED_COLOR) if node.arc_id else _SHARED_COLOR
         attrs["fillcolor"] = f'"{color}"'
+
+    # Overlay passages get a thick orange-red border
+    if node.has_overlays:
+        attrs["color"] = f'"{_OVERLAY_BORDER}"'
+        attrs["penwidth"] = '"2.5"'
 
     attrs["label"] = f'"{_dot_escape(node.label)}"'
     return attrs
