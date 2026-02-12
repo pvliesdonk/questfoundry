@@ -1090,9 +1090,12 @@ def check_codeword_gate_coverage(graph: Graph) -> ValidationCheck:
 
     # Overlays are embedded arrays on entity nodes (type="entity"),
     # not separate typed nodes.
-    for entity_data in graph.get_nodes_by_type("entity").values():
-        for overlay in entity_data.get("overlays") or []:
-            consumed.update(overlay.get("when") or [])
+    consumed.update(
+        cw
+        for entity_data in graph.get_nodes_by_type("entity").values()
+        for overlay in entity_data.get("overlays") or []
+        for cw in overlay.get("when") or []
+    )
 
     unconsumed = sorted(set(codeword_nodes.keys()) - consumed)
     if not unconsumed:
