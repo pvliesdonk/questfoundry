@@ -485,6 +485,24 @@ class TestOverlayPassages:
         assert ":::startOverlay" in mmd
         assert "classDef overlay" in mmd
 
+    def test_overlay_detected_via_raw_id(self) -> None:
+        """Passages referencing entities by raw ID (without prefix) are detected."""
+        graph = _make_simple_graph()
+        graph.create_node(
+            "character::bob",
+            {
+                "type": "entity",
+                "entity_type": "character",
+                "name": "Bob",
+                "overlays": [{"codeword": "met_bob", "field": "mood", "value": "happy"}],
+            },
+        )
+        # Passage references entity by raw ID "bob" (not "character::bob")
+        graph.update_node("passage::middle", entities=["bob"])
+        sg = build_story_graph(graph)
+        node_map = {n.id: n for n in sg.nodes}
+        assert node_map["passage::middle"].has_overlays is True
+
 
 class TestGrantsEdges:
     """Tests for state-changing choice edges."""
@@ -510,6 +528,31 @@ class TestGrantsEdges:
         mmd = render_mermaid(sg)
         assert "linkStyle" in mmd
         assert "#6A5ACD" in mmd
+
+    def test_return_edge_with_grants_keeps_dashed_style(self) -> None:
+        """Return edges that also have grants keep grey dashed style, not grants color."""
+        graph = _make_hub_graph()
+        # Add grants to the return choice
+        graph.update_node("choice::spoke_middle", grants=["explored_alcove"])
+        sg = build_story_graph(graph)
+
+        # DOT: return edge should be dashed grey, not slate blue
+        dot = render_dot(sg)
+        return_line = next(
+            row for row in dot.split("\n") if '"passage::spoke" -> "passage::middle"' in row
+        )
+        assert "dashed" in return_line
+        assert "#6A5ACD" not in return_line
+
+        # Mermaid: grants linkStyle should exclude the return edge
+        mmd = render_mermaid(sg)
+        # The return edge should NOT appear in grants linkStyle
+        if "linkStyle" in mmd:
+            # If there are other grants edges they may produce linkStyle,
+            # but the return edge index should not be listed
+            return_idx = next(i for i, e in enumerate(sg.edges) if e.is_return)
+            link_line = next(row for row in mmd.split("\n") if "linkStyle" in row)
+            assert str(return_idx) not in link_line.split()
 
 
 class TestOutgoingCount:

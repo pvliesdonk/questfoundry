@@ -32,6 +32,7 @@ _START_COLOR = "#90EE90"  # light green
 _ENDING_COLOR = "#FFB6C1"  # light pink
 _GRANTS_COLOR = "#6A5ACD"  # slate blue for state-changing choices
 _OVERLAY_BORDER = "#FF4500"  # orange-red border for overlay passages
+_ENTITY_PREFIXES = ("character::", "location::", "object::", "faction::")
 
 
 @dataclass
@@ -122,10 +123,9 @@ def build_story_graph(
             if ent in overlay_entity_ids:
                 overlay_passages.add(pid)
                 break
-            for prefix in ("character::", "location::", "object::", "faction::"):
-                if f"{prefix}{ent}" in overlay_entity_ids:
-                    overlay_passages.add(pid)
-                    break
+            if any(f"{prefix}{ent}" in overlay_entity_ids for prefix in _ENTITY_PREFIXES):
+                overlay_passages.add(pid)
+                break
 
     # Determine start/ending passages and outgoing counts
     has_incoming: set[str] = set()
@@ -237,10 +237,12 @@ def render_dot(sg: StoryGraph, *, no_labels: bool = False) -> str:
         if edge.is_return:
             edge_attrs["style"] = '"dashed"'
             edge_attrs["color"] = '"grey"'
+        # Requires (gated) takes precedence over grants (state-changing).
+        # Return edges keep their dashed grey style in both renderers.
         if edge.requires:
             edge_attrs["color"] = '"orange"'
             edge_attrs["penwidth"] = '"2"'
-        elif edge.grants:
+        elif edge.grants and not edge.is_return:
             edge_attrs["color"] = f'"{_GRANTS_COLOR}"'
             edge_attrs["penwidth"] = '"2"'
         edge_attr_str = " ".join(f"{k}={v}" for k, v in edge_attrs.items())
