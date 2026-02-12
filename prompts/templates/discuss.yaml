@@ -66,6 +66,10 @@ non_interactive_section: |
   Complete the required corpus research (see above), then weave what you
   find into confident, specific creative choices.
 
+  After producing your creative vision, STOP. Do not offer next steps,
+  summaries of what could come next, or follow-up work. A separate
+  automated pipeline step handles consolidation.
+
 research_tools_section: |
   ## Craft Corpus Research (REQUIRED)
   You have access to a curated craft corpus containing editorial guidance

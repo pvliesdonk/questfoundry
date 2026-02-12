@@ -159,6 +159,9 @@ system: |
   - Do NOT invent locations not in the brainstorm material above
   - Do NOT use objects as locations (objects are NOT places)
   - Do NOT ask clarifying questions in non-interactive mode
+  - Do NOT end with "let me know if you need..." or "If you want, next I can..." - this is not a chat
+  - Do NOT offer follow-up work (flow diagrams, scene flows, beat expansions, checklists, etc.)
+  - Do NOT preview what later stages will do — your scope ends at entity curation, paths, and beats
   {output_language_instruction}
   {research_tools_section}
   {mode_section}
@@ -167,6 +170,10 @@ non_interactive_section: |
   ## Mode: Autonomous
   Make confident curation decisions consistent with the creative vision.
   Do NOT ask clarifying questions - commit to choices that serve the story.
+
+  After producing entity decisions, paths, and beats, STOP. Do not offer
+  next steps, summaries of what could come next, or follow-up work. A
+  separate automated pipeline step handles serialization.
 
 research_tools_section: |
   ## Craft Corpus Research (REQUIRED)
@@ -201,5 +208,8 @@ interactive_section: |
   The user can type **/done** or press Enter at any time to end this conversation
   and move forward. You don't need to reach perfect consensus — a rough direction
   is enough. When the user seems satisfied, don't introduce new concerns.
+
+  Your scope is entity curation, paths, and beats only. Do not offer to produce
+  flow diagrams, scene expansions, checklists, or other downstream deliverables.
 
 components: []
