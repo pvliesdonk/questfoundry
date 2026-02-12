@@ -16,6 +16,8 @@ from questfoundry.agents.prompts import (
 from questfoundry.agents.serialize import (
     SerializationError,
     SerializeResult,
+    serialize_convergence_analysis,
+    serialize_interaction_constraints,
     serialize_post_prune_analysis,
     serialize_seed_as_function,
     serialize_seed_iteratively,
@@ -38,6 +40,8 @@ __all__ = [
     "get_serialize_prompt",
     "get_summarize_prompt",
     "run_discuss_phase",
+    "serialize_convergence_analysis",
+    "serialize_interaction_constraints",
     "serialize_post_prune_analysis",
     "serialize_seed_as_function",
     "serialize_seed_iteratively",

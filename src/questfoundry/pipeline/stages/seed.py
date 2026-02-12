@@ -23,7 +23,8 @@ from questfoundry.agents import (
     SerializeResult,
     get_seed_discuss_prompt,
     run_discuss_phase,
-    serialize_post_prune_analysis,
+    serialize_convergence_analysis,
+    serialize_interaction_constraints,
     serialize_seed_as_function,
     summarize_seed_chunked,
 )
@@ -440,13 +441,34 @@ class SeedStage:
             # This shouldn't happen with current logic, but handle defensively
             raise SeedStageError("SEED serialization failed: artifact is None after all retries")
 
-        # Phase 4: Prune to arc limit (over-generate-and-select pattern)
-        # LLM may have explored more dilemmas than the arc limit allows.
-        # Instead of retrying, we programmatically select the best dilemmas.
+        # Phase 4: Convergence analysis (Section 7) — runs BEFORE pruning
+        # so that policy-aware pruning can keep hard dilemmas and demote
+        # soft/flavor first.  Only hard dilemmas multiply endings.
+        log.debug("seed_phase", phase="convergence_analysis")
+        analyses, analysis_tokens, analysis_calls = await serialize_convergence_analysis(
+            model=serialize_model or model,
+            seed_artifact=result.artifact,
+            graph=graph,
+            provider_name=serialize_provider_name or provider_name,
+            callbacks=callbacks,
+            on_phase_progress=on_phase_progress,
+        )
+        total_llm_calls += analysis_calls
+        total_tokens += analysis_tokens
+
+        # Phase 5: Policy-aware pruning (over-generate-and-select pattern)
+        # With convergence policies known, only hard dilemmas count toward
+        # the arc limit.  Soft/flavor dilemmas add mid-story variety without
+        # multiplying endings.
         original_arc_count = compute_arc_count(result.artifact)
         size_profile = kwargs.get("size_profile") or get_size_profile("standard")
         max_arcs = size_profile.max_arcs
-        pruned_artifact = prune_to_arc_limit(result.artifact, max_arcs=max_arcs, graph=graph)
+        pruned_artifact = prune_to_arc_limit(
+            result.artifact,
+            max_arcs=max_arcs,
+            graph=graph,
+            dilemma_analyses=analyses,
+        )
         final_arc_count = compute_arc_count(pruned_artifact)
 
         if original_arc_count != final_arc_count:
@@ -458,14 +480,10 @@ class SeedStage:
                 final_paths=len(pruned_artifact.paths),
             )
 
-        # Phase 5: Post-prune convergence analysis (sections 7+8)
-        log.debug("seed_phase", phase="post_prune_analysis")
-        (
-            analyses,
-            constraints,
-            analysis_tokens,
-            analysis_calls,
-        ) = await serialize_post_prune_analysis(
+        # Phase 6: Interaction constraints (Section 8) — runs AFTER pruning
+        # since it only needs to analyze surviving dilemma pairs.
+        log.debug("seed_phase", phase="interaction_constraints")
+        constraints, constraint_tokens, constraint_calls = await serialize_interaction_constraints(
             model=serialize_model or model,
             pruned_artifact=pruned_artifact,
             graph=graph,
@@ -473,8 +491,8 @@ class SeedStage:
             callbacks=callbacks,
             on_phase_progress=on_phase_progress,
         )
-        total_llm_calls += analysis_calls
-        total_tokens += analysis_tokens
+        total_llm_calls += constraint_calls
+        total_tokens += constraint_tokens
 
         # Merge analysis into pruned artifact
         pruned_artifact = pruned_artifact.model_copy(

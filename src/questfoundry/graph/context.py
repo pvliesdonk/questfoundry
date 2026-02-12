@@ -898,6 +898,10 @@ def format_dilemma_analysis_context(
             if effects:
                 block_lines.append(f"    Effects: {' | '.join(effects)}")
 
+        # Show unexplored answers so the LLM can reason about divergence
+        if d.unexplored:
+            block_lines.append(f"**Unexplored answers:** {', '.join(d.unexplored)}")
+
         if not dilemma_paths:
             explored = ", ".join(d.explored) if d.explored else "(none)"
             block_lines.append(f"  (no paths yet — explored: [{explored}])")

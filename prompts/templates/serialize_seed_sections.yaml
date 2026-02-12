@@ -644,48 +644,64 @@ per_path_beats_prompt: |
 dilemma_analyses_prompt: |
   You are classifying dilemma convergence policies for a SEED stage.
 
-  Each dilemma has a convergence policy that tells GROW how strictly to
-  enforce path separation. Classify EVERY dilemma listed below. Also provide
-  per-dilemma convergence guidance: where paths physically converge and what
-  differences persist afterward.
+  Classify EVERY dilemma listed below based on its QUESTION and STAKES, not
+  on how many paths it currently has. A dilemma with 1 surviving path can
+  still be `hard` if the question involves incompatible world states.
+
+  ## Why This Matters
+
+  Only `hard` dilemmas multiply story endings. `soft` and `flavor` dilemmas
+  add mid-story variety but converge back, so they do not increase arc count.
+  A story can have many `soft`/`flavor` dilemmas for richness, but only 3-4
+  `hard` dilemmas before the ending count becomes unmanageable.
+
+  Classify based on: "Could the SAME scene plausibly follow BOTH answers?"
+  - NO (different world states) -> `hard`
+  - YES, but with meaningful differences -> `soft`
+  - YES, nearly identical -> `flavor`
 
   ## Convergence Policies
 
-  - **hard**: Paths are mutually exclusive world states. They CANNOT share beats
-    or converge until an explicit convergence point. Example: "alive vs dead" —
-    fundamentally incompatible realities.
-  - **soft**: Paths have meaningful differences but CAN share some beats after
-    a minimum number of exclusive beats (payoff_budget). Default choice.
-    Example: "trust vs betray" — different approaches to the same situation.
-  - **flavor**: Cosmetic difference only. Paths converge immediately and only
-    differ through entity overlays (appearance, dialogue tone). Example:
-    "polite vs blunt greeting" — same events, different flavor text.
+  **hard** -- Different endings. Paths create incompatible world states that
+  NEVER converge. Each `hard` dilemma doubles the number of distinct endings.
+  Use `hard` when ANY of these triggers apply:
+  - Someone lives vs dies, is guilty vs innocent, is present vs absent
+  - A key object/place is destroyed vs intact, revealed vs hidden
+  - The antagonist's identity or motive fundamentally changes
+  - The protagonist's core allegiance flips (ally vs enemy)
+  Examples: murder vs accident, betrayal vs loyalty (when it changes who
+  the antagonist is), artifact destroyed vs preserved, spy revealed vs hidden.
+
+  **soft** -- Different middles. Paths have meaningfully different beats but
+  converge after `payoff_budget` exclusive beats. The ending is the same;
+  the journey differs. DEFAULT when unsure.
+  Examples: trust vs suspicion (same ally, different relationship tone),
+  stealth vs confrontation (different approach, same destination),
+  investigate alone vs recruit help.
+
+  **flavor** -- Different tone. Paths converge immediately and differ only
+  in dialogue style, description color, or cosmetic details.
+  Examples: polite vs blunt greeting, left door vs right door (same room),
+  diplomatic vs forceful persuasion with identical outcome.
 
   ## payoff_budget
 
-  Minimum number of exclusive beats before paths can converge (2-6).
-  - 2: Use for `flavor` dilemmas (paths converge immediately, budget is minimal).
-  - 3-4: Standard for most `soft` dilemmas.
-  - 5-6: Deep divergence for `hard` dilemmas (paths stay separate longer).
+  Minimum exclusive beats before convergence (2-6).
+  - `flavor`: always 2
+  - `soft`: 3-4 (standard), 5 (deep divergence)
+  - `hard`: 5-6 (paths stay separate through distinct endings)
 
-  ## Convergence Point Guidance
+  ## Convergence Point
 
-  For `soft` and `flavor` dilemmas, provide a **location-based, concrete**
-  convergence_point describing where paths physically merge.
+  For `soft` and `flavor`: a **location-based, concrete** description of
+  where paths physically merge.
+  GOOD: "paths converge at archive_vault where evidence is revealed"
+  BAD: "paths merge emotionally in the final act" (abstract)
 
-  GOOD convergence_point examples:
-  - "paths converge at archive_vault where evidence from both choices is revealed"
-  - "characters are forced to the council_chamber for a confrontation"
-  - "investigation trails lead to the same lighthouse"
+  For `hard`: set convergence_point to null (paths never merge).
 
-  BAD convergence_point examples:
-  - "paths merge emotionally in the final act" (abstract, no location)
-  - "the story reaches a climax" (no specific mechanism)
-
-  For `hard` dilemmas, set convergence_point to null (paths never merge).
-
-  The residue_note describes what differences persist AFTER convergence
-  (e.g., "trust-path characters remain suspicious"). Set to null if none.
+  The residue_note describes differences persisting AFTER convergence.
+  Set to null for `hard` dilemmas or when no differences persist.
 
   ## Context
 
@@ -698,28 +714,37 @@ dilemma_analyses_prompt: |
     "dilemma_analyses": [
       {{
         "dilemma_id": "dilemma::example_id",
+        "convergence_policy": "hard",
+        "payoff_budget": 5,
+        "reasoning": "Murder vs accident produces incompatible crime scenes, suspect lists, and endings.",
+        "convergence_point": null,
+        "residue_note": null
+      }},
+      {{
+        "dilemma_id": "dilemma::example_soft",
         "convergence_policy": "soft",
         "payoff_budget": 3,
-        "reasoning": "Explain your classification in 1-2 sentences.",
-        "convergence_point": "paths converge at archive_vault where evidence is revealed",
-        "residue_note": "trust-path characters remain wary of the host"
+        "reasoning": "Trust vs suspicion changes the relationship tone but both paths lead to the same confrontation.",
+        "convergence_point": "paths converge at council_chamber for the final confrontation",
+        "residue_note": "suspicious-path characters remain wary of the host"
       }}
     ]
   }}
   ```
 
   ## Rules
-  - Classify EVERY dilemma from the ### Valid Dilemma IDs list in the Context
-  - If unsure, use `soft` with `payoff_budget: 2`
-  - Dilemmas with only 1 path are typically `flavor` (no real branching)
-  - `reasoning` must be 1-2 sentences explaining WHY you chose that policy
-  - GOOD reasoning: "Trust vs betrayal creates genuinely different arcs needing 3 exclusive beats to develop."
-  - BAD reasoning: "It is soft." (too short, no justification)
-  - `convergence_point`: null for hard dilemmas or when convergence location is unspecified; location-based description for soft/flavor with known convergence
-  - `residue_note`: null if no differences persist or if unspecified; otherwise a short description
+  - Classify EVERY dilemma from the ### Valid Dilemma IDs list
+  - Classify based on the dilemma's QUESTION and STAKES, not path count
+  - Apply the `hard` triggers above FIRST; if none match, use `soft`; use `flavor` only for cosmetic differences
+  - `reasoning` must be 1-2 sentences explaining WHY (reference the question/stakes)
+  - GOOD reasoning: "Homicide vs accident creates incompatible suspect lists and requires different endings."
+  - BAD reasoning: "It is soft." / "Only one path."
+  - `convergence_point`: null for `hard`; location-based description for `soft`/`flavor`
+  - `residue_note`: null for `hard` or if no differences persist; short description otherwise
 
   ## REMINDER
-  Classify ALL dilemmas. hard = mutually exclusive, soft = meaningful but mergeable (DEFAULT), flavor = cosmetic only.
+  Classify ALL dilemmas. Ask: "Could the SAME scene follow both answers?"
+  NO -> hard. YES with differences -> soft. YES nearly identical -> flavor.
 
   ## Output
   Return ONLY valid JSON with the "dilemma_analyses" array. Classify ALL dilemmas.
