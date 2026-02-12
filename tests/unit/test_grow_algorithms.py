@@ -5190,3 +5190,42 @@ class TestSplitEndingFamilies:
             target = choice_to[0]["to"]
             target_data = graph.get_node(target)
             assert target_data.get("is_ending") is True
+
+    def test_ending_tone_propagated_to_endings(self) -> None:
+        """When dilemma nodes have ending_tone, synthetic endings receive it."""
+        from questfoundry.graph.grow_algorithms import split_ending_families
+
+        graph = self._make_shared_ending_graph()
+
+        # Add ending_tone to the dilemma node
+        graph.update_node("dilemma::d1", ending_tone="cold justice")
+
+        split_ending_families(graph)
+
+        endings = {
+            pid: data
+            for pid, data in graph.get_nodes_by_type("passage").items()
+            if data.get("is_ending")
+        }
+        assert len(endings) == 2
+
+        # Both endings should carry the ending_tone
+        for pid, data in endings.items():
+            assert data.get("ending_tone") == "cold justice", f"Ending {pid} missing ending_tone"
+
+    def test_no_ending_tone_when_dilemma_lacks_it(self) -> None:
+        """When dilemma nodes have no ending_tone, synthetic endings omit it."""
+        from questfoundry.graph.grow_algorithms import split_ending_families
+
+        graph = self._make_shared_ending_graph()
+        # Don't set ending_tone on dilemma
+
+        split_ending_families(graph)
+
+        endings = {
+            pid: data
+            for pid, data in graph.get_nodes_by_type("passage").items()
+            if data.get("is_ending")
+        }
+        for _pid, data in endings.items():
+            assert "ending_tone" not in data

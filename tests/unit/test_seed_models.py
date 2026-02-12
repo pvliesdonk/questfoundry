@@ -335,6 +335,22 @@ class TestDilemmaAnalysis:
         assert da.convergence_point is None
         assert da.residue_note is None
 
+    def test_ending_tone_accepted(self) -> None:
+        da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "ending_tone": "cold justice"})
+        assert da.ending_tone == "cold justice"
+
+    def test_ending_tone_default_none(self) -> None:
+        da = DilemmaAnalysis(**_ANALYSIS_KWARGS)
+        assert da.ending_tone is None
+
+    def test_ending_tone_empty_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="ending_tone"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "ending_tone": ""})
+
+    def test_ending_tone_too_long_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="ending_tone"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "ending_tone": "x" * 81})
+
 
 class TestInteractionConstraint:
     """InteractionConstraint normalizes pair order and validates fields."""

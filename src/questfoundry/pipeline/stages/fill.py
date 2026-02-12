@@ -1268,7 +1268,9 @@ class FillStage:
                 "shadow_states": shadow_states_text,
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
                 "vocabulary_note": vocabulary_note,
-                "ending_guidance": format_ending_guidance(is_ending),
+                "ending_guidance": format_ending_guidance(
+                    is_ending, ending_tone=passage.get("ending_tone", "")
+                ),
                 "introduction_guidance": format_introduction_guidance(
                     first_names,
                     arc_hints=compute_arc_hints(graph, first_eids, arc_id),
