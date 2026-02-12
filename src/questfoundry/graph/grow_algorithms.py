@@ -9,6 +9,7 @@ Algorithm summary:
 - topological_sort_beats: Stable topological sort with alphabetical tie-breaking
 - enumerate_arcs: Cartesian product of paths across dilemmas
 - compute_divergence_points: Find where arcs diverge from the spine
+- split_ending_families: Split shared terminal passages into per-arc-family endings
 - select_entities_for_arc: Deterministic entity selection for Phase 4f
 """
 
@@ -581,6 +582,196 @@ def mark_terminal_passages(graph: Graph) -> int:
     for pid in terminal:
         graph.update_node(pid, is_ending=True)
     return len(terminal)
+
+
+# ---------------------------------------------------------------------------
+# Phase 9c3: Split ending families
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class EndingSplitResult:
+    """Summary of ending family splitting."""
+
+    terminal_passages: int
+    families_created: int
+    passages_already_unique: int
+
+
+def split_ending_families(graph: Graph) -> EndingSplitResult:
+    """Split shared terminal passages into per-arc-family ending passages.
+
+    When multiple arcs with different codeword signatures share the same
+    terminal passage, this function creates distinct ending passages gated
+    by distinguishing codewords.  Each arc family gets its own ending
+    passage so that FILL can write unique prose per family.
+
+    Must run AFTER mark_terminal_passages (Phase 9c2) and AFTER codewords
+    have been created (Phase 8b).
+
+    Args:
+        graph: Story graph with passages, arcs, and codewords.
+
+    Returns:
+        EndingSplitResult with counts.
+    """
+    passages = graph.get_nodes_by_type("passage")
+    arc_nodes = graph.get_nodes_by_type("arc")
+
+    if not passages or not arc_nodes:
+        return EndingSplitResult(0, 0, 0)
+
+    terminal_ids = [pid for pid, data in passages.items() if data.get("is_ending")]
+    if not terminal_ids:
+        return EndingSplitResult(0, 0, 0)
+
+    # Build arc → codeword signature mapping
+    arc_codewords = _build_arc_codewords(graph, arc_nodes)
+
+    # Build beat → covering arcs mapping
+    beat_to_arcs: dict[str, list[str]] = {}
+    for arc_id, data in arc_nodes.items():
+        for beat_id in data.get("sequence", []):
+            beat_to_arcs.setdefault(beat_id, []).append(arc_id)
+
+    families_created = 0
+    already_unique = 0
+
+    for terminal_id in terminal_ids:
+        t_data = passages[terminal_id]
+        from_beat = t_data.get("from_beat") or t_data.get("primary_beat") or ""
+        covering_arcs = beat_to_arcs.get(from_beat, [])
+        if not covering_arcs:
+            if not from_beat:
+                log.debug("terminal_missing_beat", passage=terminal_id)
+            already_unique += 1
+            continue
+
+        # Group arcs by codeword signature
+        sig_to_arcs: dict[frozenset[str], list[str]] = {}
+        for arc_id in covering_arcs:
+            sig = arc_codewords.get(arc_id, frozenset())
+            sig_to_arcs.setdefault(sig, []).append(arc_id)
+
+        if len(sig_to_arcs) <= 1:
+            already_unique += 1
+            continue
+
+        # Multiple families → split
+        raw_id = strip_scope_prefix(terminal_id)
+        graph.update_node(terminal_id, is_ending=False)
+
+        all_sigs = list(sig_to_arcs.keys())
+        for i, (sig, family_arcs) in enumerate(
+            sorted(sig_to_arcs.items(), key=lambda x: sorted(x[0]))
+        ):
+            # Distinguishing codewords: in this family but not in ALL other families
+            other_sigs_intersection = _intersect_all([s for s in all_sigs if s != sig])
+            distinguishing = sorted(sig - other_sigs_intersection)
+
+            if not distinguishing:
+                # Degenerate: families share all codewords but have different
+                # signatures — shouldn't occur, indicates upstream issue
+                log.warning(
+                    "degenerate_ending_split",
+                    terminal=terminal_id,
+                    family_count=len(sig_to_arcs),
+                )
+                distinguishing = sorted(sig)
+
+            ending_pid = f"passage::ending_{raw_id}_{i}"
+            # Ensure unique ID
+            counter = 1
+            while graph.get_node(ending_pid):
+                ending_pid = f"passage::ending_{raw_id}_{i}_{counter}"
+                counter += 1
+
+            summary = t_data.get("summary", "")
+            graph.create_node(
+                ending_pid,
+                {
+                    "type": "passage",
+                    "raw_id": ending_pid.removeprefix("passage::"),
+                    "is_ending": True,
+                    "is_synthetic": True,
+                    "summary": summary,
+                    "family_codewords": distinguishing,
+                    "family_arc_count": len(family_arcs),
+                },
+            )
+
+            # Create gated choice from terminal → ending
+            choice_id = f"choice::{raw_id}__ending_{i}"
+            graph.create_node(
+                choice_id,
+                {
+                    "type": "choice",
+                    "from_passage": terminal_id,
+                    "to_passage": ending_pid,
+                    "requires": distinguishing,
+                    "grants": [],
+                    "label": None,
+                },
+            )
+            graph.add_edge("choice_from", choice_id, terminal_id)
+            graph.add_edge("choice_to", choice_id, ending_pid)
+
+            families_created += 1
+
+        log.info(
+            "ending_split",
+            terminal=terminal_id,
+            families=len(sig_to_arcs),
+        )
+
+    return EndingSplitResult(
+        terminal_passages=len(terminal_ids),
+        families_created=families_created,
+        passages_already_unique=already_unique,
+    )
+
+
+def _build_arc_codewords(
+    graph: Graph,
+    arc_nodes: dict[str, dict[str, Any]],
+) -> dict[str, frozenset[str]]:
+    """Build mapping from arc node ID to its codeword signature.
+
+    Traces: arc → paths → consequences → codewords via graph edges.
+    """
+    # consequence → codeword (via tracks edges: codeword tracks consequence)
+    tracks_edges = graph.get_edges(edge_type="tracks")
+    consequence_to_codeword: dict[str, str] = {}
+    for edge in tracks_edges:
+        consequence_to_codeword[edge["to"]] = edge["from"]
+
+    # path → consequences (via has_consequence edges)
+    has_consequence_edges = graph.get_edges(edge_type="has_consequence")
+    path_consequences: dict[str, list[str]] = {}
+    for edge in has_consequence_edges:
+        path_consequences.setdefault(edge["from"], []).append(edge["to"])
+
+    result: dict[str, frozenset[str]] = {}
+    for arc_id, data in arc_nodes.items():
+        cws: set[str] = set()
+        for path_raw in data.get("paths", []):
+            path_id = normalize_scoped_id(path_raw, "path")
+            for cons_id in path_consequences.get(path_id, []):
+                if cw := consequence_to_codeword.get(cons_id):
+                    cws.add(cw)
+        result[arc_id] = frozenset(cws)
+
+    return result
+
+
+def _intersect_all(sets: list[frozenset[str]]) -> frozenset[str]:
+    """Return the intersection of all frozensets, or empty if list is empty."""
+    if not sets:
+        return frozenset()
+    result = sets[0]
+    for s in sets[1:]:
+        result = result & s
+    return result
 
 
 def _build_collapse_exempt_passages(

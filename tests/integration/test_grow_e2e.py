@@ -186,8 +186,8 @@ class TestGrowFullPipeline:
         assert any(a.get("arc_type") == "spine" for a in result_dict["arcs"])
 
     def test_passages_created(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify passages are created for all beats (10 beats = 10 passages)."""
-        assert len(pipeline_result["result_dict"]["passages"]) == 10
+        """Verify passages are created (10 from beats + 4 ending families)."""
+        assert len(pipeline_result["result_dict"]["passages"]) == 14
 
     def test_codewords_derived(self, pipeline_result: dict[str, Any]) -> None:
         """Verify codewords are created from consequences (4 consequences)."""

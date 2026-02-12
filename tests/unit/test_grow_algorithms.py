@@ -2946,8 +2946,8 @@ class TestPhaseIntegrationEndToEnd:
         assert len(result_dict["arcs"]) == 4  # 2x2 = 4 arcs
         assert any(a.get("arc_type") == "spine" for a in result_dict["arcs"])
 
-        # Should have passages (one per beat)
-        assert len(result_dict["passages"]) == 8  # 8 beats in two-dilemma graph
+        # Should have passages (8 from beats + 4 ending families from split_endings)
+        assert len(result_dict["passages"]) == 12
 
         # Should have codewords (one per consequence)
         assert len(result_dict["codewords"]) == 4  # 4 consequences
@@ -3001,7 +3001,7 @@ class TestPhaseIntegrationEndToEnd:
 
         # Verify node types exist
         assert len(saved_graph.get_nodes_by_type("arc")) == 4
-        assert len(saved_graph.get_nodes_by_type("passage")) == 8
+        assert len(saved_graph.get_nodes_by_type("passage")) == 12  # 8 + 4 ending families
         assert len(saved_graph.get_nodes_by_type("codeword")) == 4
         assert len(saved_graph.get_nodes_by_type("beat")) == 8
         assert len(saved_graph.get_nodes_by_type("dilemma")) == 2
@@ -4779,3 +4779,266 @@ class TestHardPolicyIntersectionRejection:
         # A single beat can't form an intersection, so no candidates expected.
         for c in candidates:
             assert "beat::b1" not in c.beat_ids
+
+
+# ---------------------------------------------------------------------------
+# Phase 9c3: split_ending_families
+# ---------------------------------------------------------------------------
+
+
+class TestSplitEndingFamilies:
+    """Tests for split_ending_families() function."""
+
+    @staticmethod
+    def _make_shared_ending_graph() -> Graph:
+        """Create a graph where 2 arcs with different codewords share 1 terminal passage.
+
+        Structure:
+            dilemma: d1 with 2 paths (canonical + alt)
+            arcs: arc1 (canonical), arc2 (alt)
+            beats: opening (shared), commits_c (path1), commits_a (path2), finale (shared)
+            passages: opening_p, commits_c_p, commits_a_p, finale_p (terminal)
+            codewords: cw_trust (path1), cw_betrayal (path2)
+
+        finale_p is terminal and shared by both arcs.
+        """
+        graph = Graph.empty()
+
+        # Dilemma + paths
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::d1__yes",
+            {
+                "type": "path",
+                "raw_id": "d1__yes",
+                "dilemma_id": "d1",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::d1__no",
+            {
+                "type": "path",
+                "raw_id": "d1__no",
+                "dilemma_id": "d1",
+                "is_canonical": False,
+            },
+        )
+
+        # Beats
+        for bid, paths in [
+            ("opening", ["d1__yes", "d1__no"]),
+            ("commits_c", ["d1__yes"]),
+            ("commits_a", ["d1__no"]),
+            ("finale", ["d1__yes", "d1__no"]),
+        ]:
+            graph.create_node(
+                f"beat::{bid}",
+                {"type": "beat", "raw_id": bid, "summary": f"Beat {bid}", "paths": paths},
+            )
+            for p in paths:
+                graph.add_edge("belongs_to", f"beat::{bid}", f"path::{p}")
+
+        # Consequences + codewords
+        graph.create_node(
+            "consequence::trust",
+            {"type": "consequence", "raw_id": "trust", "path_id": "d1__yes"},
+        )
+        graph.create_node(
+            "consequence::betrayal",
+            {"type": "consequence", "raw_id": "betrayal", "path_id": "d1__no"},
+        )
+        graph.add_edge("has_consequence", "path::d1__yes", "consequence::trust")
+        graph.add_edge("has_consequence", "path::d1__no", "consequence::betrayal")
+        graph.create_node(
+            "codeword::cw_trust",
+            {"type": "codeword", "raw_id": "cw_trust", "tracks": "consequence::trust"},
+        )
+        graph.create_node(
+            "codeword::cw_betrayal",
+            {"type": "codeword", "raw_id": "cw_betrayal", "tracks": "consequence::betrayal"},
+        )
+        graph.add_edge("tracks", "codeword::cw_trust", "consequence::trust")
+        graph.add_edge("tracks", "codeword::cw_betrayal", "consequence::betrayal")
+
+        # Arcs (2 arcs: canonical path, alt path)
+        graph.create_node(
+            "arc::d1__yes",
+            {
+                "type": "arc",
+                "raw_id": "d1__yes",
+                "arc_type": "spine",
+                "paths": ["d1__yes"],
+                "sequence": [
+                    "beat::opening",
+                    "beat::commits_c",
+                    "beat::finale",
+                ],
+            },
+        )
+        graph.create_node(
+            "arc::d1__no",
+            {
+                "type": "arc",
+                "raw_id": "d1__no",
+                "arc_type": "branch",
+                "paths": ["d1__no"],
+                "sequence": [
+                    "beat::opening",
+                    "beat::commits_a",
+                    "beat::finale",
+                ],
+            },
+        )
+
+        # Passages
+        for beat_id in ["opening", "commits_c", "commits_a", "finale"]:
+            pid = f"passage::{beat_id}_p"
+            graph.create_node(
+                pid,
+                {
+                    "type": "passage",
+                    "raw_id": f"{beat_id}_p",
+                    "from_beat": f"beat::{beat_id}",
+                    "summary": f"Passage for {beat_id}",
+                },
+            )
+
+        # Choice edges: opening → commits, commits → finale
+        for from_p, to_p, cid in [
+            ("opening_p", "commits_c_p", "c1"),
+            ("opening_p", "commits_a_p", "c2"),
+            ("commits_c_p", "finale_p", "c3"),
+            ("commits_a_p", "finale_p", "c4"),
+        ]:
+            graph.create_node(
+                f"choice::{cid}",
+                {
+                    "type": "choice",
+                    "from_passage": f"passage::{from_p}",
+                    "to_passage": f"passage::{to_p}",
+                },
+            )
+            graph.add_edge("choice_from", f"choice::{cid}", f"passage::{from_p}")
+            graph.add_edge("choice_to", f"choice::{cid}", f"passage::{to_p}")
+
+        # Mark finale as ending
+        graph.update_node("passage::finale_p", is_ending=True)
+
+        return graph
+
+    def test_splits_shared_terminal(self) -> None:
+        """When 2 arcs with different codewords share a terminal, split into 2 endings."""
+        from questfoundry.graph.grow_algorithms import split_ending_families
+
+        graph = self._make_shared_ending_graph()
+
+        result = split_ending_families(graph)
+
+        assert result.terminal_passages == 1
+        assert result.families_created == 2
+        assert result.passages_already_unique == 0
+
+        # Original terminal should no longer be an ending
+        assert graph.get_node("passage::finale_p").get("is_ending") is False
+
+        # Two new ending passages should exist
+        endings = {
+            pid: data
+            for pid, data in graph.get_nodes_by_type("passage").items()
+            if data.get("is_ending")
+        }
+        assert len(endings) == 2
+
+        # Each ending should be synthetic with family codewords
+        for _pid, data in endings.items():
+            assert data.get("is_synthetic") is True
+            assert data.get("family_codewords")
+            assert data.get("family_arc_count") == 1
+
+        # Codeword gating: one ending requires cw_trust, other requires cw_betrayal
+        ending_codewords = {frozenset(data["family_codewords"]) for data in endings.values()}
+        assert frozenset(["codeword::cw_trust"]) in ending_codewords
+        assert frozenset(["codeword::cw_betrayal"]) in ending_codewords
+
+    def test_single_family_no_split(self) -> None:
+        """When all arcs share the same codewords, no splitting occurs."""
+        from questfoundry.graph.grow_algorithms import split_ending_families
+
+        graph = Graph.empty()
+        # 1 arc, 1 terminal passage
+        graph.create_node(
+            "arc::only",
+            {
+                "type": "arc",
+                "raw_id": "only",
+                "arc_type": "spine",
+                "paths": ["p1"],
+                "sequence": ["beat::b1"],
+            },
+        )
+        graph.create_node(
+            "beat::b1",
+            {"type": "beat", "raw_id": "b1", "summary": "End"},
+        )
+        graph.create_node(
+            "passage::p1",
+            {
+                "type": "passage",
+                "raw_id": "p1",
+                "from_beat": "beat::b1",
+                "is_ending": True,
+            },
+        )
+
+        result = split_ending_families(graph)
+
+        assert result.families_created == 0
+        assert result.passages_already_unique == 1
+        # Original passage still an ending
+        assert graph.get_node("passage::p1").get("is_ending") is True
+
+    def test_no_terminal_passages(self) -> None:
+        """When no passages are marked as ending, no splitting occurs."""
+        from questfoundry.graph.grow_algorithms import split_ending_families
+
+        graph = Graph.empty()
+        graph.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
+        )
+
+        result = split_ending_families(graph)
+
+        assert result.terminal_passages == 0
+        assert result.families_created == 0
+
+    def test_empty_graph(self) -> None:
+        """Empty graph returns zero counts."""
+        from questfoundry.graph.grow_algorithms import split_ending_families
+
+        graph = Graph.empty()
+        result = split_ending_families(graph)
+        assert result.terminal_passages == 0
+        assert result.families_created == 0
+        assert result.passages_already_unique == 0
+
+    def test_choice_edges_wired_correctly(self) -> None:
+        """Verify choice edges connect terminal passage to new endings."""
+        from questfoundry.graph.grow_algorithms import split_ending_families
+
+        graph = self._make_shared_ending_graph()
+        split_ending_families(graph)
+
+        # Terminal passage should now have outgoing choices
+        choice_from_edges = graph.get_edges(edge_type="choice_from", to_id="passage::finale_p")
+        assert len(choice_from_edges) >= 2
+
+        # Each choice should point to an ending passage
+        for edge in choice_from_edges:
+            choice_id = edge["from"]
+            choice_to = graph.get_edges(edge_type="choice_to", from_id=choice_id)
+            assert len(choice_to) == 1
+            target = choice_to[0]["to"]
+            target_data = graph.get_node(target)
+            assert target_data.get("is_ending") is True
