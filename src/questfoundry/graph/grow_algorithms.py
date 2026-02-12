@@ -1300,11 +1300,7 @@ def _compute_per_dilemma_convergence(
             converges_at = _find_convergence_for_soft(filtered_branch, filtered_spine, dp.budget)
         else:
             # flavor: first shared beat
-            converges_at = None
-            for beat_id in filtered_branch:
-                if beat_id in filtered_spine:
-                    converges_at = beat_id
-                    break
+            converges_at = next((b for b in filtered_branch if b in filtered_spine), None)
 
         results.append(
             DilemmaConvergence(
@@ -1413,14 +1409,12 @@ def find_convergence_points(
             # Arc-level converges_at = earliest non-None per-dilemma convergence
             non_none = [dc for dc in per_dilemma if dc.converges_at]
             if non_none:
-                converges_at = min(
-                    non_none,
-                    key=lambda dc: (
-                        branch_after_div.index(dc.converges_at)
-                        if dc.converges_at in branch_after_div
-                        else len(branch_after_div)
-                    ),
-                ).converges_at
+
+                def _beat_index(dc: DilemmaConvergence, seq: list[str] = branch_after_div) -> int:
+                    at = dc.converges_at
+                    return seq.index(at) if at and at in seq else len(seq)
+
+                converges_at = min(non_none, key=_beat_index).converges_at
 
         result[arc.arc_id] = ConvergenceInfo(
             arc_id=arc.arc_id,
