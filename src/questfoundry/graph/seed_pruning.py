@@ -16,9 +16,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from questfoundry.graph.context import get_default_answer_from_graph, strip_scope_prefix
-from questfoundry.graph.dilemma_scoring import select_dilemmas_for_full_exploration
+from questfoundry.graph.dilemma_scoring import score_dilemma, select_dilemmas_for_full_exploration
 from questfoundry.models.seed import (
     Consequence,
+    DilemmaAnalysis,
     DilemmaDecision,
     InitialBeat,
     Path,
@@ -56,6 +57,7 @@ def prune_to_arc_limit(
     seed_output: SeedOutput,
     max_arcs: int = 16,
     graph: Graph | None = None,
+    dilemma_analyses: list[DilemmaAnalysis] | None = None,
 ) -> SeedOutput:
     """Prune seed output to stay within arc count limits.
 
@@ -63,27 +65,39 @@ def prune_to_arc_limit(
     It uses programmatic scoring to select the best dilemmas and prunes
     the rest.
 
+    When ``dilemma_analyses`` are provided (from Section 7), pruning is
+    **policy-aware**: only ``hard`` dilemmas count toward the arc limit
+    (since ``soft``/``flavor`` converge back and don't multiply endings).
+    Non-hard dilemmas are kept explored up to a computational budget.
+
     Args:
         seed_output: The full SEED output (potentially over-generated).
         max_arcs: Maximum number of arcs to allow (default 16 = 4 fully explored).
         graph: Story graph for looking up canonical answers via is_default_path.
+        dilemma_analyses: Section 7 convergence classifications (enables
+            policy-aware pruning when provided).
 
     Returns:
         Pruned SeedOutput with arc count within limits.
     """
     import math
 
-    max_fully_explored = int(math.log2(max_arcs)) if max_arcs > 1 else 0
+    max_hard = int(math.log2(max_arcs)) if max_arcs > 1 else 0
 
-    # Select dilemmas to keep fully explored
+    # Build policy lookup from analyses
+    policy_lookup = _build_policy_lookup(dilemma_analyses) if dilemma_analyses else {}
+
+    if policy_lookup:
+        return _policy_aware_prune(seed_output, max_hard, policy_lookup, graph)
+
+    # Fallback: no policy info, use original behavior
     selected, demoted = select_dilemmas_for_full_exploration(
         seed_output,
-        max_fully_explored=max_fully_explored,
+        max_fully_explored=max_hard,
         graph=graph,
     )
 
     if not demoted:
-        # Nothing to prune
         log.debug(
             "seed_pruning_skipped",
             reason="within_arc_limit",
@@ -91,7 +105,87 @@ def prune_to_arc_limit(
         )
         return seed_output
 
-    # Prune the output
+    return _prune_demoted_dilemmas(seed_output, set(demoted), graph=graph)
+
+
+def _build_policy_lookup(
+    analyses: list[DilemmaAnalysis],
+) -> dict[str, str]:
+    """Build dilemma_id → convergence_policy lookup from analyses."""
+    return {strip_scope_prefix(a.dilemma_id): a.convergence_policy for a in analyses}
+
+
+# Maximum total explored dilemmas (hard + soft + flavor) to prevent
+# combinatorial explosion in GROW arc enumeration (2^n).
+_MAX_TOTAL_EXPLORED = 8
+
+
+def _policy_aware_prune(
+    seed_output: SeedOutput,
+    max_hard: int,
+    policy_lookup: dict[str, str],
+    graph: Graph | None = None,
+) -> SeedOutput:
+    """Prune with policy awareness: hard dilemmas get priority.
+
+    Only ``hard`` dilemmas count toward the ending limit (max_hard).
+    ``soft`` and ``flavor`` dilemmas are kept explored up to a total
+    budget (_MAX_TOTAL_EXPLORED) to prevent arc enumeration explosion.
+
+    Demotion priority: flavor first, then soft, then hard (by score).
+    """
+    # Identify dilemmas with 2+ paths
+    paths_per_dilemma: dict[str, int] = {}
+    for path in seed_output.paths:
+        did = strip_scope_prefix(path.dilemma_id)
+        paths_per_dilemma[did] = paths_per_dilemma.get(did, 0) + 1
+
+    multi_path_ids = [did for did, count in paths_per_dilemma.items() if count >= 2]
+
+    # Separate by policy
+    hard_ids = [d for d in multi_path_ids if policy_lookup.get(d) == "hard"]
+    soft_ids = [d for d in multi_path_ids if policy_lookup.get(d) == "soft"]
+    flavor_ids = [d for d in multi_path_ids if policy_lookup.get(d) == "flavor"]
+    # Unclassified dilemmas treated as soft (conservative)
+    unclassified = [d for d in multi_path_ids if d not in policy_lookup]
+    soft_ids.extend(unclassified)
+
+    # Score for ranking within each group
+    scores = {did: score_dilemma(seed_output, did, graph).score for did in multi_path_ids}
+
+    # Sort each group by score descending (best first)
+    hard_ids.sort(key=lambda d: scores.get(d, 0.0), reverse=True)
+    soft_ids.sort(key=lambda d: scores.get(d, 0.0), reverse=True)
+    flavor_ids.sort(key=lambda d: scores.get(d, 0.0), reverse=True)
+
+    # Select: keep top max_hard hard dilemmas
+    kept_hard = hard_ids[:max_hard]
+    demoted_hard = hard_ids[max_hard:]
+
+    # Fill remaining budget with soft, then flavor
+    remaining_budget = _MAX_TOTAL_EXPLORED - len(kept_hard)
+    kept_soft = soft_ids[:remaining_budget]
+    remaining_budget -= len(kept_soft)
+    kept_flavor = flavor_ids[:remaining_budget]
+
+    demoted_soft = soft_ids[len(kept_soft) :]
+    demoted_flavor = flavor_ids[len(kept_flavor) :]
+    demoted = demoted_hard + demoted_soft + demoted_flavor
+
+    log.info(
+        "policy_aware_pruning",
+        hard_kept=len(kept_hard),
+        hard_demoted=len(demoted_hard),
+        soft_kept=len(kept_soft),
+        soft_demoted=len(demoted_soft),
+        flavor_kept=len(kept_flavor),
+        flavor_demoted=len(demoted_flavor),
+        total_explored=len(kept_hard) + len(kept_soft) + len(kept_flavor),
+    )
+
+    if not demoted:
+        return seed_output
+
     return _prune_demoted_dilemmas(seed_output, set(demoted), graph=graph)
 
 
