@@ -26,7 +26,7 @@ from questfoundry.graph.grow_validation import (
     check_spine_arc_exists,
     run_all_checks,
 )
-from questfoundry.pipeline.stages.grow import GrowStage
+from questfoundry.pipeline.stages.grow.deterministic import phase_validation
 
 
 def _make_linear_passage_graph() -> Graph:
@@ -866,10 +866,8 @@ class TestPhase10Integration:
     async def test_phase_10_valid_graph(self) -> None:
         """Phase 10 passes on a valid linear passage graph."""
         graph = _make_linear_passage_graph()
-        stage = GrowStage()
-        mock_model = MagicMock()
 
-        result = await stage._phase_10_validation(graph, mock_model)
+        result = await phase_validation(graph, MagicMock())
         assert result.status == "completed"
         assert result.phase == "validation"
 
@@ -889,10 +887,7 @@ class TestPhase10Integration:
         )
         # Neither has incoming edges → multiple starts
 
-        stage = GrowStage()
-        mock_model = MagicMock()
-
-        result = await stage._phase_10_validation(graph, mock_model)
+        result = await phase_validation(graph, MagicMock())
         assert result.status == "failed"
         assert "failed" in result.detail
 
@@ -936,10 +931,7 @@ class TestPhase10Integration:
             paths=["path::d1__a1", "path::th1"],
         )
 
-        stage = GrowStage()
-        mock_model = MagicMock()
-
-        result = await stage._phase_10_validation(graph, mock_model)
+        result = await phase_validation(graph, MagicMock())
         # Should pass but with warnings
         assert result.status == "completed"
         assert "warnings" in result.detail

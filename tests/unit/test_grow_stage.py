@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -296,15 +296,20 @@ class TestGrowStagePhaseFailed:
     async def test_failed_phase_raises_mutation_error(
         self, tmp_project: Path, mock_model: MagicMock
     ) -> None:
-        stage = GrowStage(project_path=tmp_project)
+        from unittest.mock import patch
 
-        # Override a phase to return failed
-        async def failing_phase(_graph: MagicMock, _model: MagicMock) -> GrowPhaseResult:
+        async def failing_phase(_graph: Any, _model: Any) -> GrowPhaseResult:
             return GrowPhaseResult(phase="validate_dag", status="failed", detail="cycle detected")
 
-        stage._phase_1_validate_dag = failing_phase  # type: ignore[assignment]
+        stage = GrowStage(project_path=tmp_project)
 
-        with pytest.raises(GrowMutationError, match="cycle detected"):
+        with (
+            patch(
+                "questfoundry.pipeline.stages.grow.stage.phase_validate_dag",
+                new=failing_phase,
+            ),
+            pytest.raises(GrowMutationError, match="cycle detected"),
+        ):
             await stage.execute(model=mock_model, user_prompt="")
 
 
