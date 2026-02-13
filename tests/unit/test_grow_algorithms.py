@@ -23,6 +23,15 @@ from questfoundry.graph.grow_algorithms import (
 )
 from questfoundry.graph.mutations import GrowErrorCategory
 from questfoundry.models.grow import Arc
+from questfoundry.pipeline.stages.grow.deterministic import (
+    phase_codewords,
+    phase_convergence,
+    phase_divergence,
+    phase_enumerate_arcs,
+    phase_passages,
+    phase_prune,
+    phase_validate_dag,
+)
 from tests.fixtures.grow_fixtures import (
     make_single_dilemma_graph,
     make_two_dilemma_graph,
@@ -723,9 +732,9 @@ class TestPhase1Integration:
         graph = make_single_dilemma_graph()
         graph.save(tmp_path / "graph.json")
 
-        stage = GrowStage(project_path=tmp_path)
+        GrowStage(project_path=tmp_path)
         mock_model = MagicMock()
-        result = await stage._phase_1_validate_dag(Graph.load(tmp_path), mock_model)
+        result = await phase_validate_dag(Graph.load(tmp_path), mock_model)
         assert result.status == "completed"
 
     @pytest.mark.asyncio
@@ -738,9 +747,9 @@ class TestPhase1Integration:
         graph.add_edge("requires", "beat::b", "beat::a")
         graph.add_edge("requires", "beat::a", "beat::b")
 
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_1_validate_dag(graph, mock_model)
+        result = await phase_validate_dag(graph, mock_model)
         assert result.status == "failed"
         assert "Cycle" in result.detail
 
@@ -751,9 +760,9 @@ class TestPhase5Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_5_enumerate_arcs(graph, mock_model)
+        result = await phase_enumerate_arcs(graph, mock_model)
 
         assert result.status == "completed"
         arc_nodes = graph.get_nodes_by_type("arc")
@@ -764,9 +773,9 @@ class TestPhase5Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        await stage._phase_5_enumerate_arcs(graph, mock_model)
+        await phase_enumerate_arcs(graph, mock_model)
 
         arc_contains_edges = graph.get_edges(from_id=None, to_id=None, edge_type="arc_contains")
         assert len(arc_contains_edges) > 0
@@ -776,9 +785,9 @@ class TestPhase5Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_5_enumerate_arcs(graph, mock_model)
+        result = await phase_enumerate_arcs(graph, mock_model)
         assert result.status == "completed"
         assert "No arcs" in result.detail
 
@@ -789,14 +798,14 @@ class TestPhase6Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
 
         # First run phase 5 to create arcs
-        await stage._phase_5_enumerate_arcs(graph, mock_model)
+        await phase_enumerate_arcs(graph, mock_model)
 
         # Then run phase 6
-        result = await stage._phase_6_divergence(graph, mock_model)
+        result = await phase_divergence(graph, mock_model)
         assert result.status == "completed"
 
         # Check that branch arc has divergence info
@@ -810,10 +819,10 @@ class TestPhase6Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        await stage._phase_5_enumerate_arcs(graph, mock_model)
-        await stage._phase_6_divergence(graph, mock_model)
+        await phase_enumerate_arcs(graph, mock_model)
+        await phase_divergence(graph, mock_model)
 
         diverges_edges = graph.get_edges(from_id=None, to_id=None, edge_type="diverges_at")
         # Should have at least one diverges_at edge for the branch
@@ -824,9 +833,9 @@ class TestPhase6Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_6_divergence(graph, mock_model)
+        result = await phase_divergence(graph, mock_model)
         assert result.status == "completed"
         assert "No arcs" in result.detail
 
@@ -1938,15 +1947,15 @@ class TestPhase7Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
 
         # Run prerequisite phases
-        await stage._phase_5_enumerate_arcs(graph, mock_model)
-        await stage._phase_6_divergence(graph, mock_model)
+        await phase_enumerate_arcs(graph, mock_model)
+        await phase_divergence(graph, mock_model)
 
         # Run phase 7
-        result = await stage._phase_7_convergence(graph, mock_model)
+        result = await phase_convergence(graph, mock_model)
         assert result.status == "completed"
 
     @pytest.mark.asyncio
@@ -1958,11 +1967,11 @@ class TestPhase7Integration:
         # (each dilemma has exactly 1 exclusive beat in the fixture)
         graph.update_node("dilemma::mentor_trust", convergence_policy="soft", payoff_budget=1)
         graph.update_node("dilemma::artifact_quest", convergence_policy="soft", payoff_budget=1)
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        await stage._phase_5_enumerate_arcs(graph, mock_model)
-        await stage._phase_6_divergence(graph, mock_model)
-        await stage._phase_7_convergence(graph, mock_model)
+        await phase_enumerate_arcs(graph, mock_model)
+        await phase_divergence(graph, mock_model)
+        await phase_convergence(graph, mock_model)
 
         converges_edges = graph.get_edges(from_id=None, to_id=None, edge_type="converges_at")
         # Two-dilemma graph: branches converge at finale
@@ -1973,9 +1982,9 @@ class TestPhase7Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_7_convergence(graph, mock_model)
+        result = await phase_convergence(graph, mock_model)
         assert result.status == "completed"
         assert "No arcs" in result.detail
 
@@ -1987,11 +1996,11 @@ class TestPhase7Integration:
         # Set budget=1 so per-dilemma convergence can be met
         graph.update_node("dilemma::mentor_trust", convergence_policy="soft", payoff_budget=1)
         graph.update_node("dilemma::artifact_quest", convergence_policy="soft", payoff_budget=1)
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        await stage._phase_5_enumerate_arcs(graph, mock_model)
-        await stage._phase_6_divergence(graph, mock_model)
-        await stage._phase_7_convergence(graph, mock_model)
+        await phase_enumerate_arcs(graph, mock_model)
+        await phase_divergence(graph, mock_model)
+        await phase_convergence(graph, mock_model)
 
         arc_nodes = graph.get_nodes_by_type("arc")
         # Check that at least some branch arcs have convergence data
@@ -2007,9 +2016,9 @@ class TestPhase8aIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_8a_passages(graph, mock_model)
+        result = await phase_passages(graph, mock_model)
 
         assert result.status == "completed"
         beat_nodes = graph.get_nodes_by_type("beat")
@@ -2022,9 +2031,9 @@ class TestPhase8aIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        await stage._phase_8a_passages(graph, mock_model)
+        await phase_passages(graph, mock_model)
 
         passage_nodes = graph.get_nodes_by_type("passage")
         for _pid, pdata in passage_nodes.items():
@@ -2038,9 +2047,9 @@ class TestPhase8aIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        await stage._phase_8a_passages(graph, mock_model)
+        await phase_passages(graph, mock_model)
 
         passage_from_edges = graph.get_edges(from_id=None, to_id=None, edge_type="passage_from")
         passage_nodes = graph.get_nodes_by_type("passage")
@@ -2051,9 +2060,9 @@ class TestPhase8aIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_8a_passages(graph, mock_model)
+        result = await phase_passages(graph, mock_model)
 
         assert result.status == "completed"
         assert "8 passages" in result.detail
@@ -2063,9 +2072,9 @@ class TestPhase8aIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_8a_passages(graph, mock_model)
+        result = await phase_passages(graph, mock_model)
         assert result.status == "completed"
         assert "No beats" in result.detail
 
@@ -2076,9 +2085,9 @@ class TestPhase8bIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_8b_codewords(graph, mock_model)
+        result = await phase_codewords(graph, mock_model)
 
         assert result.status == "completed"
         consequence_nodes = graph.get_nodes_by_type("consequence")
@@ -2090,9 +2099,9 @@ class TestPhase8bIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        await stage._phase_8b_codewords(graph, mock_model)
+        await phase_codewords(graph, mock_model)
 
         tracks_edges = graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
         codeword_nodes = graph.get_nodes_by_type("codeword")
@@ -2103,9 +2112,9 @@ class TestPhase8bIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        await stage._phase_8b_codewords(graph, mock_model)
+        await phase_codewords(graph, mock_model)
 
         grants_edges = graph.get_edges(from_id=None, to_id=None, edge_type="grants")
         # Each consequence has a path which has a commits beat
@@ -2122,9 +2131,9 @@ class TestPhase8bIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        await stage._phase_8b_codewords(graph, mock_model)
+        await phase_codewords(graph, mock_model)
 
         codeword_nodes = graph.get_nodes_by_type("codeword")
         for cw_id in codeword_nodes:
@@ -2137,9 +2146,9 @@ class TestPhase8bIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_8b_codewords(graph, mock_model)
+        result = await phase_codewords(graph, mock_model)
 
         assert result.status == "completed"
         codeword_nodes = graph.get_nodes_by_type("codeword")
@@ -2151,9 +2160,9 @@ class TestPhase8bIntegration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_8b_codewords(graph, mock_model)
+        result = await phase_codewords(graph, mock_model)
         assert result.status == "completed"
         assert "No consequences" in result.detail
 
@@ -2164,14 +2173,14 @@ class TestPhase11Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
 
         # Run phases 5 and 8a to create arcs and passages
-        await stage._phase_5_enumerate_arcs(graph, mock_model)
-        await stage._phase_8a_passages(graph, mock_model)
+        await phase_enumerate_arcs(graph, mock_model)
+        await phase_passages(graph, mock_model)
 
-        result = await stage._phase_11_prune(graph, mock_model)
+        result = await phase_prune(graph, mock_model)
         assert result.status == "completed"
         assert "All passages reachable" in result.detail
 
@@ -2180,13 +2189,13 @@ class TestPhase11Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
 
         # Run phase 5 to create arcs
-        await stage._phase_5_enumerate_arcs(graph, mock_model)
+        await phase_enumerate_arcs(graph, mock_model)
         # Run phase 8a to create passages
-        await stage._phase_8a_passages(graph, mock_model)
+        await phase_passages(graph, mock_model)
 
         # Manually create an orphan passage not connected to any arc beat
         graph.create_node(
@@ -2199,7 +2208,7 @@ class TestPhase11Integration:
             },
         )
 
-        result = await stage._phase_11_prune(graph, mock_model)
+        result = await phase_prune(graph, mock_model)
         assert result.status == "completed"
         assert "Pruned 1" in result.detail
 
@@ -2212,10 +2221,10 @@ class TestPhase11Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        await stage._phase_5_enumerate_arcs(graph, mock_model)
-        await stage._phase_8a_passages(graph, mock_model)
+        await phase_enumerate_arcs(graph, mock_model)
+        await phase_passages(graph, mock_model)
 
         # Add orphan
         graph.create_node(
@@ -2229,7 +2238,7 @@ class TestPhase11Integration:
         )
 
         beat_count = len(graph.get_nodes_by_type("beat"))
-        await stage._phase_11_prune(graph, mock_model)
+        await phase_prune(graph, mock_model)
 
         # Original passages should still exist (one per beat)
         passage_nodes = graph.get_nodes_by_type("passage")
@@ -2240,9 +2249,9 @@ class TestPhase11Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_11_prune(graph, mock_model)
+        result = await phase_prune(graph, mock_model)
         assert result.status == "completed"
         assert "No passages" in result.detail
 
@@ -2298,9 +2307,9 @@ class TestPhase11Integration:
         graph.add_edge("choice_from", "choice::a_b", "passage::a")
         graph.add_edge("choice_to", "choice::a_b", "passage::b")
 
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_11_prune(graph, mock_model)
+        result = await phase_prune(graph, mock_model)
 
         assert result.status == "completed"
         assert "Pruned 1" in result.detail
@@ -2436,9 +2445,9 @@ class TestPhase11Integration:
         graph.add_edge("choice_from", "choice::spine_continue", "passage::spine_1")
         graph.add_edge("choice_to", "choice::spine_continue", "passage::spine_2")
 
-        stage = GrowStage()
+        GrowStage()
         mock_model = MagicMock()
-        result = await stage._phase_11_prune(graph, mock_model)
+        result = await phase_prune(graph, mock_model)
 
         assert result.status == "completed"
         assert "All passages reachable" in result.detail
