@@ -698,7 +698,8 @@ class PipelineOrchestrator:
             if not validation_errors and has_mutation_handler(stage_name):
                 try:
                     graph = _load_graph_for_mutation(self.project_path, stage_name)
-                    apply_mutations(graph, stage_name, artifact_data)
+                    with graph.mutation_context(stage=stage_name):
+                        apply_mutations(graph, stage_name, artifact_data)
 
                     # Post-mutation invariant check - catches code bugs, not LLM errors
                     violations = graph.validate_invariants()

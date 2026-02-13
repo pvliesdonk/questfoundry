@@ -337,9 +337,10 @@ class DressStage:
 
             self._save_checkpoint(graph, resolved_path, phase_name)
             log.debug("phase_start", phase=phase_name)
-            snapshot = graph.to_dict()
+            graph.savepoint(phase_name)
 
-            result = await phase_fn(graph, model)
+            with graph.mutation_context(stage="dress", phase=phase_name):
+                result = await phase_fn(graph, model)
             phase_results.append(result)
             total_llm_calls += result.llm_calls
             total_tokens += result.tokens_used
@@ -352,11 +353,12 @@ class DressStage:
             decision = await self.gate.on_phase_complete("dress", phase_name, result)
             if decision == "reject":
                 log.info("phase_rejected", phase=phase_name)
-                graph = Graph.from_dict(snapshot)
+                graph.rollback_to(phase_name)
                 graph.save(resolved_path / "graph.json")
                 completed_normally = False
                 break
 
+            graph.release(phase_name)
             log.debug("phase_complete", phase=phase_name, status=result.status)
 
             if on_phase_progress is not None:
