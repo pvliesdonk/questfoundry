@@ -5251,3 +5251,382 @@ class TestSplitEndingFamilies:
         }
         for _pid, data in endings.items():
             assert "ending_tone" not in data
+
+
+class TestFindResidueCandidates:
+    """Tests for find_residue_candidates()."""
+
+    @staticmethod
+    def _make_convergence_graph(policy: str = "soft") -> Graph:
+        """Create a graph with convergence metadata for residue candidate testing.
+
+        Structure:
+            dilemma: d1 (question="Trust or betray?") with 2 paths
+            arcs: spine (d1__yes), branch (d1__no)
+            beats: opening (shared), commits_yes (path1), commits_no (path2),
+                   converge (shared = convergence point)
+            passages: for each beat
+            codewords: cw_yes_committed (path1), cw_no_committed (path2)
+            convergence: branch converges at beat::converge with given policy
+        """
+        graph = Graph.empty()
+
+        # Dilemma + paths
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "question": "Trust or betray?"},
+        )
+        graph.create_node(
+            "path::d1__yes",
+            {"type": "path", "raw_id": "d1__yes", "dilemma_id": "d1", "is_canonical": True},
+        )
+        graph.create_node(
+            "path::d1__no",
+            {"type": "path", "raw_id": "d1__no", "dilemma_id": "d1", "is_canonical": False},
+        )
+
+        # Beats
+        for bid, paths in [
+            ("opening", ["d1__yes", "d1__no"]),
+            ("commits_yes", ["d1__yes"]),
+            ("commits_no", ["d1__no"]),
+            ("converge", ["d1__yes", "d1__no"]),
+        ]:
+            graph.create_node(
+                f"beat::{bid}",
+                {"type": "beat", "raw_id": bid, "summary": f"Beat {bid}"},
+            )
+            for p in paths:
+                graph.add_edge("belongs_to", f"beat::{bid}", f"path::{p}")
+
+        # Consequences + codewords
+        graph.create_node(
+            "consequence::yes_result",
+            {"type": "consequence", "raw_id": "yes_result", "path_id": "d1__yes"},
+        )
+        graph.create_node(
+            "consequence::no_result",
+            {"type": "consequence", "raw_id": "no_result", "path_id": "d1__no"},
+        )
+        graph.add_edge("has_consequence", "path::d1__yes", "consequence::yes_result")
+        graph.add_edge("has_consequence", "path::d1__no", "consequence::no_result")
+        graph.create_node(
+            "codeword::yes_result_committed",
+            {
+                "type": "codeword",
+                "raw_id": "yes_result_committed",
+                "tracks": "consequence::yes_result",
+            },
+        )
+        graph.create_node(
+            "codeword::no_result_committed",
+            {
+                "type": "codeword",
+                "raw_id": "no_result_committed",
+                "tracks": "consequence::no_result",
+            },
+        )
+        graph.add_edge("tracks", "codeword::yes_result_committed", "consequence::yes_result")
+        graph.add_edge("tracks", "codeword::no_result_committed", "consequence::no_result")
+
+        # Passages
+        for beat_id in ["opening", "commits_yes", "commits_no", "converge"]:
+            graph.create_node(
+                f"passage::{beat_id}",
+                {
+                    "type": "passage",
+                    "raw_id": beat_id,
+                    "from_beat": f"beat::{beat_id}",
+                    "summary": f"Passage for {beat_id}",
+                },
+            )
+
+        # Arcs with convergence metadata
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["d1__yes"],
+                "sequence": ["beat::opening", "beat::commits_yes", "beat::converge"],
+            },
+        )
+        graph.create_node(
+            "arc::branch",
+            {
+                "type": "arc",
+                "raw_id": "branch",
+                "arc_type": "branch",
+                "paths": ["d1__no"],
+                "sequence": ["beat::opening", "beat::commits_no", "beat::converge"],
+                "convergence_policy": policy,
+                "dilemma_convergences": [
+                    {
+                        "dilemma_id": "dilemma::d1",
+                        "policy": policy,
+                        "budget": 3,
+                        "converges_at": "beat::converge",
+                    }
+                ],
+            },
+        )
+        return graph
+
+    def test_soft_dilemma_found(self) -> None:
+        from questfoundry.graph.grow_algorithms import find_residue_candidates
+
+        graph = self._make_convergence_graph(policy="soft")
+        candidates = find_residue_candidates(graph)
+        assert len(candidates) == 1
+        assert candidates[0].passage_id == "passage::converge"
+        assert candidates[0].dilemma_id == "dilemma::d1"
+        assert candidates[0].convergence_policy == "soft"
+        assert len(candidates[0].codeword_ids) == 2
+        assert candidates[0].dilemma_question == "Trust or betray?"
+
+    def test_flavor_dilemma_found(self) -> None:
+        from questfoundry.graph.grow_algorithms import find_residue_candidates
+
+        graph = self._make_convergence_graph(policy="flavor")
+        candidates = find_residue_candidates(graph)
+        assert len(candidates) == 1
+        assert candidates[0].convergence_policy == "flavor"
+
+    def test_hard_dilemma_excluded(self) -> None:
+        from questfoundry.graph.grow_algorithms import find_residue_candidates
+
+        graph = self._make_convergence_graph(policy="hard")
+        candidates = find_residue_candidates(graph)
+        assert len(candidates) == 0
+
+    def test_empty_graph(self) -> None:
+        from questfoundry.graph.grow_algorithms import find_residue_candidates
+
+        graph = Graph.empty()
+        candidates = find_residue_candidates(graph)
+        assert candidates == []
+
+    def test_dedup_by_passage_and_dilemma(self) -> None:
+        """Multiple arcs converging at the same passage for the same dilemma produce one candidate."""
+        from questfoundry.graph.grow_algorithms import find_residue_candidates
+
+        graph = self._make_convergence_graph(policy="soft")
+        # Add a second branch arc converging at the same beat for the same dilemma
+        graph.create_node(
+            "arc::branch2",
+            {
+                "type": "arc",
+                "raw_id": "branch2",
+                "arc_type": "branch",
+                "paths": ["d1__no"],
+                "sequence": ["beat::opening", "beat::commits_no", "beat::converge"],
+                "dilemma_convergences": [
+                    {
+                        "dilemma_id": "dilemma::d1",
+                        "policy": "soft",
+                        "budget": 3,
+                        "converges_at": "beat::converge",
+                    }
+                ],
+            },
+        )
+        candidates = find_residue_candidates(graph)
+        assert len(candidates) == 1  # Deduped
+
+    def test_single_path_dilemma_excluded(self) -> None:
+        """Dilemma with only one codeword produces no candidates."""
+        from questfoundry.graph.grow_algorithms import find_residue_candidates
+
+        graph = self._make_convergence_graph(policy="soft")
+        # Remove the second consequence and codeword
+        graph.delete_node("codeword::no_result_committed", cascade=True)
+        graph.delete_node("consequence::no_result", cascade=True)
+        candidates = find_residue_candidates(graph)
+        assert len(candidates) == 0
+
+
+class TestCreateResiduePassages:
+    """Tests for create_residue_passages()."""
+
+    @staticmethod
+    def _make_base_graph() -> Graph:
+        """Create a minimal graph with a base passage and codewords."""
+        graph = Graph.empty()
+        graph.create_node(
+            "passage::aftermath",
+            {
+                "type": "passage",
+                "raw_id": "aftermath",
+                "from_beat": "beat::aftermath",
+                "summary": "The dust settles after the confrontation",
+                "entities": ["entity::hero"],
+            },
+        )
+        graph.create_node(
+            "codeword::fight_committed",
+            {"type": "codeword", "raw_id": "fight_committed", "tracks": "consequence::fight"},
+        )
+        graph.create_node(
+            "codeword::argue_committed",
+            {"type": "codeword", "raw_id": "argue_committed", "tracks": "consequence::argue"},
+        )
+        return graph
+
+    def test_creates_variant_passages(self) -> None:
+        from questfoundry.graph.grow_algorithms import create_residue_passages
+
+        graph = self._make_base_graph()
+        proposals = [
+            {
+                "passage_id": "passage::aftermath",
+                "dilemma_id": "dilemma::approach",
+                "variants": [
+                    {
+                        "codeword_id": "codeword::fight_committed",
+                        "hint": "mention the bruises from the fight",
+                    },
+                    {
+                        "codeword_id": "codeword::argue_committed",
+                        "hint": "mention the strained voices from the argument",
+                    },
+                ],
+            }
+        ]
+        result = create_residue_passages(graph, proposals)
+        assert result.proposals_applied == 1
+        assert result.variants_created == 2
+        assert result.proposals_skipped == 0
+
+        # Check variant passages exist with correct metadata
+        passages = graph.get_nodes_by_type("passage")
+        residue_passages = {pid: data for pid, data in passages.items() if data.get("is_residue")}
+        assert len(residue_passages) == 2
+
+        for _pid, data in residue_passages.items():
+            assert data["is_residue"] is True
+            assert data["is_synthetic"] is True
+            assert data["residue_for"] == "passage::aftermath"
+            assert data["residue_dilemma"] == "dilemma::approach"
+            assert data["residue_codeword"] in {
+                "codeword::fight_committed",
+                "codeword::argue_committed",
+            }
+            assert data["residue_hint"] != ""
+            # Inherited from base
+            assert data["summary"] == "The dust settles after the confrontation"
+            assert data["entities"] == ["entity::hero"]
+
+    def test_base_passage_preserved(self) -> None:
+        from questfoundry.graph.grow_algorithms import create_residue_passages
+
+        graph = self._make_base_graph()
+        proposals = [
+            {
+                "passage_id": "passage::aftermath",
+                "dilemma_id": "dilemma::approach",
+                "variants": [
+                    {
+                        "codeword_id": "codeword::fight_committed",
+                        "hint": "mention the bruises from the fight",
+                    },
+                    {
+                        "codeword_id": "codeword::argue_committed",
+                        "hint": "mention the strained voices from argument",
+                    },
+                ],
+            }
+        ]
+        create_residue_passages(graph, proposals)
+        # Base passage should still exist
+        assert graph.get_node("passage::aftermath") is not None
+
+    def test_invalid_passage_skipped(self) -> None:
+        from questfoundry.graph.grow_algorithms import create_residue_passages
+
+        graph = self._make_base_graph()
+        proposals = [
+            {
+                "passage_id": "passage::nonexistent",
+                "dilemma_id": "dilemma::x",
+                "variants": [
+                    {"codeword_id": "codeword::fight_committed", "hint": "some hint text"},
+                    {"codeword_id": "codeword::argue_committed", "hint": "another hint"},
+                ],
+            }
+        ]
+        result = create_residue_passages(graph, proposals)
+        assert result.proposals_skipped == 1
+        assert result.proposals_applied == 0
+
+    def test_invalid_codeword_skipped(self) -> None:
+        from questfoundry.graph.grow_algorithms import create_residue_passages
+
+        graph = self._make_base_graph()
+        proposals = [
+            {
+                "passage_id": "passage::aftermath",
+                "dilemma_id": "dilemma::x",
+                "variants": [
+                    {"codeword_id": "codeword::fight_committed", "hint": "valid codeword"},
+                    {"codeword_id": "codeword::NONEXISTENT", "hint": "invalid codeword"},
+                ],
+            }
+        ]
+        result = create_residue_passages(graph, proposals)
+        assert result.proposals_skipped == 1
+        assert result.proposals_applied == 0
+
+    def test_insufficient_variants_skipped(self) -> None:
+        from questfoundry.graph.grow_algorithms import create_residue_passages
+
+        graph = self._make_base_graph()
+        proposals = [
+            {
+                "passage_id": "passage::aftermath",
+                "dilemma_id": "dilemma::x",
+                "variants": [
+                    {"codeword_id": "codeword::fight_committed", "hint": "only one variant"},
+                ],
+            }
+        ]
+        result = create_residue_passages(graph, proposals)
+        assert result.proposals_skipped == 1
+        assert result.proposals_applied == 0
+
+    def test_variant_id_naming(self) -> None:
+        """Variant passage IDs follow the pattern passage::{base}__via_{codeword_suffix}."""
+        from questfoundry.graph.grow_algorithms import create_residue_passages
+
+        graph = self._make_base_graph()
+        proposals = [
+            {
+                "passage_id": "passage::aftermath",
+                "dilemma_id": "dilemma::approach",
+                "variants": [
+                    {
+                        "codeword_id": "codeword::fight_committed",
+                        "hint": "mention the bruises from the fight",
+                    },
+                    {
+                        "codeword_id": "codeword::argue_committed",
+                        "hint": "mention the voices from the argument",
+                    },
+                ],
+            }
+        ]
+        create_residue_passages(graph, proposals)
+        passages = graph.get_nodes_by_type("passage")
+        variant_ids = [pid for pid in passages if "__via_" in pid]
+        assert len(variant_ids) == 2
+        assert "passage::aftermath__via_fight" in variant_ids
+        assert "passage::aftermath__via_argue" in variant_ids
+
+    def test_empty_proposals(self) -> None:
+        from questfoundry.graph.grow_algorithms import create_residue_passages
+
+        graph = self._make_base_graph()
+        result = create_residue_passages(graph, [])
+        assert result.proposals_applied == 0
+        assert result.variants_created == 0
+        assert result.proposals_skipped == 0

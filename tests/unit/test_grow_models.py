@@ -26,6 +26,9 @@ from questfoundry.models.grow import (
     Phase4dOutput,
     Phase4eOutput,
     Phase4fOutput,
+    Phase8dOutput,
+    ResidueBeatProposal,
+    ResidueVariant,
     SceneTypeTag,
     SpokeProposal,
 )
@@ -731,3 +734,125 @@ class TestSpokeProposal:
         )
         assert spoke.grants == ["cw_library_secret", "cw_dust_allergy"]
         assert len(spoke.grants) == 2
+
+
+class TestResidueVariant:
+    """Tests for ResidueVariant model."""
+
+    def test_valid_variant(self) -> None:
+        v = ResidueVariant(
+            codeword_id="codeword::fistfight_committed",
+            hint="mention the scar from the fight",
+        )
+        assert v.codeword_id == "codeword::fistfight_committed"
+        assert "scar" in v.hint
+
+    def test_empty_codeword_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="codeword_id"):
+            ResidueVariant(codeword_id="", hint="a valid hint that is long enough")
+
+    def test_short_hint_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="hint"):
+            ResidueVariant(codeword_id="codeword::x", hint="too short")
+
+    def test_long_hint_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="hint"):
+            ResidueVariant(codeword_id="codeword::x", hint="a" * 201)
+
+
+class TestResidueBeatProposal:
+    """Tests for ResidueBeatProposal model."""
+
+    def test_valid_proposal(self) -> None:
+        proposal = ResidueBeatProposal(
+            passage_id="passage::shared_aftermath",
+            dilemma_id="dilemma::trust_choice",
+            rationale="The aftermath should acknowledge whether the hero fought or argued",
+            variants=[
+                ResidueVariant(
+                    codeword_id="codeword::fistfight_committed",
+                    hint="mention the scar from the fight",
+                ),
+                ResidueVariant(
+                    codeword_id="codeword::argue_committed",
+                    hint="mention the lingering tension from the argument",
+                ),
+            ],
+        )
+        assert proposal.passage_id == "passage::shared_aftermath"
+        assert len(proposal.variants) == 2
+
+    def test_single_variant_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="variants"):
+            ResidueBeatProposal(
+                passage_id="passage::x",
+                dilemma_id="dilemma::y",
+                rationale="some rationale here",
+                variants=[
+                    ResidueVariant(
+                        codeword_id="codeword::a",
+                        hint="only one variant is not enough",
+                    )
+                ],
+            )
+
+    def test_duplicate_codewords_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"codeword_id.*unique"):
+            ResidueBeatProposal(
+                passage_id="passage::x",
+                dilemma_id="dilemma::y",
+                rationale="rationale for this residue",
+                variants=[
+                    ResidueVariant(
+                        codeword_id="codeword::same",
+                        hint="first variant hint text here",
+                    ),
+                    ResidueVariant(
+                        codeword_id="codeword::same",
+                        hint="second variant hint text here",
+                    ),
+                ],
+            )
+
+    def test_empty_passage_id_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="passage_id"):
+            ResidueBeatProposal(
+                passage_id="",
+                dilemma_id="dilemma::y",
+                rationale="some rationale here",
+                variants=[
+                    ResidueVariant(codeword_id="codeword::a", hint="hint text a long enough"),
+                    ResidueVariant(codeword_id="codeword::b", hint="hint text b long enough"),
+                ],
+            )
+
+
+class TestPhase8dOutput:
+    """Tests for Phase8dOutput wrapper."""
+
+    def test_empty_proposals(self) -> None:
+        output = Phase8dOutput(proposals=[])
+        assert output.proposals == []
+
+    def test_with_proposals(self) -> None:
+        output = Phase8dOutput(
+            proposals=[
+                ResidueBeatProposal(
+                    passage_id="passage::shared_c",
+                    dilemma_id="dilemma::trust",
+                    rationale="trust aftermath differs by path",
+                    variants=[
+                        ResidueVariant(
+                            codeword_id="codeword::trust_committed",
+                            hint="hero recalls the leap of faith",
+                        ),
+                        ResidueVariant(
+                            codeword_id="codeword::distrust_committed",
+                            hint="hero recalls the cold suspicion",
+                        ),
+                    ],
+                )
+            ]
+        )
+        assert len(output.proposals) == 1
+        assert len(output.proposals[0].variants) == 2

@@ -11,6 +11,8 @@ Algorithm summary:
 - enumerate_arcs: Cartesian product of paths across dilemmas
 - compute_divergence_points: Find where arcs diverge from the spine
 - split_ending_families: Split shared terminal passages into per-arc-family endings
+- find_residue_candidates: Find convergence passages eligible for residue variants
+- create_residue_passages: Create variant passages from residue proposals
 - select_entities_for_arc: Deterministic entity selection for Phase 4f
 """
 
@@ -1696,6 +1698,234 @@ def find_convergence_points(
         )
 
     return result
+
+
+# ---------------------------------------------------------------------------
+# Phase 8d helpers: residue beat candidates and variant passage creation
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ResidueCandidate:
+    """A convergence passage eligible for residue variants.
+
+    Produced by ``find_residue_candidates()`` for soft/flavor dilemmas
+    where converging paths should yield different prose.
+    """
+
+    passage_id: str
+    dilemma_id: str
+    convergence_policy: str  # "soft" or "flavor"
+    codeword_ids: list[str]  # Available codewords for gating variants
+    dilemma_question: str  # For LLM context
+
+
+def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
+    """Find convergence passages eligible for residue variants.
+
+    Scans arc convergence metadata for soft/flavor dilemmas and identifies
+    the first shared passage after convergence as a residue candidate.
+    Hard dilemmas are excluded (they never converge).
+
+    Returns one candidate per distinct (passage_id, dilemma_id) pair.
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+    passage_nodes = graph.get_nodes_by_type("passage")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    if not arc_nodes or not passage_nodes:
+        return []
+
+    # Build beat → passage lookup
+    beat_to_passage: dict[str, str] = {}
+    for pid, pdata in passage_nodes.items():
+        from_beat = pdata.get("from_beat", "")
+        if from_beat:
+            beat_to_passage[from_beat] = pid
+
+    # Build path → codeword mapping (path's consequence → codeword)
+    path_codewords: dict[str, list[str]] = {}
+    codeword_nodes = graph.get_nodes_by_type("codeword")
+    has_consequence_edges = graph.get_edges(edge_type="has_consequence")
+    # Map consequence → path
+    cons_to_path: dict[str, str] = {}
+    for edge in has_consequence_edges:
+        cons_to_path[edge["to"]] = edge["from"]
+    # Map path → codewords via consequence
+    for cw_id, cw_data in codeword_nodes.items():
+        tracks = cw_data.get("tracks", "")
+        path_id = cons_to_path.get(tracks)
+        if path_id:
+            path_codewords.setdefault(path_id, []).append(cw_id)
+
+    # Build dilemma → paths mapping
+    dilemma_paths = build_dilemma_paths(graph)
+
+    # Scan arcs for convergence metadata
+    seen: set[tuple[str, str]] = set()  # (passage_id, dilemma_id) dedup
+    candidates: list[ResidueCandidate] = []
+
+    for _arc_id, arc_data in arc_nodes.items():
+        for dc in arc_data.get("dilemma_convergences", []):
+            policy = dc.get("policy", "")
+            if policy not in ("soft", "flavor"):
+                continue  # Skip hard dilemmas
+
+            converges_at_beat = dc.get("converges_at")
+            if not converges_at_beat:
+                continue
+
+            dilemma_id = dc.get("dilemma_id", "")
+            if not dilemma_id:
+                continue
+
+            # Convert convergence beat to passage
+            passage_id = beat_to_passage.get(converges_at_beat)
+            if not passage_id:
+                continue
+
+            # Dedup by (passage_id, dilemma_id)
+            key = (passage_id, dilemma_id)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            # Collect codewords for this dilemma's paths
+            paths = dilemma_paths.get(dilemma_id, [])
+            cw_ids: list[str] = []
+            for path_id in paths:
+                cw_ids.extend(path_codewords.get(path_id, []))
+
+            if len(cw_ids) < 2:
+                continue  # Need at least 2 variants
+
+            # Get dilemma question for LLM context
+            dilemma_data = dilemma_nodes.get(dilemma_id, {})
+            question = dilemma_data.get("question", "")
+
+            candidates.append(
+                ResidueCandidate(
+                    passage_id=passage_id,
+                    dilemma_id=dilemma_id,
+                    convergence_policy=policy,
+                    codeword_ids=sorted(cw_ids),
+                    dilemma_question=question,
+                )
+            )
+
+    return candidates
+
+
+@dataclass
+class ResidueCreationResult:
+    """Summary of residue variant passage creation."""
+
+    variants_created: int
+    proposals_applied: int
+    proposals_skipped: int
+
+
+def create_residue_passages(
+    graph: Graph,
+    proposals: list[dict[str, Any]],
+) -> ResidueCreationResult:
+    """Create variant passages from accepted residue proposals.
+
+    For each proposal:
+    1. Create variant passages (passage::{base}__via_{codeword_suffix})
+    2. Mark variants with is_residue=True and residue metadata
+
+    Choice edge wiring through variants is handled by Phase 9 (choices).
+    The base passage is NOT removed — it becomes the fallback for arcs
+    whose codewords don't match any variant.
+
+    Args:
+        graph: Story graph with passages and codewords.
+        proposals: List of dicts with keys: passage_id, dilemma_id,
+            variants (list of {codeword_id, hint}).
+
+    Returns:
+        ResidueCreationResult with counts.
+    """
+    passage_nodes = graph.get_nodes_by_type("passage")
+    codeword_nodes = graph.get_nodes_by_type("codeword")
+    valid_codewords = set(codeword_nodes.keys())
+
+    variants_created = 0
+    applied = 0
+    skipped = 0
+
+    for proposal in proposals:
+        passage_id = proposal.get("passage_id", "")
+        if passage_id not in passage_nodes:
+            log.warning("residue_invalid_passage", passage_id=passage_id)
+            skipped += 1
+            continue
+
+        base_data = passage_nodes[passage_id]
+        raw_id = strip_scope_prefix(passage_id)
+        variants = proposal.get("variants", [])
+        dilemma_id = proposal.get("dilemma_id", "")
+
+        if len(variants) < 2:
+            log.warning("residue_insufficient_variants", passage_id=passage_id)
+            skipped += 1
+            continue
+
+        # Validate all codewords exist
+        all_valid = True
+        for variant in variants:
+            cw_id = variant.get("codeword_id", "")
+            if cw_id not in valid_codewords:
+                log.warning(
+                    "residue_invalid_codeword",
+                    passage_id=passage_id,
+                    codeword_id=cw_id,
+                )
+                all_valid = False
+                break
+        if not all_valid:
+            skipped += 1
+            continue
+
+        # Create variant passages
+        for variant in variants:
+            cw_id = variant.get("codeword_id", "")
+            hint = variant.get("hint", "")
+            cw_suffix = strip_scope_prefix(cw_id).removesuffix("_committed")
+
+            variant_pid = f"passage::{raw_id}__via_{cw_suffix}"
+            # Ensure unique ID
+            counter = 1
+            while graph.get_node(variant_pid):
+                variant_pid = f"passage::{raw_id}__via_{cw_suffix}_{counter}"
+                counter += 1
+
+            graph.create_node(
+                variant_pid,
+                {
+                    "type": "passage",
+                    "raw_id": variant_pid.removeprefix("passage::"),
+                    "summary": base_data.get("summary", ""),
+                    "entities": base_data.get("entities", []),
+                    "from_beat": base_data.get("from_beat"),
+                    "is_residue": True,
+                    "is_synthetic": True,
+                    "residue_for": passage_id,
+                    "residue_codeword": cw_id,
+                    "residue_hint": hint,
+                    "residue_dilemma": dilemma_id,
+                },
+            )
+            variants_created += 1
+
+        applied += 1
+
+    return ResidueCreationResult(
+        variants_created=variants_created,
+        proposals_applied=applied,
+        proposals_skipped=skipped,
+    )
 
 
 # ---------------------------------------------------------------------------

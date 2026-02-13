@@ -341,6 +341,48 @@ class Phase8cOutput(BaseModel):
     overlays: list[OverlayProposal] = Field(default_factory=list)
 
 
+class ResidueVariant(BaseModel):
+    """A single path-specific variant for a residue passage.
+
+    Each variant is gated by a codeword and carries a prose hint
+    telling FILL how to differentiate this variant's prose.
+    """
+
+    codeword_id: str = Field(min_length=1, description="Codeword that gates this variant")
+    hint: str = Field(
+        min_length=10,
+        max_length=200,
+        description="Prose guidance for FILL (e.g. 'mention the scar from the fight')",
+    )
+
+
+class ResidueBeatProposal(BaseModel):
+    """Phase 8d: Proposes a residue point where path-specific prose should differ.
+
+    A residue point is a passage at or near a convergence point where
+    the prose should acknowledge which path was taken. The LLM proposes
+    the passage and a hint for each path's variant.
+    """
+
+    passage_id: str = Field(min_length=1, description="Passage to split into variants")
+    dilemma_id: str = Field(min_length=1, description="Dilemma whose paths are converging")
+    rationale: str = Field(min_length=1, description="Why this passage needs residue variants")
+    variants: list[ResidueVariant] = Field(min_length=2, description="One variant per path")
+
+    @model_validator(mode="after")
+    def _validate_unique_codewords(self) -> ResidueBeatProposal:
+        cw_ids = [v.codeword_id for v in self.variants]
+        if len(cw_ids) != len(set(cw_ids)):
+            raise ValueError("codeword_id in variants must be unique")
+        return self
+
+
+class Phase8dOutput(BaseModel):
+    """Wrapper for Phase 8d structured output (residue beat proposals)."""
+
+    proposals: list[ResidueBeatProposal] = Field(default_factory=list)
+
+
 class ChoiceLabel(BaseModel):
     """Phase 9: Labels for player choices between passages."""
 
