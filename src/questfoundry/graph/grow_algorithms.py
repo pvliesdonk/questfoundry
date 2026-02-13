@@ -859,6 +859,7 @@ def _build_collapse_exempt_passages(
     - Climax/resolution beats (narrative_function in {"confront", "resolve"})
     - Ending passages (is_ending=True)
     - Passages with transition_style="cut" in their beat
+    - Residue variant passages (is_residue=True)
     """
     beats = graph.get_nodes_by_type("beat")
     exempt: set[str] = set()
@@ -866,6 +867,11 @@ def _build_collapse_exempt_passages(
     for pid, pdata in passages.items():
         # Check ending status
         if pdata.get("is_ending"):
+            exempt.add(pid)
+            continue
+
+        # Check residue variant status
+        if pdata.get("is_residue"):
             exempt.add(pid)
             continue
 

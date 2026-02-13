@@ -10,6 +10,7 @@ from questfoundry.graph.grow_validators import (
     validate_phase4a_output,
     validate_phase4f_output,
     validate_phase8c_output,
+    validate_phase8d_output,
     validate_phase9_output,
     validate_phase9c_output,
 )
@@ -26,8 +27,11 @@ from questfoundry.models.grow import (
     Phase4aOutput,
     Phase4fOutput,
     Phase8cOutput,
+    Phase8dOutput,
     Phase9cOutput,
     Phase9Output,
+    ResidueBeatProposal,
+    ResidueVariant,
     SceneTypeTag,
     SpokeProposal,
 )
@@ -656,5 +660,84 @@ class TestValidatePhase9cGrants:
             result,
             valid_passage_ids={"passage::market"},
             valid_codeword_ids={"codeword::cw_mural"},
+        )
+        assert not errors
+
+
+class TestValidatePhase8dOutput:
+    """Tests for Phase 8d residue beat proposal validation."""
+
+    @staticmethod
+    def _make_output(
+        passage_id: str = "passage::aftermath",
+        dilemma_id: str = "dilemma::approach",
+        codeword_ids: list[str] | None = None,
+    ) -> Phase8dOutput:
+        if codeword_ids is None:
+            codeword_ids = ["codeword::fight_committed", "codeword::talk_committed"]
+        return Phase8dOutput(
+            proposals=[
+                ResidueBeatProposal(
+                    passage_id=passage_id,
+                    dilemma_id=dilemma_id,
+                    rationale="Test rationale",
+                    variants=[
+                        ResidueVariant(codeword_id=cw, hint=f"hint for {cw} variant prose")
+                        for cw in codeword_ids
+                    ],
+                ),
+            ]
+        )
+
+    def test_valid_output_no_errors(self) -> None:
+        result = self._make_output()
+        errors = validate_phase8d_output(
+            result,
+            valid_passage_ids={"passage::aftermath"},
+            valid_codeword_ids={"codeword::fight_committed", "codeword::talk_committed"},
+            valid_dilemma_ids={"dilemma::approach"},
+        )
+        assert not errors
+
+    def test_invalid_passage_id(self) -> None:
+        result = self._make_output(passage_id="passage::nonexistent")
+        errors = validate_phase8d_output(
+            result,
+            valid_passage_ids={"passage::aftermath"},
+            valid_codeword_ids={"codeword::fight_committed", "codeword::talk_committed"},
+            valid_dilemma_ids={"dilemma::approach"},
+        )
+        assert len(errors) == 1
+        assert "passage_id" in errors[0].field_path
+
+    def test_invalid_dilemma_id(self) -> None:
+        result = self._make_output(dilemma_id="dilemma::nonexistent")
+        errors = validate_phase8d_output(
+            result,
+            valid_passage_ids={"passage::aftermath"},
+            valid_codeword_ids={"codeword::fight_committed", "codeword::talk_committed"},
+            valid_dilemma_ids={"dilemma::approach"},
+        )
+        assert len(errors) == 1
+        assert "dilemma_id" in errors[0].field_path
+
+    def test_invalid_codeword_id(self) -> None:
+        result = self._make_output(codeword_ids=["codeword::fight_committed", "codeword::fake"])
+        errors = validate_phase8d_output(
+            result,
+            valid_passage_ids={"passage::aftermath"},
+            valid_codeword_ids={"codeword::fight_committed", "codeword::talk_committed"},
+            valid_dilemma_ids={"dilemma::approach"},
+        )
+        assert len(errors) == 1
+        assert "codeword_id" in errors[0].field_path
+
+    def test_empty_proposals_no_errors(self) -> None:
+        result = Phase8dOutput(proposals=[])
+        errors = validate_phase8d_output(
+            result,
+            valid_passage_ids={"passage::aftermath"},
+            valid_codeword_ids={"codeword::fight_committed"},
+            valid_dilemma_ids={"dilemma::approach"},
         )
         assert not errors

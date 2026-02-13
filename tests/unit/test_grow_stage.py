@@ -200,10 +200,10 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_twenty_four_phases(self) -> None:
+    def test_phase_order_returns_twenty_five_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 24
+        assert len(phases) == 25
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -224,6 +224,7 @@ class TestGrowStagePhaseOrder:
             "collapse_linear_beats",
             "passages",
             "codewords",
+            "residue_beats",
             "overlays",
             "choices",
             "fork_beats",
@@ -3548,3 +3549,195 @@ class TestPhase9cHubSpokes:
 
         assert result.status == "completed"
         assert "0 hub" in result.detail
+
+
+class TestPhase8dResidueBeats:
+    """Tests for Phase 8d residue beat insertion."""
+
+    def _make_residue_eligible_graph(self) -> Any:
+        """Build a graph with a soft-dilemma convergence eligible for residue variants."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        # Dilemma with two paths
+        graph.create_node(
+            "dilemma::approach",
+            {
+                "type": "dilemma",
+                "raw_id": "approach",
+                "question": "Fight or negotiate?",
+                "dilemma_type": "soft",
+            },
+        )
+        for suffix, name in [("fight", "Fight"), ("talk", "Negotiate")]:
+            graph.create_node(
+                f"path::{suffix}",
+                {
+                    "type": "path",
+                    "raw_id": suffix,
+                    "name": name,
+                    "dilemma_id": "dilemma::approach",
+                },
+            )
+            graph.create_node(
+                f"consequence::{suffix}_result",
+                {
+                    "type": "consequence",
+                    "raw_id": f"{suffix}_result",
+                    "description": f"{name} result",
+                },
+            )
+            graph.add_edge("has_consequence", f"path::{suffix}", f"consequence::{suffix}_result")
+            graph.create_node(
+                f"codeword::{suffix}_committed",
+                {
+                    "type": "codeword",
+                    "raw_id": f"{suffix}_committed",
+                    "tracks": f"consequence::{suffix}_result",
+                    "codeword_type": "granted",
+                },
+            )
+        # Beat and passage at convergence
+        graph.create_node(
+            "beat::aftermath",
+            {"type": "beat", "raw_id": "aftermath", "summary": "The dust settles"},
+        )
+        graph.create_node(
+            "passage::aftermath",
+            {
+                "type": "passage",
+                "raw_id": "aftermath",
+                "summary": "The dust settles after the confrontation",
+                "from_beat": "beat::aftermath",
+            },
+        )
+        # Arc with convergence metadata
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": ["path::fight", "path::talk"],
+                "dilemma_convergences": [
+                    {
+                        "dilemma_id": "dilemma::approach",
+                        "policy": "soft",
+                        "converges_at": "beat::aftermath",
+                    },
+                ],
+            },
+        )
+        return graph
+
+    @pytest.mark.asyncio
+    async def test_phase_8d_creates_residue_variants(self) -> None:
+        """Phase 8d creates variant passages from LLM proposals."""
+        from unittest.mock import patch
+
+        from questfoundry.models.grow import Phase8dOutput, ResidueBeatProposal, ResidueVariant
+
+        graph = self._make_residue_eligible_graph()
+        stage = GrowStage()
+
+        llm_result = Phase8dOutput(
+            proposals=[
+                ResidueBeatProposal(
+                    passage_id="passage::aftermath",
+                    dilemma_id="dilemma::approach",
+                    rationale="Prose should acknowledge fight vs negotiation",
+                    variants=[
+                        ResidueVariant(
+                            codeword_id="codeword::fight_committed",
+                            hint="mention bruises from the fistfight",
+                        ),
+                        ResidueVariant(
+                            codeword_id="codeword::talk_committed",
+                            hint="reference the fragile truce with the guards",
+                        ),
+                    ],
+                ),
+            ]
+        )
+
+        with patch.object(
+            stage,
+            "_grow_llm_call",
+            return_value=(llm_result, 1, 100),
+        ):
+            result = await stage._phase_8d_residue_beats(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert result.phase == "residue_beats"
+        assert result.llm_calls == 1
+        assert "2 residue variants" in result.detail
+        assert "1 proposals" in result.detail
+
+        # Verify variant passages exist
+        fight_variant = graph.get_node("passage::aftermath__via_fight")
+        assert fight_variant is not None
+        assert fight_variant["is_residue"] is True
+        assert fight_variant["residue_codeword"] == "codeword::fight_committed"
+
+        talk_variant = graph.get_node("passage::aftermath__via_talk")
+        assert talk_variant is not None
+        assert talk_variant["is_residue"] is True
+        assert talk_variant["residue_codeword"] == "codeword::talk_committed"
+
+        # Base passage preserved
+        base = graph.get_node("passage::aftermath")
+        assert base is not None
+
+    @pytest.mark.asyncio
+    async def test_phase_8d_no_candidates_skips_llm(self) -> None:
+        """Phase 8d returns completed without LLM call when no eligible candidates."""
+        from questfoundry.graph.graph import Graph
+
+        graph = Graph.empty()
+        stage = GrowStage()
+
+        result = await stage._phase_8d_residue_beats(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert result.llm_calls == 0
+        assert "No convergence" in result.detail
+
+    @pytest.mark.asyncio
+    async def test_phase_8d_empty_llm_proposals(self) -> None:
+        """Phase 8d handles LLM returning empty proposals."""
+        from unittest.mock import patch
+
+        from questfoundry.models.grow import Phase8dOutput
+
+        graph = self._make_residue_eligible_graph()
+        stage = GrowStage()
+
+        with patch.object(
+            stage,
+            "_grow_llm_call",
+            return_value=(Phase8dOutput(proposals=[]), 1, 50),
+        ):
+            result = await stage._phase_8d_residue_beats(graph, MagicMock())
+
+        assert result.status == "completed"
+        assert result.llm_calls == 1
+        assert "no residue" in result.detail.lower()
+
+    @pytest.mark.asyncio
+    async def test_phase_8d_returns_failed_on_grow_error(self) -> None:
+        """Phase 8d returns failed on GrowStageError."""
+        from unittest.mock import patch
+
+        graph = self._make_residue_eligible_graph()
+        stage = GrowStage()
+
+        with patch.object(
+            stage,
+            "_grow_llm_call",
+            side_effect=GrowStageError("LLM failed after 3 attempts"),
+        ):
+            result = await stage._phase_8d_residue_beats(graph, MagicMock())
+
+        assert result.status == "failed"
+        assert result.phase == "residue_beats"
+        assert "LLM failed" in result.detail

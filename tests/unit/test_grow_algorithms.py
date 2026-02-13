@@ -4857,6 +4857,23 @@ class TestCollapseLinearPassages:
         assert result.chains_collapsed == 0
         assert result.passages_removed == 0
 
+    def test_exempts_residue_passages(self) -> None:
+        """Does not include residue variant passages in collapse."""
+        from questfoundry.graph.grow_algorithms import collapse_linear_passages
+
+        graph = self._make_linear_chain_graph(chain_length=4)
+        # Mark middle passage as a residue variant
+        graph.update_node("passage::b1", is_residue=True)
+
+        collapse_linear_passages(graph, min_chain_length=3)
+
+        # b1 should not be absorbed into any merged passage
+        merged_passages = [
+            p for _pid, p in graph.get_nodes_by_type("passage").items() if p.get("merged_from")
+        ]
+        for merged in merged_passages:
+            assert "passage::b1" not in merged.get("merged_from", [])
+
 
 # ---------------------------------------------------------------------------
 # Hard-policy intersection rejection
