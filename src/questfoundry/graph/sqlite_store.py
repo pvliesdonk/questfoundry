@@ -102,9 +102,11 @@ class SqliteGraphStore:
         """
         if _conn is not None:
             self._conn = _conn
+            self._db_path: str = ":memory:"
         else:
+            self._db_path = str(db_path) if isinstance(db_path, Path) else db_path
             self._conn = sqlite3.connect(
-                str(db_path) if isinstance(db_path, Path) else db_path,
+                self._db_path,
                 isolation_level=None,  # autocommit — we manage transactions
             )
         self._conn.row_factory = sqlite3.Row
@@ -118,6 +120,22 @@ class SqliteGraphStore:
     def close(self) -> None:
         """Close the database connection."""
         self._conn.close()
+
+    def backup_to(self, dest_path: Path) -> None:
+        """Copy the live database to a destination file.
+
+        Uses SQLite's online backup API for a consistent copy,
+        even while the source database is in use.
+
+        Args:
+            dest_path: Path for the backup file.
+        """
+        dest_path.parent.mkdir(parents=True, exist_ok=True)
+        dest = sqlite3.connect(str(dest_path))
+        try:
+            self._conn.backup(dest)
+        finally:
+            dest.close()
 
     # -- Mutation context ------------------------------------------------------
 

@@ -5,8 +5,8 @@ delegates to. Implementations handle raw CRUD; Graph provides the public API
 with validation, error messages, and business logic.
 
 DictGraphStore is the default backend, preserving the original in-memory dict
-behavior. SqliteGraphStore (future PR) will provide SQLite-backed storage with
-mutation recording and savepoint support.
+behavior. SqliteGraphStore provides SQLite-backed storage with mutation
+recording and savepoint support.
 """
 
 from __future__ import annotations
@@ -110,6 +110,26 @@ class GraphStore(Protocol):
         """Return the full metadata dict."""
         ...
 
+    # -- Mutation context ------------------------------------------------------
+
+    def set_mutation_context(self, stage: str = "", phase: str = "") -> None:
+        """Set the current stage/phase for mutation recording."""
+        ...
+
+    # -- Savepoints ------------------------------------------------------------
+
+    def savepoint(self, name: str) -> None:
+        """Create a named savepoint of the current state."""
+        ...
+
+    def rollback_to(self, name: str) -> None:
+        """Rollback to a named savepoint."""
+        ...
+
+    def release(self, name: str) -> None:
+        """Release (discard) a named savepoint."""
+        ...
+
     # -- Serialization ---------------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
@@ -138,6 +158,7 @@ class DictGraphStore:
             "nodes": {},
             "edges": [],
         }
+        self._savepoints: dict[str, dict[str, Any]] = {}
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DictGraphStore:
@@ -230,6 +251,27 @@ class DictGraphStore:
 
     def all_meta(self) -> dict[str, Any]:
         return cast("dict[str, Any]", self._data["meta"])
+
+    # -- Mutation context (no-op for dict backend) ----------------------------
+
+    def set_mutation_context(self, stage: str = "", phase: str = "") -> None:
+        """No-op — DictGraphStore does not record mutations."""
+
+    # -- Savepoints (deepcopy-based) -------------------------------------------
+
+    def savepoint(self, name: str) -> None:
+        """Save a named snapshot of current state."""
+        self._savepoints[name] = copy.deepcopy(self._data)
+
+    def rollback_to(self, name: str) -> None:
+        """Restore state from a named snapshot."""
+        if name not in self._savepoints:
+            raise ValueError(f"No savepoint named '{name}'")
+        self._data = copy.deepcopy(self._savepoints[name])
+
+    def release(self, name: str) -> None:
+        """Discard a named snapshot."""
+        self._savepoints.pop(name, None)
 
     # -- Serialization ---------------------------------------------------------
 
