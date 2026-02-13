@@ -8,10 +8,27 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from contextlib import contextmanager
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
+
+
+@contextmanager
+def _open_db(db_path: Path) -> Iterator[sqlite3.Connection]:
+    """Open a read-only connection to the audit database.
+
+    Raises:
+        sqlite3.Error: If the database cannot be opened or is corrupted.
+    """
+    conn = sqlite3.connect(str(db_path))
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
 
 
 def query_mutations(
@@ -35,10 +52,11 @@ def query_mutations(
 
     Returns:
         List of mutation dicts, most recent first.
+
+    Raises:
+        sqlite3.Error: If the database cannot be read.
     """
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    try:
+    with _open_db(db_path) as conn:
         clauses: list[str] = []
         params: list[Any] = []
 
@@ -55,6 +73,8 @@ def query_mutations(
             clauses.append("target_id LIKE ?")
             params.append(f"%{target}%")
 
+        # WHERE clause is built from hardcoded column names; all values
+        # are parameterized via ? — no injection risk.
         where = (" WHERE " + " AND ".join(clauses)) if clauses else ""
         params.append(limit)
 
@@ -76,8 +96,6 @@ def query_mutations(
             }
             for row in rows
         ]
-    finally:
-        conn.close()
 
 
 def query_phase_history(db_path: Path) -> list[dict[str, Any]]:
@@ -88,10 +106,11 @@ def query_phase_history(db_path: Path) -> list[dict[str, Any]]:
 
     Returns:
         List of phase history dicts, ordered by ID.
+
+    Raises:
+        sqlite3.Error: If the database cannot be read.
     """
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    try:
+    with _open_db(db_path) as conn:
         rows = conn.execute(
             "SELECT id, stage, phase, started_at, completed_at, status, "
             "mutation_count, detail FROM phase_history ORDER BY id"
@@ -110,8 +129,6 @@ def query_phase_history(db_path: Path) -> list[dict[str, Any]]:
             }
             for row in rows
         ]
-    finally:
-        conn.close()
 
 
 def mutation_summary(db_path: Path) -> dict[str, Any]:
@@ -122,10 +139,11 @@ def mutation_summary(db_path: Path) -> dict[str, Any]:
 
     Returns:
         Summary dict with total count, per-stage counts, and per-operation counts.
+
+    Raises:
+        sqlite3.Error: If the database cannot be read.
     """
-    conn = sqlite3.connect(str(db_path))
-    conn.row_factory = sqlite3.Row
-    try:
+    with _open_db(db_path) as conn:
         total = conn.execute("SELECT COUNT(*) AS cnt FROM mutations").fetchone()["cnt"]
 
         stage_rows = conn.execute(
@@ -141,5 +159,3 @@ def mutation_summary(db_path: Path) -> dict[str, Any]:
             "by_stage": {row["stage"] or "(none)": row["cnt"] for row in stage_rows},
             "by_operation": {row["operation"]: row["cnt"] for row in op_rows},
         }
-    finally:
-        conn.close()

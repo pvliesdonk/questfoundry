@@ -2534,59 +2534,65 @@ def audit(
         )
         raise typer.Exit(1)
 
+    import sqlite3
+
     from questfoundry.graph.audit import mutation_summary, query_mutations
 
-    if summary:
-        result = mutation_summary(db_path)
-        console.print(f"\n[bold]Total mutations:[/bold] {result['total']}\n")
+    try:
+        if summary:
+            result = mutation_summary(db_path)
+            console.print(f"\n[bold]Total mutations:[/bold] {result['total']}\n")
 
-        if result["by_stage"]:
-            stage_table = Table(title="By Stage")
-            stage_table.add_column("Stage", style="cyan")
-            stage_table.add_column("Count", justify="right")
-            for s, cnt in result["by_stage"].items():
-                stage_table.add_row(s, str(cnt))
-            console.print(stage_table)
+            if result["by_stage"]:
+                stage_table = Table(title="By Stage")
+                stage_table.add_column("Stage", style="cyan")
+                stage_table.add_column("Count", justify="right")
+                for s, cnt in result["by_stage"].items():
+                    stage_table.add_row(s, str(cnt))
+                console.print(stage_table)
 
-        if result["by_operation"]:
-            op_table = Table(title="By Operation")
-            op_table.add_column("Operation", style="green")
-            op_table.add_column("Count", justify="right")
-            for op, cnt in result["by_operation"].items():
-                op_table.add_row(op, str(cnt))
-            console.print(op_table)
-    else:
-        mutations = query_mutations(
-            db_path,
-            stage=stage,
-            phase=phase,
-            operation=operation,
-            target=target,
-            limit=limit,
-        )
-
-        if not mutations:
-            console.print("[dim]No mutations found matching filters.[/dim]")
-            raise typer.Exit()
-
-        table = Table(title=f"Mutations ({len(mutations)} shown)")
-        table.add_column("ID", style="dim", justify="right")
-        table.add_column("Timestamp", style="dim")
-        table.add_column("Stage", style="cyan")
-        table.add_column("Phase", style="blue")
-        table.add_column("Operation", style="green")
-        table.add_column("Target", style="yellow")
-
-        for m in mutations:
-            table.add_row(
-                str(m["id"]),
-                m["timestamp"][:19] if m["timestamp"] else "",
-                m["stage"] or "",
-                m["phase"] or "",
-                m["operation"],
-                m["target_id"],
+            if result["by_operation"]:
+                op_table = Table(title="By Operation")
+                op_table.add_column("Operation", style="green")
+                op_table.add_column("Count", justify="right")
+                for op, cnt in result["by_operation"].items():
+                    op_table.add_row(op, str(cnt))
+                console.print(op_table)
+        else:
+            mutations = query_mutations(
+                db_path,
+                stage=stage,
+                phase=phase,
+                operation=operation,
+                target=target,
+                limit=limit,
             )
-        console.print(table)
+
+            if not mutations:
+                console.print("[dim]No mutations found matching filters.[/dim]")
+                return
+
+            table = Table(title=f"Mutations ({len(mutations)} shown)")
+            table.add_column("ID", style="dim", justify="right")
+            table.add_column("Timestamp", style="dim")
+            table.add_column("Stage", style="cyan")
+            table.add_column("Phase", style="blue")
+            table.add_column("Operation", style="green")
+            table.add_column("Target", style="yellow")
+
+            for m in mutations:
+                table.add_row(
+                    str(m["id"]),
+                    m["timestamp"][:19] if m["timestamp"] else "",
+                    m["stage"] or "",
+                    m["phase"] or "",
+                    m["operation"],
+                    m["target_id"],
+                )
+            console.print(table)
+    except sqlite3.Error as e:
+        console.print(f"[red]Database error:[/red] {e}")
+        raise typer.Exit(1) from None
 
 
 @app.command()
