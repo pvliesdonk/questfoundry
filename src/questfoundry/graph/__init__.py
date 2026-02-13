@@ -57,6 +57,7 @@ from questfoundry.graph.snapshots import (
     rollback_to_snapshot,
     save_snapshot,
 )
+from questfoundry.graph.store import DictGraphStore, GraphStore
 
 __all__ = [
     "ENTITY_CATEGORIES",
@@ -64,10 +65,12 @@ __all__ = [
     "SCOPE_PATH",
     "BrainstormMutationError",
     "BrainstormValidationError",
+    "DictGraphStore",
     "EdgeEndpointError",
     "Graph",
     "GraphCorruptionError",
     "GraphIntegrityError",
+    "GraphStore",
     "GrowErrorCategory",
     "GrowMutationError",
     "GrowValidationError",
