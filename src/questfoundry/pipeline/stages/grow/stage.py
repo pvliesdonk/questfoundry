@@ -164,6 +164,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         "path_arcs": "_phase_4e_path_arcs",
         "intersections": "_phase_3_intersections",
         "entity_arcs": "_phase_4f_entity_arcs",
+        "residue_beats": "_phase_8d_residue_beats",
         "overlays": "_phase_8c_overlays",
         "choices": "_phase_9_choices",
         "fork_beats": "_phase_9b_fork_beats",

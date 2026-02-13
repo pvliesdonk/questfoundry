@@ -1253,10 +1253,150 @@ class _LLMPhaseMixin:
         )
 
     # -------------------------------------------------------------------------
-    # Late LLM phases (8c, 9, 9b, 9c)
+    # Late LLM phases (8d, 8c, 9, 9b, 9c)
     # -------------------------------------------------------------------------
 
-    @grow_phase(name="overlays", depends_on=["codewords"], priority=15)
+    @grow_phase(name="residue_beats", depends_on=["codewords"], priority=15)
+    async def _phase_8d_residue_beats(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
+        """Phase 8d: Propose and create residue beat variants at convergence points.
+
+        For soft/flavor dilemma convergences, asks the LLM to identify passages
+        that should have path-specific prose variants. Each variant is gated by
+        a codeword so FILL generates different prose per path.
+
+        Preconditions:
+        - Codeword nodes exist (Phase 8b complete).
+        - Passage nodes exist with from_beat edges.
+        - Arc convergence metadata computed (Phase 7 complete).
+
+        Postconditions:
+        - Variant passages created for accepted proposals (is_residue=True).
+        - Base passages preserved as fallback.
+        - Each variant has residue_codeword, residue_hint, residue_for metadata.
+
+        Invariants:
+        - Only soft/flavor dilemma convergences considered.
+        - Maximum 3 proposals per LLM call.
+        - Invalid passage/codeword IDs from LLM output silently skipped.
+        - Empty candidates → completed with no LLM call.
+        """
+        from questfoundry.graph.grow_algorithms import (
+            create_residue_passages,
+            find_residue_candidates,
+        )
+        from questfoundry.models.grow import Phase8dOutput
+
+        candidates = find_residue_candidates(graph)
+        if not candidates:
+            return GrowPhaseResult(
+                phase="residue_beats",
+                status="completed",
+                detail="No convergence points eligible for residue variants",
+            )
+
+        # Build convergence context for LLM — rich narrative per candidate
+        convergence_lines: list[str] = []
+        passage_nodes = graph.get_nodes_by_type("passage")
+        valid_passage_ids: list[str] = []
+        valid_codeword_ids: list[str] = []
+        valid_dilemma_ids: list[str] = []
+
+        for candidate in candidates:
+            if candidate.passage_id not in valid_passage_ids:
+                valid_passage_ids.append(candidate.passage_id)
+            if candidate.dilemma_id not in valid_dilemma_ids:
+                valid_dilemma_ids.append(candidate.dilemma_id)
+            for cw_id in candidate.codeword_ids:
+                if cw_id not in valid_codeword_ids:
+                    valid_codeword_ids.append(cw_id)
+
+            passage_data = passage_nodes.get(candidate.passage_id, {})
+            summary = truncate_summary(str(passage_data.get("summary", "")), 120)
+
+            block = [f"- Passage: {candidate.passage_id}"]
+            block.append(f"  Summary: {summary}")
+            block.append(f"  Dilemma: {candidate.dilemma_id}")
+            if candidate.dilemma_question:
+                block.append(f'  Question: "{candidate.dilemma_question}"')
+            block.append(f"  Policy: {candidate.convergence_policy}")
+            block.append(f"  Available codewords: {', '.join(candidate.codeword_ids)}")
+            convergence_lines.append("\n".join(block))
+
+        convergence_context = "\n".join(convergence_lines)
+
+        # Build passage summaries for context
+        passage_lines: list[str] = []
+        for pid in valid_passage_ids:
+            pdata = passage_nodes.get(pid, {})
+            summary = truncate_summary(str(pdata.get("summary", "")), 120)
+            passage_lines.append(f"- {pid}: {summary}")
+        passage_context = "\n".join(passage_lines)
+
+        max_proposals = min(len(candidates), 3)
+
+        context = {
+            "convergence_context": convergence_context,
+            "passage_context": passage_context,
+            "max_proposals": str(max_proposals),
+            "valid_passage_ids": ", ".join(valid_passage_ids),
+            "valid_codeword_ids": ", ".join(valid_codeword_ids),
+            "valid_dilemma_ids": ", ".join(valid_dilemma_ids),
+        }
+
+        from questfoundry.graph.grow_validators import validate_phase8d_output
+
+        validator = partial(
+            validate_phase8d_output,
+            valid_passage_ids=set(valid_passage_ids),
+            valid_codeword_ids=set(valid_codeword_ids),
+            valid_dilemma_ids=set(valid_dilemma_ids),
+        )
+
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
+                model,
+                "grow_phase8d_residue",
+                context,
+                Phase8dOutput,
+                semantic_validator=validator,
+            )
+        except GrowStageError as e:
+            return GrowPhaseResult(phase="residue_beats", status="failed", detail=str(e))
+
+        if not result.proposals:
+            return GrowPhaseResult(
+                phase="residue_beats",
+                status="completed",
+                detail="LLM proposed no residue beats",
+                llm_calls=llm_calls,
+                tokens_used=tokens,
+            )
+
+        # Convert Pydantic proposals to dicts for create_residue_passages
+        proposal_dicts = [
+            {
+                "passage_id": p.passage_id,
+                "dilemma_id": p.dilemma_id,
+                "variants": [{"codeword_id": v.codeword_id, "hint": v.hint} for v in p.variants],
+            }
+            for p in result.proposals
+        ]
+
+        creation = create_residue_passages(graph, proposal_dicts)
+
+        return GrowPhaseResult(
+            phase="residue_beats",
+            status="completed",
+            detail=(
+                f"Created {creation.variants_created} residue variants "
+                f"from {creation.proposals_applied} proposals "
+                f"({creation.proposals_skipped} skipped)"
+            ),
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
+    @grow_phase(name="overlays", depends_on=["residue_beats"], priority=16)
     async def _phase_8c_overlays(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 8c: Create entity overlays conditioned on codewords.
 
@@ -1444,7 +1584,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
-    @grow_phase(name="choices", depends_on=["overlays"], priority=16)
+    @grow_phase(name="choices", depends_on=["overlays"], priority=17)
     async def _phase_9_choices(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 9: Create choice edges between passages.
 
@@ -1752,7 +1892,7 @@ class _LLMPhaseMixin:
             tokens_used=single_tokens + tokens,
         )
 
-    @grow_phase(name="fork_beats", depends_on=["choices"], priority=17)
+    @grow_phase(name="fork_beats", depends_on=["choices"], priority=18)
     async def _phase_9b_fork_beats(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 9b: Insert reconvergent forks at linear stretches.
 
@@ -2011,7 +2151,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
-    @grow_phase(name="hub_spokes", depends_on=["fork_beats"], priority=18)
+    @grow_phase(name="hub_spokes", depends_on=["fork_beats"], priority=19)
     async def _phase_9c_hub_spokes(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 9c: Add hub-and-spoke exploration nodes.
 
