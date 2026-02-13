@@ -578,13 +578,13 @@ async def phase_split_endings(
     Preconditions:
     - Terminal passages marked with is_ending (Phase 9c2 complete).
     - Codeword nodes exist (Phase 8b complete).
-    - Arcs have codeword signatures from their path combinations.
+    - Arcs, paths, and codewords exist to derive codeword signatures.
 
     Postconditions:
     - Shared terminal passages split into per-arc-family variants.
     - Each variant gated by its distinguishing codeword set.
     - Choice edges updated to point to appropriate variants.
-    - Original shared passage removed when split occurs.
+    - Original shared passage is converted to a branching point (is_ending=False).
 
     Invariants:
     - No-op when all terminal passages already have unique arc families.
