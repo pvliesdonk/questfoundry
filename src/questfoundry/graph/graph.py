@@ -204,12 +204,17 @@ class Graph:
             self._store.backup_to(file_path)
         else:
             # Bulk-export from dict store to SQLite.
-            # Remove existing file to avoid IntegrityError on INSERT.
-            if file_path.exists():
-                file_path.unlink()
-            data = self._store.to_dict()
-            new_store = SqliteGraphStore.from_dict(data, db_path=file_path)
-            new_store.close()
+            # Use atomic temp-file + rename to avoid data loss on failure.
+            tmp_path = file_path.with_suffix(".db.tmp")
+            try:
+                data = self._store.to_dict()
+                new_store = SqliteGraphStore.from_dict(data, db_path=tmp_path)
+                new_store.close()
+                tmp_path.replace(file_path)
+            except Exception:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+                raise
 
     # -------------------------------------------------------------------------
     # Savepoint API
