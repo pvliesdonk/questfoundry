@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import os
 import warnings
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -30,7 +31,10 @@ from questfoundry.graph.errors import (
 from questfoundry.graph.store import DictGraphStore, GraphStore
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
+
+    from questfoundry.graph.sqlite_store import SqliteGraphStore
 
 
 class Graph:
@@ -68,12 +72,17 @@ class Graph:
 
     @property
     def _data(self) -> dict[str, Any]:
-        """Backward-compat access to underlying dict (DictGraphStore only).
+        """Backward-compat access to underlying dict.
+
+        For DictGraphStore, returns the live internal dict (mutations visible).
+        For other stores, returns a snapshot via ``to_dict()`` (read-only).
 
         External code that accesses ``graph._data`` directly should migrate
         to use Graph public methods instead.
         """
-        return self._store._data  # type: ignore[attr-defined, no-any-return]
+        if hasattr(self._store, "_data"):
+            return self._store._data  # type: ignore[no-any-return]
+        return self._store.to_dict()
 
     # -------------------------------------------------------------------------
     # Loading
@@ -83,31 +92,54 @@ class Graph:
     def load(cls, project_path: Path) -> Graph:
         """Load graph from project directory.
 
+        Detection order:
+        1. ``graph.db`` — open existing SQLite database
+        2. ``graph.json`` — load as DictGraphStore (JSON backend)
+        3. Neither — return empty graph (DictGraphStore)
+
+        To migrate from JSON to SQLite, use :func:`migrate_json_to_sqlite`
+        explicitly or enable auto-migration at the stage level.
+
         Args:
             project_path: Path to project root directory.
 
         Returns:
-            Loaded graph, or empty graph if no graph.json exists.
+            Loaded graph.
         """
-        graph_file = project_path / "graph.json"
-        if not graph_file.exists():
-            return cls.empty()
-        return cls.load_from_file(graph_file)
+        db_file = project_path / "graph.db"
+        json_file = project_path / "graph.json"
+
+        if db_file.exists():
+            return cls.load_from_file(db_file)
+
+        if json_file.exists():
+            return cls.load_from_file(json_file)
+
+        return cls.empty()
 
     @classmethod
     def load_from_file(cls, file_path: Path) -> Graph:
         """Load graph from a specific file (e.g., snapshot).
 
+        Supports both ``.json`` and ``.db`` files. For ``.db`` files,
+        opens a SqliteGraphStore directly.
+
         Args:
-            file_path: Path to graph JSON file.
+            file_path: Path to graph file (``.json`` or ``.db``).
 
         Returns:
             Loaded graph.
 
         Raises:
             FileNotFoundError: If file doesn't exist.
-            json.JSONDecodeError: If file contains invalid JSON.
+            json.JSONDecodeError: If JSON file contains invalid JSON.
         """
+        if file_path.suffix == ".db":
+            from questfoundry.graph.sqlite_store import SqliteGraphStore
+
+            store = SqliteGraphStore(file_path)
+            return cls(store=store)
+
         with file_path.open() as f:
             data = json.load(f)
         return cls.from_dict(data)
@@ -128,11 +160,12 @@ class Graph:
     def save(self, file_path: Path) -> None:
         """Persist graph to a file (atomic write).
 
-        Uses a temporary file and rename to ensure atomicity.
-        No partial writes on failure.
+        For ``.json`` files, serializes via ``to_dict()`` and writes JSON.
+        For ``.db`` files, copies the SQLite database (if the store is
+        SQLite-backed) or bulk-exports to a new database.
 
         Args:
-            file_path: Path to save graph JSON.
+            file_path: Path to save graph (``.json`` or ``.db``).
         """
         # Update last_modified timestamp
         self._store.set_meta("last_modified", datetime.now(UTC).isoformat())
@@ -140,21 +173,125 @@ class Graph:
         # Ensure parent directory exists
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Serialize via store
-        data = self._store.to_dict()
+        if file_path.suffix == ".db":
+            self._save_db(file_path)
+        else:
+            self._save_json(file_path)
 
-        # Atomic write: write to temp file, then rename
-        # Use PID-based suffix to avoid collisions with concurrent processes
+    def _save_json(self, file_path: Path) -> None:
+        """Write graph as JSON with atomic temp-file + rename."""
+        data = self._store.to_dict()
         temp_file = file_path.with_name(f"{file_path.name}.{os.getpid()}.tmp")
         try:
             with temp_file.open("w") as f:
                 json.dump(data, f, indent=2)
             temp_file.rename(file_path)
         except Exception:
-            # Clean up temp file on failure
             if temp_file.exists():
                 temp_file.unlink()
             raise
+
+    def _save_db(self, file_path: Path) -> None:
+        """Save graph as a SQLite database.
+
+        If the store is already SQLite-backed, copies its database file.
+        Otherwise, bulk-exports from the current store to a new SQLite file.
+        """
+        from questfoundry.graph.sqlite_store import SqliteGraphStore
+
+        if isinstance(self._store, SqliteGraphStore):
+            # Copy the live database using SQLite backup API
+            self._store.backup_to(file_path)
+        else:
+            # Bulk-export from dict store to SQLite.
+            # Remove existing file to avoid IntegrityError on INSERT.
+            if file_path.exists():
+                file_path.unlink()
+            data = self._store.to_dict()
+            new_store = SqliteGraphStore.from_dict(data, db_path=file_path)
+            new_store.close()
+
+    # -------------------------------------------------------------------------
+    # Savepoint API
+    # -------------------------------------------------------------------------
+
+    def savepoint(self, name: str) -> None:
+        """Create a named savepoint of the current graph state.
+
+        For SQLite stores, uses native SQL SAVEPOINT. For dict stores,
+        takes a deepcopy snapshot. Use :meth:`rollback_to` to restore
+        and :meth:`release` to discard.
+
+        Args:
+            name: Savepoint name (alphanumeric + underscores).
+        """
+        self._store.savepoint(name)
+
+    def rollback_to(self, name: str) -> None:
+        """Rollback graph state to a named savepoint.
+
+        The savepoint remains active after rollback (can rollback again).
+
+        Args:
+            name: Savepoint name previously created with :meth:`savepoint`.
+        """
+        self._store.rollback_to(name)
+
+    def release(self, name: str) -> None:
+        """Release (commit) a named savepoint, discarding the snapshot.
+
+        Args:
+            name: Savepoint name to release.
+        """
+        self._store.release(name)
+
+    # -------------------------------------------------------------------------
+    # Mutation Context
+    # -------------------------------------------------------------------------
+
+    @contextmanager
+    def mutation_context(self, stage: str, phase: str = "") -> Iterator[None]:
+        """Context manager that tags all mutations with stage/phase info.
+
+        Only effective when the store supports mutation recording
+        (SqliteGraphStore). For DictGraphStore, this is a no-op.
+
+        Args:
+            stage: Current pipeline stage (e.g., "grow").
+            phase: Current phase within the stage (e.g., "path_agnostic").
+
+        Yields:
+            None — enter/exit handles context setup/teardown.
+        """
+        self._store.set_mutation_context(stage, phase)
+        try:
+            yield
+        finally:
+            self._store.set_mutation_context("", "")
+
+    # -------------------------------------------------------------------------
+    # Store Access
+    # -------------------------------------------------------------------------
+
+    @property
+    def is_sqlite_backed(self) -> bool:
+        """Whether this graph uses a SQLite storage backend."""
+        from questfoundry.graph.sqlite_store import SqliteGraphStore
+
+        return isinstance(self._store, SqliteGraphStore)
+
+    @property
+    def sqlite_store(self) -> SqliteGraphStore:
+        """Access the underlying SqliteGraphStore (for advanced operations).
+
+        Raises:
+            TypeError: If the store is not SQLite-backed.
+        """
+        from questfoundry.graph.sqlite_store import SqliteGraphStore
+
+        if not isinstance(self._store, SqliteGraphStore):
+            raise TypeError("Graph is not SQLite-backed")
+        return self._store
 
     # -------------------------------------------------------------------------
     # Node Operations
