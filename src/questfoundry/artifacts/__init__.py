@@ -1,4 +1,4 @@
-"""Artifact reading, writing, and validation."""
+"""Artifact validation and legacy reading."""
 
 from questfoundry.artifacts.reader import (
     ArtifactNotFoundError,
@@ -13,7 +13,6 @@ from questfoundry.artifacts.validator import (
     get_all_field_paths,
     pydantic_errors_to_details,
 )
-from questfoundry.artifacts.writer import ArtifactWriteError, ArtifactWriter
 from questfoundry.models.dream import (
     ContentNotes,
     DreamArtifact,
@@ -30,8 +29,6 @@ __all__ = [
     "ArtifactType",
     "ArtifactValidationError",
     "ArtifactValidator",
-    "ArtifactWriteError",
-    "ArtifactWriter",
     "ContentNotes",
     "DreamArtifact",
     "SchemaNotFoundError",
