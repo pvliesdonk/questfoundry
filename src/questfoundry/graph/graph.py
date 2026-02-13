@@ -72,17 +72,12 @@ class Graph:
 
     @property
     def _data(self) -> dict[str, Any]:
-        """Backward-compat access to underlying dict.
-
-        For DictGraphStore, returns the live internal dict (mutations visible).
-        For other stores, returns a snapshot via ``to_dict()`` (read-only).
+        """Backward-compat access to underlying dict (DictGraphStore only).
 
         External code that accesses ``graph._data`` directly should migrate
         to use Graph public methods instead.
         """
-        if hasattr(self._store, "_data"):
-            return self._store._data  # type: ignore[no-any-return]
-        return self._store.to_dict()
+        return self._store._data  # type: ignore[attr-defined, no-any-return]
 
     # -------------------------------------------------------------------------
     # Loading
@@ -173,14 +168,11 @@ class Graph:
         # Ensure parent directory exists
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if file_path.suffix == ".db":
-            self._save_db(file_path)
-        else:
-            self._save_json(file_path)
-
-    def _save_json(self, file_path: Path) -> None:
-        """Write graph as JSON with atomic temp-file + rename."""
+        # Serialize via store
         data = self._store.to_dict()
+
+        # Atomic write: write to temp file, then rename
+        # Use PID-based suffix to avoid collisions with concurrent processes
         temp_file = file_path.with_name(f"{file_path.name}.{os.getpid()}.tmp")
         try:
             with temp_file.open("w") as f:
