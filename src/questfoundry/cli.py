@@ -2484,6 +2484,112 @@ def graph_cmd(
 
 
 @app.command()
+def audit(
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    stage: Annotated[
+        str | None,
+        typer.Option("--stage", "-s", help="Filter by stage name."),
+    ] = None,
+    phase: Annotated[
+        str | None,
+        typer.Option("--phase", help="Filter by phase name."),
+    ] = None,
+    operation: Annotated[
+        str | None,
+        typer.Option("--operation", "-o", help="Filter by operation type."),
+    ] = None,
+    target: Annotated[
+        str | None,
+        typer.Option("--target", "-t", help="Filter by target ID (substring match)."),
+    ] = None,
+    limit: Annotated[
+        int,
+        typer.Option("--limit", "-n", help="Maximum number of results."),
+    ] = 50,
+    summary: Annotated[
+        bool,
+        typer.Option("--summary", help="Show mutation count summary instead of details."),
+    ] = False,
+) -> None:
+    """Query the graph mutation audit trail.
+
+    Requires a SQLite-backed graph (graph.db). Shows mutations recorded
+    during stage execution with stage, phase, operation, and target details.
+    """
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+
+    db_path = project_path / "graph.db"
+    if not db_path.exists():
+        console.print(
+            "[yellow]No graph.db found.[/yellow] "
+            "Mutation audit is only available for SQLite-backed graphs.",
+        )
+        raise typer.Exit(1)
+
+    from questfoundry.graph.audit import mutation_summary, query_mutations
+
+    if summary:
+        result = mutation_summary(db_path)
+        console.print(f"\n[bold]Total mutations:[/bold] {result['total']}\n")
+
+        if result["by_stage"]:
+            stage_table = Table(title="By Stage")
+            stage_table.add_column("Stage", style="cyan")
+            stage_table.add_column("Count", justify="right")
+            for s, cnt in result["by_stage"].items():
+                stage_table.add_row(s, str(cnt))
+            console.print(stage_table)
+
+        if result["by_operation"]:
+            op_table = Table(title="By Operation")
+            op_table.add_column("Operation", style="green")
+            op_table.add_column("Count", justify="right")
+            for op, cnt in result["by_operation"].items():
+                op_table.add_row(op, str(cnt))
+            console.print(op_table)
+    else:
+        mutations = query_mutations(
+            db_path,
+            stage=stage,
+            phase=phase,
+            operation=operation,
+            target=target,
+            limit=limit,
+        )
+
+        if not mutations:
+            console.print("[dim]No mutations found matching filters.[/dim]")
+            raise typer.Exit()
+
+        table = Table(title=f"Mutations ({len(mutations)} shown)")
+        table.add_column("ID", style="dim", justify="right")
+        table.add_column("Timestamp", style="dim")
+        table.add_column("Stage", style="cyan")
+        table.add_column("Phase", style="blue")
+        table.add_column("Operation", style="green")
+        table.add_column("Target", style="yellow")
+
+        for m in mutations:
+            table.add_row(
+                str(m["id"]),
+                m["timestamp"][:19] if m["timestamp"] else "",
+                m["stage"] or "",
+                m["phase"] or "",
+                m["operation"],
+                m["target_id"],
+            )
+        console.print(table)
+
+
+@app.command()
 def inspect(
     project: Annotated[
         Path | None,
