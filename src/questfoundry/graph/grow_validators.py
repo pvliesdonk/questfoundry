@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         Phase4bOutput,
         Phase4fOutput,
         Phase8cOutput,
+        Phase8dOutput,
         Phase9bOutput,
         Phase9cOutput,
         Phase9Output,
@@ -165,6 +166,52 @@ def validate_phase8c_output(
                         field_path=f"overlays.{i}.when",
                         issue=f"Codeword ID not found: {cw_id}",
                         provided=cw_id,
+                        available=sorted(valid_codeword_ids)[:10],
+                    )
+                )
+    return errors
+
+
+def validate_phase8d_output(
+    result: Phase8dOutput,
+    valid_passage_ids: set[str],
+    valid_codeword_ids: set[str],
+    valid_dilemma_ids: set[str],
+) -> list[GrowValidationError]:
+    """Validate Phase 8d residue beat proposals.
+
+    Checks:
+    - passage_id exists in graph
+    - dilemma_id exists in graph
+    - codeword IDs in variants exist
+    """
+    errors: list[GrowValidationError] = []
+    for i, proposal in enumerate(result.proposals):
+        if proposal.passage_id not in valid_passage_ids:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"proposals.{i}.passage_id",
+                    issue=f"Passage ID not found: {proposal.passage_id}",
+                    provided=proposal.passage_id,
+                    available=sorted(valid_passage_ids)[:10],
+                )
+            )
+        if proposal.dilemma_id not in valid_dilemma_ids:
+            errors.append(
+                GrowValidationError(
+                    field_path=f"proposals.{i}.dilemma_id",
+                    issue=f"Dilemma ID not found: {proposal.dilemma_id}",
+                    provided=proposal.dilemma_id,
+                    available=sorted(valid_dilemma_ids)[:10],
+                )
+            )
+        for j, variant in enumerate(proposal.variants):
+            if variant.codeword_id not in valid_codeword_ids:
+                errors.append(
+                    GrowValidationError(
+                        field_path=f"proposals.{i}.variants.{j}.codeword_id",
+                        issue=f"Codeword ID not found: {variant.codeword_id}",
+                        provided=variant.codeword_id,
                         available=sorted(valid_codeword_ids)[:10],
                     )
                 )
