@@ -72,12 +72,17 @@ class Graph:
 
     @property
     def _data(self) -> dict[str, Any]:
-        """Backward-compat access to underlying dict (DictGraphStore only).
+        """Backward-compat access to underlying dict.
+
+        For DictGraphStore, returns the live internal dict (mutations visible).
+        For other stores, returns a snapshot via ``to_dict()`` (read-only).
 
         External code that accesses ``graph._data`` directly should migrate
         to use Graph public methods instead.
         """
-        return self._store._data  # type: ignore[attr-defined, no-any-return]
+        if hasattr(self._store, "_data"):
+            return self._store._data  # type: ignore[no-any-return]
+        return self._store.to_dict()
 
     # -------------------------------------------------------------------------
     # Loading
@@ -168,11 +173,14 @@ class Graph:
         # Ensure parent directory exists
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Serialize via store
-        data = self._store.to_dict()
+        if file_path.suffix == ".db":
+            self._save_db(file_path)
+        else:
+            self._save_json(file_path)
 
-        # Atomic write: write to temp file, then rename
-        # Use PID-based suffix to avoid collisions with concurrent processes
+    def _save_json(self, file_path: Path) -> None:
+        """Write graph as JSON with atomic temp-file + rename."""
+        data = self._store.to_dict()
         temp_file = file_path.with_name(f"{file_path.name}.{os.getpid()}.tmp")
         try:
             with temp_file.open("w") as f:
@@ -196,17 +204,12 @@ class Graph:
             self._store.backup_to(file_path)
         else:
             # Bulk-export from dict store to SQLite.
-            # Use atomic temp-file + rename to avoid data loss on failure.
-            tmp_path = file_path.with_suffix(".db.tmp")
-            try:
-                data = self._store.to_dict()
-                new_store = SqliteGraphStore.from_dict(data, db_path=tmp_path)
-                new_store.close()
-                tmp_path.replace(file_path)
-            except Exception:
-                if tmp_path.exists():
-                    tmp_path.unlink()
-                raise
+            # Remove existing file to avoid IntegrityError on INSERT.
+            if file_path.exists():
+                file_path.unlink()
+            data = self._store.to_dict()
+            new_store = SqliteGraphStore.from_dict(data, db_path=file_path)
+            new_store.close()
 
     # -------------------------------------------------------------------------
     # Savepoint API
