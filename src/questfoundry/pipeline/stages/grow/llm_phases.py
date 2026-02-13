@@ -10,7 +10,7 @@ GrowStage inherits this mixin so ``execute()`` can delegate to
 from __future__ import annotations
 
 from functools import partial
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.context import (
     ENTITY_CATEGORIES,
@@ -1658,7 +1658,7 @@ class _LLMPhaseMixin:
         # Find linear stretches via BFS from start passages
         choice_to_edges = graph.get_edges(edge_type="choice_to")
         has_incoming = {e["to"] for e in choice_to_edges}
-        starts = [pid for pid in passages if pid not in has_incoming]
+        starts = sorted(pid for pid in passages if pid not in has_incoming)
 
         # BFS: collect maximal linear stretches (3+ single-outgoing passages)
         stretches: list[list[str]] = []
