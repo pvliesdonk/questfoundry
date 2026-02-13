@@ -606,7 +606,7 @@ class TestGrowLlmCall:
         mock_model = MagicMock()
 
         with patch(
-            "questfoundry.pipeline.stages.grow.stage.with_structured_output",
+            "questfoundry.pipeline.stages.grow.llm_helper.with_structured_output",
             return_value=mock_structured,
         ) as mock_wso:
             await stage._grow_llm_call(
@@ -2479,14 +2479,14 @@ class TestGrowLLMCallTokens:
 
         with (
             patch(
-                "questfoundry.pipeline.stages.grow.stage.with_structured_output",
+                "questfoundry.pipeline.stages.grow.llm_helper.with_structured_output",
                 return_value=mock_structured,
             ),
             patch(
-                "questfoundry.pipeline.stages.grow.stage.extract_tokens",
+                "questfoundry.pipeline.stages.grow.llm_helper.extract_tokens",
                 return_value=150,
             ),
-            patch("questfoundry.pipeline.stages.grow.stage._get_prompts_path") as mock_path,
+            patch("questfoundry.pipeline.stages.grow.llm_helper._get_prompts_path") as mock_path,
         ):
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
@@ -2519,14 +2519,14 @@ class TestGrowLLMCallTokens:
 
         with (
             patch(
-                "questfoundry.pipeline.stages.grow.stage.with_structured_output",
+                "questfoundry.pipeline.stages.grow.llm_helper.with_structured_output",
                 return_value=mock_structured,
             ),
             patch(
-                "questfoundry.pipeline.stages.grow.stage.extract_tokens",
+                "questfoundry.pipeline.stages.grow.llm_helper.extract_tokens",
                 return_value=0,
             ),
-            patch("questfoundry.pipeline.stages.grow.stage._get_prompts_path") as mock_path,
+            patch("questfoundry.pipeline.stages.grow.llm_helper._get_prompts_path") as mock_path,
         ):
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
@@ -2565,14 +2565,14 @@ class TestGrowLLMCallTokens:
 
         with (
             patch(
-                "questfoundry.pipeline.stages.grow.stage.with_structured_output",
+                "questfoundry.pipeline.stages.grow.llm_helper.with_structured_output",
                 return_value=mock_structured,
             ),
             patch(
-                "questfoundry.pipeline.stages.grow.stage.extract_tokens",
+                "questfoundry.pipeline.stages.grow.llm_helper.extract_tokens",
                 side_effect=extract_tokens_calls,
             ),
-            patch("questfoundry.pipeline.stages.grow.stage._get_prompts_path") as mock_path,
+            patch("questfoundry.pipeline.stages.grow.llm_helper._get_prompts_path") as mock_path,
         ):
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
@@ -2611,10 +2611,10 @@ class TestGrowHybridProviders:
 
         with (
             patch(
-                "questfoundry.pipeline.stages.grow.stage.with_structured_output",
+                "questfoundry.pipeline.stages.grow.llm_helper.with_structured_output",
                 return_value=mock_structured,
             ) as mock_wso,
-            patch("questfoundry.pipeline.stages.grow.stage._get_prompts_path") as mock_path,
+            patch("questfoundry.pipeline.stages.grow.llm_helper._get_prompts_path") as mock_path,
         ):
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             await stage._grow_llm_call(
@@ -2649,10 +2649,10 @@ class TestGrowHybridProviders:
 
         with (
             patch(
-                "questfoundry.pipeline.stages.grow.stage.with_structured_output",
+                "questfoundry.pipeline.stages.grow.llm_helper.with_structured_output",
                 return_value=mock_structured,
             ) as mock_wso,
-            patch("questfoundry.pipeline.stages.grow.stage._get_prompts_path") as mock_path,
+            patch("questfoundry.pipeline.stages.grow.llm_helper._get_prompts_path") as mock_path,
         ):
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             await stage._grow_llm_call(
@@ -2814,14 +2814,14 @@ class TestGrowSemanticValidation:
 
         with (
             patch(
-                "questfoundry.pipeline.stages.grow.stage.with_structured_output",
+                "questfoundry.pipeline.stages.grow.llm_helper.with_structured_output",
                 return_value=mock_structured,
             ),
             patch(
-                "questfoundry.pipeline.stages.grow.stage.extract_tokens",
+                "questfoundry.pipeline.stages.grow.llm_helper.extract_tokens",
                 return_value=50,
             ),
-            patch("questfoundry.pipeline.stages.grow.stage._get_prompts_path") as mock_path,
+            patch("questfoundry.pipeline.stages.grow.llm_helper._get_prompts_path") as mock_path,
         ):
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
@@ -2897,14 +2897,14 @@ class TestGrowSemanticValidation:
 
         with (
             patch(
-                "questfoundry.pipeline.stages.grow.stage.with_structured_output",
+                "questfoundry.pipeline.stages.grow.llm_helper.with_structured_output",
                 return_value=mock_structured,
             ),
             patch(
-                "questfoundry.pipeline.stages.grow.stage.extract_tokens",
+                "questfoundry.pipeline.stages.grow.llm_helper.extract_tokens",
                 return_value=80,
             ),
-            patch("questfoundry.pipeline.stages.grow.stage._get_prompts_path") as mock_path,
+            patch("questfoundry.pipeline.stages.grow.llm_helper._get_prompts_path") as mock_path,
         ):
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, _tokens = await stage._grow_llm_call(
@@ -2963,14 +2963,14 @@ class TestGrowSemanticValidation:
 
         with (
             patch(
-                "questfoundry.pipeline.stages.grow.stage.with_structured_output",
+                "questfoundry.pipeline.stages.grow.llm_helper.with_structured_output",
                 return_value=mock_structured,
             ),
             patch(
-                "questfoundry.pipeline.stages.grow.stage.extract_tokens",
+                "questfoundry.pipeline.stages.grow.llm_helper.extract_tokens",
                 return_value=60,
             ),
-            patch("questfoundry.pipeline.stages.grow.stage._get_prompts_path") as mock_path,
+            patch("questfoundry.pipeline.stages.grow.llm_helper._get_prompts_path") as mock_path,
         ):
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
@@ -3022,14 +3022,14 @@ class TestGrowSemanticValidation:
 
         with (
             patch(
-                "questfoundry.pipeline.stages.grow.stage.with_structured_output",
+                "questfoundry.pipeline.stages.grow.llm_helper.with_structured_output",
                 return_value=mock_structured,
             ),
             patch(
-                "questfoundry.pipeline.stages.grow.stage.extract_tokens",
+                "questfoundry.pipeline.stages.grow.llm_helper.extract_tokens",
                 return_value=100,
             ),
-            patch("questfoundry.pipeline.stages.grow.stage._get_prompts_path") as mock_path,
+            patch("questfoundry.pipeline.stages.grow.llm_helper._get_prompts_path") as mock_path,
         ):
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
