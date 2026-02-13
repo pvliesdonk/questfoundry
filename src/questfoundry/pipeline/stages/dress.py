@@ -354,6 +354,7 @@ class DressStage:
             if decision == "reject":
                 log.info("phase_rejected", phase=phase_name)
                 graph.rollback_to(phase_name)
+                graph.release(phase_name)
                 graph.save(resolved_path / "graph.json")
                 completed_normally = False
                 break
