@@ -138,7 +138,13 @@ class SqliteGraphStore:
         dest = sqlite3.connect(str(dest_path))
         try:
             self._conn.backup(dest)
-        finally:
+        except Exception:
+            dest.close()
+            # Remove partial file on failure
+            if dest_path.exists():
+                dest_path.unlink()
+            raise
+        else:
             dest.close()
 
     # -- Mutation context ------------------------------------------------------
