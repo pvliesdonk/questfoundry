@@ -57,6 +57,7 @@ from questfoundry.graph.snapshots import (
     rollback_to_snapshot,
     save_snapshot,
 )
+from questfoundry.graph.sqlite_store import SqliteGraphStore
 from questfoundry.graph.store import DictGraphStore, GraphStore
 
 __all__ = [
@@ -81,6 +82,7 @@ __all__ = [
     "SeedErrorCategory",
     "SeedMutationError",
     "SeedValidationError",
+    "SqliteGraphStore",
     "apply_brainstorm_mutations",
     "apply_dream_mutations",
     "apply_mutations",
