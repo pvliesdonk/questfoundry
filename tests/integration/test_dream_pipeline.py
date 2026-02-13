@@ -19,7 +19,6 @@ from pathlib import Path  # noqa: TC003 - Used at runtime in fixtures
 from typing import TYPE_CHECKING
 
 import pytest
-import yaml
 
 from tests.integration.conftest import requires_any_provider, requires_ollama, requires_openai
 
@@ -258,9 +257,6 @@ class TestOrchestratorIntegration:
             assert result.tokens_used > 0
             assert result.duration_seconds > 0
 
-            # Artifact should be written
-            assert result.artifact_path is not None
-            assert result.artifact_path.exists()
         finally:
             await orchestrator.close()
 
@@ -309,8 +305,8 @@ class TestOrchestratorIntegration:
         integration_project: Path,
         simple_story_prompt: str,
     ) -> None:
-        """PipelineOrchestrator persists artifact to disk."""
-        from questfoundry.artifacts import DreamArtifact
+        """PipelineOrchestrator updates graph on completion."""
+        from questfoundry.graph.graph import Graph
         from questfoundry.pipeline.orchestrator import PipelineOrchestrator
 
         orchestrator = PipelineOrchestrator(
@@ -323,16 +319,9 @@ class TestOrchestratorIntegration:
                 context={"user_prompt": simple_story_prompt},
             )
 
-            # Verify artifact file
-            artifact_path = integration_project / "artifacts" / "dream.yaml"
-            assert artifact_path.exists()
-
-            # Load and validate the artifact
-            with artifact_path.open() as f:
-                artifact_data = yaml.safe_load(f)
-
-            artifact = DreamArtifact.model_validate(artifact_data)
-            assert artifact.type == "dream"
+            # Verify graph was updated
+            graph = Graph.load(integration_project)
+            assert graph.get_last_stage() == "dream"
         finally:
             await orchestrator.close()
 

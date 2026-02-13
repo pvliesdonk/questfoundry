@@ -18,7 +18,6 @@ from questfoundry.cli import (
     DEFAULT_NONINTERACTIVE_SEED_PROMPT,
     STAGE_ORDER,
     STAGE_PROMPTS,
-    _preview_grow_artifact,
     _resolve_project_path,
     app,
 )
@@ -163,16 +162,16 @@ def test_status_shows_stages(tmp_path: Path) -> None:
 
 def test_status_shows_completed_stage(tmp_path: Path) -> None:
     """Test qf status shows completed stages."""
-    import yaml
+    from questfoundry.graph.graph import Graph
 
     # Create project
     runner.invoke(app, ["init", "test", "--path", str(tmp_path)])
     project_path = tmp_path / "test"
 
-    # Create fake artifact
-    artifact = {"type": "dream", "version": 1, "genre": "fantasy"}
-    with (project_path / "artifacts" / "dream.yaml").open("w") as f:
-        yaml.safe_dump(artifact, f)
+    # Create graph with dream completed
+    graph = Graph.empty()
+    graph.set_last_stage("dream")
+    graph.save(project_path / "graph.json")
 
     result = runner.invoke(app, ["status", "--project", str(project_path)])
 
@@ -204,25 +203,10 @@ def test_dream_with_mock_provider(tmp_path: Path) -> None:
     mock_result = StageResult(
         stage="dream",
         status="completed",
-        artifact_path=project_path / "artifacts" / "dream.yaml",
         llm_calls=1,
         tokens_used=500,
         duration_seconds=1.5,
     )
-
-    # Create mock artifact
-    import yaml
-
-    artifact = {
-        "type": "dream",
-        "version": 1,
-        "genre": "fantasy",
-        "subgenre": "epic",
-        "tone": ["adventurous", "dramatic"],
-        "themes": ["heroism", "destiny"],
-    }
-    with (project_path / "artifacts" / "dream.yaml").open("w") as f:
-        yaml.safe_dump(artifact, f)
 
     with patch("questfoundry.cli._get_orchestrator") as mock_get:
         mock_orchestrator = MagicMock()
@@ -237,7 +221,6 @@ def test_dream_with_mock_provider(tmp_path: Path) -> None:
 
     assert result.exit_code == 0
     assert "DREAM stage completed" in result.stdout
-    assert "fantasy" in result.stdout
     assert "Tokens: 500" in result.stdout
 
 
@@ -639,7 +622,6 @@ def test_brainstorm_no_prompt_noninteractive_uses_default(tmp_path: Path) -> Non
     mock_result = StageResult(
         stage="brainstorm",
         status="completed",
-        artifact_path=project_path / "graph.json",
         llm_calls=2,
         tokens_used=300,
     )
@@ -677,7 +659,6 @@ def test_seed_no_prompt_noninteractive_uses_default(tmp_path: Path) -> None:
     mock_result = StageResult(
         stage="seed",
         status="completed",
-        artifact_path=project_path / "graph.json",
         llm_calls=2,
         tokens_used=400,
     )
@@ -853,7 +834,6 @@ def test_run_command_runs_stages(tmp_path: Path) -> None:
         return StageResult(
             stage=stage,
             status="completed",
-            artifact_path=project_path / "graph.json",
             llm_calls=2,
             tokens_used=300,
         )
@@ -897,7 +877,6 @@ def test_run_command_skips_completed_stages(tmp_path: Path) -> None:
     mock_result = StageResult(
         stage="brainstorm",
         status="completed",
-        artifact_path=project_path / "graph.json",
         llm_calls=2,
         tokens_used=300,
     )
@@ -940,7 +919,6 @@ def test_run_command_force_reruns_completed(tmp_path: Path) -> None:
         return StageResult(
             stage=stage,
             status="completed",
-            artifact_path=project_path / "graph.json",
             llm_calls=2,
             tokens_used=300,
         )
@@ -1020,7 +998,6 @@ def test_dream_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> No
     mock_result = StageResult(
         stage="dream",
         status="completed",
-        artifact_path=project_path / "artifacts" / "dream.yaml",
         llm_calls=1,
         tokens_used=500,
         duration_seconds=1.5,
@@ -1075,7 +1052,6 @@ def test_brainstorm_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) 
     mock_result = StageResult(
         stage="brainstorm",
         status="completed",
-        artifact_path=project_path / "artifacts" / "brainstorm.yaml",
         llm_calls=1,
         tokens_used=500,
         duration_seconds=1.5,
@@ -1121,7 +1097,6 @@ def test_seed_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> Non
     mock_result = StageResult(
         stage="seed",
         status="completed",
-        artifact_path=project_path / "artifacts" / "seed.yaml",
         llm_calls=1,
         tokens_used=500,
         duration_seconds=1.5,
@@ -1173,12 +1148,9 @@ def test_run_phase_provider_flags_passed_to_orchestrator(tmp_path: Path) -> None
         yaml.safe_dump(artifact, f)
 
     def make_result(stage: str) -> StageResult:
-        artifact_file = project_path / "artifacts" / f"{stage}.yaml"
-        artifact_file.write_text(f"type: {stage}\nversion: 1\n")
         return StageResult(
             stage=stage,
             status="completed",
-            artifact_path=artifact_file,
             llm_calls=1,
             tokens_used=100,
             duration_seconds=0.5,
@@ -1422,7 +1394,6 @@ def test_grow_with_mock_provider(tmp_path: Path) -> None:
     mock_result = StageResult(
         stage="grow",
         status="completed",
-        artifact_path=project_path / "artifacts" / "grow.yaml",
         llm_calls=5,
         tokens_used=2000,
         duration_seconds=10.0,
@@ -1469,113 +1440,6 @@ def test_grow_has_no_interactive_flag() -> None:
     output = _strip_ansi(result.stdout)
 
     assert "--interactive" not in output
-
-
-def test_grow_preview_function_basic() -> None:
-    """Test _preview_grow_artifact displays arc/passage/choice counts."""
-    from io import StringIO
-
-    from rich.console import Console
-
-    import questfoundry.cli as cli_module
-
-    artifact = {
-        "arc_count": 3,
-        "passage_count": 12,
-        "choice_count": 8,
-        "codeword_count": 4,
-        "overlay_count": 0,
-        "spine_arc_id": "arc_main",
-        "phases_completed": [
-            {"phase": 1, "status": "completed"},
-            {"phase": 2, "status": "completed"},
-            {"phase": 3, "status": "completed"},
-        ],
-    }
-
-    # Capture console output
-    output = StringIO()
-    test_console = Console(file=output, highlight=False)
-    original_console = cli_module.console
-    try:
-        cli_module.console = test_console
-        _preview_grow_artifact(artifact)
-    finally:
-        cli_module.console = original_console
-
-    text = output.getvalue()
-    assert "3" in text  # arc_count
-    assert "12" in text  # passage_count
-    assert "8" in text  # choice_count
-    assert "4" in text  # codeword_count
-    assert "arc_main" in text  # spine_arc_id
-    assert "3 completed" in text  # phases
-
-
-def test_grow_preview_function_with_failures() -> None:
-    """Test _preview_grow_artifact shows failed phases."""
-    from io import StringIO
-
-    from rich.console import Console
-
-    import questfoundry.cli as cli_module
-
-    artifact = {
-        "arc_count": 1,
-        "passage_count": 5,
-        "choice_count": 3,
-        "codeword_count": 2,
-        "overlay_count": 0,
-        "spine_arc_id": "arc_main",
-        "phases_completed": [
-            {"phase": 1, "status": "completed"},
-            {"phase": 2, "status": "failed", "detail": "Validation error"},
-        ],
-    }
-
-    output = StringIO()
-    test_console = Console(file=output, highlight=False)
-    original_console = cli_module.console
-    try:
-        cli_module.console = test_console
-        _preview_grow_artifact(artifact)
-    finally:
-        cli_module.console = original_console
-
-    text = output.getvalue()
-    assert "Failed phases: 1" in text
-
-
-def test_grow_preview_function_with_overlays() -> None:
-    """Test _preview_grow_artifact shows overlay count when non-zero."""
-    from io import StringIO
-
-    from rich.console import Console
-
-    import questfoundry.cli as cli_module
-
-    artifact = {
-        "arc_count": 2,
-        "passage_count": 8,
-        "choice_count": 5,
-        "codeword_count": 3,
-        "overlay_count": 4,
-        "spine_arc_id": "arc_spine",
-        "phases_completed": [],
-    }
-
-    output = StringIO()
-    test_console = Console(file=output, highlight=False)
-    original_console = cli_module.console
-    try:
-        cli_module.console = test_console
-        _preview_grow_artifact(artifact)
-    finally:
-        cli_module.console = original_console
-
-    text = output.getvalue()
-    assert "Overlays" in text
-    assert "4" in text
 
 
 # --- Generate Images Command Tests ---
