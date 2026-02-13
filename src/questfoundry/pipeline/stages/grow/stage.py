@@ -81,7 +81,7 @@ def _get_prompts_path() -> Path:
 
     Returns prompts from package first, then falls back to project root.
     """
-    pkg_path = Path(__file__).parents[4] / "prompts"
+    pkg_path = Path(__file__).parents[5] / "prompts"
     if pkg_path.exists():
         return pkg_path
     return Path.cwd() / "prompts"
