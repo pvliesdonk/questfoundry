@@ -360,8 +360,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             if decision == "reject":
                 log.info("phase_rejected", phase=phase_name)
                 graph.rollback_to(phase_name)
-                graph.release(phase_name)
-                graph.save(resolved_path / "graph.json")
                 break
 
             graph.release(phase_name)
