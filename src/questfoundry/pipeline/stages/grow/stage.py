@@ -22,7 +22,7 @@ from __future__ import annotations
 from collections.abc import Awaitable, Callable
 from functools import partial
 from pathlib import Path  # noqa: TC003 - used at runtime
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph.context_compact import (
@@ -37,7 +37,7 @@ from questfoundry.pipeline.stages.grow._helpers import (
     GrowStageError,
     log,
 )
-from questfoundry.pipeline.stages.grow.deterministic import (
+from questfoundry.pipeline.stages.grow.deterministic import (  # noqa: F401 - register phases
     phase_codewords,
     phase_collapse_linear_beats,
     phase_collapse_passages,
@@ -57,6 +57,7 @@ from questfoundry.pipeline.stages.grow.llm_helper import (
 from questfoundry.pipeline.stages.grow.llm_phases import (
     _LLMPhaseMixin,
 )
+from questfoundry.pipeline.stages.grow.registry import get_registry
 
 if TYPE_CHECKING:
     from langchain_core.callbacks import BaseCallbackHandler
@@ -152,48 +153,83 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             return CompactContextConfig.from_context_window(self._context_window)
         return CompactContextConfig()
 
+    # Map from registry phase name → self method name.
+    # Mixin methods need binding to ``self`` at call time.
+    _METHOD_PHASES: ClassVar[dict[str, str]] = {
+        "path_agnostic": "_phase_2_path_agnostic",
+        "scene_types": "_phase_4a_scene_types",
+        "narrative_gaps": "_phase_4b_narrative_gaps",
+        "pacing_gaps": "_phase_4c_pacing_gaps",
+        "atmospheric": "_phase_4d_atmospheric",
+        "path_arcs": "_phase_4e_path_arcs",
+        "intersections": "_phase_3_intersections",
+        "entity_arcs": "_phase_4f_entity_arcs",
+        "overlays": "_phase_8c_overlays",
+        "choices": "_phase_9_choices",
+        "fork_beats": "_phase_9b_fork_beats",
+        "hub_spokes": "_phase_9c_hub_spokes",
+    }
+
+    # Map from registry phase name → module-level free function.
+    # Resolved at call time so that test patches (on the module import)
+    # take effect.  Entries here are the names imported at module top level.
+    _FREE_PHASES: ClassVar[dict[str, str]] = {
+        "validate_dag": "phase_validate_dag",
+        "enumerate_arcs": "phase_enumerate_arcs",
+        "divergence": "phase_divergence",
+        "convergence": "phase_convergence",
+        "collapse_linear_beats": "phase_collapse_linear_beats",
+        "passages": "phase_passages",
+        "codewords": "phase_codewords",
+        "mark_endings": "phase_mark_endings",
+        "split_endings": "phase_split_endings",
+        "collapse_passages": "phase_collapse_passages",
+        "validation": "phase_validation",
+        "prune": "phase_prune",
+    }
+
     def _phase_order(self) -> list[tuple[PhaseFunc, str]]:
         """Return ordered list of (phase_function, phase_name) tuples.
 
-        Returns:
-            List of phase functions with their names, in execution order.
-            All phases are async and accept (graph, model) parameters.
-            Deterministic phases ignore the model parameter.
+        Uses the phase registry for topological ordering, then resolves
+        each phase to its callable: bound method for LLM phases, module-
+        level import for deterministic free functions (preserving test
+        patchability).
+
+        The registry's declared dependencies encode the invariant that
+        phases 4a-4d run BEFORE intersections (3) so that each path is
+        fully elaborated before cross-path weaving.  Gap detection
+        (4a/4b/4c) prevents "conditional prerequisites" — a shared beat
+        depending on a path-specific gap beat — which would cause silent
+        ``requires`` edge drops during arc enumeration and passage DAG
+        cycles.  Phase 4d (atmospheric) annotates beats with sensory
+        detail and entry states that intersections need for shared beats.
+        See: check_intersection_compatibility() invariant, #357/#358/#359.
         """
-        # Phases 4a-4d run BEFORE intersections (3) so that each path is
-        # fully elaborated before cross-path weaving.  Gap detection
-        # (4a/4b/4c) prevents "conditional prerequisites" — a shared beat
-        # depending on a path-specific gap beat — which would cause silent
-        # `requires` edge drops during arc enumeration and passage DAG
-        # cycles.  Phase 4d (atmospheric) annotates beats with sensory
-        # detail and entry states that intersections need for shared beats.
-        # See: check_intersection_compatibility() invariant, #357/#358/#359.
-        return [
-            (phase_validate_dag, "validate_dag"),
-            (self._phase_2_path_agnostic, "path_agnostic"),
-            (self._phase_4a_scene_types, "scene_types"),
-            (self._phase_4b_narrative_gaps, "narrative_gaps"),
-            (self._phase_4c_pacing_gaps, "pacing_gaps"),
-            (self._phase_4d_atmospheric, "atmospheric"),
-            (self._phase_4e_path_arcs, "path_arcs"),
-            (self._phase_3_intersections, "intersections"),
-            (self._phase_4f_entity_arcs, "entity_arcs"),
-            (partial(phase_enumerate_arcs, size_profile=self._size_profile), "enumerate_arcs"),
-            (phase_divergence, "divergence"),
-            (phase_convergence, "convergence"),
-            (phase_collapse_linear_beats, "collapse_linear_beats"),
-            (phase_passages, "passages"),
-            (phase_codewords, "codewords"),
-            (self._phase_8c_overlays, "overlays"),
-            (self._phase_9_choices, "choices"),
-            (self._phase_9b_fork_beats, "fork_beats"),
-            (self._phase_9c_hub_spokes, "hub_spokes"),
-            (phase_mark_endings, "mark_endings"),
-            (phase_split_endings, "split_endings"),
-            (phase_collapse_passages, "collapse_passages"),
-            (phase_validation, "validation"),
-            (phase_prune, "prune"),
-        ]
+        import questfoundry.pipeline.stages.grow.stage as _this_module
+
+        registry = get_registry()
+        result: list[tuple[GrowStage.PhaseFunc, str]] = []
+
+        for phase_name in registry.execution_order():
+            method_name = self._METHOD_PHASES.get(phase_name)
+            free_name = self._FREE_PHASES.get(phase_name)
+
+            if method_name is not None:
+                fn = getattr(self, method_name)
+            elif free_name is not None:
+                # Resolve from module scope so test patches take effect
+                fn = getattr(_this_module, free_name)
+            else:
+                fn = registry.get_function(phase_name)
+
+            # Inject runtime size_profile for enumerate_arcs
+            if phase_name == "enumerate_arcs":
+                fn = partial(fn, size_profile=self._size_profile)
+
+            result.append((fn, phase_name))
+
+        return result
 
     @traceable(name="GROW Stage", run_type="chain", tags=["stage:grow"])
     async def execute(

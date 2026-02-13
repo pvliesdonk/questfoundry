@@ -31,6 +31,7 @@ from questfoundry.pipeline.stages.grow._helpers import (
     _format_structural_feedback,
     log,
 )
+from questfoundry.pipeline.stages.grow.registry import grow_phase
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
@@ -52,6 +53,7 @@ class _LLMPhaseMixin:
     - ``PROLOGUE_ID``
     """
 
+    @grow_phase(name="path_agnostic", depends_on=["validate_dag"], priority=1)
     async def _phase_2_path_agnostic(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 2: Path-agnostic assessment.
 
@@ -59,9 +61,20 @@ class _LLMPhaseMixin:
         of the same dilemma. Path-agnostic beats don't need separate
         renderings per path -- they read the same regardless of path.
 
-        This is about prose compatibility, not logical compatibility.
-        A beat is path-agnostic if its narrative content doesn't reference
-        path-specific choices or consequences.
+        Preconditions:
+        - Beat DAG validated (Phase 1 passed).
+        - Dilemmas with multiple explored paths exist.
+        - Beats have belongs_to edges linking them to paths.
+
+        Postconditions:
+        - Shared beats annotated with path_agnostic_for=[dilemma_ids].
+        - Only beats belonging to 2+ paths of the same dilemma assessed.
+        - Beat nodes updated in-place with assessment results.
+
+        Invariants:
+        - LLM call only made when candidate beats exist.
+        - Invalid beat/dilemma IDs from LLM output silently filtered.
+        - Single-path dilemmas skipped (no assessment needed).
         """
         from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
 
@@ -211,6 +224,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="intersections", depends_on=["path_arcs"], priority=7)
     async def _phase_3_intersections(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 3: Intersection detection.
 
@@ -218,14 +232,21 @@ class _LLMPhaseMixin:
         using algorithmic signal detection (shared locations/entities),
         then asks the LLM to evaluate which groups form natural scenes.
 
-        Includes a structural retry: if all proposed intersections are
-        rejected by compatibility checks, the LLM is re-invoked with
-        targeted error feedback.
+        Preconditions:
+        - Path arcs computed (Phase 4e complete).
+        - Beats have belongs_to edges with single-dilemma mapping.
+        - Beat nodes have locations, entities for candidate clustering.
 
-        An intersection is valid when:
-        - Beats are from different dilemmas
-        - No requires conflicts between the beats
-        - Location is resolvable (shared location exists)
+        Postconditions:
+        - Accepted intersections marked on beat nodes via apply_intersection_mark.
+        - Resolved locations stored on intersected beats.
+        - Incompatible proposals rejected (requires conflicts, same dilemma).
+
+        Invariants:
+        - Pre-clustering is deterministic (shared locations/entities).
+        - LLM only evaluates pre-clustered candidate groups.
+        - Structural retry: up to 2 attempts with targeted error feedback.
+        - All intersections applied in batch to avoid cascade effects.
         """
         from questfoundry.graph.grow_algorithms import (
             apply_intersection_mark,
@@ -445,12 +466,26 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
+    @grow_phase(name="scene_types", depends_on=["path_agnostic"], priority=2)
     async def _phase_4a_scene_types(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4a: Tag beats with scene type classification.
 
         Asks the LLM to classify each beat as scene (active conflict/action),
         sequel (reaction/reflection), or micro_beat (brief transition).
-        Updates beat nodes with scene_type field.
+
+        Preconditions:
+        - Path-agnostic assessment complete (Phase 2).
+        - Beat nodes exist with summaries.
+
+        Postconditions:
+        - Each beat annotated with scene_type (scene/sequel/micro_beat).
+        - Each beat annotated with narrative_function and exit_mood.
+        - Invalid beat IDs from LLM output silently skipped.
+
+        Invariants:
+        - All beats classified in a single LLM call.
+        - Beat summaries truncated to 80 chars in context.
+        - Uses compact_items for context budget management.
         """
         from questfoundry.models.grow import Phase4aOutput
 
@@ -517,13 +552,27 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="narrative_gaps", depends_on=["scene_types"], priority=3)
     async def _phase_4b_narrative_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4b: Detect narrative gaps in path beat sequences.
 
         For each path, traces the beat sequence and asks the LLM
         to identify missing beats (e.g., a path jumps from setup
-        to climax without a development beat). Inserts proposed gap
-        beats into the graph.
+        to climax without a development beat).
+
+        Preconditions:
+        - Scene types assigned (Phase 4a complete).
+        - Paths have 2+ beats with requires-based ordering.
+
+        Postconditions:
+        - Gap beats inserted into the graph with requires edges.
+        - New beats have belongs_to edges linking them to their path.
+        - Beat summaries provided by LLM for each gap.
+
+        Invariants:
+        - Only paths with 2+ beats assessed.
+        - Inserted beats placed between valid before/after beat pairs.
+        - Invalid proposals (bad IDs, wrong ordering) silently rejected.
         """
         from questfoundry.graph.grow_algorithms import get_path_beat_sequence
         from questfoundry.models.grow import Phase4bOutput
@@ -601,12 +650,25 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="pacing_gaps", depends_on=["narrative_gaps"], priority=4)
     async def _phase_4c_pacing_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4c: Detect and fix pacing issues (3+ same scene_type in a row).
 
-        Runs deterministic pacing detection first. If issues are found,
-        asks the LLM to propose correction beats. Only proceeds if
-        Phase 4a has tagged beats with scene types.
+        Runs deterministic pacing detection first, then asks the LLM
+        to propose correction beats for any violations found.
+
+        Preconditions:
+        - Narrative gaps resolved (Phase 4b complete).
+        - Beats have scene_type tags from Phase 4a.
+
+        Postconditions:
+        - Pacing violations (3+ consecutive same scene_type) corrected.
+        - Correction beats inserted to break monotonous sequences.
+
+        Invariants:
+        - Skipped if no scene_type tags found (Phase 4a did not run).
+        - Only affected paths included in LLM context.
+        - Deterministic pacing detection precedes LLM correction.
         """
         from questfoundry.graph.grow_algorithms import (
             detect_pacing_issues,
@@ -727,11 +789,27 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="atmospheric", depends_on=["pacing_gaps"], priority=5)
     async def _phase_4d_atmospheric(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4d: Atmospheric detail and entry states for beats.
 
         Generates sensory environment details for all beats and per-path
-        entry moods for shared (path-agnostic) beats. Single batch LLM call.
+        entry moods for shared (path-agnostic) beats.
+
+        Preconditions:
+        - Pacing gaps resolved (Phase 4c complete).
+        - Beat nodes have summaries and optional path_agnostic_for.
+        - Path nodes have dilemma_id, path_theme, path_mood.
+
+        Postconditions:
+        - All beats annotated with atmospheric_detail (sensory environment).
+        - Shared (path-agnostic) beats get entry_states with per-path moods.
+        - Entry states only applied to beats in the shared_beats set.
+
+        Invariants:
+        - Single LLM call for all beats.
+        - Narrative frame built from dilemma questions and path themes.
+        - Entry states validated against valid path IDs before storing.
         """
         from questfoundry.models.grow import Phase4dOutput
 
@@ -843,11 +921,25 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="path_arcs", depends_on=["atmospheric"], priority=6)
     async def _phase_4e_path_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4e: Per-path thematic mini-arcs.
 
         Generates a thematic through-line and mood descriptor for each path.
-        One LLM call per path.
+
+        Preconditions:
+        - Atmospheric details assigned (Phase 4d complete).
+        - Each path has beats with scene_type and narrative_function.
+        - Entity nodes have concept and entity_type fields.
+
+        Postconditions:
+        - Each path annotated with path_theme and path_mood.
+        - Themes and moods derived from beat sequence and entity context.
+
+        Invariants:
+        - One LLM call per path via batch_llm_calls.
+        - Dilemma question and stakes included in per-path context.
+        - Entity arcs from path node included for thematic coherence.
         """
         from questfoundry.graph.grow_algorithms import get_path_beat_sequence
         from questfoundry.models.grow import PathMiniArc
@@ -978,15 +1070,28 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
+    @grow_phase(name="entity_arcs", depends_on=["intersections"], priority=8)
     async def _phase_4f_entity_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4f: Per-entity arc trajectories on each path.
 
         Runs post-intersection so beat topology is final. For each path,
         selects eligible entities (deterministic), then asks the LLM to
-        generate arc_line and pivot_beat per entity. The arc_type is
-        computed from entity category, not LLM output.
+        generate arc_line and pivot_beat per entity.
 
-        Results are stored as ``entity_arcs`` on path nodes.
+        Preconditions:
+        - Intersections computed (Phase 3 complete), beat topology final.
+        - Entity nodes have entity_type and concept fields.
+        - Path nodes have beat sequences via belongs_to + requires.
+
+        Postconditions:
+        - Each path annotated with entity_arcs list.
+        - Each entity arc has entity_id, arc_type, arc_line, pivot_beat.
+        - arc_type derived deterministically from entity category.
+
+        Invariants:
+        - One LLM call per path via batch_llm_calls.
+        - Only eligible entities (2+ beat appearances) included.
+        - Pivot beat on shared beat triggers a warning but is allowed.
         """
         from functools import partial as partial_fn
 
@@ -1151,12 +1256,27 @@ class _LLMPhaseMixin:
     # Late LLM phases (8c, 9, 9b, 9c)
     # -------------------------------------------------------------------------
 
+    @grow_phase(name="overlays", depends_on=["codewords"], priority=15)
     async def _phase_8c_overlays(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 8c: Create entity overlays conditioned on codewords.
 
         For each consequence/codeword pair, proposes entity modifications
-        that activate when those codewords are granted. Validates that
-        entity_ids and codeword IDs exist in the graph before storing.
+        that activate when those codewords are granted.
+
+        Preconditions:
+        - Codeword nodes exist (Phase 8b complete).
+        - Entity nodes exist with concept, entity_type.
+        - Consequence nodes linked to paths and dilemmas.
+
+        Postconditions:
+        - Entity nodes gain overlays list with {when: [codeword_ids], details: {...}}.
+        - Overlays modify entity presentation when codewords are granted.
+        - Invalid entity/codeword IDs from LLM output silently skipped.
+
+        Invariants:
+        - Entity IDs resolved through all category prefixes for robustness.
+        - Enriched context traces codeword -> consequence -> path -> dilemma.
+        - Overlays appended to existing overlays list (not replaced).
         """
         from questfoundry.models.grow import Phase8cOutput
 
@@ -1324,15 +1444,30 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="choices", depends_on=["overlays"], priority=16)
     async def _phase_9_choices(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 9: Create choice edges between passages.
 
-        Handles three cases:
-        1. Single-successor passages get implicit "continue" edges.
-        2. Multi-successor passages (divergence points) get LLM-generated
-           diegetic labels describing the player's action.
-        3. Multiple orphan starts (arcs diverging at beat 0) get a synthetic
-           "prologue" passage that branches to each start.
+        Handles three cases: single-successor (contextual labels),
+        multi-successor (diegetic labels), and orphan starts (synthetic
+        prologue).
+
+        Preconditions:
+        - Overlay nodes created (Phase 8c complete).
+        - Passage nodes exist with passage_from edges to beats.
+        - Arc membership and divergence points computed.
+
+        Postconditions:
+        - Every passage-to-passage transition has a choice node.
+        - Single-successor passages get LLM-generated contextual labels.
+        - Multi-successor passages get diegetic labels from LLM.
+        - Multiple orphan starts get a synthetic prologue passage.
+        - Choice requires derived from arc codeword signatures.
+
+        Invariants:
+        - Fails if fallback label ratio exceeds 30%.
+        - Prologue is synthetic with is_synthetic=True.
+        - choice_from and choice_to edges link choices to passages.
         """
         from questfoundry.graph.grow_algorithms import (
             PassageSuccessor,
@@ -1617,6 +1752,7 @@ class _LLMPhaseMixin:
             tokens_used=single_tokens + tokens,
         )
 
+    @grow_phase(name="fork_beats", depends_on=["choices"], priority=17)
     async def _phase_9b_fork_beats(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 9b: Insert reconvergent forks at linear stretches.
 
@@ -1624,10 +1760,21 @@ class _LLMPhaseMixin:
         and asks the LLM to propose forks where the player chooses between
         two approaches that reconverge at a later passage.
 
-        For each accepted fork:
-        - Remove the existing choice from fork_at to its successor
-        - Create 2 synthetic passages (option A and option B)
-        - Create 4 choice nodes wiring fork_at → options → reconverge_at
+        Preconditions:
+        - Choice edges exist (Phase 9 complete).
+        - Linear stretches of 3+ consecutive single-outgoing passages exist.
+
+        Postconditions:
+        - Fork proposals insert 2 synthetic passages between fork_at and next.
+        - Original choice from fork_at removed; 4 new choices created.
+        - Synthetic passages have is_synthetic=True.
+        - Reconvergence choices carry grants from the original choice.
+
+        Invariants:
+        - Maximum 5 fork proposals accepted per phase run.
+        - Maximum 10 stretches sent to LLM context.
+        - Already-forked passages skipped to prevent stale data.
+        - Gracefully degrades: LLM failure results in no forks (not failure).
         """
         from questfoundry.graph.grow_validation import (
             build_outgoing_count,
@@ -1864,14 +2011,27 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="hub_spokes", depends_on=["fork_beats"], priority=18)
     async def _phase_9c_hub_spokes(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 9c: Add hub-and-spoke exploration nodes.
 
         Identifies passages suitable for optional exploration (location arrivals,
         group encounters) and creates spoke passages that return to the hub.
 
-        Spoke→hub return choices use ``is_return=True`` so they are excluded
-        from DAG cycle detection.
+        Preconditions:
+        - Fork beats inserted (Phase 9b complete).
+        - Passage nodes have outgoing choice_from edges.
+
+        Postconditions:
+        - Hub passages get spoke passages for optional exploration.
+        - Spoke passages have is_synthetic=True.
+        - Spoke->hub return choices have is_return=True (excluded from DAG checks).
+        - Hub's first forward choice relabeled with forward_label.
+
+        Invariants:
+        - Maximum 3 hubs inserted per phase run.
+        - Only non-ending passages considered as hub candidates.
+        - Gracefully degrades: LLM failure results in no hubs (not failure).
         """
         from questfoundry.models.grow import Phase9cOutput
 
