@@ -247,6 +247,7 @@ class TestGlobalRegistry:
             "collapse_linear_beats",
             "passages",
             "codewords",
+            "residue_beats",
             "overlays",
             "choices",
             "fork_beats",
