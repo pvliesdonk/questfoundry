@@ -33,9 +33,18 @@ PROLOGUE_ID = "passage::prologue"
 async def phase_validate_dag(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 1: Validate beat DAG and commits beats.
 
-    Checks:
-    1. Beat requires edges form a valid DAG (no cycles)
-    2. Each explored dilemma has a commits beat per path
+    Preconditions:
+    - Graph contains beat nodes from SEED with requires edges.
+    - Each explored dilemma has paths with beats belonging to them.
+
+    Postconditions:
+    - Beat requires edges form a valid DAG (no cycles).
+    - Each explored dilemma has exactly one commits beat per path.
+    - Returns failed status if any validation check fails.
+
+    Invariants:
+    - Read-only: no graph mutations, only validation.
+    - Must run before any phase that relies on beat ordering.
     """
     from questfoundry.graph.grow_algorithms import (
         validate_beat_dag,
@@ -67,7 +76,20 @@ async def phase_enumerate_arcs(
 ) -> GrowPhaseResult:
     """Phase 5: Enumerate arcs from path combinations.
 
-    Creates arc nodes and arc_contains edges for each beat in the arc.
+    Preconditions:
+    - Beat DAG is valid (Phase 1 passed).
+    - Entity arcs computed for all paths (Phase 4f complete).
+    - Path and beat nodes exist with belongs_to edges.
+
+    Postconditions:
+    - Arc nodes created for each valid path combination.
+    - arc_contains edges link arcs to their beat sequences.
+    - Exactly one spine arc exists (containing all canonical paths).
+    - Arc count bounded by 4x size_profile.max_arcs (if provided).
+
+    Invariants:
+    - Deterministic: same graph always produces same arcs.
+    - Fails if no spine arc is created.
     """
     from questfoundry.graph.grow_algorithms import enumerate_arcs
 
@@ -138,7 +160,17 @@ async def phase_enumerate_arcs(
 async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 6: Compute divergence points between arcs.
 
-    Updates arc nodes with divergence metadata and creates diverges_at edges.
+    Preconditions:
+    - Arc nodes exist with sequence and paths metadata (Phase 5 complete).
+    - At least one spine arc exists for reference.
+
+    Postconditions:
+    - Each non-spine arc has diverges_from and diverges_at metadata.
+    - diverges_at edges link arcs to their first diverging beat.
+
+    Invariants:
+    - Deterministic: divergence points derived from sequence comparison.
+    - No-op if only one arc exists (no branching).
     """
     from questfoundry.graph.grow_algorithms import compute_divergence_points
     from questfoundry.models.grow import Arc as ArcModel
@@ -201,7 +233,20 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
 async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 7: Find convergence points for diverged arcs.
 
-    Updates arc nodes with convergence metadata and creates converges_at edges.
+    Preconditions:
+    - Divergence points computed (Phase 6 complete).
+    - Arc nodes have sequence, paths, and diverges_at metadata.
+    - Dilemma nodes have convergence_policy from SEED analysis.
+
+    Postconditions:
+    - Arcs with soft/flavor dilemmas get converges_at and converges_to metadata.
+    - converges_at edges link arcs to their convergence beat.
+    - Each arc has convergence_policy and payoff_budget stored.
+    - Hard dilemma arcs have no convergence point.
+
+    Invariants:
+    - Deterministic: convergence derived from dilemma policies and beat sequences.
+    - dilemma_convergences list stored per arc for multi-dilemma arcs.
     """
     from questfoundry.graph.grow_algorithms import (
         compute_divergence_points,
@@ -292,7 +337,22 @@ async def phase_collapse_linear_beats(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
 ) -> GrowPhaseResult:
-    """Phase 7b: Collapse mandatory linear beat runs before passage creation."""
+    """Phase 7b: Collapse mandatory linear beat runs before passage creation.
+
+    Preconditions:
+    - Convergence computed (Phase 7 complete).
+    - Beat nodes have requires edges defining ordering.
+
+    Postconditions:
+    - Linear runs of 2+ consecutive single-path beats are merged.
+    - Surviving beat absorbs summaries and entities from removed beats.
+    - requires edges updated to preserve ordering.
+    - Beat count reduced; arc sequences updated accordingly.
+
+    Invariants:
+    - Deterministic: min_run_length=2 always applied.
+    - Only mandatory (single-path) beats collapsed; shared beats preserved.
+    """
     from questfoundry.graph.grow_algorithms import collapse_linear_beats
 
     result = collapse_linear_beats(graph, min_run_length=2)
@@ -319,7 +379,18 @@ async def phase_collapse_linear_beats(
 async def phase_passages(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 8a: Create passage nodes from beats.
 
-    Each beat gets exactly one passage node and a passage_from edge.
+    Preconditions:
+    - Beat collapse complete (Phase 7b).
+    - Each beat has a raw_id, summary, and entities.
+
+    Postconditions:
+    - Each beat has exactly one passage node (passage::{raw_id}).
+    - passage_from edges link each passage to its source beat.
+    - Passage nodes carry summary, entities, and prose=None.
+
+    Invariants:
+    - 1:1 mapping between beats and passages (before collapse/split).
+    - Deterministic: passage IDs derived from beat raw_ids.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     if not beat_nodes:
@@ -362,8 +433,19 @@ async def phase_passages(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
 async def phase_codewords(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 8b: Create codeword nodes from consequences.
 
-    For each consequence, creates a codeword node with a tracks edge.
-    Finds commits beats and adds grants edges from beat to codeword.
+    Preconditions:
+    - Passage nodes exist (Phase 8a complete).
+    - Consequence nodes exist with path_id associations.
+    - has_consequence edges link paths to consequences.
+
+    Postconditions:
+    - One codeword node per consequence (codeword::{raw_id}_committed).
+    - tracks edges link codewords to their consequences.
+    - grants edges link commits beats to codewords they activate.
+
+    Invariants:
+    - 1:1 mapping between consequences and codewords.
+    - Codeword grants derived from beat dilemma_impacts with effect="commits".
     """
     consequence_nodes = graph.get_nodes_by_type("consequence")
     if not consequence_nodes:
@@ -456,8 +538,17 @@ async def phase_mark_endings(
 ) -> GrowPhaseResult:
     """Phase 9c2: Mark terminal passages with is_ending flag.
 
-    Derives ending status from graph structure (no outgoing choices).
-    Must run before collapse so endings are exempt from merging.
+    Preconditions:
+    - Hub-spoke nodes created (Phase 9c complete).
+    - Passage and choice nodes exist with choice_from edges.
+
+    Postconditions:
+    - Terminal passages (no outgoing choice_from edges) have is_ending=True.
+    - Non-terminal passages are not modified.
+
+    Invariants:
+    - Deterministic: ending status derived purely from graph structure.
+    - Must run before collapse so endings are exempt from merging.
     """
     from questfoundry.graph.grow_algorithms import mark_terminal_passages
 
@@ -484,9 +575,20 @@ async def phase_split_endings(
 ) -> GrowPhaseResult:
     """Phase 9c3: Split shared endings into per-arc-family passages.
 
-    When multiple arcs with different codeword signatures share a terminal
-    passage, creates distinct ending passages gated by distinguishing
-    codewords.  No LLM call — pure graph manipulation.
+    Preconditions:
+    - Terminal passages marked with is_ending (Phase 9c2 complete).
+    - Codeword nodes exist (Phase 8b complete).
+    - Arcs have codeword signatures from their path combinations.
+
+    Postconditions:
+    - Shared terminal passages split into per-arc-family variants.
+    - Each variant gated by its distinguishing codeword set.
+    - Choice edges updated to point to appropriate variants.
+    - Original shared passage removed when split occurs.
+
+    Invariants:
+    - No-op when all terminal passages already have unique arc families.
+    - Deterministic: splitting based on codeword signature comparison.
     """
     from questfoundry.graph.grow_algorithms import split_ending_families
 
@@ -521,9 +623,19 @@ async def phase_collapse_passages(
 ) -> GrowPhaseResult:
     """Phase 9d: Collapse linear passage chains into merged passages.
 
-    Linear chains (3+ consecutive single-outgoing passages) create a passive
-    reading experience. This phase merges them into single passages with
-    multiple source beats, giving FILL richer context for continuous prose.
+    Preconditions:
+    - Endings split (Phase 9c3 complete).
+    - Choice edges define passage-to-passage navigation.
+
+    Postconditions:
+    - Linear chains of 3-5 consecutive single-outgoing passages merged.
+    - Surviving passage absorbs source_beats from removed passages.
+    - Choice edges rewired to skip removed passages.
+    - Endings and hub spokes exempt from collapsing.
+
+    Invariants:
+    - min_chain_length=3, max_chain_length=5.
+    - Deterministic: chain detection via outgoing choice count.
     """
     from questfoundry.graph.grow_algorithms import collapse_linear_passages
 
@@ -553,8 +665,18 @@ async def phase_collapse_passages(
 async def phase_validation(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 10: Graph validation.
 
-    Runs structural and timing checks on the assembled story graph.
-    Failures block execution; warnings are advisory.
+    Preconditions:
+    - Passage collapse complete (Phase 9d).
+    - Full story graph assembled with passages, choices, arcs.
+
+    Postconditions:
+    - All structural and timing checks evaluated.
+    - Returns failed if any check has severity="fail".
+    - Warnings logged but do not block execution.
+
+    Invariants:
+    - Read-only: no graph mutations, only validation.
+    - Check results include pass/warn/fail counts and summary.
     """
     from questfoundry.graph.grow_validation import run_all_checks
 
@@ -599,9 +721,18 @@ async def phase_validation(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
 async def phase_prune(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 11: Prune unreachable passages.
 
-    When choice edges exist (Phase 9 ran), uses BFS via choice_to edges
-    from the first passage in the spine arc to find reachable passages.
-    Falls back to arc_contains membership when no choices exist.
+    Preconditions:
+    - Validation complete (Phase 10).
+    - Choice edges define the reachability graph.
+
+    Postconditions:
+    - Passages unreachable from the story start are deleted (cascade).
+    - When choices exist: BFS via choice_to from prologue or spine start.
+    - When no choices: fallback to arc_contains membership.
+
+    Invariants:
+    - Prologue passage (if synthetic) is always the BFS start.
+    - All reachable passages preserved; only orphans removed.
     """
     passage_nodes = graph.get_nodes_by_type("passage")
     if not passage_nodes:
