@@ -55,7 +55,7 @@ class TestGrowStageExecute:
         result_dict, llm_calls, tokens = await stage.execute(model=mock_model, user_prompt="")
         assert llm_calls == 0
         assert tokens == 0
-        # execute() returns the GROW artifact data (not telemetry)
+        # execute() returns GrowResult.model_dump() (not artifact data)
         expected_keys = {
             "arc_count",
             "passage_count",
@@ -63,18 +63,13 @@ class TestGrowStageExecute:
             "codeword_count",
             "overlay_count",
             "spine_arc_id",
-            "arcs",
-            "beats",
-            "passages",
-            "choices",
-            "codewords",
+            "phases_completed",
         }
         assert set(result_dict.keys()) == expected_keys
-        assert result_dict["arcs"] == []
-        assert result_dict["beats"] == []
-        assert result_dict["passages"] == []
-        assert result_dict["choices"] == []
-        assert result_dict["codewords"] == []
+        assert result_dict["arc_count"] == 0
+        assert result_dict["passage_count"] == 0
+        assert result_dict["choice_count"] == 0
+        assert result_dict["codeword_count"] == 0
 
     @pytest.mark.asyncio
     async def test_execute_with_project_path_kwarg(
@@ -84,7 +79,7 @@ class TestGrowStageExecute:
         result_dict, _, _ = await stage.execute(
             model=mock_model, user_prompt="", project_path=tmp_project
         )
-        assert result_dict["arcs"] == []
+        assert result_dict["arc_count"] == 0
 
     @pytest.mark.asyncio
     async def test_execute_missing_project_path_raises(self, mock_model: MagicMock) -> None:
@@ -138,7 +133,7 @@ class TestGrowStageExecute:
 
         stage = GrowStage(project_path=tmp_path)
         result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
-        assert result_dict["arcs"] == []
+        assert result_dict["arc_count"] == 0
 
         graph = Graph.load(tmp_path)
         assert graph.get_last_stage() == "grow"
@@ -199,11 +194,7 @@ class TestGrowStageExecute:
             "codeword_count",
             "overlay_count",
             "spine_arc_id",
-            "arcs",
-            "beats",
-            "passages",
-            "choices",
-            "codewords",
+            "phases_completed",
         }
         assert set(result_dict.keys()) == expected_keys
 

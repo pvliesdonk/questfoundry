@@ -453,12 +453,6 @@ class GrowStage:
             spine_arc_id=spine_arc_id,
         )
 
-        # Artifact is derived from the graph (beats/arcs/passages/choices/codewords).
-        # The orchestrator is responsible for writing artifacts to disk.
-        from questfoundry.artifacts.enrichment import extract_grow_artifact
-
-        artifact_data = extract_grow_artifact(graph)
-
         log.info(
             "stage_complete",
             stage="grow",
@@ -467,7 +461,8 @@ class GrowStage:
             codewords=grow_result.codeword_count,
         )
 
-        return artifact_data, total_llm_calls, total_tokens
+        # GROW manages its own graph; return summary data for validation
+        return grow_result.model_dump(), total_llm_calls, total_tokens
 
     # -------------------------------------------------------------------------
     # LLM helper

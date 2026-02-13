@@ -1,4 +1,4 @@
-"""Tests for artifact reading, writing, and validation."""
+"""Tests for artifact reading and validation."""
 
 from pathlib import Path
 
@@ -10,7 +10,6 @@ from questfoundry.artifacts import (
     ArtifactReader,
     ArtifactValidationError,
     ArtifactValidator,
-    ArtifactWriter,
     DreamArtifact,
     Scope,
 )
@@ -121,95 +120,34 @@ def test_dream_artifact_accepts_flexible_audience() -> None:
     assert artifact.audience == "adults"
 
 
-# --- ArtifactWriter Tests ---
-
-
-def test_writer_creates_artifact_file(tmp_path: Path) -> None:
-    """Writer creates artifact YAML file."""
-    writer = ArtifactWriter(tmp_path)
-    artifact = DreamArtifact(
-        genre="mystery",
-        tone=["dark"],
-        audience="adult",
-        themes=["betrayal"],
-        scope=Scope(story_size="standard"),
-    )
-
-    path = writer.write(artifact, "dream")
-
-    assert path.exists()
-    assert path == tmp_path / "artifacts" / "dream.yaml"
-
-
-def test_writer_creates_artifacts_directory(tmp_path: Path) -> None:
-    """Writer creates artifacts directory if missing."""
-    writer = ArtifactWriter(tmp_path)
-    artifact = DreamArtifact(
-        genre="mystery",
-        tone=["dark"],
-        audience="adult",
-        themes=["betrayal"],
-        scope=Scope(story_size="standard"),
-    )
-
-    writer.write(artifact, "dream")
-
-    assert (tmp_path / "artifacts").is_dir()
-
-
-def test_writer_writes_dict(tmp_path: Path) -> None:
-    """Writer can write raw dictionaries."""
-    writer = ArtifactWriter(tmp_path)
-    data = {
-        "type": "dream",
-        "version": 1,
-        "genre": "mystery",
-        "tone": ["dark"],
-        "audience": "adult",
-        "themes": ["betrayal"],
-        "scope": {"story_size": "standard"},
-    }
-
-    path = writer.write(data, "dream")
-
-    assert path.exists()
-
-
-def test_writer_excludes_none_values(tmp_path: Path) -> None:
-    """Writer excludes None values from output."""
-    writer = ArtifactWriter(tmp_path)
-    artifact = DreamArtifact(
-        genre="mystery",
-        tone=["dark"],
-        audience="adult",
-        themes=["betrayal"],
-        subgenre=None,  # Should not appear in output
-        scope=Scope(story_size="standard"),
-    )
-
-    path = writer.write(artifact, "dream")
-    content = path.read_text()
-
-    assert "subgenre" not in content
-
-
 # --- ArtifactReader Tests ---
+
+
+def _write_yaml(tmp_path: Path, stage: str, data: dict) -> Path:
+    """Write a YAML artifact file for testing."""
+    import yaml
+
+    artifacts_dir = tmp_path / "artifacts"
+    artifacts_dir.mkdir(exist_ok=True)
+    path = artifacts_dir / f"{stage}.yaml"
+    path.write_text(yaml.safe_dump(data))
+    return path
 
 
 def test_reader_reads_artifact(tmp_path: Path) -> None:
     """Reader reads artifact from YAML file."""
-    # Write first
-    writer = ArtifactWriter(tmp_path)
-    artifact = DreamArtifact(
-        genre="mystery",
-        tone=["dark"],
-        audience="adult",
-        themes=["betrayal"],
-        scope=Scope(story_size="standard"),
+    _write_yaml(
+        tmp_path,
+        "dream",
+        {
+            "genre": "mystery",
+            "tone": ["dark"],
+            "audience": "adult",
+            "themes": ["betrayal"],
+            "scope": {"story_size": "standard"},
+        },
     )
-    writer.write(artifact, "dream")
 
-    # Read back
     reader = ArtifactReader(tmp_path)
     data = reader.read("dream")
 
@@ -219,19 +157,19 @@ def test_reader_reads_artifact(tmp_path: Path) -> None:
 
 def test_reader_read_validated(tmp_path: Path) -> None:
     """Reader validates against Pydantic model."""
-    # Write first
-    writer = ArtifactWriter(tmp_path)
-    artifact = DreamArtifact(
-        genre="mystery",
-        subgenre="noir",
-        tone=["dark", "atmospheric"],
-        audience="adult",
-        themes=["betrayal"],
-        scope=Scope(story_size="standard"),
+    _write_yaml(
+        tmp_path,
+        "dream",
+        {
+            "genre": "mystery",
+            "subgenre": "noir",
+            "tone": ["dark", "atmospheric"],
+            "audience": "adult",
+            "themes": ["betrayal"],
+            "scope": {"story_size": "standard"},
+        },
     )
-    writer.write(artifact, "dream")
 
-    # Read validated
     reader = ArtifactReader(tmp_path)
     loaded = reader.read_validated("dream", DreamArtifact)
 
@@ -252,15 +190,17 @@ def test_reader_not_found(tmp_path: Path) -> None:
 
 def test_reader_exists(tmp_path: Path) -> None:
     """Reader checks artifact existence."""
-    writer = ArtifactWriter(tmp_path)
-    artifact = DreamArtifact(
-        genre="mystery",
-        tone=["dark"],
-        audience="adult",
-        themes=["betrayal"],
-        scope=Scope(story_size="standard"),
+    _write_yaml(
+        tmp_path,
+        "dream",
+        {
+            "genre": "mystery",
+            "tone": ["dark"],
+            "audience": "adult",
+            "themes": ["betrayal"],
+            "scope": {"story_size": "standard"},
+        },
     )
-    writer.write(artifact, "dream")
 
     reader = ArtifactReader(tmp_path)
 
@@ -399,8 +339,7 @@ def test_roundtrip_preserves_data(tmp_path: Path) -> None:
         scope=Scope(story_size="short"),
     )
 
-    writer = ArtifactWriter(tmp_path)
-    writer.write(original, "dream")
+    _write_yaml(tmp_path, "dream", original.model_dump())
 
     reader = ArtifactReader(tmp_path)
     loaded = reader.read_validated("dream", DreamArtifact)

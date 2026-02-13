@@ -506,22 +506,26 @@ class FillStage:
             graph.set_last_stage("fill")
             graph.save(resolved_path / "graph.json")
 
-        # Write human-readable artifact (story data extracted from graph)
-        from questfoundry.artifacts.enrichment import extract_fill_artifact
-        from questfoundry.artifacts.writer import ArtifactWriter
-
-        artifact_data = extract_fill_artifact(graph)
-        ArtifactWriter(resolved_path).write(artifact_data, "fill")
-
-        passages = artifact_data.get("passages", [])
+        # Summarize passage prose coverage from graph
+        passage_nodes = graph.get_nodes_by_type("passage")
+        total_passages = len(passage_nodes)
+        passages_with_prose = sum(1 for p in passage_nodes.values() if p.get("prose"))
         log.info(
             "stage_complete",
             stage="fill",
-            total_passages=len(passages),
-            passages_with_prose=sum(1 for p in passages if p.get("prose")),
+            total_passages=total_passages,
+            passages_with_prose=passages_with_prose,
         )
 
-        return artifact_data, total_llm_calls, total_tokens
+        # Return summary for validation (graph is the source of truth)
+        return (
+            {
+                "total_passages": total_passages,
+                "passages_with_prose": passages_with_prose,
+            },
+            total_llm_calls,
+            total_tokens,
+        )
 
     # -------------------------------------------------------------------------
     # LLM helper
