@@ -1253,7 +1253,7 @@ class _LLMPhaseMixin:
         )
 
     # -------------------------------------------------------------------------
-    # Late LLM phases (8d, 8c, 9, 9b, 9c)
+    # Late LLM phases (codewords → validation)
     # -------------------------------------------------------------------------
 
     @grow_phase(name="residue_beats", depends_on=["codewords"], priority=15)
@@ -1297,19 +1297,13 @@ class _LLMPhaseMixin:
         # Build convergence context for LLM — rich narrative per candidate
         convergence_lines: list[str] = []
         passage_nodes = graph.get_nodes_by_type("passage")
-        valid_passage_ids: list[str] = []
-        valid_codeword_ids: list[str] = []
-        valid_dilemma_ids: list[str] = []
+        valid_passage_ids: list[str] = list(dict.fromkeys(c.passage_id for c in candidates))
+        valid_dilemma_ids: list[str] = list(dict.fromkeys(c.dilemma_id for c in candidates))
+        valid_codeword_ids: list[str] = list(
+            dict.fromkeys(cw_id for c in candidates for cw_id in c.codeword_ids)
+        )
 
         for candidate in candidates:
-            if candidate.passage_id not in valid_passage_ids:
-                valid_passage_ids.append(candidate.passage_id)
-            if candidate.dilemma_id not in valid_dilemma_ids:
-                valid_dilemma_ids.append(candidate.dilemma_id)
-            for cw_id in candidate.codeword_ids:
-                if cw_id not in valid_codeword_ids:
-                    valid_codeword_ids.append(cw_id)
-
             passage_data = passage_nodes.get(candidate.passage_id, {})
             summary = truncate_summary(str(passage_data.get("summary", "")), 120)
 
