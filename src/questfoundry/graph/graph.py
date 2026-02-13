@@ -9,15 +9,16 @@ The graph enforces referential integrity similar to foreign keys in databases:
 - Edges validate that both endpoints exist
 - Errors provide semantic, actionable feedback for LLM retry loops
 
-See docs/architecture/graph-storage.md for design details.
+Graph delegates storage operations to a GraphStore backend (DictGraphStore by
+default). See docs/architecture/graph-storage.md for design details.
 """
 
 from __future__ import annotations
 
-import copy
 import json
 import os
 import warnings
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
@@ -27,40 +28,61 @@ from questfoundry.graph.errors import (
     NodeNotFoundError,
     NodeReferencedError,
 )
+from questfoundry.graph.store import DictGraphStore, GraphStore
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
+
+    from questfoundry.graph.sqlite_store import SqliteGraphStore
 
 
 class Graph:
     """Unified story graph storage.
 
-    The graph stores all story state as nodes and edges in a single JSON file.
-    Stages produce structured output that the runtime applies as mutations.
+    The graph stores all story state as nodes and edges. Stages produce
+    structured output that the runtime applies as mutations.
+
+    Storage is delegated to a GraphStore backend. By default, DictGraphStore
+    provides the original in-memory dict behavior.
 
     Attributes:
-        _data: Internal graph data structure with version, meta, nodes, edges.
+        _store: The underlying storage backend.
     """
 
     VERSION = "5.0"
 
-    def __init__(self, data: dict[str, Any] | None = None) -> None:
-        """Initialize graph with optional data.
+    def __init__(
+        self,
+        data: dict[str, Any] | None = None,
+        *,
+        store: GraphStore | None = None,
+    ) -> None:
+        """Initialize graph with optional data or store.
 
         Args:
             data: Graph data dict. If None, creates an empty graph.
+                  Ignored if *store* is provided.
+            store: Pre-built storage backend. If provided, *data* is ignored.
         """
-        self._data = data or {
-            "version": self.VERSION,
-            "meta": {
-                "project_name": None,
-                "last_stage": None,
-                "last_modified": None,
-                "stage_history": [],
-            },
-            "nodes": {},
-            "edges": [],
-        }
+        if store is not None:
+            self._store = store
+        else:
+            self._store = DictGraphStore(data)
+
+    @property
+    def _data(self) -> dict[str, Any]:
+        """Backward-compat access to underlying dict.
+
+        For DictGraphStore, returns the live internal dict (mutations visible).
+        For other stores, returns a snapshot via ``to_dict()`` (read-only).
+
+        External code that accesses ``graph._data`` directly should migrate
+        to use Graph public methods instead.
+        """
+        if hasattr(self._store, "_data"):
+            return self._store._data  # type: ignore[no-any-return]
+        return self._store.to_dict()
 
     # -------------------------------------------------------------------------
     # Loading
@@ -70,31 +92,54 @@ class Graph:
     def load(cls, project_path: Path) -> Graph:
         """Load graph from project directory.
 
+        Detection order:
+        1. ``graph.db`` — open existing SQLite database
+        2. ``graph.json`` — load as DictGraphStore (JSON backend)
+        3. Neither — return empty graph (DictGraphStore)
+
+        To migrate from JSON to SQLite, use :func:`migrate_json_to_sqlite`
+        explicitly or enable auto-migration at the stage level.
+
         Args:
             project_path: Path to project root directory.
 
         Returns:
-            Loaded graph, or empty graph if no graph.json exists.
+            Loaded graph.
         """
-        graph_file = project_path / "graph.json"
-        if not graph_file.exists():
-            return cls.empty()
-        return cls.load_from_file(graph_file)
+        db_file = project_path / "graph.db"
+        json_file = project_path / "graph.json"
+
+        if db_file.exists():
+            return cls.load_from_file(db_file)
+
+        if json_file.exists():
+            return cls.load_from_file(json_file)
+
+        return cls.empty()
 
     @classmethod
     def load_from_file(cls, file_path: Path) -> Graph:
         """Load graph from a specific file (e.g., snapshot).
 
+        Supports both ``.json`` and ``.db`` files. For ``.db`` files,
+        opens a SqliteGraphStore directly.
+
         Args:
-            file_path: Path to graph JSON file.
+            file_path: Path to graph file (``.json`` or ``.db``).
 
         Returns:
             Loaded graph.
 
         Raises:
             FileNotFoundError: If file doesn't exist.
-            json.JSONDecodeError: If file contains invalid JSON.
+            json.JSONDecodeError: If JSON file contains invalid JSON.
         """
+        if file_path.suffix == ".db":
+            from questfoundry.graph.sqlite_store import SqliteGraphStore
+
+            store = SqliteGraphStore(file_path)
+            return cls(store=store)
+
         with file_path.open() as f:
             data = json.load(f)
         return cls.from_dict(data)
@@ -115,30 +160,143 @@ class Graph:
     def save(self, file_path: Path) -> None:
         """Persist graph to a file (atomic write).
 
-        Uses a temporary file and rename to ensure atomicity.
-        No partial writes on failure.
+        For ``.json`` files, serializes via ``to_dict()`` and writes JSON.
+        For ``.db`` files, copies the SQLite database (if the store is
+        SQLite-backed) or bulk-exports to a new database.
 
         Args:
-            file_path: Path to save graph JSON.
+            file_path: Path to save graph (``.json`` or ``.db``).
         """
         # Update last_modified timestamp
-        self._data["meta"]["last_modified"] = datetime.now(UTC).isoformat()
+        self._store.set_meta("last_modified", datetime.now(UTC).isoformat())
 
         # Ensure parent directory exists
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        # Atomic write: write to temp file, then rename
-        # Use PID-based suffix to avoid collisions with concurrent processes
+        if file_path.suffix == ".db":
+            self._save_db(file_path)
+        else:
+            self._save_json(file_path)
+
+    def _save_json(self, file_path: Path) -> None:
+        """Write graph as JSON with atomic temp-file + rename."""
+        data = self._store.to_dict()
         temp_file = file_path.with_name(f"{file_path.name}.{os.getpid()}.tmp")
         try:
             with temp_file.open("w") as f:
-                json.dump(self._data, f, indent=2)
+                json.dump(data, f, indent=2)
             temp_file.rename(file_path)
         except Exception:
-            # Clean up temp file on failure
             if temp_file.exists():
                 temp_file.unlink()
             raise
+
+    def _save_db(self, file_path: Path) -> None:
+        """Save graph as a SQLite database.
+
+        If the store is already SQLite-backed, copies its database file.
+        Otherwise, bulk-exports from the current store to a new SQLite file.
+        """
+        from questfoundry.graph.sqlite_store import SqliteGraphStore
+
+        if isinstance(self._store, SqliteGraphStore):
+            # Copy the live database using SQLite backup API
+            self._store.backup_to(file_path)
+        else:
+            # Bulk-export from dict store to SQLite.
+            # Use atomic temp-file + rename to avoid data loss on failure.
+            tmp_path = file_path.with_suffix(".db.tmp")
+            try:
+                data = self._store.to_dict()
+                new_store = SqliteGraphStore.from_dict(data, db_path=tmp_path)
+                new_store.close()
+                tmp_path.replace(file_path)
+            except Exception:
+                if tmp_path.exists():
+                    tmp_path.unlink()
+                raise
+
+    # -------------------------------------------------------------------------
+    # Savepoint API
+    # -------------------------------------------------------------------------
+
+    def savepoint(self, name: str) -> None:
+        """Create a named savepoint of the current graph state.
+
+        For SQLite stores, uses native SQL SAVEPOINT. For dict stores,
+        takes a deepcopy snapshot. Use :meth:`rollback_to` to restore
+        and :meth:`release` to discard.
+
+        Args:
+            name: Savepoint name (alphanumeric + underscores).
+        """
+        self._store.savepoint(name)
+
+    def rollback_to(self, name: str) -> None:
+        """Rollback graph state to a named savepoint.
+
+        The savepoint remains active after rollback (can rollback again).
+
+        Args:
+            name: Savepoint name previously created with :meth:`savepoint`.
+        """
+        self._store.rollback_to(name)
+
+    def release(self, name: str) -> None:
+        """Release (commit) a named savepoint, discarding the snapshot.
+
+        Args:
+            name: Savepoint name to release.
+        """
+        self._store.release(name)
+
+    # -------------------------------------------------------------------------
+    # Mutation Context
+    # -------------------------------------------------------------------------
+
+    @contextmanager
+    def mutation_context(self, stage: str, phase: str = "") -> Iterator[None]:
+        """Context manager that tags all mutations with stage/phase info.
+
+        Only effective when the store supports mutation recording
+        (SqliteGraphStore). For DictGraphStore, this is a no-op.
+
+        Args:
+            stage: Current pipeline stage (e.g., "grow").
+            phase: Current phase within the stage (e.g., "path_agnostic").
+
+        Yields:
+            None — enter/exit handles context setup/teardown.
+        """
+        self._store.set_mutation_context(stage, phase)
+        try:
+            yield
+        finally:
+            self._store.set_mutation_context("", "")
+
+    # -------------------------------------------------------------------------
+    # Store Access
+    # -------------------------------------------------------------------------
+
+    @property
+    def is_sqlite_backed(self) -> bool:
+        """Whether this graph uses a SQLite storage backend."""
+        from questfoundry.graph.sqlite_store import SqliteGraphStore
+
+        return isinstance(self._store, SqliteGraphStore)
+
+    @property
+    def sqlite_store(self) -> SqliteGraphStore:
+        """Access the underlying SqliteGraphStore (for advanced operations).
+
+        Raises:
+            TypeError: If the store is not SQLite-backed.
+        """
+        from questfoundry.graph.sqlite_store import SqliteGraphStore
+
+        if not isinstance(self._store, SqliteGraphStore):
+            raise TypeError("Graph is not SQLite-backed")
+        return self._store
 
     # -------------------------------------------------------------------------
     # Node Operations
@@ -153,8 +311,7 @@ class Graph:
         Returns:
             Node data dict, or None if not found.
         """
-        result = self._data["nodes"].get(node_id)
-        return cast("dict[str, Any] | None", result)
+        return self._store.get_node(node_id)
 
     def create_node(self, node_id: str, data: dict[str, Any]) -> None:
         """Create a new node. Fails if node already exists.
@@ -169,9 +326,9 @@ class Graph:
         Raises:
             NodeExistsError: If node already exists.
         """
-        if node_id in self._data["nodes"]:
+        if self._store.has_node(node_id):
             raise NodeExistsError(node_id)
-        self._data["nodes"][node_id] = data
+        self._store.set_node(node_id, data)
 
     def update_node(self, node_id: str, **updates: Any) -> None:
         """Update an existing node. Fails if node doesn't exist.
@@ -186,7 +343,7 @@ class Graph:
         Raises:
             NodeNotFoundError: If node doesn't exist.
         """
-        if node_id not in self._data["nodes"]:
+        if not self._store.has_node(node_id):
             # Provide helpful context based on node ID prefix
             node_type = self._infer_type_from_id(node_id)
             available = self._get_node_ids_by_type(node_type)
@@ -195,7 +352,7 @@ class Graph:
                 available=available,
                 context="update_node - node must exist before updating",
             )
-        self._data["nodes"][node_id].update(updates)
+        self._store.update_node_fields(node_id, **updates)
 
     def upsert_node(self, node_id: str, data: dict[str, Any]) -> bool:
         """Create or update a node. Use sparingly - prefer explicit create/update.
@@ -210,8 +367,8 @@ class Graph:
         Returns:
             True if node was created, False if updated.
         """
-        created = node_id not in self._data["nodes"]
-        self._data["nodes"][node_id] = data
+        created = not self._store.has_node(node_id)
+        self._store.set_node(node_id, data)
         return created
 
     def delete_node(self, node_id: str, *, cascade: bool = False) -> None:
@@ -225,21 +382,19 @@ class Graph:
             NodeNotFoundError: If node doesn't exist.
             NodeReferencedError: If node is referenced by edges and cascade=False.
         """
-        if node_id not in self._data["nodes"]:
+        if not self._store.has_node(node_id):
             raise NodeNotFoundError(node_id, context="delete_node")
 
         # Find edges referencing this node
-        refs = self._find_edges_referencing(node_id)
+        refs = self._store.edges_referencing(node_id)
         if refs and not cascade:
             raise NodeReferencedError(node_id, referenced_by=refs)
 
         # Delete referencing edges if cascade
         if cascade and refs:
-            self._data["edges"] = [
-                e for e in self._data["edges"] if node_id not in (e.get("from"), e.get("to"))
-            ]
+            self._store.remove_edges_referencing(node_id)
 
-        del self._data["nodes"][node_id]
+        self._store.delete_node(node_id)
 
     def set_node(self, node_id: str, data: dict[str, Any]) -> None:
         """Set a node, creating or replacing it.
@@ -258,7 +413,7 @@ class Graph:
             DeprecationWarning,
             stacklevel=2,
         )
-        self._data["nodes"][node_id] = data
+        self._store.set_node(node_id, data)
 
     def add_node(self, node_id: str, data: dict[str, Any]) -> None:
         """Add a new node (alias for create_node).
@@ -289,7 +444,7 @@ class Graph:
         Returns:
             True if node exists, False otherwise.
         """
-        return node_id in self._data["nodes"]
+        return self._store.has_node(node_id)
 
     def ref(self, node_type: str, raw_id: str) -> str:
         """Get a validated node reference. Raises if node doesn't exist.
@@ -318,7 +473,7 @@ class Graph:
                 f"Got '{raw_id}', expected just the ID part (e.g., 'kay' not 'entity::kay')"
             )
         node_id = f"{node_type}::{raw_id}"
-        if node_id not in self._data["nodes"]:
+        if not self._store.has_node(node_id):
             available = self._get_node_ids_by_type(node_type)
             raise NodeNotFoundError(
                 node_id,
@@ -336,11 +491,7 @@ class Graph:
         Returns:
             Dict of node_id -> node_data for matching nodes.
         """
-        return {
-            node_id: node_data
-            for node_id, node_data in self._data["nodes"].items()
-            if node_data.get("type") == node_type
-        }
+        return self._store.get_nodes_by_type(node_type)
 
     def _infer_type_from_id(self, node_id: str) -> str | None:
         """Infer node type from ID prefix (e.g., 'entity::kay' -> 'entity')."""
@@ -355,13 +506,8 @@ class Graph:
         IDs to provide relevant suggestions.
         """
         if node_type is None:
-            return [nid for nid in self._data["nodes"] if "::" not in nid]
-        prefix = f"{node_type}::"
-        return [nid for nid in self._data["nodes"] if nid.startswith(prefix)]
-
-    def _find_edges_referencing(self, node_id: str) -> list[dict[str, Any]]:
-        """Find all edges that reference a node (as from or to)."""
-        return [e for e in self._data["edges"] if node_id in (e.get("from"), e.get("to"))]
+            return [nid for nid in self._store.all_node_ids() if "::" not in nid]
+        return self._store.node_ids_with_prefix(f"{node_type}::")
 
     # -------------------------------------------------------------------------
     # Edge Operations
@@ -390,8 +536,8 @@ class Graph:
             EdgeEndpointError: If validate=True and either endpoint doesn't exist.
         """
         if validate:
-            from_exists = from_id in self._data["nodes"]
-            to_exists = to_id in self._data["nodes"]
+            from_exists = self._store.has_node(from_id)
+            to_exists = self._store.has_node(to_id)
 
             if not from_exists or not to_exists:
                 # Determine what's missing
@@ -421,7 +567,7 @@ class Graph:
             "to": to_id,
             **props,
         }
-        self._data["edges"].append(edge)
+        self._store.add_edge(edge)
 
     def remove_edge(
         self,
@@ -442,15 +588,7 @@ class Graph:
         Returns:
             True if an edge was removed, False if no match found.
         """
-        for i, edge in enumerate(self._data["edges"]):
-            if (
-                edge.get("type") == edge_type
-                and edge.get("from") == from_id
-                and edge.get("to") == to_id
-            ):
-                self._data["edges"].pop(i)
-                return True
-        return False
+        return self._store.remove_edge(edge_type, from_id, to_id)
 
     def get_edges(
         self,
@@ -470,16 +608,7 @@ class Graph:
         Returns:
             List of matching edge dicts.
         """
-        edges: list[dict[str, Any]] = self._data["edges"]
-
-        if from_id is not None:
-            edges = [e for e in edges if e.get("from") == from_id]
-        if to_id is not None:
-            edges = [e for e in edges if e.get("to") == to_id]
-        if edge_type is not None:
-            edges = [e for e in edges if e.get("type") == edge_type]
-
-        return edges
+        return self._store.get_edges(from_id=from_id, to_id=to_id, edge_type=edge_type)
 
     # -------------------------------------------------------------------------
     # Validation
@@ -499,9 +628,8 @@ class Graph:
             List of violation messages (empty if valid).
         """
         violations: list[str] = []
-        nodes = self._data["nodes"]
 
-        for i, edge in enumerate(self._data["edges"]):
+        for i, edge in enumerate(self._store.get_edges()):
             # Check edge has required fields
             edge_type = edge.get("type")
             from_id = edge.get("from")
@@ -515,9 +643,9 @@ class Graph:
                 violations.append(f"Edge {i} missing 'to' field")
 
             # Check endpoints exist
-            if from_id and from_id not in nodes:
+            if from_id and not self._store.has_node(from_id):
                 violations.append(f"Edge {i} ({edge_type}): source '{from_id}' does not exist")
-            if to_id and to_id not in nodes:
+            if to_id and not self._store.has_node(to_id):
                 violations.append(f"Edge {i} ({edge_type}): target '{to_id}' does not exist")
 
         return violations
@@ -534,13 +662,15 @@ class Graph:
         Args:
             stage_name: Name of completed stage.
         """
-        self._data["meta"]["last_stage"] = stage_name
-        self._data["meta"]["stage_history"].append(
+        self._store.set_meta("last_stage", stage_name)
+        history = self._store.get_meta("stage_history") or []
+        history.append(
             {
                 "stage": stage_name,
                 "completed": datetime.now(UTC).isoformat(),
             }
         )
+        self._store.set_meta("stage_history", history)
 
     def get_last_stage(self) -> str | None:
         """Get the name of the last completed stage.
@@ -548,7 +678,7 @@ class Graph:
         Returns:
             Stage name, or None if no stages completed.
         """
-        result = self._data["meta"].get("last_stage")
+        result = self._store.get_meta("last_stage")
         return cast("str | None", result)
 
     def set_project_name(self, name: str) -> None:
@@ -557,7 +687,7 @@ class Graph:
         Args:
             name: Project name.
         """
-        self._data["meta"]["project_name"] = name
+        self._store.set_meta("project_name", name)
 
     def get_project_name(self) -> str | None:
         """Get the project name from metadata.
@@ -565,7 +695,7 @@ class Graph:
         Returns:
             Project name, or None if not set.
         """
-        result = self._data["meta"].get("project_name")
+        result = self._store.get_meta("project_name")
         return cast("str | None", result)
 
     # -------------------------------------------------------------------------
@@ -580,7 +710,7 @@ class Graph:
         Returns:
             Graph data as dict (deep copy).
         """
-        return copy.deepcopy(self._data)
+        return self._store.to_dict()
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Graph:
@@ -600,7 +730,7 @@ class Graph:
 
     def __repr__(self) -> str:
         """Return string representation of graph."""
-        node_count = len(self._data["nodes"])
-        edge_count = len(self._data["edges"])
+        node_count = self._store.node_count()
+        edge_count = self._store.edge_count()
         last_stage = self.get_last_stage() or "none"
         return f"Graph(nodes={node_count}, edges={edge_count}, last_stage={last_stage})"

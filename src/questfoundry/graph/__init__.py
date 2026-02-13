@@ -32,6 +32,7 @@ from questfoundry.graph.errors import (
     NodeReferencedError,
 )
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.migration import migrate_json_to_sqlite
 from questfoundry.graph.mutations import (
     BrainstormMutationError,
     BrainstormValidationError,
@@ -57,6 +58,8 @@ from questfoundry.graph.snapshots import (
     rollback_to_snapshot,
     save_snapshot,
 )
+from questfoundry.graph.sqlite_store import SqliteGraphStore
+from questfoundry.graph.store import DictGraphStore, GraphStore
 
 __all__ = [
     "ENTITY_CATEGORIES",
@@ -64,10 +67,12 @@ __all__ = [
     "SCOPE_PATH",
     "BrainstormMutationError",
     "BrainstormValidationError",
+    "DictGraphStore",
     "EdgeEndpointError",
     "Graph",
     "GraphCorruptionError",
     "GraphIntegrityError",
+    "GraphStore",
     "GrowErrorCategory",
     "GrowMutationError",
     "GrowValidationError",
@@ -78,6 +83,7 @@ __all__ = [
     "SeedErrorCategory",
     "SeedMutationError",
     "SeedValidationError",
+    "SqliteGraphStore",
     "apply_brainstorm_mutations",
     "apply_dream_mutations",
     "apply_mutations",
@@ -93,6 +99,7 @@ __all__ = [
     "has_mutation_handler",
     "is_entity_id",
     "list_snapshots",
+    "migrate_json_to_sqlite",
     "normalize_scoped_id",
     "parse_entity_id",
     "parse_hierarchical_path_id",
