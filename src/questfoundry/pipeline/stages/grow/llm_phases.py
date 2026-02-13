@@ -12,7 +12,7 @@ GrowStage inherits this mixin so ``execute()`` can delegate to
 from __future__ import annotations
 
 from functools import partial
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from questfoundry.graph.context_compact import (
     ContextItem,
@@ -32,6 +32,8 @@ from questfoundry.pipeline.stages.grow._helpers import (
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
+
+    from questfoundry.graph.mutations import GrowValidationError
 
 
 class _LLMPhaseMixin:
@@ -325,7 +327,7 @@ class _LLMPhaseMixin:
             skipped_count = 0
             pre_intersection_graph = Graph.from_dict(graph.to_dict())
             accepted: list[tuple[list[str], str | None]] = []
-            structural_errors: list[Any] = []
+            structural_errors: list[GrowValidationError] = []
 
             for proposal in result.intersections:
                 # Filter to valid beat IDs
