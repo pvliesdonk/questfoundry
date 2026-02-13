@@ -58,6 +58,7 @@ from questfoundry.graph.snapshots import (
     rollback_to_snapshot,
     save_snapshot,
 )
+from questfoundry.graph.sqlite_store import SqliteGraphStore
 from questfoundry.graph.store import DictGraphStore, GraphStore
 
 __all__ = [
