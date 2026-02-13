@@ -11,9 +11,12 @@ JSON serialization.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from pathlib import Path
 from typing import Any, cast
+
+from questfoundry.graph.errors import NodeNotFoundError
 
 # ---------------------------------------------------------------------------
 # Schema
@@ -111,6 +114,7 @@ class SqliteGraphStore:
             )
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
+        self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
 
@@ -170,12 +174,24 @@ class SqliteGraphStore:
 
     # -- Savepoints ------------------------------------------------------------
 
+    _SAVEPOINT_RE = re.compile(r"^[A-Za-z0-9_]+$")
+
+    def _validate_savepoint_name(self, name: str) -> None:
+        """Validate savepoint name to prevent SQL injection."""
+        if not self._SAVEPOINT_RE.match(name):
+            msg = f"Invalid savepoint name {name!r}: must be alphanumeric/underscores only"
+            raise ValueError(msg)
+
     def savepoint(self, name: str) -> None:
         """Create a SQLite savepoint.
 
         Args:
-            name: Savepoint name (alphanumeric + underscores).
+            name: Savepoint name (alphanumeric + underscores only).
+
+        Raises:
+            ValueError: If *name* contains invalid characters.
         """
+        self._validate_savepoint_name(name)
         self._conn.execute(f"SAVEPOINT sp_{name}")
 
     def rollback_to(self, name: str) -> None:
@@ -185,7 +201,11 @@ class SqliteGraphStore:
 
         Args:
             name: Savepoint name previously created with :meth:`savepoint`.
+
+        Raises:
+            ValueError: If *name* contains invalid characters.
         """
+        self._validate_savepoint_name(name)
         self._conn.execute(f"ROLLBACK TO sp_{name}")
 
     def release(self, name: str) -> None:
@@ -193,7 +213,11 @@ class SqliteGraphStore:
 
         Args:
             name: Savepoint name to release.
+
+        Raises:
+            ValueError: If *name* contains invalid characters.
         """
+        self._validate_savepoint_name(name)
         self._conn.execute(f"RELEASE SAVEPOINT sp_{name}")
 
     # -- Nodes -----------------------------------------------------------------
@@ -236,7 +260,7 @@ class SqliteGraphStore:
     def update_node_fields(self, node_id: str, **updates: Any) -> None:
         row = self._conn.execute("SELECT data FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         if row is None:
-            return  # Graph checks existence before calling
+            raise NodeNotFoundError(node_id=node_id)
         current = json.loads(row["data"])
         current.update(updates)
         node_type = current.get("type", "")
@@ -342,18 +366,25 @@ class SqliteGraphStore:
         return [self._row_to_edge(row) for row in rows]
 
     def remove_edges_referencing(self, node_id: str) -> None:
-        # Record mutations before deleting
-        rows = self._conn.execute(
-            "SELECT edge_type, from_id, to_id FROM edges WHERE from_id = ? OR to_id = ?",
-            (node_id, node_id),
-        ).fetchall()
-        for row in rows:
-            target_id = f"edge:{row['edge_type']}:{row['from_id']}:{row['to_id']}"
-            self._record_mutation("remove_edge", target_id)
-        self._conn.execute(
-            "DELETE FROM edges WHERE from_id = ? OR to_id = ?",
-            (node_id, node_id),
-        )
+        # Atomic: record mutations and delete in one transaction
+        self._conn.execute("SAVEPOINT sp_remove_refs")
+        try:
+            rows = self._conn.execute(
+                "SELECT edge_type, from_id, to_id FROM edges WHERE from_id = ? OR to_id = ?",
+                (node_id, node_id),
+            ).fetchall()
+            for row in rows:
+                target_id = f"edge:{row['edge_type']}:{row['from_id']}:{row['to_id']}"
+                self._record_mutation("remove_edge", target_id)
+            self._conn.execute(
+                "DELETE FROM edges WHERE from_id = ? OR to_id = ?",
+                (node_id, node_id),
+            )
+            self._conn.execute("RELEASE SAVEPOINT sp_remove_refs")
+        except Exception:
+            self._conn.execute("ROLLBACK TO sp_remove_refs")
+            self._conn.execute("RELEASE SAVEPOINT sp_remove_refs")
+            raise
 
     def edge_count(self) -> int:
         row = self._conn.execute("SELECT COUNT(*) AS cnt FROM edges").fetchone()
@@ -433,33 +464,50 @@ class SqliteGraphStore:
         """
         store = cls(db_path)
 
-        # Meta
-        meta = data.get("meta", {})
-        for key, value in meta.items():
-            store._conn.execute(
-                "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
-                (key, json.dumps(value)),
-            )
+        # Bulk import in a single transaction for performance
+        store._conn.execute("BEGIN")
+        try:
+            # Meta
+            meta = data.get("meta", {})
+            if meta:
+                store._conn.executemany(
+                    "INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)",
+                    [(key, json.dumps(value)) for key, value in meta.items()],
+                )
 
-        # Nodes (bulk insert, no mutation recording)
-        nodes = data.get("nodes", {})
-        for node_id, node_data in nodes.items():
-            node_type = node_data.get("type", "")
-            store._conn.execute(
-                "INSERT INTO nodes (node_id, type, data) VALUES (?, ?, ?)",
-                (node_id, node_type, json.dumps(node_data)),
-            )
+            # Nodes (bulk insert, no mutation recording)
+            nodes = data.get("nodes", {})
+            if nodes:
+                store._conn.executemany(
+                    "INSERT INTO nodes (node_id, type, data) VALUES (?, ?, ?)",
+                    [
+                        (node_id, node_data.get("type", ""), json.dumps(node_data))
+                        for node_id, node_data in nodes.items()
+                    ],
+                )
 
-        # Edges (bulk insert, no mutation recording)
-        edges = data.get("edges", [])
-        for edge in edges:
-            edge_type = edge.get("type", "")
-            from_id = edge.get("from", "")
-            to_id = edge.get("to", "")
-            extra = {k: v for k, v in edge.items() if k not in ("type", "from", "to")}
-            store._conn.execute(
-                "INSERT INTO edges (edge_type, from_id, to_id, data) VALUES (?, ?, ?, ?)",
-                (edge_type, from_id, to_id, json.dumps(extra) if extra else None),
-            )
+            # Edges (bulk insert, no mutation recording)
+            edges = data.get("edges", [])
+            if edges:
+                store._conn.executemany(
+                    "INSERT INTO edges (edge_type, from_id, to_id, data) VALUES (?, ?, ?, ?)",
+                    [
+                        (
+                            edge.get("type", ""),
+                            edge.get("from", ""),
+                            edge.get("to", ""),
+                            json.dumps(
+                                {k: v for k, v in edge.items() if k not in ("type", "from", "to")}
+                            )
+                            or None,
+                        )
+                        for edge in edges
+                    ],
+                )
+
+            store._conn.execute("COMMIT")
+        except Exception:
+            store._conn.execute("ROLLBACK")
+            raise
 
         return store
