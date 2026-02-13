@@ -31,6 +31,7 @@ from questfoundry.pipeline.stages.grow._helpers import (
     _format_structural_feedback,
     log,
 )
+from questfoundry.pipeline.stages.grow.registry import grow_phase
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
@@ -52,6 +53,7 @@ class _LLMPhaseMixin:
     - ``PROLOGUE_ID``
     """
 
+    @grow_phase(name="path_agnostic", depends_on=["validate_dag"], priority=1)
     async def _phase_2_path_agnostic(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 2: Path-agnostic assessment.
 
@@ -211,6 +213,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="intersections", depends_on=["path_arcs"], priority=7)
     async def _phase_3_intersections(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 3: Intersection detection.
 
@@ -445,6 +448,7 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
+    @grow_phase(name="scene_types", depends_on=["path_agnostic"], priority=2)
     async def _phase_4a_scene_types(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4a: Tag beats with scene type classification.
 
@@ -517,6 +521,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="narrative_gaps", depends_on=["scene_types"], priority=3)
     async def _phase_4b_narrative_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4b: Detect narrative gaps in path beat sequences.
 
@@ -601,6 +606,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="pacing_gaps", depends_on=["narrative_gaps"], priority=4)
     async def _phase_4c_pacing_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4c: Detect and fix pacing issues (3+ same scene_type in a row).
 
@@ -727,6 +733,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="atmospheric", depends_on=["pacing_gaps"], priority=5)
     async def _phase_4d_atmospheric(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4d: Atmospheric detail and entry states for beats.
 
@@ -843,6 +850,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="path_arcs", depends_on=["atmospheric"], priority=6)
     async def _phase_4e_path_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4e: Per-path thematic mini-arcs.
 
@@ -978,6 +986,7 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
+    @grow_phase(name="entity_arcs", depends_on=["intersections"], priority=8)
     async def _phase_4f_entity_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4f: Per-entity arc trajectories on each path.
 
@@ -1151,6 +1160,7 @@ class _LLMPhaseMixin:
     # Late LLM phases (8c, 9, 9b, 9c)
     # -------------------------------------------------------------------------
 
+    @grow_phase(name="overlays", depends_on=["codewords"], priority=15)
     async def _phase_8c_overlays(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 8c: Create entity overlays conditioned on codewords.
 
@@ -1324,6 +1334,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="choices", depends_on=["overlays"], priority=16)
     async def _phase_9_choices(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 9: Create choice edges between passages.
 
@@ -1617,6 +1628,7 @@ class _LLMPhaseMixin:
             tokens_used=single_tokens + tokens,
         )
 
+    @grow_phase(name="fork_beats", depends_on=["choices"], priority=17)
     async def _phase_9b_fork_beats(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 9b: Insert reconvergent forks at linear stretches.
 
@@ -1864,6 +1876,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
+    @grow_phase(name="hub_spokes", depends_on=["fork_beats"], priority=18)
     async def _phase_9c_hub_spokes(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 9c: Add hub-and-spoke exploration nodes.
 

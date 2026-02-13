@@ -16,6 +16,7 @@ from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.graph import Graph  # noqa: TC001 - used at runtime
 from questfoundry.models.grow import GrowPhaseResult
 from questfoundry.pipeline.stages.grow._helpers import log
+from questfoundry.pipeline.stages.grow.registry import grow_phase
 
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
@@ -28,6 +29,7 @@ PROLOGUE_ID = "passage::prologue"
 # --- Phase 1: Validate DAG ---
 
 
+@grow_phase(name="validate_dag", is_deterministic=True, priority=0)
 async def phase_validate_dag(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 1: Validate beat DAG and commits beats.
 
@@ -56,6 +58,7 @@ async def phase_validate_dag(graph: Graph, model: BaseChatModel) -> GrowPhaseRes
 # --- Phase 5: Enumerate Arcs ---
 
 
+@grow_phase(name="enumerate_arcs", depends_on=["entity_arcs"], is_deterministic=True, priority=9)
 async def phase_enumerate_arcs(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
@@ -131,6 +134,7 @@ async def phase_enumerate_arcs(
 # --- Phase 6: Divergence ---
 
 
+@grow_phase(name="divergence", depends_on=["enumerate_arcs"], is_deterministic=True, priority=10)
 async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 6: Compute divergence points between arcs.
 
@@ -193,6 +197,7 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
 # --- Phase 7: Convergence ---
 
 
+@grow_phase(name="convergence", depends_on=["divergence"], is_deterministic=True, priority=11)
 async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 7: Find convergence points for diverged arcs.
 
@@ -280,6 +285,9 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
 # --- Phase 7b: Collapse Linear Beats ---
 
 
+@grow_phase(
+    name="collapse_linear_beats", depends_on=["convergence"], is_deterministic=True, priority=12
+)
 async def phase_collapse_linear_beats(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
@@ -305,6 +313,9 @@ async def phase_collapse_linear_beats(
 # --- Phase 8a: Passages ---
 
 
+@grow_phase(
+    name="passages", depends_on=["collapse_linear_beats"], is_deterministic=True, priority=13
+)
 async def phase_passages(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 8a: Create passage nodes from beats.
 
@@ -347,6 +358,7 @@ async def phase_passages(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
 # --- Phase 8b: Codewords ---
 
 
+@grow_phase(name="codewords", depends_on=["passages"], is_deterministic=True, priority=14)
 async def phase_codewords(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 8b: Create codeword nodes from consequences.
 
@@ -437,6 +449,7 @@ async def phase_codewords(graph: Graph, model: BaseChatModel) -> GrowPhaseResult
 # --- Phase 9c2: Mark Endings ---
 
 
+@grow_phase(name="mark_endings", depends_on=["hub_spokes"], is_deterministic=True, priority=19)
 async def phase_mark_endings(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
@@ -459,6 +472,12 @@ async def phase_mark_endings(
 # --- Phase 9c3: Split Endings ---
 
 
+@grow_phase(
+    name="split_endings",
+    depends_on=["mark_endings", "codewords"],
+    is_deterministic=True,
+    priority=20,
+)
 async def phase_split_endings(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
@@ -493,6 +512,9 @@ async def phase_split_endings(
 # --- Phase 9d: Collapse Passages ---
 
 
+@grow_phase(
+    name="collapse_passages", depends_on=["split_endings"], is_deterministic=True, priority=21
+)
 async def phase_collapse_passages(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
@@ -527,6 +549,7 @@ async def phase_collapse_passages(
 # --- Phase 10: Validation ---
 
 
+@grow_phase(name="validation", depends_on=["collapse_passages"], is_deterministic=True, priority=22)
 async def phase_validation(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 10: Graph validation.
 
@@ -572,6 +595,7 @@ async def phase_validation(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
 # --- Phase 11: Prune ---
 
 
+@grow_phase(name="prune", depends_on=["validation"], is_deterministic=True, priority=23)
 async def phase_prune(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 11: Prune unreachable passages.
 
