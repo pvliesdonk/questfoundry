@@ -5,11 +5,9 @@ from __future__ import annotations
 import os
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import TYPE_CHECKING, Any, Literal
 
-from questfoundry.artifacts import ArtifactReader, ArtifactValidator, ArtifactWriter
-from questfoundry.artifacts.enrichment import enrich_seed_artifact
+from questfoundry.artifacts import ArtifactValidator
 from questfoundry.graph import (
     Graph,
     GraphCorruptionError,
@@ -101,7 +99,6 @@ class StageResult:
 
     stage: str
     status: Literal["completed", "failed", "pending_review"]
-    artifact_path: Path | None = None
     llm_calls: int = 0
     tokens_used: int = 0
     errors: list[str] = field(default_factory=list)
@@ -114,8 +111,6 @@ class StageInfo:
     """Information about a stage's current state."""
 
     status: Literal["pending", "completed", "failed"]
-    artifact_path: Path | None = None
-    last_run: datetime | None = None
 
 
 @dataclass
@@ -235,8 +230,6 @@ class PipelineOrchestrator:
         self._user_config = load_user_config()
 
         # Initialize components
-        self._reader = ArtifactReader(project_path)
-        self._writer = ArtifactWriter(project_path)
         self._validator = ArtifactValidator()
 
         # Chat models will be lazily initialized (one per role for hybrid support)
@@ -701,55 +694,39 @@ class PipelineOrchestrator:
                 )
                 errors.extend(validation_errors)
 
-            # Only write artifact if validation passed
-            artifact_path: Path | None = None
-            if not validation_errors:
-                # Enrich artifact with context from previous stages (SEED only for now)
-                if stage_name == "seed":
-                    try:
-                        graph = Graph.load(self.project_path)
-                        artifact_data = enrich_seed_artifact(graph, artifact_data)
-                    except Exception as e:
-                        # Enrichment failure is non-critical - artifact still valid
-                        log.warning("artifact_enrichment_failed", stage=stage_name, error=str(e))
+            # Apply mutations to unified graph (only for stages with mutation handlers)
+            if not validation_errors and has_mutation_handler(stage_name):
+                try:
+                    graph = _load_graph_for_mutation(self.project_path, stage_name)
+                    apply_mutations(graph, stage_name, artifact_data)
 
-                # Write to legacy artifact file (for human review)
-                artifact_path = self._writer.write(artifact_data, stage_name)
-                log.debug("artifact_written", stage=stage_name, path=str(artifact_path))
-
-                # Apply mutations to unified graph (only for stages with mutation handlers)
-                if has_mutation_handler(stage_name):
-                    try:
-                        graph = _load_graph_for_mutation(self.project_path, stage_name)
-                        apply_mutations(graph, stage_name, artifact_data)
-
-                        # Post-mutation invariant check - catches code bugs, not LLM errors
-                        violations = graph.validate_invariants()
-                        if violations:
-                            log.error(
-                                "graph_corruption_detected",
-                                stage=stage_name,
-                                violations=violations[:5],
-                            )
-                            rollback_to_snapshot(self.project_path, stage_name)
-                            raise GraphCorruptionError(violations, stage=stage_name)
-
-                        graph.set_last_stage(stage_name)
-                        graph.save(self.project_path / "graph.json")
-                        log.debug("graph_updated", stage=stage_name)
-                    except SeedMutationError:
-                        # SeedMutationError at this point indicates a bug - validation
-                        # should have occurred during serialization. Re-raise to fail loudly.
+                    # Post-mutation invariant check - catches code bugs, not LLM errors
+                    violations = graph.validate_invariants()
+                    if violations:
                         log.error(
-                            "seed_validation_bypassed",
+                            "graph_corruption_detected",
                             stage=stage_name,
-                            msg="SeedMutationError reached orchestrator - validation should happen during serialize",
+                            violations=violations[:5],
                         )
-                        raise
-                    except GraphCorruptionError:
-                        # Re-raise corruption errors - already logged and rolled back above
-                        raise
-                    # All other exceptions propagate - never swallow errors
+                        rollback_to_snapshot(self.project_path, stage_name)
+                        raise GraphCorruptionError(violations, stage=stage_name)
+
+                    graph.set_last_stage(stage_name)
+                    graph.save(self.project_path / "graph.json")
+                    log.debug("graph_updated", stage=stage_name)
+                except SeedMutationError:
+                    # SeedMutationError at this point indicates a bug - validation
+                    # should have occurred during serialization. Re-raise to fail loudly.
+                    log.error(
+                        "seed_validation_bypassed",
+                        stage=stage_name,
+                        msg="SeedMutationError reached orchestrator - validation should happen during serialize",
+                    )
+                    raise
+                except GraphCorruptionError:
+                    # Re-raise corruption errors - already logged and rolled back above
+                    raise
+                # All other exceptions propagate - never swallow errors
 
             # Calculate duration
             duration = time.perf_counter() - start_time
@@ -757,7 +734,6 @@ class PipelineOrchestrator:
             result = StageResult(
                 stage=stage_name,
                 status="completed" if not errors else "failed",
-                artifact_path=artifact_path,
                 llm_calls=llm_calls,
                 tokens_used=tokens_used,
                 errors=errors,
@@ -804,13 +780,8 @@ class PipelineOrchestrator:
     def get_status(self) -> PipelineStatus:
         """Get the current pipeline status.
 
-        Stage completion is determined by artifact file existence cross-referenced
-        with graph.last_stage. A stage is only "completed" if:
-        1. Its artifact file exists, AND
-        2. The graph confirms it (last_stage is at or past this stage)
-
-        This prevents stale artifacts from failed runs (e.g., SEED artifact exists
-        but mutations failed) from being treated as completed stages.
+        Stage completion is determined solely by graph.last_stage.
+        A stage is "completed" if the graph records it at or past that stage.
 
         Returns:
             PipelineStatus with stage information.
@@ -825,8 +796,7 @@ class PipelineOrchestrator:
         except Exception as e:
             log.warning("graph_load_failed_in_status", error=str(e))
 
-        # Determine the index boundary: stages after graph_last_stage cannot
-        # be "completed" even if their artifact file exists (stale from failed run).
+        # Determine which stages are completed based on graph state
         max_completed_idx = -1
         if graph_last_stage and graph_last_stage in self.config.stages:
             max_completed_idx = self.config.stages.index(graph_last_stage)
@@ -838,36 +808,11 @@ class PipelineOrchestrator:
             )
 
         for idx, stage_name in enumerate(self.config.stages):
-            stage_artifact_path = self.project_path / "artifacts" / f"{stage_name}.yaml"
-
-            if stage_artifact_path.exists():
-                mtime = stage_artifact_path.stat().st_mtime
-                last_run: datetime | None = datetime.fromtimestamp(mtime)
-                info_artifact_path: Path | None = stage_artifact_path
-
-                if graph_last_stage is not None and idx > max_completed_idx:
-                    # Artifact exists but graph says this stage never completed.
-                    # Stale artifact from a failed run.
-                    status: Literal["pending", "completed", "failed"] = "pending"
-                    log.debug(
-                        "stale_artifact_detected",
-                        stage=stage_name,
-                        graph_last_stage=graph_last_stage,
-                    )
-                else:
-                    status = "completed"
-            else:
-                info_artifact_path = None
-                last_run = None
-                status = "pending"
-
-            stages[stage_name] = StageInfo(
-                status=status,
-                artifact_path=info_artifact_path,
-                last_run=last_run,
+            status: Literal["pending", "completed", "failed"] = (
+                "completed" if idx <= max_completed_idx else "pending"
             )
+            stages[stage_name] = StageInfo(status=status)
 
-        # Log graph status for debugging
         if graph_last_stage:
             log.debug("graph_status", last_stage=graph_last_stage)
 
