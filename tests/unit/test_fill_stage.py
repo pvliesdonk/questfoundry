@@ -262,8 +262,8 @@ class TestFillStageExecute:
             mock_model, "", resume_from="review", project_path=tmp_path
         )
 
-        # Should return artifact data
-        assert "voice_document" in result_dict
+        # Should return passage coverage stats
+        assert "total_passages" in result_dict
 
         # Only review (1 call) + revision (0 calls) = 1 LLM call
         assert llm_calls == 1
@@ -351,7 +351,7 @@ class TestFillStageExecute:
         _mock_implemented_phases(stage)
         # Override with tmp_path
         result_dict, _, _ = await stage.execute(mock_model, "", project_path=tmp_path)
-        assert "voice_document" in result_dict
+        assert "total_passages" in result_dict
 
 
 class TestPhaseOrder:
