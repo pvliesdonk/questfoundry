@@ -1732,7 +1732,6 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
     arc_nodes = graph.get_nodes_by_type("arc")
     passage_nodes = graph.get_nodes_by_type("passage")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    path_nodes = graph.get_nodes_by_type("path")
 
     if not arc_nodes or not passage_nodes:
         return []
@@ -1760,12 +1759,7 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
             path_codewords.setdefault(path_id, []).append(cw_id)
 
     # Build dilemma → paths mapping
-    dilemma_paths: dict[str, list[str]] = {}
-    for path_id, pdata in path_nodes.items():
-        did = pdata.get("dilemma_id", "")
-        if did:
-            full_did = normalize_scoped_id(did, "dilemma")
-            dilemma_paths.setdefault(full_did, []).append(path_id)
+    dilemma_paths = build_dilemma_paths(graph)
 
     # Scan arcs for convergence metadata
     seen: set[tuple[str, str]] = set()  # (passage_id, dilemma_id) dedup
@@ -1840,8 +1834,8 @@ def create_residue_passages(
     For each proposal:
     1. Create variant passages (passage::{base}__via_{codeword_suffix})
     2. Mark variants with is_residue=True and residue metadata
-    3. Wire choice edges routing through variants based on codewords
 
+    Choice edge wiring through variants is handled by Phase 9 (choices).
     The base passage is NOT removed — it becomes the fallback for arcs
     whose codewords don't match any variant.
 
