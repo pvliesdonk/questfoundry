@@ -6,9 +6,9 @@ continues to work after the single-file → package conversion.
 
 from __future__ import annotations
 
+from questfoundry.pipeline.stages.grow._helpers import GrowStageError
 from questfoundry.pipeline.stages.grow.stage import (
     GrowStage,
-    GrowStageError,
     create_grow_stage,
     grow_stage,
 )
