@@ -13,7 +13,11 @@ system: |
 
   ## What is an Entity Overlay?
   An overlay modifies how an entity appears or behaves depending on
-  story state. For example:
+  story state. Overlays are cosmetic entity-level changes — they describe
+  how an entity's presentation shifts based on codewords. (Passage-level
+  prose variants at convergence points are handled by residue beats.)
+
+  Examples:
   - A character's attitude changes after the player betrays them
   - A location's description changes after a disaster occurs
   - An object becomes unavailable after it is destroyed
