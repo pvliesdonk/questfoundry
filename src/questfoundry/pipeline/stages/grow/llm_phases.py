@@ -55,11 +55,12 @@ class _LLMPhaseMixin:
 
     @grow_phase(name="path_agnostic", depends_on=["validate_dag"], priority=1)
     async def _phase_2_path_agnostic(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 2: Path-agnostic assessment.
+        """Phase 2: Path-agnostic assessment (structural sharing).
 
-        Identifies beats whose prose is compatible across multiple paths
-        of the same dilemma. Path-agnostic beats don't need separate
-        renderings per path -- they read the same regardless of path.
+        Identifies beats that can share a single rendering across multiple
+        paths of the same dilemma. This is structural classification —
+        Phase 8d (residue beats) handles prose-level variants at
+        convergence points.
 
         Preconditions:
         - Beat DAG validated (Phase 1 passed).
@@ -226,11 +227,14 @@ class _LLMPhaseMixin:
 
     @grow_phase(name="intersections", depends_on=["path_arcs"], priority=7)
     async def _phase_3_intersections(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 3: Intersection detection.
+        """Phase 3: Intersection detection (structural, multi-dilemma).
 
         Pre-clusters beats from different dilemmas into candidate groups
         using algorithmic signal detection (shared locations/entities),
         then asks the LLM to evaluate which groups form natural scenes.
+        Intersections are purely structural (multi-dilemma scene merging);
+        prose differentiation for same-dilemma convergences is handled
+        by Phase 8d (residue beats).
 
         Preconditions:
         - Path arcs computed (Phase 4e complete).
@@ -791,10 +795,12 @@ class _LLMPhaseMixin:
 
     @grow_phase(name="atmospheric", depends_on=["pacing_gaps"], priority=5)
     async def _phase_4d_atmospheric(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 4d: Atmospheric detail and entry states for beats.
+        """Phase 4d: Atmospheric detail and optional entry states for beats.
 
-        Generates sensory environment details for all beats and per-path
-        entry moods for shared (path-agnostic) beats.
+        Generates sensory environment details for all beats. Optionally
+        generates cosmetic per-path entry moods for shared beats (these
+        are atmospheric hints only — Phase 8d residue beats handle
+        structural prose differentiation at convergence points).
 
         Preconditions:
         - Pacing gaps resolved (Phase 4c complete).
@@ -803,13 +809,13 @@ class _LLMPhaseMixin:
 
         Postconditions:
         - All beats annotated with atmospheric_detail (sensory environment).
-        - Shared (path-agnostic) beats get entry_states with per-path moods.
+        - Shared beats may get entry_states with cosmetic per-path moods.
         - Entry states only applied to beats in the shared_beats set.
 
         Invariants:
         - Single LLM call for all beats.
         - Narrative frame built from dilemma questions and path themes.
-        - Entry states validated against valid path IDs before storing.
+        - Entry states are cosmetic-only; prose variants use Phase 8d.
         """
         from questfoundry.models.grow import Phase4dOutput
 
@@ -1392,13 +1398,15 @@ class _LLMPhaseMixin:
 
     @grow_phase(name="overlays", depends_on=["residue_beats"], priority=16)
     async def _phase_8c_overlays(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 8c: Create entity overlays conditioned on codewords.
+        """Phase 8c: Create cosmetic entity overlays conditioned on codewords.
 
-        For each consequence/codeword pair, proposes entity modifications
-        that activate when those codewords are granted.
+        For each consequence/codeword pair, proposes entity-level presentation
+        changes that activate when those codewords are granted. Overlays are
+        cosmetic (how entities appear/behave); passage-level prose variants
+        are handled by Phase 8d (residue beats).
 
         Preconditions:
-        - Codeword nodes exist (Phase 8b complete).
+        - Residue beats created (Phase 8d complete).
         - Entity nodes exist with concept, entity_type.
         - Consequence nodes linked to paths and dilemmas.
 

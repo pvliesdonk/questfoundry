@@ -197,7 +197,11 @@ class EntryStateBeat(BaseModel):
 
 
 class Phase4dOutput(BaseModel):
-    """Wrapper for Phase 4d structured output (atmospheric details + entry states)."""
+    """Wrapper for Phase 4d structured output (atmospheric details + optional entry states).
+
+    Entry states are cosmetic mood hints for shared beats. Path-specific prose
+    variants at convergence points are handled by Phase 8d (residue beats).
+    """
 
     details: list[AtmosphericDetail] = Field(default_factory=list)
     entry_states: list[EntryStateBeat] = Field(default_factory=list)
