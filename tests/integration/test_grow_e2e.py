@@ -162,7 +162,7 @@ class TestGrowFullPipeline:
     """E2E tests running all 21 GROW phases on the fixture graph."""
 
     def test_all_phases_complete(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify the stage completes and returns the topology artifact."""
+        """Verify the stage completes and returns the GrowResult summary."""
         result_dict = pipeline_result["result_dict"]
         expected_keys = {
             "arc_count",
@@ -171,31 +171,27 @@ class TestGrowFullPipeline:
             "codeword_count",
             "overlay_count",
             "spine_arc_id",
-            "arcs",
-            "beats",
-            "passages",
-            "choices",
-            "codewords",
+            "phases_completed",
         }
         assert set(result_dict.keys()) == expected_keys
 
     def test_arc_enumeration(self, pipeline_result: dict[str, Any]) -> None:
         """Verify 4 arcs are enumerated from 2 dilemmas x 2 paths."""
         result_dict = pipeline_result["result_dict"]
-        assert len(result_dict["arcs"]) == 4
-        assert any(a.get("arc_type") == "spine" for a in result_dict["arcs"])
+        assert result_dict["arc_count"] == 4
+        assert result_dict["spine_arc_id"] is not None
 
     def test_passages_created(self, pipeline_result: dict[str, Any]) -> None:
         """Verify passages are created (7 after consolidation + 4 ending families)."""
-        assert len(pipeline_result["result_dict"]["passages"]) == 11
+        assert pipeline_result["result_dict"]["passage_count"] == 11
 
     def test_codewords_derived(self, pipeline_result: dict[str, Any]) -> None:
         """Verify codewords are created from consequences (4 consequences)."""
-        assert len(pipeline_result["result_dict"]["codewords"]) == 4
+        assert pipeline_result["result_dict"]["codeword_count"] == 4
 
     def test_choices_created(self, pipeline_result: dict[str, Any]) -> None:
         """Verify choices are created at divergence points."""
-        assert len(pipeline_result["result_dict"]["choices"]) > 0
+        assert pipeline_result["result_dict"]["choice_count"] > 0
 
     def test_validation_phase_passes(self, pipeline_result: dict[str, Any]) -> None:
         """Verify the resulting graph is structurally valid."""
@@ -203,14 +199,14 @@ class TestGrowFullPipeline:
         assert saved_graph.validate_invariants() == []
 
     def test_result_structure(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify the topology artifact contains expected keys."""
+        """Verify the GrowResult summary contains expected count fields."""
         result_dict = pipeline_result["result_dict"]
         expected_keys = {
-            "arcs",
-            "beats",
-            "passages",
-            "choices",
-            "codewords",
+            "arc_count",
+            "passage_count",
+            "codeword_count",
+            "choice_count",
+            "overlay_count",
         }
         assert expected_keys.issubset(set(result_dict.keys()))
 
