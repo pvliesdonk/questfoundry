@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import atexit
 import sys
-from collections.abc import Callable
 from enum import StrEnum
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any
@@ -37,9 +36,6 @@ if TYPE_CHECKING:
 
     from questfoundry.inspection import InspectionReport
     from questfoundry.pipeline import PipelineOrchestrator, StageResult
-
-# Type alias for artifact preview functions
-PreviewFn = Callable[[dict[str, Any]], None]
 
 # Shared CLI option types (used across multiple commands)
 MinPriorityOption = Annotated[
@@ -466,7 +462,6 @@ def _run_stage_command(
     interactive: bool | None,
     default_interactive_prompt: str,
     default_noninteractive_prompt: str | None,
-    preview_fn: PreviewFn | None,
     next_step_hint: str | None = None,
     provider_discuss: str | None = None,
     provider_summarize: str | None = None,
@@ -493,7 +488,6 @@ def _run_stage_command(
         default_interactive_prompt: Default prompt for interactive mode.
         default_noninteractive_prompt: Default prompt for non-interactive mode.
             If None, non-interactive mode requires an explicit prompt.
-        preview_fn: Optional function to display artifact preview.
         next_step_hint: Optional hint about next step (e.g., "qf brainstorm").
         provider_discuss: Optional provider override for discuss phase.
         provider_summarize: Optional provider override for summarize phase.
@@ -661,187 +655,17 @@ def _run_stage_command(
     # Display success
     console.print()
     console.print(f"[green]✓[/green] {stage_name.upper()} stage completed")
-    console.print(f"  Artifact: [cyan]{result.artifact_path}[/cyan]")
     console.print(f"  Tokens: {result.tokens_used:,}")
     console.print(f"  Duration: {result.duration_seconds:.1f}s")
 
     if _log_enabled:
         console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
 
-    # Show preview of artifact
-    if preview_fn and result.artifact_path and result.artifact_path.exists():
-        from ruamel.yaml import YAML
-
-        yaml_reader = YAML()
-        with result.artifact_path.open() as f:
-            artifact = yaml_reader.load(f)
-
-        console.print()
-        preview_fn(artifact)
-
     console.print()
     if next_step_hint:
         console.print(f"Run: [cyan]{next_step_hint}[/cyan]")
     else:
         console.print("Run: [cyan]qf status[/cyan] to see pipeline state")
-
-
-# =============================================================================
-# Artifact Preview Functions
-# =============================================================================
-
-
-def _preview_dream_artifact(artifact: dict[str, Any]) -> None:
-    """Display preview of DREAM artifact."""
-    genre = artifact.get("genre", "unknown")
-    subgenre = artifact.get("subgenre")
-    genre_display = f"{genre} ({subgenre})" if subgenre else genre
-
-    console.print(f"  Genre: [bold]{genre_display}[/bold]")
-
-    if tones := artifact.get("tone"):
-        console.print(f"  Tone: {', '.join(tones)}")
-
-    if themes := artifact.get("themes"):
-        console.print(f"  Themes: {', '.join(themes)}")
-
-
-def _preview_brainstorm_artifact(artifact: dict[str, Any]) -> None:
-    """Display preview of BRAINSTORM artifact."""
-    entities = artifact.get("entities", [])
-    dilemmas = artifact.get("dilemmas", [])
-
-    console.print(f"  Entities: [bold]{len(entities)}[/bold]")
-
-    # Group entities by category
-    entity_categories: dict[str, list[str]] = {}
-    for entity in entities:
-        category = entity.get("entity_category", "unknown")
-        entity_categories.setdefault(category, []).append(entity.get("entity_id", "?"))
-
-    for category, ids in entity_categories.items():
-        ids_display = ", ".join(ids[:5])
-        if len(ids) > 5:
-            ids_display += f", +{len(ids) - 5} more"
-        console.print(f"    {category}: {ids_display}")
-
-    console.print(f"  Dilemmas: [bold]{len(dilemmas)}[/bold]")
-    for dilemma in dilemmas:
-        console.print(f"    • {dilemma.get('question', '?')}")
-
-
-def _preview_seed_artifact(artifact: dict[str, Any]) -> None:
-    """Display preview of SEED artifact."""
-    entities = artifact.get("entities", [])
-    paths = artifact.get("paths", [])
-    beats = artifact.get("initial_beats", [])
-
-    # Count retained vs cut entities
-    retained = sum(1 for e in entities if e.get("disposition") == "retained")
-    cut = sum(1 for e in entities if e.get("disposition") == "cut")
-
-    console.print(f"  Entities: [bold]{retained}[/bold] retained, [dim]{cut}[/dim] cut")
-
-    console.print(f"  Paths: [bold]{len(paths)}[/bold]")
-    for path in paths[:3]:
-        importance = path.get("path_importance", "?")
-        importance_style = "bold green" if importance == "major" else "dim"
-        console.print(
-            f"    • [{importance_style}]{importance}[/{importance_style}] {path.get('name', '?')}"
-        )
-    if len(paths) > 3:
-        console.print(f"    ... and {len(paths) - 3} more")
-
-    console.print(f"  Initial beats: [bold]{len(beats)}[/bold]")
-
-
-def _preview_grow_artifact(artifact: dict[str, Any]) -> None:
-    """Display preview of GROW artifact."""
-    arc_count = artifact.get("arc_count", 0)
-    passage_count = artifact.get("passage_count", 0)
-    choice_count = artifact.get("choice_count", 0)
-    codeword_count = artifact.get("codeword_count", 0)
-    overlay_count = artifact.get("overlay_count", 0)
-    spine = artifact.get("spine_arc_id", "?")
-
-    console.print(f"  Arcs: [bold]{arc_count}[/bold] (spine: {spine})")
-    console.print(f"  Passages: [bold]{passage_count}[/bold]")
-    console.print(f"  Choices: [bold]{choice_count}[/bold]")
-    console.print(f"  Codewords: [bold]{codeword_count}[/bold]")
-    if overlay_count:
-        console.print(f"  Overlays: [bold]{overlay_count}[/bold]")
-
-    # Show phase summary
-    phases = artifact.get("phases_completed", [])
-    if phases:
-        failed = [p for p in phases if p.get("status") == "failed"]
-        warnings = [p for p in phases if "warning" in (p.get("detail") or "").lower()]
-        if failed:
-            console.print(f"  [red]Failed phases: {len(failed)}[/red]")
-        elif warnings:
-            console.print(f"  [yellow]Warnings: {len(warnings)} phases[/yellow]")
-        else:
-            console.print(f"  Phases: [green]{len(phases)} completed[/green]")
-
-
-def _preview_fill_artifact(artifact: dict[str, Any]) -> None:
-    """Display preview of FILL artifact.
-
-    Reads extract_fill_artifact fields (voice_document, passages).
-    """
-    voice = artifact.get("voice_document", {})
-    if voice:
-        pov = voice.get("pov", "?")
-        tense = voice.get("tense", "?")
-        register = voice.get("voice_register", "?")
-        console.print(f"  Voice: [bold]{pov}[/bold] {tense}, {register}")
-        tone_words = voice.get("tone_words", [])
-        if tone_words:
-            console.print(f"  Tone: {', '.join(str(w) for w in tone_words)}")
-
-    passages = artifact.get("passages", [])
-    with_prose = sum(1 for p in passages if p.get("prose"))
-    console.print(f"  Passages: [bold]{with_prose}[/bold]/{len(passages)} with prose")
-
-    flagged = sum(1 for p in passages if p.get("flag"))
-    if flagged:
-        console.print(f"  [yellow]Flagged passages: {flagged}[/yellow]")
-
-
-def _preview_dress_artifact(artifact: dict[str, Any]) -> None:
-    """Display preview of DRESS artifact."""
-    art_dir = artifact.get("art_direction", {})
-    if art_dir:
-        style = art_dir.get("style", "?")
-        medium = art_dir.get("medium", "?")
-        console.print(f"  Art direction: [bold]{style}[/bold] ({medium})")
-        palette = art_dir.get("palette", [])
-        if palette:
-            console.print(f"  Palette: {', '.join(str(c) for c in palette)}")
-
-    visuals = artifact.get("entity_visuals", {})
-    console.print(f"  Entity visuals: [bold]{len(visuals)}[/bold]")
-
-    briefs = artifact.get("briefs", {})
-    console.print(f"  Illustration briefs: [bold]{len(briefs)}[/bold]")
-
-    codex = artifact.get("codex_entries", {})
-    console.print(f"  Codex entries: [bold]{len(codex)}[/bold]")
-
-    illustrations = artifact.get("illustrations", {})
-    if illustrations:
-        console.print(f"  Illustrations generated: [bold]{len(illustrations)}[/bold]")
-
-
-# Stage preview function mapping (defined after functions exist)
-STAGE_PREVIEW_FNS: dict[str, PreviewFn] = {
-    "dream": _preview_dream_artifact,
-    "brainstorm": _preview_brainstorm_artifact,
-    "seed": _preview_seed_artifact,
-    "grow": _preview_grow_artifact,
-    "fill": _preview_fill_artifact,
-    "dress": _preview_dress_artifact,
-}
 
 
 # =============================================================================
@@ -1029,7 +853,6 @@ def dream(
         interactive=interactive,
         default_interactive_prompt=DEFAULT_INTERACTIVE_DREAM_PROMPT,
         default_noninteractive_prompt=None,  # DREAM requires explicit prompt
-        preview_fn=_preview_dream_artifact,
         next_step_hint="qf brainstorm",
         provider_discuss=provider_creative or provider_discuss,
         provider_summarize=provider_balanced or provider_summarize,
@@ -1122,7 +945,6 @@ def brainstorm(
         interactive=interactive,
         default_interactive_prompt=DEFAULT_INTERACTIVE_BRAINSTORM_PROMPT,
         default_noninteractive_prompt=DEFAULT_NONINTERACTIVE_BRAINSTORM_PROMPT,
-        preview_fn=_preview_brainstorm_artifact,
         next_step_hint="qf seed",
         provider_discuss=provider_creative or provider_discuss,
         provider_summarize=provider_balanced or provider_summarize,
@@ -1217,7 +1039,6 @@ def seed(
         interactive=interactive,
         default_interactive_prompt=DEFAULT_INTERACTIVE_SEED_PROMPT,
         default_noninteractive_prompt=DEFAULT_NONINTERACTIVE_SEED_PROMPT,
-        preview_fn=_preview_seed_artifact,
         provider_discuss=provider_creative or provider_discuss,
         provider_summarize=provider_balanced or provider_summarize,
         provider_serialize=provider_structured or provider_serialize,
@@ -1306,7 +1127,6 @@ def grow(
         interactive=False,  # GROW is never interactive (deterministic, graph-driven)
         default_interactive_prompt=DEFAULT_GROW_PROMPT,
         default_noninteractive_prompt=DEFAULT_GROW_PROMPT,
-        preview_fn=_preview_grow_artifact,
         next_step_hint="qf fill",
         provider_discuss=provider_creative or provider_discuss,
         provider_summarize=provider_balanced or provider_summarize,
@@ -1403,7 +1223,6 @@ def fill(
         interactive=False,  # FILL is never interactive (graph-driven)
         default_interactive_prompt=DEFAULT_FILL_PROMPT,
         default_noninteractive_prompt=DEFAULT_FILL_PROMPT,
-        preview_fn=_preview_fill_artifact,
         next_step_hint="qf dress",
         provider_discuss=provider_creative or provider_discuss,
         provider_summarize=provider_balanced or provider_summarize,
@@ -1506,7 +1325,6 @@ def dress(
         interactive=False,
         default_interactive_prompt=DEFAULT_DRESS_PROMPT,
         default_noninteractive_prompt=DEFAULT_DRESS_PROMPT,
-        preview_fn=_preview_dress_artifact,
         next_step_hint="qf ship",
         provider_discuss=provider_creative or provider_discuss,
         provider_summarize=provider_balanced or provider_summarize,
@@ -2016,7 +1834,6 @@ def run(
                 interactive=use_interactive,
                 default_interactive_prompt=default_interactive_prompt,
                 default_noninteractive_prompt=default_noninteractive_prompt,
-                preview_fn=STAGE_PREVIEW_FNS.get(stage_name),
                 next_step_hint=next_step_hint,
                 provider_discuss=provider_creative or provider_discuss,
                 provider_summarize=provider_balanced or provider_summarize,
@@ -2064,7 +1881,6 @@ def status(
     table = Table(title=f"Pipeline Status: {pipeline_status.project_name}")
     table.add_column("Stage", style="cyan")
     table.add_column("Status", style="bold")
-    table.add_column("Last Run", style="dim")
 
     status_icons = {
         "completed": "[green]✓[/green] completed",
@@ -2074,8 +1890,7 @@ def status(
 
     for stage_name, info in pipeline_status.stages.items():
         status_display = status_icons.get(info.status, info.status)
-        last_run = info.last_run.strftime("%Y-%m-%d %H:%M") if info.last_run else "-"
-        table.add_row(stage_name, status_display, last_run)
+        table.add_row(stage_name, status_display)
 
     console.print()
     console.print(table)
