@@ -66,7 +66,9 @@ def _load_graph_for_mutation(project_path: Path, stage_name: str) -> Graph:
     graph = Graph.load(project_path)
     last_stage = graph.get_last_stage()
     prerequisite = _MUTATION_STAGE_PREREQUISITES.get(stage_name)
-    snapshot_path = project_path / "snapshots" / f"pre-{stage_name}.json"
+    db_snapshot = project_path / "snapshots" / f"pre-{stage_name}.db"
+    json_snapshot = project_path / "snapshots" / f"pre-{stage_name}.json"
+    snapshot_path = db_snapshot if db_snapshot.exists() else json_snapshot
 
     if last_stage == prerequisite:
         # First run: save clean pre-stage snapshot
@@ -713,7 +715,7 @@ class PipelineOrchestrator:
                         raise GraphCorruptionError(violations, stage=stage_name)
 
                     graph.set_last_stage(stage_name)
-                    graph.save(self.project_path / "graph.json")
+                    graph.save(self.project_path / "graph.db")
                     log.debug("graph_updated", stage=stage_name)
                 except SeedMutationError:
                     # SeedMutationError at this point indicates a bug - validation
