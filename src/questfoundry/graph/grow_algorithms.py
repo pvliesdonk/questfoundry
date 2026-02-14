@@ -2036,14 +2036,14 @@ def compute_all_choice_requires(
                     if cw:
                         arc_codewords.add(cw)
 
+            # Only consider arcs with branch-exclusive codewords.
+            # Arcs with no branch-exclusive paths don't contribute to gating.
             if arc_codewords:
                 arc_codeword_sets.append(arc_codewords)
 
         if arc_codeword_sets:
             # Intersection: codewords shared by all qualifying arcs
-            codewords = arc_codeword_sets[0]
-            for s in arc_codeword_sets[1:]:
-                codewords = codewords & s
+            codewords = set.intersection(*arc_codeword_sets)
             if codewords:
                 requires[passage_id] = sorted(codewords)
 
