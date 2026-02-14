@@ -1146,16 +1146,21 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
     The spine arc contains all canonical paths. Branch arcs contain at least
     one non-canonical path.
 
+    The arc count limit is **policy-aware**: only hard-policy dilemmas count
+    toward the limit, since soft/flavor dilemmas converge and don't multiply
+    endings.  The full Cartesian product is still enumerated so downstream
+    phases (convergence metadata, residue) can operate on soft-variant arcs.
+
     Args:
         graph: Graph containing dilemma, path, and beat nodes.
-        max_arc_count: Safety ceiling for arc count. Defaults to
-            ``_MAX_ARC_COUNT`` (64) if not provided.
+        max_arc_count: Safety ceiling for effective (hard-only) arc count.
+            Defaults to ``_MAX_ARC_COUNT`` (64) if not provided.
 
     Returns:
         List of Arc models, spine first, then branches sorted by ID.
 
     Raises:
-        ValueError: If arc count exceeds the limit.
+        ValueError: If effective arc count exceeds the limit.
     """
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
     path_nodes = graph.get_nodes_by_type("path")
@@ -1221,14 +1226,37 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
             )
         )
 
-    # Check combinatorial limit
+    # Check combinatorial limit using EFFECTIVE arc count.
+    # Only hard-policy dilemmas multiply endings; soft/flavor dilemmas converge
+    # back and don't produce distinct endings.  The full Cartesian product is
+    # still enumerated (downstream phases need soft-variant arcs for convergence
+    # metadata and residue), but the limit check counts hard dilemmas only.
     limit = max_arc_count if max_arc_count is not None else _MAX_ARC_COUNT
-    if len(arcs) > limit:
-        # This will be caught by the phase and raised as GrowMutationError
+    hard_dilemma_count = 0
+    for did in sorted_dilemmas:
+        dnode = dilemma_nodes.get(did, {})
+        if (
+            dnode.get("convergence_policy", "soft") == "hard"
+            and len(dilemma_paths_map.get(did, [])) >= 2
+        ):
+            hard_dilemma_count += 1
+    effective_arc_count = 2**hard_dilemma_count if hard_dilemma_count > 0 else 1
+
+    if effective_arc_count > limit:
         raise ValueError(
-            f"Arc count ({len(arcs)}) exceeds limit of {limit}. "
-            f"Reduce the number of dilemmas or paths."
+            f"Effective arc count ({effective_arc_count}) from "
+            f"{hard_dilemma_count} hard dilemmas exceeds limit of {limit}. "
+            f"Reduce the number of hard-policy dilemmas or paths."
         )
+
+    log.debug(
+        "arc_enumeration_complete",
+        total_arcs=len(arcs),
+        effective_arcs=effective_arc_count,
+        hard_dilemmas=hard_dilemma_count,
+        total_dilemmas=len(sorted_dilemmas),
+        limit=limit,
+    )
 
     # Sort: spine first, then branches by ID
     spine_arcs = [a for a in arcs if a.arc_type == "spine"]

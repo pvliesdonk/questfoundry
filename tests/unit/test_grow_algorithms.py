@@ -452,9 +452,73 @@ class TestEnumerateArcs:
         arcs = enumerate_arcs(graph)
         assert arcs == []
 
-    def test_combinatorial_limit(self) -> None:
+    def test_combinatorial_limit_hard_dilemmas(self) -> None:
+        """Limit triggers when hard-policy dilemmas exceed the arc ceiling."""
         graph = Graph.empty()
-        # Create 7 dilemmas x 2 paths each = 128 arcs (exceeds 64 limit)
+        # 7 hard dilemmas x 2 paths = 2^7 = 128 effective arcs (exceeds 64)
+        for i in range(7):
+            dilemma_id = f"dilemma::t{i}"
+            graph.create_node(
+                dilemma_id,
+                {"type": "dilemma", "raw_id": f"t{i}", "convergence_policy": "hard"},
+            )
+            for j in range(2):
+                path_id = f"path::t{i}_th{j}"
+                graph.create_node(
+                    path_id,
+                    {
+                        "type": "path",
+                        "raw_id": f"t{i}_th{j}",
+                        "dilemma_id": f"t{i}",
+                        "is_canonical": j == 0,
+                    },
+                )
+                graph.add_edge("explores", path_id, dilemma_id)
+
+        with pytest.raises(ValueError, match="exceeds limit"):
+            enumerate_arcs(graph)
+
+    def test_soft_dilemmas_do_not_count_toward_limit(self) -> None:
+        """Soft/flavor dilemmas don't count toward the arc limit.
+
+        1 hard + 7 soft = 2^1 = 2 effective arcs (within limit), even
+        though total arcs = 2^8 = 256.
+        """
+        graph = Graph.empty()
+        for i in range(8):
+            dilemma_id = f"dilemma::t{i}"
+            policy = "hard" if i == 0 else "soft"
+            graph.create_node(
+                dilemma_id,
+                {
+                    "type": "dilemma",
+                    "raw_id": f"t{i}",
+                    "convergence_policy": policy,
+                },
+            )
+            for j in range(2):
+                path_id = f"path::t{i}_th{j}"
+                graph.create_node(
+                    path_id,
+                    {
+                        "type": "path",
+                        "raw_id": f"t{i}_th{j}",
+                        "dilemma_id": f"t{i}",
+                        "is_canonical": j == 0,
+                    },
+                )
+                graph.add_edge("explores", path_id, dilemma_id)
+
+        # Should NOT raise — only 1 hard dilemma = 2 effective arcs
+        arcs = enumerate_arcs(graph)
+        assert len(arcs) == 256  # Total arcs (full Cartesian product)
+        spine_arcs = [a for a in arcs if a.arc_type == "spine"]
+        assert len(spine_arcs) == 1
+
+    def test_unclassified_dilemmas_default_to_soft(self) -> None:
+        """Dilemmas without convergence_policy default to soft (no limit impact)."""
+        graph = Graph.empty()
+        # 7 dilemmas with no convergence_policy set (default=soft)
         for i in range(7):
             dilemma_id = f"dilemma::t{i}"
             graph.create_node(dilemma_id, {"type": "dilemma", "raw_id": f"t{i}"})
@@ -471,8 +535,9 @@ class TestEnumerateArcs:
                 )
                 graph.add_edge("explores", path_id, dilemma_id)
 
-        with pytest.raises(ValueError, match="exceeds limit"):
-            enumerate_arcs(graph)
+        # Should NOT raise — 0 hard dilemmas = 1 effective arc
+        arcs = enumerate_arcs(graph)
+        assert len(arcs) == 128
 
     def test_arc_paths_are_raw_ids(self) -> None:
         graph = make_single_dilemma_graph()
