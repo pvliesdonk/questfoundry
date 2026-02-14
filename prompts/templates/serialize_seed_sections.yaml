@@ -669,6 +669,9 @@ dilemma_analyses_prompt: |
   3. Escalate to `hard` ONLY if convergence is truly IMPOSSIBLE — the world
      states are incompatible and no shared scene could follow both answers
 
+  After classifying all dilemmas, count your `hard` classifications.
+  If more than 2 are hard, re-evaluate. (See Self-Check section below.)
+
   ## Convergence Policies
 
   **soft** (most common) -- Different middles. Paths have meaningfully
@@ -687,17 +690,18 @@ dilemma_analyses_prompt: |
   **hard** (rare, max 1-2 per story) -- Different endings. Paths create
   incompatible world states that NEVER converge. Use `hard` ONLY when ALL
   of these conditions are met:
-  - The answers produce mutually exclusive world states (not just different activities)
+  - The answers produce a mutually exclusive world state caused by at
+    least one of: someone lives vs dies, a key entity is permanently
+    destroyed vs intact, or the protagonist's core identity/allegiance
+    is irrevocably changed
   - No plausible scene could follow both answers
   - The story REQUIRES separate endings for this dilemma
-  AND at least one of these triggers applies:
-  - Someone lives vs dies
-  - A key entity is permanently destroyed vs intact
-  - The protagonist's core identity or allegiance is irrevocably changed
 
   ## What NOT to classify as `hard`
   - Different activities or approaches (that is `soft`)
-  - Revealed vs hidden information (usually `soft` — both paths can reach the same conclusion)
+  - Revealed vs hidden information (usually `soft` — both paths can reach
+    the same conclusion, UNLESS the revelation irrevocably changes identity
+    or allegiance, in which case the triggers above apply)
   - Different emotional tones (that is `flavor` or `soft`)
   - Choosing different allies or methods (usually `soft` — the destination is the same)
 
@@ -723,7 +727,8 @@ dilemma_analyses_prompt: |
   ## Ending Tone
 
   For `hard` dilemmas: provide a 2-5 word emotional descriptor for how
-  endings shaped by this dilemma should feel.
+  endings shaped by this dilemma should feel. This guides the FILL stage
+  when generating prose for endings on each arc.
   GOOD: "cold justice", "bittersweet triumph", "quiet dread"
   BAD: "the ending is sad" (too vague)
 
