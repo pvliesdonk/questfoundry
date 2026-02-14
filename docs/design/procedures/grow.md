@@ -4,6 +4,11 @@
 **Parent:** questfoundry-v5-spec.md
 **Purpose:** Detailed specification of the GROW stage mechanics
 
+> **Note:** This document describes the original design intent. Implementation
+> may differ — see source code and ADRs in `docs/architecture/decisions.md` for
+> current behavior. In particular, Phase 2 (path-agnostic assessment) was removed
+> in favor of residue beats (see ADR-015).
+
 ---
 
 ## Overview
@@ -37,7 +42,7 @@ Dilemma introduced → Evidence builds → Truth locks in → Consequences play 
      (advances)        (reveals)         (commits)        (path-specific)
 ```
 
-**Before commits:** Beats can be path-agnostic—they work regardless of which answer is true.
+**Before commits:** Beats can be shared across arcs — they work regardless of which answer is true.
 
 **At commits:** The narrative locks in. One answer becomes true for this playthrough.
 
@@ -54,17 +59,18 @@ beat:
 
 A commits beat must specify which path it locks in.
 
-### Path-Agnostic Beats
+### Shared Beats and Convergence
 
-Beats before any commits for a dilemma can be **path-agnostic**: they work for any answer.
+Beats before any commits for a dilemma can be **shared** across arcs — they work
+regardless of which answer is true.
 
 Example:
 - "Kay meets the mentor" — protector or manipulator, works either way
 - "Mentor gives cryptic advice" — ambiguous until truth revealed
 
-Path-agnostic beats are shared across arcs, reducing duplication.
-
-**Marking:** During SEED or early GROW, LLM assesses which beats are path-agnostic. Human confirms.
+Shared beats reduce duplication. When arcs reconverge at a shared beat, **residue
+beats** (Phase 8d) are inserted before the convergence point to carry forward
+each arc's emotional tone.
 
 ### Divergence and Convergence
 
@@ -137,47 +143,14 @@ If the non-canonical answer is not promoted to a path in SEED, that dilemma has 
 
 ---
 
-### Phase 2: Path-Agnostic Assessment
+### ~~Phase 2: Path-Agnostic Assessment~~ (Removed)
 
-**Purpose:** Identify which beats work for multiple paths within a dilemma.
-
-**Input:** Beat graph
-
-**Key distinction: Logic State vs Prose State**
-
-Path-agnostic is about **prose compatibility**, not just logic compatibility:
-
-| State Type | Splits At | Meaning |
-|------------|-----------|---------|
-| Logic State | `commits` | Game state (codewords/branching) tracks player choice |
-| Prose State | `reveals` | Character's internal state shifts (suspicion, trust, knowledge) |
-
-A beat between `reveals` and `commits` may be **logically agnostic** (player hasn't committed yet) but **prose-incompatible** (character's internal monologue differs based on what they know).
-
-**The test:** Can the same prose work for all incoming character states?
-
-- **Compatible:** "Kay studied the Mentor's face, searching for the person she thought she knew." (Works for trust or doubt)
-- **Incompatible:** "Kay gripped the knife, knowing he was a traitor." (Only works for doubt route)
-
-**Operations:**
-1. For each dilemma with multiple paths:
-   - Collect beats assigned to those paths
-   - Collect beats marked `advances` or `reveals` (not `commits`)
-2. LLM assesses each beat for **prose compatibility**:
-   - "Given the character's internal state on each route, can this beat use the same prose?"
-   - Consider: internal monologue, emotional subtext, knowledge level
-   - Output: list of path-agnostic beat IDs per dilemma
-3. Human reviews and approves
-   - Pay special attention to beats after `reveals` — these often have incompatible prose states
-
-**Output:** Beats marked with `path_agnostic_for: [dilemma_id, ...]`
-
-**Iteration:** One pass. If human disagrees, manual edit and re-run.
-
-**Warning signs of false agnosticism:**
-- Beat follows a `reveals` that changes character knowledge
-- Beat involves character reacting emotionally to the dilemma
-- Beat has internal monologue about the dilemma's subject
+> **Removed in Epic #858.** See ADR-015. The original Phase 2 used an LLM to
+> assess which beats were "prose-compatible" across paths and marked them with
+> `path_agnostic_for`. This was replaced by residue beats (Phase 8d) which
+> handle post-convergence variation without requiring upfront prose compatibility
+> assessment. Beats that belong to multiple arcs are now detected structurally
+> via `belongs_to` edges rather than LLM annotation.
 
 ---
 
@@ -185,7 +158,7 @@ A beat between `reveals` and `commits` may be **logically agnostic** (player has
 
 **Purpose:** Find beats from different paths (different dilemmas) that should be one scene.
 
-**Input:** Beat graph with path-agnostic markings, location flexibility from SEED
+**Input:** Beat graph with validated DAG, location flexibility from SEED
 
 **Operations:**
 1. Build candidate pool:
@@ -333,8 +306,9 @@ membership, which would invalidate pre-intersection pivot beats. Runs before Pha
    - `pivot_beat` must exist in path-scoped beat set
 5. Results stored on path nodes: `entity_arcs: [{entity_id, arc_line, pivot_beat, arc_type}]`
 
-**Shared pivot policy:** If `pivot_beat` is path-agnostic (shared across paths), a
-warning is logged but no error raised. Path-specific pivot beats are preferred.
+**Shared pivot policy:** If `pivot_beat` belongs to multiple arcs (detected via
+`belongs_to` edges), a warning is logged but no error raised. Path-specific
+pivot beats are preferred.
 
 **Output:** Path nodes annotated with `entity_arcs`
 
@@ -357,7 +331,7 @@ warning is logged but no error raised. Path-specific pivot beats are preferred.
 2. For each combination:
    - Collect applicable beats:
      - Beats assigned to these paths
-     - Path-agnostic beats for these dilemmas
+     - Shared beats for these dilemmas
      - Intersections involving these paths
    - Topological sort (respecting `requires`)
    - This sequence is one arc
@@ -604,7 +578,7 @@ These are warnings, not failures. Human reviews and decides whether to:
 
 | After Phase | Human Decision |
 |-------------|----------------|
-| 2. Path-agnostic | Approve/edit agnostic markings |
+| ~~2. Path-agnostic~~ | ~~Removed — see ADR-015~~ |
 | 3. Intersections | Approve/reject/modify intersection proposals |
 | 4a. Scene-type | Approve/edit scene-type tags |
 | 4b. Narrative gaps | Approve/reject/edit new beats |
@@ -625,7 +599,7 @@ These are warnings, not failures. Human reviews and decides whether to:
 |-------|---------|-----------|----------|
 | 1. Import | Missing `commits` beat for a dilemma | Validation check | Return to SEED, add commits beat |
 | 1. Import | Cycle in `requires` edges | Topological sort fails | Return to SEED, fix ordering |
-| 2. Path-agnostic | LLM marks too many/few beats as agnostic | Human review | Manual override, re-run with guidance |
+| ~~2. Path-agnostic~~ | ~~Removed — see ADR-015~~ | | |
 | 3. Intersections | Incompatible beats proposed as intersection | Compatibility check | Automatic rejection, try other clusters |
 | 3. Intersections | No intersections found when expected | Human review | Accept (story is linear) or return to SEED |
 | 4. Gaps | Path has no route from entry to exit | Connectivity check | Add bridging beats or return to SEED |
@@ -672,7 +646,7 @@ These failures can be fixed within GROW:
 
 | Phase | Completion Criterion | Fallback |
 |-------|---------------------|----------|
-| Path-agnostic | All beats assessed | 1 pass |
+| ~~Path-agnostic~~ | ~~Removed~~ | |
 | Intersections | No more candidates above threshold | 1 pass |
 | Scene-type (4a) | All beats tagged | 1 pass |
 | Narrative gaps (4b) | Each path connected start→end | 1 pass + validation catch |
@@ -714,21 +688,15 @@ Dilemma: dilemma::mentor_trust
   Path: path::mentor_trust__protector (canonical)
     Beats: meet_mentor, mentor_advice, mentor_reveal_good
   Path: path::mentor_trust__manipulator (alternate)
-    Beats: meet_mentor*, mentor_advice*, mentor_reveal_evil
-  (* = path-agnostic)
+    Beats: meet_mentor, mentor_advice, mentor_reveal_evil
+  (meet_mentor, mentor_advice shared across both paths)
 
 Dilemma: dilemma::artifact_nature
   Path: path::artifact_nature__saves (canonical)
     Beats: find_artifact, study_artifact, use_artifact_good
   Path: path::artifact_nature__corrupts (alternate)
-    Beats: find_artifact*, study_artifact*, use_artifact_bad
+    Beats: find_artifact, study_artifact, use_artifact_bad
 ```
-
-**Phase 2 output:**
-- meet_mentor: path-agnostic for dilemma::mentor_trust
-- mentor_advice: path-agnostic for dilemma::mentor_trust
-- find_artifact: path-agnostic for dilemma::artifact_nature
-- study_artifact: path-agnostic for dilemma::artifact_nature
 
 **Phase 3 (intersections):**
 - LLM clusters: [[mentor_advice, study_artifact]] — same location, same entities
@@ -789,7 +757,7 @@ The complete beat graph is unwieldy for humans to navigate. The LLM's job is to 
 
 | Phase | LLM Prepares | Human Decides |
 |-------|--------------|---------------|
-| Path-agnostic | "These 5 beats could be shared" | Approve/reject each |
+| ~~Path-agnostic~~ | ~~Removed~~ | |
 | Intersections | "These beat pairs could merge" | Approve/reject each |
 | Scene-type | "Beat X is a full scene, Beat Y is a sequel" | Approve/override tags |
 | Narrative gaps | "Path X needs a beat here, here's a draft" | Approve/edit/reject |
@@ -821,7 +789,7 @@ GROW is 11 phases (Phases 4 and 8 have sub-phases):
 | # | Phase | LLM | Human Gate |
 |---|-------|-----|------------|
 | 1 | Beat graph import | No | No |
-| 2 | Path-agnostic assessment | Yes | Yes |
+| ~~2~~ | ~~Path-agnostic assessment (removed)~~ | | |
 | 3 | Intersection detection | Yes (clustering) | Yes |
 | 4a | Scene-type tagging | Yes | Yes |
 | 4b | Narrative gap detection | Yes | Yes |

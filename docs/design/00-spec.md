@@ -1210,17 +1210,18 @@ After validation passes:
 
 ---
 
-## Prose Template Conditionals
+## Post-Convergence Variation
 
-Passages may contain minor inline conditionals for flavor:
+When arcs reconverge at a shared beat, prose must work for all arriving paths.
+Rather than inline conditionals, QuestFoundry uses **residue beats** (GROW
+Phase 8d) — short, path-specific passages inserted before the shared convergence
+point. Each residue beat carries forward the emotional tone of its arc so the
+shared passage can remain neutral.
 
-```
-Kay approached the guard.
-[[if:earned_trust]]"Good to see you," he said warmly.[[endif]]
-[[if:!earned_trust]]He barely glanced up.[[endif]]
-```
+**Scope:** Cosmetic-only. Major divergence = separate passages on distinct arcs.
 
-**Scope:** Small diegetic variations only. Major divergence = separate passages.
+Entity **overlays** (codeword-gated attribute overrides) handle small state
+differences like appearance or mood that carry across convergence boundaries.
 
 ---
 
@@ -1430,19 +1431,19 @@ Ugly but explicit. Avoids scope creep into state machine complexity.
 
 ## File Structure
 
-The project uses a **unified graph** stored as JSON, with snapshots for rollback
-and optional human-readable exports.
+The project uses a **unified graph** stored as a SQLite database, with snapshots
+for rollback and optional human-readable exports.
 
 ```
 /project
-  graph.json              # The unified story graph (single source of truth)
+  graph.db                # The unified story graph (SQLite, single source of truth)
   /snapshots              # Pre-stage snapshots for rollback
-    pre-dream.json
-    pre-brainstorm.json
-    pre-seed.json
-    pre-grow.json
-    pre-fill.json
-    pre-dress.json
+    pre-dream.db
+    pre-brainstorm.db
+    pre-seed.db
+    pre-grow.db
+    pre-fill.db
+    pre-dress.db
   /exports                # Human-readable views (generated on demand)
     graph.yaml            # Full graph in YAML for review
     graph.md              # Markdown summary for reading
@@ -1461,33 +1462,18 @@ and optional human-readable exports.
 
 ### Graph File Format
 
-The `graph.json` file contains:
-
-```json
-{
-  "version": "5.0",
-  "meta": {
-    "last_stage": "seed",
-    "last_modified": "2026-01-13T10:30:00Z"
-  },
-  "nodes": {
-    "vision": { "type": "vision", ... },
-    "protag_001": { "type": "entity", ... },
-    "opening_001": { "type": "passage", ... }
-  },
-  "edges": [
-    { "type": "choice", "from": "opening_001", "to": "fork_001", ... }
-  ]
-}
-```
+The `graph.db` file is a SQLite database with tables for nodes, edges, and
+metadata. Each node is stored as an ID + JSON data blob; edges are stored as
+typed (edge_type, from_id, to_id) triples. A mutation audit trail records all
+graph changes with timestamps.
 
 ### Snapshot Strategy
 
 Before each stage runs:
-1. Copy current `graph.json` to `snapshots/pre-{stage}.json`
-2. Run stage (graph modified in memory)
-3. Write updated `graph.json` on success
-4. If stage fails, graph.json unchanged (snapshot available for manual recovery)
+1. Copy current `graph.db` to `snapshots/pre-{stage}.db`
+2. Run stage (graph modified via `SqliteGraphStore`)
+3. On success, changes are committed to `graph.db`
+4. If stage fails, `graph.db` unchanged (snapshot available for manual recovery)
 
 ### Human Review
 
