@@ -1679,27 +1679,28 @@ async def serialize_seed_as_function(
     prompts = _load_seed_section_prompts()
     total_tokens = 0
 
-    # Build valid IDs context from graph
-    valid_ids_context = ""
-    if graph is not None:
-        valid_ids_context = format_valid_ids_context(graph, stage="seed")
-
     def _build_section_brief(section_name: str) -> str:
         """Build the brief for a specific section.
 
-        When chunked: uses per-section brief + valid IDs context.
-        When monolithic: uses full brief + valid IDs context (old behavior).
+        When chunked: uses per-section brief + section-scoped valid IDs.
+        When monolithic: uses full brief + full valid IDs (old behavior).
         """
+        ids_ctx = ""
+        if graph is not None:
+            # Chunked mode: scope IDs to section; monolithic: full manifest
+            scope = section_name if chunked else None
+            ids_ctx = format_valid_ids_context(graph, stage="seed", section=scope)
+
         if chunked:
             section_brief = brief_dict.get(section_name, "")
             if not section_brief:
                 log.warning("missing_section_brief", section=section_name)
-            if valid_ids_context:
-                return f"{valid_ids_context}\n\n---\n\n{section_brief}"
+            if ids_ctx:
+                return f"{ids_ctx}\n\n---\n\n{section_brief}"
             return section_brief
         # Monolithic fallback
-        if valid_ids_context:
-            return f"{valid_ids_context}\n\n---\n\n{monolithic_brief}"
+        if ids_ctx:
+            return f"{ids_ctx}\n\n---\n\n{monolithic_brief}"
         return monolithic_brief
 
     # Initial enhanced_brief for the monolithic code path and downstream use
@@ -1742,7 +1743,7 @@ async def serialize_seed_as_function(
     # This is injected into each per-path brief for character/location refs
     entity_context = ""
     if graph is not None:
-        entity_context = format_valid_ids_context(graph, stage="seed")
+        entity_context = format_valid_ids_context(graph, stage="seed", section="entities")
 
     for section_name, schema, output_field in sections:
         log.debug("serialize_section_started", section=section_name)
@@ -1758,9 +1759,11 @@ async def serialize_seed_as_function(
             else:
                 paths_brief = ""
             if chunked or collected.get("paths"):
-                current_brief = (
-                    f"{valid_ids_context}\n\n{paths_brief}" if valid_ids_context else paths_brief
-                )
+                cons_ids_ctx = ""
+                if graph is not None:
+                    scope = "consequences" if chunked else None
+                    cons_ids_ctx = format_valid_ids_context(graph, stage="seed", section=scope)
+                current_brief = f"{cons_ids_ctx}\n\n{paths_brief}" if cons_ids_ctx else paths_brief
             else:
                 current_brief = brief_with_paths
         else:
@@ -1967,10 +1970,14 @@ async def serialize_seed_as_function(
                     else:
                         paths_brief = ""
                     if chunked or collected.get("paths"):
+                        cons_ids_ctx = ""
+                        if graph is not None:
+                            scope = "consequences" if chunked else None
+                            cons_ids_ctx = format_valid_ids_context(
+                                graph, stage="seed", section=scope
+                            )
                         current_brief = (
-                            f"{valid_ids_context}\n\n{paths_brief}"
-                            if valid_ids_context
-                            else paths_brief
+                            f"{cons_ids_ctx}\n\n{paths_brief}" if cons_ids_ctx else paths_brief
                         )
                     else:
                         current_brief = brief_with_paths

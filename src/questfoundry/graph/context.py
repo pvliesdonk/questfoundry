@@ -483,7 +483,7 @@ def format_path_ids_context(paths: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def format_valid_ids_context(graph: Graph, stage: str) -> str:
+def format_valid_ids_context(graph: Graph, stage: str, section: str | None = None) -> str:
     """Format valid IDs as context for LLM serialization.
 
     Provides the authoritative list of IDs the LLM must use.
@@ -492,12 +492,15 @@ def format_valid_ids_context(graph: Graph, stage: str) -> str:
     Args:
         graph: Graph containing nodes from previous stages.
         stage: Current stage name ("seed", "grow", etc.).
+        section: When set, scope output to only the IDs relevant to this
+            serialization section (e.g. "entities", "dilemmas").  ``None``
+            returns the full manifest (monolithic mode / backward compat).
 
     Returns:
         Formatted context string, or empty string if not applicable.
     """
     if stage == "seed":
-        return _format_seed_valid_ids(graph)
+        return _format_seed_valid_ids(graph, section=section)
     if stage == "grow":
         return _format_grow_valid_ids(graph)
     return ""
@@ -535,117 +538,174 @@ def _format_grow_valid_ids(graph: Graph) -> str:
     return "\n".join(lines) if any(ids.values()) else ""
 
 
-def _format_seed_valid_ids(graph: Graph) -> str:
+def _format_seed_valid_ids(graph: Graph, section: str | None = None) -> str:
     """Format BRAINSTORM IDs for SEED serialization.
 
     Groups entities by category and lists dilemmas with their answers,
     making it clear which IDs are valid for the SEED stage to reference.
     Includes counts to enable completeness validation.
 
+    When *section* is ``None`` the full manifest is returned (monolithic mode).
+    When *section* is ``"entities"`` only entity IDs are included; when
+    ``"dilemmas"`` only dilemma IDs.  Any other value returns ``""``.
+
     Args:
         graph: Graph containing BRAINSTORM data.
+        section: Serialization section to scope output for, or ``None``
+            for the full manifest.
 
     Returns:
         Formatted context string with valid IDs and counts.
     """
+    include_entities = section is None or section == "entities"
+    include_dilemmas = section is None or section == "dilemmas"
+
+    if not include_entities and not include_dilemmas:
+        return ""
+
     # Get expected counts from canonical source (DRY principle)
     counts = get_expected_counts(graph)
     total_entity_count = counts["entities"]
     dilemma_count = counts["dilemmas"]
 
-    lines = [
-        "## VALID IDS MANIFEST - GENERATE FOR ALL",
-        "",
-        "You MUST generate a decision for EVERY ID listed below.",
-        "Missing items WILL cause validation failure.",
-        "",
-    ]
+    # Header — scoped to what this section generates
+    if section is None:
+        lines = [
+            "## VALID IDS MANIFEST - GENERATE FOR ALL",
+            "",
+            "You MUST generate a decision for EVERY ID listed below.",
+            "Missing items WILL cause validation failure.",
+            "",
+        ]
+    elif section == "entities":
+        lines = [
+            "## VALID ENTITY IDS - GENERATE FOR ALL",
+            "",
+            "You MUST generate a decision for EVERY entity ID listed below.",
+            "Missing items WILL cause validation failure.",
+            "",
+        ]
+    else:  # dilemmas
+        lines = [
+            "## VALID DILEMMA IDS - GENERATE FOR ALL",
+            "",
+            "You MUST generate a decision for EVERY dilemma ID listed below.",
+            "Missing items WILL cause validation failure.",
+            "",
+        ]
 
-    # Group entities by type (character, location, object, faction)
-    # Track which entities need names (don't have one from BRAINSTORM)
-    entities = graph.get_nodes_by_type("entity")
-    by_category: dict[str, list[tuple[str, bool]]] = {}  # (raw_id, needs_name)
-    for node in entities.values():
-        cat = node.get("entity_type", "unknown")
-        raw_id = node.get("raw_id", "")
-        if raw_id:  # Only include entities with valid raw_id
-            # Check if entity has a name from BRAINSTORM
-            needs_name = not node.get("name")
-            by_category.setdefault(cat, []).append((raw_id, needs_name))
+    # Entity IDs block
+    if include_entities:
+        # Group entities by type (character, location, object, faction)
+        # Track which entities need names (don't have one from BRAINSTORM)
+        entities = graph.get_nodes_by_type("entity")
+        by_category: dict[str, list[tuple[str, bool]]] = {}  # (raw_id, needs_name)
+        for node in entities.values():
+            cat = node.get("entity_type", "unknown")
+            raw_id = node.get("raw_id", "")
+            if raw_id:  # Only include entities with valid raw_id
+                # Check if entity has a name from BRAINSTORM
+                needs_name = not node.get("name")
+                by_category.setdefault(cat, []).append((raw_id, needs_name))
 
-    if by_category:
-        lines.append(f"### Entity IDs (TOTAL: {total_entity_count} - generate decision for ALL)")
-        lines.append("Use these for `entity_id`, `entities`, and `location` fields:")
-        lines.append("Entities marked (needs name) require a `name` field if RETAINED.")
-        lines.append("")
+        if by_category:
+            lines.append(
+                f"### Entity IDs (TOTAL: {total_entity_count} - generate decision for ALL)"
+            )
+            lines.append("Use these for `entity_id`, `entities`, and `location` fields:")
+            lines.append("Entities marked (needs name) require a `name` field if RETAINED.")
+            lines.append("")
 
-        for category in ENTITY_CATEGORIES:
-            if category in by_category:
-                cat_count = len(by_category[category])
-                lines.append(f"**{category.title()}s ({cat_count}):**")
-                for raw_id, needs_name in sorted(by_category[category]):
-                    marker = " (needs name)" if needs_name else ""
-                    lines.append(f"  - `{category}::{raw_id}`{marker}")
-                lines.append("")
+            for category in ENTITY_CATEGORIES:
+                if category in by_category:
+                    cat_count = len(by_category[category])
+                    lines.append(f"**{category.title()}s ({cat_count}):**")
+                    for raw_id, needs_name in sorted(by_category[category]):
+                        marker = " (needs name)" if needs_name else ""
+                        lines.append(f"  - `{category}::{raw_id}`{marker}")
+                    lines.append("")
 
-    # Dilemmas with answers
-    dilemmas = graph.get_nodes_by_type("dilemma")
-    if dilemmas:
-        # Pre-build answer edges map to avoid O(D*E) lookups
-        answer_edges_by_dilemma: dict[str, list[dict[str, Any]]] = {}
-        for edge in graph.get_edges(edge_type="has_answer"):
-            from_id = edge.get("from")
-            if from_id:
-                answer_edges_by_dilemma.setdefault(from_id, []).append(edge)
+    # Dilemma IDs block
+    if include_dilemmas:
+        dilemmas = graph.get_nodes_by_type("dilemma")
+        if dilemmas:
+            # Pre-build answer edges map to avoid O(D*E) lookups
+            answer_edges_by_dilemma: dict[str, list[dict[str, Any]]] = {}
+            for edge in graph.get_edges(edge_type="has_answer"):
+                from_id = edge.get("from")
+                if from_id:
+                    answer_edges_by_dilemma.setdefault(from_id, []).append(edge)
 
-        lines.append(f"### Dilemma IDs (TOTAL: {dilemma_count} - generate decision for ALL)")
-        lines.append("Format: dilemma::id → [answer_ids]")
-        lines.append("Note: Every dilemma_id contains `_or_` — entity IDs never do.")
-        lines.append("")
+            lines.append(f"### Dilemma IDs (TOTAL: {dilemma_count} - generate decision for ALL)")
+            lines.append("Format: dilemma::id → [answer_ids]")
+            lines.append("Note: Every dilemma_id contains `_or_` — entity IDs never do.")
+            lines.append("")
 
-        for did, ddata in sorted(dilemmas.items()):
-            raw_id = ddata.get("raw_id")
-            if not raw_id:
-                continue
+            for did, ddata in sorted(dilemmas.items()):
+                raw_id = ddata.get("raw_id")
+                if not raw_id:
+                    continue
 
-            answers = []
-            for edge in answer_edges_by_dilemma.get(did, []):
-                answer_node = graph.get_node(edge.get("to", ""))
-                if answer_node:
-                    ans_id = answer_node.get("raw_id")
-                    if ans_id:
-                        default = " (default)" if answer_node.get("is_default_path") else ""
-                        answers.append(f"`{ans_id}`{default}")
+                answers = []
+                for edge in answer_edges_by_dilemma.get(did, []):
+                    answer_node = graph.get_node(edge.get("to", ""))
+                    if answer_node:
+                        ans_id = answer_node.get("raw_id")
+                        if ans_id:
+                            default = " (default)" if answer_node.get("is_default_path") else ""
+                            answers.append(f"`{ans_id}`{default}")
 
-            if answers:
-                # Sort answers for deterministic output
-                answers.sort()
-                lines.append(
-                    f"- `{normalize_scoped_id(raw_id, SCOPE_DILEMMA)}` → [{', '.join(answers)}]"
-                )
+                if answers:
+                    # Sort answers for deterministic output
+                    answers.sort()
+                    lines.append(
+                        f"- `{normalize_scoped_id(raw_id, SCOPE_DILEMMA)}` → [{', '.join(answers)}]"
+                    )
 
-        lines.append("")
+            lines.append("")
 
-    # Generation requirements with counts (handle singular/plural grammar)
+    # Generation requirements — scoped to included ID types
+    _append_seed_requirements(lines, include_entities, include_dilemmas, counts)
+
+    return "\n".join(lines)
+
+
+def _append_seed_requirements(
+    lines: list[str],
+    include_entities: bool,
+    include_dilemmas: bool,
+    counts: dict[str, int],
+) -> None:
+    """Append generation requirements scoped to the included ID types."""
+    total_entity_count = counts["entities"]
+    dilemma_count = counts["dilemmas"]
     entity_word = "item" if total_entity_count == 1 else "items"
     dilemma_word = "item" if dilemma_count == 1 else "items"
 
-    lines.extend(
-        [
-            "### Generation Requirements (CRITICAL)",
-            f"- Generate EXACTLY {total_entity_count} entity decisions (one per entity above)",
-            f"- Generate EXACTLY {dilemma_count} dilemma decisions (one per dilemma above)",
-            "- Path `answer_id` must be from that dilemma's answers list",
-            "- Use scoped IDs: category prefix for entities (character::, location::, etc.), dilemma:: for dilemmas",
-            "",
-            "### Verification",
-            "Before submitting, COUNT your outputs:",
-            f"- entities array should have {total_entity_count} {entity_word}",
-            f"- dilemmas array should have {dilemma_count} {dilemma_word}",
-        ]
-    )
+    lines.append("### Generation Requirements (CRITICAL)")
 
-    return "\n".join(lines)
+    if include_entities:
+        lines.append(
+            f"- Generate EXACTLY {total_entity_count} entity decisions (one per entity above)"
+        )
+        lines.append(
+            "- Use scoped IDs: category prefix for entities (character::, location::, etc.)"
+        )
+    if include_dilemmas:
+        lines.append(
+            f"- Generate EXACTLY {dilemma_count} dilemma decisions (one per dilemma above)"
+        )
+        lines.append("- Path `answer_id` must be from that dilemma's answers list")
+        lines.append("- Use scoped IDs: dilemma:: for dilemmas")
+
+    lines.append("")
+    lines.append("### Verification")
+    lines.append("Before submitting, COUNT your outputs:")
+
+    if include_entities:
+        lines.append(f"- entities array should have {total_entity_count} {entity_word}")
+    if include_dilemmas:
+        lines.append(f"- dilemmas array should have {dilemma_count} {dilemma_word}")
 
 
 def get_expected_counts(graph: Graph) -> dict[str, int]:
