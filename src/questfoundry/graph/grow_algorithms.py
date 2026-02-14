@@ -1232,15 +1232,13 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
     # still enumerated (downstream phases need soft-variant arcs for convergence
     # metadata and residue), but the limit check counts hard dilemmas only.
     limit = max_arc_count if max_arc_count is not None else _MAX_ARC_COUNT
-    hard_dilemma_count = 0
-    for did in sorted_dilemmas:
-        dnode = dilemma_nodes.get(did, {})
-        if (
-            dnode.get("convergence_policy", "soft") == "hard"
-            and len(dilemma_paths_map.get(did, [])) >= 2
-        ):
-            hard_dilemma_count += 1
-    effective_arc_count = 2**hard_dilemma_count if hard_dilemma_count > 0 else 1
+    hard_dilemma_count = sum(
+        1
+        for did in sorted_dilemmas
+        if dilemma_nodes.get(did, {}).get("convergence_policy", "soft") == "hard"
+        and len(dilemma_paths_map.get(did, [])) >= 2
+    )
+    effective_arc_count = 2**hard_dilemma_count
 
     if effective_arc_count > limit:
         raise ValueError(
