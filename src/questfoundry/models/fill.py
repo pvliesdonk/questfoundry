@@ -90,22 +90,10 @@ class SpokeLabelUpdate(BaseModel):
 
 
 class FillPassageOutput(BaseModel):
-    """LLM output for a single passage prose generation.
-
-    When the LLM cannot write poly-state prose for a shared beat,
-    it sets ``flag`` to ``incompatible_states`` and leaves ``prose`` empty.
-    """
+    """LLM output for a single passage prose generation."""
 
     passage_id: str = Field(min_length=1)
     prose: str = Field(default="", description="Generated prose text")
-    flag: Literal["ok", "incompatible_states"] = Field(
-        default="ok",
-        description="Signal for poly-state failures requiring beat splitting",
-    )
-    flag_reason: str = Field(
-        default="",
-        description="Explanation when flag is incompatible_states",
-    )
     entity_updates: list[EntityUpdate] = Field(
         default_factory=list,
         description="Micro-details discovered during generation",

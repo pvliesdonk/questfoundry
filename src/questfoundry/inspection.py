@@ -181,12 +181,7 @@ def _prose_stats(graph: Graph) -> ProseStats | None:
     for pid, data in passages.items():
         prose = data.get("prose")
         if not prose or not str(prose).strip():
-            entry: dict[str, str] = {"id": pid}
-            if data.get("flag"):
-                entry["flag"] = data["flag"]
-            if data.get("flag_reason"):
-                entry["flag_reason"] = data["flag_reason"]
-            flagged.append(entry)
+            flagged.append({"id": pid})
         else:
             text = str(prose)
             wc = len(text.split())

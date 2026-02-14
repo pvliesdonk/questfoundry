@@ -63,8 +63,6 @@ system: |
   Return a JSON object with a "passage" field containing:
   - passage_id: the passage ID
   - prose: the revised text
-  - flag: "ok" (revision should resolve the issues)
-  - flag_reason: empty string
   - entity_updates: list of {{entity_id, field, value}} (may be empty)
 
 user: |
