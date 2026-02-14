@@ -672,7 +672,7 @@ async def test_outer_loop_appends_feedback_to_messages() -> None:
 
 @pytest.mark.asyncio
 async def test_outer_loop_respects_max_retries() -> None:
-    """Outer loop stops after max_outer_retries even with persistent errors."""
+    """Outer loop stops after max_outer_retries and raises on persistent errors."""
     stage = SeedStage()
 
     mock_model = MagicMock()
@@ -713,17 +713,75 @@ async def test_outer_loop_respects_max_retries() -> None:
         mock_summarize.return_value = (_MOCK_SECTION_BRIEFS, 50)
         mock_serialize.side_effect = always_errors
 
-        # With max_outer_retries=2, should attempt 3 times (initial + 2 retries)
-        await stage.execute(
-            model=mock_model,
-            user_prompt="test",
-            project_path=Path("/test/project"),
-            max_outer_retries=2,
-        )
+        # With max_outer_retries=2, should attempt 3 times then raise
+        with pytest.raises(SeedStageError, match="outer retry exhausted"):
+            await stage.execute(
+                model=mock_model,
+                user_prompt="test",
+                project_path=Path("/test/project"),
+                max_outer_retries=2,
+            )
 
         # Verify exactly 3 attempts (1 initial + 2 retries)
         assert mock_summarize.call_count == 3
         assert mock_serialize.call_count == 3
+
+
+@pytest.mark.asyncio
+async def test_outer_loop_exhaustion_skips_convergence_analysis() -> None:
+    """Convergence analysis is NOT called when outer retry exhausts with errors."""
+    stage = SeedStage()
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+    mock_graph.get_nodes_by_type.side_effect = lambda t: (
+        {"entity1": {"type": "entity"}} if t == "entity" else {}
+    )
+    mock_graph.get_edges.return_value = []
+
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+
+    def always_errors(*_args, **_kwargs):
+        return SerializeResult(
+            artifact=mock_artifact,
+            tokens_used=100,
+            semantic_errors=[
+                SeedValidationError(
+                    field_path="entities.0.entity_id",
+                    issue="Wrong scope prefix",
+                    available=[],
+                    provided="dilemma::x",
+                )
+            ],
+        )
+
+    with (
+        patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch(
+            "questfoundry.pipeline.stages.seed.serialize_convergence_analysis"
+        ) as mock_convergence,
+        patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.format_semantic_errors_as_content"),
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = (_MOCK_SECTION_BRIEFS, 50)
+        mock_serialize.side_effect = always_errors
+
+        with pytest.raises(SeedStageError, match="outer retry exhausted"):
+            await stage.execute(
+                model=mock_model,
+                user_prompt="test",
+                project_path=Path("/test/project"),
+                max_outer_retries=0,  # No retries — fail immediately
+            )
+
+        # Convergence analysis should NOT have been called
+        mock_convergence.assert_not_called()
 
 
 @pytest.mark.asyncio
