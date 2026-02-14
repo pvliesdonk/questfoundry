@@ -68,6 +68,7 @@ from questfoundry.graph.fill_context import (
     get_spine_arc_id,
 )
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.fill import (
     BatchedExpandOutput,
     ExpandBlueprint,
@@ -290,35 +291,8 @@ class FillStage:
         self._on_llm_end: LLMCallbackFn | None = None
         self._on_connectivity_error: ConnectivityRetryFn | None = None
 
-    CHECKPOINT_DIR = "snapshots"
-
     # Type for async phase functions: (Graph, BaseChatModel) -> FillPhaseResult
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[FillPhaseResult]]
-
-    def _get_checkpoint_path(self, project_path: Path, phase_name: str) -> Path:
-        """Return the checkpoint file path for a given phase."""
-        return project_path / self.CHECKPOINT_DIR / f"fill-pre-{phase_name}.json"
-
-    def _save_checkpoint(self, graph: Graph, project_path: Path, phase_name: str) -> None:
-        """Save graph state before a phase runs."""
-        path = self._get_checkpoint_path(project_path, phase_name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        graph.save(path)
-        log.debug("checkpoint_saved", phase=phase_name, path=str(path))
-
-    def _load_checkpoint(self, project_path: Path, phase_name: str) -> Graph:
-        """Load graph state from a checkpoint.
-
-        Raises:
-            FillStageError: If checkpoint file doesn't exist.
-        """
-        path = self._get_checkpoint_path(project_path, phase_name)
-        if not path.exists():
-            raise FillStageError(
-                f"No checkpoint found for phase '{phase_name}'. Expected at: {path}"
-            )
-        log.info("checkpoint_loaded", phase=phase_name, path=str(path))
-        return Graph.load_from_file(path)
 
     def _phase_order(self) -> list[tuple[PhaseFunc, str]]:
         """Return ordered list of (phase_function, phase_name) tuples.
@@ -416,6 +390,8 @@ class FillStage:
         phase_map = {name: i for i, (_, name) in enumerate(phases)}
         start_idx = 0
 
+        graph = Graph.load(resolved_path)
+
         if resume_from:
             if resume_from not in phase_map:
                 raise FillStageError(
@@ -423,19 +399,11 @@ class FillStage:
                     f"Valid phases: {', '.join(repr(p) for p in phase_map)}"
                 )
             start_idx = phase_map[resume_from]
-            graph = self._load_checkpoint(resolved_path, resume_from)
-            log.info(
-                "resume_from_checkpoint",
-                phase=resume_from,
-                skipped=start_idx,
-            )
-        else:
-            graph = Graph.load(resolved_path)
+            if graph.is_sqlite_backed:
+                graph.rewind_to_phase("fill", resume_from)
+            log.info("resume_via_rewind", phase=resume_from, skipped=start_idx)
 
         # Verify GROW has completed before running FILL
-        # Accept "grow" or any later stage (fill/dress/ship) for re-runs.
-        # When re-running, restore the pre-FILL snapshot to avoid stale
-        # FILL/DRESS nodes (e.g. voice::voice already exists).
         last_stage = graph.get_last_stage()
         if last_stage not in ("grow", "fill", "dress", "ship"):
             raise FillStageError(
@@ -443,28 +411,29 @@ class FillStage:
                 f"Run GROW before FILL."
             )
 
-        # Snapshot management for re-runs:
-        # Save pre-fill.json on first run (same naming as orchestrator snapshots
-        # like pre-dream.json, pre-seed.json). The phase loop uses fill-pre-*.json
-        # naming, so pre-fill.json is never overwritten by phase checkpoints.
-        # On re-runs, restore from pre-fill.json to avoid stale nodes.
-        pre_fill_snapshot = resolved_path / "snapshots" / "pre-fill.json"
+        # Re-run management:
+        # On first run (last_stage == "grow"), save a pre-fill backup snapshot.
+        # On re-runs, rewind all fill (and later stage) mutations to start fresh.
         if last_stage == "grow" and not resume_from:
-            pre_fill_snapshot.parent.mkdir(parents=True, exist_ok=True)
-            graph.save(pre_fill_snapshot)
+            save_snapshot(graph, resolved_path, "fill")
         elif last_stage != "grow" and not resume_from:
-            if not pre_fill_snapshot.exists():
-                raise FillStageError(
-                    f"FILL re-run requires the pre-FILL snapshot ({pre_fill_snapshot}). "
-                    f"Re-run GROW first, or use --resume-from to skip the voice phase."
+            if graph.is_sqlite_backed:
+                graph.rewind_stage("fill")
+                log.info("rerun_rewound", stage="fill")
+            else:
+                pre_json = resolved_path / "snapshots" / "pre-fill.json"
+                if not pre_json.exists():
+                    raise FillStageError(
+                        f"FILL re-run requires a pre-FILL snapshot ({pre_json}). "
+                        f"Re-run GROW first, or use --resume-from to skip the voice phase."
+                    )
+                graph = Graph.load_from_file(pre_json)
+                log.info(
+                    "rerun_restored_checkpoint",
+                    stage="fill",
+                    from_last_stage=last_stage,
+                    snapshot=str(pre_json),
                 )
-            graph = Graph.load_from_file(pre_fill_snapshot)
-            log.info(
-                "rerun_restored_checkpoint",
-                stage="fill",
-                from_last_stage=last_stage,
-                snapshot=str(pre_fill_snapshot),
-            )
 
         phase_results: list[FillPhaseResult] = []
         total_llm_calls = 0
@@ -475,7 +444,6 @@ class FillStage:
             if idx < start_idx:
                 continue
 
-            self._save_checkpoint(graph, resolved_path, phase_name)
             log.debug("phase_start", phase=phase_name)
             graph.savepoint(phase_name)
 
@@ -495,7 +463,7 @@ class FillStage:
                 log.info("phase_rejected", phase=phase_name)
                 graph.rollback_to(phase_name)
                 graph.release(phase_name)
-                graph.save(resolved_path / "graph.json")
+                graph.save(resolved_path / "graph.db")
                 completed_normally = False
                 break
 
@@ -507,7 +475,7 @@ class FillStage:
 
         if completed_normally:
             graph.set_last_stage("fill")
-            graph.save(resolved_path / "graph.json")
+            graph.save(resolved_path / "graph.db")
 
         # Summarize passage prose coverage from graph
         passage_nodes = graph.get_nodes_by_type("passage")
