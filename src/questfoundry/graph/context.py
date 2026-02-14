@@ -585,7 +585,7 @@ def _format_seed_valid_ids(graph: Graph, section: str | None = None) -> str:
             "Missing items WILL cause validation failure.",
             "",
         ]
-    else:  # dilemmas
+    elif section == "dilemmas":
         lines = [
             "## VALID DILEMMA IDS - GENERATE FOR ALL",
             "",
