@@ -286,8 +286,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                     f"Unknown phase: '{resume_from}'. Valid phases: {', '.join(phase_map)}"
                 )
             start_idx = phase_map[resume_from]
-            if graph.is_sqlite_backed:
-                graph.rewind_to_phase("grow", resume_from)
+            graph.rewind_to_phase("grow", resume_from)
             log.info("resume_via_rewind", phase=resume_from, skipped=start_idx)
 
         # Verify SEED has completed before running GROW.
@@ -308,23 +307,8 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         if last_stage == "seed" and not resume_from:
             save_snapshot(graph, resolved_path, "grow")
         elif last_stage != "seed" and not resume_from:
-            if graph.is_sqlite_backed:
-                graph.rewind_stage("grow")
-                log.info("rerun_rewound", stage="grow")
-            else:
-                pre_json = resolved_path / "snapshots" / "pre-grow.json"
-                if not pre_json.exists():
-                    raise GrowStageError(
-                        f"GROW re-run requires a pre-GROW snapshot ({pre_json}). "
-                        f"Re-run SEED first, or use --resume-from to skip to a specific phase."
-                    )
-                graph = Graph.load_from_file(pre_json)
-                log.info(
-                    "rerun_restored_checkpoint",
-                    stage="grow",
-                    from_last_stage=last_stage,
-                    snapshot=str(pre_json),
-                )
+            graph.rewind_stage("grow")
+            log.info("rerun_rewound", stage="grow")
 
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0

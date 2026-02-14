@@ -399,8 +399,7 @@ class FillStage:
                     f"Valid phases: {', '.join(repr(p) for p in phase_map)}"
                 )
             start_idx = phase_map[resume_from]
-            if graph.is_sqlite_backed:
-                graph.rewind_to_phase("fill", resume_from)
+            graph.rewind_to_phase("fill", resume_from)
             log.info("resume_via_rewind", phase=resume_from, skipped=start_idx)
 
         # Verify GROW has completed before running FILL
@@ -417,23 +416,8 @@ class FillStage:
         if last_stage == "grow" and not resume_from:
             save_snapshot(graph, resolved_path, "fill")
         elif last_stage != "grow" and not resume_from:
-            if graph.is_sqlite_backed:
-                graph.rewind_stage("fill")
-                log.info("rerun_rewound", stage="fill")
-            else:
-                pre_json = resolved_path / "snapshots" / "pre-fill.json"
-                if not pre_json.exists():
-                    raise FillStageError(
-                        f"FILL re-run requires a pre-FILL snapshot ({pre_json}). "
-                        f"Re-run GROW first, or use --resume-from to skip the voice phase."
-                    )
-                graph = Graph.load_from_file(pre_json)
-                log.info(
-                    "rerun_restored_checkpoint",
-                    stage="fill",
-                    from_last_stage=last_stage,
-                    snapshot=str(pre_json),
-                )
+            graph.rewind_stage("fill")
+            log.info("rerun_rewound", stage="fill")
 
         phase_results: list[FillPhaseResult] = []
         total_llm_calls = 0
