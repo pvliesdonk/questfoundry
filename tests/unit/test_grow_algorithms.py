@@ -329,43 +329,31 @@ class TestTopologicalSortBeats:
         result = topological_sort_beats(graph, ["beat::z", "beat::a"], priority_beats=None)
         assert result == ["beat::a", "beat::z"]
 
+    @staticmethod
+    def _create_dilemma_chain(graph: Graph, dilemma_id: str, prefix: str, count: int) -> list[str]:
+        """Create a chain of beats for a dilemma with requires edges."""
+        ids = []
+        for i in range(1, count + 1):
+            bid = f"beat::{prefix}{i}"
+            graph.create_node(
+                bid,
+                {
+                    "type": "beat",
+                    "dilemma_impacts": [{"dilemma_id": dilemma_id, "effect": "explores"}],
+                },
+            )
+            if i > 1:
+                graph.add_edge("requires", bid, f"beat::{prefix}{i - 1}")
+            ids.append(bid)
+        return ids
+
     def test_dilemma_interleaving(self) -> None:
         """Beats from different dilemmas interleave when no requires edges."""
         graph = Graph.empty()
-        # Dilemma A: 3 beats (a1, a2, a3) — chained
-        graph.create_node(
-            "beat::a1",
-            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_alpha", "effect": "explores"}]},
-        )
-        graph.create_node(
-            "beat::a2",
-            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_alpha", "effect": "explores"}]},
-        )
-        graph.create_node(
-            "beat::a3",
-            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_alpha", "effect": "commits"}]},
-        )
-        graph.add_edge("requires", "beat::a2", "beat::a1")
-        graph.add_edge("requires", "beat::a3", "beat::a2")
+        a_ids = self._create_dilemma_chain(graph, "d_alpha", "a", 3)
+        b_ids = self._create_dilemma_chain(graph, "d_beta", "b", 3)
 
-        # Dilemma B: 3 beats (b1, b2, b3) — chained
-        graph.create_node(
-            "beat::b1",
-            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_beta", "effect": "explores"}]},
-        )
-        graph.create_node(
-            "beat::b2",
-            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_beta", "effect": "explores"}]},
-        )
-        graph.create_node(
-            "beat::b3",
-            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_beta", "effect": "commits"}]},
-        )
-        graph.add_edge("requires", "beat::b2", "beat::b1")
-        graph.add_edge("requires", "beat::b3", "beat::b2")
-
-        all_beats = ["beat::a1", "beat::a2", "beat::a3", "beat::b1", "beat::b2", "beat::b3"]
-        result = topological_sort_beats(graph, all_beats)
+        result = topological_sort_beats(graph, a_ids + b_ids)
 
         # Without interleaving (old behavior): a1, a2, a3, b1, b2, b3
         # With interleaving: a1, b1, a2, b2, a3, b3
