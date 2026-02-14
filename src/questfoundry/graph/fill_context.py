@@ -1522,7 +1522,12 @@ def compute_is_ending(graph: Graph, passage_id: str) -> bool:
     return len(choice_from_edges) == 0
 
 
-def format_ending_guidance(is_ending: bool, *, ending_tone: str = "") -> str:
+def format_ending_guidance(
+    is_ending: bool,
+    *,
+    ending_tone: str = "",
+    ending_differentiation: str = "",
+) -> str:
     """Format ending-specific prose guidance.
 
     When a passage is a story ending, returns craft instructions for
@@ -1532,6 +1537,8 @@ def format_ending_guidance(is_ending: bool, *, ending_tone: str = "") -> str:
         is_ending: Whether this passage is a story ending.
         ending_tone: Optional emotional tone hint from SEED's DilemmaAnalysis
             (e.g. "bittersweet triumph"). Appended to guidance when present.
+        ending_differentiation: Optional family-specific narrative context
+            from ``format_ending_differentiation()``.  Appended after tone.
 
     Returns:
         Ending guidance string, or empty string.
@@ -1562,7 +1569,85 @@ def format_ending_guidance(is_ending: bool, *, ending_tone: str = "") -> str:
             f"This ending should feel: **{ending_tone}**\n"
             f"Let this emotional quality infuse the final image and rhythm."
         )
+    if ending_differentiation:
+        guidance += f"\n\n{ending_differentiation}"
     return guidance
+
+
+def format_ending_differentiation(graph: Graph, passage_id: str) -> str:
+    """Build family-specific narrative context for a synthetic ending passage.
+
+    Traces the passage's ``family_codewords`` back through graph edges to
+    collect the consequence descriptions and path themes that distinguish
+    this ending from its siblings.  Returns a prompt block that grounds
+    the LLM in the specific consequences the reader experienced.
+
+    Edge traversal::
+
+        codeword --tracks--> consequence <--has_consequence-- path
+
+    Args:
+        graph: Story graph with codeword, consequence, and path nodes.
+        passage_id: Full node ID (e.g. ``passage::ending_climax_0``).
+
+    Returns:
+        Formatted "This Ending's Story" prompt section, or empty string
+        if the passage is not a synthetic ending or has no traceable
+        consequences.
+    """
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return ""
+
+    family_codewords = passage.get("family_codewords")
+    if not family_codewords or not passage.get("is_synthetic"):
+        return ""
+
+    # codeword → consequence (via tracks edges: codeword tracks consequence)
+    # We only need edges for our family codewords.
+    bullets: list[str] = []
+    for cw_id in sorted(family_codewords):
+        scoped_cw = cw_id if cw_id.startswith("codeword::") else f"codeword::{cw_id}"
+        tracks = graph.get_edges(from_id=scoped_cw, edge_type="tracks")
+        if not tracks:
+            continue
+        consequence_id = sorted(tracks, key=lambda e: e["to"])[0]["to"]
+        cons_node = graph.get_node(consequence_id)
+        if not cons_node:
+            continue
+        description = cons_node.get("description", "")
+        if not description:
+            continue
+
+        # consequence ← has_consequence ← path
+        has_cons = graph.get_edges(to_id=consequence_id, edge_type="has_consequence")
+        path_theme = ""
+        if has_cons:
+            path_id = sorted(has_cons, key=lambda e: e["from"])[0]["from"]
+            path_node = graph.get_node(path_id)
+            if path_node:
+                path_theme = path_node.get("path_theme", "") or path_node.get(
+                    "raw_id", strip_scope_prefix(path_id)
+                )
+
+        label = f"**{path_theme}**" if path_theme else "Choice consequence"
+        bullets.append(f"- {label}: {description}")
+
+    if not bullets:
+        return ""
+
+    bullet_block = "\n".join(bullets)
+    return (
+        "## This Ending's Story\n\n"
+        "The reader reached this ending because of these choices:\n"
+        f"{bullet_block}\n\n"
+        "Write this ending as the natural conclusion of THESE specific "
+        "consequences. The emotional texture comes from what happened on "
+        "this path, not from generic resolution. Ground the final image "
+        "in the specific consequences above.\n\n"
+        "Do NOT reference choices the reader did not make.\n"
+        "Do NOT write a generic ending that could apply to any path."
+    )
 
 
 def compute_first_appearances(

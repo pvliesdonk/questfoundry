@@ -17,6 +17,7 @@ from questfoundry.graph.fill_context import (
     format_blueprint_context,
     format_dramatic_questions,
     format_dream_vision,
+    format_ending_differentiation,
     format_ending_guidance,
     format_entity_arc_context,
     format_entity_states,
@@ -1249,6 +1250,173 @@ class TestEndingGuidance:
 
     def test_non_ending_ignores_tone(self) -> None:
         assert format_ending_guidance(False, ending_tone="cold justice") == ""
+
+    def test_ending_with_differentiation(self) -> None:
+        guidance = format_ending_guidance(
+            True,
+            ending_tone="cold justice",
+            ending_differentiation="## This Ending's Story\n\nSome context.",
+        )
+        assert "FINAL PASSAGE" in guidance
+        assert "cold justice" in guidance
+        assert "This Ending's Story" in guidance
+
+    def test_non_ending_ignores_differentiation(self) -> None:
+        assert format_ending_guidance(False, ending_differentiation="## ignored") == ""
+
+
+class TestEndingDifferentiation:
+    """Tests for format_ending_differentiation."""
+
+    def test_returns_empty_for_non_ending(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "passage::intro",
+            {"type": "passage", "raw_id": "intro", "summary": "An intro."},
+        )
+        assert format_ending_differentiation(g, "passage::intro") == ""
+
+    def test_returns_empty_for_non_synthetic_ending(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "passage::finale",
+            {
+                "type": "passage",
+                "raw_id": "finale",
+                "is_ending": True,
+                "summary": "The end.",
+            },
+        )
+        assert format_ending_differentiation(g, "passage::finale") == ""
+
+    def test_returns_empty_when_no_family_codewords(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "passage::ending_climax_0",
+            {
+                "type": "passage",
+                "raw_id": "ending_climax_0",
+                "is_ending": True,
+                "is_synthetic": True,
+                "family_codewords": [],
+            },
+        )
+        assert format_ending_differentiation(g, "passage::ending_climax_0") == ""
+
+    def test_returns_empty_for_missing_passage(self) -> None:
+        g = Graph.empty()
+        assert format_ending_differentiation(g, "passage::nonexistent") == ""
+
+    def test_returns_formatted_consequences(self) -> None:
+        """Synthetic ending with traceable codewords gets narrative context."""
+        g = Graph.empty()
+        # Path node
+        g.create_node(
+            "path::ally_path",
+            {
+                "type": "path",
+                "raw_id": "ally_path",
+                "path_theme": "loyalty rewarded",
+                "description": "The hero chose to trust their ally.",
+            },
+        )
+        # Consequence node
+        g.create_node(
+            "consequence::ally_trusted",
+            {
+                "type": "consequence",
+                "raw_id": "ally_trusted",
+                "description": "The ally stands by the hero in the final battle.",
+            },
+        )
+        # Codeword node
+        g.create_node(
+            "codeword::cw_ally",
+            {"type": "codeword", "raw_id": "cw_ally"},
+        )
+        # Edges: codeword --tracks--> consequence
+        g.add_edge("tracks", "codeword::cw_ally", "consequence::ally_trusted")
+        # path --has_consequence--> consequence
+        g.add_edge("has_consequence", "path::ally_path", "consequence::ally_trusted")
+
+        # Synthetic ending passage referencing the codeword
+        g.create_node(
+            "passage::ending_climax_0",
+            {
+                "type": "passage",
+                "raw_id": "ending_climax_0",
+                "is_ending": True,
+                "is_synthetic": True,
+                "family_codewords": ["cw_ally"],
+            },
+        )
+
+        result = format_ending_differentiation(g, "passage::ending_climax_0")
+        assert "## This Ending's Story" in result
+        assert "loyalty rewarded" in result
+        assert "stands by the hero" in result
+        assert "Do NOT reference choices the reader did not make" in result
+
+    def test_falls_back_to_raw_id_when_no_path_theme(self) -> None:
+        """When path has no path_theme, falls back to raw_id."""
+        g = Graph.empty()
+        g.create_node(
+            "path::dark_path",
+            {"type": "path", "raw_id": "dark_path", "description": "A dark road."},
+        )
+        g.create_node(
+            "consequence::shadow",
+            {
+                "type": "consequence",
+                "raw_id": "shadow",
+                "description": "Shadows consume the hero.",
+            },
+        )
+        g.create_node(
+            "codeword::cw_shadow",
+            {"type": "codeword", "raw_id": "cw_shadow"},
+        )
+        g.add_edge("tracks", "codeword::cw_shadow", "consequence::shadow")
+        g.add_edge("has_consequence", "path::dark_path", "consequence::shadow")
+        g.create_node(
+            "passage::ending_0",
+            {
+                "type": "passage",
+                "raw_id": "ending_0",
+                "is_ending": True,
+                "is_synthetic": True,
+                "family_codewords": ["cw_shadow"],
+            },
+        )
+
+        result = format_ending_differentiation(g, "passage::ending_0")
+        assert "dark_path" in result
+        assert "Shadows consume" in result
+
+    def test_skips_codewords_without_consequence_description(self) -> None:
+        """Codewords whose consequences lack descriptions are skipped."""
+        g = Graph.empty()
+        g.create_node(
+            "consequence::empty_cons",
+            {"type": "consequence", "raw_id": "empty_cons", "description": ""},
+        )
+        g.create_node(
+            "codeword::cw_empty",
+            {"type": "codeword", "raw_id": "cw_empty"},
+        )
+        g.add_edge("tracks", "codeword::cw_empty", "consequence::empty_cons")
+        g.create_node(
+            "passage::ending_1",
+            {
+                "type": "passage",
+                "raw_id": "ending_1",
+                "is_ending": True,
+                "is_synthetic": True,
+                "family_codewords": ["cw_empty"],
+            },
+        )
+
+        assert format_ending_differentiation(g, "passage::ending_1") == ""
 
 
 # ---------------------------------------------------------------------------
