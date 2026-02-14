@@ -1747,17 +1747,19 @@ class TestComputeAllChoiceRequires:
         # pb is spine-only → no requires
         assert result.get("passage::pb", []) == []
 
-    def test_hard_branch_no_spine_consequences(self) -> None:
-        """Hard branch with no spine-path consequences gets no requires."""
+    def test_hard_branch_gets_branch_exclusive_codewords(self) -> None:
+        """Hard branch passages require codewords from their own off-spine paths."""
         graph, passage_arcs = self._make_requires_graph("hard")
         result = compute_all_choice_requires(graph, passage_arcs)
 
-        # px is branch-only, hard policy, but spine path p_canon has no
-        # consequences → no spine-exclusive codewords to require.
-        assert result.get("passage::px", []) == []
+        # px is branch-only, hard policy. The branch path p_alt has
+        # consequence alt_outcome → codeword alt_outcome_committed.
+        # This is the off-spine choice the player made → requires it.
+        assert "passage::px" in result
+        assert "codeword::alt_outcome_committed" in result["passage::px"]
 
-    def test_hard_branch_with_spine_consequences(self) -> None:
-        """Hard branch passages get spine-exclusive codewords when spine has consequences."""
+    def test_hard_branch_does_not_require_spine_codewords(self) -> None:
+        """Hard branch passages must NOT require codewords from spine paths."""
         graph, passage_arcs = self._make_requires_graph("hard")
 
         # Add a consequence + codeword on the spine path (p_canon)
@@ -1774,11 +1776,10 @@ class TestComputeAllChoiceRequires:
 
         result = compute_all_choice_requires(graph, passage_arcs)
 
-        # px is branch-only, hard policy → requires spine-exclusive codeword
+        # px is branch-only → requires branch codeword, NOT spine codeword
         assert "passage::px" in result
-        assert "codeword::spine_outcome_committed" in result["passage::px"]
-        # Must NOT require the branch's own codeword
-        assert "codeword::alt_outcome_committed" not in result["passage::px"]
+        assert "codeword::alt_outcome_committed" in result["passage::px"]
+        assert "codeword::spine_outcome_committed" not in result["passage::px"]
 
     def test_soft_branch_target_no_requires(self) -> None:
         """Target exclusive to soft-policy branch gets no requires."""
@@ -1853,6 +1854,82 @@ class TestComputeAllChoiceRequires:
         graph = Graph.empty()
         result = compute_all_choice_requires(graph, {})
         assert result == {}
+
+    def test_multi_arc_intersection(self) -> None:
+        """Passage on multiple arcs gets intersection of branch-exclusive codewords."""
+        graph = Graph.empty()
+
+        # Two dilemmas with two paths each
+        for d_id in ("d1", "d2"):
+            graph.create_node(
+                f"dilemma::{d_id}",
+                {"type": "dilemma", "raw_id": d_id, "convergence_policy": "hard"},
+            )
+        for p_id in ("d1_a", "d1_b", "d2_a", "d2_b"):
+            graph.create_node(
+                f"path::{p_id}",
+                {"type": "path", "raw_id": p_id},
+            )
+
+        # Consequences + codewords for each non-spine path
+        for p_id in ("d1_b", "d2_b"):
+            cons_id = f"consequence::{p_id}_outcome"
+            cw_id = f"codeword::{p_id}_cw"
+            graph.create_node(cons_id, {"type": "consequence", "raw_id": f"{p_id}_outcome"})
+            graph.add_edge("has_consequence", f"path::{p_id}", cons_id)
+            graph.create_node(cw_id, {"type": "codeword", "raw_id": f"{p_id}_cw"})
+            graph.add_edge("tracks", cw_id, cons_id)
+
+        # Spine: [d1_a, d2_a]
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "paths": ["d1_a", "d2_a"],
+                "sequence": ["beat::shared"],
+                "convergence_policy": "flavor",
+                "payoff_budget": 0,
+            },
+        )
+        # Branch 1: [d1_b, d2_b] — both off-spine
+        graph.create_node(
+            "arc::branch_bb",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "paths": ["d1_b", "d2_b"],
+                "sequence": ["beat::x"],
+                "convergence_policy": "hard",
+                "payoff_budget": 2,
+            },
+        )
+        # Branch 2: [d1_a, d2_b] — only d2_b off-spine
+        graph.create_node(
+            "arc::branch_ab",
+            {
+                "type": "arc",
+                "arc_type": "branch",
+                "paths": ["d1_a", "d2_b"],
+                "sequence": ["beat::x"],
+                "convergence_policy": "hard",
+                "payoff_budget": 2,
+            },
+        )
+
+        # passage::x on both branch arcs
+        graph.create_node("passage::x", {"type": "passage", "from_beat": "beat::x"})
+        passage_arcs: dict[str, set[str]] = {
+            "passage::x": {"arc::branch_bb", "arc::branch_ab"},
+        }
+
+        result = compute_all_choice_requires(graph, passage_arcs)
+
+        # branch_bb exclusive codewords: {d1_b_cw, d2_b_cw}
+        # branch_ab exclusive codewords: {d2_b_cw}
+        # Intersection: {d2_b_cw}
+        assert "passage::x" in result
+        assert result["passage::x"] == ["codeword::d2_b_cw"]
 
 
 # ---------------------------------------------------------------------------

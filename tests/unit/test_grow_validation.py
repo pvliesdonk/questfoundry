@@ -401,6 +401,88 @@ class TestGateSatisfiability:
         assert result.severity == "pass"
 
 
+class TestGateCoSatisfiability:
+    def test_co_satisfiable_gates(self) -> None:
+        """Gates requiring codewords from a single arc pass co-satisfiability."""
+        from questfoundry.graph.grow_validation import check_gate_co_satisfiability
+
+        graph = Graph.empty()
+        # Path with consequence and codeword
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node("consequence::c1", {"type": "consequence", "raw_id": "c1"})
+        graph.add_edge("has_consequence", "path::p1", "consequence::c1")
+        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
+        graph.add_edge("tracks", "codeword::cw1", "consequence::c1")
+        # Arc containing p1
+        graph.create_node(
+            "arc::a1",
+            {"type": "arc", "arc_type": "branch", "paths": ["p1"], "sequence": []},
+        )
+        # Choice requiring cw1 — arc a1 provides it
+        graph.create_node("passage::p", {"type": "passage", "raw_id": "p", "from_beat": "b"})
+        graph.create_node(
+            "choice::g1",
+            {
+                "type": "choice",
+                "from_passage": "passage::p",
+                "to_passage": "passage::p",
+                "label": "go",
+                "requires": ["codeword::cw1"],
+                "grants": [],
+            },
+        )
+        result = check_gate_co_satisfiability(graph)
+        assert result.severity == "pass"
+
+    def test_paradoxical_gate_detected(self) -> None:
+        """Gate requiring codewords from mutually exclusive paths is detected."""
+        from questfoundry.graph.grow_validation import check_gate_co_satisfiability
+
+        graph = Graph.empty()
+        # Two paths on separate arcs, each with own codeword
+        for p_id in ("p1", "p2"):
+            graph.create_node(f"path::{p_id}", {"type": "path", "raw_id": p_id})
+            cons_id = f"consequence::{p_id}_c"
+            cw_id = f"codeword::{p_id}_cw"
+            graph.create_node(cons_id, {"type": "consequence", "raw_id": f"{p_id}_c"})
+            graph.add_edge("has_consequence", f"path::{p_id}", cons_id)
+            graph.create_node(cw_id, {"type": "codeword", "raw_id": f"{p_id}_cw"})
+            graph.add_edge("tracks", cw_id, cons_id)
+        # Arc 1 has only p1, Arc 2 has only p2 — mutually exclusive
+        graph.create_node(
+            "arc::a1",
+            {"type": "arc", "arc_type": "branch", "paths": ["p1"], "sequence": []},
+        )
+        graph.create_node(
+            "arc::a2",
+            {"type": "arc", "arc_type": "branch", "paths": ["p2"], "sequence": []},
+        )
+        # Choice requiring BOTH codewords — no single arc provides both
+        graph.create_node("passage::p", {"type": "passage", "raw_id": "p", "from_beat": "b"})
+        graph.create_node(
+            "choice::g1",
+            {
+                "type": "choice",
+                "from_passage": "passage::p",
+                "to_passage": "passage::p",
+                "label": "go",
+                "requires": ["codeword::p1_cw", "codeword::p2_cw"],
+                "grants": [],
+            },
+        )
+        result = check_gate_co_satisfiability(graph)
+        assert result.severity == "fail"
+        assert "Paradoxical" in result.message
+
+    def test_no_choices_passes(self) -> None:
+        """Empty graph with no choices passes co-satisfiability."""
+        from questfoundry.graph.grow_validation import check_gate_co_satisfiability
+
+        graph = Graph.empty()
+        result = check_gate_co_satisfiability(graph)
+        assert result.severity == "pass"
+
+
 class TestPassageDagCycles:
     def test_passage_dag_no_cycles(self) -> None:
         graph = _make_linear_passage_graph()
