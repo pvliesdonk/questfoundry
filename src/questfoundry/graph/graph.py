@@ -113,7 +113,11 @@ class Graph:
             return cls.load_from_file(db_file)
 
         if json_file.exists():
-            return cls.load_from_file(json_file)
+            # Auto-migrate JSON to SQLite on first load
+            from questfoundry.graph.migration import migrate_json_to_sqlite
+
+            store = migrate_json_to_sqlite(json_file, db_file)
+            return cls(store=store)
 
         return cls.empty()
 
@@ -211,6 +215,13 @@ class Graph:
                 new_store = SqliteGraphStore.from_dict(data, db_path=tmp_path)
                 new_store.close()
                 tmp_path.replace(file_path)
+                # Remove stale WAL/SHM files from any previous SQLite
+                # connection to this path (e.g., after rollback replaces
+                # a live database file).
+                for suffix in ("-wal", "-shm"):
+                    stale = file_path.with_name(file_path.name + suffix)
+                    if stale.exists():
+                        stale.unlink()
             except Exception:
                 if tmp_path.exists():
                     tmp_path.unlink()
