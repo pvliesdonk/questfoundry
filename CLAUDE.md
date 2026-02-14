@@ -167,7 +167,7 @@ log.error("provider_error", provider="ollama", message=str(e))
 
 ### Model Workflow (Ontology → Pydantic → Graph)
 
-**The design specification (`docs/design/00-spec.md`) defines the ontology.** Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.json`) is the runtime source of truth for story state.
+**The design specification (`docs/design/00-spec.md`) defines the ontology.** Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.db`) is the runtime source of truth for story state.
 
 ```
 docs/design/00-spec.md        ← Ontology definition (node types, relationships)
@@ -176,7 +176,7 @@ src/questfoundry/models/*.py  ← Hand-written Pydantic models (validate LLM out
         ↓
 graph/mutations.py            ← Semantic validation against graph state
         ↓
-graph.json                    ← Runtime source of truth (nodes + edges)
+graph.db                      ← Runtime source of truth (SQLite, nodes + edges)
 ```
 
 **When adding new stage models:**
@@ -764,9 +764,9 @@ If asked to inspect or debug a specific project run, start with these files in `
 
 - `logs/debug.jsonl` — complete debug logs (primary signal for failures)
 - `logs/llm_calls.jsonl` — full prompt + LLM traces (use to understand model output)
-- `graph.json` — primary output artifact (current story state)
+- `graph.db` — primary output artifact (SQLite database, current story state)
 - `snapshots/` — pre-stage graph checkpoints for rollback/diagnosis
-- `artifacts/` — derived outputs from `graph.json` (use for context only)
+- `artifacts/` — derived outputs from `graph.db` (use for context only)
 
 ### 1. Enable LLM Logging
 

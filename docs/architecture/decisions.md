@@ -515,6 +515,107 @@ Key design choices:
 
 ---
 
+## ADR-014: SQLite Graph Storage
+
+**Date**: 2026-02-12
+**Status**: Accepted
+
+### Context
+
+The story graph was stored as a monolithic `graph.json` file. As stories grew (500+ nodes, 1000+ edges), JSON serialization/deserialization became a bottleneck. Every stage loaded and re-wrote the entire file, even when modifying a few nodes. There was no mutation audit trail, making debugging pipeline failures difficult.
+
+### Decision
+
+Replace `graph.json` with a SQLite database (`graph.db`) via `SqliteGraphStore`. Nodes are stored as (id, JSON data blob) rows; edges as (edge_type, from_id, to_id) triples. A `mutations` table records all graph changes with timestamps and stage attribution.
+
+Key design choices:
+- **SQLite, not Postgres** — Single-file database, zero deployment overhead, portable with the project directory.
+- **JSON data blobs, not normalized columns** — Node schemas vary by type; a relational schema would need 30+ tables. JSON blobs preserve flexibility while SQLite provides indexing and transactions.
+- **Mutation audit trail** — Every `create_node`, `update_node`, `add_edge`, `delete_node` is recorded. `qf inspect` uses this for debugging.
+- **Snapshot strategy preserved** — Pre-stage snapshots copy `graph.db` to `snapshots/pre-{stage}.db`.
+
+### Rationale
+
+- SQLite handles concurrent reads safely and supports WAL mode for performance.
+- The mutation trail eliminates "what changed?" debugging sessions — every GROW phase's modifications are visible.
+- Stage resume becomes trivial: rewind to the last snapshot and replay from a specific phase.
+
+### Consequences
+
+- `graph.json` no longer exists in new projects; legacy projects are migrated on first load.
+- All `Graph` consumers use the same `SqliteGraphStore` API — no code changes needed outside the storage layer.
+- Snapshot files change from `.json` to `.db`.
+- `qf inspect` gains mutation history reporting.
+
+---
+
+## ADR-015: Residue Beats Replace Poly-State Prose
+
+**Date**: 2026-02-13
+**Status**: Accepted
+
+### Context
+
+When multiple arcs reconverge at a shared beat, the original design used "poly-state prose" — shadow states, entry moods, and inline conditionals (`[[if:codeword]]`) — to make one passage read differently depending on the arriving path. This required Phase 2 (path-agnostic assessment) to classify which beats could share prose, an `INCOMPATIBLE_STATES` sentinel for LLM-detected failures, and ~1,000 lines of FILL machinery for entry states, shadow states, and re-generation.
+
+In practice, poly-state prose produced awkward results. The LLM struggled to write natural prose with inline conditionals, and the path-agnostic assessment was unreliable for small models.
+
+### Decision
+
+Replace poly-state prose with **residue beats** (GROW Phase 8d). When arcs converge at a shared beat, the system inserts a short, path-specific "residue" passage before the convergence point. Each residue beat carries forward the emotional tone and narrative context of its arc, allowing the shared passage to remain neutral.
+
+Key design choices:
+- **Structural solution, not prose-level** — Variation is achieved by adding passages (residue beats), not by making one passage conditionally rendered.
+- **Phase 2 fully removed** — `path_agnostic_for` annotation has no remaining consumers. Shared beats are detected structurally via `belongs_to` edges.
+- **Entity overlays survive** — Cosmetic-only overlays (appearance, mood) still use codeword-gated attributes. These are orthogonal to prose variation.
+
+### Rationale
+
+- Residue beats produce natural, non-conditional prose that small models generate reliably.
+- Removing Phase 2 eliminates an LLM call that was unreliable and difficult to validate.
+- The structural approach (add passages) is simpler than the prose-level approach (conditional rendering within passages).
+
+### Consequences
+
+- ~1,400 lines of dead code removed from GROW and FILL stages.
+- `FillPassageOutput.flag` and `flag_reason` fields removed.
+- `grow_phase2_agnostic.yaml` template deleted.
+- No behavioral change for stories — residue beats were already generating variation before the cleanup.
+
+---
+
+## ADR-016: Artifact File Consolidation
+
+**Date**: 2026-02-13
+**Status**: Accepted
+
+### Context
+
+Early QuestFoundry versions produced separate artifact files per stage (e.g., `dream.yaml`, `brainstorm.yaml`, `seed.yaml`) alongside the graph. This created a dual-source-of-truth problem — the graph and artifacts could drift. `qf inspect` had to reconcile multiple files.
+
+### Decision
+
+Consolidate all story state into the unified graph (`graph.db`). Stage artifacts are derived views, not primary storage. The `artifacts/` directory contains only exported views generated on demand by `qf inspect` or `qf review`.
+
+Key design choices:
+- **Graph is the single source of truth** — No stage writes to separate artifact files.
+- **`qf inspect` for derived views** — Machine-readable JSON, human-readable summaries, and quality metrics are all generated from the graph on demand.
+- **Snapshots for rollback** — Pre-stage snapshots in `snapshots/` provide rollback without artifact versioning.
+
+### Rationale
+
+- Single source of truth eliminates drift between artifacts and graph.
+- `qf inspect` provides richer reporting than static artifact files (quality metrics, convergence analysis, ending variant counts).
+- Reduces file count in project directories.
+
+### Consequences
+
+- New projects have only `graph.db`, `snapshots/`, `logs/`, and `exports/` directories.
+- Legacy projects with separate artifact files are migrated on first load.
+- All debugging starts with `graph.db` + `logs/` — no need to cross-reference artifact files.
+
+---
+
 ## Template
 
 ```markdown
