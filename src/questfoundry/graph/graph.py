@@ -275,6 +275,60 @@ class Graph:
             self._store.set_mutation_context("", "")
 
     # -------------------------------------------------------------------------
+    # Rewind
+    # -------------------------------------------------------------------------
+
+    def rewind_to_phase(self, stage: str, phase: str) -> int:
+        """Rewind graph by reversing all mutations from a phase onward.
+
+        Requires a SQLite-backed graph with mutation recording. All mutations
+        from the first occurrence of *(stage, phase)* through the latest
+        mutation are reversed in order, and the mutation records deleted.
+
+        Note: Metadata (``last_stage``, ``stage_history``) is NOT updated
+        automatically — callers should update meta after rewind if needed.
+
+        Args:
+            stage: Pipeline stage (e.g., ``"grow"``).
+            phase: Phase within the stage (e.g., ``"path_agnostic"``).
+
+        Returns:
+            Number of mutations reversed.
+
+        Raises:
+            TypeError: If the graph is not SQLite-backed.
+            ValueError: If no mutations found for *(stage, phase)*.
+            RuntimeError: If a mutation lacks data needed for reversal.
+        """
+        if not self.is_sqlite_backed:
+            raise TypeError("Rewind requires SQLite-backed graph")
+        return self.sqlite_store.rewind_to_phase(stage, phase)
+
+    def rewind_stage(self, stage: str) -> int:
+        """Rewind all mutations for an entire stage.
+
+        Requires a SQLite-backed graph. All mutations for the given *stage*
+        (across all phases) are reversed in order.
+
+        Note: Metadata (``last_stage``, ``stage_history``) is NOT updated
+        automatically — callers should update meta after rewind if needed.
+
+        Args:
+            stage: Pipeline stage to rewind (e.g., ``"grow"``).
+
+        Returns:
+            Number of mutations reversed.
+
+        Raises:
+            TypeError: If the graph is not SQLite-backed.
+            ValueError: If no mutations found for the stage.
+            RuntimeError: If a mutation lacks data needed for reversal.
+        """
+        if not self.is_sqlite_backed:
+            raise TypeError("Rewind requires SQLite-backed graph")
+        return self.sqlite_store.rewind_stage(stage)
+
+    # -------------------------------------------------------------------------
     # Store Access
     # -------------------------------------------------------------------------
 
