@@ -1773,3 +1773,128 @@ class TestGetBrainstormAnswerIds:
 
         graph = Graph.empty()
         assert get_brainstorm_answer_ids(graph) == {}
+
+
+class TestFilterConsequencesByValidPaths:
+    """Test _filter_consequences_by_valid_paths helper."""
+
+    def test_keeps_consequences_with_valid_path_ids(self) -> None:
+        """Consequences referencing valid paths should be kept."""
+        from questfoundry.agents.serialize import _filter_consequences_by_valid_paths
+
+        paths = [
+            {"path_id": "path::d1__answer_a", "name": "Path A"},
+            {"path_id": "path::d1__answer_b", "name": "Path B"},
+        ]
+        consequences = [
+            {"consequence_id": "c1", "path_id": "path::d1__answer_a"},
+            {"consequence_id": "c2", "path_id": "path::d1__answer_b"},
+        ]
+        result = _filter_consequences_by_valid_paths(consequences, paths)
+        assert len(result) == 2
+        assert result == consequences
+
+    def test_drops_consequences_with_invalid_path_ids(self) -> None:
+        """Consequences referencing non-existent paths should be dropped."""
+        from questfoundry.agents.serialize import _filter_consequences_by_valid_paths
+
+        paths = [{"path_id": "path::d1__answer_a", "name": "Path A"}]
+        consequences = [
+            {"consequence_id": "c1", "path_id": "path::d1__answer_a"},
+            {"consequence_id": "c2", "path_id": "path::d1__answer_b"},
+            {"consequence_id": "c3", "path_id": "path::d2__answer_x"},
+        ]
+        result = _filter_consequences_by_valid_paths(consequences, paths)
+        assert len(result) == 1
+        assert result[0]["consequence_id"] == "c1"
+
+    def test_drops_correct_count_when_multiple_invalid(self) -> None:
+        """Should drop exactly the invalid consequences and keep valid ones."""
+        from questfoundry.agents.serialize import _filter_consequences_by_valid_paths
+
+        paths = [{"path_id": "path::d1__a", "name": "A"}]
+        consequences = [
+            {"consequence_id": "c1", "path_id": "path::d1__a"},
+            {"consequence_id": "c2", "path_id": "path::d1__b"},
+            {"consequence_id": "c3", "path_id": "path::d2__x"},
+        ]
+        result = _filter_consequences_by_valid_paths(consequences, paths)
+        assert len(result) == 1
+        assert result[0]["consequence_id"] == "c1"
+
+    def test_empty_consequences_returns_empty(self) -> None:
+        """Empty consequences list should return empty list."""
+        from questfoundry.agents.serialize import _filter_consequences_by_valid_paths
+
+        paths = [{"path_id": "path::d1__a", "name": "A"}]
+        result = _filter_consequences_by_valid_paths([], paths)
+        assert result == []
+
+    def test_empty_paths_drops_all(self) -> None:
+        """If no paths, all consequences are invalid."""
+        from questfoundry.agents.serialize import _filter_consequences_by_valid_paths
+
+        consequences = [{"consequence_id": "c1", "path_id": "path::d1__a"}]
+        result = _filter_consequences_by_valid_paths(consequences, [])
+        assert result == []
+
+
+class TestBuildConsequencesPathsBrief:
+    """Test _build_consequences_paths_brief helper."""
+
+    def test_includes_all_path_ids(self) -> None:
+        """Brief should list all serialized paths."""
+        from questfoundry.agents.serialize import _build_consequences_paths_brief
+
+        paths = [
+            {
+                "path_id": "path::d1__answer_a",
+                "name": "Path A",
+                "description": "First path",
+                "dilemma_id": "d1",
+                "answer_id": "answer_a",
+            },
+            {
+                "path_id": "path::d2__answer_x",
+                "name": "Path X",
+                "description": "Second path",
+                "dilemma_id": "d2",
+                "answer_id": "answer_x",
+            },
+        ]
+        result = _build_consequences_paths_brief(paths)
+        assert "path::d1__answer_a" in result
+        assert "path::d2__answer_x" in result
+        assert "Path A" in result
+        assert "First path" in result
+
+    def test_empty_paths_returns_empty(self) -> None:
+        """Empty paths list should return empty string."""
+        from questfoundry.agents.serialize import _build_consequences_paths_brief
+
+        assert _build_consequences_paths_brief([]) == ""
+
+    def test_sorted_by_path_id(self) -> None:
+        """Paths should be sorted by path_id for deterministic output."""
+        from questfoundry.agents.serialize import _build_consequences_paths_brief
+
+        paths = [
+            {
+                "path_id": "path::z_dilemma__z",
+                "name": "Z",
+                "description": "Z",
+                "dilemma_id": "z",
+                "answer_id": "z",
+            },
+            {
+                "path_id": "path::a_dilemma__a",
+                "name": "A",
+                "description": "A",
+                "dilemma_id": "a",
+                "answer_id": "a",
+            },
+        ]
+        result = _build_consequences_paths_brief(paths)
+        a_pos = result.index("a_dilemma")
+        z_pos = result.index("z_dilemma")
+        assert a_pos < z_pos
