@@ -194,9 +194,9 @@ class TestDressStageResume:
             await stage.execute(MagicMock(), "test", resume_from="nonexistent")
 
     @pytest.mark.asyncio()
-    async def test_missing_checkpoint_raises(self, tmp_path: Path) -> None:
+    async def test_resume_requires_fill_completed(self, tmp_path: Path) -> None:
         stage = DressStage(project_path=tmp_path)
-        with pytest.raises(DressStageError, match="No checkpoint"):
+        with pytest.raises(DressStageError, match="DRESS requires completed FILL"):
             await stage.execute(MagicMock(), "test", resume_from="briefs")
 
 
@@ -462,7 +462,7 @@ class TestPhase4Generate:
 
     @pytest.mark.asyncio()
     async def test_writes_graph_after_each_image(self, tmp_path: Path) -> None:
-        """Phase 4 writes illustration nodes to graph.json incrementally."""
+        """Phase 4 writes illustration nodes to graph.db incrementally."""
         g = Graph()
         g.create_node(
             "art_direction::main",
@@ -521,7 +521,7 @@ class TestPhase4Generate:
         assert result.status == "completed"
         assert save_mock.call_count == 2
         for call in save_mock.call_args_list:
-            assert call.args[0] == tmp_path / "graph.json"
+            assert call.args[0] == tmp_path / "graph.db"
 
     @pytest.mark.asyncio()
     async def test_no_provider_skips(self) -> None:
@@ -716,30 +716,6 @@ class TestPhase4SkipExisting:
 
         assert "1 images generated" in result.detail
         mock_provider.generate.assert_called_once()
-
-
-# ---------------------------------------------------------------------------
-# Checkpoints
-# ---------------------------------------------------------------------------
-
-
-class TestCheckpoints:
-    def test_checkpoint_saved(self, tmp_path: Path) -> None:
-        stage = DressStage()
-        g = Graph()
-        stage._save_checkpoint(g, tmp_path, "art_direction")
-
-        path = tmp_path / "snapshots" / "dress-pre-art_direction.json"
-        assert path.exists()
-
-    def test_checkpoint_loaded(self, tmp_path: Path) -> None:
-        stage = DressStage()
-        g = Graph()
-        g.create_node("test::node", {"type": "test"})
-        stage._save_checkpoint(g, tmp_path, "briefs")
-
-        loaded = stage._load_checkpoint(tmp_path, "briefs")
-        assert loaded.get_node("test::node") is not None
 
 
 # ---------------------------------------------------------------------------

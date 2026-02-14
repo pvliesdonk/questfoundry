@@ -53,6 +53,7 @@ from questfoundry.graph.dress_mutations import (
 )
 from questfoundry.graph.fill_context import format_dream_vision, get_spine_arc_id
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.dress import (
     BatchedBriefOutput,
     BatchedCodexOutput,
@@ -166,27 +167,7 @@ class DressStage:
         self._on_connectivity_error: ConnectivityRetryFn | None = None
         self._skip_codex: bool = False
 
-    CHECKPOINT_DIR = "snapshots"
-
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[DressPhaseResult]]
-
-    def _get_checkpoint_path(self, project_path: Path, phase_name: str) -> Path:
-        return project_path / self.CHECKPOINT_DIR / f"dress-pre-{phase_name}.json"
-
-    def _save_checkpoint(self, graph: Graph, project_path: Path, phase_name: str) -> None:
-        path = self._get_checkpoint_path(project_path, phase_name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        graph.save(path)
-        log.debug("checkpoint_saved", phase=phase_name, path=str(path))
-
-    def _load_checkpoint(self, project_path: Path, phase_name: str) -> Graph:
-        path = self._get_checkpoint_path(project_path, phase_name)
-        if not path.exists():
-            raise DressStageError(
-                f"No checkpoint found for phase '{phase_name}'. Expected at: {path}"
-            )
-        log.info("checkpoint_loaded", phase=phase_name, path=str(path))
-        return Graph.load_from_file(path)
 
     def _phase_order(self) -> list[tuple[PhaseFunc, str]]:
         return [
@@ -285,6 +266,8 @@ class DressStage:
         phase_map = {name: i for i, (_, name) in enumerate(phases)}
         start_idx = 0
 
+        graph = Graph.load(resolved_path)
+
         if resume_from:
             if resume_from not in phase_map:
                 raise DressStageError(
@@ -292,9 +275,9 @@ class DressStage:
                     f"Valid phases: {', '.join(repr(p) for p in phase_map)}"
                 )
             start_idx = phase_map[resume_from]
-            graph = self._load_checkpoint(resolved_path, resume_from)
-        else:
-            graph = Graph.load(resolved_path)
+            if graph.is_sqlite_backed:
+                graph.rewind_to_phase("dress", resume_from)
+            log.info("resume_via_rewind", phase=resume_from, skipped=start_idx)
 
         # Verify FILL has completed before running DRESS
         last_stage = graph.get_last_stage()
@@ -304,27 +287,29 @@ class DressStage:
                 f"Run FILL before DRESS."
             )
 
-        # Snapshot management for re-runs:
-        # Save pre-dress.json on first run (same naming as orchestrator snapshots).
-        # The phase loop uses dress-pre-*.json naming, so pre-dress.json is never
-        # overwritten by phase checkpoints. On re-runs, restore from pre-dress.json.
-        pre_dress_snapshot = resolved_path / "snapshots" / "pre-dress.json"
+        # Re-run management:
+        # On first run (last_stage == "fill"), save a pre-dress backup snapshot.
+        # On re-runs, rewind all dress (and later stage) mutations to start fresh.
         if last_stage == "fill" and not resume_from:
-            pre_dress_snapshot.parent.mkdir(parents=True, exist_ok=True)
-            graph.save(pre_dress_snapshot)
+            save_snapshot(graph, resolved_path, "dress")
         elif last_stage != "fill" and not resume_from:
-            if not pre_dress_snapshot.exists():
-                raise DressStageError(
-                    f"DRESS re-run requires the pre-DRESS snapshot ({pre_dress_snapshot}). "
-                    f"Re-run FILL first, or use --resume-from to skip to a specific phase."
+            if graph.is_sqlite_backed:
+                graph.rewind_stage("dress")
+                log.info("rerun_rewound", stage="dress")
+            else:
+                pre_json = resolved_path / "snapshots" / "pre-dress.json"
+                if not pre_json.exists():
+                    raise DressStageError(
+                        f"DRESS re-run requires a pre-DRESS snapshot ({pre_json}). "
+                        f"Re-run FILL first, or use --resume-from to skip to a specific phase."
+                    )
+                graph = Graph.load_from_file(pre_json)
+                log.info(
+                    "rerun_restored_checkpoint",
+                    stage="dress",
+                    from_last_stage=last_stage,
+                    snapshot=str(pre_json),
                 )
-            graph = Graph.load_from_file(pre_dress_snapshot)
-            log.info(
-                "rerun_restored_checkpoint",
-                stage="dress",
-                from_last_stage=last_stage,
-                snapshot=str(pre_dress_snapshot),
-            )
 
         phase_results: list[DressPhaseResult] = []
         total_llm_calls = 0
@@ -335,7 +320,6 @@ class DressStage:
             if idx < start_idx:
                 continue
 
-            self._save_checkpoint(graph, resolved_path, phase_name)
             log.debug("phase_start", phase=phase_name)
             graph.savepoint(phase_name)
 
@@ -355,7 +339,7 @@ class DressStage:
                 log.info("phase_rejected", phase=phase_name)
                 graph.rollback_to(phase_name)
                 graph.release(phase_name)
-                graph.save(resolved_path / "graph.json")
+                graph.save(resolved_path / "graph.db")
                 completed_normally = False
                 break
 
@@ -367,11 +351,11 @@ class DressStage:
 
             # Persist progress after each approved phase so expensive work
             # (briefs/codex/review) isn't lost if later phases fail.
-            graph.save(resolved_path / "graph.json")
+            graph.save(resolved_path / "graph.db")
 
         if completed_normally:
             graph.set_last_stage("dress")
-            graph.save(resolved_path / "graph.json")
+            graph.save(resolved_path / "graph.db")
 
         artifact_data = self._extract_artifact(graph)
 
@@ -1079,7 +1063,7 @@ class DressStage:
         )
 
         if result.status != "failed":
-            graph.save(project_path / "graph.json")
+            graph.save(project_path / "graph.db")
 
         if on_phase_progress is not None:
             on_phase_progress("generate", result.status, result.detail)
@@ -1291,7 +1275,7 @@ class DressStage:
                     category=brief_data.get("category", "scene"),
                     quality=quality,
                 )
-                graph.save(self.project_path / "graph.json")
+                graph.save(self.project_path / "graph.db")
                 generated += 1
 
             except ImageProviderError as e:

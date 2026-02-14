@@ -70,12 +70,6 @@ class ShipStage:
         )
 
         # Load graph
-        graph_file = self._project_path / "graph.json"
-        if not graph_file.exists():
-            raise ShipStageError(
-                f"No graph.json found in {self._project_path}. "
-                "Run pipeline stages (dream → fill) first."
-            )
         graph = Graph.load(self._project_path)
 
         # Validate passages have prose

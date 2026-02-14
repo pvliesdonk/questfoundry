@@ -186,7 +186,7 @@ class TestShipStage:
         project.mkdir(parents=True)
 
         stage = ShipStage(project)
-        with pytest.raises(ShipStageError, match=r"No graph\.json found"):
+        with pytest.raises(ShipStageError, match="no passages"):
             stage.execute()
 
     def test_missing_prose_raises(self, tmp_path: Path) -> None:

@@ -130,6 +130,28 @@ class GraphStore(Protocol):
         """Release (discard) a named savepoint."""
         ...
 
+    # -- Rewind ----------------------------------------------------------------
+
+    def rewind_to_phase(self, stage: str, phase: str) -> int:
+        """Reverse all mutations from (stage, phase) onward.
+
+        Only supported by stores with mutation recording.
+
+        Returns:
+            Number of mutations reversed.
+        """
+        ...
+
+    def rewind_stage(self, stage: str) -> int:
+        """Reverse all mutations for an entire stage.
+
+        Only supported by stores with mutation recording.
+
+        Returns:
+            Number of mutations reversed.
+        """
+        ...
+
     # -- Serialization ---------------------------------------------------------
 
     def to_dict(self) -> dict[str, Any]:
@@ -272,6 +294,16 @@ class DictGraphStore:
     def release(self, name: str) -> None:
         """Discard a named snapshot."""
         self._savepoints.pop(name, None)
+
+    # -- Rewind (not supported) ------------------------------------------------
+
+    def rewind_to_phase(self, stage: str, phase: str) -> int:
+        """Not supported — DictGraphStore does not record mutations."""
+        raise NotImplementedError("Rewind requires SQLite-backed storage with mutation recording")
+
+    def rewind_stage(self, stage: str) -> int:
+        """Not supported — DictGraphStore does not record mutations."""
+        raise NotImplementedError("Rewind requires SQLite-backed storage with mutation recording")
 
     # -- Serialization ---------------------------------------------------------
 

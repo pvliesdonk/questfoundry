@@ -30,6 +30,7 @@ from questfoundry.graph.context_compact import (
 )
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
+from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
 from questfoundry.observability.tracing import traceable
 from questfoundry.pipeline.gates import AutoApprovePhaseGate
@@ -109,40 +110,10 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         self._lang_instruction: str = ""
         self._on_connectivity_error: ConnectivityRetryFn | None = None
 
-    CHECKPOINT_DIR = "snapshots"
     PROLOGUE_ID = "passage::prologue"
 
     # Type for async phase functions: (Graph, BaseChatModel) -> GrowPhaseResult
     PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[GrowPhaseResult]]
-
-    def _get_checkpoint_path(self, project_path: Path, phase_name: str) -> Path:
-        """Return the checkpoint file path for a given phase."""
-        return project_path / self.CHECKPOINT_DIR / f"grow-pre-{phase_name}.json"
-
-    def _save_checkpoint(self, graph: Graph, project_path: Path, phase_name: str) -> None:
-        """Save graph state before a phase runs.
-
-        Creates a snapshot file that can be used to resume from this phase
-        if execution is interrupted or needs to be re-run.
-        """
-        path = self._get_checkpoint_path(project_path, phase_name)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        graph.save(path)
-        log.debug("checkpoint_saved", phase=phase_name, path=str(path))
-
-    def _load_checkpoint(self, project_path: Path, phase_name: str) -> Graph:
-        """Load graph state from a checkpoint.
-
-        Raises:
-            GrowStageError: If checkpoint file doesn't exist.
-        """
-        path = self._get_checkpoint_path(project_path, phase_name)
-        if not path.exists():
-            raise GrowStageError(
-                f"No checkpoint found for phase '{phase_name}'. Expected at: {path}"
-            )
-        log.info("checkpoint_loaded", phase=phase_name, path=str(path))
-        return Graph.load_from_file(path)
 
     def _compact_config(self) -> CompactContextConfig:
         """Build a compaction config from the model's context window.
@@ -307,27 +278,23 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         phase_map = {name: i for i, (_, name) in enumerate(phases)}
         start_idx = 0
 
+        graph = Graph.load(resolved_path)
+
         if resume_from:
             if resume_from not in phase_map:
                 raise GrowStageError(
                     f"Unknown phase: '{resume_from}'. Valid phases: {', '.join(phase_map)}"
                 )
             start_idx = phase_map[resume_from]
-            graph = self._load_checkpoint(resolved_path, resume_from)
-            log.info(
-                "resume_from_checkpoint",
-                phase=resume_from,
-                skipped=start_idx,
-            )
-        else:
-            graph = Graph.load(resolved_path)
+            if graph.is_sqlite_backed:
+                graph.rewind_to_phase("grow", resume_from)
+            log.info("resume_via_rewind", phase=resume_from, skipped=start_idx)
 
         # Verify SEED has completed before running GROW.
         #
         # Pipeline invariant: stages always run in order, so if graph.meta.last_stage
         # is *beyond* SEED (e.g., fill/dress), SEED must have completed. In that case,
-        # re-running GROW should restore the pre-GROW snapshot to avoid accumulating
-        # stale GROW/FILL/DRESS nodes.
+        # re-running GROW should rewind all grow mutations to start fresh.
         last_stage = graph.get_last_stage()
         if last_stage not in ("seed", "grow", "fill", "dress", "ship"):
             raise GrowStageError(
@@ -335,34 +302,29 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 f"Run SEED before GROW."
             )
 
-        # Snapshot management for re-runs:
-        # Save pre-grow.json on first run (same naming as orchestrator snapshots).
-        # The phase loop uses grow-pre-*.json naming, so pre-grow.json is never
-        # overwritten by phase checkpoints. On re-runs, restore from pre-grow.json.
-        pre_grow_snapshot = resolved_path / "snapshots" / "pre-grow.json"
+        # Re-run management:
+        # On first run (last_stage == "seed"), save a pre-grow backup snapshot.
+        # On re-runs, rewind all grow (and later stage) mutations to start fresh.
         if last_stage == "seed" and not resume_from:
-            pre_grow_snapshot.parent.mkdir(parents=True, exist_ok=True)
-            graph.save(pre_grow_snapshot)
+            save_snapshot(graph, resolved_path, "grow")
         elif last_stage != "seed" and not resume_from:
-            if not pre_grow_snapshot.exists():
-                raise GrowStageError(
-                    f"GROW re-run requires the pre-GROW snapshot ({pre_grow_snapshot}). "
-                    f"Re-run SEED first, or use --resume-from to skip to a specific phase."
+            if graph.is_sqlite_backed:
+                graph.rewind_stage("grow")
+                log.info("rerun_rewound", stage="grow")
+            else:
+                pre_json = resolved_path / "snapshots" / "pre-grow.json"
+                if not pre_json.exists():
+                    raise GrowStageError(
+                        f"GROW re-run requires a pre-GROW snapshot ({pre_json}). "
+                        f"Re-run SEED first, or use --resume-from to skip to a specific phase."
+                    )
+                graph = Graph.load_from_file(pre_json)
+                log.info(
+                    "rerun_restored_checkpoint",
+                    stage="grow",
+                    from_last_stage=last_stage,
+                    snapshot=str(pre_json),
                 )
-            graph = Graph.load_from_file(pre_grow_snapshot)
-            restored_last_stage = graph.get_last_stage()
-            if restored_last_stage != "seed":
-                raise GrowStageError(
-                    "Pre-GROW snapshot does not contain a SEED-completed graph. "
-                    f"Current last_stage: '{restored_last_stage}'. "
-                    "Re-run SEED before GROW."
-                )
-            log.info(
-                "rerun_restored_checkpoint",
-                stage="grow",
-                from_last_stage=last_stage,
-                snapshot=str(pre_grow_snapshot),
-            )
 
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0
@@ -372,7 +334,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             if idx < start_idx:
                 continue
 
-            self._save_checkpoint(graph, resolved_path, phase_name)
             log.debug("phase_start", phase=phase_name)
             graph.savepoint(phase_name)
 
@@ -398,7 +359,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 log.info("phase_rejected", phase=phase_name)
                 graph.rollback_to(phase_name)
                 graph.release(phase_name)
-                graph.save(resolved_path / "graph.json")
+                graph.save(resolved_path / "graph.db")
                 break
 
             graph.release(phase_name)
@@ -409,7 +370,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 on_phase_progress(phase_name, result.status, result.detail)
 
         graph.set_last_stage("grow")
-        graph.save(resolved_path / "graph.json")
+        graph.save(resolved_path / "graph.db")
 
         # Count created nodes
         arc_nodes = graph.get_nodes_by_type("arc")

@@ -53,14 +53,15 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 
 CREATE TABLE IF NOT EXISTS mutations (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
-    stage     TEXT NOT NULL DEFAULT '',
-    phase     TEXT NOT NULL DEFAULT '',
-    operation TEXT NOT NULL,
-    target_id TEXT NOT NULL,
-    delta     JSON,
-    rationale TEXT DEFAULT ''
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    stage        TEXT NOT NULL DEFAULT '',
+    phase        TEXT NOT NULL DEFAULT '',
+    operation    TEXT NOT NULL,
+    target_id    TEXT NOT NULL,
+    delta        JSON,
+    before_state JSON,
+    rationale    TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_mutations_stage  ON mutations(stage);
 CREATE INDEX IF NOT EXISTS idx_mutations_target ON mutations(target_id);
@@ -117,6 +118,7 @@ class SqliteGraphStore:
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
+        self._ensure_before_state_column()
 
         self._stage: str = ""
         self._phase: str = ""
@@ -147,6 +149,19 @@ class SqliteGraphStore:
         else:
             dest.close()
 
+    # -- Schema migration ------------------------------------------------------
+
+    def _ensure_before_state_column(self) -> None:
+        """Add ``before_state`` column if absent (schema migration).
+
+        Existing databases created before rewind support lack the column.
+        ``ALTER TABLE ADD COLUMN`` is safe for nullable columns in SQLite.
+        """
+        cursor = self._conn.execute("PRAGMA table_info(mutations)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "before_state" not in columns:
+            self._conn.execute("ALTER TABLE mutations ADD COLUMN before_state JSON")
+
     # -- Mutation context ------------------------------------------------------
 
     def set_mutation_context(self, stage: str = "", phase: str = "") -> None:
@@ -164,17 +179,28 @@ class SqliteGraphStore:
         operation: str,
         target_id: str,
         delta: dict[str, Any] | None = None,
+        before_state: dict[str, Any] | None = None,
     ) -> None:
-        """Append a mutation record."""
+        """Append a mutation record.
+
+        Args:
+            operation: Mutation type (create_node, update_node, etc.).
+            target_id: Affected node ID or edge reference.
+            delta: New data (node data for creates/updates, edge dict for add_edge).
+            before_state: State before mutation for reversibility. Required for
+                update_node, delete_node, and remove_edge to enable rewind.
+        """
         self._conn.execute(
-            "INSERT INTO mutations (stage, phase, operation, target_id, delta) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO mutations "
+            "(stage, phase, operation, target_id, delta, before_state) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (
                 self._stage,
                 self._phase,
                 operation,
                 target_id,
                 json.dumps(delta) if delta is not None else None,
+                json.dumps(before_state) if before_state is not None else None,
             ),
         )
 
@@ -241,6 +267,13 @@ class SqliteGraphStore:
     def set_node(self, node_id: str, data: dict[str, Any]) -> None:
         node_type = data.get("type", "")
         existing = self.has_node(node_id)
+        before: dict[str, Any] | None = None
+        if existing:
+            row = self._conn.execute(
+                "SELECT data FROM nodes WHERE node_id = ?", (node_id,)
+            ).fetchone()
+            if row is not None:
+                before = json.loads(row["data"])
         self._conn.execute(
             "INSERT OR REPLACE INTO nodes "
             "(node_id, type, data, created_stage, created_phase, modified_stage, modified_phase) "
@@ -260,14 +293,15 @@ class SqliteGraphStore:
                 self._phase,
             ),
         )
-        op = "update_node" if existing else "create_node"
-        self._record_mutation(op, node_id, delta=data)
+        op = "replace_node" if existing else "create_node"
+        self._record_mutation(op, node_id, delta=data, before_state=before)
 
     def update_node_fields(self, node_id: str, **updates: Any) -> None:
         row = self._conn.execute("SELECT data FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         if row is None:
             raise NodeNotFoundError(node_id=node_id)
         current = json.loads(row["data"])
+        old_values = {k: current.get(k) for k in updates}
         current.update(updates)
         node_type = current.get("type", "")
         self._conn.execute(
@@ -275,11 +309,18 @@ class SqliteGraphStore:
             "WHERE node_id = ?",
             (json.dumps(current), node_type, self._stage, self._phase, node_id),
         )
-        self._record_mutation("update_node", node_id, delta=dict(updates))
+        self._record_mutation(
+            "update_node",
+            node_id,
+            delta=dict(updates),
+            before_state=old_values,
+        )
 
     def delete_node(self, node_id: str) -> None:
+        row = self._conn.execute("SELECT data FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+        before = json.loads(row["data"]) if row is not None else None
         self._conn.execute("DELETE FROM nodes WHERE node_id = ?", (node_id,))
-        self._record_mutation("delete_node", node_id)
+        self._record_mutation("delete_node", node_id, before_state=before)
 
     def get_nodes_by_type(self, node_type: str) -> dict[str, dict[str, Any]]:
         rows = self._conn.execute(
@@ -323,19 +364,21 @@ class SqliteGraphStore:
             ),
         )
         target_id = f"edge:{edge_type}:{from_id}:{to_id}"
-        self._record_mutation("add_edge", target_id)
+        self._record_mutation("add_edge", target_id, delta=dict(edge))
 
     def remove_edge(self, edge_type: str, from_id: str, to_id: str) -> bool:
-        # Find the first matching row to delete
+        # Find the first matching row to delete (fetch full data for before_state)
         row = self._conn.execute(
-            "SELECT rowid FROM edges WHERE edge_type = ? AND from_id = ? AND to_id = ? LIMIT 1",
+            "SELECT rowid, edge_type, from_id, to_id, data FROM edges "
+            "WHERE edge_type = ? AND from_id = ? AND to_id = ? LIMIT 1",
             (edge_type, from_id, to_id),
         ).fetchone()
         if row is None:
             return False
+        before = self._row_to_edge(row)
         self._conn.execute("DELETE FROM edges WHERE rowid = ?", (row["rowid"],))
         target_id = f"edge:{edge_type}:{from_id}:{to_id}"
-        self._record_mutation("remove_edge", target_id)
+        self._record_mutation("remove_edge", target_id, before_state=before)
         return True
 
     def get_edges(
@@ -376,12 +419,13 @@ class SqliteGraphStore:
         self._conn.execute("SAVEPOINT sp_remove_refs")
         try:
             rows = self._conn.execute(
-                "SELECT edge_type, from_id, to_id FROM edges WHERE from_id = ? OR to_id = ?",
+                "SELECT edge_type, from_id, to_id, data FROM edges WHERE from_id = ? OR to_id = ?",
                 (node_id, node_id),
             ).fetchall()
             for row in rows:
                 target_id = f"edge:{row['edge_type']}:{row['from_id']}:{row['to_id']}"
-                self._record_mutation("remove_edge", target_id)
+                before = self._row_to_edge(row)
+                self._record_mutation("remove_edge", target_id, before_state=before)
             self._conn.execute(
                 "DELETE FROM edges WHERE from_id = ? OR to_id = ?",
                 (node_id, node_id),
@@ -408,6 +452,201 @@ class SqliteGraphStore:
             extra = json.loads(row["data"])
             edge.update(extra)
         return edge
+
+    # -- Rewind ----------------------------------------------------------------
+
+    def rewind_to_phase(self, stage: str, phase: str) -> int:
+        """Rewind graph by reversing all mutations from a phase onward.
+
+        Finds the first mutation matching *(stage, phase)* and applies the
+        inverse of every mutation from that point forward, in reverse order.
+        The reversed mutation records are deleted.
+
+        Args:
+            stage: Pipeline stage (e.g., ``"grow"``).
+            phase: Phase within the stage (e.g., ``"path_agnostic"``).
+
+        Returns:
+            Number of mutations reversed.  Returns 0 if no mutations
+            exist for *(stage, phase)* (already in pre-phase state).
+
+        Raises:
+            RuntimeError: If a mutation lacks ``before_state`` needed for
+                reversal (e.g., pre-migration data).
+        """
+        row = self._conn.execute(
+            "SELECT MIN(id) AS min_id FROM mutations WHERE stage = ? AND phase = ?",
+            (stage, phase),
+        ).fetchone()
+
+        if row is None or row["min_id"] is None:
+            return 0
+
+        return self._rewind_from_id(row["min_id"])
+
+    def rewind_stage(self, stage: str) -> int:
+        """Rewind all mutations for an entire stage.
+
+        Finds the first mutation for *stage* (any phase) and reverses
+        everything from that point forward.
+
+        Args:
+            stage: Pipeline stage to rewind (e.g., ``"grow"``).
+
+        Returns:
+            Number of mutations reversed.  Returns 0 if no mutations
+            exist for the stage (the graph is already in pre-stage state).
+
+        Raises:
+            RuntimeError: If a mutation lacks ``before_state`` needed for
+                reversal.
+        """
+        row = self._conn.execute(
+            "SELECT MIN(id) AS min_id FROM mutations WHERE stage = ?",
+            (stage,),
+        ).fetchone()
+
+        if row is None or row["min_id"] is None:
+            return 0
+
+        return self._rewind_from_id(row["min_id"])
+
+    def _rewind_from_id(self, first_id: int) -> int:
+        """Reverse all mutations with ``id >= first_id``.
+
+        Processes mutations in reverse chronological order, applying the
+        inverse of each. The entire rewind is wrapped in a SAVEPOINT for
+        atomicity — on any failure, all changes are rolled back.
+
+        Args:
+            first_id: Mutation ID to start rewinding from (inclusive).
+
+        Returns:
+            Number of mutations reversed.
+        """
+        mutations = self._conn.execute(
+            "SELECT id, operation, target_id, delta, before_state "
+            "FROM mutations WHERE id >= ? ORDER BY id DESC",
+            (first_id,),
+        ).fetchall()
+
+        if not mutations:
+            return 0
+
+        self._conn.execute("SAVEPOINT sp_rewind")
+        try:
+            for mutation in mutations:
+                self._apply_inverse(mutation)
+
+            self._conn.execute("DELETE FROM mutations WHERE id >= ?", (first_id,))
+            self._conn.execute("RELEASE SAVEPOINT sp_rewind")
+        except Exception:
+            self._conn.execute("ROLLBACK TO sp_rewind")
+            self._conn.execute("RELEASE SAVEPOINT sp_rewind")
+            raise
+
+        return len(mutations)
+
+    def _apply_inverse(self, mutation: sqlite3.Row) -> None:
+        """Apply the inverse of a single mutation.
+
+        Args:
+            mutation: Row from the ``mutations`` table with columns:
+                ``operation``, ``target_id``, ``delta``, ``before_state``.
+
+        Raises:
+            RuntimeError: If ``before_state`` is required but missing, or
+                if the operation is unknown.
+        """
+        operation = mutation["operation"]
+        target_id = mutation["target_id"]
+        delta = json.loads(mutation["delta"]) if mutation["delta"] else None
+        before = json.loads(mutation["before_state"]) if mutation["before_state"] else None
+
+        if operation == "create_node":
+            self._conn.execute("DELETE FROM nodes WHERE node_id = ?", (target_id,))
+
+        elif operation == "replace_node":
+            if before is None:
+                raise RuntimeError(
+                    f"Cannot reverse replace_node for {target_id!r}: "
+                    f"before_state is missing (pre-migration mutation?)"
+                )
+            self._conn.execute(
+                "INSERT OR REPLACE INTO nodes (node_id, type, data) VALUES (?, ?, ?)",
+                (target_id, before.get("type", ""), json.dumps(before)),
+            )
+
+        elif operation == "update_node":
+            if before is None:
+                raise RuntimeError(
+                    f"Cannot reverse update_node for {target_id!r}: "
+                    f"before_state is missing (pre-migration mutation?)"
+                )
+            row = self._conn.execute(
+                "SELECT data FROM nodes WHERE node_id = ?", (target_id,)
+            ).fetchone()
+            if row is None:
+                raise RuntimeError(
+                    f"Cannot reverse update_node: node {target_id!r} not found in database"
+                )
+            current = json.loads(row["data"])
+            for k, v in before.items():
+                if v is None:
+                    current.pop(k, None)
+                else:
+                    current[k] = v
+            self._conn.execute(
+                "UPDATE nodes SET data = ?, type = ? WHERE node_id = ?",
+                (json.dumps(current), current.get("type", ""), target_id),
+            )
+
+        elif operation == "delete_node":
+            if before is None:
+                raise RuntimeError(
+                    f"Cannot reverse delete_node for {target_id!r}: "
+                    f"before_state is missing (pre-migration mutation?)"
+                )
+            self._conn.execute(
+                "INSERT INTO nodes (node_id, type, data) VALUES (?, ?, ?)",
+                (target_id, before.get("type", ""), json.dumps(before)),
+            )
+
+        elif operation == "add_edge":
+            if delta is None:
+                raise RuntimeError(f"Cannot reverse add_edge for {target_id!r}: delta is missing")
+            edge_type = delta.get("type", "")
+            from_id = delta.get("from", "")
+            to_id = delta.get("to", "")
+            row = self._conn.execute(
+                "SELECT rowid FROM edges WHERE edge_type = ? AND from_id = ? AND to_id = ? LIMIT 1",
+                (edge_type, from_id, to_id),
+            ).fetchone()
+            if row is not None:
+                self._conn.execute("DELETE FROM edges WHERE rowid = ?", (row["rowid"],))
+
+        elif operation == "remove_edge":
+            if before is None:
+                raise RuntimeError(
+                    f"Cannot reverse remove_edge for {target_id!r}: "
+                    f"before_state is missing (pre-migration mutation?)"
+                )
+            edge_type = before.get("type", "")
+            from_id = before.get("from", "")
+            to_id = before.get("to", "")
+            extra = {k: v for k, v in before.items() if k not in ("type", "from", "to")}
+            self._conn.execute(
+                "INSERT INTO edges (edge_type, from_id, to_id, data) VALUES (?, ?, ?, ?)",
+                (
+                    edge_type,
+                    from_id,
+                    to_id,
+                    json.dumps(extra) if extra else None,
+                ),
+            )
+
+        else:
+            raise RuntimeError(f"Unknown mutation operation: {operation!r}")
 
     # -- Meta ------------------------------------------------------------------
 
