@@ -1679,28 +1679,49 @@ async def serialize_seed_as_function(
     prompts = _load_seed_section_prompts()
     total_tokens = 0
 
-    # Build valid IDs context from graph
-    valid_ids_context = ""
-    if graph is not None:
-        valid_ids_context = format_valid_ids_context(graph, stage="seed")
-
     def _build_section_brief(section_name: str) -> str:
         """Build the brief for a specific section.
 
-        When chunked: uses per-section brief + valid IDs context.
-        When monolithic: uses full brief + valid IDs context (old behavior).
+        When chunked: uses per-section brief + section-scoped valid IDs.
+        When monolithic: uses full brief + full valid IDs (old behavior).
         """
+        ids_ctx = ""
+        if graph is not None:
+            # Chunked mode: scope IDs to section; monolithic: full manifest
+            scope = section_name if chunked else None
+            ids_ctx = format_valid_ids_context(graph, stage="seed", section=scope)
+
         if chunked:
             section_brief = brief_dict.get(section_name, "")
             if not section_brief:
                 log.warning("missing_section_brief", section=section_name)
-            if valid_ids_context:
-                return f"{valid_ids_context}\n\n---\n\n{section_brief}"
+            if ids_ctx:
+                return f"{ids_ctx}\n\n---\n\n{section_brief}"
             return section_brief
         # Monolithic fallback
-        if valid_ids_context:
-            return f"{valid_ids_context}\n\n---\n\n{monolithic_brief}"
+        if ids_ctx:
+            return f"{ids_ctx}\n\n---\n\n{monolithic_brief}"
         return monolithic_brief
+
+    def _build_consequences_section_brief() -> str:
+        """Build the brief for the consequences section.
+
+        Uses serialized paths when available, falling back to the summarize
+        brief.  Prepends section-scoped valid IDs context.
+        """
+        if collected.get("paths"):
+            paths_brief = _build_consequences_paths_brief(collected["paths"])
+        elif chunked:
+            paths_brief = brief_dict.get("paths", "")
+        else:
+            paths_brief = ""
+        if chunked or collected.get("paths"):
+            cons_ids_ctx = ""
+            if graph is not None:
+                scope = "consequences" if chunked else None
+                cons_ids_ctx = format_valid_ids_context(graph, stage="seed", section=scope)
+            return f"{cons_ids_ctx}\n\n{paths_brief}" if cons_ids_ctx else paths_brief
+        return brief_with_paths
 
     # Initial enhanced_brief for the monolithic code path and downstream use
     enhanced_brief = _build_section_brief("entities")
@@ -1742,27 +1763,14 @@ async def serialize_seed_as_function(
     # This is injected into each per-path brief for character/location refs
     entity_context = ""
     if graph is not None:
-        entity_context = format_valid_ids_context(graph, stage="seed")
+        entity_context = format_valid_ids_context(graph, stage="seed", section="entities")
 
     for section_name, schema, output_field in sections:
         log.debug("serialize_section_started", section=section_name)
 
         # Build per-section brief (chunked mode uses scoped briefs)
         if section_name == "consequences":
-            # Build consequences brief from serialized paths (not the summarize brief,
-            # which may describe paths for unexplored dilemma answers).
-            if collected.get("paths"):
-                paths_brief = _build_consequences_paths_brief(collected["paths"])
-            elif chunked:
-                paths_brief = brief_dict.get("paths", "")
-            else:
-                paths_brief = ""
-            if chunked or collected.get("paths"):
-                current_brief = (
-                    f"{valid_ids_context}\n\n{paths_brief}" if valid_ids_context else paths_brief
-                )
-            else:
-                current_brief = brief_with_paths
+            current_brief = _build_consequences_section_brief()
         else:
             current_brief = _build_section_brief(section_name)
 
@@ -1958,22 +1966,7 @@ async def serialize_seed_as_function(
                 corrected_prompt = f"{prompts[section_name]}\n\n{corrections}"
                 # Build brief for retry (mirrors initial section loop logic)
                 if section_name == "consequences":
-                    # Use serialized paths brief (not summarize brief) to avoid
-                    # describing paths for unexplored dilemma answers.
-                    if collected.get("paths"):
-                        paths_brief = _build_consequences_paths_brief(collected["paths"])
-                    elif chunked:
-                        paths_brief = brief_dict.get("paths", "")
-                    else:
-                        paths_brief = ""
-                    if chunked or collected.get("paths"):
-                        current_brief = (
-                            f"{valid_ids_context}\n\n{paths_brief}"
-                            if valid_ids_context
-                            else paths_brief
-                        )
-                    else:
-                        current_brief = brief_with_paths
+                    current_brief = _build_consequences_section_brief()
                 elif chunked:
                     current_brief = _build_section_brief(section_name)
                 else:

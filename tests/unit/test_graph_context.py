@@ -257,6 +257,99 @@ class TestFormatValidIdsContext:
         assert "`accept` (default)" in result  # answers stay unscoped
 
 
+class TestSectionScopedManifest:
+    """Tests for section-scoped valid IDs manifest (#898)."""
+
+    @staticmethod
+    def _graph_with_entities_and_dilemmas() -> Graph:
+        """Build a graph with both entities and dilemmas for scoping tests."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "entity_type": "character"},
+        )
+        graph.create_node(
+            "entity::tavern",
+            {"type": "entity", "raw_id": "tavern", "entity_type": "location"},
+        )
+        graph.create_node(
+            "dilemma::trust_or_betray",
+            {"type": "dilemma", "raw_id": "trust_or_betray"},
+        )
+        graph.create_node(
+            "dilemma::trust_or_betray::alt::trust",
+            {"type": "answer", "raw_id": "trust", "is_default_path": True},
+        )
+        graph.create_node(
+            "dilemma::trust_or_betray::alt::betray",
+            {"type": "answer", "raw_id": "betray", "is_default_path": False},
+        )
+        graph.add_edge(
+            "has_answer", "dilemma::trust_or_betray", "dilemma::trust_or_betray::alt::trust"
+        )
+        graph.add_edge(
+            "has_answer", "dilemma::trust_or_betray", "dilemma::trust_or_betray::alt::betray"
+        )
+        return graph
+
+    def test_seed_entities_section_excludes_dilemmas(self) -> None:
+        """section='entities' has entity IDs but no dilemma IDs."""
+        graph = self._graph_with_entities_and_dilemmas()
+        result = format_valid_ids_context(graph, "seed", section="entities")
+
+        assert "VALID ENTITY IDS" in result
+        assert "`character::hero`" in result
+        assert "`location::tavern`" in result
+        assert "EXACTLY 2 entity decisions" in result
+
+        # Must NOT mention dilemmas
+        assert "Dilemma IDs" not in result
+        assert "dilemma::" not in result
+        assert "dilemma decisions" not in result.lower()
+
+    def test_seed_dilemmas_section_excludes_entities(self) -> None:
+        """section='dilemmas' has dilemma IDs but no entity IDs."""
+        graph = self._graph_with_entities_and_dilemmas()
+        result = format_valid_ids_context(graph, "seed", section="dilemmas")
+
+        assert "VALID DILEMMA IDS" in result
+        assert "`dilemma::trust_or_betray`" in result
+        assert "EXACTLY 1 dilemma decisions" in result
+
+        # Must NOT mention entities
+        assert "Entity IDs" not in result
+        assert "character::" not in result
+        assert "entity decisions" not in result.lower()
+
+    def test_seed_unknown_section_returns_empty(self) -> None:
+        """Sections like 'consequences' return empty (IDs come from elsewhere)."""
+        graph = self._graph_with_entities_and_dilemmas()
+
+        assert format_valid_ids_context(graph, "seed", section="consequences") == ""
+        assert format_valid_ids_context(graph, "seed", section="beats") == ""
+        assert format_valid_ids_context(graph, "seed", section="paths") == ""
+
+    def test_seed_none_section_returns_full_manifest(self) -> None:
+        """section=None returns the full manifest (backward compat)."""
+        graph = self._graph_with_entities_and_dilemmas()
+        result = format_valid_ids_context(graph, "seed", section=None)
+
+        # Both entity and dilemma blocks present
+        assert "Entity IDs" in result
+        assert "Dilemma IDs" in result
+        assert "`character::hero`" in result
+        assert "`dilemma::trust_or_betray`" in result
+        assert "entity decisions" in result.lower()
+        assert "dilemma decisions" in result.lower()
+
+    def test_default_section_matches_none(self) -> None:
+        """Omitting section arg gives same result as section=None."""
+        graph = self._graph_with_entities_and_dilemmas()
+        default_result = format_valid_ids_context(graph, "seed")
+        explicit_none = format_valid_ids_context(graph, "seed", section=None)
+        assert default_result == explicit_none
+
+
 class TestFormatPathIdsContext:
     """Tests for format_path_ids_context function."""
 
