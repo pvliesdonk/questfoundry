@@ -312,15 +312,15 @@ class TestSqliteStoreMutations:
         ).fetchall()
         assert len(rows) == 1
 
-    def test_overwrite_node_records_update_mutation(self) -> None:
-        """Second set_node on same ID records update_node."""
+    def test_overwrite_node_records_replace_mutation(self) -> None:
+        """Second set_node on same ID records replace_node."""
         store = SqliteGraphStore()
         store.set_node("entity::alice", {"type": "entity", "name": "Alice"})
         store.set_node("entity::alice", {"type": "entity", "name": "Bob"})
 
         rows = store._conn.execute("SELECT operation FROM mutations").fetchall()
         ops = [row["operation"] for row in rows]
-        assert ops == ["create_node", "update_node"]
+        assert ops == ["create_node", "replace_node"]
 
     def test_mutation_context_default_empty(self) -> None:
         """Without set_mutation_context, stage/phase are empty strings."""
