@@ -1971,10 +1971,14 @@ def compute_all_choice_requires(
     """Compute codeword ``requires`` for hard-policy branch entry passages.
 
     For each passage that appears exclusively in hard-policy branch arcs
-    (not on the spine), collects codewords from **spine-exclusive** paths —
-    paths on the spine that are NOT shared with the branch arc.  These
-    codewords are earnable before the branch divergence point, making the
-    gate satisfiable in a single playthrough.
+    (not on the spine), collects codewords from **branch-exclusive** paths —
+    paths on the branch arc that are NOT on the spine.  These codewords
+    identify the specific off-spine choices the player made, so the gate
+    is satisfiable by any player on that arc.
+
+    When a passage appears on multiple hard arcs, the requires are the
+    **intersection** of each arc's branch-exclusive codewords — ensuring
+    any player on any qualifying arc can satisfy the gate.
 
     Returns:
         Mapping of ``passage_id`` → list of required codeword IDs.
@@ -2006,31 +2010,42 @@ def compute_all_choice_requires(
         path_consequences.setdefault(edge["from"], []).append(edge["to"])
 
     # 4. For each passage exclusive to hard-policy branches, collect
-    #    codewords from spine-exclusive paths.
+    #    codewords from branch-exclusive paths (off-spine choices).
     requires: dict[str, list[str]] = {}
     for passage_id, arc_ids in passage_arcs.items():
         # Skip passages reachable via the spine — no gating needed
         if any(arc_nodes.get(a, {}).get("arc_type") == "spine" for a in arc_ids):
             continue
 
-        codewords: set[str] = set()
+        # Collect per-arc codeword sets; intersection gives codewords
+        # that ANY player on a qualifying arc will have.
+        arc_codeword_sets: list[set[str]] = []
         for arc_id in sorted(arc_ids):
             arc_data = arc_nodes.get(arc_id, {})
             if arc_data.get("convergence_policy") != "hard":
                 continue
 
-            # Spine-exclusive = spine paths NOT shared with this branch
+            # Branch-exclusive = branch paths NOT on the spine
             branch_paths = {normalize_scoped_id(p, "path") for p in arc_data.get("paths", [])}
-            spine_exclusive = spine_paths - branch_paths
+            branch_exclusive = branch_paths - spine_paths
 
-            for path_id in sorted(spine_exclusive):
+            arc_codewords: set[str] = set()
+            for path_id in sorted(branch_exclusive):
                 for cons_id in path_consequences.get(path_id, []):
                     cw = cons_to_codeword.get(cons_id)
                     if cw:
-                        codewords.add(cw)
+                        arc_codewords.add(cw)
 
-        if codewords:
-            requires[passage_id] = sorted(codewords)
+            if arc_codewords:
+                arc_codeword_sets.append(arc_codewords)
+
+        if arc_codeword_sets:
+            # Intersection: codewords shared by all qualifying arcs
+            codewords = arc_codeword_sets[0]
+            for s in arc_codeword_sets[1:]:
+                codewords = codewords & s
+            if codewords:
+                requires[passage_id] = sorted(codewords)
 
     return requires
 

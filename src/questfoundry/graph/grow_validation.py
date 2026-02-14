@@ -375,6 +375,77 @@ def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
     )
 
 
+def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
+    """Verify all required codewords are co-reachable in a single playthrough.
+
+    For each choice with non-empty requires, checks that at least one arc
+    provides ALL required codewords.  A gate that requires codewords from
+    mutually exclusive paths is paradoxical — the player can never satisfy it.
+    """
+    choice_nodes = graph.get_nodes_by_type("choice")
+    if not choice_nodes:
+        return ValidationCheck(
+            name="gate_co_satisfiability",
+            severity="pass",
+            message="No choices to check",
+        )
+
+    arc_nodes = graph.get_nodes_by_type("arc")
+    if not arc_nodes:
+        return ValidationCheck(
+            name="gate_co_satisfiability",
+            severity="pass",
+            message="No arcs to check",
+        )
+
+    # Build consequence→codeword lookup
+    cons_to_codeword = {
+        edge["to"]: edge["from"]
+        for edge in graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
+    }
+
+    # Build path→consequences lookup
+    path_consequences: dict[str, list[str]] = {}
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="has_consequence"):
+        path_consequences.setdefault(edge["from"], []).append(edge["to"])
+
+    # Build earnable codewords per arc
+    arc_codewords: dict[str, set[str]] = {}
+    for arc_id, arc_data in arc_nodes.items():
+        cws: set[str] = set()
+        for raw_path in arc_data.get("paths", []):
+            path_id = normalize_scoped_id(raw_path, "path")
+            for cons_id in path_consequences.get(path_id, []):
+                cw = cons_to_codeword.get(cons_id)
+                if cw:
+                    cws.add(cw)
+        arc_codewords[arc_id] = cws
+
+    # Check each gated choice
+    paradoxical: list[str] = []
+    for choice_id, choice_data in sorted(choice_nodes.items()):
+        requires = set(choice_data.get("requires", []))
+        if not requires:
+            continue
+
+        # A gate is satisfiable if ANY arc provides all required codewords
+        satisfiable = any(requires <= cws for cws in arc_codewords.values())
+        if not satisfiable:
+            paradoxical.append(f"{choice_id} requires {sorted(requires)}")
+
+    if not paradoxical:
+        return ValidationCheck(
+            name="gate_co_satisfiability",
+            severity="pass",
+            message="All gates co-satisfiable",
+        )
+    return ValidationCheck(
+        name="gate_co_satisfiability",
+        severity="fail",
+        message=f"Paradoxical gates ({len(paradoxical)}): {', '.join(paradoxical[:3])}",
+    )
+
+
 def check_passage_dag_cycles(graph: Graph) -> ValidationCheck:
     """Verify passage→choice→passage directed edges form a DAG (no cycles).
 
@@ -1195,6 +1266,7 @@ def run_all_checks(graph: Graph) -> ValidationReport:
         check_arc_divergence(graph),
         check_dilemmas_resolved(graph),
         check_gate_satisfiability(graph),
+        check_gate_co_satisfiability(graph),
         check_passage_dag_cycles(graph),
         check_max_consecutive_linear(graph, max_run=linear_threshold),
         check_codeword_gate_coverage(graph),
