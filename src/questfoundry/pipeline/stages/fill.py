@@ -44,6 +44,7 @@ from questfoundry.graph.fill_context import (
     format_continuity_warning,
     format_dramatic_questions,
     format_dream_vision,
+    format_ending_differentiation,
     format_ending_guidance,
     format_entity_arc_context,
     format_entity_states,
@@ -1165,7 +1166,9 @@ class FillStage:
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
                 "vocabulary_note": vocabulary_note,
                 "ending_guidance": format_ending_guidance(
-                    is_ending, ending_tone=passage.get("ending_tone", "")
+                    is_ending,
+                    ending_tone=passage.get("ending_tone", ""),
+                    ending_differentiation=format_ending_differentiation(graph, passage_id),
                 ),
                 "introduction_guidance": format_introduction_guidance(
                     first_names,
