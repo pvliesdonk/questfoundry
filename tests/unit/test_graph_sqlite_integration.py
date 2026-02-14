@@ -1,7 +1,7 @@
 """Tests for Graph ↔ SQLite integration.
 
-Covers: auto-migration, .db load/save, savepoint API through Graph,
-mutation_context, snapshot handling with mixed formats.
+Covers: .db load/save, savepoint API through Graph,
+mutation_context, snapshot handling.
 """
 
 from __future__ import annotations
@@ -10,7 +10,6 @@ import json
 from typing import TYPE_CHECKING
 
 from questfoundry.graph.graph import Graph
-from questfoundry.graph.migration import migrate_json_to_sqlite
 from questfoundry.graph.snapshots import (
     delete_snapshot,
     list_snapshots,
@@ -29,52 +28,8 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 
 
-def _write_json_graph(path: Path) -> dict:
-    """Write a minimal graph.json and return the data."""
-    data = {
-        "version": "5.0",
-        "meta": {
-            "project_name": "test",
-            "last_stage": "seed",
-            "last_modified": None,
-            "stage_history": [],
-        },
-        "nodes": {
-            "entity::alice": {"type": "entity", "name": "Alice"},
-            "entity::bob": {"type": "entity", "name": "Bob"},
-        },
-        "edges": [
-            {"type": "knows", "from": "entity::alice", "to": "entity::bob"},
-        ],
-    }
-    json_file = path / "graph.json"
-    with json_file.open("w") as f:
-        json.dump(data, f)
-    return data
-
-
 class TestGraphLoadDetection:
-    """Graph.load() detects .db vs .json files."""
-
-    def test_load_prefers_db_over_json(self, tmp_path: Path) -> None:
-        """If both graph.db and graph.json exist, prefer .db."""
-        _write_json_graph(tmp_path)
-        db_graph = Graph.empty()
-        db_graph.create_node("entity::charlie", {"type": "entity"})
-        db_graph.save(tmp_path / "graph.db")
-
-        loaded = Graph.load(tmp_path)
-        assert loaded.has_node("entity::charlie")
-        assert not loaded.has_node("entity::alice")
-
-    def test_load_json_auto_migrates_to_sqlite(self, tmp_path: Path) -> None:
-        """Loading graph.json auto-migrates to SQLite when no .db exists."""
-        _write_json_graph(tmp_path)
-        graph = Graph.load(tmp_path)
-
-        assert graph.is_sqlite_backed
-        assert graph.has_node("entity::alice")
-        assert (tmp_path / "graph.db").exists()
+    """Graph.load() detects .db files."""
 
     def test_load_db_is_sqlite_backed(self, tmp_path: Path) -> None:
         """Loading .db results in SQLite-backed graph."""
@@ -86,40 +41,11 @@ class TestGraphLoadDetection:
         assert loaded.is_sqlite_backed
         assert loaded.has_node("n1")
 
-    def test_load_empty_when_no_files(self, tmp_path: Path) -> None:
-        """Returns empty graph when neither .db nor .json exists."""
+    def test_load_empty_when_no_db(self, tmp_path: Path) -> None:
+        """Returns empty graph when no .db exists."""
         graph = Graph.load(tmp_path)
         assert not graph.is_sqlite_backed
         assert isinstance(graph._store, DictGraphStore)
-
-
-# ---------------------------------------------------------------------------
-# migrate_json_to_sqlite utility
-# ---------------------------------------------------------------------------
-
-
-class TestMigrateJsonToSqlite:
-    """Direct migration function tests."""
-
-    def test_round_trip_fidelity(self, tmp_path: Path) -> None:
-        """Migrated data matches original JSON."""
-        data = {
-            "version": "5.0",
-            "meta": {"project_name": "test", "last_stage": None},
-            "nodes": {"n1": {"type": "t", "val": 42}},
-            "edges": [{"type": "e", "from": "n1", "to": "n1"}],
-        }
-        json_file = tmp_path / "graph.json"
-        with json_file.open("w") as f:
-            json.dump(data, f)
-
-        store = migrate_json_to_sqlite(json_file, tmp_path / "graph.db")
-        result = store.to_dict()
-        store.close()
-
-        assert result["nodes"]["n1"]["val"] == 42
-        assert len(result["edges"]) == 1
-        assert result["meta"]["project_name"] == "test"
 
 
 # ---------------------------------------------------------------------------
@@ -152,16 +78,6 @@ class TestDbLoadSave:
 
         loaded = Graph.load_from_file(backup_path)
         assert loaded.has_node("n1")
-
-    def test_save_json_still_works(self, tmp_path: Path) -> None:
-        """JSON save still works for backward compatibility."""
-        graph = Graph.empty()
-        graph.create_node("n1", {"type": "t"})
-        graph.save(tmp_path / "out.json")
-
-        with (tmp_path / "out.json").open() as f:
-            data = json.load(f)
-        assert "n1" in data["nodes"]
 
     def test_save_db_overwrites_existing(self, tmp_path: Path) -> None:
         """Saving .db to an existing path overwrites it."""
@@ -395,26 +311,24 @@ class TestDbSnapshots:
         assert restored.has_node("n1")
         assert not restored.has_node("n2")
 
-    def test_list_snapshots_mixed(self, tmp_path: Path) -> None:
-        """list_snapshots finds both .json and .db snapshots."""
+    def test_list_snapshots(self, tmp_path: Path) -> None:
+        """list_snapshots finds .db snapshots."""
         snapshot_dir = tmp_path / "snapshots"
         snapshot_dir.mkdir()
-        (snapshot_dir / "pre-dream.json").write_text("{}")
+        (snapshot_dir / "pre-dream.db").write_bytes(b"")
         (snapshot_dir / "pre-grow.db").write_bytes(b"")
 
         stages = list_snapshots(tmp_path)
         assert "dream" in stages
         assert "grow" in stages
 
-    def test_delete_snapshot_both_formats(self, tmp_path: Path) -> None:
-        """delete_snapshot removes both .json and .db variants."""
+    def test_delete_snapshot(self, tmp_path: Path) -> None:
+        """delete_snapshot removes .db snapshot."""
         snapshot_dir = tmp_path / "snapshots"
         snapshot_dir.mkdir()
-        (snapshot_dir / "pre-dream.json").write_text("{}")
         (snapshot_dir / "pre-dream.db").write_bytes(b"")
 
         assert delete_snapshot(tmp_path, "dream")
-        assert not (snapshot_dir / "pre-dream.json").exists()
         assert not (snapshot_dir / "pre-dream.db").exists()
 
 

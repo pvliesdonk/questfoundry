@@ -326,7 +326,7 @@ pipeline:
     # Create graph with dream completed
     graph = Graph.empty()
     graph.set_last_stage("dream")
-    graph.save(tmp_path / "graph.json")
+    graph.save(tmp_path / "graph.db")
 
     orchestrator = PipelineOrchestrator(tmp_path)
     status = orchestrator.get_status()
@@ -354,7 +354,7 @@ pipeline:
     # Create a graph at brainstorm stage (SEED never completed)
     graph = Graph.empty()
     graph.set_last_stage("brainstorm")
-    graph.save(tmp_path / "graph.json")
+    graph.save(tmp_path / "graph.db")
 
     orchestrator = PipelineOrchestrator(tmp_path)
     status = orchestrator.get_status()
@@ -366,7 +366,7 @@ pipeline:
 
 
 def test_status_without_graph_shows_all_pending(tmp_path: Path) -> None:
-    """Without graph.json, all stages should be pending."""
+    """Without graph.db, all stages should be pending."""
     config_file = tmp_path / "project.yaml"
     config_file.write_text(
         """
@@ -582,7 +582,7 @@ providers:
         "entity::detective",
         {"type": "entity", "raw_id": "detective", "entity_type": "character"},
     )
-    graph.save(tmp_path / "graph.json")
+    graph.save(tmp_path / "graph.db")
 
     return tmp_path
 
@@ -1118,7 +1118,7 @@ class TestMutationRerunDetection:
         graph = Graph.empty()
         graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
         graph.set_last_stage("dream")
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
 
@@ -1136,7 +1136,7 @@ class TestMutationRerunDetection:
         graph = Graph.empty()
         graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
         graph.set_last_stage("dream")
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
 
@@ -1179,14 +1179,14 @@ class TestMutationRerunDetection:
         graph = Graph.empty()
         graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
         graph.set_last_stage("dream")
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
 
         # Simulate seed having run (just set last_stage, no real seed mutations)
         result = Graph.load(tmp_path)
         result.set_last_stage("seed")
-        result.save(tmp_path / "graph.json")
+        result.save(tmp_path / "graph.db")
 
         # Now re-run brainstorm — should not crash
         _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
@@ -1201,7 +1201,7 @@ class TestMutationRerunDetection:
         graph = Graph.empty()
         graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
         graph.set_last_stage("dream")
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
 
@@ -1225,11 +1225,10 @@ class TestMutationRerunDetection:
         graph = Graph.empty()
         graph.upsert_node("vision", {"type": "vision", "genre": "fantasy"})
         graph.set_last_stage("brainstorm")
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
-        # No pre-brainstorm snapshot exists (neither .db nor .json)
+        # No pre-brainstorm snapshot exists
         assert not (tmp_path / "snapshots" / "pre-brainstorm.db").exists()
-        assert not (tmp_path / "snapshots" / "pre-brainstorm.json").exists()
 
         # Re-run without snapshot should raise, not silently corrupt
         with pytest.raises(ValueError, match="requires the pre-stage snapshot"):
@@ -1239,7 +1238,7 @@ class TestMutationRerunDetection:
         """Dream first run works with None prerequisite (empty graph)."""
         # Empty graph — last_stage is None, dream prerequisite is None
         graph = Graph.empty()
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         _simulate_mutation_block(tmp_path, "dream", _DREAM_ARTIFACT)
 

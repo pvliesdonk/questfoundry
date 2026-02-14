@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
 
 def _create_project_with_graph(project_path: Path, *, with_prose: bool = True) -> None:
-    """Create a minimal project with graph.json for SHIP testing."""
+    """Create a minimal project with graph.db for SHIP testing."""
     from ruamel.yaml import YAML
 
     project_path.mkdir(parents=True, exist_ok=True)
@@ -56,7 +56,7 @@ def _create_project_with_graph(project_path: Path, *, with_prose: bool = True) -
     g.add_edge("choice_from", "choice::enter", "passage::intro")
     g.add_edge("choice_to", "choice::enter", "passage::castle")
 
-    g.save(project_path / "graph.json")
+    g.save(project_path / "graph.db")
 
 
 def _write_test_png(path: Path) -> None:
@@ -123,7 +123,7 @@ class TestShipStage:
             },
         )
         g.add_edge("Depicts", "illustration::intro", "passage::intro")
-        g.save(project / "graph.json")
+        g.save(project / "graph.db")
 
         stage = ShipStage(project)
         result = stage.execute(export_format="html", embed_assets=True)
@@ -153,7 +153,7 @@ class TestShipStage:
             },
         )
         g.add_edge("Depicts", "illustration::intro", "passage::intro")
-        g.save(project / "graph.json")
+        g.save(project / "graph.db")
 
         stage = ShipStage(project)
         result = stage.execute(export_format="json", embed_assets=True)
@@ -210,7 +210,7 @@ class TestShipStage:
 
         # Graph with no passages
         g = Graph()
-        g.save(project / "graph.json")
+        g.save(project / "graph.db")
 
         stage = ShipStage(project)
         with pytest.raises(ShipStageError, match="no passages"):
@@ -238,7 +238,7 @@ class TestShipStage:
 
         g = Graph()
         g.create_node("passage::intro", {"type": "passage", "raw_id": "intro", "prose": "   "})
-        g.save(project / "graph.json")
+        g.save(project / "graph.db")
 
         stage = ShipStage(project)
         with pytest.raises(ShipStageError, match="missing prose"):
@@ -263,7 +263,7 @@ class TestShipStage:
 
         g = Graph()
         g.create_node("passage::intro", {"type": "passage", "raw_id": "intro", "prose": "Hello."})
-        g.save(project / "graph.json")
+        g.save(project / "graph.db")
 
         stage = ShipStage(project)
         result = stage.execute(export_format="json")
@@ -284,7 +284,7 @@ class TestShipStage:
             "voice::voice",
             {"type": "voice", "raw_id": "voice", "story_title": "The Hollow Crown"},
         )
-        g.save(project / "graph.json")
+        g.save(project / "graph.db")
 
         stage = ShipStage(project)
         result = stage.execute(export_format="json")
@@ -302,7 +302,7 @@ class TestShipStage:
         # Voice node exists but without story_title
         g = Graph.load(project)
         g.create_node("voice::voice", {"type": "voice", "raw_id": "voice"})
-        g.save(project / "graph.json")
+        g.save(project / "graph.db")
 
         stage = ShipStage(project)
         result = stage.execute(export_format="json")
@@ -319,7 +319,7 @@ class TestShipStage:
 
         g = Graph.load(project)
         g.create_node("voice::voice", {"type": "voice", "raw_id": "voice", "story_title": None})
-        g.save(project / "graph.json")
+        g.save(project / "graph.db")
 
         stage = ShipStage(project)
         result = stage.execute(export_format="json")

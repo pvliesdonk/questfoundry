@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import warnings
 from typing import TYPE_CHECKING
 
@@ -490,7 +489,7 @@ class TestPersistence:
         graph.set_last_stage("dream")
 
         # Save
-        graph_file = tmp_path / "graph.json"
+        graph_file = tmp_path / "graph.db"
         graph.save(graph_file)
         assert graph_file.exists()
 
@@ -504,7 +503,7 @@ class TestPersistence:
         """Can load graph from project directory."""
         graph = Graph.empty()
         graph.create_node("test", {"type": "test"})
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         loaded = Graph.load(tmp_path)
         assert loaded.has_node("test")
@@ -518,14 +517,14 @@ class TestPersistence:
     def test_save_creates_parent_dirs(self, tmp_path: Path) -> None:
         """Save creates parent directories if needed."""
         graph = Graph.empty()
-        nested_path = tmp_path / "a" / "b" / "c" / "graph.json"
+        nested_path = tmp_path / "a" / "b" / "c" / "graph.db"
         graph.save(nested_path)
         assert nested_path.exists()
 
     def test_save_is_atomic(self, tmp_path: Path) -> None:
         """Save uses atomic write pattern."""
         graph = Graph.empty()
-        graph_file = tmp_path / "graph.json"
+        graph_file = tmp_path / "graph.db"
         graph.save(graph_file)
 
         # Verify no temp file left behind
@@ -535,11 +534,11 @@ class TestPersistence:
     def test_save_updates_last_modified(self, tmp_path: Path) -> None:
         """Save updates last_modified timestamp."""
         graph = Graph.empty()
-        graph_file = tmp_path / "graph.json"
+        graph_file = tmp_path / "graph.db"
         graph.save(graph_file)
 
-        data = json.loads(graph_file.read_text())
-        assert data["meta"]["last_modified"] is not None
+        loaded = Graph.load_from_file(graph_file)
+        assert loaded.to_dict()["meta"]["last_modified"] is not None
 
 
 class TestSerialization:
@@ -572,7 +571,7 @@ class TestSnapshots:
         snapshot_path = save_snapshot(graph, tmp_path, "dream")
 
         assert snapshot_path.exists()
-        assert snapshot_path.name == "pre-dream.json"
+        assert snapshot_path.name == "pre-dream.db"
 
         # Verify snapshot contains original data
         loaded = Graph.load_from_file(snapshot_path)
@@ -587,7 +586,7 @@ class TestSnapshots:
 
         # Modify graph (simulating stage execution)
         graph.create_node("added_by_dream", {"type": "test"})
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         # Verify current state has new node
         current = Graph.load(tmp_path)
@@ -599,7 +598,7 @@ class TestSnapshots:
         assert restored.has_node("original")
         assert not restored.has_node("added_by_dream")
 
-        # Verify graph.json was also updated
+        # Verify graph.db was also updated
         reloaded = Graph.load(tmp_path)
         assert not reloaded.has_node("added_by_dream")
 
