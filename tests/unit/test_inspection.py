@@ -33,7 +33,7 @@ def _make_graph_with_passages(prose_texts: list[str | None]) -> Graph:
             data["prose"] = prose
         else:
             data["prose"] = None
-            data["flag"] = "incompatible_states"
+            data["flag"] = "flat_prose"
             data["flag_reason"] = "test reason"
         graph.create_node(f"passage::p{i}", data)
     return graph
@@ -145,7 +145,7 @@ class TestProseStats:
         assert stats.passages_with_prose == 1
         assert len(stats.flagged_passages) == 1
         assert stats.flagged_passages[0]["id"] == "passage::p1"
-        assert stats.flagged_passages[0]["flag"] == "incompatible_states"
+        assert stats.flagged_passages[0]["flag"] == "flat_prose"
 
     def test_no_passages_returns_none(self) -> None:
         graph = Graph.empty()

@@ -233,7 +233,6 @@ class TestGlobalRegistry:
         """Execution order matches the original hand-maintained _phase_order() list."""
         expected = [
             "validate_dag",
-            "path_agnostic",
             "scene_types",
             "narrative_gaps",
             "pacing_gaps",

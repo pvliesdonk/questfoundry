@@ -5,7 +5,6 @@ from __future__ import annotations
 from questfoundry.graph.grow_validators import (
     count_entries,
     format_semantic_errors,
-    validate_phase2_output,
     validate_phase3_output,
     validate_phase4a_output,
     validate_phase4f_output,
@@ -21,8 +20,6 @@ from questfoundry.models.grow import (
     HubProposal,
     IntersectionProposal,
     OverlayProposal,
-    PathAgnosticAssessment,
-    Phase2Output,
     Phase3Output,
     Phase4aOutput,
     Phase4fOutput,
@@ -35,76 +32,6 @@ from questfoundry.models.grow import (
     SceneTypeTag,
     SpokeProposal,
 )
-
-
-class TestValidatePhase2Output:
-    def test_valid_output_no_errors(self) -> None:
-        result = Phase2Output(
-            assessments=[
-                PathAgnosticAssessment(beat_id="beat::b1", agnostic_for=["t1"]),
-                PathAgnosticAssessment(beat_id="beat::b2", agnostic_for=["t1", "t2"]),
-            ]
-        )
-        errors = validate_phase2_output(
-            result,
-            valid_beat_ids={"beat::b1", "beat::b2"},
-            valid_dilemma_ids={"t1", "t2"},
-        )
-        assert errors == []
-
-    def test_invalid_beat_id(self) -> None:
-        result = Phase2Output(
-            assessments=[
-                PathAgnosticAssessment(beat_id="beat::phantom", agnostic_for=[]),
-            ]
-        )
-        errors = validate_phase2_output(
-            result,
-            valid_beat_ids={"beat::b1", "beat::b2"},
-            valid_dilemma_ids=set(),
-        )
-        assert len(errors) == 1
-        assert errors[0].field_path == "assessments.0.beat_id"
-        assert "phantom" in errors[0].issue
-        assert errors[0].provided == "beat::phantom"
-
-    def test_invalid_dilemma_id(self) -> None:
-        result = Phase2Output(
-            assessments=[
-                PathAgnosticAssessment(beat_id="beat::b1", agnostic_for=["t_bad"]),
-            ]
-        )
-        errors = validate_phase2_output(
-            result,
-            valid_beat_ids={"beat::b1"},
-            valid_dilemma_ids={"t1", "t2"},
-        )
-        assert len(errors) == 1
-        assert errors[0].field_path == "assessments.0.agnostic_for"
-        assert "t_bad" in errors[0].issue
-
-    def test_multiple_errors(self) -> None:
-        result = Phase2Output(
-            assessments=[
-                PathAgnosticAssessment(beat_id="beat::bad", agnostic_for=["t_bad1", "t_bad2"]),
-            ]
-        )
-        errors = validate_phase2_output(
-            result,
-            valid_beat_ids={"beat::b1"},
-            valid_dilemma_ids={"t1"},
-        )
-        # 1 bad beat_id + 2 bad dilemma_ids = 3 errors
-        assert len(errors) == 3
-
-    def test_empty_assessments(self) -> None:
-        result = Phase2Output(assessments=[])
-        errors = validate_phase2_output(
-            result,
-            valid_beat_ids={"beat::b1"},
-            valid_dilemma_ids={"t1"},
-        )
-        assert errors == []
 
 
 class TestValidatePhase3Output:
@@ -534,11 +461,21 @@ class TestFormatSemanticErrors:
 
 
 class TestCountEntries:
-    def test_counts_assessments(self) -> None:
-        result = Phase2Output(
-            assessments=[
-                PathAgnosticAssessment(beat_id="b1", agnostic_for=[]),
-                PathAgnosticAssessment(beat_id="b2", agnostic_for=[]),
+    def test_counts_tags_via_phase4a(self) -> None:
+        result = Phase4aOutput(
+            tags=[
+                SceneTypeTag(
+                    narrative_function="introduce",
+                    exit_mood="quiet dread",
+                    beat_id="b1",
+                    scene_type="scene",
+                ),
+                SceneTypeTag(
+                    narrative_function="develop",
+                    exit_mood="rising tension",
+                    beat_id="b2",
+                    scene_type="sequel",
+                ),
             ]
         )
         assert count_entries(result) == 2

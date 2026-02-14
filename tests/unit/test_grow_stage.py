@@ -182,17 +182,16 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_twenty_five_phases(self) -> None:
+    def test_phase_order_returns_twenty_four_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 25
+        assert len(phases) == 24
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
         names = [name for _, name in stage._phase_order()]
         assert names == [
             "validate_dag",
-            "path_agnostic",
             "scene_types",
             "narrative_gaps",
             "pacing_gaps",
@@ -312,136 +311,30 @@ class TestCreateGrowStage:
         assert stage.gate is gate
 
 
-class TestPhase2PathAgnostic:
-    @pytest.mark.asyncio
-    async def test_phase_2_with_valid_assessments(self) -> None:
-        """Phase 2 with mocked LLM returns valid assessments and updates beats."""
-        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
-        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
-
-        graph = make_single_dilemma_graph()
-        stage = GrowStage()
-
-        # Mock model returns assessments for shared beats
-        phase2_output = Phase2Output(
-            assessments=[
-                PathAgnosticAssessment(
-                    beat_id="beat::opening",
-                    agnostic_for=["mentor_trust"],
-                ),
-                PathAgnosticAssessment(
-                    beat_id="beat::mentor_meet",
-                    agnostic_for=["mentor_trust"],
-                ),
-            ]
-        )
-
-        mock_structured = AsyncMock()
-        mock_structured.ainvoke = AsyncMock(return_value=phase2_output)
-        mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
-
-        result = await stage._phase_2_path_agnostic(graph, mock_model)
-
-        assert result.status == "completed"
-        assert result.llm_calls == 1
-        assert "2 marked agnostic" in result.detail
-
-        # Verify beat nodes updated
-        beat_opening = graph.get_node("beat::opening")
-        assert beat_opening["path_agnostic_for"] == ["mentor_trust"]
-        beat_meet = graph.get_node("beat::mentor_meet")
-        assert beat_meet["path_agnostic_for"] == ["mentor_trust"]
-
-    @pytest.mark.asyncio
-    async def test_phase_2_skips_no_multi_path_dilemmas(self) -> None:
-        """Phase 2 skips when no dilemmas have multiple paths."""
-        from questfoundry.graph.graph import Graph
-
-        graph = Graph.empty()
-        # Single dilemma with single path
-        graph.create_node("dilemma::t1", {"type": "dilemma", "raw_id": "t1"})
-        graph.create_node(
-            "path::th1",
-            {"type": "path", "raw_id": "th1", "is_canonical": True},
-        )
-        graph.add_edge("explores", "path::th1", "dilemma::t1")
-        graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1", "summary": "test"})
-        graph.add_edge("belongs_to", "beat::b1", "path::th1")
-
-        stage = GrowStage()
-        mock_model = MagicMock()
-        result = await stage._phase_2_path_agnostic(graph, mock_model)
-
-        assert result.status == "completed"
-        assert "No multi-path dilemmas" in result.detail
-        assert result.llm_calls == 0
-
-    @pytest.mark.asyncio
-    async def test_phase_2_filters_invalid_beat_ids(self) -> None:
-        """Phase 2 filters out assessments with invalid beat IDs."""
-        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
-        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
-
-        graph = make_single_dilemma_graph()
-        stage = GrowStage()
-
-        # Mock returns one valid and one invalid assessment
-        phase2_output = Phase2Output(
-            assessments=[
-                PathAgnosticAssessment(
-                    beat_id="beat::opening",
-                    agnostic_for=["mentor_trust"],
-                ),
-                PathAgnosticAssessment(
-                    beat_id="beat::nonexistent",
-                    agnostic_for=["mentor_trust"],
-                ),
-            ]
-        )
-
-        mock_structured = AsyncMock()
-        mock_structured.ainvoke = AsyncMock(return_value=phase2_output)
-        mock_model = MagicMock()
-        mock_model.with_structured_output = MagicMock(return_value=mock_structured)
-
-        result = await stage._phase_2_path_agnostic(graph, mock_model)
-
-        assert result.status == "completed"
-        # Only 1 valid assessment applied
-        assert "1 marked agnostic" in result.detail
-
-    @pytest.mark.asyncio
-    async def test_phase_2_empty_graph_skips(self) -> None:
-        """Phase 2 skips with empty graph."""
-        from questfoundry.graph.graph import Graph
-
-        graph = Graph.empty()
-        stage = GrowStage()
-        mock_model = MagicMock()
-        result = await stage._phase_2_path_agnostic(graph, mock_model)
-
-        assert result.status == "completed"
-        assert result.llm_calls == 0
-
-
 class TestGrowLlmCall:
     @pytest.mark.asyncio
     async def test_retry_on_validation_failure(self) -> None:
         """_grow_llm_call retries on validation failure."""
 
-        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
+        from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
 
         stage = GrowStage()
 
-        # First call returns invalid data (assessments must be a list, not a string)
-        valid_output = Phase2Output(
-            assessments=[PathAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+        # First call returns invalid data (tags must be a list, not a string)
+        valid_output = Phase4aOutput(
+            tags=[
+                SceneTypeTag(
+                    beat_id="beat::a",
+                    scene_type="scene",
+                    narrative_function="introduce",
+                    exit_mood="tense anticipation",
+                )
+            ]
         )
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(
             side_effect=[
-                {"assessments": "not_a_list"},  # First call: invalid type
+                {"tags": "not_a_list"},  # First call: invalid type
                 valid_output,  # Second call: valid
             ]
         )
@@ -451,29 +344,29 @@ class TestGrowLlmCall:
 
         result, llm_calls, _tokens = await stage._grow_llm_call(
             model=mock_model,
-            template_name="grow_phase2_agnostic",
+            template_name="grow_phase4a_scene_types",
             context={
                 "beat_summaries": "test",
                 "valid_beat_ids": "beat::a",
-                "valid_dilemma_ids": "t1",
+                "beat_count": "1",
             },
-            output_schema=Phase2Output,
+            output_schema=Phase4aOutput,
         )
 
-        assert isinstance(result, Phase2Output)
+        assert isinstance(result, Phase4aOutput)
         assert llm_calls == 2  # Retried once
 
     @pytest.mark.asyncio
     async def test_raises_after_max_retries(self) -> None:
         """_grow_llm_call raises GrowStageError after max retries."""
-        from questfoundry.models.grow import Phase2Output
+        from questfoundry.models.grow import Phase4aOutput
         from questfoundry.pipeline.stages.grow import GrowStageError
 
         stage = GrowStage()
 
-        # All calls return data with invalid type for assessments field
+        # All calls return data with invalid type for tags field
         mock_structured = AsyncMock()
-        mock_structured.ainvoke = AsyncMock(return_value={"assessments": "not_a_list"})
+        mock_structured.ainvoke = AsyncMock(return_value={"tags": "not_a_list"})
 
         mock_model = MagicMock()
         mock_model.with_structured_output = MagicMock(return_value=mock_structured)
@@ -481,26 +374,33 @@ class TestGrowLlmCall:
         with pytest.raises(GrowStageError, match="failed after 3 attempts"):
             await stage._grow_llm_call(
                 model=mock_model,
-                template_name="grow_phase2_agnostic",
+                template_name="grow_phase4a_scene_types",
                 context={
                     "beat_summaries": "test",
                     "valid_beat_ids": "beat::a",
-                    "valid_dilemma_ids": "t1",
+                    "beat_count": "1",
                 },
-                output_schema=Phase2Output,
+                output_schema=Phase4aOutput,
             )
 
     @pytest.mark.asyncio
     async def test_callbacks_passed_to_ainvoke(self) -> None:
         """_grow_llm_call passes callbacks via RunnableConfig to ainvoke."""
-        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
+        from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
 
         stage = GrowStage()
         mock_callback = MagicMock()
         stage._callbacks = [mock_callback]
 
-        valid_output = Phase2Output(
-            assessments=[PathAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+        valid_output = Phase4aOutput(
+            tags=[
+                SceneTypeTag(
+                    beat_id="beat::a",
+                    scene_type="scene",
+                    narrative_function="introduce",
+                    exit_mood="tense anticipation",
+                )
+            ]
         )
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(return_value=valid_output)
@@ -510,13 +410,13 @@ class TestGrowLlmCall:
 
         await stage._grow_llm_call(
             model=mock_model,
-            template_name="grow_phase2_agnostic",
+            template_name="grow_phase4a_scene_types",
             context={
                 "beat_summaries": "test",
                 "valid_beat_ids": "beat::a",
-                "valid_dilemma_ids": "t1",
+                "beat_count": "1",
             },
-            output_schema=Phase2Output,
+            output_schema=Phase4aOutput,
         )
 
         # Verify ainvoke was called with a config containing callbacks
@@ -533,13 +433,20 @@ class TestGrowLlmCall:
     @pytest.mark.asyncio
     async def test_no_callbacks_still_works(self) -> None:
         """_grow_llm_call works when no callbacks are set."""
-        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
+        from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
 
         stage = GrowStage()
         # _callbacks is None by default
 
-        valid_output = Phase2Output(
-            assessments=[PathAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+        valid_output = Phase4aOutput(
+            tags=[
+                SceneTypeTag(
+                    beat_id="beat::a",
+                    scene_type="scene",
+                    narrative_function="introduce",
+                    exit_mood="tense anticipation",
+                )
+            ]
         )
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(return_value=valid_output)
@@ -549,16 +456,16 @@ class TestGrowLlmCall:
 
         result, llm_calls, _ = await stage._grow_llm_call(
             model=mock_model,
-            template_name="grow_phase2_agnostic",
+            template_name="grow_phase4a_scene_types",
             context={
                 "beat_summaries": "test",
                 "valid_beat_ids": "beat::a",
-                "valid_dilemma_ids": "t1",
+                "beat_count": "1",
             },
-            output_schema=Phase2Output,
+            output_schema=Phase4aOutput,
         )
 
-        assert isinstance(result, Phase2Output)
+        assert isinstance(result, Phase4aOutput)
         assert llm_calls == 1
 
     @pytest.mark.asyncio
@@ -575,13 +482,20 @@ class TestGrowLlmCall:
         """_grow_llm_call forwards provider_name to with_structured_output."""
         from unittest.mock import patch
 
-        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
+        from questfoundry.models.grow import Phase4aOutput, SceneTypeTag
 
         stage = GrowStage()
         stage._provider_name = provider_name
 
-        valid_output = Phase2Output(
-            assessments=[PathAgnosticAssessment(beat_id="beat::a", agnostic_for=["t1"])]
+        valid_output = Phase4aOutput(
+            tags=[
+                SceneTypeTag(
+                    beat_id="beat::a",
+                    scene_type="scene",
+                    narrative_function="introduce",
+                    exit_mood="tense anticipation",
+                )
+            ]
         )
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(return_value=valid_output)
@@ -594,17 +508,17 @@ class TestGrowLlmCall:
         ) as mock_wso:
             await stage._grow_llm_call(
                 model=mock_model,
-                template_name="grow_phase2_agnostic",
+                template_name="grow_phase4a_scene_types",
                 context={
                     "beat_summaries": "test",
                     "valid_beat_ids": "beat::a",
-                    "valid_dilemma_ids": "t1",
+                    "beat_count": "1",
                 },
-                output_schema=Phase2Output,
+                output_schema=Phase4aOutput,
             )
 
             mock_wso.assert_called_once_with(
-                mock_model, Phase2Output, provider_name=expected_provider
+                mock_model, Phase4aOutput, provider_name=expected_provider
             )
 
 
@@ -2474,8 +2388,8 @@ class TestGrowLLMCallTokens:
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
-                "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
+                "grow_phase4a_scene_types",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "beat_count": "0"},
                 SimpleOutput,
             )
 
@@ -2514,8 +2428,8 @@ class TestGrowLLMCallTokens:
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
-                "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
+                "grow_phase4a_scene_types",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "beat_count": "0"},
                 SimpleOutput,
             )
 
@@ -2560,8 +2474,8 @@ class TestGrowLLMCallTokens:
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
-                "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
+                "grow_phase4a_scene_types",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "beat_count": "0"},
                 SimpleOutput,
             )
 
@@ -2602,8 +2516,8 @@ class TestGrowHybridProviders:
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             await stage._grow_llm_call(
                 default_model,
-                "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
+                "grow_phase4a_scene_types",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "beat_count": "0"},
                 SimpleOutput,
             )
 
@@ -2640,8 +2554,8 @@ class TestGrowHybridProviders:
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             await stage._grow_llm_call(
                 default_model,
-                "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
+                "grow_phase4a_scene_types",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "beat_count": "0"},
                 SimpleOutput,
             )
 
@@ -2809,8 +2723,8 @@ class TestGrowSemanticValidation:
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
-                "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
+                "grow_phase4a_scene_types",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "beat_count": "0"},
                 Phase4aOutput,
                 semantic_validator=validator,
             )
@@ -2892,8 +2806,8 @@ class TestGrowSemanticValidation:
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, _tokens = await stage._grow_llm_call(
                 MagicMock(),
-                "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
+                "grow_phase4a_scene_types",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "beat_count": "0"},
                 Phase4aOutput,
                 semantic_validator=validator,
             )
@@ -2958,8 +2872,8 @@ class TestGrowSemanticValidation:
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
-                "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
+                "grow_phase4a_scene_types",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "beat_count": "0"},
                 Phase4aOutput,
                 max_retries=3,
                 semantic_validator=validator,
@@ -3017,8 +2931,8 @@ class TestGrowSemanticValidation:
             mock_path.return_value = Path(__file__).parents[2] / "prompts"
             result, llm_calls, tokens = await stage._grow_llm_call(
                 MagicMock(),
-                "grow_phase2_agnostic",
-                {"beat_summaries": "test", "valid_beat_ids": "[]", "valid_dilemma_ids": "[]"},
+                "grow_phase4a_scene_types",
+                {"beat_summaries": "test", "valid_beat_ids": "[]", "beat_count": "0"},
                 Phase4aOutput,
                 semantic_validator=validator,
             )

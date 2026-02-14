@@ -698,44 +698,6 @@ class TestPhase1Generate:
         assert p1["prose"] == "Prose for p1."
 
     @pytest.mark.asyncio
-    async def test_handles_incompatible_states_flag(self) -> None:
-        graph = _make_prose_graph()
-        stage = FillStage()
-
-        async def mock_llm_call(
-            model: MagicMock,  # noqa: ARG001
-            template_name: str,  # noqa: ARG001
-            context: dict,
-            output_schema: type,  # noqa: ARG001
-            max_retries: int = 3,  # noqa: ARG001
-            **kwargs: object,  # noqa: ARG001
-        ) -> tuple:
-            pid = context["passage_id"]
-            if pid == "p1":
-                return (
-                    FillPhase1Output(
-                        passage=FillPassageOutput(
-                            passage_id=pid,
-                            flag="incompatible_states",
-                            flag_reason="States too divergent",
-                        )
-                    ),
-                    1,
-                    100,
-                )
-            return _make_passage_output(pid), 1, 100
-
-        stage._fill_llm_call = mock_llm_call  # type: ignore[method-assign]
-        result = await stage._phase_1_generate(graph, MagicMock())
-
-        assert "1 filled, 1 flagged" in (result.detail or "")
-
-        p1 = graph.get_node("passage::p1")
-        assert p1 is not None
-        assert p1.get("flag") == "incompatible_states"
-        assert p1.get("prose", "") == ""
-
-    @pytest.mark.asyncio
     async def test_applies_entity_updates(self) -> None:
         graph = _make_prose_graph()
         graph.create_node(
@@ -822,30 +784,6 @@ class TestGenerationOrder:
         assert passage_ids.count("passage::p1") == 1
         assert passage_ids.count("passage::p2") == 1
         assert len(order) == 2
-
-    def test_incompatible_flagged_regenerated_in_branch(self) -> None:
-        graph = _make_prose_graph()
-        # Add branch arc sharing beats with spine
-        graph.create_node(
-            "arc::branch_1_0",
-            {
-                "type": "arc",
-                "raw_id": "branch_1_0",
-                "arc_type": "branch",
-                "paths": ["path::alt"],
-                "sequence": ["beat::b1", "beat::b2"],
-            },
-        )
-        # p1 has prose but is flagged incompatible — should re-generate in branch
-        graph.update_node("passage::p1", prose="Filled.", flag="incompatible_states")
-        stage = FillStage()
-        order = stage._get_generation_order(graph)
-
-        passage_ids = [pid for pid, _ in order]
-        # p1 appears twice: spine + branch (flagged incompatible)
-        assert passage_ids.count("passage::p1") == 2
-        # p2 appears once (deduped, no flag)
-        assert passage_ids.count("passage::p2") == 1
 
 
 class TestPhase1aExpand:
@@ -1325,36 +1263,10 @@ class TestTwoStepFill:
         model.ainvoke = AsyncMock(return_value=mock_result)
 
         context = {"passage_id": "p1"}
-        prose, flag, flag_reason, calls, _tokens = await stage._fill_prose_call(model, context)
+        prose, calls, _tokens = await stage._fill_prose_call(model, context)
 
         assert prose == "The tower loomed above Kay."
-        assert flag == "ok"
-        assert flag_reason == ""
         assert calls == 1
-
-    @pytest.mark.asyncio
-    async def test_prose_call_detects_sentinel(self) -> None:
-        """_fill_prose_call detects INCOMPATIBLE_STATES sentinel."""
-        stage = FillStage()
-        stage._two_step = True
-
-        mock_result = MagicMock()
-        mock_result.content = (
-            "INCOMPATIBLE_STATES: Emotional register too divergent between trust and betrayal paths"
-        )
-        mock_result.response_metadata = {}
-        mock_result.usage_metadata = None
-
-        model = AsyncMock()
-        model.ainvoke = AsyncMock(return_value=mock_result)
-
-        prose, flag, flag_reason, _calls, _tokens = await stage._fill_prose_call(
-            model, {"passage_id": "p1"}
-        )
-
-        assert prose == ""
-        assert flag == "incompatible_states"
-        assert "divergent" in flag_reason
 
     @pytest.mark.asyncio
     async def test_extract_call_returns_entity_updates(self) -> None:
@@ -1398,7 +1310,7 @@ class TestTwoStepFill:
             model: MagicMock,  # noqa: ARG001
             context: dict,
         ) -> tuple:
-            return f"Prose for {context['passage_id']}.", "ok", "", 1, 100
+            return f"Prose for {context['passage_id']}.", 1, 100
 
         # Mock the extract call
         async def mock_extract_call(
@@ -1487,7 +1399,7 @@ class TestTwoStepFill:
             model: MagicMock,  # noqa: ARG001
             context: dict,  # noqa: ARG001
         ) -> tuple:
-            return "A brief transition.", "ok", "", 1, 50
+            return "A brief transition.", 1, 50
 
         async def mock_extract_call(
             model: MagicMock,  # noqa: ARG001
@@ -1548,7 +1460,7 @@ class TestTwoStepFill:
             model: MagicMock,  # noqa: ARG001
             context: dict,
         ) -> tuple:
-            return f"Prose for {context['passage_id']}.", "ok", "", 1, 100
+            return f"Prose for {context['passage_id']}.", 1, 100
 
         async def mock_extract_call(
             model: MagicMock,  # noqa: ARG001
@@ -1568,28 +1480,6 @@ class TestTwoStepFill:
         p1 = graph.get_node("passage::p1")
         assert p1 is not None
         assert p1["prose"] == "Prose for p1."
-
-    @pytest.mark.asyncio
-    async def test_sentinel_mid_prose_not_detected(self) -> None:
-        """Sentinel appearing mid-response is NOT treated as incompatible."""
-        stage = FillStage()
-        stage._two_step = True
-
-        mock_result = MagicMock()
-        mock_result.content = "The sign read INCOMPATIBLE_STATES: a warning from a forgotten era."
-        mock_result.response_metadata = {}
-        mock_result.usage_metadata = None
-
-        model = AsyncMock()
-        model.ainvoke = AsyncMock(return_value=mock_result)
-
-        prose, flag, _reason, _calls, _tokens = await stage._fill_prose_call(
-            model, {"passage_id": "p1"}
-        )
-
-        # startswith() correctly ignores sentinel appearing mid-text
-        assert flag == "ok"
-        assert "INCOMPATIBLE_STATES" in prose
 
 
 # ---------------------------------------------------------------------------
@@ -1690,22 +1580,6 @@ class TestMechanicalQualityGate:
         assert p1 is not None
         assert p1.get("review_flags", []) == []
         assert "0 mechanical flags" in result.detail
-
-    @pytest.mark.asyncio
-    async def test_skips_incompatible_states(self, mock_model: MagicMock) -> None:
-        g = Graph.empty()
-        g.create_node(
-            "passage::p1",
-            {
-                "type": "passage",
-                "raw_id": "p1",
-                "prose": "some prose",
-                "flag": "incompatible_states",
-            },
-        )
-        stage = FillStage()
-        result = await stage._phase_1c_mechanical_gate(g, mock_model)
-        assert "no passages" in result.detail
 
     @pytest.mark.asyncio
     async def test_bigram_check_logs_only(self, mock_model: MagicMock) -> None:

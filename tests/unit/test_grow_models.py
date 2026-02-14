@@ -13,15 +13,12 @@ from questfoundry.models.grow import (
     Codeword,
     EntityArcDescriptor,
     EntityOverlay,
-    EntryMood,
-    EntryStateBeat,
     GapProposal,
     GrowPhaseResult,
     GrowResult,
     IntersectionProposal,
     OverlayProposal,
     Passage,
-    PathAgnosticAssessment,
     PathMiniArc,
     Phase4dOutput,
     Phase4eOutput,
@@ -200,24 +197,6 @@ class TestEntityOverlay:
         """Empty details dict is rejected - must have at least one key."""
         with pytest.raises(ValidationError, match="details must contain at least one"):
             EntityOverlay(entity_id="e1", when=["cw1"], details={})
-
-
-class TestPathAgnosticAssessment:
-    def test_valid_assessment(self) -> None:
-        ta = PathAgnosticAssessment(
-            beat_id="beat_1",
-            agnostic_for=["dilemma_mentor_trust"],
-        )
-        assert ta.beat_id == "beat_1"
-        assert ta.agnostic_for == ["dilemma_mentor_trust"]
-
-    def test_empty_agnostic_for_allowed(self) -> None:
-        ta = PathAgnosticAssessment(beat_id="b1")
-        assert ta.agnostic_for == []
-
-    def test_empty_beat_id_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="beat_id"):
-            PathAgnosticAssessment(beat_id="")
 
 
 class TestIntersectionProposal:
@@ -482,66 +461,12 @@ class TestAtmosphericDetail:
             AtmosphericDetail(beat_id="b1", atmospheric_detail="x" * 201)
 
 
-class TestEntryMood:
-    def test_valid_mood(self) -> None:
-        em = EntryMood(path_id="path_trust", mood="wary hope")
-        assert em.path_id == "path_trust"
-        assert em.mood == "wary hope"
-
-    def test_empty_path_id_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="path_id"):
-            EntryMood(path_id="", mood="wary hope")
-
-    def test_too_short_mood_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="mood"):
-            EntryMood(path_id="p1", mood="x")
-
-    def test_too_long_mood_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="mood"):
-            EntryMood(path_id="p1", mood="x" * 51)
-
-
-class TestEntryStateBeat:
-    def test_valid_entry_state(self) -> None:
-        esb = EntryStateBeat(
-            beat_id="b1",
-            moods=[EntryMood(path_id="p1", mood="quiet dread")],
-        )
-        assert esb.beat_id == "b1"
-        assert len(esb.moods) == 1
-
-    def test_empty_moods_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="moods"):
-            EntryStateBeat(beat_id="b1", moods=[])
-
-    def test_multiple_moods(self) -> None:
-        esb = EntryStateBeat(
-            beat_id="shared_beat",
-            moods=[
-                EntryMood(path_id="p1", mood="wary hope"),
-                EntryMood(path_id="p2", mood="bitter resolve"),
-            ],
-        )
-        assert len(esb.moods) == 2
-
-    def test_duplicate_path_ids_rejected(self) -> None:
-        with pytest.raises(ValidationError, match=r"path_id.*unique"):
-            EntryStateBeat(
-                beat_id="b1",
-                moods=[
-                    EntryMood(path_id="p1", mood="quiet dread"),
-                    EntryMood(path_id="p1", mood="bitter resolve"),
-                ],
-            )
-
-
 class TestPhase4dOutput:
     def test_default_empty(self) -> None:
         out = Phase4dOutput()
         assert out.details == []
-        assert out.entry_states == []
 
-    def test_with_details_and_entry_states(self) -> None:
+    def test_with_details(self) -> None:
         out = Phase4dOutput(
             details=[
                 AtmosphericDetail(
@@ -549,15 +474,8 @@ class TestPhase4dOutput:
                     atmospheric_detail="Dusty library with creaking shelves",
                 ),
             ],
-            entry_states=[
-                EntryStateBeat(
-                    beat_id="b2",
-                    moods=[EntryMood(path_id="p1", mood="quiet dread")],
-                ),
-            ],
         )
         assert len(out.details) == 1
-        assert len(out.entry_states) == 1
 
     def test_duplicate_detail_beat_ids_rejected(self) -> None:
         with pytest.raises(ValidationError, match=r"beat_id.*details.*unique"):
@@ -569,15 +487,6 @@ class TestPhase4dOutput:
                     AtmosphericDetail(
                         beat_id="b1", atmospheric_detail="Rain-slicked cobblestones at dusk"
                     ),
-                ],
-            )
-
-    def test_duplicate_entry_state_beat_ids_rejected(self) -> None:
-        with pytest.raises(ValidationError, match=r"beat_id.*entry_states.*unique"):
-            Phase4dOutput(
-                entry_states=[
-                    EntryStateBeat(beat_id="b1", moods=[EntryMood(path_id="p1", mood="dread")]),
-                    EntryStateBeat(beat_id="b1", moods=[EntryMood(path_id="p2", mood="hope")]),
                 ],
             )
 
