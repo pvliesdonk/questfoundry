@@ -441,6 +441,14 @@ class SeedStage:
             # This shouldn't happen with current logic, but handle defensively
             raise SeedStageError("SEED serialization failed: artifact is None after all retries")
 
+        # Fail fast if outer retry exhausted with unresolved semantic errors
+        if result.semantic_errors:
+            error_summary = "; ".join(str(e) for e in result.semantic_errors[:3])
+            raise SeedStageError(
+                f"SEED serialization failed: outer retry exhausted with "
+                f"{len(result.semantic_errors)} unresolved errors: {error_summary}"
+            )
+
         # Phase 4: Convergence analysis (Section 7) — runs BEFORE pruning
         # so that policy-aware pruning can keep hard dilemmas and demote
         # soft/flavor first.  Only hard dilemmas multiply endings.
