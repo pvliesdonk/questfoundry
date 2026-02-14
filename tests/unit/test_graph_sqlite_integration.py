@@ -458,7 +458,7 @@ class TestBeforeStateMutations:
 
         muts = self._get_mutations(store)
         assert len(muts) == 2
-        assert muts[1]["operation"] == "update_node"
+        assert muts[1]["operation"] == "replace_node"
         assert muts[1]["delta"] == {"type": "t", "name": "Bob"}
         assert muts[1]["before_state"] == {"type": "t", "name": "Alice"}
 
@@ -596,3 +596,326 @@ class TestBeforeStateMutations:
         ).fetchone()
         assert row["before_state"] is not None
         store.close()
+
+
+# ---------------------------------------------------------------------------
+# Rewind API
+# ---------------------------------------------------------------------------
+
+
+class TestRewind:
+    """Verify rewind_to_phase and rewind_stage reverse mutations correctly."""
+
+    def test_rewind_create_nodes(self) -> None:
+        """Rewinding create_node mutations deletes the created nodes."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("grow", "spine"):
+            graph.create_node("n1", {"type": "t", "name": "A"})
+            graph.create_node("n2", {"type": "t", "name": "B"})
+            graph.create_node("n3", {"type": "t", "name": "C"})
+
+        assert graph.has_node("n1")
+        assert graph.has_node("n2")
+        assert graph.has_node("n3")
+
+        count = graph.rewind_to_phase("grow", "spine")
+        assert count == 3
+        assert not graph.has_node("n1")
+        assert not graph.has_node("n2")
+        assert not graph.has_node("n3")
+
+    def test_rewind_update_restores_old_values(self) -> None:
+        """Rewinding update_node restores previous field values."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("n1", {"type": "t", "name": "Alice", "age": 30})
+
+        with graph.mutation_context("grow", "spine"):
+            graph.update_node("n1", name="Bob", age=31)
+
+        assert graph.get_node("n1")["name"] == "Bob"
+
+        count = graph.rewind_to_phase("grow", "spine")
+        assert count == 1
+        node = graph.get_node("n1")
+        assert node["name"] == "Alice"
+        assert node["age"] == 30
+
+    def test_rewind_replace_node_restores_full_data(self) -> None:
+        """Rewinding replace_node (set_node update) restores full old data."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("n1", {"type": "t", "name": "Alice", "extra": "x"})
+
+        with graph.mutation_context("grow", "spine"):
+            graph.upsert_node("n1", {"type": "t", "name": "Bob"})
+
+        node = graph.get_node("n1")
+        assert node["name"] == "Bob"
+        assert "extra" not in node
+
+        count = graph.rewind_to_phase("grow", "spine")
+        assert count == 1
+        node = graph.get_node("n1")
+        assert node["name"] == "Alice"
+        assert node["extra"] == "x"
+
+    def test_rewind_delete_recreates_node(self) -> None:
+        """Rewinding delete_node recreates the node with original data."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("n1", {"type": "t", "name": "Alice"})
+
+        with graph.mutation_context("grow", "collapse"):
+            graph.delete_node("n1")
+
+        assert not graph.has_node("n1")
+
+        count = graph.rewind_to_phase("grow", "collapse")
+        assert count == 1
+        node = graph.get_node("n1")
+        assert node is not None
+        assert node["name"] == "Alice"
+
+    def test_rewind_add_edge_removes(self) -> None:
+        """Rewinding add_edge removes the created edge."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("a", {"type": "t"})
+            graph.create_node("b", {"type": "t"})
+
+        with graph.mutation_context("grow", "spine"):
+            graph.add_edge("knows", "a", "b", weight=5)
+
+        assert len(graph.get_edges(edge_type="knows")) == 1
+
+        count = graph.rewind_to_phase("grow", "spine")
+        assert count == 1
+        assert len(graph.get_edges(edge_type="knows")) == 0
+
+    def test_rewind_remove_edge_recreates(self) -> None:
+        """Rewinding remove_edge recreates the edge with original data."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("a", {"type": "t"})
+            graph.create_node("b", {"type": "t"})
+            graph.add_edge("knows", "a", "b", weight=5)
+
+        with graph.mutation_context("grow", "collapse"):
+            graph.remove_edge("knows", "a", "b")
+
+        assert len(graph.get_edges(edge_type="knows")) == 0
+
+        count = graph.rewind_to_phase("grow", "collapse")
+        assert count == 1
+        edges = graph.get_edges(edge_type="knows")
+        assert len(edges) == 1
+        assert edges[0]["weight"] == 5
+
+    def test_rewind_mixed_operations(self) -> None:
+        """Rewind correctly reverses a mix of create, update, edge ops."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        # Phase 1: create base data
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("n1", {"type": "t", "val": 1})
+            graph.create_node("n2", {"type": "t", "val": 2})
+
+        # Phase 2: mixed operations
+        with graph.mutation_context("grow", "spine"):
+            graph.create_node("n3", {"type": "t", "val": 3})
+            graph.update_node("n1", val=10)
+            graph.add_edge("link", "n1", "n2")
+            graph.add_edge("link", "n2", "n3")
+
+        assert graph.has_node("n3")
+        assert graph.get_node("n1")["val"] == 10
+        assert len(graph.get_edges(edge_type="link")) == 2
+
+        count = graph.rewind_to_phase("grow", "spine")
+        assert count == 4
+        assert not graph.has_node("n3")
+        assert graph.get_node("n1")["val"] == 1
+        assert graph.has_node("n2")
+        assert len(graph.get_edges(edge_type="link")) == 0
+
+    def test_rewind_preserves_earlier_phases(self) -> None:
+        """Rewind only affects mutations from the target phase onward."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("seed_node", {"type": "t", "from": "seed"})
+
+        with graph.mutation_context("grow", "phase1"):
+            graph.create_node("p1_node", {"type": "t", "from": "p1"})
+
+        with graph.mutation_context("grow", "phase2"):
+            graph.create_node("p2_node", {"type": "t", "from": "p2"})
+
+        # Rewind from phase2 — phase1 and seed should be preserved
+        count = graph.rewind_to_phase("grow", "phase2")
+        assert count == 1
+        assert graph.has_node("seed_node")
+        assert graph.has_node("p1_node")
+        assert not graph.has_node("p2_node")
+
+    def test_rewind_from_middle_phase_reverses_later(self) -> None:
+        """Rewinding from an early phase also reverses later phases."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("grow", "phase1"):
+            graph.create_node("p1", {"type": "t"})
+
+        with graph.mutation_context("grow", "phase2"):
+            graph.create_node("p2", {"type": "t"})
+
+        with graph.mutation_context("grow", "phase3"):
+            graph.create_node("p3", {"type": "t"})
+
+        # Rewind from phase1 — reverses all three phases
+        count = graph.rewind_to_phase("grow", "phase1")
+        assert count == 3
+        assert not graph.has_node("p1")
+        assert not graph.has_node("p2")
+        assert not graph.has_node("p3")
+
+    def test_rewind_nonexistent_phase_raises(self) -> None:
+        """Rewind raises ValueError for a phase with no mutations."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("grow", "spine"):
+            graph.create_node("n1", {"type": "t"})
+
+        raised = False
+        try:
+            graph.rewind_to_phase("grow", "nonexistent")
+        except ValueError:
+            raised = True
+        assert raised, "Expected ValueError for nonexistent phase"
+
+    def test_rewind_stage_reverses_all(self) -> None:
+        """rewind_stage reverses all phases within the stage."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("seed_node", {"type": "t"})
+
+        with graph.mutation_context("grow", "phase1"):
+            graph.create_node("g1", {"type": "t"})
+
+        with graph.mutation_context("grow", "phase2"):
+            graph.create_node("g2", {"type": "t"})
+            graph.update_node("g1", val=99)
+
+        count = graph.rewind_stage("grow")
+        assert count == 3  # g1 create + g2 create + g1 update
+        assert graph.has_node("seed_node")
+        assert not graph.has_node("g1")
+        assert not graph.has_node("g2")
+
+    def test_rewind_destructive_phase(self) -> None:
+        """Rewind restores nodes deleted during a collapse-like phase."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("keep", {"type": "t", "name": "keeper"})
+            graph.create_node("remove_me", {"type": "t", "name": "doomed"})
+            graph.add_edge("link", "keep", "remove_me")
+
+        with graph.mutation_context("grow", "collapse"):
+            graph.remove_edge("link", "keep", "remove_me")
+            graph.delete_node("remove_me")
+            graph.update_node("keep", status="alone")
+
+        assert not graph.has_node("remove_me")
+        assert graph.get_node("keep")["status"] == "alone"
+
+        count = graph.rewind_to_phase("grow", "collapse")
+        assert count == 3
+        assert graph.has_node("remove_me")
+        assert graph.get_node("remove_me")["name"] == "doomed"
+        assert graph.get_node("keep").get("status") is None
+        edges = graph.get_edges(edge_type="link")
+        assert len(edges) == 1
+
+    def test_rewind_not_sqlite_raises(self) -> None:
+        """Rewind on a dict-backed graph raises TypeError."""
+        graph = Graph.empty()
+        graph.create_node("n1", {"type": "t"})
+
+        raised = False
+        try:
+            graph.rewind_to_phase("grow", "spine")
+        except TypeError:
+            raised = True
+        assert raised, "Expected TypeError for non-SQLite graph"
+
+    def test_rewind_atomicity_on_failure(self) -> None:
+        """If rewind fails partway, graph state is unchanged."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("grow", "phase1"):
+            graph.create_node("n1", {"type": "t"})
+
+        # Manually insert a mutation with missing before_state that needs it
+        store._conn.execute(
+            "INSERT INTO mutations (stage, phase, operation, target_id) VALUES (?, ?, ?, ?)",
+            ("grow", "phase1", "update_node", "n1"),
+        )
+
+        raised = False
+        try:
+            graph.rewind_to_phase("grow", "phase1")
+        except RuntimeError:
+            raised = True
+        assert raised, "Expected RuntimeError for missing before_state"
+
+        # Graph state should be unchanged due to SAVEPOINT rollback
+        assert graph.has_node("n1")
+
+    def test_mutations_deleted_after_rewind(self) -> None:
+        """Rewind deletes the reversed mutation records."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("n1", {"type": "t"})
+
+        with graph.mutation_context("grow", "spine"):
+            graph.create_node("n2", {"type": "t"})
+            graph.create_node("n3", {"type": "t"})
+
+        # Verify 3 mutations exist
+        count_before = store._conn.execute("SELECT COUNT(*) AS cnt FROM mutations").fetchone()[
+            "cnt"
+        ]
+        assert count_before == 3
+
+        graph.rewind_to_phase("grow", "spine")
+
+        # Only seed mutation should remain
+        count_after = store._conn.execute("SELECT COUNT(*) AS cnt FROM mutations").fetchone()["cnt"]
+        assert count_after == 1
+
+        remaining = store._conn.execute("SELECT stage, phase FROM mutations").fetchone()
+        assert remaining["stage"] == "seed"
+        assert remaining["phase"] == "core"
