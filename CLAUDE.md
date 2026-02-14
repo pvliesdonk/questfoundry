@@ -86,6 +86,27 @@ DRESS stage (art direction, illustrations, codex) is specified in Slice 5. See `
 - **Tests first** where practical
 - Keep functions focused and small
 
+### Parametric Knowledge is Stale — Use Documentation Tools
+
+**Your training data has a cutoff. Library APIs, framework patterns, and best practices
+change faster than your weights update. You MUST verify before assuming.**
+
+**Rules:**
+- NEVER rely on parametric knowledge for library APIs, configuration syntax,
+  or framework patterns — always check current documentation first
+- Use the `context7` MCP server (`resolve-library-id` → `query-docs`) to fetch
+  up-to-date documentation for any library before writing code that uses it
+- Use `WebSearch` / `WebFetch` when context7 doesn't cover the library
+- When debugging an issue that might be version-related, check the docs before
+  guessing at the fix
+- If you catch yourself writing "I believe the API is..." — STOP and look it up
+
+**Common violations:**
+- Assuming a LangChain API still works the same as 6 months ago (it doesn't)
+- Using deprecated pydantic v1 patterns when v2 is in use
+- Guessing at CLI flags for tools like `ruff`, `uv`, or `gh`
+- Writing provider integration code from memory instead of checking current docs
+
 ### Tooling-First Workflow
 
 - **Use tools as the source of truth** — avoid repo-wide reasoning or "global refactors"
@@ -871,6 +892,25 @@ all fields from the graph that would inform the model's decision. Bare ID listin
 2. Verify the injected context actually contains the data the prompt references
 3. Test with `logs/llm_calls.jsonl` — inspect the `messages` array to confirm
    the model receives rich context, not bare listings
+
+### 9. Small Model Prompt Bias (CRITICAL)
+
+**You have a systematic bias toward writing prompts optimized for large LLMs (70B+).
+Do NOT blame small models when output quality is poor — fix the prompt first.**
+
+Common failure pattern:
+1. You write a prompt with implicit instructions, complex nesting, or assumed knowledge
+2. A small model (e.g., qwen3:4b) produces poor output
+3. You conclude "the model is too small" and suggest switching to a larger model
+4. The actual problem is the prompt — a well-structured prompt works fine on 4B models
+
+**Rules:**
+- NEVER suggest "use a larger model" as a first response to output quality issues
+- ALWAYS use the `prompt-engineer` subagent to review and fix prompts before
+  concluding a model is incapable
+- Small models need: explicit instructions, concrete examples, shorter context,
+  simpler schemas, and clear delimiters — not different models
+- If the `prompt-engineer` subagent cannot make it work, THEN discuss model limitations
 
 ## DREAM Stage Implementation
 
