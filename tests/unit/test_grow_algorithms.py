@@ -3306,8 +3306,9 @@ class TestPhaseIntegrationEndToEnd:
         assert result_dict["arc_count"] == 4  # 2x2 = 4 arcs
         assert result_dict["spine_arc_id"] is not None
 
-        # Should have counted passages
-        assert result_dict["passage_count"] == 12  # 8 beats + 4 ending families
+        # Should have counted passages (no ending split — dilemmas default to
+        # soft, so soft codewords don't differentiate endings)
+        assert result_dict["passage_count"] == 8  # 8 beats, no ending families
 
         # Should have counted codewords
         assert result_dict["codeword_count"] == 4  # 4 consequences
@@ -3357,7 +3358,9 @@ class TestPhaseIntegrationEndToEnd:
 
         # Verify node types exist
         assert len(saved_graph.get_nodes_by_type("arc")) == 4
-        assert len(saved_graph.get_nodes_by_type("passage")) == 12  # 8 + 4 ending families
+        assert (
+            len(saved_graph.get_nodes_by_type("passage")) == 8
+        )  # no ending families (soft dilemmas)
         assert len(saved_graph.get_nodes_by_type("codeword")) == 4
         assert len(saved_graph.get_nodes_by_type("beat")) == 8
         assert len(saved_graph.get_nodes_by_type("dilemma")) == 2
@@ -5177,8 +5180,11 @@ class TestSplitEndingFamilies:
         """
         graph = Graph.empty()
 
-        # Dilemma + paths
-        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        # Dilemma + paths (hard policy — endings differentiate)
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "convergence_policy": "hard"},
+        )
         graph.create_node(
             "path::d1__yes",
             {
@@ -5454,6 +5460,118 @@ class TestSplitEndingFamilies:
         }
         for _pid, data in endings.items():
             assert "ending_tone" not in data
+
+    def test_soft_dilemma_codewords_do_not_split_endings(self) -> None:
+        """Soft/flavor dilemma codewords are excluded from signatures.
+
+        All arcs collapse to the same (empty) signature so the terminal
+        passage stays unique — no family explosion.
+        """
+        from questfoundry.graph.grow_algorithms import split_ending_families
+
+        graph = self._make_shared_ending_graph()
+        # Override dilemma to soft policy
+        graph.update_node("dilemma::d1", convergence_policy="soft")
+
+        result = split_ending_families(graph)
+
+        # Soft codewords excluded → identical signatures → no split
+        assert result.families_created == 0
+        assert result.passages_already_unique == 1
+        # Original passage remains an ending
+        assert graph.get_node("passage::finale_p").get("is_ending") is True
+
+    def test_mixed_hard_soft_only_hard_differentiates(self) -> None:
+        """With 1 hard + 1 soft dilemma, only hard codewords form signatures.
+
+        4 arcs (2x2) but only 2 distinct signatures from the hard dilemma,
+        so 2 families are created (not 4).
+        """
+        from questfoundry.graph.grow_algorithms import split_ending_families
+
+        graph = Graph.empty()
+
+        # Hard dilemma (d1)
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "convergence_policy": "hard"},
+        )
+        graph.create_node(
+            "path::d1__yes",
+            {"type": "path", "raw_id": "d1__yes", "dilemma_id": "d1"},
+        )
+        graph.create_node(
+            "path::d1__no",
+            {"type": "path", "raw_id": "d1__no", "dilemma_id": "d1"},
+        )
+        # Soft dilemma (d2)
+        graph.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "raw_id": "d2", "convergence_policy": "soft"},
+        )
+        graph.create_node(
+            "path::d2__left",
+            {"type": "path", "raw_id": "d2__left", "dilemma_id": "d2"},
+        )
+        graph.create_node(
+            "path::d2__right",
+            {"type": "path", "raw_id": "d2__right", "dilemma_id": "d2"},
+        )
+
+        # Consequences + codewords for both dilemmas
+        for cons_id, path_id, cw_id in [
+            ("trust", "d1__yes", "cw_trust"),
+            ("betrayal", "d1__no", "cw_betrayal"),
+            ("left_c", "d2__left", "cw_left"),
+            ("right_c", "d2__right", "cw_right"),
+        ]:
+            graph.create_node(
+                f"consequence::{cons_id}",
+                {"type": "consequence", "raw_id": cons_id},
+            )
+            graph.add_edge("has_consequence", f"path::{path_id}", f"consequence::{cons_id}")
+            graph.create_node(f"codeword::{cw_id}", {"type": "codeword", "raw_id": cw_id})
+            graph.add_edge("tracks", f"codeword::{cw_id}", f"consequence::{cons_id}")
+
+        # Shared beat + terminal passage
+        graph.create_node(
+            "beat::finale",
+            {"type": "beat", "raw_id": "finale", "summary": "End"},
+        )
+        graph.create_node(
+            "passage::finale_p",
+            {
+                "type": "passage",
+                "raw_id": "finale_p",
+                "from_beat": "beat::finale",
+                "is_ending": True,
+                "summary": "The ending.",
+            },
+        )
+
+        # 4 arcs (d1 x d2 Cartesian product), all sharing the finale beat
+        for d1p, d2p in [
+            ("d1__yes", "d2__left"),
+            ("d1__yes", "d2__right"),
+            ("d1__no", "d2__left"),
+            ("d1__no", "d2__right"),
+        ]:
+            graph.create_node(
+                f"arc::{d1p}+{d2p}",
+                {
+                    "type": "arc",
+                    "raw_id": f"{d1p}+{d2p}",
+                    "arc_type": "spine",
+                    "paths": [d1p, d2p],
+                    "sequence": ["beat::finale"],
+                },
+            )
+
+        result = split_ending_families(graph)
+
+        # 4 arcs but only 2 distinct hard-codeword signatures
+        # (cw_trust vs cw_betrayal; soft cw_left/cw_right excluded)
+        assert result.families_created == 2
 
 
 class TestFindResidueCandidates:

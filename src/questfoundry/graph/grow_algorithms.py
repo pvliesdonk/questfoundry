@@ -835,10 +835,26 @@ def _build_arc_codewords(
     graph: Graph,
     arc_nodes: dict[str, dict[str, Any]],
 ) -> dict[str, frozenset[str]]:
-    """Build mapping from arc node ID to its codeword signature.
+    """Build mapping from arc node ID to its ending-differentiating codeword signature.
 
-    Traces: arc → paths → consequences → codewords via graph edges.
+    Only includes codewords from **hard-policy** dilemma paths, because
+    soft/flavor dilemmas converge and should not multiply endings.
+    Without this filter, N soft dilemmas produce 2^N distinct signatures
+    and an explosion of ending families.
+
+    Traces: arc → paths (hard only) → consequences → codewords via graph edges.
     """
+    # Build set of paths belonging to hard-policy dilemmas
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    hard_paths: set[str] = set()
+    for path_id, path_data in path_nodes.items():
+        did = path_data.get("dilemma_id", "")
+        if did:
+            dnode = dilemma_nodes.get(normalize_scoped_id(did, "dilemma"), {})
+            if dnode.get("convergence_policy") == "hard":
+                hard_paths.add(path_id)
+
     # consequence → codeword (via tracks edges: codeword tracks consequence)
     tracks_edges = graph.get_edges(edge_type="tracks")
     consequence_to_codeword: dict[str, str] = {}
@@ -856,6 +872,8 @@ def _build_arc_codewords(
         cws: set[str] = set()
         for path_raw in data.get("paths", []):
             path_id = normalize_scoped_id(path_raw, "path")
+            if path_id not in hard_paths:
+                continue
             for cons_id in path_consequences.get(path_id, []):
                 if cw := consequence_to_codeword.get(cons_id):
                     cws.add(cw)
