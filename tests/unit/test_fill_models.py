@@ -181,8 +181,6 @@ class TestFillPassageOutput:
         output = FillPassageOutput(passage_id="p1")
         assert output.passage_id == "p1"
         assert output.prose == ""
-        assert output.flag == "ok"
-        assert output.flag_reason == ""
         assert output.entity_updates == []
 
     def test_with_prose(self) -> None:
@@ -191,16 +189,6 @@ class TestFillPassageOutput:
             prose="The tower stairs wound upward into darkness.",
         )
         assert "tower" in output.prose
-
-    def test_incompatible_states_flag(self) -> None:
-        output = FillPassageOutput(
-            passage_id="mentor_confrontation",
-            flag="incompatible_states",
-            flag_reason="Character emotional state too divergent between paths",
-        )
-        assert output.flag == "incompatible_states"
-        assert output.prose == ""
-        assert "divergent" in output.flag_reason
 
     def test_with_entity_updates(self) -> None:
         output = FillPassageOutput(
