@@ -47,7 +47,6 @@ from questfoundry.graph.fill_context import (
     format_ending_guidance,
     format_entity_arc_context,
     format_entity_states,
-    format_entry_states,
     format_grow_summary,
     format_introduction_guidance,
     format_lookahead_context,
@@ -56,7 +55,6 @@ from questfoundry.graph.fill_context import (
     format_path_arc_context,
     format_pov_context,
     format_scene_types_summary,
-    format_shadow_states,
     format_sliding_window,
     format_spoke_context,
     format_story_identity,
@@ -118,41 +116,6 @@ _SLIDING_WINDOW_SIZES: dict[str, int] = {
 
 _STRUCTURAL_ERROR_TYPES = frozenset(
     {"missing", "missing_argument", "type_error", "extra_forbidden"}
-)
-
-# Poly-state prompt sections, injected only when the beat is shared (has
-# shadow states or entry states).  Kept out of non-shared beat prompts to
-# prevent the LLM from false-positive flagging INCOMPATIBLE_STATES.
-_POLY_STATE_BASE = """\
-## Shared-Beat Rule
-If this is a shared beat, write prose that works for ALL arriving states \
-(active + shadows). Use ambiguous phrasing when states diverge.
-
-## Poly-State Examples (CRITICAL for shared beats)
-GOOD: "The stranger's expression was unreadable" (works for trust or betrayal)
-GOOD: "Something had shifted between them" (ambiguous emotional change)
-BAD: "Kay trusted the mentor completely" (only works for one path state)
-BAD: "The betrayal still burned in Kay's mind" (reveals path-specific knowledge)
-
-## Poly-State Failure
-
-If you CANNOT write prose compatible with all shadow states because:
-- Internal monologue requires contradictory knowledge
-- Body language only makes sense for one state
-- Dialogue would reveal path-specific information
-- Emotional register is fundamentally different (rage vs warmth)
-
-"""
-
-_POLY_STATE_PROSE_ONLY = (
-    _POLY_STATE_BASE + "Then output EXACTLY the following line and nothing else:\n"
-    "INCOMPATIBLE_STATES: <your explanation of why states are incompatible>\n"
-    "Do NOT attempt to write prose. Just output that line."
-)
-
-_POLY_STATE_JSON = (
-    _POLY_STATE_BASE + 'Then set flag to "incompatible_states" and explain in flag_reason.\n'
-    "Leave prose empty."
 )
 
 
@@ -641,28 +604,23 @@ class FillStage:
     # Two-step prose generation
     # -------------------------------------------------------------------------
 
-    _INCOMPATIBLE_SENTINEL = "INCOMPATIBLE_STATES:"
-
     @traceable(name="FILL Prose Call", run_type="llm", tags=["stage:fill"])
     async def _fill_prose_call(
         self,
         model: BaseChatModel,
         context: dict[str, Any],
-    ) -> tuple[str, str, str, int, int]:
+    ) -> tuple[str, int, int]:
         """Generate prose as plain text (no structured output).
 
         Uses the creative-role model at high temperature without any JSON
-        grammar constraints.  Poly-state failures are detected via a
-        sentinel prefix in the response.
+        grammar constraints.
 
         Args:
             model: Creative-role chat model (high temperature).
             context: Template context variables.
 
         Returns:
-            Tuple of (prose, flag, flag_reason, llm_calls, tokens_used).
-            When the model outputs the INCOMPATIBLE_STATES sentinel, prose
-            is empty and flag is ``"incompatible_states"``.
+            Tuple of (prose, llm_calls, tokens_used).
         """
         from questfoundry.agents.serialize import extract_tokens
         from questfoundry.observability.tracing import build_runnable_config
@@ -692,12 +650,7 @@ class FillStage:
         content = raw_content if isinstance(raw_content, str) else str(raw_content)
         prose = content.strip()
 
-        # Detect poly-state incompatibility sentinel
-        if prose.startswith(self._INCOMPATIBLE_SENTINEL):
-            reason = prose[len(self._INCOMPATIBLE_SENTINEL) :].strip()
-            return "", "incompatible_states", reason, 1, tokens
-
-        return prose, "ok", "", 1, tokens
+        return prose, 1, tokens
 
     @traceable(name="FILL Extract Call", run_type="llm", tags=["stage:fill"])
     async def _fill_extract_call(
@@ -937,10 +890,6 @@ class FillStage:
                 continue
             for pid in get_arc_passage_order(graph, arc_id):
                 if pid in seen:
-                    # Re-generate only if flagged incompatible_states
-                    pnode = graph.get_node(pid)
-                    if pnode and pnode.get("flag") == "incompatible_states":
-                        order.append((pid, arc_id))
                     continue
                 seen.add(pid)
                 order.append((pid, arc_id))
@@ -1138,7 +1087,7 @@ class FillStage:
 
         Generates prose for all passages in arc traversal order.
         Spine arc first, then branches. Shared passages are only
-        generated once unless flagged as incompatible_states.
+        generated once.
         """
         generation_order = self._get_generation_order(graph)
         if not generation_order:
@@ -1151,7 +1100,6 @@ class FillStage:
         total_llm_calls = 0
         total_tokens = 0
         passages_filled = 0
-        passages_flagged = 0
 
         # Lexical diversity tracking: recomputed after every passage from
         # the sliding window prose to detect vocabulary convergence.
@@ -1193,15 +1141,6 @@ class FillStage:
                 (graph.get_node(eid) or {}).get("raw_id", strip_scope_prefix(eid))
                 for eid in first_eids
             ]
-            entry_states_text = format_entry_states(graph, passage_id, arc_id)
-            shadow_states_text = format_shadow_states(graph, passage_id, arc_id)
-            is_shared = bool(shadow_states_text or entry_states_text)
-            poly_section = (
-                (_POLY_STATE_PROSE_ONLY if self._two_step else _POLY_STATE_JSON)
-                if is_shared
-                else ""
-            )
-
             # Blueprint from expand phase (if available)
             blueprint = passage.get("blueprint")
             blueprint_ctx = format_blueprint_context(blueprint)
@@ -1218,13 +1157,11 @@ class FillStage:
                 "narrative_context": format_narrative_context(graph, passage_id),
                 "blueprint_context": blueprint_ctx,
                 "atmospheric_detail": atmo_detail,
-                "entry_states": entry_states_text,
                 "entity_states": format_entity_states(graph, passage_id),
                 "entity_arc_context": format_entity_arc_context(graph, passage_id, arc_id),
                 "sliding_window": format_sliding_window(graph, arc_id, current_idx, window_size),
                 "continuity_warning": format_continuity_warning(graph, arc_id, current_idx),
                 "lookahead": format_lookahead_context(graph, passage_id, arc_id),
-                "shadow_states": shadow_states_text,
                 "path_arcs": format_path_arc_context(graph, passage_id, arc_id),
                 "vocabulary_note": vocabulary_note,
                 "ending_guidance": format_ending_guidance(
@@ -1235,14 +1172,11 @@ class FillStage:
                     arc_hints=compute_arc_hints(graph, first_eids, arc_id),
                 ),
                 "output_language_instruction": self._lang_instruction,
-                "poly_state_section": poly_section,
                 "spoke_context": format_spoke_context(graph, passage_id),
             }
 
             if self._two_step:
-                prose, flag, flag_reason, llm_calls, tokens = await self._fill_prose_call(
-                    model, context
-                )
+                prose, llm_calls, tokens = await self._fill_prose_call(model, context)
                 total_llm_calls += llm_calls
                 total_tokens += tokens
             else:
@@ -1257,114 +1191,98 @@ class FillStage:
                 total_tokens += tokens
                 passage_output = output.passage
                 prose = passage_output.prose
-                flag = passage_output.flag
-                flag_reason = passage_output.flag_reason
 
-            if flag == "incompatible_states":
-                graph.update_node(
-                    passage_id,
-                    flag="incompatible_states",
-                    flag_reason=flag_reason,
-                )
-                passages_flagged += 1
-                log.info(
-                    "passage_flagged",
-                    passage_id=passage_id,
-                    reason=flag_reason,
-                )
+            graph.update_node(passage_id, prose=prose)
+            if not prose:
+                log.warning("empty_prose_returned", passage_id=passage_id)
+                continue
+            passages_filled += 1
+
+            # Track prose for lexical diversity monitoring
+            recent_prose.append(prose)
+            window = recent_prose[-self._DIVERSITY_WINDOW_SIZE :]
+            ratio = compute_lexical_diversity(window)
+            vocabulary_note = format_vocabulary_note(
+                ratio, recent_prose=window, lang=self._language
+            )
+            if vocabulary_note:
+                log.info("lexical_diversity_low", ratio=f"{ratio:.2f}")
+
+            # Entity updates: two-step extracts analytically,
+            # single-call gets them from the structured output.
+            entity_updates = []
+            if self._two_step:
+                # Skip extraction for micro_beats (unlikely to have entity details)
+                if scene_type != "micro_beat":
+                    # Build valid entity ID list for phantom-ID prevention
+                    entity_ids = [
+                        (graph.get_node(eid) or {}).get("raw_id", eid)
+                        for eid in passage.get("entities", [])
+                        if graph.has_node(eid)
+                    ]
+                    try:
+                        extract_out, ex_calls, ex_tokens = await self._fill_extract_call(
+                            model,
+                            prose,
+                            passage.get("raw_id", passage_id),
+                            format_entity_states(graph, passage_id),
+                            valid_entity_ids=entity_ids,
+                        )
+                        total_llm_calls += ex_calls
+                        total_tokens += ex_tokens
+                        entity_updates = extract_out.entity_updates
+                    except (ValidationError, ValueError, RuntimeError):
+                        log.warning(
+                            "entity_extract_failed",
+                            passage_id=passage_id,
+                            exc_info=True,
+                        )
             else:
-                graph.update_node(passage_id, prose=prose)
-                if not prose:
-                    log.warning("empty_prose_returned", passage_id=passage_id)
-                    continue
-                passages_filled += 1
+                entity_updates = passage_output.entity_updates
 
-                # Track prose for lexical diversity monitoring
-                recent_prose.append(prose)
-                window = recent_prose[-self._DIVERSITY_WINDOW_SIZE :]
-                ratio = compute_lexical_diversity(window)
-                vocabulary_note = format_vocabulary_note(
-                    ratio, recent_prose=window, lang=self._language
-                )
-                if vocabulary_note:
-                    log.info("lexical_diversity_low", ratio=f"{ratio:.2f}")
-
-                # Entity updates: two-step extracts analytically,
-                # single-call gets them from the structured output.
-                entity_updates = []
-                if self._two_step:
-                    # Skip extraction for micro_beats (unlikely to have entity details)
-                    if scene_type != "micro_beat":
-                        # Build valid entity ID list for phantom-ID prevention
-                        entity_ids = [
-                            (graph.get_node(eid) or {}).get("raw_id", eid)
-                            for eid in passage.get("entities", [])
-                            if graph.has_node(eid)
-                        ]
-                        try:
-                            extract_out, ex_calls, ex_tokens = await self._fill_extract_call(
-                                model,
-                                prose,
-                                passage.get("raw_id", passage_id),
-                                format_entity_states(graph, passage_id),
-                                valid_entity_ids=entity_ids,
-                            )
-                            total_llm_calls += ex_calls
-                            total_tokens += ex_tokens
-                            entity_updates = extract_out.entity_updates
-                        except (ValidationError, ValueError, RuntimeError):
-                            log.warning(
-                                "entity_extract_failed",
-                                passage_id=passage_id,
-                                exc_info=True,
-                            )
+            for update in entity_updates:
+                # Resolve entity ID using category prefixes (character::, location::, etc.)
+                entity_id = _resolve_entity_id(graph, update.entity_id)
+                if entity_id:
+                    graph.update_node(
+                        entity_id,
+                        **{update.field: update.value},
+                    )
                 else:
-                    entity_updates = passage_output.entity_updates
+                    log.warning(
+                        "entity_update_skipped",
+                        entity_id=update.entity_id,
+                        reason="entity not found in graph",
+                    )
 
-                for update in entity_updates:
-                    # Resolve entity ID using category prefixes (character::, location::, etc.)
-                    entity_id = _resolve_entity_id(graph, update.entity_id)
-                    if entity_id:
-                        graph.update_node(
-                            entity_id,
-                            **{update.field: update.value},
+            # Spoke label updates: single-call mode only (two-step doesn't extract these)
+            if not self._two_step:
+                for label_update in passage_output.spoke_labels:
+                    # Normalize choice ID to ensure choice:: prefix
+                    choice_id = normalize_scoped_id(label_update.choice_id, "choice")
+                    if graph.has_node(choice_id):
+                        graph.update_node(choice_id, label=label_update.label)
+                        log.debug(
+                            "spoke_label_set",
+                            choice_id=choice_id,
+                            label=label_update.label,
                         )
                     else:
                         log.warning(
-                            "entity_update_skipped",
-                            entity_id=update.entity_id,
-                            reason="entity not found in graph",
+                            "spoke_label_skipped",
+                            choice_id=choice_id,
+                            reason="choice not found in graph",
                         )
-
-                # Spoke label updates: single-call mode only (two-step doesn't extract these)
-                if not self._two_step:
-                    for label_update in passage_output.spoke_labels:
-                        # Normalize choice ID to ensure choice:: prefix
-                        choice_id = normalize_scoped_id(label_update.choice_id, "choice")
-                        if graph.has_node(choice_id):
-                            graph.update_node(choice_id, label=label_update.label)
-                            log.debug(
-                                "spoke_label_set",
-                                choice_id=choice_id,
-                                label=label_update.label,
-                            )
-                        else:
-                            log.warning(
-                                "spoke_label_skipped",
-                                choice_id=choice_id,
-                                reason="choice not found in graph",
-                            )
 
             log.debug(
                 "passage_generated",
                 passage_id=passage_id,
-                flag=flag,
             )
 
         return FillPhaseResult(
             phase="generate",
             status="completed",
-            detail=f"{passages_filled} filled, {passages_flagged} flagged",
+            detail=f"{passages_filled} filled",
             llm_calls=total_llm_calls,
             tokens_used=total_tokens,
         )
@@ -1402,7 +1320,7 @@ class FillStage:
         prose_entries: list[tuple[str, str]] = [
             (pid, pdata.get("prose", ""))
             for pid, pdata in passage_nodes.items()
-            if pdata.get("prose") and pdata.get("flag") != "incompatible_states"
+            if pdata.get("prose")
         ]
         if not prose_entries:
             return FillPhaseResult(
@@ -1549,11 +1467,7 @@ class FillStage:
         ReviewFlag objects that Phase 3 will use for targeted revision.
         """
         passage_nodes = graph.get_nodes_by_type("passage")
-        filled_ids = [
-            pid
-            for pid, pdata in passage_nodes.items()
-            if pdata.get("prose") and pdata.get("flag") != "incompatible_states"
-        ]
+        filled_ids = [pid for pid, pdata in passage_nodes.items() if pdata.get("prose")]
         if not filled_ids:
             return FillPhaseResult(
                 phase="review", status="completed", detail="no passages to review"

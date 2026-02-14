@@ -106,19 +106,6 @@ class EntityOverlay(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class PathAgnosticAssessment(BaseModel):
-    """Phase 2: Marks beats that are path-agnostic for specific dilemmas."""
-
-    beat_id: str = Field(min_length=1)
-    agnostic_for: list[str] = Field(default_factory=list)
-
-
-class Phase2Output(BaseModel):
-    """Wrapper for Phase 2 structured output (path-agnostic assessment)."""
-
-    assessments: list[PathAgnosticAssessment] = Field(default_factory=list)
-
-
 class IntersectionProposal(BaseModel):
     """Phase 3: Proposes beats that form structural intersections."""
 
@@ -171,40 +158,10 @@ class AtmosphericDetail(BaseModel):
     )
 
 
-class EntryMood(BaseModel):
-    """Phase 4d: Per-path entry mood for shared beats."""
-
-    path_id: str = Field(min_length=1)
-    mood: str = Field(
-        min_length=2,
-        max_length=50,
-        description="Emotional quality arriving from this path (2-3 words)",
-    )
-
-
-class EntryStateBeat(BaseModel):
-    """Phase 4d: Entry mood assignments for a single shared beat."""
-
-    beat_id: str = Field(min_length=1)
-    moods: list[EntryMood] = Field(min_length=1)
-
-    @model_validator(mode="after")
-    def _validate_unique_mood_paths(self) -> EntryStateBeat:
-        path_ids = [mood.path_id for mood in self.moods]
-        if len(path_ids) != len(set(path_ids)):
-            raise ValueError("path_id in moods list must be unique for a single beat")
-        return self
-
-
 class Phase4dOutput(BaseModel):
-    """Wrapper for Phase 4d structured output (atmospheric details + optional entry states).
-
-    Entry states are cosmetic mood hints for shared beats. Path-specific prose
-    variants at convergence points are handled by Phase 8d (residue beats).
-    """
+    """Wrapper for Phase 4d structured output (atmospheric details)."""
 
     details: list[AtmosphericDetail] = Field(default_factory=list)
-    entry_states: list[EntryStateBeat] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _validate_unique_beat_ids(self) -> Phase4dOutput:
@@ -212,10 +169,6 @@ class Phase4dOutput(BaseModel):
             detail_ids = [d.beat_id for d in self.details]
             if len(detail_ids) != len(set(detail_ids)):
                 raise ValueError("beat_id in details list must be unique")
-        if self.entry_states:
-            entry_ids = [es.beat_id for es in self.entry_states]
-            if len(entry_ids) != len(set(entry_ids)):
-                raise ValueError("beat_id in entry_states list must be unique")
         return self
 
 

@@ -1,10 +1,10 @@
 """LLM-powered phase implementations for the GROW stage.
 
 Contains _LLMPhaseMixin with all phases that require LLM calls:
-phases 2, 3, 4a-4f, 8c, 9, 9b, 9c.
+phases 3, 4a-4f, 8c, 8d, 9, 9b, 9c.
 
 GrowStage inherits this mixin so ``execute()`` can delegate to
-``self._phase_2_path_agnostic()``, etc.
+``self._phase_3_intersections()``, etc.
 """
 
 from __future__ import annotations
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 
 class _LLMPhaseMixin:
-    """Mixin providing LLM-powered GROW phases (2, 3, 4a-4f, 8c, 9, 9b, 9c).
+    """Mixin providing LLM-powered GROW phases (3, 4a-4f, 8c, 8d, 9, 9b, 9c).
 
     Expects the host class to provide (via ``_LLMHelperMixin`` or directly):
 
@@ -52,178 +52,6 @@ class _LLMPhaseMixin:
     - ``_lang_instruction``
     - ``PROLOGUE_ID``
     """
-
-    @grow_phase(name="path_agnostic", depends_on=["validate_dag"], priority=1)
-    async def _phase_2_path_agnostic(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 2: Path-agnostic assessment (structural sharing).
-
-        Identifies beats that can share a single rendering across multiple
-        paths of the same dilemma. This is structural classification —
-        Phase 8d (residue beats) handles prose-level variants at
-        convergence points.
-
-        Preconditions:
-        - Beat DAG validated (Phase 1 passed).
-        - Dilemmas with multiple explored paths exist.
-        - Beats have belongs_to edges linking them to paths.
-
-        Postconditions:
-        - Shared beats annotated with path_agnostic_for=[dilemma_ids].
-        - Only beats belonging to 2+ paths of the same dilemma assessed.
-        - Beat nodes updated in-place with assessment results.
-
-        Invariants:
-        - LLM call only made when candidate beats exist.
-        - Invalid beat/dilemma IDs from LLM output silently filtered.
-        - Single-path dilemmas skipped (no assessment needed).
-        """
-        from questfoundry.models.grow import PathAgnosticAssessment, Phase2Output
-
-        # Collect dilemmas with multiple paths
-        dilemma_nodes = graph.get_nodes_by_type("dilemma")
-        path_nodes = graph.get_nodes_by_type("path")
-        beat_nodes = graph.get_nodes_by_type("beat")
-
-        if not dilemma_nodes or not path_nodes or not beat_nodes:
-            return GrowPhaseResult(
-                phase="path_agnostic",
-                status="completed",
-                detail="No dilemmas/paths/beats to assess",
-            )
-
-        # Build dilemma -> paths mapping from path node dilemma_id properties
-        from questfoundry.graph.grow_algorithms import build_dilemma_paths
-
-        dilemma_paths = build_dilemma_paths(graph)
-
-        # Only assess dilemmas with multiple paths
-        multi_path_dilemmas = {did: paths for did, paths in dilemma_paths.items() if len(paths) > 1}
-
-        if not multi_path_dilemmas:
-            return GrowPhaseResult(
-                phase="path_agnostic",
-                status="completed",
-                detail="No multi-path dilemmas to assess",
-            )
-
-        # Build beat -> paths mapping via belongs_to edges
-        beat_path_map: dict[str, list[str]] = {}
-        belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
-        for edge in belongs_to_edges:
-            beat_id = edge["from"]
-            path_id = edge["to"]
-            beat_path_map.setdefault(beat_id, []).append(path_id)
-
-        # Find beats that belong to multiple paths of the same dilemma
-        # These are candidates for path-agnostic assessment
-        candidate_beats: dict[str, list[str]] = {}  # beat_id -> list of dilemma_ids
-        for beat_id, beat_paths in beat_path_map.items():
-            if beat_id not in beat_nodes:
-                continue
-            for dilemma_id, dilemma_path_list in multi_path_dilemmas.items():
-                # Count how many of this dilemma's paths the beat belongs to
-                shared = [p for p in beat_paths if p in dilemma_path_list]
-                if len(shared) > 1:
-                    candidate_beats.setdefault(beat_id, []).append(dilemma_id)
-
-        if not candidate_beats:
-            return GrowPhaseResult(
-                phase="path_agnostic",
-                status="completed",
-                detail="No candidate beats for path-agnostic assessment",
-            )
-
-        # Build context for LLM
-        beat_summaries: list[str] = []
-        valid_beat_ids: list[str] = []
-        valid_dilemma_ids: list[str] = []
-
-        for beat_id, dilemma_id_list in sorted(candidate_beats.items()):
-            beat_data = beat_nodes[beat_id]
-            summary = beat_data.get("summary", "No summary")
-            dilemmas_str = ", ".join(
-                dilemma_nodes[did].get("raw_id", did) for did in dilemma_id_list
-            )
-            beat_summaries.append(
-                f"- beat_id: {beat_id}\n  summary: {summary}\n  dilemmas: [{dilemmas_str}]"
-            )
-            valid_beat_ids.append(beat_id)
-            for did in dilemma_id_list:
-                raw_did = dilemma_nodes[did].get("raw_id", did)
-                if raw_did not in valid_dilemma_ids:
-                    valid_dilemma_ids.append(raw_did)
-
-        context = {
-            "beat_summaries": "\n".join(beat_summaries),
-            "valid_beat_ids": ", ".join(valid_beat_ids),
-            "valid_dilemma_ids": ", ".join(valid_dilemma_ids),
-        }
-
-        # Call LLM with semantic validation
-        from questfoundry.graph.grow_validators import validate_phase2_output
-
-        validator = partial(
-            validate_phase2_output,
-            valid_beat_ids=set(valid_beat_ids),
-            valid_dilemma_ids=set(valid_dilemma_ids),
-        )
-        try:
-            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
-                model=model,
-                template_name="grow_phase2_agnostic",
-                context=context,
-                output_schema=Phase2Output,
-                semantic_validator=validator,
-            )
-        except GrowStageError as e:
-            return GrowPhaseResult(
-                phase="path_agnostic",
-                status="failed",
-                detail=str(e),
-            )
-
-        # Semantic validation: check all IDs exist
-        valid_assessments: list[PathAgnosticAssessment] = []
-        for assessment in result.assessments:
-            if assessment.beat_id not in beat_nodes:
-                log.warning(
-                    "phase2_invalid_beat_id",
-                    beat_id=assessment.beat_id,
-                )
-                continue
-            # Filter agnostic_for to valid dilemma raw_ids
-            invalid_dilemmas = [d for d in assessment.agnostic_for if d not in valid_dilemma_ids]
-            if invalid_dilemmas:
-                log.warning(
-                    "phase2_invalid_dilemma_ids",
-                    beat_id=assessment.beat_id,
-                    invalid_ids=invalid_dilemmas,
-                )
-            valid_dilemmas = [d for d in assessment.agnostic_for if d in valid_dilemma_ids]
-            if valid_dilemmas:
-                valid_assessments.append(
-                    PathAgnosticAssessment(
-                        beat_id=assessment.beat_id,
-                        agnostic_for=valid_dilemmas,
-                    )
-                )
-
-        # Apply results to graph
-        agnostic_count = 0
-        for assessment in valid_assessments:
-            graph.update_node(
-                assessment.beat_id,
-                path_agnostic_for=assessment.agnostic_for,
-            )
-            agnostic_count += 1
-
-        return GrowPhaseResult(
-            phase="path_agnostic",
-            status="completed",
-            detail=f"Assessed {len(candidate_beats)} beats, {agnostic_count} marked agnostic",
-            llm_calls=llm_calls,
-            tokens_used=tokens,
-        )
 
     @grow_phase(name="intersections", depends_on=["path_arcs"], priority=7)
     async def _phase_3_intersections(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
@@ -470,7 +298,7 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
-    @grow_phase(name="scene_types", depends_on=["path_agnostic"], priority=2)
+    @grow_phase(name="scene_types", depends_on=["validate_dag"], priority=2)
     async def _phase_4a_scene_types(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4a: Tag beats with scene type classification.
 
@@ -478,7 +306,7 @@ class _LLMPhaseMixin:
         sequel (reaction/reflection), or micro_beat (brief transition).
 
         Preconditions:
-        - Path-agnostic assessment complete (Phase 2).
+        - DAG validation complete.
         - Beat nodes exist with summaries.
 
         Postconditions:
@@ -795,27 +623,20 @@ class _LLMPhaseMixin:
 
     @grow_phase(name="atmospheric", depends_on=["pacing_gaps"], priority=5)
     async def _phase_4d_atmospheric(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 4d: Atmospheric detail and optional entry states for beats.
+        """Phase 4d: Atmospheric detail for beats.
 
-        Generates sensory environment details for all beats. Optionally
-        generates cosmetic per-path entry moods for shared beats (these
-        are atmospheric hints only — Phase 8d residue beats handle
-        structural prose differentiation at convergence points).
+        Generates sensory environment details for all beats.
 
         Preconditions:
         - Pacing gaps resolved (Phase 4c complete).
-        - Beat nodes have summaries and optional path_agnostic_for.
-        - Path nodes have dilemma_id, path_theme, path_mood.
+        - Beat nodes have summaries.
 
         Postconditions:
         - All beats annotated with atmospheric_detail (sensory environment).
-        - Shared beats may get entry_states with cosmetic per-path moods.
-        - Entry states only applied to beats in the shared_beats set.
 
         Invariants:
         - Single LLM call for all beats.
         - Narrative frame built from dilemma questions and path themes.
-        - Entry states are cosmetic-only; prose variants use Phase 8d.
         """
         from questfoundry.models.grow import Phase4dOutput
 
@@ -827,45 +648,23 @@ class _LLMPhaseMixin:
                 detail="No beats to annotate",
             )
 
-        path_nodes = graph.get_nodes_by_type("path")
-
         # Build enriched beat summaries with entity names
         beat_items: list[ContextItem] = []
-        shared_beats: list[str] = []
         for bid in sorted(beat_nodes.keys()):
             data = beat_nodes[bid]
             line = enrich_beat_line(graph, bid, data, include_entities=True)
             beat_items.append(ContextItem(id=bid, text=line))
-            if data.get("path_agnostic_for"):
-                shared_beats.append(bid)
 
         # Build narrative frame from dilemmas and paths
         dilemma_ids = sorted(graph.get_nodes_by_type("dilemma").keys())
-        path_ids = sorted(path_nodes.keys())
+        path_ids = sorted(graph.get_nodes_by_type("path").keys())
         narrative_frame = build_narrative_frame(graph, dilemma_ids=dilemma_ids, path_ids=path_ids)
-
-        # Build path info with theme/mood for entry state context
-        path_info_lines: list[str] = []
-        for pid in sorted(path_nodes.keys()):
-            pdata = path_nodes[pid]
-            dilemma = pdata.get("dilemma_id", "")
-            theme = pdata.get("path_theme", "")
-            mood = pdata.get("path_mood", "")
-            line = f"- {pid} [dilemma={dilemma}]"
-            if theme:
-                line += f"\n    theme: {theme}"
-            if mood:
-                line += f"\n    mood: {mood}"
-            path_info_lines.append(line)
 
         context = {
             "narrative_frame": narrative_frame,
             "beat_summaries": compact_items(beat_items, self._compact_config()),  # type: ignore[attr-defined]
             "beat_count": str(len(beat_nodes)),
             "valid_beat_ids": ", ".join(sorted(beat_nodes.keys())),
-            "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
-            "shared_beats": ", ".join(shared_beats) if shared_beats else "(none)",
-            "path_info": "\n".join(path_info_lines) if path_info_lines else "(no paths)",
         }
 
         try:
@@ -894,35 +693,10 @@ class _LLMPhaseMixin:
             )
             applied_details += 1
 
-        # Apply entry states (shared beats only)
-        applied_entries = 0
-        valid_path_set = set(path_nodes.keys())
-        for entry_beat in result.entry_states:
-            if entry_beat.beat_id not in beat_nodes:
-                log.warning("phase4d_invalid_entry_beat_id", beat_id=entry_beat.beat_id)
-                continue
-            if entry_beat.beat_id not in shared_beats:
-                log.warning(
-                    "phase4d_entry_for_non_shared_beat",
-                    beat_id=entry_beat.beat_id,
-                )
-                continue
-            valid_moods = [
-                {"path_id": em.path_id, "mood": em.mood}
-                for em in entry_beat.moods
-                if em.path_id in valid_path_set
-            ]
-            if valid_moods:
-                graph.update_node(entry_beat.beat_id, entry_states=valid_moods)
-                applied_entries += 1
-
         return GrowPhaseResult(
             phase="atmospheric",
             status="completed",
-            detail=(
-                f"Applied atmospheric details to {applied_details}/{len(beat_nodes)} beats, "
-                f"entry states to {applied_entries}/{len(shared_beats)} shared beats"
-            ),
+            detail=f"Applied atmospheric details to {applied_details}/{len(beat_nodes)} beats",
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
@@ -1223,9 +997,9 @@ class _LLMPhaseMixin:
                 etype = edata.get("entity_type", "character")
                 arc_type = ARC_TYPE_BY_ENTITY_TYPE.get(etype, "transformation")
 
-                # Warn if pivot is on a shared beat
-                pivot_data = graph.get_node(arc.pivot_beat)
-                if pivot_data and pivot_data.get("path_agnostic_for"):
+                # Warn if pivot is on a shared beat (belongs to multiple paths)
+                pivot_paths = graph.get_edges(from_id=arc.pivot_beat, edge_type="belongs_to")
+                if len(pivot_paths) > 1:
                     log.warning(
                         "shared_pivot_beat",
                         entity_id=arc.entity_id,
