@@ -415,3 +415,184 @@ class TestDbSnapshots:
         assert delete_snapshot(tmp_path, "dream")
         assert not (snapshot_dir / "pre-dream.json").exists()
         assert not (snapshot_dir / "pre-dream.db").exists()
+
+
+# ---------------------------------------------------------------------------
+# Mutation before_state recording
+# ---------------------------------------------------------------------------
+
+
+class TestBeforeStateMutations:
+    """Verify that mutating operations capture before_state for reversibility."""
+
+    def _get_mutations(self, store: SqliteGraphStore) -> list[dict]:
+        rows = store._conn.execute(
+            "SELECT operation, target_id, delta, before_state FROM mutations ORDER BY id"
+        ).fetchall()
+        return [
+            {
+                "operation": r["operation"],
+                "target_id": r["target_id"],
+                "delta": json.loads(r["delta"]) if r["delta"] else None,
+                "before_state": (json.loads(r["before_state"]) if r["before_state"] else None),
+            }
+            for r in rows
+        ]
+
+    def test_create_node_has_no_before_state(self) -> None:
+        """create_node records delta but no before_state."""
+        store = SqliteGraphStore()
+        store.set_node("n1", {"type": "t", "name": "Alice"})
+
+        muts = self._get_mutations(store)
+        assert len(muts) == 1
+        assert muts[0]["operation"] == "create_node"
+        assert muts[0]["delta"] == {"type": "t", "name": "Alice"}
+        assert muts[0]["before_state"] is None
+
+    def test_set_node_update_captures_before(self) -> None:
+        """set_node on existing node captures old data in before_state."""
+        store = SqliteGraphStore()
+        store.set_node("n1", {"type": "t", "name": "Alice"})
+        store.set_node("n1", {"type": "t", "name": "Bob"})
+
+        muts = self._get_mutations(store)
+        assert len(muts) == 2
+        assert muts[1]["operation"] == "update_node"
+        assert muts[1]["delta"] == {"type": "t", "name": "Bob"}
+        assert muts[1]["before_state"] == {"type": "t", "name": "Alice"}
+
+    def test_update_node_fields_captures_old_values(self) -> None:
+        """update_node_fields records old values of changed fields."""
+        store = SqliteGraphStore()
+        store.set_node("n1", {"type": "t", "name": "Alice", "age": 30})
+        store.update_node_fields("n1", name="Bob", age=31)
+
+        muts = self._get_mutations(store)
+        update_mut = muts[-1]
+        assert update_mut["operation"] == "update_node"
+        assert update_mut["delta"] == {"name": "Bob", "age": 31}
+        assert update_mut["before_state"] == {"name": "Alice", "age": 30}
+
+    def test_update_node_fields_captures_none_for_new_fields(self) -> None:
+        """update_node_fields records None for fields that didn't exist before."""
+        store = SqliteGraphStore()
+        store.set_node("n1", {"type": "t", "name": "Alice"})
+        store.update_node_fields("n1", mood="happy")
+
+        muts = self._get_mutations(store)
+        update_mut = muts[-1]
+        assert update_mut["before_state"] == {"mood": None}
+
+    def test_delete_node_captures_before_state(self) -> None:
+        """delete_node records full node data in before_state."""
+        store = SqliteGraphStore()
+        store.set_node("n1", {"type": "t", "name": "Alice", "age": 30})
+        store.delete_node("n1")
+
+        muts = self._get_mutations(store)
+        delete_mut = muts[-1]
+        assert delete_mut["operation"] == "delete_node"
+        assert delete_mut["before_state"] == {"type": "t", "name": "Alice", "age": 30}
+
+    def test_add_edge_stores_full_delta(self) -> None:
+        """add_edge records full edge dict in delta."""
+        store = SqliteGraphStore()
+        store.add_edge({"type": "knows", "from": "a", "to": "b", "weight": 5})
+
+        muts = self._get_mutations(store)
+        assert len(muts) == 1
+        assert muts[0]["operation"] == "add_edge"
+        assert muts[0]["delta"] == {"type": "knows", "from": "a", "to": "b", "weight": 5}
+
+    def test_remove_edge_captures_before_state(self) -> None:
+        """remove_edge records full edge dict in before_state."""
+        store = SqliteGraphStore()
+        store.add_edge({"type": "knows", "from": "a", "to": "b", "weight": 5})
+        store.remove_edge("knows", "a", "b")
+
+        muts = self._get_mutations(store)
+        remove_mut = muts[-1]
+        assert remove_mut["operation"] == "remove_edge"
+        assert remove_mut["before_state"]["type"] == "knows"
+        assert remove_mut["before_state"]["from"] == "a"
+        assert remove_mut["before_state"]["to"] == "b"
+        assert remove_mut["before_state"]["weight"] == 5
+
+    def test_remove_edges_referencing_captures_all(self) -> None:
+        """remove_edges_referencing captures before_state for each removed edge."""
+        store = SqliteGraphStore()
+        store.add_edge({"type": "knows", "from": "a", "to": "b"})
+        store.add_edge({"type": "likes", "from": "c", "to": "a"})
+        store.add_edge({"type": "hates", "from": "d", "to": "e"})
+        store.remove_edges_referencing("a")
+
+        muts = self._get_mutations(store)
+        # 3 add_edge + 2 remove_edge (only edges referencing "a")
+        remove_muts = [m for m in muts if m["operation"] == "remove_edge"]
+        assert len(remove_muts) == 2
+        edge_types = {m["before_state"]["type"] for m in remove_muts}
+        assert edge_types == {"knows", "likes"}
+        # All have before_state
+        assert all(m["before_state"] is not None for m in remove_muts)
+
+    def test_schema_migration_adds_column(self, tmp_path: Path) -> None:
+        """Opening a DB without before_state column adds it automatically."""
+        import sqlite3
+
+        db_path = tmp_path / "test.db"
+        # Create a DB with old schema (no before_state column)
+        conn = sqlite3.connect(str(db_path))
+        conn.executescript(
+            """\
+            CREATE TABLE nodes (
+                node_id TEXT PRIMARY KEY, type TEXT, data JSON,
+                created_stage TEXT DEFAULT '', created_phase TEXT DEFAULT '',
+                modified_stage TEXT DEFAULT '', modified_phase TEXT DEFAULT ''
+            );
+            CREATE TABLE edges (
+                rowid INTEGER PRIMARY KEY AUTOINCREMENT,
+                edge_type TEXT, from_id TEXT, to_id TEXT, data JSON,
+                created_stage TEXT DEFAULT '', created_phase TEXT DEFAULT ''
+            );
+            CREATE TABLE meta (key TEXT PRIMARY KEY, value JSON);
+            CREATE TABLE mutations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                timestamp TEXT DEFAULT '', stage TEXT DEFAULT '',
+                phase TEXT DEFAULT '', operation TEXT,
+                target_id TEXT, delta JSON, rationale TEXT DEFAULT ''
+            );
+            CREATE TABLE phase_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                stage TEXT, phase TEXT, started_at TEXT,
+                completed_at TEXT, status TEXT, mutation_count INTEGER,
+                detail TEXT
+            );
+            """
+        )
+        # Insert an old mutation without before_state
+        conn.execute(
+            "INSERT INTO mutations (operation, target_id) VALUES (?, ?)",
+            ("create_node", "old_node"),
+        )
+        conn.commit()
+        conn.close()
+
+        # Reopen with SqliteGraphStore — should migrate
+        store = SqliteGraphStore(db_path)
+        # Verify column exists by inserting with before_state
+        store.set_node("n1", {"type": "t", "name": "X"})
+        store.delete_node("n1")
+
+        # Old mutation should have NULL before_state
+        row = store._conn.execute(
+            "SELECT before_state FROM mutations WHERE target_id = 'old_node'"
+        ).fetchone()
+        assert row["before_state"] is None
+
+        # New delete should have before_state
+        row = store._conn.execute(
+            "SELECT before_state FROM mutations WHERE operation = 'delete_node'"
+        ).fetchone()
+        assert row["before_state"] is not None
+        store.close()

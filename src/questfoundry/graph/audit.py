@@ -79,7 +79,8 @@ def query_mutations(
         params.append(limit)
 
         rows = conn.execute(
-            f"SELECT id, timestamp, stage, phase, operation, target_id, delta "
+            f"SELECT id, timestamp, stage, phase, operation, target_id, "
+            f"delta, before_state "
             f"FROM mutations{where} ORDER BY id DESC LIMIT ?",
             params,
         ).fetchall()
@@ -93,6 +94,7 @@ def query_mutations(
                 "operation": row["operation"],
                 "target_id": row["target_id"],
                 "delta": json.loads(row["delta"]) if row["delta"] else None,
+                "before_state": (json.loads(row["before_state"]) if row["before_state"] else None),
             }
             for row in rows
         ]

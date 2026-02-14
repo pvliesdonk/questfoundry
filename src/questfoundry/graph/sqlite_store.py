@@ -53,14 +53,15 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 
 CREATE TABLE IF NOT EXISTS mutations (
-    id        INTEGER PRIMARY KEY AUTOINCREMENT,
-    timestamp TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
-    stage     TEXT NOT NULL DEFAULT '',
-    phase     TEXT NOT NULL DEFAULT '',
-    operation TEXT NOT NULL,
-    target_id TEXT NOT NULL,
-    delta     JSON,
-    rationale TEXT DEFAULT ''
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    timestamp    TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%f','now')),
+    stage        TEXT NOT NULL DEFAULT '',
+    phase        TEXT NOT NULL DEFAULT '',
+    operation    TEXT NOT NULL,
+    target_id    TEXT NOT NULL,
+    delta        JSON,
+    before_state JSON,
+    rationale    TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_mutations_stage  ON mutations(stage);
 CREATE INDEX IF NOT EXISTS idx_mutations_target ON mutations(target_id);
@@ -117,6 +118,7 @@ class SqliteGraphStore:
         self._conn.execute("PRAGMA synchronous=NORMAL")
         self._conn.execute("PRAGMA foreign_keys=ON")
         self._conn.executescript(_SCHEMA)
+        self._ensure_before_state_column()
 
         self._stage: str = ""
         self._phase: str = ""
@@ -147,6 +149,19 @@ class SqliteGraphStore:
         else:
             dest.close()
 
+    # -- Schema migration ------------------------------------------------------
+
+    def _ensure_before_state_column(self) -> None:
+        """Add ``before_state`` column if absent (schema migration).
+
+        Existing databases created before rewind support lack the column.
+        ``ALTER TABLE ADD COLUMN`` is safe for nullable columns in SQLite.
+        """
+        cursor = self._conn.execute("PRAGMA table_info(mutations)")
+        columns = {row[1] for row in cursor.fetchall()}
+        if "before_state" not in columns:
+            self._conn.execute("ALTER TABLE mutations ADD COLUMN before_state JSON")
+
     # -- Mutation context ------------------------------------------------------
 
     def set_mutation_context(self, stage: str = "", phase: str = "") -> None:
@@ -164,17 +179,28 @@ class SqliteGraphStore:
         operation: str,
         target_id: str,
         delta: dict[str, Any] | None = None,
+        before_state: dict[str, Any] | None = None,
     ) -> None:
-        """Append a mutation record."""
+        """Append a mutation record.
+
+        Args:
+            operation: Mutation type (create_node, update_node, etc.).
+            target_id: Affected node ID or edge reference.
+            delta: New data (node data for creates/updates, edge dict for add_edge).
+            before_state: State before mutation for reversibility. Required for
+                update_node, delete_node, and remove_edge to enable rewind.
+        """
         self._conn.execute(
-            "INSERT INTO mutations (stage, phase, operation, target_id, delta) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO mutations "
+            "(stage, phase, operation, target_id, delta, before_state) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
             (
                 self._stage,
                 self._phase,
                 operation,
                 target_id,
                 json.dumps(delta) if delta is not None else None,
+                json.dumps(before_state) if before_state is not None else None,
             ),
         )
 
@@ -241,6 +267,13 @@ class SqliteGraphStore:
     def set_node(self, node_id: str, data: dict[str, Any]) -> None:
         node_type = data.get("type", "")
         existing = self.has_node(node_id)
+        before: dict[str, Any] | None = None
+        if existing:
+            row = self._conn.execute(
+                "SELECT data FROM nodes WHERE node_id = ?", (node_id,)
+            ).fetchone()
+            if row is not None:
+                before = json.loads(row["data"])
         self._conn.execute(
             "INSERT OR REPLACE INTO nodes "
             "(node_id, type, data, created_stage, created_phase, modified_stage, modified_phase) "
@@ -261,13 +294,14 @@ class SqliteGraphStore:
             ),
         )
         op = "update_node" if existing else "create_node"
-        self._record_mutation(op, node_id, delta=data)
+        self._record_mutation(op, node_id, delta=data, before_state=before)
 
     def update_node_fields(self, node_id: str, **updates: Any) -> None:
         row = self._conn.execute("SELECT data FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         if row is None:
             raise NodeNotFoundError(node_id=node_id)
         current = json.loads(row["data"])
+        old_values = {k: current.get(k) for k in updates}
         current.update(updates)
         node_type = current.get("type", "")
         self._conn.execute(
@@ -275,11 +309,18 @@ class SqliteGraphStore:
             "WHERE node_id = ?",
             (json.dumps(current), node_type, self._stage, self._phase, node_id),
         )
-        self._record_mutation("update_node", node_id, delta=dict(updates))
+        self._record_mutation(
+            "update_node",
+            node_id,
+            delta=dict(updates),
+            before_state=old_values,
+        )
 
     def delete_node(self, node_id: str) -> None:
+        row = self._conn.execute("SELECT data FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+        before = json.loads(row["data"]) if row is not None else None
         self._conn.execute("DELETE FROM nodes WHERE node_id = ?", (node_id,))
-        self._record_mutation("delete_node", node_id)
+        self._record_mutation("delete_node", node_id, before_state=before)
 
     def get_nodes_by_type(self, node_type: str) -> dict[str, dict[str, Any]]:
         rows = self._conn.execute(
@@ -323,19 +364,21 @@ class SqliteGraphStore:
             ),
         )
         target_id = f"edge:{edge_type}:{from_id}:{to_id}"
-        self._record_mutation("add_edge", target_id)
+        self._record_mutation("add_edge", target_id, delta=dict(edge))
 
     def remove_edge(self, edge_type: str, from_id: str, to_id: str) -> bool:
-        # Find the first matching row to delete
+        # Find the first matching row to delete (fetch full data for before_state)
         row = self._conn.execute(
-            "SELECT rowid FROM edges WHERE edge_type = ? AND from_id = ? AND to_id = ? LIMIT 1",
+            "SELECT rowid, edge_type, from_id, to_id, data FROM edges "
+            "WHERE edge_type = ? AND from_id = ? AND to_id = ? LIMIT 1",
             (edge_type, from_id, to_id),
         ).fetchone()
         if row is None:
             return False
+        before = self._row_to_edge(row)
         self._conn.execute("DELETE FROM edges WHERE rowid = ?", (row["rowid"],))
         target_id = f"edge:{edge_type}:{from_id}:{to_id}"
-        self._record_mutation("remove_edge", target_id)
+        self._record_mutation("remove_edge", target_id, before_state=before)
         return True
 
     def get_edges(
@@ -376,12 +419,13 @@ class SqliteGraphStore:
         self._conn.execute("SAVEPOINT sp_remove_refs")
         try:
             rows = self._conn.execute(
-                "SELECT edge_type, from_id, to_id FROM edges WHERE from_id = ? OR to_id = ?",
+                "SELECT edge_type, from_id, to_id, data FROM edges WHERE from_id = ? OR to_id = ?",
                 (node_id, node_id),
             ).fetchall()
             for row in rows:
                 target_id = f"edge:{row['edge_type']}:{row['from_id']}:{row['to_id']}"
-                self._record_mutation("remove_edge", target_id)
+                before = self._row_to_edge(row)
+                self._record_mutation("remove_edge", target_id, before_state=before)
             self._conn.execute(
                 "DELETE FROM edges WHERE from_id = ? OR to_id = ?",
                 (node_id, node_id),
