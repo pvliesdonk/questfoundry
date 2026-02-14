@@ -1555,6 +1555,55 @@ def _suggest_closest(bad_id: str, valid_ids: list[str]) -> str | None:
     return None
 
 
+def _build_consequences_paths_brief(paths: list[dict[str, Any]]) -> str:
+    """Build a compact paths brief from serialized paths for consequences context.
+
+    Replaces the unfiltered summarize-phase brief (which may describe paths
+    for unexplored dilemma answers) with one built from actually-serialized
+    paths. This prevents the LLM from generating consequences for non-existent
+    paths.
+    """
+    if not paths:
+        return ""
+
+    lines = ["## Paths to Generate Consequences For", ""]
+    for p in sorted(paths, key=lambda x: x.get("path_id", "")):
+        pid = p.get("path_id", "")
+        name = p.get("name", "")
+        desc = p.get("description", "")
+        dilemma = p.get("dilemma_id", "")
+        answer = p.get("answer_id", "")
+        lines.append(f"- `{pid}` ({name}): {answer} answer to {dilemma} — {desc}")
+    return "\n".join(lines)
+
+
+def _filter_consequences_by_valid_paths(
+    consequences: list[dict[str, Any]],
+    paths: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Filter consequences to only those referencing valid (serialized) path_ids.
+
+    Consequences for non-existent paths (e.g., unexplored dilemma answers)
+    are dropped with a warning log. This prevents semantic validation errors
+    that the retry loop cannot fix.
+    """
+    valid_path_ids = {p.get("path_id", "") for p in paths if p.get("path_id")}
+    filtered = [c for c in consequences if c.get("path_id") in valid_path_ids]
+    dropped = len(consequences) - len(filtered)
+    if dropped:
+        dropped_ids = [
+            c.get("path_id", "?") for c in consequences if c.get("path_id") not in valid_path_ids
+        ]
+        log.warning(
+            "consequences_filtered_invalid_paths",
+            dropped=dropped,
+            total=len(consequences),
+            kept=len(filtered),
+            dropped_path_ids=dropped_ids,
+        )
+    return filtered
+
+
 @traceable(
     name="Serialize SEED (Function)", run_type="chain", tags=["phase:serialize", "stage:seed"]
 )
@@ -1697,9 +1746,15 @@ async def serialize_seed_as_function(
 
         # Build per-section brief (chunked mode uses scoped briefs)
         if section_name == "consequences":
-            # Consequences need path IDs context, plus the paths brief in chunked mode
-            if chunked:
+            # Build consequences brief from serialized paths (not the summarize brief,
+            # which may describe paths for unexplored dilemma answers).
+            if collected.get("paths"):
+                paths_brief = _build_consequences_paths_brief(collected["paths"])
+            elif chunked:
                 paths_brief = brief_dict.get("paths", "")
+            else:
+                paths_brief = ""
+            if chunked or collected.get("paths"):
                 current_brief = (
                     f"{valid_ids_context}\n\n{paths_brief}" if valid_ids_context else paths_brief
                 )
@@ -1735,6 +1790,13 @@ async def serialize_seed_as_function(
                 f"Expected field '{output_field}', got: {list(section_data.keys())}"
             )
         collected[output_field] = section_data[output_field]
+
+        # Filter consequences referencing non-existent paths (safety net).
+        if section_name == "consequences" and collected.get("paths"):
+            collected["consequences"] = _filter_consequences_by_valid_paths(
+                collected["consequences"], collected["paths"]
+            )
+
         if on_phase_progress is not None:
             items = collected[output_field]
             count = len(items) if isinstance(items, list) else 1
@@ -1893,8 +1955,15 @@ async def serialize_seed_as_function(
                 corrected_prompt = f"{prompts[section_name]}\n\n{corrections}"
                 # Build brief for retry (mirrors initial section loop logic)
                 if section_name == "consequences":
-                    if chunked:
+                    # Use serialized paths brief (not summarize brief) to avoid
+                    # describing paths for unexplored dilemma answers.
+                    if collected.get("paths"):
+                        paths_brief = _build_consequences_paths_brief(collected["paths"])
+                    elif chunked:
                         paths_brief = brief_dict.get("paths", "")
+                    else:
+                        paths_brief = ""
+                    if chunked or collected.get("paths"):
                         current_brief = (
                             f"{valid_ids_context}\n\n{paths_brief}"
                             if valid_ids_context
@@ -1923,6 +1992,12 @@ async def serialize_seed_as_function(
                     if output_field in section_data:
                         collected[output_field] = section_data[output_field]
                         retried_any = True
+
+                        # Filter consequences referencing non-existent paths.
+                        if section_name == "consequences" and collected.get("paths"):
+                            collected["consequences"] = _filter_consequences_by_valid_paths(
+                                collected["consequences"], collected["paths"]
+                            )
 
                         # Refresh downstream context when upstream sections change.
                         if section_name == "dilemmas" and collected.get("dilemmas"):
