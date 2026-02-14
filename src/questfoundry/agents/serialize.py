@@ -1587,16 +1587,19 @@ def _filter_consequences_by_valid_paths(
     are dropped with a warning log. This prevents semantic validation errors
     that the retry loop cannot fix.
     """
-    valid_path_ids = {p.get("path_id", "") for p in paths if p.get("path_id")}
-    filtered = [c for c in consequences if c.get("path_id") in valid_path_ids]
-    dropped = len(consequences) - len(filtered)
-    if dropped:
-        dropped_ids = [
-            c.get("path_id", "?") for c in consequences if c.get("path_id") not in valid_path_ids
-        ]
+    valid_path_ids = {p.get("path_id") for p in paths if p.get("path_id")}
+    filtered: list[dict[str, Any]] = []
+    dropped_ids: list[str] = []
+    for c in consequences:
+        path_id = c.get("path_id")
+        if path_id in valid_path_ids:
+            filtered.append(c)
+        else:
+            dropped_ids.append(path_id if path_id is not None else "?")
+    if dropped_ids:
         log.warning(
             "consequences_filtered_invalid_paths",
-            dropped=dropped,
+            dropped=len(dropped_ids),
             total=len(consequences),
             kept=len(filtered),
             dropped_path_ids=dropped_ids,
