@@ -49,9 +49,6 @@ system: |
   ## Atmospheric Detail
   {atmospheric_detail}
 
-  ## Entry States
-  {entry_states}
-
   ## Entity States
   {entity_states}
 
@@ -66,9 +63,6 @@ system: |
 
   ## Lookahead
   {lookahead}
-
-  ## Shadow States (Poly-State Context)
-  {shadow_states}
 
   ## Path Arcs
   {path_arcs}
@@ -109,8 +103,6 @@ system: |
 
   {introduction_guidance}
 
-  {poly_state_section}
-
   ## Entity Updates
 
   If your prose introduces micro-details about entities (appearance, mannerisms,
@@ -123,8 +115,6 @@ system: |
   Return a JSON object with a "passage" field containing:
   - passage_id: the passage ID
   - prose: the generated text
-  - flag: "ok" or "incompatible_states"
-  - flag_reason: explanation if flagged (empty otherwise)
   - entity_updates: array of objects with entity_id, field, value (may be empty)
   - spoke_labels: array of spoke label objects (may be empty), each with:
     - choice_id: the choice node ID (may omit "choice::" prefix)

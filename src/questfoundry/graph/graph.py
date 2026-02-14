@@ -240,7 +240,7 @@ class Graph:
 
         Args:
             stage: Current pipeline stage (e.g., "grow").
-            phase: Current phase within the stage (e.g., "path_agnostic").
+            phase: Current phase within the stage (e.g., "scene_types").
 
         Yields:
             None — enter/exit handles context setup/teardown.
@@ -267,7 +267,7 @@ class Graph:
 
         Args:
             stage: Pipeline stage (e.g., ``"grow"``).
-            phase: Phase within the stage (e.g., ``"path_agnostic"``).
+            phase: Phase within the stage (e.g., ``"scene_types"``).
 
         Returns:
             Number of mutations reversed.

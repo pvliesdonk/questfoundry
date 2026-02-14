@@ -37,9 +37,6 @@ system: |
   ## Scene Blueprint
   {blueprint_context}
 
-  ## Entry States
-  {entry_states}
-
   ## Entity States
   {entity_states}
 
@@ -54,9 +51,6 @@ system: |
 
   ## Lookahead
   {lookahead}
-
-  ## Shadow States (Poly-State Context)
-  {shadow_states}
 
   ## Path Arcs
   {path_arcs}
@@ -88,8 +82,6 @@ system: |
   {ending_guidance}
 
   {introduction_guidance}
-
-  {poly_state_section}
 
 user: |
   Write the prose for passage {passage_id} following the voice document and

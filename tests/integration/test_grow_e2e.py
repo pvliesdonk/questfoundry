@@ -19,14 +19,11 @@ from tests.fixtures.grow_fixtures import make_e2e_fixture_graph
 def _make_e2e_mock_model(graph: Graph) -> MagicMock:
     """Create a mock model that returns valid structured output for all LLM phases.
 
-    Builds realistic Phase 2 assessments from the fixture graph structure.
-    Other phases return empty/minimal results for simplicity.
+    Returns empty/minimal results for each phase for simplicity.
     """
     from questfoundry.models.grow import (
         AtmosphericDetail,
-        PathAgnosticAssessment,
         PathMiniArc,
-        Phase2Output,
         Phase3Output,
         Phase4aOutput,
         Phase4bOutput,
@@ -36,38 +33,8 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
         SceneTypeTag,
     )
 
-    # Build Phase 2: identify shared beats (path-agnostic)
-    dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    path_nodes = graph.get_nodes_by_type("path")
     beat_nodes = graph.get_nodes_by_type("beat")
 
-    dilemma_paths: dict[str, list[str]] = {}
-    for edge in graph.get_edges(edge_type="explores"):
-        path_id = edge["from"]
-        dilemma_id = edge["to"]
-        if path_id in path_nodes and dilemma_id in dilemma_nodes:
-            dilemma_paths.setdefault(dilemma_id, []).append(path_id)
-
-    beat_path_map: dict[str, list[str]] = {}
-    for edge in graph.get_edges(edge_type="belongs_to"):
-        beat_path_map.setdefault(edge["from"], []).append(edge["to"])
-
-    assessments: list[PathAgnosticAssessment] = []
-    for beat_id, bp_list in beat_path_map.items():
-        if beat_id not in beat_nodes:
-            continue
-        agnostic_dilemmas: list[str] = []
-        for dilemma_id, d_paths in dilemma_paths.items():
-            shared = [p for p in bp_list if p in d_paths]
-            if len(shared) > 1:
-                raw_did = dilemma_nodes[dilemma_id].get("raw_id", dilemma_id)
-                agnostic_dilemmas.append(raw_did)
-        if agnostic_dilemmas:
-            assessments.append(
-                PathAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_dilemmas)
-            )
-
-    phase2_output = Phase2Output(assessments=assessments)
     phase3_output = Phase3Output(intersections=[])
 
     # Phase 4a: scene type tags for all beats
@@ -93,7 +60,6 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
             )
             for bid in sorted(beat_nodes.keys())
         ],
-        entry_states=[],
     )
 
     # Phase 4e: generic path arc (called per-path with PathMiniArc schema)
@@ -108,7 +74,6 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
 
     # Map schema title -> output (schema is now a dict with "title" field)
     output_by_title: dict[str, object] = {
-        "Phase2Output": phase2_output,
         "Phase3Output": phase3_output,
         "Phase4aOutput": phase4a_output,
         "Phase4bOutput": phase4b_output,
@@ -120,7 +85,7 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
 
     def _with_structured_output(schema: dict[str, Any], **_kwargs: object) -> AsyncMock:
         title = schema.get("title", "") if isinstance(schema, dict) else ""
-        output = output_by_title.get(title, phase2_output)
+        output = output_by_title.get(title, phase3_output)
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(return_value=output)
         return mock_structured

@@ -17,7 +17,6 @@ from questfoundry.graph.mutations import GrowValidationError
 
 if TYPE_CHECKING:
     from questfoundry.models.grow import (
-        Phase2Output,
         Phase3Output,
         Phase4aOutput,
         Phase4bOutput,
@@ -28,41 +27,6 @@ if TYPE_CHECKING:
         Phase9cOutput,
         Phase9Output,
     )
-
-
-def validate_phase2_output(
-    result: Phase2Output,
-    valid_beat_ids: set[str],
-    valid_dilemma_ids: set[str],
-) -> list[GrowValidationError]:
-    """Validate Phase 2 path-agnostic assessments.
-
-    Checks:
-    - beat_id exists in graph
-    - agnostic_for dilemma IDs exist
-    """
-    errors: list[GrowValidationError] = []
-    for i, assessment in enumerate(result.assessments):
-        if assessment.beat_id not in valid_beat_ids:
-            errors.append(
-                GrowValidationError(
-                    field_path=f"assessments.{i}.beat_id",
-                    issue=f"Beat ID not found in graph: {assessment.beat_id}",
-                    provided=assessment.beat_id,
-                    available=sorted(valid_beat_ids)[:10],
-                )
-            )
-        for dilemma_id in assessment.agnostic_for:
-            if dilemma_id not in valid_dilemma_ids:
-                errors.append(
-                    GrowValidationError(
-                        field_path=f"assessments.{i}.agnostic_for",
-                        issue=f"Dilemma ID not found: {dilemma_id}",
-                        provided=dilemma_id,
-                        available=sorted(valid_dilemma_ids)[:10],
-                    )
-                )
-    return errors
 
 
 def validate_phase3_output(

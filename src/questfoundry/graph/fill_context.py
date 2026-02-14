@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
+from questfoundry.graph.context import strip_scope_prefix
 from questfoundry.observability.logging import get_logger
 
 # ---------------------------------------------------------------------------
@@ -810,106 +810,6 @@ def format_lookahead_context(
     return "\n".join(lines).strip()
 
 
-def format_shadow_states(
-    graph: Graph,
-    passage_id: str,
-    arc_id: str,
-) -> str:
-    """Format shadow state context for poly-state prose.
-
-    For shared beats (path-agnostic), shows which other paths reach
-    this beat and what their active state implies.
-
-    Args:
-        graph: Graph containing passage, beat, path, and dilemma nodes.
-        passage_id: The current passage.
-        arc_id: The arc being generated (defines the "active" state).
-
-    Returns:
-        Formatted shadow states, or empty string if not a shared beat.
-    """
-    passage = graph.get_node(passage_id)
-    if not passage:
-        return ""
-
-    beat_id = passage.get("from_beat", "")
-    beat = graph.get_node(beat_id) if beat_id else None
-    if not beat:
-        return ""
-
-    # Check if beat is path-agnostic (shared across paths)
-    agnostic_for = beat.get("path_agnostic_for", [])
-    if not agnostic_for:
-        return ""
-
-    # Get the active arc's paths
-    arc_node = graph.get_node(arc_id)
-    if not arc_node:
-        return ""
-    active_paths = set(arc_node.get("paths", []))
-    if not active_paths:
-        return ""
-
-    # Build path → dilemma mapping for filtering
-    path_nodes = graph.get_nodes_by_type("path")
-    path_to_dilemma: dict[str, str] = {}
-    for pid, pdata in path_nodes.items():
-        did = pdata.get("dilemma_id")
-        if did:
-            raw_id = pdata.get("raw_id", pid)
-            path_to_dilemma[raw_id] = normalize_scoped_id(did, "dilemma")
-
-    # Active arc's path-per-dilemma
-    active_path_per_dilemma: dict[str, str] = {}
-    for p in active_paths:
-        d = path_to_dilemma.get(p)
-        if d:
-            active_path_per_dilemma[d] = p
-
-    # Normalize agnostic_for to prefixed dilemma IDs
-    agnostic_dilemmas = {normalize_scoped_id(d, "dilemma") for d in agnostic_for}
-
-    # Find shadow arcs (other arcs containing this beat),
-    # filtered to only arcs that differ on agnostic dilemmas
-    lines: list[str] = []
-    lines.append("**This is a shared beat.** Write prose compatible with ALL states below.")
-    lines.append("")
-    lines.append(f"**Active state** (arc being generated): paths {sorted(active_paths)}")
-
-    all_arcs = graph.get_nodes_by_type("arc")
-    shadow_arcs: list[tuple[str, dict[str, object], set[str]]] = []
-    for aid, adata in all_arcs.items():
-        if aid == arc_id:
-            continue
-        arc_seq = adata.get("sequence", [])
-        if beat_id not in arc_seq:
-            continue
-        shadow_paths = set(adata.get("paths", []))
-
-        # Skip arcs that differ from active on a non-agnostic dilemma
-        has_non_agnostic_difference = False
-        for sp in shadow_paths:
-            sd = path_to_dilemma.get(sp)
-            if sd and sd not in agnostic_dilemmas:
-                active_p = active_path_per_dilemma.get(sd)
-                if active_p and active_p != sp:
-                    has_non_agnostic_difference = True
-                    break
-        if has_non_agnostic_difference:
-            continue
-
-        shadow_arcs.append((aid, adata, shadow_paths))
-
-    if shadow_arcs:
-        lines.append("")
-        lines.append("**Shadow states** (other arcs reaching this beat):")
-        for aid, adata, spaths in shadow_arcs:
-            arc_raw = adata.get("raw_id", aid)
-            lines.append(f"- {arc_raw}: paths {sorted(spaths)}")
-
-    return "\n".join(lines)
-
-
 def format_entity_states(graph: Graph, passage_id: str) -> str:
     """Format entity states relevant to a passage.
 
@@ -1541,55 +1441,6 @@ def format_atmospheric_detail(graph: Graph, passage_id: str) -> str:
         "Weave this sensory detail into the prose as a recurring anchor. "
         "Do not state it as a list — embed it naturally."
     )
-
-
-def format_entry_states(graph: Graph, passage_id: str, arc_id: str) -> str:
-    """Format entry state context for shared beats.
-
-    For poly-state beats, shows how readers arrive from different paths.
-
-    Args:
-        graph: Graph containing passage, beat, and arc nodes.
-        passage_id: The passage being generated.
-        arc_id: The arc being traversed.
-
-    Returns:
-        Formatted entry states, or empty string if not a shared beat.
-    """
-    passage = graph.get_node(passage_id)
-    if not passage:
-        return ""
-
-    beat_id = passage.get("from_beat", "")
-    beat = graph.get_node(beat_id) if beat_id else None
-    if not beat:
-        return ""
-
-    entry_states = beat.get("entry_states", [])
-    if not entry_states:
-        return ""
-
-    # Identify active paths from the arc
-    arc_node = graph.get_node(arc_id)
-    active_paths: set[str] = set()
-    if arc_node:
-        active_paths = set(arc_node.get("paths", []))
-
-    lines = [
-        "**Entry States** (how readers arrive at this shared beat):",
-        "",
-    ]
-
-    for entry in entry_states:
-        path_id = entry.get("path_id", "")
-        mood = entry.get("mood", "")
-        indicator = " <- ACTIVE" if path_id in active_paths else ""
-        lines.append(f"- {path_id}: {mood}{indicator}")
-
-    lines.append("")
-    lines.append("Write prose that accommodates ALL entry moods.")
-
-    return "\n".join(lines)
 
 
 # ---------------------------------------------------------------------------

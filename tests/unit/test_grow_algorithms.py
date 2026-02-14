@@ -2962,7 +2962,6 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
 
     Inspects the output schema passed to with_structured_output() and returns
     the appropriate mock response for each phase:
-    - Phase 2: PathAgnosticAssessment for shared beats
     - Phase 3: Empty intersections (no candidates in typical test graphs)
     - Phase 4a: SceneTypeTag for all beats
     - Phase 4b/4c: Empty gaps (no gap proposals)
@@ -2972,9 +2971,7 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
 
     from questfoundry.models.grow import (
         AtmosphericDetail,
-        PathAgnosticAssessment,
         PathMiniArc,
-        Phase2Output,
         Phase3Output,
         Phase4aOutput,
         Phase4bOutput,
@@ -2985,39 +2982,9 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
         SceneTypeTag,
     )
 
-    # Build Phase 2 response based on graph structure
-    dilemma_nodes = graph.get_nodes_by_type("dilemma")
     beat_nodes = graph.get_nodes_by_type("beat")
 
-    # Build dilemma -> paths mapping from path node dilemma_id properties
-    from questfoundry.graph.grow_algorithms import build_dilemma_paths
-
-    dilemma_paths_raw = build_dilemma_paths(graph)
-
-    # Build beat -> paths via belongs_to
-    beat_paths: dict[str, list[str]] = {}
-    belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
-    for edge in belongs_to_edges:
-        beat_paths.setdefault(edge["from"], []).append(edge["to"])
-
-    # Find shared beats and mark all as agnostic for simplicity
-    assessments: list[PathAgnosticAssessment] = []
-    for beat_id, bp_list in beat_paths.items():
-        if beat_id not in beat_nodes:
-            continue
-        agnostic_dilemmas: list[str] = []
-        for dilemma_id, d_paths in dilemma_paths_raw.items():
-            shared = [p for p in bp_list if p in d_paths]
-            if len(shared) > 1:
-                raw_did = dilemma_nodes[dilemma_id].get("raw_id", dilemma_id)
-                agnostic_dilemmas.append(raw_did)
-        if agnostic_dilemmas:
-            assessments.append(
-                PathAgnosticAssessment(beat_id=beat_id, agnostic_for=agnostic_dilemmas)
-            )
-
     # Pre-build outputs for each phase
-    phase2_output = Phase2Output(assessments=assessments)
     phase3_output = Phase3Output(intersections=[])
 
     # Phase 4a: tag all beats with alternating scene types
@@ -3036,7 +3003,7 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
     # Phase 4b/4c: no gaps proposed (keeps test graphs simple)
     phase4b_output = Phase4bOutput(gaps=[])
 
-    # Phase 4d: atmospheric details for all beats, no entry states
+    # Phase 4d: atmospheric details for all beats
     phase4d_output = Phase4dOutput(
         details=[
             AtmosphericDetail(
@@ -3045,7 +3012,6 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
             )
             for bid in sorted(beat_nodes.keys())
         ],
-        entry_states=[],
     )
 
     # Phase 8c: no overlays proposed (keeps test graphs simple)
@@ -3067,7 +3033,6 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
 
     # Map schema title -> output (schema is now a dict with "title" field)
     output_by_title: dict[str, object] = {
-        "Phase2Output": phase2_output,
         "Phase3Output": phase3_output,
         "Phase4aOutput": phase4a_output,
         "Phase4bOutput": phase4b_output,
@@ -3081,7 +3046,7 @@ def _make_grow_mock_model(graph: Graph) -> MagicMock:
     def _with_structured_output(schema: dict[str, Any], **_kwargs: object) -> AsyncMock:
         """Return a mock that produces the correct output for the given schema."""
         title = schema.get("title", "") if isinstance(schema, dict) else ""
-        output = output_by_title.get(title, phase2_output)
+        output = output_by_title.get(title, phase3_output)
         mock_structured = AsyncMock()
         mock_structured.ainvoke = AsyncMock(return_value=output)
         return mock_structured

@@ -1,5 +1,5 @@
 name: grow_phase4d_atmospheric
-description: Generate atmospheric details and entry states for beats
+description: Generate atmospheric details for beats
 
 system: |
   You are adding sensory atmosphere to story beats.
@@ -19,48 +19,26 @@ system: |
   Write ENVIRONMENT, not character emotion. Not "a sense of dread" but
   "the smell of wet earth and rust."
 
-  ## Entry States (OPTIONAL, cosmetic only)
-  Some beats are shared between paths. If shared beats exist, you MAY
-  provide a brief emotional mood tag per path — a cosmetic atmospheric
-  hint, not a prose-changing directive. Path-specific prose variants at
-  convergence points are handled by residue beats (Phase 8d), not here.
-
-  Shared beats: {shared_beats}
-
-  If shared beats exist, provide 2-3 word emotional descriptors (2-50 chars).
-  If no shared beats exist, omit entry_states entirely.
-
-  Examples: "cautious warmth", "defensive guilt", "bitter resolve"
-
   ## Beats to Annotate
   {beat_summaries}
-
-  ## Path Information
-  {path_info}
 
   ## What NOT to Do
   - Do NOT use IDs not listed in the Valid IDs section
   - Do NOT write character emotions as atmospheric detail
-  - Do NOT write full sentences as entry moods
-  - Do NOT provide entry_states for non-shared beats
-  - entry_states are OPTIONAL — omit if no shared beats exist
 
   ## Valid IDs
   Valid beat_ids (use ONLY these): {valid_beat_ids}
-  Valid path_ids (use ONLY these): {valid_path_ids}
   Total beats: {beat_count}
 
   ## Output Format
   Return a JSON object with:
   - details: array of {{beat_id, atmospheric_detail}} for ALL beats
-  - entry_states: (OPTIONAL) array of {{beat_id, moods: [{{path_id, mood}}]}} for shared beats
 
 user: |
-  Generate atmospheric details for all beats. Optionally include entry states
-  for shared beats (cosmetic mood hints only).
+  Generate atmospheric details for all beats.
 
   REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs
-  section. Every beat needs an atmospheric_detail. entry_states are optional.
+  section. Every beat needs an atmospheric_detail.
   Do NOT add prose before or after the JSON.
 
 components: []

@@ -170,7 +170,7 @@ class SqliteGraphStore:
 
         Args:
             stage: Current pipeline stage (e.g., "grow").
-            phase: Current phase within the stage (e.g., "path_agnostic").
+            phase: Current phase within the stage (e.g., "scene_types").
         """
         self._stage = stage
         self._phase = phase
@@ -465,7 +465,7 @@ class SqliteGraphStore:
 
         Args:
             stage: Pipeline stage (e.g., ``"grow"``).
-            phase: Phase within the stage (e.g., ``"path_agnostic"``).
+            phase: Phase within the stage (e.g., ``"scene_types"``).
 
         Returns:
             Number of mutations reversed.  Returns 0 if no mutations

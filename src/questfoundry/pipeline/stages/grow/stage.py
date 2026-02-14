@@ -127,7 +127,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
     # Map from registry phase name → self method name.
     # Mixin methods need binding to ``self`` at call time.
     _METHOD_PHASES: ClassVar[dict[str, str]] = {
-        "path_agnostic": "_phase_2_path_agnostic",
         "scene_types": "_phase_4a_scene_types",
         "narrative_gaps": "_phase_4b_narrative_gaps",
         "pacing_gaps": "_phase_4c_pacing_gaps",
