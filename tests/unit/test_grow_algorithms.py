@@ -329,6 +329,85 @@ class TestTopologicalSortBeats:
         result = topological_sort_beats(graph, ["beat::z", "beat::a"], priority_beats=None)
         assert result == ["beat::a", "beat::z"]
 
+    @staticmethod
+    def _create_dilemma_chain(graph: Graph, dilemma_id: str, prefix: str, count: int) -> list[str]:
+        """Create a chain of beats for a dilemma with requires edges."""
+        ids = []
+        for i in range(1, count + 1):
+            bid = f"beat::{prefix}{i}"
+            graph.create_node(
+                bid,
+                {
+                    "type": "beat",
+                    "dilemma_impacts": [{"dilemma_id": dilemma_id, "effect": "explores"}],
+                },
+            )
+            if i > 1:
+                graph.add_edge("requires", bid, f"beat::{prefix}{i - 1}")
+            ids.append(bid)
+        return ids
+
+    def test_dilemma_interleaving(self) -> None:
+        """Beats from different dilemmas interleave when no requires edges."""
+        graph = Graph.empty()
+        a_ids = self._create_dilemma_chain(graph, "d_alpha", "a", 3)
+        b_ids = self._create_dilemma_chain(graph, "d_beta", "b", 3)
+
+        result = topological_sort_beats(graph, a_ids + b_ids)
+
+        # Without interleaving (old behavior): a1, a2, a3, b1, b2, b3
+        # With interleaving: a1, b1, a2, b2, a3, b3
+        assert result == ["beat::a1", "beat::b1", "beat::a2", "beat::b2", "beat::a3", "beat::b3"]
+
+    def test_requires_edges_override_interleaving(self) -> None:
+        """Topological constraints take precedence over round-robin."""
+        graph = Graph.empty()
+        graph.create_node(
+            "beat::a1",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_alpha", "effect": "explores"}]},
+        )
+        graph.create_node(
+            "beat::b1",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_beta", "effect": "explores"}]},
+        )
+        # b1 requires a1 — a1 must come first even though b has 0 emissions
+        graph.add_edge("requires", "beat::b1", "beat::a1")
+
+        result = topological_sort_beats(graph, ["beat::a1", "beat::b1"])
+        assert result == ["beat::a1", "beat::b1"]
+
+    def test_shared_beats_still_sort_before_exclusive(self) -> None:
+        """Priority beats (shared) sort before non-priority regardless of dilemma."""
+        graph = Graph.empty()
+        # Shared beat from dilemma B
+        graph.create_node(
+            "beat::shared_b",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_beta", "effect": "explores"}]},
+        )
+        # Exclusive beat from dilemma A (alphabetically before beta)
+        graph.create_node(
+            "beat::excl_a",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_alpha", "effect": "commits"}]},
+        )
+
+        result = topological_sort_beats(
+            graph,
+            ["beat::shared_b", "beat::excl_a"],
+            priority_beats={"beat::shared_b"},
+        )
+        # shared_b is priority → comes first despite d_beta > d_alpha alphabetically
+        assert result == ["beat::shared_b", "beat::excl_a"]
+
+    def test_no_dilemma_impacts_falls_back_to_alphabetical(self) -> None:
+        """Beats without dilemma_impacts use alphabetical as before."""
+        graph = Graph.empty()
+        graph.create_node("beat::z_beat", {"type": "beat"})
+        graph.create_node("beat::a_beat", {"type": "beat"})
+        graph.create_node("beat::m_beat", {"type": "beat"})
+
+        result = topological_sort_beats(graph, ["beat::z_beat", "beat::a_beat", "beat::m_beat"])
+        assert result == ["beat::a_beat", "beat::m_beat", "beat::z_beat"]
+
 
 # ---------------------------------------------------------------------------
 # compute_shared_beats
