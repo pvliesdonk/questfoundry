@@ -652,37 +652,58 @@ dilemma_analyses_prompt: |
 
   Only `hard` dilemmas multiply story endings. `soft` and `flavor` dilemmas
   add mid-story variety but converge back, so they do not increase arc count.
-  A story can have many `soft`/`flavor` dilemmas for richness, but only 3-4
-  `hard` dilemmas before the ending count becomes unmanageable.
 
-  Classify based on: "Could the SAME scene plausibly follow BOTH answers?"
-  - NO (different world states) -> `hard`
-  - YES, but with meaningful differences -> `soft`
-  - YES, nearly identical -> `flavor`
+  ## Expected Distribution
+
+  Most dilemmas should be `soft` (different middles, same ending). At most
+  1-2 per story should be `hard` (0 is fine if no dilemma truly requires
+  separate endings). Use `flavor` for cosmetic-only differences.
+  Each `hard` dilemma DOUBLES the ending count: 2 hard = 4 endings,
+  3 hard = 8 endings, 4 hard = 16 endings (unmanageable).
+
+  ## Decision Process
+
+  For each dilemma, ask: "Could the SAME scene plausibly follow BOTH answers?"
+  1. Start with `soft` — this is the most common and correct policy
+  2. Downgrade to `flavor` if differences are purely cosmetic (tone/style only)
+  3. Escalate to `hard` ONLY if convergence is truly IMPOSSIBLE — the world
+     states are incompatible and no shared scene could follow both answers
+
+  After classifying all dilemmas, count your `hard` classifications.
+  If more than 2 are hard, re-evaluate. (See Self-Check section below.)
 
   ## Convergence Policies
 
-  **hard** -- Different endings. Paths create incompatible world states that
-  NEVER converge. Each `hard` dilemma doubles the number of distinct endings.
-  Use `hard` when ANY of these triggers apply:
-  - Someone lives vs dies, is guilty vs innocent, is present vs absent
-  - A key object/place is destroyed vs intact, revealed vs hidden
-  - The antagonist's identity or motive fundamentally changes
-  - The protagonist's core allegiance flips (ally vs enemy)
-  Examples: murder vs accident, betrayal vs loyalty (when it changes who
-  the antagonist is), artifact destroyed vs preserved, spy revealed vs hidden.
-
-  **soft** -- Different middles. Paths have meaningfully different beats but
-  converge after `payoff_budget` exclusive beats. The ending is the same;
-  the journey differs. DEFAULT when unsure.
+  **soft** (most common) -- Different middles. Paths have meaningfully
+  different beats but converge after `payoff_budget` exclusive beats. The
+  ending is the same; the journey differs.
   Examples: trust vs suspicion (same ally, different relationship tone),
   stealth vs confrontation (different approach, same destination),
-  investigate alone vs recruit help.
+  investigate alone vs recruit help, reveal information vs keep it secret
+  (when both paths eventually reach the same confrontation).
 
   **flavor** -- Different tone. Paths converge immediately and differ only
   in dialogue style, description color, or cosmetic details.
   Examples: polite vs blunt greeting, left door vs right door (same room),
   diplomatic vs forceful persuasion with identical outcome.
+
+  **hard** (rare, max 1-2 per story) -- Different endings. Paths create
+  incompatible world states that NEVER converge. Use `hard` ONLY when ALL
+  of these conditions are met:
+  - The answers produce a mutually exclusive world state caused by at
+    least one of: someone lives vs dies, a key entity is permanently
+    destroyed vs intact, or the protagonist's core identity/allegiance
+    is irrevocably changed
+  - No plausible scene could follow both answers
+  - The story REQUIRES separate endings for this dilemma
+
+  ## What NOT to classify as `hard`
+  - Different activities or approaches (that is `soft`)
+  - Revealed vs hidden information (usually `soft` — both paths can reach
+    the same conclusion, UNLESS the revelation irrevocably changes identity
+    or allegiance, in which case the triggers above apply)
+  - Different emotional tones (that is `flavor` or `soft`)
+  - Choosing different allies or methods (usually `soft` — the destination is the same)
 
   ## payoff_budget
 
@@ -703,6 +724,17 @@ dilemma_analyses_prompt: |
   The residue_note describes differences persisting AFTER convergence.
   Set to null for `hard` dilemmas or when no differences persist.
 
+  ## Ending Tone
+
+  For `hard` dilemmas: provide a 2-5 word emotional descriptor for how
+  endings shaped by this dilemma should feel. This guides the FILL stage
+  when generating prose for endings on each arc.
+  GOOD: "cold justice", "bittersweet triumph", "quiet dread"
+  BAD: "the ending is sad" (too vague)
+
+  For `soft` and `flavor`: set ending_tone to null (their paths converge,
+  so ending tone comes from the shared continuation).
+
   ## Context
 
   {dilemma_context}
@@ -713,15 +745,6 @@ dilemma_analyses_prompt: |
   {{
     "dilemma_analyses": [
       {{
-        "dilemma_id": "dilemma::example_id",
-        "convergence_policy": "hard",
-        "payoff_budget": 5,
-        "reasoning": "Murder vs accident produces incompatible crime scenes, suspect lists, and endings.",
-        "convergence_point": null,
-        "residue_note": null,
-        "ending_tone": "cold justice"
-      }},
-      {{
         "dilemma_id": "dilemma::example_soft",
         "convergence_policy": "soft",
         "payoff_budget": 3,
@@ -729,6 +752,24 @@ dilemma_analyses_prompt: |
         "convergence_point": "paths converge at council_chamber for the final confrontation",
         "residue_note": "suspicious-path characters remain wary of the host",
         "ending_tone": null
+      }},
+      {{
+        "dilemma_id": "dilemma::example_flavor",
+        "convergence_policy": "flavor",
+        "payoff_budget": 2,
+        "reasoning": "Polite vs blunt greeting changes dialogue tone but leads to the same meeting outcome.",
+        "convergence_point": "paths converge at the tavern entrance after introductions",
+        "residue_note": null,
+        "ending_tone": null
+      }},
+      {{
+        "dilemma_id": "dilemma::example_hard",
+        "convergence_policy": "hard",
+        "payoff_budget": 5,
+        "reasoning": "Murder vs accident produces incompatible crime scenes, suspect lists, and endings — no shared scene can follow both.",
+        "convergence_point": null,
+        "residue_note": null,
+        "ending_tone": "cold justice"
       }}
     ]
   }}
@@ -737,17 +778,25 @@ dilemma_analyses_prompt: |
   ## Rules
   - Classify EVERY dilemma from the ### Valid Dilemma IDs list
   - Classify based on the dilemma's QUESTION and STAKES, not path count
-  - Apply the `hard` triggers above FIRST; if none match, use `soft`; use `flavor` only for cosmetic differences
+  - Start with `soft` (most common); downgrade to `flavor` for cosmetic differences; escalate to `hard` ONLY if world states are truly incompatible
+  - Do NOT classify as `hard` just because paths have different activities or approaches
+  - Do NOT classify as `hard` unless convergence is IMPOSSIBLE (not just difficult)
+  - If in doubt between `soft` and `hard`, choose `soft` — it preserves variety without multiplying endings
   - `reasoning` must be 1-2 sentences explaining WHY (reference the question/stakes)
   - GOOD reasoning: "Homicide vs accident creates incompatible suspect lists and requires different endings."
   - BAD reasoning: "It is soft." / "Only one path."
   - `convergence_point`: null for `hard`; location-based description for `soft`/`flavor`
   - `residue_note`: null for `hard` or if no differences persist; short description otherwise
-  - `ending_tone`: 2-5 word emotional descriptor for how endings shaped by this dilemma should feel (e.g. "cold justice", "bittersweet triumph", "quiet dread"). Required for `hard` dilemmas (they multiply endings). null for `soft`/`flavor` (their paths converge, so ending tone comes from the shared continuation).
+  - `ending_tone`: required for `hard`, null for `soft`/`flavor` (see Ending Tone section above)
+
+  ## Self-Check
+  Count your classifications. If more than 2 are `hard`, re-evaluate — most
+  stories need at most 1-2 hard dilemmas.
 
   ## REMINDER
-  Classify ALL dilemmas. Ask: "Could the SAME scene follow both answers?"
-  NO -> hard. YES with differences -> soft. YES nearly identical -> flavor.
+  Classify ALL dilemmas. Most should be `soft`. Only 1-2 should be `hard`.
+  Ask: "Could the SAME scene follow both answers?"
+  YES with differences -> soft (most common). YES nearly identical -> flavor. NO (incompatible world states) -> hard (rare).
 
   ## Output
   Return ONLY valid JSON with the "dilemma_analyses" array. Classify ALL dilemmas.
