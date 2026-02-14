@@ -219,13 +219,18 @@ def topological_sort_beats(
 ) -> list[str]:
     """Topologically sort a subset of beats using requires edges.
 
-    Uses Kahn's algorithm with deterministic tie-breaking. When multiple beats
-    have in-degree 0, beats in *priority_beats* sort first, then alphabetically.
-    This lets callers push shared/common beats early in the sequence and
-    exclusive beats late, so arcs naturally diverge toward the end.
+    Uses Kahn's algorithm with deterministic tie-breaking.  Tie-breaking
+    order (highest priority first):
+
+    1. **Priority tier** — beats in *priority_beats* (shared) before others.
+    2. **Dilemma round-robin** — beats from the dilemma that has emitted
+       fewest beats so far sort first, interleaving dilemmas instead of
+       clustering all of one dilemma's beats together.
+    3. **Alphabetical** — deterministic within the same tier and count.
 
     Args:
-        graph: Graph containing requires edges.
+        graph: Graph containing requires edges and beat nodes with
+            optional ``dilemma_impacts`` metadata.
         beat_ids: Subset of beat node IDs to sort.
         priority_beats: Optional set of beat IDs that should sort before
             non-priority beats when topological constraints allow. When
@@ -242,8 +247,24 @@ def topological_sort_beats(
 
     beat_set = set(beat_ids)
 
-    def _sort_key(bid: str) -> tuple[int, str]:
-        return (0 if priority_beats and bid in priority_beats else 1, bid)
+    # Build beat → dilemma mapping from dilemma_impacts metadata.
+    # A beat may impact multiple dilemmas; use the first one for
+    # round-robin grouping (beats typically belong to one dilemma).
+    beat_dilemma: dict[str, str] = {}
+    for bid in beat_set:
+        beat_data = graph.get_node(bid)
+        if beat_data:
+            impacts = beat_data.get("dilemma_impacts", [])
+            if impacts:
+                beat_dilemma[bid] = impacts[0].get("dilemma_id", "")
+
+    dilemma_emission: dict[str, int] = {}
+
+    def _sort_key(bid: str) -> tuple[int, int, str]:
+        priority = 0 if priority_beats and bid in priority_beats else 1
+        did = beat_dilemma.get(bid, "")
+        rr = dilemma_emission.get(did, 0)
+        return (priority, rr, bid)
 
     # Build adjacency within the subset
     in_degree: dict[str, int] = dict.fromkeys(beat_set, 0)
@@ -257,19 +278,22 @@ def topological_sort_beats(
             in_degree[from_id] += 1
             successors[to_id].append(from_id)
 
-    # Kahn's with priority + alphabetical tie-breaking
+    # Kahn's with priority + round-robin + alphabetical tie-breaking
     queue = sorted((bid for bid, deg in in_degree.items() if deg == 0), key=_sort_key)
     result: list[str] = []
 
     while queue:
         node = queue.pop(0)  # Take highest-priority first
         result.append(node)
+        # Track emission count for round-robin
+        did = beat_dilemma.get(node, "")
+        dilemma_emission[did] = dilemma_emission.get(did, 0) + 1
         new_ready = []
         for successor in successors[node]:
             in_degree[successor] -= 1
             if in_degree[successor] == 0:
                 new_ready.append(successor)
-        # Insert new ready nodes maintaining priority + alphabetical order
+        # Re-sort queue: emission counts changed, so round-robin ranks update
         queue = sorted(queue + new_ready, key=_sort_key)
 
     if len(result) != len(beat_set):
