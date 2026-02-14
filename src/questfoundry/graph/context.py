@@ -973,9 +973,10 @@ def format_dilemma_analysis_context(
     lines = [
         "## Dilemma Convergence Brief",
         "",
-        "Classify each dilemma below. Focus on whether the path EFFECTS create",
-        "different world states (hard), different approaches (soft), or just",
-        "different flavor text (flavor).",
+        "Classify each dilemma below. Most dilemmas are `soft` — paths diverge",
+        "then reconverge. Reserve `hard` for at most 1-2 dilemmas where the",
+        "QUESTION creates incompatible world states (e.g., someone lives vs dies).",
+        "Use `flavor` for cosmetic-only differences.",
         "",
         *dilemma_blocks,
         "",
