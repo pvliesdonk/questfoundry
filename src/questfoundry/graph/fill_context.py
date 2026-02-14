@@ -1611,7 +1611,7 @@ def format_ending_differentiation(graph: Graph, passage_id: str) -> str:
         tracks = graph.get_edges(from_id=scoped_cw, edge_type="tracks")
         if not tracks:
             continue
-        consequence_id = tracks[0]["to"]
+        consequence_id = sorted(tracks, key=lambda e: e["to"])[0]["to"]
         cons_node = graph.get_node(consequence_id)
         if not cons_node:
             continue
@@ -1623,7 +1623,7 @@ def format_ending_differentiation(graph: Graph, passage_id: str) -> str:
         has_cons = graph.get_edges(to_id=consequence_id, edge_type="has_consequence")
         path_theme = ""
         if has_cons:
-            path_id = has_cons[0]["from"]
+            path_id = sorted(has_cons, key=lambda e: e["from"])[0]["from"]
             path_node = graph.get_node(path_id)
             if path_node:
                 path_theme = path_node.get("path_theme", "") or path_node.get(
