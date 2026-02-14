@@ -150,6 +150,9 @@ class Graph:
         Args:
             file_path: Path to save graph (``.db``).
         """
+        if file_path.suffix != ".db":
+            raise ValueError(f"Graph can only be saved to .db files, got: {file_path}")
+
         # Update last_modified timestamp
         self._store.set_meta("last_modified", datetime.now(UTC).isoformat())
 
