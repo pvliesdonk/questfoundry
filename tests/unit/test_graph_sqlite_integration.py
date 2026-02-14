@@ -67,13 +67,14 @@ class TestGraphLoadDetection:
         assert loaded.has_node("entity::charlie")
         assert not loaded.has_node("entity::alice")
 
-    def test_load_json_when_no_db(self, tmp_path: Path) -> None:
-        """Loads graph.json when no .db exists."""
+    def test_load_json_auto_migrates_to_sqlite(self, tmp_path: Path) -> None:
+        """Loading graph.json auto-migrates to SQLite when no .db exists."""
         _write_json_graph(tmp_path)
         graph = Graph.load(tmp_path)
 
-        assert not graph.is_sqlite_backed
+        assert graph.is_sqlite_backed
         assert graph.has_node("entity::alice")
+        assert (tmp_path / "graph.db").exists()
 
     def test_load_db_is_sqlite_backed(self, tmp_path: Path) -> None:
         """Loading .db results in SQLite-backed graph."""
@@ -794,20 +795,18 @@ class TestRewind:
         assert not graph.has_node("p2")
         assert not graph.has_node("p3")
 
-    def test_rewind_nonexistent_phase_raises(self) -> None:
-        """Rewind raises ValueError for a phase with no mutations."""
+    def test_rewind_nonexistent_phase_is_noop(self) -> None:
+        """Rewind returns 0 for a phase with no mutations."""
         store = SqliteGraphStore()
         graph = Graph(store=store)
 
         with graph.mutation_context("grow", "spine"):
             graph.create_node("n1", {"type": "t"})
 
-        raised = False
-        try:
-            graph.rewind_to_phase("grow", "nonexistent")
-        except ValueError:
-            raised = True
-        assert raised, "Expected ValueError for nonexistent phase"
+        count = graph.rewind_to_phase("grow", "nonexistent")
+        assert count == 0
+        # Original node should still exist
+        assert graph.has_node("n1")
 
     def test_rewind_stage_reverses_all(self) -> None:
         """rewind_stage reverses all phases within the stage."""

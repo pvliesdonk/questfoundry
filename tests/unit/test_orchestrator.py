@@ -1105,7 +1105,7 @@ def _simulate_mutation_block(
     graph = _load_graph_for_mutation(project_path, stage_name)
     apply_mutations(graph, stage_name, artifact_data)
     graph.set_last_stage(stage_name)
-    graph.save(project_path / "graph.json")
+    graph.save(project_path / "graph.db")
     return graph
 
 
@@ -1122,7 +1122,7 @@ class TestMutationRerunDetection:
 
         _simulate_mutation_block(tmp_path, "brainstorm", _BRAINSTORM_ARTIFACT)
 
-        snapshot_path = tmp_path / "snapshots" / "pre-brainstorm.json"
+        snapshot_path = tmp_path / "snapshots" / "pre-brainstorm.db"
         assert snapshot_path.exists()
 
         # Snapshot should contain dream-only state (no brainstorm nodes)
@@ -1227,9 +1227,9 @@ class TestMutationRerunDetection:
         graph.set_last_stage("brainstorm")
         graph.save(tmp_path / "graph.json")
 
-        # No pre-brainstorm.json exists — simulate snapshot deletion
-        snapshot_path = tmp_path / "snapshots" / "pre-brainstorm.json"
-        assert not snapshot_path.exists()
+        # No pre-brainstorm snapshot exists (neither .db nor .json)
+        assert not (tmp_path / "snapshots" / "pre-brainstorm.db").exists()
+        assert not (tmp_path / "snapshots" / "pre-brainstorm.json").exists()
 
         # Re-run without snapshot should raise, not silently corrupt
         with pytest.raises(ValueError, match="requires the pre-stage snapshot"):
@@ -1247,6 +1247,6 @@ class TestMutationRerunDetection:
         assert result.get_node("vision") is not None
         assert result.get_last_stage() == "dream"
 
-        # Snapshot saved
-        snapshot_path = tmp_path / "snapshots" / "pre-dream.json"
+        # Snapshot saved (SQLite format after auto-migration)
+        snapshot_path = tmp_path / "snapshots" / "pre-dream.db"
         assert snapshot_path.exists()

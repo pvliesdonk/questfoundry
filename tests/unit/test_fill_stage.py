@@ -182,31 +182,33 @@ class TestFillStageExecute:
             assert "FILL requires completed GROW" not in str(e)
 
     @pytest.mark.asyncio
-    async def test_rerun_restores_snapshot(self, mock_model: MagicMock, tmp_path: Path) -> None:
-        """Re-running FILL should restore pre-FILL snapshot, removing stale nodes."""
-        # Pre-FILL snapshot: GROW-completed, no voice node
-        pre_fill = Graph.empty()
-        pre_fill.set_last_stage("grow")
-        pre_fill.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
-        snapshot_dir = tmp_path / "snapshots"
-        snapshot_dir.mkdir(parents=True, exist_ok=True)
-        pre_fill.save(snapshot_dir / "pre-fill.json")
-
-        # Main graph: FILL already ran, has voice node
+    async def test_rerun_rewinds_fill_mutations(
+        self, mock_model: MagicMock, tmp_path: Path
+    ) -> None:
+        """Re-running FILL should rewind fill mutations, removing stale nodes."""
+        # Main graph: simulate GROW completed, then FILL ran and created voice node
         g = Graph.empty()
-        g.set_last_stage("fill")
-        g.create_node(
-            "voice::voice",
-            {"type": "voice", "raw_id": "voice", "pov": "first", "tense": "present"},
-        )
+        g.set_last_stage("grow")
         g.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
         g.save(tmp_path / "graph.json")
+
+        # Reload as SQLite-backed (auto-migration)
+        g = Graph.load(tmp_path)
+
+        # Simulate a previous FILL run by creating the voice node within fill mutation context
+        with g.mutation_context(stage="fill", phase="voice"):
+            g.create_node(
+                "voice::voice",
+                {"type": "voice", "raw_id": "voice", "pov": "first", "tense": "present"},
+            )
+        g.set_last_stage("fill")
+        g.save(tmp_path / "graph.db")
 
         stage = FillStage(project_path=tmp_path)
         _mock_implemented_phases(stage)
         await stage.execute(mock_model, "", project_path=tmp_path)
 
-        # The voice node from the stale graph should NOT cause a conflict
+        # The voice node from the stale fill run should have been rewound
         # (snapshot restored before phases run)
         saved = Graph.load(tmp_path)
         assert saved.get_last_stage() == "fill"
@@ -372,27 +374,6 @@ class TestPhaseOrder:
             "revision",
             "arc_validation",
         ]
-
-
-class TestCheckpointing:
-    def test_checkpoint_path(self) -> None:
-        stage = FillStage()
-        path = stage._get_checkpoint_path(Path("/proj"), "voice")
-        assert path == Path("/proj/snapshots/fill-pre-voice.json")
-
-    def test_save_and_load_checkpoint(self, tmp_path: Path) -> None:
-        stage = FillStage()
-        g = Graph.empty()
-        g.set_last_stage("grow")
-
-        stage._save_checkpoint(g, tmp_path, "voice")
-        loaded = stage._load_checkpoint(tmp_path, "voice")
-        assert loaded.get_last_stage() == "grow"
-
-    def test_load_missing_checkpoint(self, tmp_path: Path) -> None:
-        stage = FillStage()
-        with pytest.raises(FillStageError, match="No checkpoint found"):
-            stage._load_checkpoint(tmp_path, "nonexistent")
 
 
 def _make_voice_output() -> FillPhase0Output:
