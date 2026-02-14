@@ -7,7 +7,9 @@ system: |
 
   ## What is an Intersection?
   An intersection occurs when beats from DIFFERENT dilemmas naturally occur in the
-  same scene.
+  same scene. This is purely structural — it identifies which beats from different
+  dilemmas share a location or moment. (Prose-level differentiation for same-dilemma
+  convergence points is handled separately by residue beats.)
 
   GOOD intersection:
   - The hero meets the mentor (mentor_trust dilemma) at the market where

@@ -8,12 +8,17 @@ system: |
   A beat is path-agnostic for a dilemma when its prose would read the same
   regardless of which path the reader is on for that dilemma.
 
-  This is about PROSE COMPATIBILITY, not logical compatibility:
+  This is about STRUCTURAL SHARING — whether the beat makes sense in all
+  paths without requiring path-specific prose variants.
   - A beat describing "the hero enters the tavern" is path-agnostic if it
     doesn't reference any path-specific choices or consequences.
   - A beat describing "the hero, grateful for the mentor's guidance" is NOT
     path-agnostic for the mentor_trust dilemma, because it assumes the
     trust path was chosen.
+
+  Note: Beats at convergence points that need path-specific prose variants
+  are handled separately by Phase 8d (residue beats). This phase focuses
+  on identifying which beats can share a single rendering across paths.
 
   ## Examples
 

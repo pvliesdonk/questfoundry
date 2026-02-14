@@ -19,18 +19,18 @@ system: |
   Write ENVIRONMENT, not character emotion. Not "a sense of dread" but
   "the smell of wet earth and rust."
 
-  ## Entry States (shared beats only, 2-50 characters per mood)
-  Some beats are shared between paths — players arrive from different
-  emotional contexts. For EACH shared beat, describe the emotional quality
-  a reader carries FROM each path.
+  ## Entry States (OPTIONAL, cosmetic only)
+  Some beats are shared between paths. If shared beats exist, you MAY
+  provide a brief emotional mood tag per path — a cosmetic atmospheric
+  hint, not a prose-changing directive. Path-specific prose variants at
+  convergence points are handled by residue beats (Phase 8d), not here.
 
   Shared beats: {shared_beats}
 
-  Examples (with character counts):
-  - path_trust: "cautious warmth" (15 chars) — built trust with mentor
-  - path_betray: "defensive guilt" (15 chars) — chose self-preservation
+  If shared beats exist, provide 2-3 word emotional descriptors (2-50 chars).
+  If no shared beats exist, omit entry_states entirely.
 
-  Write 2-3 word emotional descriptors (2-50 chars). Not sentences.
+  Examples: "cautious warmth", "defensive guilt", "bitter resolve"
 
   ## Beats to Annotate
   {beat_summaries}
@@ -43,6 +43,7 @@ system: |
   - Do NOT write character emotions as atmospheric detail
   - Do NOT write full sentences as entry moods
   - Do NOT provide entry_states for non-shared beats
+  - entry_states are OPTIONAL — omit if no shared beats exist
 
   ## Valid IDs
   Valid beat_ids (use ONLY these): {valid_beat_ids}
@@ -52,13 +53,14 @@ system: |
   ## Output Format
   Return a JSON object with:
   - details: array of {{beat_id, atmospheric_detail}} for ALL beats
-  - entry_states: array of {{beat_id, moods: [{{path_id, mood}}]}} for shared beats ONLY
+  - entry_states: (OPTIONAL) array of {{beat_id, moods: [{{path_id, mood}}]}} for shared beats
 
 user: |
-  Generate atmospheric details for all beats, and entry states for shared beats.
+  Generate atmospheric details for all beats. Optionally include entry states
+  for shared beats (cosmetic mood hints only).
 
   REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs
-  section. Every beat needs an atmospheric_detail. Only shared beats get entry_states.
+  section. Every beat needs an atmospheric_detail. entry_states are optional.
   Do NOT add prose before or after the JSON.
 
 components: []
