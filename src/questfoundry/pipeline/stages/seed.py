@@ -443,7 +443,9 @@ class SeedStage:
 
         # Fail fast if outer retry exhausted with unresolved semantic errors
         if result.semantic_errors:
-            error_summary = "; ".join(str(e) for e in result.semantic_errors[:3])
+            error_summary = "; ".join(
+                f"{e.field_path}: {e.issue}" for e in result.semantic_errors[:3]
+            )
             raise SeedStageError(
                 f"SEED serialization failed: outer retry exhausted with "
                 f"{len(result.semantic_errors)} unresolved errors: {error_summary}"
