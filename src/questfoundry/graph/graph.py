@@ -15,8 +15,6 @@ default). See docs/architecture/graph-storage.md for design details.
 
 from __future__ import annotations
 
-import json
-import os
 import warnings
 from contextlib import contextmanager
 from datetime import UTC, datetime
@@ -92,13 +90,8 @@ class Graph:
     def load(cls, project_path: Path) -> Graph:
         """Load graph from project directory.
 
-        Detection order:
-        1. ``graph.db`` — open existing SQLite database
-        2. ``graph.json`` — load as DictGraphStore (JSON backend)
-        3. Neither — return empty graph (DictGraphStore)
-
-        To migrate from JSON to SQLite, use :func:`migrate_json_to_sqlite`
-        explicitly or enable auto-migration at the stage level.
+        Looks for ``graph.db`` in the project directory.  Returns an
+        empty graph if no database file exists.
 
         Args:
             project_path: Path to project root directory.
@@ -107,46 +100,33 @@ class Graph:
             Loaded graph.
         """
         db_file = project_path / "graph.db"
-        json_file = project_path / "graph.json"
 
         if db_file.exists():
             return cls.load_from_file(db_file)
-
-        if json_file.exists():
-            # Auto-migrate JSON to SQLite on first load
-            from questfoundry.graph.migration import migrate_json_to_sqlite
-
-            store = migrate_json_to_sqlite(json_file, db_file)
-            return cls(store=store)
 
         return cls.empty()
 
     @classmethod
     def load_from_file(cls, file_path: Path) -> Graph:
-        """Load graph from a specific file (e.g., snapshot).
-
-        Supports both ``.json`` and ``.db`` files. For ``.db`` files,
-        opens a SqliteGraphStore directly.
+        """Load graph from a ``.db`` file (e.g., snapshot).
 
         Args:
-            file_path: Path to graph file (``.json`` or ``.db``).
+            file_path: Path to graph ``.db`` file.
 
         Returns:
             Loaded graph.
 
         Raises:
             FileNotFoundError: If file doesn't exist.
-            json.JSONDecodeError: If JSON file contains invalid JSON.
+            ValueError: If file is not a ``.db`` file.
         """
-        if file_path.suffix == ".db":
-            from questfoundry.graph.sqlite_store import SqliteGraphStore
+        if file_path.suffix != ".db":
+            raise ValueError(f"Expected .db file, got: {file_path}")
 
-            store = SqliteGraphStore(file_path)
-            return cls(store=store)
+        from questfoundry.graph.sqlite_store import SqliteGraphStore
 
-        with file_path.open() as f:
-            data = json.load(f)
-        return cls.from_dict(data)
+        store = SqliteGraphStore(file_path)
+        return cls(store=store)
 
     @classmethod
     def empty(cls) -> Graph:
@@ -162,14 +142,13 @@ class Graph:
     # -------------------------------------------------------------------------
 
     def save(self, file_path: Path) -> None:
-        """Persist graph to a file (atomic write).
+        """Persist graph to a ``.db`` file (atomic write).
 
-        For ``.json`` files, serializes via ``to_dict()`` and writes JSON.
-        For ``.db`` files, copies the SQLite database (if the store is
-        SQLite-backed) or bulk-exports to a new database.
+        Copies the SQLite database (if the store is already SQLite-backed)
+        or bulk-exports from the current store to a new database.
 
         Args:
-            file_path: Path to save graph (``.json`` or ``.db``).
+            file_path: Path to save graph (``.db``).
         """
         # Update last_modified timestamp
         self._store.set_meta("last_modified", datetime.now(UTC).isoformat())
@@ -177,23 +156,7 @@ class Graph:
         # Ensure parent directory exists
         file_path.parent.mkdir(parents=True, exist_ok=True)
 
-        if file_path.suffix == ".db":
-            self._save_db(file_path)
-        else:
-            self._save_json(file_path)
-
-    def _save_json(self, file_path: Path) -> None:
-        """Write graph as JSON with atomic temp-file + rename."""
-        data = self._store.to_dict()
-        temp_file = file_path.with_name(f"{file_path.name}.{os.getpid()}.tmp")
-        try:
-            with temp_file.open("w") as f:
-                json.dump(data, f, indent=2)
-            temp_file.rename(file_path)
-        except Exception:
-            if temp_file.exists():
-                temp_file.unlink()
-            raise
+        self._save_db(file_path)
 
     def _save_db(self, file_path: Path) -> None:
         """Save graph as a SQLite database.
