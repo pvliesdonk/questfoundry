@@ -66,9 +66,7 @@ def _load_graph_for_mutation(project_path: Path, stage_name: str) -> Graph:
     graph = Graph.load(project_path)
     last_stage = graph.get_last_stage()
     prerequisite = _MUTATION_STAGE_PREREQUISITES.get(stage_name)
-    db_snapshot = project_path / "snapshots" / f"pre-{stage_name}.db"
-    json_snapshot = project_path / "snapshots" / f"pre-{stage_name}.json"
-    snapshot_path = db_snapshot if db_snapshot.exists() else json_snapshot
+    snapshot_path = project_path / "snapshots" / f"pre-{stage_name}.db"
 
     if last_stage == prerequisite:
         # First run: save clean pre-stage snapshot

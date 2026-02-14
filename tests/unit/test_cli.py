@@ -64,7 +64,7 @@ def test_inspect_json_emits_valid_json(tmp_path: Path) -> None:
             "summary": "start",
         },
     )
-    graph.save(project_path / "graph.json")
+    graph.save(project_path / "graph.db")
 
     result = runner.invoke(app, ["inspect", "--project", str(project_path), "--json"])
 
@@ -171,7 +171,7 @@ def test_status_shows_completed_stage(tmp_path: Path) -> None:
     # Create graph with dream completed
     graph = Graph.empty()
     graph.set_last_stage("dream")
-    graph.save(project_path / "graph.json")
+    graph.save(project_path / "graph.db")
 
     result = runner.invoke(app, ["status", "--project", str(project_path)])
 
@@ -1494,7 +1494,7 @@ def test_generate_images_no_selection_fails(tmp_path: Path) -> None:
 
     g = Graph()
     g.set_last_stage("dress")
-    g.save(project / "graph.json")
+    g.save(project / "graph.db")
 
     result = runner.invoke(
         app, ["generate-images", "--project", str(project), "--image-provider", "placeholder"]
@@ -1528,7 +1528,7 @@ def test_generate_images_success(tmp_path: Path) -> None:
         "dress_meta::selection",
         {"type": "dress_meta", "selected_briefs": [], "total_briefs": 0},
     )
-    g.save(project / "graph.json")
+    g.save(project / "graph.db")
 
     result = runner.invoke(
         app, ["generate-images", "--project", str(project), "--image-provider", "placeholder"]

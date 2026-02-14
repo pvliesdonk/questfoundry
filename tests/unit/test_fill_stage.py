@@ -40,7 +40,7 @@ def grow_graph(tmp_path: Path) -> Graph:
         {"type": "passage", "raw_id": "p1", "from_beat": "", "summary": "test"},
     )
 
-    g.save(tmp_path / "graph.json")
+    g.save(tmp_path / "graph.db")
     return g
 
 
@@ -141,7 +141,7 @@ class TestFillStageExecute:
     ) -> None:
         g = Graph.empty()
         g.set_last_stage(last_stage)
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         stage = FillStage(project_path=tmp_path)
         with pytest.raises(FillStageError, match="FILL requires completed GROW"):
@@ -161,7 +161,7 @@ class TestFillStageExecute:
         # Save the pre-FILL checkpoint (needed for re-runs from fill/dress/ship)
         snapshot_dir = tmp_path / "snapshots"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
-        pre_fill.save(snapshot_dir / "pre-fill.json")
+        pre_fill.save(snapshot_dir / "pre-fill.db")
 
         # The main graph has progressed past GROW
         g = Graph.empty()
@@ -171,7 +171,7 @@ class TestFillStageExecute:
             {"type": "voice", "raw_id": "voice", "pov": "third_limited", "tense": "past"},
         )
         g.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         stage = FillStage(project_path=tmp_path)
         # Should not raise FillStageError about GROW requirement
@@ -190,7 +190,7 @@ class TestFillStageExecute:
         g = Graph.empty()
         g.set_last_stage("grow")
         g.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         # Reload as SQLite-backed (auto-migration)
         g = Graph.load(tmp_path)

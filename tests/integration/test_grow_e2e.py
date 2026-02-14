@@ -143,7 +143,7 @@ def pipeline_result(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
 
     tmp_path = tmp_path_factory.mktemp("grow_e2e")
     graph = make_e2e_fixture_graph()
-    graph.save(tmp_path / "graph.json")
+    graph.save(tmp_path / "graph.db")
 
     stage = GrowStage(project_path=tmp_path)
     mock_model = _make_e2e_mock_model(graph)

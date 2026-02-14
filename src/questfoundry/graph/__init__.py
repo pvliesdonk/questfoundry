@@ -32,7 +32,6 @@ from questfoundry.graph.errors import (
     NodeReferencedError,
 )
 from questfoundry.graph.graph import Graph
-from questfoundry.graph.migration import migrate_json_to_sqlite
 from questfoundry.graph.mutations import (
     BrainstormMutationError,
     BrainstormValidationError,
@@ -99,7 +98,6 @@ __all__ = [
     "has_mutation_handler",
     "is_entity_id",
     "list_snapshots",
-    "migrate_json_to_sqlite",
     "normalize_scoped_id",
     "parse_entity_id",
     "parse_hierarchical_path_id",

@@ -20,7 +20,7 @@ def tmp_project(tmp_path: Path) -> Path:
 
     graph = Graph.empty()
     graph.set_last_stage("seed")
-    graph.save(tmp_path / "graph.json")
+    graph.save(tmp_path / "graph.db")
     return tmp_path
 
 
@@ -93,7 +93,7 @@ class TestGrowStageExecute:
 
         # Graph without last_stage set (no SEED completed)
         graph = Graph.empty()
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
         stage = GrowStage(project_path=tmp_path)
         with pytest.raises(GrowStageError, match="GROW requires completed SEED stage"):
             await stage.execute(model=mock_model, user_prompt="")
@@ -107,7 +107,7 @@ class TestGrowStageExecute:
         # Graph with last_stage set to "dream" (wrong stage)
         graph = Graph.empty()
         graph.set_last_stage("dream")
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
         stage = GrowStage(project_path=tmp_path)
         with pytest.raises(GrowStageError, match="Current last_stage: 'dream'"):
             await stage.execute(model=mock_model, user_prompt="")
@@ -122,14 +122,14 @@ class TestGrowStageExecute:
         # Current graph is at a later stage (e.g., after FILL)
         current = Graph.empty()
         current.set_last_stage("fill")
-        current.save(tmp_path / "graph.json")
+        current.save(tmp_path / "graph.db")
 
         # Pre-GROW checkpoint contains SEED-completed graph state
         pre_grow = Graph.empty()
         pre_grow.set_last_stage("seed")
         checkpoints_dir = tmp_path / "snapshots"
         checkpoints_dir.mkdir(parents=True, exist_ok=True)
-        pre_grow.save(checkpoints_dir / "pre-grow.json")
+        pre_grow.save(checkpoints_dir / "pre-grow.db")
 
         stage = GrowStage(project_path=tmp_path)
         result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
@@ -147,7 +147,7 @@ class TestGrowStageExecute:
 
         graph = Graph.empty()
         graph.set_last_stage("fill")
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         stage = GrowStage(project_path=tmp_path)
         result_dict, _, _ = await stage.execute(model=mock_model, user_prompt="")
@@ -255,7 +255,7 @@ class TestGrowStageGateRejection:
         # Pre-populate graph with a marker node
         graph = Graph.load(tmp_project)
         graph.create_node("marker::test", {"type": "marker", "value": "original"})
-        graph.save(tmp_project / "graph.json")
+        graph.save(tmp_project / "graph.db")
 
         class AlwaysRejectGate:
             async def on_phase_complete(

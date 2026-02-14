@@ -730,7 +730,7 @@ class TestPhase1Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         GrowStage(project_path=tmp_path)
         mock_model = MagicMock()
@@ -3098,7 +3098,7 @@ class TestPhaseIntegrationEndToEnd:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         stage = GrowStage(project_path=tmp_path)
         mock_model = _make_grow_mock_model(graph)
@@ -3134,7 +3134,7 @@ class TestPhaseIntegrationEndToEnd:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         stage = GrowStage(project_path=tmp_path)
         mock_model = _make_grow_mock_model(graph)
@@ -3160,7 +3160,7 @@ class TestPhaseIntegrationEndToEnd:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         stage = GrowStage(project_path=tmp_path)
         mock_model = _make_grow_mock_model(graph)
@@ -3182,7 +3182,7 @@ class TestPhaseIntegrationEndToEnd:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
-        graph.save(tmp_path / "graph.json")
+        graph.save(tmp_path / "graph.db")
 
         stage = GrowStage(project_path=tmp_path)
         mock_model = _make_grow_mock_model(graph)

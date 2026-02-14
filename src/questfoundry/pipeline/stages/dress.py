@@ -275,8 +275,7 @@ class DressStage:
                     f"Valid phases: {', '.join(repr(p) for p in phase_map)}"
                 )
             start_idx = phase_map[resume_from]
-            if graph.is_sqlite_backed:
-                graph.rewind_to_phase("dress", resume_from)
+            graph.rewind_to_phase("dress", resume_from)
             log.info("resume_via_rewind", phase=resume_from, skipped=start_idx)
 
         # Verify FILL has completed before running DRESS
@@ -293,23 +292,8 @@ class DressStage:
         if last_stage == "fill" and not resume_from:
             save_snapshot(graph, resolved_path, "dress")
         elif last_stage != "fill" and not resume_from:
-            if graph.is_sqlite_backed:
-                graph.rewind_stage("dress")
-                log.info("rerun_rewound", stage="dress")
-            else:
-                pre_json = resolved_path / "snapshots" / "pre-dress.json"
-                if not pre_json.exists():
-                    raise DressStageError(
-                        f"DRESS re-run requires a pre-DRESS snapshot ({pre_json}). "
-                        f"Re-run FILL first, or use --resume-from to skip to a specific phase."
-                    )
-                graph = Graph.load_from_file(pre_json)
-                log.info(
-                    "rerun_restored_checkpoint",
-                    stage="dress",
-                    from_last_stage=last_stage,
-                    snapshot=str(pre_json),
-                )
+            graph.rewind_stage("dress")
+            log.info("rerun_rewound", stage="dress")
 
         phase_results: list[DressPhaseResult] = []
         total_llm_calls = 0

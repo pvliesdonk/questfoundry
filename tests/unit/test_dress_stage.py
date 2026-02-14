@@ -84,7 +84,7 @@ def dress_graph(tmp_path: Path) -> Graph:
             "prose": "The wind howled...",
         },
     )
-    g.save(tmp_path / "graph.json")
+    g.save(tmp_path / "graph.db")
     return g
 
 
@@ -143,7 +143,7 @@ class TestDressStageInit:
         """Singleton stage should persist a resolved project_path for all phases."""
         g = Graph()
         g.set_last_stage("fill")
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         stage = DressStage()
 
@@ -160,7 +160,7 @@ class TestDressStagePrerequisites:
     async def test_rejects_without_fill(self, tmp_path: Path) -> None:
         g = Graph()
         g.set_last_stage("grow")
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         stage = DressStage(project_path=tmp_path)
         with pytest.raises(DressStageError, match="FILL"):
@@ -174,11 +174,11 @@ class TestDressStagePrerequisites:
         pre_dress.set_last_stage("fill")
         snapshot_dir = tmp_path / "snapshots"
         snapshot_dir.mkdir(parents=True, exist_ok=True)
-        pre_dress.save(snapshot_dir / "pre-dress.json")
+        pre_dress.save(snapshot_dir / "pre-dress.db")
 
         g = Graph()
         g.set_last_stage("dress")
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         stage = DressStage(project_path=tmp_path)
         # Prerequisite check passes but Phase 0 fails (no entities)
@@ -195,6 +195,10 @@ class TestDressStageResume:
 
     @pytest.mark.asyncio()
     async def test_resume_requires_fill_completed(self, tmp_path: Path) -> None:
+        g = Graph()
+        g.set_last_stage("seed")
+        g.save(tmp_path / "graph.db")
+
         stage = DressStage(project_path=tmp_path)
         with pytest.raises(DressStageError, match="DRESS requires completed FILL"):
             await stage.execute(MagicMock(), "test", resume_from="briefs")
@@ -1158,7 +1162,7 @@ class TestPriorityMismatchWarning:
             "dress_meta::selection",
             {"type": "dress_meta", "selected_briefs": [], "total_briefs": 0},
         )
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         stage = DressStage(project_path=tmp_path)
 
@@ -1757,7 +1761,7 @@ class TestRunGenerateOnly:
                 "total_briefs": 1,
             },
         )
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         mock_result = MagicMock()
         mock_result.image_data = b"fake_png"
@@ -1787,7 +1791,7 @@ class TestRunGenerateOnly:
         """run_generate_only raises if no brief selection exists."""
         g = Graph()
         g.set_last_stage("dress")
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         stage = DressStage(image_provider="placeholder")
         with pytest.raises(DressStageError, match="No brief selection"):
@@ -1826,7 +1830,7 @@ class TestRunGenerateOnly:
                 ],
             },
         )
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         mock_result = MagicMock()
         mock_result.image_data = b"fake"
@@ -1855,7 +1859,7 @@ class TestRunGenerateOnly:
             "dress_meta::selection",
             {"type": "dress_meta", "selected_briefs": []},
         )
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         stage = DressStage(image_provider="placeholder")
         progress_calls: list[tuple[str, str, str | None]] = []
@@ -1897,7 +1901,7 @@ class TestRunGenerateOnly:
                 "total_briefs": 1,
             },
         )
-        g.save(tmp_path / "graph.json")
+        g.save(tmp_path / "graph.db")
 
         mock_result = MagicMock()
         mock_result.image_data = b"fake_png"

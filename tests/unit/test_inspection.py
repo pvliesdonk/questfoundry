@@ -425,11 +425,8 @@ class TestCoverageStats:
 class TestInspectProject:
     def test_integration(self, tmp_path: Path) -> None:
         """Full integration: write graph, run inspect."""
-        import json
-
         graph = _make_full_graph()
-        graph_file = tmp_path / "graph.json"
-        graph_file.write_text(json.dumps(graph.to_dict()))
+        graph.save(tmp_path / "graph.db")
 
         # Write a minimal project.yaml
         (tmp_path / "project.yaml").write_text("name: test-project\nversion: 1\n")
@@ -449,8 +446,7 @@ class TestInspectProject:
         import json
 
         graph = _make_full_graph()
-        graph_file = tmp_path / "graph.json"
-        graph_file.write_text(json.dumps(graph.to_dict()))
+        graph.save(tmp_path / "graph.db")
         (tmp_path / "project.yaml").write_text("name: test\nversion: 1\n")
 
         report = inspect_project(tmp_path)
@@ -516,7 +512,6 @@ class TestBranchingQualityScore:
     def test_json_includes_quality(self, tmp_path: Path) -> None:
         """branching_quality appears in JSON-serialized report."""
         import dataclasses
-        import json
 
         graph = _make_full_graph()
         # Add an arc so branching_quality is non-None
@@ -529,8 +524,7 @@ class TestBranchingQualityScore:
                 "paths": ["path::canon"],
             },
         )
-        graph_file = tmp_path / "graph.json"
-        graph_file.write_text(json.dumps(graph.to_dict()))
+        graph.save(tmp_path / "graph.db")
         (tmp_path / "project.yaml").write_text("name: test\nversion: 1\n")
 
         report = inspect_project(tmp_path)
