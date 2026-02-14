@@ -595,7 +595,7 @@ Early QuestFoundry versions produced separate artifact files per stage (e.g., `d
 
 ### Decision
 
-Consolidate all story state into the unified graph (`graph.db`). Stage artifacts are derived views, not primary storage. The `artifacts/` directory contains only exported views generated on demand by `qf inspect` or `qf review`.
+Consolidate all story state into the unified graph (`graph.db`). Stage artifacts are derived views, not primary storage. The `exports/` directory contains only exported views generated on demand by `qf inspect` or `qf review`.
 
 Key design choices:
 - **Graph is the single source of truth** — No stage writes to separate artifact files.

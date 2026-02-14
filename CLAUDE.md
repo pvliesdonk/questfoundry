@@ -766,7 +766,7 @@ If asked to inspect or debug a specific project run, start with these files in `
 - `logs/llm_calls.jsonl` — full prompt + LLM traces (use to understand model output)
 - `graph.db` — primary output artifact (SQLite database, current story state)
 - `snapshots/` — pre-stage graph checkpoints for rollback/diagnosis
-- `artifacts/` — derived outputs from `graph.db` (use for context only)
+- `exports/` — derived outputs from `graph.db` (use for context only)
 
 ### 1. Enable LLM Logging
 
