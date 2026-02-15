@@ -351,6 +351,37 @@ class TestDilemmaAnalysis:
         with pytest.raises(ValidationError, match="ending_tone"):
             DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "ending_tone": "x" * 81})
 
+    def test_ending_salience_defaults_to_low(self) -> None:
+        da = DilemmaAnalysis(**_ANALYSIS_KWARGS)
+        assert da.ending_salience == "low"
+
+    @pytest.mark.parametrize(
+        "salience",
+        [
+            pytest.param("high", id="high"),
+            pytest.param("low", id="low"),
+            pytest.param("none", id="none"),
+        ],
+    )
+    def test_valid_ending_salience_values(self, salience: str) -> None:
+        da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "ending_salience": salience})
+        assert da.ending_salience == salience
+
+    def test_invalid_ending_salience_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="ending_salience"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "ending_salience": "medium"})
+
+    def test_backward_compat_without_ending_salience(self) -> None:
+        """Model validates when ending_salience is not provided (backward compat)."""
+        data = {
+            "dilemma_id": "legacy_dilemma",
+            "convergence_policy": "soft",
+            "payoff_budget": 2,
+            "reasoning": "From older version without ending_salience",
+        }
+        da = DilemmaAnalysis.model_validate(data)
+        assert da.ending_salience == "low"
+
 
 class TestInteractionConstraint:
     """InteractionConstraint normalizes pair order and validates fields."""

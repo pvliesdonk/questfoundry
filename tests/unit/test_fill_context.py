@@ -19,6 +19,7 @@ from questfoundry.graph.fill_context import (
     format_dream_vision,
     format_ending_differentiation,
     format_ending_guidance,
+    format_ending_salience_obligations,
     format_entity_arc_context,
     format_entity_states,
     format_grow_summary,
@@ -2465,3 +2466,141 @@ class TestFormatAntislopBlocklist:
         from questfoundry.graph.fill_context import ANTISLOP_PATTERNS
 
         assert "xx" not in ANTISLOP_PATTERNS
+
+
+class TestEndingSalienceObligations:
+    """Tests for format_ending_salience_obligations."""
+
+    def test_non_ending_returns_empty(self) -> None:
+        """Non-ending passage gets no obligations."""
+        g = Graph.empty()
+        g.create_node("passage::intro", {"type": "passage", "raw_id": "intro"})
+        assert format_ending_salience_obligations(g, "passage::intro") == ""
+
+    def test_missing_passage_returns_empty(self) -> None:
+        g = Graph.empty()
+        assert format_ending_salience_obligations(g, "passage::nonexistent") == ""
+
+    def test_no_dilemmas_returns_empty(self) -> None:
+        """Ending passage with no dilemmas in graph returns empty."""
+        g = Graph.empty()
+        g.create_node(
+            "passage::finale",
+            {"type": "passage", "raw_id": "finale", "is_ending": True},
+        )
+        assert format_ending_salience_obligations(g, "passage::finale") == ""
+
+    def test_all_high_returns_empty(self) -> None:
+        """When all dilemmas are high-salience, no obligations are generated."""
+        g = Graph.empty()
+        g.create_node(
+            "passage::finale",
+            {"type": "passage", "raw_id": "finale", "is_ending": True},
+        )
+        g.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Trust the mentor?",
+                "ending_salience": "high",
+            },
+        )
+        assert format_ending_salience_obligations(g, "passage::finale") == ""
+
+    def test_none_salience_generates_do_not_reference(self) -> None:
+        """ending_salience: none generates 'Do NOT reference' obligation."""
+        g = Graph.empty()
+        g.create_node(
+            "passage::finale",
+            {"type": "passage", "raw_id": "finale", "is_ending": True},
+        )
+        g.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Trust the mentor?",
+                "ending_salience": "none",
+            },
+        )
+
+        result = format_ending_salience_obligations(g, "passage::finale")
+        assert "Ending Salience Obligations" in result
+        assert "Do NOT reference or depend on: Trust the mentor?" in result
+
+    def test_low_salience_generates_may_acknowledge(self) -> None:
+        """ending_salience: low generates 'May acknowledge' obligation."""
+        g = Graph.empty()
+        g.create_node(
+            "passage::finale",
+            {"type": "passage", "raw_id": "finale", "is_ending": True},
+        )
+        g.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Stay or leave?",
+                "ending_salience": "low",
+            },
+        )
+
+        result = format_ending_salience_obligations(g, "passage::finale")
+        assert "May acknowledge but ending must work without: Stay or leave?" in result
+
+    def test_mixed_salience_levels(self) -> None:
+        """Mix of none, low, and high generates correct obligations."""
+        g = Graph.empty()
+        g.create_node(
+            "passage::finale",
+            {"type": "passage", "raw_id": "finale", "is_ending": True},
+        )
+        g.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Trust?",
+                "ending_salience": "high",
+            },
+        )
+        g.create_node(
+            "dilemma::d2",
+            {
+                "type": "dilemma",
+                "raw_id": "d2",
+                "question": "Stay?",
+                "ending_salience": "low",
+            },
+        )
+        g.create_node(
+            "dilemma::d3",
+            {
+                "type": "dilemma",
+                "raw_id": "d3",
+                "question": "Fight?",
+                "ending_salience": "none",
+            },
+        )
+
+        result = format_ending_salience_obligations(g, "passage::finale")
+        assert "Do NOT reference or depend on: Fight?" in result
+        assert "May acknowledge but ending must work without: Stay?" in result
+        # High-salience dilemma should NOT appear in obligations
+        assert "Trust?" not in result
+
+    def test_missing_ending_salience_defaults_to_low(self) -> None:
+        """Dilemma without ending_salience attribute treated as low."""
+        g = Graph.empty()
+        g.create_node(
+            "passage::finale",
+            {"type": "passage", "raw_id": "finale", "is_ending": True},
+        )
+        g.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "question": "Legacy dilemma?"},
+        )
+
+        result = format_ending_salience_obligations(g, "passage::finale")
+        assert "May acknowledge but ending must work without: Legacy dilemma?" in result

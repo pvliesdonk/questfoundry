@@ -5833,3 +5833,159 @@ class TestCreateResiduePassages:
         assert result.proposals_applied == 0
         assert result.variants_created == 0
         assert result.proposals_skipped == 0
+
+
+class TestBuildArcCodewords:
+    """Tests for _build_arc_codewords() ending_salience filtering."""
+
+    @staticmethod
+    def _make_two_dilemma_graph(
+        d1_salience: str = "high",
+        d2_salience: str = "low",
+    ) -> Graph:
+        """Graph with 2 dilemmas, each with 1 path + consequence + codeword.
+
+        Single arc covers both paths.
+        """
+        graph = Graph.empty()
+
+        # Dilemmas
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "ending_salience": d1_salience},
+        )
+        graph.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "raw_id": "d2", "ending_salience": d2_salience},
+        )
+
+        # Paths (dilemma_id references raw dilemma ID)
+        graph.create_node(
+            "path::d1__yes",
+            {"type": "path", "raw_id": "d1__yes", "dilemma_id": "d1"},
+        )
+        graph.create_node(
+            "path::d2__yes",
+            {"type": "path", "raw_id": "d2__yes", "dilemma_id": "d2"},
+        )
+
+        # Consequences + edges
+        graph.create_node(
+            "consequence::c1",
+            {"type": "consequence", "raw_id": "c1"},
+        )
+        graph.create_node(
+            "consequence::c2",
+            {"type": "consequence", "raw_id": "c2"},
+        )
+        graph.add_edge("has_consequence", "path::d1__yes", "consequence::c1")
+        graph.add_edge("has_consequence", "path::d2__yes", "consequence::c2")
+
+        # Codewords + tracks edges
+        graph.create_node(
+            "codeword::cw1",
+            {"type": "codeword", "raw_id": "cw1"},
+        )
+        graph.create_node(
+            "codeword::cw2",
+            {"type": "codeword", "raw_id": "cw2"},
+        )
+        graph.add_edge("tracks", "codeword::cw1", "consequence::c1")
+        graph.add_edge("tracks", "codeword::cw2", "consequence::c2")
+
+        # Single arc covering both paths
+        graph.create_node(
+            "arc::main",
+            {
+                "type": "arc",
+                "raw_id": "main",
+                "arc_type": "spine",
+                "paths": ["d1__yes", "d2__yes"],
+                "sequence": [],
+            },
+        )
+
+        return graph
+
+    def test_only_high_salience_codewords_included(self) -> None:
+        """Arc codewords include only codewords from high-salience dilemmas."""
+        from questfoundry.graph.grow_algorithms import _build_arc_codewords
+
+        graph = self._make_two_dilemma_graph(d1_salience="high", d2_salience="low")
+        arc_nodes = graph.get_nodes_by_type("arc")
+
+        result = _build_arc_codewords(graph, arc_nodes)
+        assert result["arc::main"] == frozenset({"codeword::cw1"})
+
+    def test_both_high_salience_included(self) -> None:
+        """When both dilemmas are high, both codewords appear."""
+        from questfoundry.graph.grow_algorithms import _build_arc_codewords
+
+        graph = self._make_two_dilemma_graph(d1_salience="high", d2_salience="high")
+        arc_nodes = graph.get_nodes_by_type("arc")
+
+        result = _build_arc_codewords(graph, arc_nodes)
+        assert result["arc::main"] == frozenset({"codeword::cw1", "codeword::cw2"})
+
+    def test_no_high_salience_yields_empty(self) -> None:
+        """When no dilemma is high-salience, arc gets empty codeword set."""
+        from questfoundry.graph.grow_algorithms import _build_arc_codewords
+
+        graph = self._make_two_dilemma_graph(d1_salience="low", d2_salience="none")
+        arc_nodes = graph.get_nodes_by_type("arc")
+
+        result = _build_arc_codewords(graph, arc_nodes)
+        assert result["arc::main"] == frozenset()
+
+    def test_missing_ending_salience_defaults_to_low(self) -> None:
+        """Dilemma without ending_salience attribute is treated as low (excluded)."""
+        from questfoundry.graph.grow_algorithms import _build_arc_codewords
+
+        graph = Graph.empty()
+        # d1 has ending_salience=high, d2 has NO ending_salience property
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "ending_salience": "high"},
+        )
+        graph.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "raw_id": "d2"},  # no ending_salience
+        )
+        graph.create_node(
+            "path::d1__yes",
+            {"type": "path", "raw_id": "d1__yes", "dilemma_id": "d1"},
+        )
+        graph.create_node(
+            "path::d2__yes",
+            {"type": "path", "raw_id": "d2__yes", "dilemma_id": "d2"},
+        )
+        graph.create_node("consequence::c1", {"type": "consequence", "raw_id": "c1"})
+        graph.create_node("consequence::c2", {"type": "consequence", "raw_id": "c2"})
+        graph.add_edge("has_consequence", "path::d1__yes", "consequence::c1")
+        graph.add_edge("has_consequence", "path::d2__yes", "consequence::c2")
+        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
+        graph.create_node("codeword::cw2", {"type": "codeword", "raw_id": "cw2"})
+        graph.add_edge("tracks", "codeword::cw1", "consequence::c1")
+        graph.add_edge("tracks", "codeword::cw2", "consequence::c2")
+        graph.create_node(
+            "arc::main",
+            {
+                "type": "arc",
+                "raw_id": "main",
+                "arc_type": "spine",
+                "paths": ["d1__yes", "d2__yes"],
+                "sequence": [],
+            },
+        )
+
+        arc_nodes = graph.get_nodes_by_type("arc")
+        result = _build_arc_codewords(graph, arc_nodes)
+        assert result["arc::main"] == frozenset({"codeword::cw1"})
+
+    def test_empty_arc_nodes(self) -> None:
+        """Empty arc_nodes dict returns empty result."""
+        from questfoundry.graph.grow_algorithms import _build_arc_codewords
+
+        graph = Graph.empty()
+        result = _build_arc_codewords(graph, {})
+        assert result == {}
