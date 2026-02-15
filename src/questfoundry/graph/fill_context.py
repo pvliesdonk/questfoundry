@@ -1723,13 +1723,38 @@ def format_residue_weight_obligations(graph: Graph, passage_id: str) -> str:
     if not passage or passage.get("is_ending"):
         return ""  # Endings use ending_salience, not residue_weight
 
+    # Find the beat for this passage to determine which paths cover it
+    beat_id = passage.get("from_beat") or passage.get("primary_beat", "")
+    beat = graph.get_node(beat_id) if beat_id else None
+    beat_paths: set[str] = set(beat.get("paths", [])) if beat else set()
+    if len(beat_paths) < 2:
+        return ""  # Not a shared passage — only one path covers it
+
+    # Find dilemmas whose different paths converge at this passage
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
     if not dilemma_nodes:
         return ""
 
+    # Build dilemma_id → set of path raw_ids
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_paths: dict[str, set[str]] = {}
+    for _pid, pdata in path_nodes.items():
+        did = pdata.get("dilemma_id", "")
+        raw = pdata.get("raw_id", "")
+        if did and raw:
+            # dilemma_id may be full node ID or raw_id
+            dilemma_paths.setdefault(did, set()).add(raw)
+            dilemma_paths.setdefault(strip_scope_prefix(did), set()).add(raw)
+
     cosmetic_dilemmas: list[str] = []
     heavy_dilemmas: list[str] = []
     for dilemma_id, dilemma_data in dilemma_nodes.items():
+        raw_did = dilemma_data.get("raw_id", strip_scope_prefix(dilemma_id))
+        # Check if multiple paths of this dilemma cover the beat
+        d_paths = dilemma_paths.get(raw_did, set()) | dilemma_paths.get(dilemma_id, set())
+        converging = d_paths & beat_paths
+        if len(converging) < 2:
+            continue  # This dilemma doesn't converge at this passage
         weight = dilemma_data.get("residue_weight", "light")
         label = dilemma_data.get("question", strip_scope_prefix(dilemma_id))
         if weight == "cosmetic":
