@@ -1217,9 +1217,9 @@ def check_forward_path_reachability(graph: Graph) -> ValidationCheck:
 
     for pid in sorted(passages):
         choices = from_passage_choices.get(pid, [])
-        forward = [c for c in choices if not c.get("is_return")]
+        forward = [c for c in choices if not c.get("is_return") and not c.get("is_routing")]
         if not forward:
-            continue  # ending passage — no forward choices
+            continue  # ending passage or routing-only — no forward choices
         ungated = [c for c in forward if not c.get("requires")]
         if not ungated:
             soft_locked.append(pid)
@@ -1239,6 +1239,130 @@ def check_forward_path_reachability(graph: Graph) -> ValidationCheck:
             f"{'...' if len(soft_locked) > 5 else ''}"
         ),
     )
+
+
+def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
+    """Verify routing choice sets are collectively-exhaustive and mutually-exclusive.
+
+    For each source passage that has ``is_routing=True`` choices, checks:
+    - CE: every arc reaching the source has at least one satisfiable route
+    - ME: at most one routing choice is satisfiable per arc (excluding fallback)
+
+    Uses arc codeword signatures from ``_build_arc_codewords()`` to evaluate
+    route satisfiability deterministically.
+
+    Returns:
+        List of ValidationCheck results (one per routing set with issues,
+        or a single pass check if all sets are valid).
+    """
+    from questfoundry.graph.grow_algorithms import _build_arc_codewords
+
+    choices = graph.get_nodes_by_type("choice")
+    arc_nodes = graph.get_nodes_by_type("arc")
+
+    if not arc_nodes:
+        return [
+            ValidationCheck(
+                name="routing_coverage",
+                severity="pass",
+                message="No arcs to validate routing against",
+            )
+        ]
+
+    arc_codewords = _build_arc_codewords(graph, arc_nodes)
+
+    # Group routing choices by source passage
+    routing_sets: dict[str, list[dict[str, object]]] = {}
+    for _cid, cdata in choices.items():
+        if cdata.get("is_routing"):
+            source = str(cdata.get("from_passage", ""))
+            routing_sets.setdefault(source, []).append(cdata)
+
+    if not routing_sets:
+        return [
+            ValidationCheck(
+                name="routing_coverage",
+                severity="pass",
+                message="No routing choice sets to validate",
+            )
+        ]
+
+    # Build beat → covering arcs mapping
+    beat_to_arcs: dict[str, list[str]] = {}
+    for arc_id, adata in arc_nodes.items():
+        for beat_id in adata.get("sequence", []):
+            beat_to_arcs.setdefault(str(beat_id), []).append(arc_id)
+
+    checks: list[ValidationCheck] = []
+    passages = graph.get_nodes_by_type("passage")
+
+    for source_pid, routing_choices in sorted(routing_sets.items()):
+        # Find arcs covering this passage's beat
+        source_data = passages.get(source_pid, {})
+        from_beat = str(source_data.get("from_beat") or source_data.get("primary_beat") or "")
+        covering_arcs = beat_to_arcs.get(from_beat, [])
+        if not covering_arcs:
+            continue
+
+        # Extract requires sets from routing choices
+        route_requires: list[set[str]] = []
+        for rc in routing_choices:
+            reqs = rc.get("requires", [])
+            route_requires.append(set(reqs) if isinstance(reqs, list) else set())
+
+        # CE check: for each covering arc, at least one route is satisfiable
+        ce_gaps: list[str] = []
+        for arc_id in covering_arcs:
+            arc_cws = arc_codewords.get(arc_id, frozenset())
+            satisfiable = [
+                i for i, reqs in enumerate(route_requires) if reqs and reqs.issubset(arc_cws)
+            ]
+            if not satisfiable:
+                ce_gaps.append(arc_id)
+
+        if ce_gaps:
+            checks.append(
+                ValidationCheck(
+                    name="routing_coverage_ce",
+                    severity="fail",
+                    message=(
+                        f"Routing set at {source_pid}: {len(ce_gaps)} arc(s) have "
+                        f"no satisfiable route: {', '.join(ce_gaps[:3])}"
+                    ),
+                )
+            )
+
+        # ME check: at most one route satisfiable per arc
+        me_violations: list[str] = []
+        for arc_id in covering_arcs:
+            arc_cws = arc_codewords.get(arc_id, frozenset())
+            satisfiable = [
+                i for i, reqs in enumerate(route_requires) if reqs and reqs.issubset(arc_cws)
+            ]
+            if len(satisfiable) > 1:
+                me_violations.append(arc_id)
+
+        if me_violations:
+            checks.append(
+                ValidationCheck(
+                    name="routing_coverage_me",
+                    severity="warn",
+                    message=(
+                        f"Routing set at {source_pid}: {len(me_violations)} arc(s) "
+                        f"satisfy multiple routes: {', '.join(me_violations[:3])}"
+                    ),
+                )
+            )
+
+    if not checks:
+        checks.append(
+            ValidationCheck(
+                name="routing_coverage",
+                severity="pass",
+                message="All routing choice sets are CE+ME valid",
+            )
+        )
+    return checks
 
 
 def _compute_linear_threshold(graph: Graph) -> int:
@@ -1274,4 +1398,5 @@ def run_all_checks(graph: Graph) -> ValidationReport:
     ]
     checks.extend(check_commits_timing(graph))
     checks.extend(check_convergence_policy_compliance(graph))
+    checks.extend(check_routing_coverage(graph))
     return ValidationReport(checks=checks)
