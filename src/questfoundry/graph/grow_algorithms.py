@@ -894,6 +894,102 @@ def _intersect_all(sets: list[frozenset[str]]) -> frozenset[str]:
     return result
 
 
+@dataclass
+class VariantSpec:
+    """Specification for a single variant in a split_and_reroute call.
+
+    Attributes:
+        passage_id: Target variant passage (must already exist in graph).
+        requires_codewords: Codewords gating this variant route.
+    """
+
+    passage_id: str
+    requires_codewords: list[str]
+
+
+def split_and_reroute(
+    graph: Graph,
+    base_passage_id: str,
+    variants: list[VariantSpec],
+    *,
+    keep_fallback: bool = False,
+) -> list[str]:
+    """Replace a shared passage with gated variants via incoming-edge rewriting.
+
+    For each incoming choice pointing to ``base_passage_id``, creates
+    cloned routing choices — one per variant — each pointing to its
+    variant passage with the variant's ``requires`` gate.  Original
+    incoming choices are either deleted (default) or kept as fallback
+    routes (when ``keep_fallback=True``).
+
+    No extra hops are introduced: readers go directly from the source
+    passage to the correct variant passage.
+
+    Args:
+        graph: Story graph with passage and choice nodes.
+        base_passage_id: The shared passage to replace with variants.
+        variants: List of variant specs (passage + codeword gates).
+        keep_fallback: If True, keep original incoming choices as ungated
+            fallback routes to base_passage_id.  If False (default),
+            remove original incoming choices.
+
+    Returns:
+        List of created routing choice node IDs.
+    """
+    if not variants:
+        return []
+
+    # Find all incoming choices (choice → base_passage via choice_to edge)
+    incoming_edges = graph.get_edges(edge_type="choice_to", to_id=base_passage_id)
+    if not incoming_edges:
+        return []
+
+    created_choices: list[str] = []
+
+    for edge in incoming_edges:
+        original_choice_id = edge["from"]
+        original_choice = graph.get_node(original_choice_id)
+        if not original_choice:
+            continue
+
+        source_passage = original_choice.get("from_passage", "")
+
+        for vi, variant in enumerate(variants):
+            # Generate unique routing choice ID
+            base_raw = strip_scope_prefix(base_passage_id)
+            variant_raw = strip_scope_prefix(variant.passage_id)
+            choice_id = f"choice::{base_raw}__route_{variant_raw}_{vi}"
+            # Ensure uniqueness
+            counter = 0
+            candidate = choice_id
+            while graph.get_node(candidate):
+                counter += 1
+                candidate = f"{choice_id}_{counter}"
+            choice_id = candidate
+
+            graph.create_node(
+                choice_id,
+                {
+                    "type": "choice",
+                    "from_passage": source_passage,
+                    "to_passage": variant.passage_id,
+                    "requires": list(variant.requires_codewords),
+                    "grants": list(original_choice.get("grants", [])),
+                    "label": original_choice.get("label"),
+                    "is_routing": True,
+                },
+            )
+            graph.add_edge("choice_from", choice_id, source_passage)
+            graph.add_edge("choice_to", choice_id, variant.passage_id)
+            created_choices.append(choice_id)
+
+        if not keep_fallback:
+            # Remove original choice and its edges
+            graph.delete_node(original_choice_id, cascade=True)
+
+    return created_choices
+
+
 def _build_collapse_exempt_passages(
     graph: Graph, passages: dict[str, dict[str, object]]
 ) -> set[str]:
