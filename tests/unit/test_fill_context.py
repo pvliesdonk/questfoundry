@@ -30,6 +30,7 @@ from questfoundry.graph.fill_context import (
     format_passage_context,
     format_passages_batch,
     format_path_arc_context,
+    format_residue_weight_obligations,
     format_scene_types_summary,
     format_sliding_window,
     format_used_imagery_blocklist,
@@ -2604,3 +2605,194 @@ class TestEndingSalienceObligations:
 
         result = format_ending_salience_obligations(g, "passage::finale")
         assert "May acknowledge but ending must work without: Legacy dilemma?" in result
+
+
+class TestResidueWeightObligations:
+    """Tests for format_residue_weight_obligations."""
+
+    @staticmethod
+    def _make_shared_passage_graph(
+        residue_weight: str = "heavy",
+        question: str = "Trust?",
+    ) -> Graph:
+        """Build a minimal graph where passage::mid is shared across 2 paths of d1."""
+        g = Graph.empty()
+        g.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": question,
+                "residue_weight": residue_weight,
+            },
+        )
+        g.create_node(
+            "path::d1__yes",
+            {"type": "path", "raw_id": "d1__yes", "dilemma_id": "d1"},
+        )
+        g.create_node(
+            "path::d1__no",
+            {"type": "path", "raw_id": "d1__no", "dilemma_id": "d1"},
+        )
+        g.create_node(
+            "beat::mid",
+            {
+                "type": "beat",
+                "raw_id": "mid",
+                "paths": ["d1__yes", "d1__no"],
+            },
+        )
+        g.create_node(
+            "passage::mid",
+            {"type": "passage", "raw_id": "mid", "from_beat": "beat::mid"},
+        )
+        return g
+
+    def test_ending_passage_returns_empty(self) -> None:
+        """Ending passages use ending_salience, not residue_weight."""
+        g = Graph.empty()
+        g.create_node(
+            "passage::finale",
+            {"type": "passage", "raw_id": "finale", "is_ending": True},
+        )
+        assert format_residue_weight_obligations(g, "passage::finale") == ""
+
+    def test_missing_passage_returns_empty(self) -> None:
+        g = Graph.empty()
+        assert format_residue_weight_obligations(g, "passage::nonexistent") == ""
+
+    def test_no_dilemmas_returns_empty(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "passage::mid",
+            {"type": "passage", "raw_id": "mid", "from_beat": "beat::mid"},
+        )
+        g.create_node("beat::mid", {"type": "beat", "raw_id": "mid", "paths": ["p1", "p2"]})
+        assert format_residue_weight_obligations(g, "passage::mid") == ""
+
+    def test_single_path_returns_empty(self) -> None:
+        """Non-shared passage (single path) gets no obligations."""
+        g = Graph.empty()
+        g.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Trust?",
+                "residue_weight": "heavy",
+            },
+        )
+        g.create_node(
+            "path::d1__yes",
+            {"type": "path", "raw_id": "d1__yes", "dilemma_id": "d1"},
+        )
+        g.create_node(
+            "beat::solo",
+            {"type": "beat", "raw_id": "solo", "paths": ["d1__yes"]},
+        )
+        g.create_node(
+            "passage::solo",
+            {"type": "passage", "raw_id": "solo", "from_beat": "beat::solo"},
+        )
+        assert format_residue_weight_obligations(g, "passage::solo") == ""
+
+    def test_all_light_returns_empty(self) -> None:
+        """When all converging dilemmas are light, no obligations are generated."""
+        g = self._make_shared_passage_graph(residue_weight="light")
+        assert format_residue_weight_obligations(g, "passage::mid") == ""
+
+    def test_cosmetic_generates_do_not_reference(self) -> None:
+        g = self._make_shared_passage_graph(residue_weight="cosmetic", question="Polite or blunt?")
+        result = format_residue_weight_obligations(g, "passage::mid")
+        assert "Residue Weight Obligations" in result
+        assert "Do NOT reference or depend on: Polite or blunt?" in result
+
+    def test_heavy_generates_must_show_differences(self) -> None:
+        g = self._make_shared_passage_graph(
+            residue_weight="heavy", question="Betray or stay loyal?"
+        )
+        result = format_residue_weight_obligations(g, "passage::mid")
+        assert "MUST show state-specific differences for: Betray or stay loyal?" in result
+
+    def test_mixed_weights_only_converging_dilemmas(self) -> None:
+        """Only dilemmas whose paths converge at this passage generate obligations."""
+        g = self._make_shared_passage_graph(residue_weight="heavy")
+        # Add a second dilemma whose paths do NOT converge at this passage
+        g.create_node(
+            "dilemma::d2",
+            {
+                "type": "dilemma",
+                "raw_id": "d2",
+                "question": "Door?",
+                "residue_weight": "cosmetic",
+            },
+        )
+        g.create_node(
+            "path::d2__left",
+            {"type": "path", "raw_id": "d2__left", "dilemma_id": "d2"},
+        )
+        g.create_node(
+            "path::d2__right",
+            {"type": "path", "raw_id": "d2__right", "dilemma_id": "d2"},
+        )
+        # d2 paths are NOT in the beat's paths list -> not converging here
+        result = format_residue_weight_obligations(g, "passage::mid")
+        assert "MUST show state-specific differences for: Trust?" in result
+        assert "Door?" not in result  # d2 doesn't converge here
+
+    def test_missing_residue_weight_defaults_to_light(self) -> None:
+        """When residue_weight is not set, defaults to light (no obligations)."""
+        g = Graph.empty()
+        # Dilemma without residue_weight field
+        g.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "question": "Legacy?"},
+        )
+        g.create_node(
+            "path::d1__yes",
+            {"type": "path", "raw_id": "d1__yes", "dilemma_id": "d1"},
+        )
+        g.create_node(
+            "path::d1__no",
+            {"type": "path", "raw_id": "d1__no", "dilemma_id": "d1"},
+        )
+        g.create_node(
+            "beat::mid",
+            {"type": "beat", "raw_id": "mid", "paths": ["d1__yes", "d1__no"]},
+        )
+        g.create_node(
+            "passage::mid",
+            {"type": "passage", "raw_id": "mid", "from_beat": "beat::mid"},
+        )
+        assert format_residue_weight_obligations(g, "passage::mid") == ""
+
+    def test_non_converging_dilemma_excluded(self) -> None:
+        """A heavy dilemma that doesn't converge at this passage is excluded."""
+        g = Graph.empty()
+        g.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Trust?",
+                "residue_weight": "heavy",
+            },
+        )
+        g.create_node(
+            "path::d1__yes",
+            {"type": "path", "raw_id": "d1__yes", "dilemma_id": "d1"},
+        )
+        g.create_node(
+            "path::d1__no",
+            {"type": "path", "raw_id": "d1__no", "dilemma_id": "d1"},
+        )
+        # Beat belongs to only ONE path of d1 — not a convergence point
+        g.create_node(
+            "beat::branch",
+            {"type": "beat", "raw_id": "branch", "paths": ["d1__yes", "other"]},
+        )
+        g.create_node(
+            "passage::branch",
+            {"type": "passage", "raw_id": "branch", "from_beat": "beat::branch"},
+        )
+        assert format_residue_weight_obligations(g, "passage::branch") == ""

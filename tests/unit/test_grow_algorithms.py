@@ -5667,6 +5667,35 @@ class TestFindResidueCandidates:
         candidates = find_residue_candidates(graph)
         assert len(candidates) == 0
 
+    def test_cosmetic_dilemma_excluded(self) -> None:
+        """Cosmetic residue_weight dilemmas never produce residue candidates."""
+        from questfoundry.graph.grow_algorithms import find_residue_candidates
+
+        graph = self._make_convergence_graph(policy="soft")
+        graph.update_node("dilemma::d1", residue_weight="cosmetic")
+        candidates = find_residue_candidates(graph)
+        assert len(candidates) == 0
+
+    def test_heavy_dilemma_included(self) -> None:
+        """Heavy residue_weight dilemmas produce candidates."""
+        from questfoundry.graph.grow_algorithms import find_residue_candidates
+
+        graph = self._make_convergence_graph(policy="soft")
+        graph.update_node("dilemma::d1", residue_weight="heavy")
+        candidates = find_residue_candidates(graph)
+        assert len(candidates) == 1
+        assert candidates[0].residue_weight == "heavy"
+
+    def test_light_dilemma_included(self) -> None:
+        """Light residue_weight (default) dilemmas produce candidates."""
+        from questfoundry.graph.grow_algorithms import find_residue_candidates
+
+        graph = self._make_convergence_graph(policy="soft")
+        # No residue_weight set -> defaults to "light"
+        candidates = find_residue_candidates(graph)
+        assert len(candidates) == 1
+        assert candidates[0].residue_weight == "light"
+
 
 class TestCreateResiduePassages:
     """Tests for create_residue_passages()."""

@@ -4477,3 +4477,56 @@ class TestApplySeedConvergenceAnalysis:
 
         node = graph.get_node("dilemma::trust_or_not")
         assert "ending_salience" not in node
+
+    def test_residue_weight_stored_on_dilemma_node(self) -> None:
+        """residue_weight from analysis is stored on the dilemma graph node."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        output["dilemma_analyses"] = [
+            {
+                "dilemma_id": "trust_or_not",
+                "convergence_policy": "soft",
+                "payoff_budget": 3,
+                "reasoning": "Core story choice",
+                "residue_weight": "heavy",
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        node = graph.get_node("dilemma::trust_or_not")
+        assert node["residue_weight"] == "heavy"
+
+    def test_residue_weight_cosmetic_stored(self) -> None:
+        """residue_weight: cosmetic is stored on the dilemma graph node."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        output["dilemma_analyses"] = [
+            {
+                "dilemma_id": "stay_or_go",
+                "convergence_policy": "flavor",
+                "payoff_budget": 2,
+                "reasoning": "Cosmetic choice",
+                "residue_weight": "cosmetic",
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        node = graph.get_node("dilemma::stay_or_go")
+        assert node["residue_weight"] == "cosmetic"
+
+    def test_absent_residue_weight_not_stored(self) -> None:
+        """When residue_weight is absent from analysis dict, it is not added."""
+        graph = self._graph_with_dilemmas()
+        output = self._base_output()
+        output["dilemma_analyses"] = [
+            {
+                "dilemma_id": "trust_or_not",
+                "convergence_policy": "hard",
+                "payoff_budget": 4,
+                "reasoning": "test",
+            },
+        ]
+        apply_seed_mutations(graph, output)
+
+        node = graph.get_node("dilemma::trust_or_not")
+        assert "residue_weight" not in node

@@ -28,6 +28,7 @@ PathTier = Literal["major", "minor"]
 DilemmaEffect = Literal["advances", "reveals", "commits", "complicates"]
 ConvergencePolicy = Literal["hard", "soft", "flavor"]
 EndingSalience = Literal["high", "low", "none"]
+ResidueWeight = Literal["heavy", "light", "cosmetic"]
 ConstraintType = Literal["shared_entity", "causal_chain", "resource_conflict"]
 
 
@@ -249,6 +250,7 @@ class DilemmaAnalysis(BaseModel):
         dilemma_id: References a dilemma from Section 2.
         convergence_policy: How strictly paths must stay separate (topology).
         ending_salience: How much this dilemma drives ending differentiation (prose layer).
+        residue_weight: How much mid-story prose varies based on this dilemma (prose layer).
         payoff_budget: Minimum exclusive beats before convergence (>=2).
         reasoning: Chain-of-thought for the classification.
         convergence_point: Where this dilemma's paths physically converge.
@@ -265,6 +267,15 @@ class DilemmaAnalysis(BaseModel):
             "How much this dilemma drives ending differentiation. "
             "'high' = endings MUST differ; 'low' = endings MAY acknowledge; "
             "'none' = ending prose MUST NOT reference this choice"
+        ),
+    )
+    residue_weight: ResidueWeight = Field(
+        default="light",
+        description=(
+            "How much mid-story prose varies based on this dilemma's outcome. "
+            "'heavy' = shared passages MUST show state-specific differences; "
+            "'light' = shared passages MAY acknowledge; "
+            "'cosmetic' = shared passages MUST NOT reference this choice"
         ),
     )
     payoff_budget: int = Field(

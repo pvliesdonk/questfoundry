@@ -1812,6 +1812,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 "residue_note",
                 "ending_tone",
                 "ending_salience",
+                "residue_weight",
             ):
                 if key in data:
                     update_fields[key] = data[key]
