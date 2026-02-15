@@ -109,6 +109,7 @@ from questfoundry.models.seed import (
     InteractionConstraintsSection,
     Path,
     PathTier,
+    ResidueWeight,
     SeedOutput,
 )
 
@@ -190,6 +191,7 @@ __all__ = [
     "Phase9bOutput",
     "Phase9cOutput",
     "PhaseResult",
+    "ResidueWeight",
     "ReviewFlag",
     "SceneTypeTag",
     "Scope",
