@@ -680,3 +680,62 @@ class TestBranchingQualityScore:
         assert result.terminal_count == 1
         # Its primary_beat should map to the spine arc, contributing a codeword signature
         assert result.ending_variants >= 1
+
+    def test_ending_variants_synthetic_endings(self) -> None:
+        """Synthetic endings (from split_ending_families) use family_codewords directly."""
+        graph = Graph.empty()
+        # Need at least one arc for the function to return a result
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "arc_type": "spine",
+                "sequence": ["beat::b1"],
+                "paths": ["path::canon"],
+            },
+        )
+        # Two synthetic ending passages with different family_codewords, no from_beat
+        graph.create_node(
+            "passage::ending_0",
+            {
+                "type": "passage",
+                "raw_id": "ending_0",
+                "is_ending": True,
+                "is_synthetic": True,
+                "summary": "Ending A",
+                "family_codewords": ["codeword::trust", "codeword::brave"],
+            },
+        )
+        graph.create_node(
+            "passage::ending_1",
+            {
+                "type": "passage",
+                "raw_id": "ending_1",
+                "is_ending": True,
+                "is_synthetic": True,
+                "summary": "Ending B",
+                "family_codewords": ["codeword::betray"],
+            },
+        )
+        # Wire choices so these are the only terminals
+        graph.create_node(
+            "passage::hub",
+            {"type": "passage", "raw_id": "hub", "summary": "Hub"},
+        )
+        graph.create_node(
+            "choice::to_0",
+            {"type": "choice", "raw_id": "to_0"},
+        )
+        graph.create_node(
+            "choice::to_1",
+            {"type": "choice", "raw_id": "to_1"},
+        )
+        graph.add_edge("choice_from", "choice::to_0", "passage::hub")
+        graph.add_edge("choice_to", "choice::to_0", "passage::ending_0")
+        graph.add_edge("choice_from", "choice::to_1", "passage::hub")
+        graph.add_edge("choice_to", "choice::to_1", "passage::ending_1")
+
+        result = _branching_quality_score(graph, None)
+        assert result is not None
+        assert result.terminal_count == 2
+        assert result.ending_variants == 2
