@@ -10,7 +10,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.fill_context import compute_lexical_diversity
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_validation import (
@@ -457,21 +457,41 @@ def _prose_neutrality_stats(graph: Graph) -> ProseNeutralityStats | None:
 
     routed_shared = [p for p in shared if p in routed]
 
-    # Check unrouted shared passages for heavy/light dilemmas
+    # Build dilemma raw_id → set of path raw_ids for convergence check
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_path_map: dict[str, set[str]] = {}
+    for _pid_p, pdata_p in path_nodes.items():
+        did = pdata_p.get("dilemma_id", "")
+        raw = pdata_p.get("raw_id", "")
+        if did and raw:
+            dilemma_path_map.setdefault(strip_scope_prefix(did), set()).add(raw)
+
+    # Check unrouted shared passages for heavy/light dilemmas that converge here
     unrouted_heavy: list[str] = []
     unrouted_light: list[str] = []
     for pid in shared:
         if pid in routed:
             continue
-        # Check if any dilemma requires variant routing
-        has_heavy = any(
-            d.get("residue_weight", "light") == "heavy" or d.get("ending_salience", "low") == "high"
-            for d in dilemma_nodes.values()
-        )
-        has_light = any(
-            d.get("residue_weight", "light") == "light" and d.get("ending_salience", "low") == "low"
-            for d in dilemma_nodes.values()
-        )
+        # Find beat paths for this passage
+        pdata = passage_nodes.get(pid, {})
+        beat_id = str(pdata.get("from_beat") or "")
+        beat = graph.get_node(beat_id) if beat_id else None
+        beat_paths: set[str] = set(beat.get("paths", [])) if beat else set()
+
+        # Only check dilemmas whose paths converge at this passage's beat
+        has_heavy = False
+        has_light = False
+        for did, ddata in dilemma_nodes.items():
+            raw_did = ddata.get("raw_id", strip_scope_prefix(did))
+            d_paths = dilemma_path_map.get(raw_did, set())
+            if len(d_paths & beat_paths) < 2:
+                continue  # Dilemma doesn't converge here
+            weight = ddata.get("residue_weight", "light")
+            salience = ddata.get("ending_salience", "low")
+            if weight == "heavy" or salience == "high":
+                has_heavy = True
+            elif weight == "light" and salience == "low":
+                has_light = True
         if has_heavy:
             unrouted_heavy.append(pid)
         elif has_light:
