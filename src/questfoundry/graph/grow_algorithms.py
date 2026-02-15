@@ -1880,6 +1880,7 @@ class ResidueCandidate:
     passage_id: str
     dilemma_id: str
     convergence_policy: str  # "soft" or "flavor"
+    residue_weight: str  # "heavy" or "light" (cosmetic filtered out)
     codeword_ids: list[str]  # Available codewords for gating variants
     dilemma_question: str  # For LLM context
 
@@ -1943,6 +1944,12 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
             if not dilemma_id:
                 continue
 
+            # Check residue_weight: cosmetic dilemmas never produce residue
+            dilemma_data = dilemma_nodes.get(dilemma_id, {})
+            residue_weight = dilemma_data.get("residue_weight", "light")
+            if residue_weight == "cosmetic":
+                continue
+
             # Convert convergence beat to passage
             passage_id = beat_to_passage.get(converges_at_beat)
             if not passage_id:
@@ -1964,7 +1971,6 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
                 continue  # Need at least 2 variants
 
             # Get dilemma question for LLM context
-            dilemma_data = dilemma_nodes.get(dilemma_id, {})
             question = dilemma_data.get("question", "")
 
             candidates.append(
@@ -1972,6 +1978,7 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
                     passage_id=passage_id,
                     dilemma_id=dilemma_id,
                     convergence_policy=policy,
+                    residue_weight=residue_weight,
                     codeword_ids=sorted(cw_ids),
                     dilemma_question=question,
                 )
