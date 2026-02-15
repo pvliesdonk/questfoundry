@@ -188,8 +188,11 @@ class SqliteGraphStore:
             operation: Mutation type (create_node, update_node, etc.).
             target_id: Affected node ID or edge reference.
             delta: New data (node data for creates/updates, edge dict for add_edge).
-            before_state: State before mutation for reversibility. Required for
-                update_node, delete_node, and remove_edge to enable rewind.
+            before_state: State before mutation for reversibility. For create_node,
+                this is None. For update_node via update_node_fields, contains old
+                values of changed fields (None if field was newly added). For
+                delete_node and remove_edge, contains full node/edge data.
+                Required for update_node, delete_node, and remove_edge to enable rewind.
         """
         self._conn.execute(
             "INSERT INTO mutations "
@@ -267,14 +270,9 @@ class SqliteGraphStore:
 
     def set_node(self, node_id: str, data: dict[str, Any]) -> None:
         node_type = data.get("type", "")
-        existing = self.has_node(node_id)
-        before: dict[str, Any] | None = None
-        if existing:
-            row = self._conn.execute(
-                "SELECT data FROM nodes WHERE node_id = ?", (node_id,)
-            ).fetchone()
-            if row is not None:
-                before = json.loads(row["data"])
+        row = self._conn.execute("SELECT data FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
+        existing = row is not None
+        before = json.loads(row["data"]) if existing else None
         self._conn.execute(
             "INSERT OR REPLACE INTO nodes "
             "(node_id, type, data, created_stage, created_phase, modified_stage, modified_phase) "
@@ -319,7 +317,9 @@ class SqliteGraphStore:
 
     def delete_node(self, node_id: str) -> None:
         row = self._conn.execute("SELECT data FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
-        before = json.loads(row["data"]) if row is not None else None
+        if row is None:
+            raise NodeNotFoundError(node_id=node_id)
+        before = json.loads(row["data"])
         self._conn.execute("DELETE FROM nodes WHERE node_id = ?", (node_id,))
         self._record_mutation("delete_node", node_id, before_state=before)
 
