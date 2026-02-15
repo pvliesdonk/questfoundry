@@ -5992,3 +5992,209 @@ class TestBuildArcCodewords:
         graph = Graph.empty()
         result = _build_arc_codewords(graph, {})
         assert result == {}
+
+
+class TestSplitAndReroute:
+    """Tests for split_and_reroute() incoming-edge rewriting primitive."""
+
+    @staticmethod
+    def _make_graph_with_incoming_choice(
+        *,
+        choice_id: str = "choice::go_to_base",
+        source_passage: str = "passage::intro",
+        base_passage: str = "passage::shared",
+    ) -> Graph:
+        """Graph: source_passage -> choice -> base_passage."""
+        graph = Graph.empty()
+        graph.create_node(
+            source_passage,
+            {"type": "passage", "raw_id": source_passage.removeprefix("passage::")},
+        )
+        graph.create_node(
+            base_passage,
+            {"type": "passage", "raw_id": base_passage.removeprefix("passage::")},
+        )
+        graph.create_node(
+            choice_id,
+            {
+                "type": "choice",
+                "from_passage": source_passage,
+                "to_passage": base_passage,
+                "requires": [],
+                "grants": ["cw_existing"],
+                "label": "Go forward",
+            },
+        )
+        graph.add_edge("choice_from", choice_id, source_passage)
+        graph.add_edge("choice_to", choice_id, base_passage)
+        return graph
+
+    def test_basic_two_variants(self) -> None:
+        """Base passage with 1 incoming choice, 2 variants."""
+        from questfoundry.graph.grow_algorithms import VariantSpec, split_and_reroute
+
+        graph = self._make_graph_with_incoming_choice()
+        graph.create_node("passage::v1", {"type": "passage", "raw_id": "v1"})
+        graph.create_node("passage::v2", {"type": "passage", "raw_id": "v2"})
+
+        created = split_and_reroute(
+            graph,
+            "passage::shared",
+            [
+                VariantSpec("passage::v1", ["cw_a"]),
+                VariantSpec("passage::v2", ["cw_b"]),
+            ],
+        )
+
+        assert len(created) == 2
+        # Original choice should be deleted
+        assert graph.get_node("choice::go_to_base") is None
+        # Each created choice should point to a variant
+        for cid in created:
+            node = graph.get_node(cid)
+            assert node is not None
+            assert node["is_routing"] is True
+            assert node["from_passage"] == "passage::intro"
+            assert node["to_passage"] in ("passage::v1", "passage::v2")
+
+    def test_multiple_incoming_choices(self) -> None:
+        """Base passage with 2 incoming choices x 2 variants = 4 routing choices."""
+        from questfoundry.graph.grow_algorithms import VariantSpec, split_and_reroute
+
+        graph = self._make_graph_with_incoming_choice()
+        # Add second incoming choice from a different passage
+        graph.create_node(
+            "passage::other",
+            {"type": "passage", "raw_id": "other"},
+        )
+        graph.create_node(
+            "choice::alt_to_base",
+            {
+                "type": "choice",
+                "from_passage": "passage::other",
+                "to_passage": "passage::shared",
+                "requires": [],
+                "grants": [],
+                "label": None,
+            },
+        )
+        graph.add_edge("choice_from", "choice::alt_to_base", "passage::other")
+        graph.add_edge("choice_to", "choice::alt_to_base", "passage::shared")
+
+        graph.create_node("passage::v1", {"type": "passage", "raw_id": "v1"})
+        graph.create_node("passage::v2", {"type": "passage", "raw_id": "v2"})
+
+        created = split_and_reroute(
+            graph,
+            "passage::shared",
+            [
+                VariantSpec("passage::v1", ["cw_a"]),
+                VariantSpec("passage::v2", ["cw_b"]),
+            ],
+        )
+
+        assert len(created) == 4
+        # Both original choices deleted
+        assert graph.get_node("choice::go_to_base") is None
+        assert graph.get_node("choice::alt_to_base") is None
+
+    def test_keep_fallback_true(self) -> None:
+        """When keep_fallback=True, original choice is preserved."""
+        from questfoundry.graph.grow_algorithms import VariantSpec, split_and_reroute
+
+        graph = self._make_graph_with_incoming_choice()
+        graph.create_node("passage::v1", {"type": "passage", "raw_id": "v1"})
+
+        created = split_and_reroute(
+            graph,
+            "passage::shared",
+            [VariantSpec("passage::v1", ["cw_a"])],
+            keep_fallback=True,
+        )
+
+        assert len(created) == 1
+        # Original choice should still exist
+        original = graph.get_node("choice::go_to_base")
+        assert original is not None
+        assert original["to_passage"] == "passage::shared"
+
+    def test_is_routing_flag(self) -> None:
+        """All created choices have is_routing=True."""
+        from questfoundry.graph.grow_algorithms import VariantSpec, split_and_reroute
+
+        graph = self._make_graph_with_incoming_choice()
+        graph.create_node("passage::v1", {"type": "passage", "raw_id": "v1"})
+
+        created = split_and_reroute(
+            graph,
+            "passage::shared",
+            [VariantSpec("passage::v1", ["cw_x"])],
+        )
+
+        for cid in created:
+            assert graph.get_node(cid)["is_routing"] is True
+
+    def test_grants_preserved(self) -> None:
+        """Created routing choices inherit grants from original choice."""
+        from questfoundry.graph.grow_algorithms import VariantSpec, split_and_reroute
+
+        graph = self._make_graph_with_incoming_choice()
+        graph.create_node("passage::v1", {"type": "passage", "raw_id": "v1"})
+
+        created = split_and_reroute(
+            graph,
+            "passage::shared",
+            [VariantSpec("passage::v1", ["cw_x"])],
+        )
+
+        node = graph.get_node(created[0])
+        assert node["grants"] == ["cw_existing"]
+
+    def test_empty_variants_noop(self) -> None:
+        """No variants = no changes."""
+        from questfoundry.graph.grow_algorithms import split_and_reroute
+
+        graph = self._make_graph_with_incoming_choice()
+        created = split_and_reroute(graph, "passage::shared", [])
+        assert created == []
+        # Original choice still exists
+        assert graph.get_node("choice::go_to_base") is not None
+
+    def test_no_incoming_choices(self) -> None:
+        """Base passage with no incoming choices returns empty list."""
+        from questfoundry.graph.grow_algorithms import VariantSpec, split_and_reroute
+
+        graph = Graph.empty()
+        graph.create_node("passage::orphan", {"type": "passage", "raw_id": "orphan"})
+        graph.create_node("passage::v1", {"type": "passage", "raw_id": "v1"})
+
+        created = split_and_reroute(
+            graph,
+            "passage::orphan",
+            [VariantSpec("passage::v1", ["cw_a"])],
+        )
+        assert created == []
+
+    def test_edges_correctly_wired(self) -> None:
+        """Verify choice_from and choice_to edges for created routing choices."""
+        from questfoundry.graph.grow_algorithms import VariantSpec, split_and_reroute
+
+        graph = self._make_graph_with_incoming_choice()
+        graph.create_node("passage::v1", {"type": "passage", "raw_id": "v1"})
+
+        created = split_and_reroute(
+            graph,
+            "passage::shared",
+            [VariantSpec("passage::v1", ["cw_a"])],
+        )
+
+        cid = created[0]
+        # choice_from edge: choice -> source passage
+        from_edges = graph.get_edges(edge_type="choice_from", from_id=cid)
+        assert len(from_edges) == 1
+        assert from_edges[0]["to"] == "passage::intro"
+
+        # choice_to edge: choice -> variant passage
+        to_edges = graph.get_edges(edge_type="choice_to", from_id=cid)
+        assert len(to_edges) == 1
+        assert to_edges[0]["to"] == "passage::v1"
