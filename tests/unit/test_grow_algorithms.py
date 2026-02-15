@@ -5177,7 +5177,8 @@ class TestSplitEndingFamilies:
         """
         graph = Graph.empty()
 
-        # Dilemma + paths
+        # Dilemma + paths (ending_salience=high so codewords contribute to
+        # ending family signatures)
         graph.create_node(
             "dilemma::d1",
             {"type": "dilemma", "raw_id": "d1", "ending_salience": "high"},
@@ -5399,24 +5400,27 @@ class TestSplitEndingFamilies:
         assert result.families_created == 0
         assert result.passages_already_unique == 0
 
-    def test_choice_edges_wired_correctly(self) -> None:
-        """Verify choice edges connect terminal passage to new endings."""
+    def test_routing_choices_wire_to_endings(self) -> None:
+        """Verify routing choices connect source passages directly to endings."""
         from questfoundry.graph.grow_algorithms import split_ending_families
 
         graph = self._make_shared_ending_graph()
         split_ending_families(graph)
 
-        # Terminal passage should now have outgoing choices
-        choice_from_edges = graph.get_edges(edge_type="choice_from", to_id="passage::finale_p")
-        assert len(choice_from_edges) >= 2
+        # Original incoming choices (c3, c4) should be deleted
+        assert graph.get_node("choice::c3") is None
+        assert graph.get_node("choice::c4") is None
 
-        # Each choice should point to an ending passage
-        for edge in choice_from_edges:
-            choice_id = edge["from"]
-            choice_to = graph.get_edges(edge_type="choice_to", from_id=choice_id)
-            assert len(choice_to) == 1
-            target = choice_to[0]["to"]
+        # Routing choices should exist pointing to ending passages
+        choices = graph.get_nodes_by_type("choice")
+        routing = {cid: c for cid, c in choices.items() if c.get("is_routing")}
+        assert len(routing) >= 2  # At least 2 incoming x 2 variants, minus deduplication
+
+        # Each routing choice should point to an ending passage
+        for _cid, cdata in routing.items():
+            target = cdata.get("to_passage", "")
             target_data = graph.get_node(target)
+            assert target_data is not None
             assert target_data.get("is_ending") is True
 
     def test_ending_tone_propagated_to_endings(self) -> None:
