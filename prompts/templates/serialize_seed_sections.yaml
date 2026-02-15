@@ -724,16 +724,45 @@ dilemma_analyses_prompt: |
   The residue_note describes differences persisting AFTER convergence.
   Set to null for `hard` dilemmas or when no differences persist.
 
+  ## Ending Salience
+
+  How much should story ENDINGS differ based on this dilemma?
+  This is SEPARATE from convergence_policy. A `soft` dilemma CAN have
+  `high` ending salience (paths converge mid-story but endings still
+  differ). A `hard` dilemma CAN have `low` ending salience (paths stay
+  separate but share the same ending tone/feeling).
+
+  **high** (rare, 1-2 per story max) -- Endings MUST differ based on
+  this choice. This dilemma drives ending family signatures.
+  Examples: save vs sacrifice (different epilogue), betray vs stay loyal
+  (different final scene mood and outcome).
+
+  **low** (default, most common) -- Endings MAY mention this choice but
+  MUST work without it. A reader who forgot this choice should still
+  find the ending satisfying.
+  Examples: stealth vs force (ending might note approach style but does
+  not depend on it), trust vs suspicion (ending works either way).
+
+  **none** -- Ending prose MUST NOT reference this choice at all.
+  Examples: left door vs right door, polite vs blunt greeting.
+
+  Most dilemmas should be `low`. Only 1-2 should be `high`.
+  If more than 2 are `high`, re-evaluate.
+
   ## Ending Tone
 
-  For `hard` dilemmas: provide a 2-5 word emotional descriptor for how
-  endings shaped by this dilemma should feel. This guides the FILL stage
-  when generating prose for endings on each arc.
+  Only meaningful when `ending_salience` is `high`. When `ending_salience`
+  is `low` or `none`, set `ending_tone` to null regardless of
+  `convergence_policy`.
+
+  For dilemmas with `ending_salience: "high"`: provide a 2-5 word
+  emotional descriptor for how endings shaped by this dilemma should feel.
+  This guides the FILL stage when generating prose for endings on each arc.
   GOOD: "cold justice", "bittersweet triumph", "quiet dread"
   BAD: "the ending is sad" (too vague)
 
-  For `soft` and `flavor`: set ending_tone to null (their paths converge,
-  so ending tone comes from the shared continuation).
+  For dilemmas with `ending_salience: "low"` or `"none"`: set
+  ending_tone to null (endings do not depend on this choice).
 
   ## Context
 
@@ -751,6 +780,7 @@ dilemma_analyses_prompt: |
         "reasoning": "Trust vs suspicion changes the relationship tone but both paths lead to the same confrontation.",
         "convergence_point": "paths converge at council_chamber for the final confrontation",
         "residue_note": "suspicious-path characters remain wary of the host",
+        "ending_salience": "low",
         "ending_tone": null
       }},
       {{
@@ -760,6 +790,7 @@ dilemma_analyses_prompt: |
         "reasoning": "Polite vs blunt greeting changes dialogue tone but leads to the same meeting outcome.",
         "convergence_point": "paths converge at the tavern entrance after introductions",
         "residue_note": null,
+        "ending_salience": "none",
         "ending_tone": null
       }},
       {{
@@ -769,6 +800,7 @@ dilemma_analyses_prompt: |
         "reasoning": "Murder vs accident produces incompatible crime scenes, suspect lists, and endings — no shared scene can follow both.",
         "convergence_point": null,
         "residue_note": null,
+        "ending_salience": "high",
         "ending_tone": "cold justice"
       }}
     ]
@@ -787,16 +819,21 @@ dilemma_analyses_prompt: |
   - BAD reasoning: "It is soft." / "Only one path."
   - `convergence_point`: null for `hard`; location-based description for `soft`/`flavor`
   - `residue_note`: null for `hard` or if no differences persist; short description otherwise
-  - `ending_tone`: required for `hard`, null for `soft`/`flavor` (see Ending Tone section above)
+  - `ending_salience`: "low" for most dilemmas (default); "high" for 1-2 dilemmas whose choice should shape endings; "none" for cosmetic-only choices
+  - `ending_salience` is INDEPENDENT of `convergence_policy` — a `soft` dilemma can be `high`, a `hard` dilemma can be `low`
+  - `ending_tone`: required when `ending_salience` is "high", null otherwise
 
   ## Self-Check
-  Count your classifications. If more than 2 are `hard`, re-evaluate — most
-  stories need at most 1-2 hard dilemmas.
+  Count your classifications:
+  - If more than 2 are `hard`, re-evaluate — most stories need at most 1-2 hard dilemmas.
+  - If more than 2 have `ending_salience: "high"`, re-evaluate — most stories need at most 1-2 ending-shaping dilemmas.
+  - Check: every dilemma with `ending_tone` set also has `ending_salience: "high"`. If not, fix it.
 
   ## REMINDER
   Classify ALL dilemmas. Most should be `soft`. Only 1-2 should be `hard`.
   Ask: "Could the SAME scene follow both answers?"
   YES with differences -> soft (most common). YES nearly identical -> flavor. NO (incompatible world states) -> hard (rare).
+  Most dilemmas get `ending_salience: "low"`. Only 1-2 get `"high"`. Set `ending_tone` ONLY when `ending_salience` is `"high"`.
 
   ## Output
   Return ONLY valid JSON with the "dilemma_analyses" array. Classify ALL dilemmas.

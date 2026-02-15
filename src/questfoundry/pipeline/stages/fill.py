@@ -46,6 +46,7 @@ from questfoundry.graph.fill_context import (
     format_dream_vision,
     format_ending_differentiation,
     format_ending_guidance,
+    format_ending_salience_obligations,
     format_entity_arc_context,
     format_entity_states,
     format_grow_summary,
@@ -1169,6 +1170,7 @@ class FillStage:
                     is_ending,
                     ending_tone=passage.get("ending_tone", ""),
                     ending_differentiation=format_ending_differentiation(graph, passage_id),
+                    salience_obligations=format_ending_salience_obligations(graph, passage_id),
                 ),
                 "introduction_guidance": format_introduction_guidance(
                     first_names,

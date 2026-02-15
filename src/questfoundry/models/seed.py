@@ -27,6 +27,7 @@ EntityDisposition = Literal["retained", "cut"]
 PathTier = Literal["major", "minor"]
 DilemmaEffect = Literal["advances", "reveals", "commits", "complicates"]
 ConvergencePolicy = Literal["hard", "soft", "flavor"]
+EndingSalience = Literal["high", "low", "none"]
 ConstraintType = Literal["shared_entity", "causal_chain", "resource_conflict"]
 
 
@@ -246,7 +247,8 @@ class DilemmaAnalysis(BaseModel):
 
     Attributes:
         dilemma_id: References a dilemma from Section 2.
-        convergence_policy: How strictly paths must stay separate.
+        convergence_policy: How strictly paths must stay separate (topology).
+        ending_salience: How much this dilemma drives ending differentiation (prose layer).
         payoff_budget: Minimum exclusive beats before convergence (>=2).
         reasoning: Chain-of-thought for the classification.
         convergence_point: Where this dilemma's paths physically converge.
@@ -256,6 +258,14 @@ class DilemmaAnalysis(BaseModel):
     dilemma_id: str = Field(min_length=1, description="Dilemma ID from Section 2")
     convergence_policy: ConvergencePolicy = Field(
         description="How strictly paths must stay separate (hard|soft|flavor)",
+    )
+    ending_salience: EndingSalience = Field(
+        default="low",
+        description=(
+            "How much this dilemma drives ending differentiation. "
+            "'high' = endings MUST differ; 'low' = endings MAY acknowledge; "
+            "'none' = ending prose MUST NOT reference this choice"
+        ),
     )
     payoff_budget: int = Field(
         ge=2,

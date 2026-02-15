@@ -66,6 +66,7 @@ def make_single_dilemma_graph() -> Graph:
             "type": "dilemma",
             "raw_id": "mentor_trust",
             "question": "Does the hero trust the mentor?",
+            "ending_salience": "high",
         },
     )
 
@@ -258,6 +259,7 @@ def make_two_dilemma_graph() -> Graph:
             "type": "dilemma",
             "raw_id": "mentor_trust",
             "question": "Does the hero trust the mentor?",
+            "ending_salience": "high",
         },
     )
     graph.create_node(
@@ -266,6 +268,7 @@ def make_two_dilemma_graph() -> Graph:
             "type": "dilemma",
             "raw_id": "artifact_quest",
             "question": "Does the hero use the artifact for good?",
+            "ending_salience": "high",
         },
     )
 
@@ -450,6 +453,7 @@ def make_e2e_fixture_graph() -> Graph:
             "type": "dilemma",
             "raw_id": "mentor_trust",
             "question": "Does the hero trust the mentor?",
+            "ending_salience": "high",
         },
     )
     graph.create_node(
@@ -458,6 +462,7 @@ def make_e2e_fixture_graph() -> Graph:
             "type": "dilemma",
             "raw_id": "artifact_quest",
             "question": "Does the hero use the artifact for good or selfish ends?",
+            "ending_salience": "high",
         },
     )
 
