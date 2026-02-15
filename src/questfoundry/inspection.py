@@ -377,10 +377,17 @@ def _branching_quality_score(
 
     variant_signatures: set[frozenset[str]] = set()
     for pid in ending_ids:
-        from_beat = passages[pid].get("from_beat") or passages[pid].get("primary_beat") or ""
-        covering_arcs = beat_to_arcs.get(from_beat, [])
-        for arc_id in covering_arcs:
-            variant_signatures.add(arc_codewords.get(arc_id, frozenset()))
+        pdata = passages[pid]
+        # Synthetic endings (from split_ending_families) carry family_codewords
+        # directly; non-synthetic endings need beat→arc→codeword lookup.
+        family_cws = pdata.get("family_codewords")
+        if family_cws is not None:
+            variant_signatures.add(frozenset(family_cws))
+        else:
+            from_beat = pdata.get("from_beat") or pdata.get("primary_beat") or ""
+            covering_arcs = beat_to_arcs.get(from_beat, [])
+            for arc_id in covering_arcs:
+                variant_signatures.add(arc_codewords.get(arc_id, frozenset()))
 
     # Meaningful choice ratio
     ratio = 0.0
