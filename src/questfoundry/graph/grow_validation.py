@@ -1365,6 +1365,125 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
     return checks
 
 
+def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
+    """Validate prose-layer contracts for shared (converged) passages.
+
+    For each passage shared across arcs from different paths of the same
+    dilemma, checks whether the dilemma's prose-layer settings require
+    variant routing:
+
+    - ``residue_weight: heavy`` or ``ending_salience: high`` without routing
+      → fail (prose MUST vary but no mechanism exists)
+    - ``residue_weight: light`` without routing → warn (prose MAY vary)
+    - ``residue_weight: cosmetic`` / ``ending_salience: none`` → pass
+
+    Returns one check per violation, or a single pass if all contracts hold.
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+    passage_nodes = graph.get_nodes_by_type("passage")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    choice_nodes = graph.get_nodes_by_type("choice")
+
+    if not arc_nodes or not passage_nodes or not dilemma_nodes:
+        return [
+            ValidationCheck(
+                name="prose_neutrality",
+                severity="pass",
+                message="No arcs/passages/dilemmas to validate prose neutrality",
+            )
+        ]
+
+    # Build beat → set of arc IDs covering it
+    beat_arcs: dict[str, set[str]] = {}
+    for arc_id, adata in arc_nodes.items():
+        for beat_id in adata.get("sequence", []):
+            beat_arcs.setdefault(str(beat_id), set()).add(arc_id)
+
+    # Build arc → dilemma mapping via arc paths
+    arc_dilemmas: dict[str, set[str]] = {}
+    path_nodes = graph.get_nodes_by_type("path")
+    for arc_id, adata in arc_nodes.items():
+        for path_raw in adata.get("paths", []):
+            path_id = normalize_scoped_id(path_raw, "path")
+            pdata = path_nodes.get(path_id, {})
+            dilemma_raw = pdata.get("dilemma_id", "")
+            if dilemma_raw:
+                dilemma_id = normalize_scoped_id(dilemma_raw, "dilemma")
+                arc_dilemmas.setdefault(arc_id, set()).add(dilemma_id)
+
+    # Build passage → set of routing choice targets
+    routed_passages: set[str] = set()
+    for _cid, cdata in choice_nodes.items():
+        if cdata.get("is_routing"):
+            source = str(cdata.get("from_passage", ""))
+            if source:
+                routed_passages.add(source)
+
+    checks: list[ValidationCheck] = []
+
+    for pid, pdata in passage_nodes.items():
+        from_beat = str(pdata.get("from_beat") or "")
+        if not from_beat:
+            continue
+
+        covering_arcs = beat_arcs.get(from_beat, set())
+        if len(covering_arcs) < 2:
+            continue  # Not shared
+
+        # Find dilemmas that diverge across covering arcs
+        # (dilemma appears in some arcs but not all = paths diverged before this beat)
+        all_dilemma_ids: set[str] = set()
+        for arc_id in covering_arcs:
+            all_dilemma_ids.update(arc_dilemmas.get(arc_id, set()))
+
+        has_routing = pid in routed_passages
+
+        for dilemma_id in sorted(all_dilemma_ids):
+            ddata = dilemma_nodes.get(dilemma_id, {})
+            weight = ddata.get("residue_weight", "light")
+            salience = ddata.get("ending_salience", "low")
+            label = ddata.get("question", dilemma_id)
+
+            if has_routing:
+                continue  # Variant routing exists, prose contract met
+
+            if weight == "heavy" or salience == "high":
+                checks.append(
+                    ValidationCheck(
+                        name="prose_neutrality",
+                        severity="fail",
+                        message=(
+                            f"Shared passage {pid} requires variant routing "
+                            f"for dilemma '{label}' "
+                            f"(residue_weight={weight}, ending_salience={salience})"
+                        ),
+                    )
+                )
+            elif weight == "light" and salience == "low":
+                checks.append(
+                    ValidationCheck(
+                        name="prose_neutrality",
+                        severity="warn",
+                        message=(
+                            f"Shared passage {pid} has no variant routing "
+                            f"for dilemma '{label}' (residue_weight=light)"
+                        ),
+                    )
+                )
+            # cosmetic/none → pass, no check needed
+
+    if not checks:
+        checks.append(
+            ValidationCheck(
+                name="prose_neutrality",
+                severity="pass",
+                message="All shared passages satisfy prose-layer contracts",
+            )
+        )
+
+    return checks
+
+
 def _compute_linear_threshold(graph: Graph) -> int:
     """Scale max consecutive linear threshold with passage count.
 
@@ -1399,4 +1518,5 @@ def run_all_checks(graph: Graph) -> ValidationReport:
     checks.extend(check_commits_timing(graph))
     checks.extend(check_convergence_policy_compliance(graph))
     checks.extend(check_routing_coverage(graph))
+    checks.extend(check_prose_neutrality(graph))
     return ValidationReport(checks=checks)
