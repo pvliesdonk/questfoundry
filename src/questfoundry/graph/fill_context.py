@@ -1527,6 +1527,7 @@ def format_ending_guidance(
     *,
     ending_tone: str = "",
     ending_differentiation: str = "",
+    salience_obligations: str = "",
 ) -> str:
     """Format ending-specific prose guidance.
 
@@ -1539,6 +1540,8 @@ def format_ending_guidance(
             (e.g. "bittersweet triumph"). Appended to guidance when present.
         ending_differentiation: Optional family-specific narrative context
             from ``format_ending_differentiation()``.  Appended after tone.
+        salience_obligations: Optional negative obligations from
+            ``format_ending_salience_obligations()``.  Appended last.
 
     Returns:
         Ending guidance string, or empty string.
@@ -1571,6 +1574,8 @@ def format_ending_guidance(
         )
     if ending_differentiation:
         guidance += f"\n\n{ending_differentiation}"
+    if salience_obligations:
+        guidance += f"\n\n{salience_obligations}"
     return guidance
 
 
@@ -1648,6 +1653,53 @@ def format_ending_differentiation(graph: Graph, passage_id: str) -> str:
         "Do NOT reference choices the reader did not make.\n"
         "Do NOT write a generic ending that could apply to any path."
     )
+
+
+def format_ending_salience_obligations(graph: Graph, passage_id: str) -> str:
+    """Build negative obligations for ending prose based on dilemma ending_salience.
+
+    For each dilemma reachable from arcs covering this passage:
+    - ``ending_salience: none`` → "Do NOT reference [dilemma]"
+    - ``ending_salience: low``  → "May acknowledge but must work without"
+
+    Only returns obligations for non-high dilemmas.  High-salience
+    dilemmas are handled by ``format_ending_differentiation()``.
+
+    Args:
+        graph: Story graph with dilemma, arc, and passage nodes.
+        passage_id: Full node ID of the ending passage.
+
+    Returns:
+        Obligation text block, or empty string if no obligations apply.
+    """
+    passage = graph.get_node(passage_id)
+    if not passage or not passage.get("is_ending"):
+        return ""
+
+    # Find all dilemmas in the story
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    if not dilemma_nodes:
+        return ""
+
+    none_dilemmas: list[str] = []
+    low_dilemmas: list[str] = []
+    for dilemma_id, dilemma_data in dilemma_nodes.items():
+        salience = dilemma_data.get("ending_salience", "low")
+        label = dilemma_data.get("question", strip_scope_prefix(dilemma_id))
+        if salience == "none":
+            none_dilemmas.append(label)
+        elif salience == "low":
+            low_dilemmas.append(label)
+
+    if not none_dilemmas and not low_dilemmas:
+        return ""
+
+    lines: list[str] = ["## Ending Salience Obligations\n"]
+    for label in sorted(none_dilemmas):
+        lines.append(f"- Do NOT reference or depend on: {label}")
+    for label in sorted(low_dilemmas):
+        lines.append(f"- May acknowledge but ending must work without: {label}")
+    return "\n".join(lines)
 
 
 def compute_first_appearances(
