@@ -5178,7 +5178,10 @@ class TestSplitEndingFamilies:
         graph = Graph.empty()
 
         # Dilemma + paths
-        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "ending_salience": "high"},
+        )
         graph.create_node(
             "path::d1__yes",
             {
