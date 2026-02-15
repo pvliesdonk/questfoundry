@@ -22,6 +22,7 @@ from questfoundry.graph.grow_validation import (
     check_gate_satisfiability,
     check_max_consecutive_linear,
     check_passage_dag_cycles,
+    check_prose_neutrality,
     check_routing_coverage,
     check_single_start,
     check_spine_arc_exists,
@@ -2100,6 +2101,163 @@ class TestCheckRoutingCoverage:
             },
         )
         result = check_routing_coverage(graph)
-        # No from_beat → no covering arcs → no CE/ME checks → all pass
+        # No from_beat -> no covering arcs -> no CE/ME checks -> all pass
         assert len(result) == 1
         assert result[0].severity == "pass"
+
+
+def _make_shared_passage_graph(
+    residue_weight: str = "light",
+    ending_salience: str = "low",
+    add_routing: bool = False,
+) -> Graph:
+    """Build a graph with a shared passage (covered by 2 arcs from different paths).
+
+    Creates:
+    - dilemma d1 with given prose-layer settings
+    - paths p1 (d1), p2 (d1)
+    - 2 arcs both covering beat::shared
+    - passage::shared at beat::shared
+    - optionally: routing choices on passage::shared
+    """
+    graph = Graph.empty()
+
+    graph.create_node(
+        "dilemma::d1",
+        {
+            "type": "dilemma",
+            "raw_id": "d1",
+            "question": "Trust or betray?",
+            "residue_weight": residue_weight,
+            "ending_salience": ending_salience,
+        },
+    )
+    graph.create_node(
+        "path::p1",
+        {"type": "path", "raw_id": "p1", "dilemma_id": "dilemma::d1"},
+    )
+    graph.create_node(
+        "path::p2",
+        {"type": "path", "raw_id": "p2", "dilemma_id": "dilemma::d1"},
+    )
+
+    graph.create_node(
+        "passage::shared",
+        {"type": "passage", "raw_id": "shared", "from_beat": "beat::shared", "summary": "shared"},
+    )
+
+    # Two arcs covering the same beat
+    graph.create_node(
+        "arc::a1",
+        {
+            "type": "arc",
+            "raw_id": "a1",
+            "arc_type": "spine",
+            "paths": ["path::p1"],
+            "sequence": ["beat::shared"],
+        },
+    )
+    graph.create_node(
+        "arc::a2",
+        {
+            "type": "arc",
+            "raw_id": "a2",
+            "arc_type": "branch",
+            "paths": ["path::p2"],
+            "sequence": ["beat::shared"],
+        },
+    )
+
+    if add_routing:
+        graph.create_node(
+            "passage::v1",
+            {"type": "passage", "raw_id": "v1", "summary": "v1"},
+        )
+        graph.create_node(
+            "choice::r1",
+            {
+                "type": "choice",
+                "from_passage": "passage::shared",
+                "to_passage": "passage::v1",
+                "label": "r1",
+                "is_routing": True,
+                "requires": ["codeword::cw1"],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::r1", "passage::shared")
+
+    return graph
+
+
+class TestCheckProseNeutrality:
+    """Tests for check_prose_neutrality() validation."""
+
+    def test_empty_graph_passes(self) -> None:
+        graph = Graph.empty()
+        result = check_prose_neutrality(graph)
+        assert len(result) == 1
+        assert result[0].severity == "pass"
+
+    def test_no_shared_passages_passes(self) -> None:
+        """Passage covered by only 1 arc is not shared, no check needed."""
+        graph = Graph.empty()
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "residue_weight": "heavy"},
+        )
+        graph.create_node(
+            "passage::solo",
+            {"type": "passage", "raw_id": "solo", "from_beat": "beat::solo", "summary": "solo"},
+        )
+        graph.create_node(
+            "arc::a1",
+            {
+                "type": "arc",
+                "raw_id": "a1",
+                "arc_type": "spine",
+                "paths": [],
+                "sequence": ["beat::solo"],
+            },
+        )
+        result = check_prose_neutrality(graph)
+        assert len(result) == 1
+        assert result[0].severity == "pass"
+
+    def test_heavy_without_routing_fails(self) -> None:
+        graph = _make_shared_passage_graph(residue_weight="heavy")
+        result = check_prose_neutrality(graph)
+        fails = [c for c in result if c.severity == "fail"]
+        assert len(fails) >= 1
+        assert "passage::shared" in fails[0].message
+        assert "residue_weight=heavy" in fails[0].message
+
+    def test_high_salience_without_routing_fails(self) -> None:
+        graph = _make_shared_passage_graph(ending_salience="high")
+        result = check_prose_neutrality(graph)
+        fails = [c for c in result if c.severity == "fail"]
+        assert len(fails) >= 1
+        assert "ending_salience=high" in fails[0].message
+
+    def test_light_without_routing_warns(self) -> None:
+        graph = _make_shared_passage_graph(residue_weight="light", ending_salience="low")
+        result = check_prose_neutrality(graph)
+        warns = [c for c in result if c.severity == "warn"]
+        assert len(warns) >= 1
+        assert "residue_weight=light" in warns[0].message
+
+    def test_cosmetic_without_routing_passes(self) -> None:
+        graph = _make_shared_passage_graph(residue_weight="cosmetic", ending_salience="none")
+        result = check_prose_neutrality(graph)
+        assert all(c.severity == "pass" for c in result)
+
+    def test_heavy_with_routing_passes(self) -> None:
+        graph = _make_shared_passage_graph(residue_weight="heavy", add_routing=True)
+        result = check_prose_neutrality(graph)
+        # With routing present, all checks pass
+        assert all(c.severity == "pass" for c in result)
+
+    def test_high_salience_with_routing_passes(self) -> None:
+        graph = _make_shared_passage_graph(ending_salience="high", add_routing=True)
+        result = check_prose_neutrality(graph)
+        assert all(c.severity == "pass" for c in result)
