@@ -112,7 +112,6 @@ class SqliteGraphStore:
             self._conn = sqlite3.connect(
                 self._db_path,
                 isolation_level=None,  # autocommit — we manage transactions
-                check_same_thread=False,  # async stages cross thread boundaries
             )
         self._conn.row_factory = sqlite3.Row
         self._conn.execute("PRAGMA journal_mode=WAL")
@@ -170,7 +169,7 @@ class SqliteGraphStore:
 
         Args:
             stage: Current pipeline stage (e.g., "grow").
-            phase: Current phase within the stage (e.g., "scene_types").
+            phase: Current phase within the stage (e.g., "path_agnostic").
         """
         self._stage = stage
         self._phase = phase
@@ -268,11 +267,31 @@ class SqliteGraphStore:
         row = self._conn.execute("SELECT 1 FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         return row is not None
 
+    def _node_meta(self, node_id: str) -> dict[str, str | None]:
+        """Fetch audit metadata columns for a node."""
+        row = self._conn.execute(
+            "SELECT created_stage, created_phase, modified_stage, modified_phase "
+            "FROM nodes WHERE node_id = ?",
+            (node_id,),
+        ).fetchone()
+        if row is None:
+            return {}
+        return {
+            "created_stage": row["created_stage"],
+            "created_phase": row["created_phase"],
+            "modified_stage": row["modified_stage"],
+            "modified_phase": row["modified_phase"],
+        }
+
     def set_node(self, node_id: str, data: dict[str, Any]) -> None:
         node_type = data.get("type", "")
         row = self._conn.execute("SELECT data FROM nodes WHERE node_id = ?", (node_id,)).fetchone()
         existing = row is not None
-        before = json.loads(row["data"]) if existing else None
+        before: dict[str, Any] | None = None
+        if existing and row is not None:
+            old_data: dict[str, Any] = json.loads(row["data"])
+            old_data["_meta"] = self._node_meta(node_id)
+            before = old_data
         self._conn.execute(
             "INSERT OR REPLACE INTO nodes "
             "(node_id, type, data, created_stage, created_phase, modified_stage, modified_phase) "
@@ -300,7 +319,8 @@ class SqliteGraphStore:
         if row is None:
             raise NodeNotFoundError(node_id=node_id)
         current = json.loads(row["data"])
-        old_values = {k: current.get(k) for k in updates}
+        old_values: dict[str, Any] = {k: current.get(k) for k in updates}
+        old_values["_meta"] = self._node_meta(node_id)
         current.update(updates)
         node_type = current.get("type", "")
         self._conn.execute(
@@ -320,6 +340,7 @@ class SqliteGraphStore:
         if row is None:
             raise NodeNotFoundError(node_id=node_id)
         before = json.loads(row["data"])
+        before["_meta"] = self._node_meta(node_id)
         self._conn.execute("DELETE FROM nodes WHERE node_id = ?", (node_id,))
         self._record_mutation("delete_node", node_id, before_state=before)
 
@@ -465,13 +486,13 @@ class SqliteGraphStore:
 
         Args:
             stage: Pipeline stage (e.g., ``"grow"``).
-            phase: Phase within the stage (e.g., ``"scene_types"``).
+            phase: Phase within the stage (e.g., ``"path_agnostic"``).
 
         Returns:
-            Number of mutations reversed.  Returns 0 if no mutations
-            exist for *(stage, phase)* (already in pre-phase state).
+            Number of mutations reversed.
 
         Raises:
+            ValueError: If no mutations found for *(stage, phase)*.
             RuntimeError: If a mutation lacks ``before_state`` needed for
                 reversal (e.g., pre-migration data).
         """
@@ -481,7 +502,7 @@ class SqliteGraphStore:
         ).fetchone()
 
         if row is None or row["min_id"] is None:
-            return 0
+            raise ValueError(f"No mutations found for stage={stage!r}, phase={phase!r}")
 
         return self._rewind_from_id(row["min_id"])
 
@@ -495,10 +516,10 @@ class SqliteGraphStore:
             stage: Pipeline stage to rewind (e.g., ``"grow"``).
 
         Returns:
-            Number of mutations reversed.  Returns 0 if no mutations
-            exist for the stage (the graph is already in pre-stage state).
+            Number of mutations reversed.
 
         Raises:
+            ValueError: If no mutations found for the stage.
             RuntimeError: If a mutation lacks ``before_state`` needed for
                 reversal.
         """
@@ -508,7 +529,7 @@ class SqliteGraphStore:
         ).fetchone()
 
         if row is None or row["min_id"] is None:
-            return 0
+            raise ValueError(f"No mutations found for stage={stage!r}")
 
         return self._rewind_from_id(row["min_id"])
 
@@ -573,9 +594,20 @@ class SqliteGraphStore:
                     f"Cannot reverse replace_node for {target_id!r}: "
                     f"before_state is missing (pre-migration mutation?)"
                 )
+            meta = before.pop("_meta", {})
             self._conn.execute(
-                "INSERT OR REPLACE INTO nodes (node_id, type, data) VALUES (?, ?, ?)",
-                (target_id, before.get("type", ""), json.dumps(before)),
+                "INSERT OR REPLACE INTO nodes "
+                "(node_id, type, data, created_stage, created_phase, modified_stage, modified_phase) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    target_id,
+                    before.get("type", ""),
+                    json.dumps(before),
+                    meta.get("created_stage"),
+                    meta.get("created_phase"),
+                    meta.get("modified_stage"),
+                    meta.get("modified_phase"),
+                ),
             )
 
         elif operation == "update_node":
@@ -584,6 +616,7 @@ class SqliteGraphStore:
                     f"Cannot reverse update_node for {target_id!r}: "
                     f"before_state is missing (pre-migration mutation?)"
                 )
+            meta = before.pop("_meta", {})
             row = self._conn.execute(
                 "SELECT data FROM nodes WHERE node_id = ?", (target_id,)
             ).fetchone()
@@ -597,10 +630,14 @@ class SqliteGraphStore:
                     current.pop(k, None)
                 else:
                     current[k] = v
-            self._conn.execute(
-                "UPDATE nodes SET data = ?, type = ? WHERE node_id = ?",
-                (json.dumps(current), current.get("type", ""), target_id),
-            )
+            update_sql = "UPDATE nodes SET data = ?, type = ?"
+            params: list[Any] = [json.dumps(current), current.get("type", "")]
+            if meta:
+                update_sql += ", modified_stage = ?, modified_phase = ?"
+                params.extend([meta.get("modified_stage"), meta.get("modified_phase")])
+            update_sql += " WHERE node_id = ?"
+            params.append(target_id)
+            self._conn.execute(update_sql, params)
 
         elif operation == "delete_node":
             if before is None:
@@ -608,9 +645,20 @@ class SqliteGraphStore:
                     f"Cannot reverse delete_node for {target_id!r}: "
                     f"before_state is missing (pre-migration mutation?)"
                 )
+            meta = before.pop("_meta", {})
             self._conn.execute(
-                "INSERT INTO nodes (node_id, type, data) VALUES (?, ?, ?)",
-                (target_id, before.get("type", ""), json.dumps(before)),
+                "INSERT INTO nodes "
+                "(node_id, type, data, created_stage, created_phase, modified_stage, modified_phase) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (
+                    target_id,
+                    before.get("type", ""),
+                    json.dumps(before),
+                    meta.get("created_stage"),
+                    meta.get("created_phase"),
+                    meta.get("modified_stage"),
+                    meta.get("modified_phase"),
+                ),
             )
 
         elif operation == "add_edge":
