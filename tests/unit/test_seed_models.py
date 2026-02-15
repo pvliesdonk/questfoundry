@@ -382,6 +382,39 @@ class TestDilemmaAnalysis:
         da = DilemmaAnalysis.model_validate(data)
         assert da.ending_salience == "low"
 
+    # --- residue_weight ---
+
+    def test_residue_weight_defaults_to_light(self) -> None:
+        da = DilemmaAnalysis(**_ANALYSIS_KWARGS)
+        assert da.residue_weight == "light"
+
+    @pytest.mark.parametrize(
+        "weight",
+        [
+            pytest.param("heavy", id="heavy"),
+            pytest.param("light", id="light"),
+            pytest.param("cosmetic", id="cosmetic"),
+        ],
+    )
+    def test_valid_residue_weight_values(self, weight: str) -> None:
+        da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "residue_weight": weight})
+        assert da.residue_weight == weight
+
+    def test_invalid_residue_weight_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="residue_weight"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "residue_weight": "medium"})
+
+    def test_backward_compat_without_residue_weight(self) -> None:
+        """Model validates when residue_weight is not provided (backward compat)."""
+        data = {
+            "dilemma_id": "legacy_dilemma",
+            "convergence_policy": "soft",
+            "payoff_budget": 2,
+            "reasoning": "From older version without residue_weight",
+        }
+        da = DilemmaAnalysis.model_validate(data)
+        assert da.residue_weight == "light"
+
 
 class TestInteractionConstraint:
     """InteractionConstraint normalizes pair order and validates fields."""

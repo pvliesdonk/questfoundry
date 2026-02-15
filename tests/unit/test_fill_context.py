@@ -30,6 +30,7 @@ from questfoundry.graph.fill_context import (
     format_passage_context,
     format_passages_batch,
     format_path_arc_context,
+    format_residue_weight_obligations,
     format_scene_types_summary,
     format_sliding_window,
     format_used_imagery_blocklist,
@@ -2604,3 +2605,96 @@ class TestEndingSalienceObligations:
 
         result = format_ending_salience_obligations(g, "passage::finale")
         assert "May acknowledge but ending must work without: Legacy dilemma?" in result
+
+
+class TestResidueWeightObligations:
+    """Tests for format_residue_weight_obligations."""
+
+    def test_ending_passage_returns_empty(self) -> None:
+        """Ending passages use ending_salience, not residue_weight."""
+        g = Graph.empty()
+        g.create_node(
+            "passage::finale",
+            {"type": "passage", "raw_id": "finale", "is_ending": True},
+        )
+        assert format_residue_weight_obligations(g, "passage::finale") == ""
+
+    def test_missing_passage_returns_empty(self) -> None:
+        g = Graph.empty()
+        assert format_residue_weight_obligations(g, "passage::nonexistent") == ""
+
+    def test_no_dilemmas_returns_empty(self) -> None:
+        g = Graph.empty()
+        g.create_node("passage::mid", {"type": "passage", "raw_id": "mid"})
+        assert format_residue_weight_obligations(g, "passage::mid") == ""
+
+    def test_all_light_returns_empty(self) -> None:
+        """When all dilemmas are light, no obligations are generated."""
+        g = Graph.empty()
+        g.create_node("passage::mid", {"type": "passage", "raw_id": "mid"})
+        g.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "question": "Trust?", "residue_weight": "light"},
+        )
+        assert format_residue_weight_obligations(g, "passage::mid") == ""
+
+    def test_cosmetic_generates_do_not_reference(self) -> None:
+        g = Graph.empty()
+        g.create_node("passage::mid", {"type": "passage", "raw_id": "mid"})
+        g.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Polite or blunt?",
+                "residue_weight": "cosmetic",
+            },
+        )
+        result = format_residue_weight_obligations(g, "passage::mid")
+        assert "Residue Weight Obligations" in result
+        assert "Do NOT reference or depend on: Polite or blunt?" in result
+
+    def test_heavy_generates_must_show_differences(self) -> None:
+        g = Graph.empty()
+        g.create_node("passage::mid", {"type": "passage", "raw_id": "mid"})
+        g.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Betray or stay loyal?",
+                "residue_weight": "heavy",
+            },
+        )
+        result = format_residue_weight_obligations(g, "passage::mid")
+        assert "MUST show state-specific differences for: Betray or stay loyal?" in result
+
+    def test_mixed_weights(self) -> None:
+        g = Graph.empty()
+        g.create_node("passage::mid", {"type": "passage", "raw_id": "mid"})
+        g.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "question": "Trust?", "residue_weight": "heavy"},
+        )
+        g.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "raw_id": "d2", "question": "Door?", "residue_weight": "cosmetic"},
+        )
+        g.create_node(
+            "dilemma::d3",
+            {"type": "dilemma", "raw_id": "d3", "question": "Stay?", "residue_weight": "light"},
+        )
+        result = format_residue_weight_obligations(g, "passage::mid")
+        assert "Do NOT reference or depend on: Door?" in result
+        assert "MUST show state-specific differences for: Trust?" in result
+        assert "Stay?" not in result
+
+    def test_missing_residue_weight_defaults_to_light(self) -> None:
+        g = Graph.empty()
+        g.create_node("passage::mid", {"type": "passage", "raw_id": "mid"})
+        g.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "question": "Legacy?"},
+        )
+        # No residue_weight set -> defaults to light -> no obligations
+        assert format_residue_weight_obligations(g, "passage::mid") == ""
