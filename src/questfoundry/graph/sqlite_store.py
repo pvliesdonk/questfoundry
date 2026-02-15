@@ -489,10 +489,10 @@ class SqliteGraphStore:
             phase: Phase within the stage (e.g., ``"path_agnostic"``).
 
         Returns:
-            Number of mutations reversed.
+            Number of mutations reversed. Returns 0 if no mutations
+            exist for *(stage, phase)*.
 
         Raises:
-            ValueError: If no mutations found for *(stage, phase)*.
             RuntimeError: If a mutation lacks ``before_state`` needed for
                 reversal (e.g., pre-migration data).
         """
@@ -502,7 +502,7 @@ class SqliteGraphStore:
         ).fetchone()
 
         if row is None or row["min_id"] is None:
-            raise ValueError(f"No mutations found for stage={stage!r}, phase={phase!r}")
+            return 0
 
         return self._rewind_from_id(row["min_id"])
 
@@ -516,10 +516,10 @@ class SqliteGraphStore:
             stage: Pipeline stage to rewind (e.g., ``"grow"``).
 
         Returns:
-            Number of mutations reversed.
+            Number of mutations reversed. Returns 0 if no mutations
+            exist for the stage.
 
         Raises:
-            ValueError: If no mutations found for the stage.
             RuntimeError: If a mutation lacks ``before_state`` needed for
                 reversal.
         """
@@ -529,7 +529,7 @@ class SqliteGraphStore:
         ).fetchone()
 
         if row is None or row["min_id"] is None:
-            raise ValueError(f"No mutations found for stage={stage!r}")
+            return 0
 
         return self._rewind_from_id(row["min_id"])
 

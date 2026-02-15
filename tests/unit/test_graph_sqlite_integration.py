@@ -720,20 +720,18 @@ class TestRewind:
         assert not graph.has_node("p2")
         assert not graph.has_node("p3")
 
-    def test_rewind_nonexistent_phase_raises(self) -> None:
-        """Rewind raises ValueError for a phase with no mutations."""
+    def test_rewind_nonexistent_phase_is_noop(self) -> None:
+        """Rewind returns 0 for a phase with no mutations."""
         store = SqliteGraphStore()
         graph = Graph(store=store)
 
         with graph.mutation_context("grow", "spine"):
             graph.create_node("n1", {"type": "t"})
 
-        raised = False
-        try:
-            graph.rewind_to_phase("grow", "nonexistent")
-        except ValueError:
-            raised = True
-        assert raised, "Expected ValueError for nonexistent phase"
+        count = graph.rewind_to_phase("grow", "nonexistent")
+        assert count == 0
+        # Original node should still exist
+        assert graph.has_node("n1")
 
     def test_rewind_stage_reverses_all(self) -> None:
         """rewind_stage reverses all phases within the stage."""
