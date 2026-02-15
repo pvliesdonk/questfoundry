@@ -749,6 +749,31 @@ dilemma_analyses_prompt: |
   Most dilemmas should be `low`. Only 1-2 should be `high`.
   If more than 2 are `high`, re-evaluate.
 
+  ## Residue Weight
+
+  How much should MID-STORY prose vary based on this dilemma's outcome?
+  This controls shared passages AFTER convergence (if paths converge).
+  This is SEPARATE from ending_salience. A dilemma can have `high`
+  ending_salience but `cosmetic` residue_weight (ending differs, but
+  mid-story shared passages ignore the choice).
+
+  **heavy** (rare, 1-2 per story max) -- Shared passages MUST show
+  state-specific differences. NPCs remember, world state reflects choice.
+  Examples: betrayed ally now distrusts you (NPC behavior changes in
+  shared scenes), stole artifact vs declined (guards react differently).
+
+  **light** (default, most common) -- Shared passages MAY acknowledge
+  the choice but MUST work without it. A reader should understand the
+  scene even if they forgot this choice.
+  Examples: stealth vs force (NPCs might comment but scene works either
+  way), trust vs suspicion (dialogue hints differ but plot proceeds).
+
+  **cosmetic** -- Shared passages MUST NOT reference this choice at all.
+  Examples: polite vs blunt greeting, chose left vs right door.
+
+  Most dilemmas should be `light`. Only 1-2 should be `heavy`.
+  If more than 2 are `heavy`, re-evaluate.
+
   ## Ending Tone
 
   Only meaningful when `ending_salience` is `high`. When `ending_salience`
@@ -781,6 +806,7 @@ dilemma_analyses_prompt: |
         "convergence_point": "paths converge at council_chamber for the final confrontation",
         "residue_note": "suspicious-path characters remain wary of the host",
         "ending_salience": "low",
+        "residue_weight": "light",
         "ending_tone": null
       }},
       {{
@@ -791,6 +817,7 @@ dilemma_analyses_prompt: |
         "convergence_point": "paths converge at the tavern entrance after introductions",
         "residue_note": null,
         "ending_salience": "none",
+        "residue_weight": "cosmetic",
         "ending_tone": null
       }},
       {{
@@ -801,6 +828,7 @@ dilemma_analyses_prompt: |
         "convergence_point": null,
         "residue_note": null,
         "ending_salience": "high",
+        "residue_weight": "light",
         "ending_tone": "cold justice"
       }}
     ]
@@ -822,18 +850,22 @@ dilemma_analyses_prompt: |
   - `ending_salience`: "low" for most dilemmas (default); "high" for 1-2 dilemmas whose choice should shape endings; "none" for cosmetic-only choices
   - `ending_salience` is INDEPENDENT of `convergence_policy` — a `soft` dilemma can be `high`, a `hard` dilemma can be `low`
   - `ending_tone`: required when `ending_salience` is "high", null otherwise
+  - `residue_weight`: "light" for most dilemmas (default); "heavy" for 1-2 dilemmas whose outcome must persist in shared mid-story prose; "cosmetic" for choices with no lasting trace
+  - `residue_weight` is INDEPENDENT of `convergence_policy` and `ending_salience` — a `soft` dilemma with `high` ending_salience can have `cosmetic` residue_weight
 
   ## Self-Check
   Count your classifications:
   - If more than 2 are `hard`, re-evaluate — most stories need at most 1-2 hard dilemmas.
   - If more than 2 have `ending_salience: "high"`, re-evaluate — most stories need at most 1-2 ending-shaping dilemmas.
   - Check: every dilemma with `ending_tone` set also has `ending_salience: "high"`. If not, fix it.
+  - If more than 2 have `residue_weight: "heavy"`, re-evaluate — most stories need at most 1-2 dilemmas that leave persistent traces in shared scenes.
 
   ## REMINDER
   Classify ALL dilemmas. Most should be `soft`. Only 1-2 should be `hard`.
   Ask: "Could the SAME scene follow both answers?"
   YES with differences -> soft (most common). YES nearly identical -> flavor. NO (incompatible world states) -> hard (rare).
   Most dilemmas get `ending_salience: "low"`. Only 1-2 get `"high"`. Set `ending_tone` ONLY when `ending_salience` is `"high"`.
+  Most dilemmas get `residue_weight: "light"`. Only 1-2 get `"heavy"`.
 
   ## Output
   Return ONLY valid JSON with the "dilemma_analyses" array. Classify ALL dilemmas.
