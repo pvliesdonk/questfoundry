@@ -375,7 +375,10 @@ class TestBeforeStateMutations:
         assert len(muts) == 2
         assert muts[1]["operation"] == "replace_node"
         assert muts[1]["delta"] == {"type": "t", "name": "Bob"}
-        assert muts[1]["before_state"] == {"type": "t", "name": "Alice"}
+        before = muts[1]["before_state"]
+        meta = before.pop("_meta")
+        assert before == {"type": "t", "name": "Alice"}
+        assert "created_stage" in meta
 
     def test_update_node_fields_captures_old_values(self) -> None:
         """update_node_fields records old values of changed fields."""
@@ -387,7 +390,10 @@ class TestBeforeStateMutations:
         update_mut = muts[-1]
         assert update_mut["operation"] == "update_node"
         assert update_mut["delta"] == {"name": "Bob", "age": 31}
-        assert update_mut["before_state"] == {"name": "Alice", "age": 30}
+        before = update_mut["before_state"]
+        meta = before.pop("_meta")
+        assert before == {"name": "Alice", "age": 30}
+        assert "modified_stage" in meta
 
     def test_update_node_fields_captures_none_for_new_fields(self) -> None:
         """update_node_fields records None for fields that didn't exist before."""
@@ -397,7 +403,9 @@ class TestBeforeStateMutations:
 
         muts = self._get_mutations(store)
         update_mut = muts[-1]
-        assert update_mut["before_state"] == {"mood": None}
+        before = update_mut["before_state"]
+        before.pop("_meta")
+        assert before == {"mood": None}
 
     def test_delete_node_captures_before_state(self) -> None:
         """delete_node records full node data in before_state."""
@@ -408,7 +416,10 @@ class TestBeforeStateMutations:
         muts = self._get_mutations(store)
         delete_mut = muts[-1]
         assert delete_mut["operation"] == "delete_node"
-        assert delete_mut["before_state"] == {"type": "t", "name": "Alice", "age": 30}
+        before = delete_mut["before_state"]
+        meta = before.pop("_meta")
+        assert before == {"type": "t", "name": "Alice", "age": 30}
+        assert "created_stage" in meta
 
     def test_add_edge_stores_full_delta(self) -> None:
         """add_edge records full edge dict in delta."""
@@ -832,3 +843,42 @@ class TestRewind:
         remaining = store._conn.execute("SELECT stage, phase FROM mutations").fetchone()
         assert remaining["stage"] == "seed"
         assert remaining["phase"] == "core"
+
+    def test_rewind_restores_metadata_columns(self) -> None:
+        """Rewind restores created_stage/phase and modified_stage/phase."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        with graph.mutation_context("seed", "core"):
+            graph.create_node("n1", {"type": "t", "name": "Alice"})
+
+        # Capture original metadata
+        orig = store._conn.execute(
+            "SELECT created_stage, created_phase, modified_stage, modified_phase "
+            "FROM nodes WHERE node_id = ?",
+            ("n1",),
+        ).fetchone()
+        assert orig["created_stage"] == "seed"
+        assert orig["created_phase"] == "core"
+
+        # Modify in a later phase
+        with graph.mutation_context("grow", "spine"):
+            graph.update_node("n1", name="Bob")
+
+        modified = store._conn.execute(
+            "SELECT modified_stage, modified_phase FROM nodes WHERE node_id = ?",
+            ("n1",),
+        ).fetchone()
+        assert modified["modified_stage"] == "grow"
+
+        # Rewind — should restore original metadata
+        graph.rewind_to_phase("grow", "spine")
+        restored = store._conn.execute(
+            "SELECT created_stage, created_phase, modified_stage, modified_phase "
+            "FROM nodes WHERE node_id = ?",
+            ("n1",),
+        ).fetchone()
+        assert restored["created_stage"] == "seed"
+        assert restored["created_phase"] == "core"
+        assert restored["modified_stage"] == "seed"
+        assert restored["modified_phase"] == "core"

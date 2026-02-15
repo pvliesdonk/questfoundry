@@ -267,7 +267,7 @@ class Graph:
 
         Args:
             stage: Pipeline stage (e.g., ``"grow"``).
-            phase: Phase within the stage (e.g., ``"scene_types"``).
+            phase: Phase within the stage (e.g., ``"path_agnostic"``).
 
         Returns:
             Number of mutations reversed.
