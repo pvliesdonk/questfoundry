@@ -97,6 +97,16 @@ class CoverageStats:
 
 
 @dataclass
+class ProseNeutralityStats:
+    """Prose-layer neutrality analysis for shared passages."""
+
+    shared_passages: int = 0
+    routed_passages: int = 0
+    unrouted_heavy: list[str] = field(default_factory=list)
+    unrouted_light: list[str] = field(default_factory=list)
+
+
+@dataclass
 class InspectionReport:
     """Complete project inspection report."""
 
@@ -105,6 +115,7 @@ class InspectionReport:
     branching: BranchingStats | None = None
     branching_quality: BranchingQualityScore | None = None
     coverage: CoverageStats = field(default_factory=CoverageStats)
+    prose_neutrality: ProseNeutralityStats | None = None
     validation_checks: list[dict[str, str]] = field(default_factory=list)
 
 
@@ -124,6 +135,7 @@ def inspect_project(project_path: Path) -> InspectionReport:
     branching = _branching_stats(graph)
     branching_quality = _branching_quality_score(graph, branching)
     coverage = _coverage_stats(graph, project_path)
+    prose_neutrality = _prose_neutrality_stats(graph)
     validation = _run_validation(graph)
 
     log.info(
@@ -139,6 +151,7 @@ def inspect_project(project_path: Path) -> InspectionReport:
         branching=branching,
         branching_quality=branching_quality,
         coverage=coverage,
+        prose_neutrality=prose_neutrality,
         validation_checks=validation,
     )
 
@@ -408,6 +421,67 @@ def _coverage_stats(graph: Graph, project_path: Path) -> CoverageStats:
         illustration_briefs=len(briefs),
         illustration_nodes=len(illustrations),
         asset_files=asset_count,
+    )
+
+
+def _prose_neutrality_stats(graph: Graph) -> ProseNeutralityStats | None:
+    """Analyze prose-layer neutrality for shared passages."""
+    arc_nodes = graph.get_nodes_by_type("arc")
+    passage_nodes = graph.get_nodes_by_type("passage")
+    choice_nodes = graph.get_nodes_by_type("choice")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    if not arc_nodes or not passage_nodes:
+        return None
+
+    # Build beat → covering arc count
+    beat_arcs: dict[str, set[str]] = {}
+    for arc_id, adata in arc_nodes.items():
+        for beat_id in adata.get("sequence", []):
+            beat_arcs.setdefault(str(beat_id), set()).add(arc_id)
+
+    # Find shared passages (beat covered by 2+ arcs)
+    shared: list[str] = []
+    for pid, pdata in passage_nodes.items():
+        from_beat = str(pdata.get("from_beat") or "")
+        if from_beat and len(beat_arcs.get(from_beat, set())) >= 2:
+            shared.append(pid)
+
+    # Find routed passages
+    routed: set[str] = set()
+    for _cid, cdata in choice_nodes.items():
+        if cdata.get("is_routing"):
+            source = str(cdata.get("from_passage", ""))
+            if source:
+                routed.add(source)
+
+    routed_shared = [p for p in shared if p in routed]
+
+    # Check unrouted shared passages for heavy/light dilemmas
+    unrouted_heavy: list[str] = []
+    unrouted_light: list[str] = []
+    for pid in shared:
+        if pid in routed:
+            continue
+        # Check if any dilemma requires variant routing
+        has_heavy = any(
+            d.get("residue_weight", "light") == "heavy" or d.get("ending_salience", "low") == "high"
+            for d in dilemma_nodes.values()
+        )
+        has_light = any(
+            d.get("residue_weight", "light") == "light" and d.get("ending_salience", "low") == "low"
+            for d in dilemma_nodes.values()
+        )
+        if has_heavy:
+            unrouted_heavy.append(pid)
+        elif has_light:
+            unrouted_light.append(pid)
+
+    return ProseNeutralityStats(
+        shared_passages=len(shared),
+        routed_passages=len(routed_shared),
+        unrouted_heavy=sorted(unrouted_heavy),
+        unrouted_light=sorted(unrouted_light),
     )
 
 

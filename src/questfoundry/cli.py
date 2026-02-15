@@ -2721,6 +2721,24 @@ def _render_inspection_report(report: InspectionReport) -> None:
         )
         console.print()
 
+    # Prose neutrality
+    if report.prose_neutrality:
+        pn = report.prose_neutrality
+        console.print("[bold]Prose Neutrality[/bold]")
+        console.print(
+            f"  Shared passages: [bold]{pn.shared_passages}[/bold]  "
+            f"Routed: [bold]{pn.routed_passages}[/bold]"
+        )
+        if pn.unrouted_heavy:
+            for pid in pn.unrouted_heavy:
+                console.print(f"  [red]![/red] {pid}: heavy/high without routing")
+        if pn.unrouted_light:
+            for pid in pn.unrouted_light:
+                console.print(f"  [yellow]![/yellow] {pid}: light without routing")
+        if not pn.unrouted_heavy and not pn.unrouted_light:
+            console.print("  [green]All shared passages satisfy prose-layer contracts[/green]")
+        console.print()
+
     # Validation checks
     if report.validation_checks:
         severity_icons = {
