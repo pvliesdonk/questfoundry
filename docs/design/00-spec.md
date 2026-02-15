@@ -832,9 +832,12 @@ seed:
 
   dilemma_analyses:
     - dilemma_id: dilemma_id
-      convergence_policy: hard | soft | flavor
+      convergence_policy: hard | soft | flavor   # topology layer
+      ending_salience: high | low | none         # prose layer (endings)
+      residue_weight: heavy | light | cosmetic   # prose layer (mid-story)
       payoff_budget: int (2-6)        # minimum exclusive beats before convergence
       reasoning: string               # chain-of-thought justification
+      ending_tone: string | null      # required when ending_salience=high
 
   interaction_constraints:             # sparse — only related dilemma pairs
     - dilemma_a: dilemma_id
@@ -844,7 +847,23 @@ seed:
       reasoning: string
 ```
 
-#### Convergence Policies (Branching Contract)
+#### Convergence: Topology Layer vs Prose Layer
+
+Convergence control is split into two orthogonal layers:
+
+- **Topology Layer** (`convergence_policy`): Controls whether and when beat sharing occurs in the graph structure. This is purely structural — it determines the shape of arcs, not the content of prose.
+- **Prose Layer** (`ending_salience`, `residue_weight`): Controls how much prose varies based on the player's choice. This is purely narrative — it determines what gets written, not the graph shape.
+
+These layers are independent. Any combination is valid:
+
+| convergence_policy | ending_salience | residue_weight | Meaning |
+|---|---|---|---|
+| hard | high | heavy | Paths never merge; endings differ; mid-story shows differences |
+| soft | high | cosmetic | Paths merge mid-story; endings differ; shared passages ignore choice |
+| soft | low | heavy | Paths merge; endings don't depend on it; but shared passages show differences |
+| flavor | none | cosmetic | Same structure throughout; choice has no narrative impact |
+
+#### Topology Layer: Convergence Policies
 
 Per-dilemma `convergence_policy` declared by SEED, enforced by GROW. Determines how and whether branch arcs reconverge with the spine.
 
@@ -858,9 +877,47 @@ Per-dilemma `convergence_policy` declared by SEED, enforced by GROW. Determines 
 
 **`convergence_sketch` vs `convergence_policy`:** These are complementary, not redundant. `convergence_policy` is a machine-actionable structural contract enforced by GROW algorithms. `convergence_sketch` is freeform creative guidance from the LLM to itself, used for narrative hints during prose generation.
 
+#### Prose Layer: Ending Salience
+
+Per-dilemma `ending_salience` controls how much story endings differ based on this dilemma's outcome.
+
+| Value | Meaning | FILL Behavior |
+|-------|---------|---------------|
+| `high` | Endings MUST differ | Ending family signatures include this dilemma's codewords. `ending_tone` guides prose. |
+| `low` | Endings MAY acknowledge | Ending prose may mention choice but must work without it. |
+| `none` | Endings MUST NOT reference | Negative obligation injected: "Do NOT reference this choice." |
+
+Only 1-2 dilemmas per story should be `high`. Most should be `low`.
+
+#### Prose Layer: Residue Weight
+
+Per-dilemma `residue_weight` controls how much mid-story prose varies in shared (converged) passages.
+
+| Value | Meaning | FILL Behavior |
+|-------|---------|---------------|
+| `heavy` | Shared passages MUST show state-specific differences | Variant routing required. Negative obligation: "MUST show differences." |
+| `light` | Shared passages MAY acknowledge | Existing behavior. Validation warns if no routing exists. |
+| `cosmetic` | Shared passages MUST NOT reference | Filtered from residue candidates. Negative obligation: "Do NOT reference." |
+
+Only 1-2 dilemmas per story should be `heavy`. Most should be `light`.
+
+#### Unified Variant Routing Primitive
+
+`split_and_reroute()` is the shared mechanism for both ending families and residue passages. Instead of adding extra hub passages, it rewrites incoming choice edges:
+
+1. For each incoming choice to a base passage, clone it per variant
+2. Each clone gets a `requires` gate (variant's codewords) and `is_routing=True`
+3. Original incoming choices are deleted (or kept as fallback with `keep_fallback=True`)
+
+**Validation:** `check_routing_coverage()` validates routing choice sets are:
+- **Collectively-exhaustive (CE):** Every arc covering the passage has at least one satisfiable route
+- **Mutually-exclusive (ME):** At most one route is satisfiable per arc (warn if violated)
+
+**Prose neutrality validation:** `check_prose_neutrality()` validates that shared passages satisfy prose-layer contracts — `heavy`/`high` without routing fails, `light` without routing warns, `cosmetic`/`none` passes.
+
 #### "Residue Must Be Read" Invariant
 
-Every codeword granted must appear in at least one `choice.requires` gate. Current scope: choice gating only. Future extensions may include overlays, ending scoring, and conditional prose as additional "read" mechanisms.
+Every codeword granted must appear in at least one `choice.requires` gate. Current scope: choice gating and variant routing. Routing choices (`is_routing=True`) satisfy this invariant for their required codewords.
 
 **`converges_at` semantics:** "From this beat onward, all remaining content on this arc is shared with the spine." It is NOT set at intersections (shared beats with later exclusive beats). For `hard` policy, it is never set.
 
@@ -1213,12 +1270,21 @@ After validation passes:
 ## Post-Convergence Variation
 
 When arcs reconverge at a shared beat, prose must work for all arriving paths.
-Rather than inline conditionals, QuestFoundry uses **residue beats** (GROW
-Phase 8d) — short, path-specific passages inserted before the shared convergence
-point. Each residue beat carries forward the emotional tone of its arc so the
-shared passage can remain neutral.
+QuestFoundry uses two mechanisms controlled by the prose layer:
 
-**Scope:** Cosmetic-only. Major divergence = separate passages on distinct arcs.
+**Variant routing** (`split_and_reroute`): For `residue_weight: heavy` dilemmas,
+incoming choices to a shared passage are cloned per variant with codeword gates.
+Each variant passage contains state-specific prose. The original passage may be
+kept as a fallback for arcs with no applicable variant.
+
+**Residue beats** (GROW Phase 8d): For `residue_weight: light` dilemmas, short
+path-specific passages are inserted before the shared convergence point. Each
+residue beat carries forward the emotional tone of its arc so the shared passage
+can remain neutral.
+
+**Cosmetic dilemmas** (`residue_weight: cosmetic`): No post-convergence variation.
+Shared passages must not reference the choice at all. These dilemmas are filtered
+out of residue candidate generation.
 
 Entity **overlays** (codeword-gated attribute overrides) handle small state
 differences like appearance or mood that carry across convergence boundaries.
