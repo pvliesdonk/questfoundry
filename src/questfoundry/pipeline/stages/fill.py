@@ -56,6 +56,7 @@ from questfoundry.graph.fill_context import (
     format_passages_batch,
     format_path_arc_context,
     format_pov_context,
+    format_residue_weight_obligations,
     format_scene_types_summary,
     format_sliding_window,
     format_spoke_context,
@@ -1172,6 +1173,7 @@ class FillStage:
                     ending_differentiation=format_ending_differentiation(graph, passage_id),
                     salience_obligations=format_ending_salience_obligations(graph, passage_id),
                 ),
+                "residue_obligations": format_residue_weight_obligations(graph, passage_id),
                 "introduction_guidance": format_introduction_guidance(
                     first_names,
                     arc_hints=compute_arc_hints(graph, first_eids, arc_id),

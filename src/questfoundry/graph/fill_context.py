@@ -1702,6 +1702,52 @@ def format_ending_salience_obligations(graph: Graph, passage_id: str) -> str:
     return "\n".join(lines)
 
 
+def format_residue_weight_obligations(graph: Graph, passage_id: str) -> str:
+    """Build prose obligations for shared mid-story passages based on residue_weight.
+
+    For each dilemma reachable from arcs covering this passage:
+    - ``residue_weight: cosmetic`` -> "Do NOT reference [dilemma]"
+    - ``residue_weight: heavy``    -> "MUST show state-specific differences for [dilemma]"
+
+    Only applies to non-ending shared passages (passages covered by
+    multiple arcs from different paths of the same dilemma).
+
+    Args:
+        graph: Story graph with dilemma, arc, and passage nodes.
+        passage_id: Full node ID of the passage.
+
+    Returns:
+        Obligation text block, or empty string if no obligations apply.
+    """
+    passage = graph.get_node(passage_id)
+    if not passage or passage.get("is_ending"):
+        return ""  # Endings use ending_salience, not residue_weight
+
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    if not dilemma_nodes:
+        return ""
+
+    cosmetic_dilemmas: list[str] = []
+    heavy_dilemmas: list[str] = []
+    for dilemma_id, dilemma_data in dilemma_nodes.items():
+        weight = dilemma_data.get("residue_weight", "light")
+        label = dilemma_data.get("question", strip_scope_prefix(dilemma_id))
+        if weight == "cosmetic":
+            cosmetic_dilemmas.append(label)
+        elif weight == "heavy":
+            heavy_dilemmas.append(label)
+
+    if not cosmetic_dilemmas and not heavy_dilemmas:
+        return ""
+
+    lines: list[str] = ["## Residue Weight Obligations\n"]
+    for label in sorted(cosmetic_dilemmas):
+        lines.append(f"- Do NOT reference or depend on: {label}")
+    for label in sorted(heavy_dilemmas):
+        lines.append(f"- MUST show state-specific differences for: {label}")
+    return "\n".join(lines)
+
+
 def compute_first_appearances(
     graph: Graph, passage_id: str, arc_passage_ids: list[str]
 ) -> list[str]:
