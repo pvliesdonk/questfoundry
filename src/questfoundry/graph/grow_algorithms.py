@@ -756,11 +756,11 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
             already_unique += 1
             continue
 
-        # Multiple families → split
+        # Multiple families → split via incoming-edge rewriting
         raw_id = strip_scope_prefix(terminal_id)
-        graph.update_node(terminal_id, is_ending=False)
 
         all_sigs = list(sig_to_arcs.keys())
+        variant_specs: list[VariantSpec] = []
         for i, (sig, family_arcs) in enumerate(
             sorted(sig_to_arcs.items(), key=lambda x: sorted(x[0]))
         ):
@@ -800,23 +800,15 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
                 node_data["ending_tone"] = "; ".join(tones)
             graph.create_node(ending_pid, node_data)
 
-            # Create gated choice from terminal → ending
-            choice_id = f"choice::{raw_id}__ending_{i}"
-            graph.create_node(
-                choice_id,
-                {
-                    "type": "choice",
-                    "from_passage": terminal_id,
-                    "to_passage": ending_pid,
-                    "requires": distinguishing,
-                    "grants": [],
-                    "label": None,
-                },
-            )
-            graph.add_edge("choice_from", choice_id, terminal_id)
-            graph.add_edge("choice_to", choice_id, ending_pid)
-
+            variant_specs.append(VariantSpec(ending_pid, distinguishing))
             families_created += 1
+
+        # Reroute incoming choices to variant endings (no extra hops)
+        split_and_reroute(graph, terminal_id, variant_specs, keep_fallback=False)
+        # Mark the original terminal as non-ending (it may still exist
+        # if it had no incoming choices, e.g. a start passage)
+        if graph.get_node(terminal_id):
+            graph.update_node(terminal_id, is_ending=False)
 
         log.info(
             "ending_split",
@@ -2006,10 +1998,10 @@ def create_residue_passages(
     For each proposal:
     1. Create variant passages (passage::{base}__via_{codeword_suffix})
     2. Mark variants with is_residue=True and residue metadata
+    3. Wire variants via split_and_reroute (incoming-edge rewriting)
 
-    Choice edge wiring through variants is handled by Phase 9 (choices).
-    The base passage is NOT removed — it becomes the fallback for arcs
-    whose codewords don't match any variant.
+    The base passage is kept as fallback for arcs whose codewords don't
+    match any variant (keep_fallback=True).
 
     Args:
         graph: Story graph with passages and codewords.
@@ -2060,7 +2052,8 @@ def create_residue_passages(
             skipped += 1
             continue
 
-        # Create variant passages
+        # Create variant passages and collect specs for routing
+        variant_specs: list[VariantSpec] = []
         for variant in variants:
             cw_id = variant.get("codeword_id", "")
             hint = variant.get("hint", "")
@@ -2089,8 +2082,12 @@ def create_residue_passages(
                     "residue_dilemma": dilemma_id,
                 },
             )
+            variant_specs.append(VariantSpec(variant_pid, [cw_id]))
             variants_created += 1
 
+        # Wire variants via incoming-edge rewriting; base passage is kept
+        # as fallback for arcs whose codewords don't match any variant
+        split_and_reroute(graph, passage_id, variant_specs, keep_fallback=True)
         applied += 1
 
     return ResidueCreationResult(

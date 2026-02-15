@@ -22,6 +22,7 @@ from questfoundry.graph.grow_validation import (
     check_gate_satisfiability,
     check_max_consecutive_linear,
     check_passage_dag_cycles,
+    check_routing_coverage,
     check_single_start,
     check_spine_arc_exists,
     run_all_checks,
@@ -1828,3 +1829,277 @@ class TestForwardPathReachability:
         result = check_forward_path_reachability(graph)
         assert result.severity == "warn"
         assert "passage::a" in result.message
+
+    def test_routing_choices_excluded(self) -> None:
+        """Routing choices (is_routing=True) are excluded from forward check."""
+        graph = Graph.empty()
+        graph.create_node(
+            "passage::hub",
+            {"type": "passage", "raw_id": "hub", "from_beat": "beat::hub", "summary": "hub"},
+        )
+        # Add a normal ungated choice so passage is not seen as an endpoint
+        graph.create_node(
+            "passage::next",
+            {"type": "passage", "raw_id": "next", "from_beat": "beat::next", "summary": "next"},
+        )
+        graph.create_node(
+            "choice::normal",
+            {
+                "type": "choice",
+                "from_passage": "passage::hub",
+                "to_passage": "passage::next",
+                "label": "continue",
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::normal", "passage::hub")
+        # Add routing choices (all gated) — these should NOT trigger a warning
+        graph.create_node(
+            "choice::r1",
+            {
+                "type": "choice",
+                "from_passage": "passage::hub",
+                "to_passage": "passage::end1",
+                "label": "route1",
+                "is_routing": True,
+                "requires": ["codeword::cw1"],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::r1", "passage::hub")
+        graph.create_node(
+            "choice::r2",
+            {
+                "type": "choice",
+                "from_passage": "passage::hub",
+                "to_passage": "passage::end2",
+                "label": "route2",
+                "is_routing": True,
+                "requires": ["codeword::cw2"],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::r2", "passage::hub")
+        result = check_forward_path_reachability(graph)
+        # The only forward (non-routing) choice is ungated, so pass
+        assert result.severity == "pass"
+
+
+def _make_routing_graph(
+    arc_paths: dict[str, list[str]],
+    route_requires: dict[str, list[str]],
+    beat: str = "beat::hub",
+) -> Graph:
+    """Build a graph with routing choices and arc codeword infrastructure.
+
+    Args:
+        arc_paths: Mapping of arc raw_id to list of path raw_ids.
+            Each path gets a dilemma, consequence, and codeword named after it.
+        route_requires: Mapping of choice raw_id to required codeword raw_ids.
+        beat: The beat that the source passage belongs to.
+    """
+    graph = Graph.empty()
+
+    # Source passage
+    graph.create_node(
+        "passage::hub",
+        {"type": "passage", "raw_id": "hub", "from_beat": beat, "summary": "hub"},
+    )
+
+    # Collect all unique paths across arcs
+    all_paths: set[str] = set()
+    for paths in arc_paths.values():
+        all_paths.update(paths)
+
+    # One dilemma for all paths
+    graph.create_node(
+        "dilemma::d1",
+        {"type": "dilemma", "raw_id": "d1", "ending_salience": "high"},
+    )
+
+    for p in sorted(all_paths):
+        pid = f"path::{p}"
+        graph.create_node(
+            pid,
+            {"type": "path", "raw_id": p, "dilemma_id": "dilemma::d1"},
+        )
+        graph.add_edge("explores", pid, "dilemma::d1")
+
+        # consequence + codeword (named after path for simplicity)
+        cons_id = f"consequence::{p}"
+        cw_id = f"codeword::{p}"
+        graph.create_node(cons_id, {"type": "consequence", "raw_id": p})
+        graph.create_node(cw_id, {"type": "codeword", "raw_id": p})
+        graph.add_edge("has_consequence", pid, cons_id)
+        graph.add_edge("tracks", cw_id, cons_id)
+
+    # Arcs
+    for arc_raw, paths in arc_paths.items():
+        graph.create_node(
+            f"arc::{arc_raw}",
+            {
+                "type": "arc",
+                "raw_id": arc_raw,
+                "arc_type": "branch",
+                "paths": [f"path::{p}" for p in paths],
+                "sequence": [beat],
+            },
+        )
+
+    # Routing choices
+    for i, (choice_raw, reqs) in enumerate(route_requires.items()):
+        target = f"passage::end{i}"
+        graph.create_node(target, {"type": "passage", "raw_id": f"end{i}", "summary": f"end{i}"})
+        graph.create_node(
+            f"choice::{choice_raw}",
+            {
+                "type": "choice",
+                "from_passage": "passage::hub",
+                "to_passage": target,
+                "label": choice_raw,
+                "is_routing": True,
+                "requires": [f"codeword::{cw}" for cw in reqs],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", f"choice::{choice_raw}", "passage::hub")
+
+    return graph
+
+
+class TestCheckRoutingCoverage:
+    """Tests for check_routing_coverage() CE+ME validation."""
+
+    def test_no_arcs_passes(self) -> None:
+        """Pass early when no arc nodes exist."""
+        graph = Graph.empty()
+        result = check_routing_coverage(graph)
+        assert len(result) == 1
+        assert result[0].severity == "pass"
+        assert "No arcs" in result[0].message
+
+    def test_no_routing_choices_passes(self) -> None:
+        """Pass when arcs exist but no is_routing choices."""
+        graph = Graph.empty()
+        graph.create_node(
+            "arc::spine",
+            {
+                "type": "arc",
+                "raw_id": "spine",
+                "arc_type": "spine",
+                "paths": [],
+                "sequence": ["beat::b1"],
+            },
+        )
+        result = check_routing_coverage(graph)
+        assert len(result) == 1
+        assert result[0].severity == "pass"
+        assert "No routing choice sets" in result[0].message
+
+    def test_valid_ce_me_passes(self) -> None:
+        """Two disjoint routes covering all arcs pass CE+ME."""
+        # arc a1 has path p1 (codeword p1), arc a2 has path p2 (codeword p2)
+        # route r1 requires codeword p1, route r2 requires codeword p2
+        graph = _make_routing_graph(
+            arc_paths={"a1": ["p1"], "a2": ["p2"]},
+            route_requires={"r1": ["p1"], "r2": ["p2"]},
+        )
+        result = check_routing_coverage(graph)
+        assert len(result) == 1
+        assert result[0].severity == "pass"
+        assert "CE+ME valid" in result[0].message
+
+    def test_ce_gap_fails(self) -> None:
+        """Arc with no satisfiable route triggers CE failure."""
+        # arc a1 → cw p1, arc a2 → cw p2, arc a3 → cw p3
+        # routes only cover p1 and p2, not p3
+        graph = _make_routing_graph(
+            arc_paths={"a1": ["p1"], "a2": ["p2"], "a3": ["p3"]},
+            route_requires={"r1": ["p1"], "r2": ["p2"]},
+        )
+        result = check_routing_coverage(graph)
+        ce_failures = [c for c in result if c.name == "routing_coverage_ce"]
+        assert len(ce_failures) == 1
+        assert ce_failures[0].severity == "fail"
+        assert "no satisfiable route" in ce_failures[0].message
+        assert "arc::a3" in ce_failures[0].message
+
+    def test_me_violation_warns(self) -> None:
+        """Arc satisfying multiple routes triggers ME warning."""
+        # arc a1 has BOTH paths p1 and p2 → codewords {p1, p2}
+        # Both routes are satisfiable for a1
+        graph = _make_routing_graph(
+            arc_paths={"a1": ["p1", "p2"], "a2": ["p2"]},
+            route_requires={"r1": ["p1"], "r2": ["p2"]},
+        )
+        result = check_routing_coverage(graph)
+        me_warnings = [c for c in result if c.name == "routing_coverage_me"]
+        assert len(me_warnings) == 1
+        assert me_warnings[0].severity == "warn"
+        assert "satisfy multiple routes" in me_warnings[0].message
+        assert "arc::a1" in me_warnings[0].message
+
+    def test_empty_requires_ignored(self) -> None:
+        """Routes with empty requires are skipped in CE/ME checks."""
+        graph = _make_routing_graph(
+            arc_paths={"a1": ["p1"], "a2": ["p2"]},
+            route_requires={"r1": ["p1"], "r2": ["p2"]},
+        )
+        # Add a fallback routing choice with empty requires
+        graph.create_node(
+            "passage::fallback",
+            {"type": "passage", "raw_id": "fallback", "summary": "fallback"},
+        )
+        graph.create_node(
+            "choice::fallback",
+            {
+                "type": "choice",
+                "from_passage": "passage::hub",
+                "to_passage": "passage::fallback",
+                "label": "fallback",
+                "is_routing": True,
+                "requires": [],
+                "grants": [],
+            },
+        )
+        graph.add_edge("choice_from", "choice::fallback", "passage::hub")
+        result = check_routing_coverage(graph)
+        # Fallback with empty requires is ignored; CE+ME still valid
+        assert len(result) == 1
+        assert result[0].severity == "pass"
+
+    def test_source_without_beat_skipped(self) -> None:
+        """Source passage without from_beat is skipped (no covering arcs)."""
+        graph = Graph.empty()
+        # Passage with no from_beat
+        graph.create_node(
+            "passage::hub",
+            {"type": "passage", "raw_id": "hub", "summary": "hub"},
+        )
+        graph.create_node(
+            "arc::a1",
+            {
+                "type": "arc",
+                "raw_id": "a1",
+                "arc_type": "branch",
+                "paths": [],
+                "sequence": ["beat::b1"],
+            },
+        )
+        graph.create_node(
+            "choice::r1",
+            {
+                "type": "choice",
+                "from_passage": "passage::hub",
+                "to_passage": "passage::end1",
+                "label": "r1",
+                "is_routing": True,
+                "requires": ["codeword::cw1"],
+                "grants": [],
+            },
+        )
+        result = check_routing_coverage(graph)
+        # No from_beat → no covering arcs → no CE/ME checks → all pass
+        assert len(result) == 1
+        assert result[0].severity == "pass"
