@@ -970,21 +970,40 @@ def format_dilemma_analysis_context(
 
     valid_ids = [f"`dilemma::{strip_scope_prefix(d.dilemma_id)}`" for d in seed_output.dilemmas]
 
+    # Fetch story tone from DREAM vision node
+    tone_lines: list[str] = []
+    if graph is not None:
+        vision = graph.get_node("vision")
+        if vision is not None:
+            parts: list[str] = []
+            if vision.get("genre"):
+                parts.append(f"**Genre:** {vision['genre']}")
+            tone_val = vision.get("tone")
+            if isinstance(tone_val, list) and tone_val:
+                parts.append(f"**Tone:** {', '.join(tone_val)}")
+            if parts:
+                tone_lines = ["## Story Tone", "", *parts, ""]
+
     lines = [
         "## Dilemma Convergence Brief",
         "",
-        "Classify each dilemma below. Most dilemmas are `soft` — paths diverge",
-        "then reconverge. Reserve `hard` for at most 1-2 dilemmas where the",
-        "QUESTION creates incompatible world states (e.g., someone lives vs dies).",
-        "Use `flavor` for cosmetic-only differences.",
-        "",
-        *dilemma_blocks,
-        "",
-        "### Valid Dilemma IDs",
-        "",
-        "You MUST use only these dilemma IDs: " + ", ".join(sorted(valid_ids)),
+        "Classify each dilemma below. Target 1-3 `hard` dilemmas per story.",
+        "Start by finding the strongest dilemma and classifying it `hard`.",
+        "Use `soft` for most others. Use `flavor` only for cosmetic differences.",
         "",
     ]
+    if tone_lines:
+        lines.extend(tone_lines)
+    lines.extend(
+        [
+            *dilemma_blocks,
+            "",
+            "### Valid Dilemma IDs",
+            "",
+            "You MUST use only these dilemma IDs: " + ", ".join(sorted(valid_ids)),
+            "",
+        ]
+    )
     return "\n".join(lines)
 
 

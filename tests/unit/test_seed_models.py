@@ -243,6 +243,8 @@ class TestPathBeatsSectionDedup:
 _ANALYSIS_KWARGS: dict[str, str | int] = {
     "dilemma_id": "dilemma::trust_or_betray",
     "convergence_policy": "soft",
+    "ending_salience": "low",
+    "residue_weight": "light",
     "payoff_budget": 3,
     "reasoning": "Trust path needs several exclusive beats to develop before rejoining.",
 }
@@ -265,13 +267,11 @@ class TestDilemmaAnalysis:
         assert da.convergence_policy == "soft"
         assert da.payoff_budget == 3
 
-    def test_payoff_budget_default(self) -> None:
-        da = DilemmaAnalysis(
-            dilemma_id="d1",
-            convergence_policy="hard",
-            reasoning="Hard policy needs at least the default budget.",
-        )
-        assert da.payoff_budget == 2
+    def test_payoff_budget_required(self) -> None:
+        """payoff_budget has no default — omitting it must fail."""
+        kwargs = {k: v for k, v in _ANALYSIS_KWARGS.items() if k != "payoff_budget"}
+        with pytest.raises(ValidationError, match="payoff_budget"):
+            DilemmaAnalysis(**kwargs)
 
     @pytest.mark.parametrize(
         ("budget", "should_pass"),
@@ -351,9 +351,11 @@ class TestDilemmaAnalysis:
         with pytest.raises(ValidationError, match="ending_tone"):
             DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "ending_tone": "x" * 81})
 
-    def test_ending_salience_defaults_to_low(self) -> None:
-        da = DilemmaAnalysis(**_ANALYSIS_KWARGS)
-        assert da.ending_salience == "low"
+    def test_ending_salience_required(self) -> None:
+        """ending_salience has no default — omitting it must fail."""
+        kwargs = {k: v for k, v in _ANALYSIS_KWARGS.items() if k != "ending_salience"}
+        with pytest.raises(ValidationError, match="ending_salience"):
+            DilemmaAnalysis(**kwargs)
 
     @pytest.mark.parametrize(
         "salience",
@@ -371,22 +373,25 @@ class TestDilemmaAnalysis:
         with pytest.raises(ValidationError, match="ending_salience"):
             DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "ending_salience": "medium"})
 
-    def test_backward_compat_without_ending_salience(self) -> None:
-        """Model validates when ending_salience is not provided (backward compat)."""
+    def test_missing_ending_salience_rejected(self) -> None:
+        """Model rejects input without ending_salience (no longer optional)."""
         data = {
             "dilemma_id": "legacy_dilemma",
             "convergence_policy": "soft",
+            "residue_weight": "light",
             "payoff_budget": 2,
             "reasoning": "From older version without ending_salience",
         }
-        da = DilemmaAnalysis.model_validate(data)
-        assert da.ending_salience == "low"
+        with pytest.raises(ValidationError, match="ending_salience"):
+            DilemmaAnalysis.model_validate(data)
 
     # --- residue_weight ---
 
-    def test_residue_weight_defaults_to_light(self) -> None:
-        da = DilemmaAnalysis(**_ANALYSIS_KWARGS)
-        assert da.residue_weight == "light"
+    def test_residue_weight_required(self) -> None:
+        """residue_weight has no default — omitting it must fail."""
+        kwargs = {k: v for k, v in _ANALYSIS_KWARGS.items() if k != "residue_weight"}
+        with pytest.raises(ValidationError, match="residue_weight"):
+            DilemmaAnalysis(**kwargs)
 
     @pytest.mark.parametrize(
         "weight",
@@ -404,16 +409,17 @@ class TestDilemmaAnalysis:
         with pytest.raises(ValidationError, match="residue_weight"):
             DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "residue_weight": "medium"})
 
-    def test_backward_compat_without_residue_weight(self) -> None:
-        """Model validates when residue_weight is not provided (backward compat)."""
+    def test_missing_residue_weight_rejected(self) -> None:
+        """Model rejects input without residue_weight (no longer optional)."""
         data = {
             "dilemma_id": "legacy_dilemma",
             "convergence_policy": "soft",
+            "ending_salience": "low",
             "payoff_budget": 2,
             "reasoning": "From older version without residue_weight",
         }
-        da = DilemmaAnalysis.model_validate(data)
-        assert da.residue_weight == "light"
+        with pytest.raises(ValidationError, match="residue_weight"):
+            DilemmaAnalysis.model_validate(data)
 
 
 class TestInteractionConstraint:
