@@ -307,7 +307,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         if not resume_from:
             n = graph.rewind_stage("grow")
             if n > 0:
-                log.info("rerun_rewound", stage="grow", mutations=n)
+                log.info("rewinding_graph", stage="grow", mutations=n)
             save_snapshot(graph, resolved_path, "grow")
 
         phase_results: list[GrowPhaseResult] = []

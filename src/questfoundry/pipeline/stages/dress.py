@@ -287,13 +287,14 @@ class DressStage:
             )
 
         # Re-run management:
-        # On first run (last_stage == "fill"), save a pre-dress backup snapshot.
-        # On re-runs, rewind all dress (and later stage) mutations to start fresh.
-        if last_stage == "fill" and not resume_from:
+        # Always rewind any existing dress mutations before (re-)running.
+        # A previous run may have failed mid-way, leaving last_stage
+        # unchanged but with partial dress artifacts in the graph.
+        if not resume_from:
+            n = graph.rewind_stage("dress")
+            if n > 0:
+                log.info("rewinding_graph", stage="dress", mutations=n)
             save_snapshot(graph, resolved_path, "dress")
-        elif last_stage != "fill" and not resume_from:
-            graph.rewind_stage("dress")
-            log.info("rerun_rewound", stage="dress")
 
         phase_results: list[DressPhaseResult] = []
         total_llm_calls = 0
