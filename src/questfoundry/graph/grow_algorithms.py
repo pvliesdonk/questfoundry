@@ -1339,54 +1339,43 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
     # causing arcs to diverge naturally toward distinct endings.
     shared = compute_shared_beats(dict(path_beat_sets), path_lists)
 
-    # Cartesian product of paths — compute spine first for reference positions
-    combos: list[tuple[list[str], list[str], str, bool]] = []
-    spine_combo: tuple[list[str], list[str], str, bool] | None = None
+    # Compute a global reference ordering from ALL beats across all paths.
+    # This ensures every beat has a reference position, preventing
+    # context-dependent round-robin from producing cross-arc inversions (#929).
+    all_beats: set[str] = set()
+    for beats in path_beat_sets.values():
+        all_beats.update(beats)
 
+    reference_positions: dict[str, int] | None = None
+    try:
+        global_sequence = topological_sort_beats(
+            graph,
+            list(all_beats),
+            priority_beats=shared,
+        )
+        reference_positions = {bid: idx for idx, bid in enumerate(global_sequence)}
+    except ValueError:
+        pass  # Fallback: no reference if global beat set has cycles
+
+    # Cartesian product of paths
+    arcs: list[Arc] = []
     for combo in product(*path_lists):
         path_combo = list(combo)
         path_raw_ids = sorted(path_nodes[pid].get("raw_id", pid) for pid in path_combo)
         arc_id = "+".join(path_raw_ids)
         is_spine = all(path_nodes[pid].get("is_canonical", False) for pid in path_combo)
-        combos.append((path_combo, path_raw_ids, arc_id, is_spine))
-        if is_spine:
-            spine_combo = combos[-1]
 
-    # Compute spine sequence first to use as reference ordering
-    reference_positions: dict[str, int] | None = None
-    spine_sequence: list[str] | None = None
-    if spine_combo is not None:
-        spine_beats: set[str] = set()
-        for pid in spine_combo[0]:
-            spine_beats.update(path_beat_sets.get(pid, set()))
-        try:
-            spine_sequence = topological_sort_beats(
-                graph,
-                list(spine_beats),
-                priority_beats=shared,
-            )
-            reference_positions = {bid: idx for idx, bid in enumerate(spine_sequence)}
-        except ValueError:
-            pass  # Fallback: no reference if spine itself has cycles
-
-    # Build all arcs; branch arcs use reference positions for consistency
-    arcs: list[Arc] = []
-    for path_combo, path_raw_ids, arc_id, is_spine in combos:
         beat_set: set[str] = set()
         for pid in path_combo:
             beat_set.update(path_beat_sets.get(pid, set()))
 
         try:
-            if is_spine and spine_sequence is not None:
-                # Spine already computed — reuse directly
-                sequence = spine_sequence
-            else:
-                sequence = topological_sort_beats(
-                    graph,
-                    list(beat_set),
-                    priority_beats=shared,
-                    reference_positions=reference_positions,
-                )
+            sequence = topological_sort_beats(
+                graph,
+                list(beat_set),
+                priority_beats=shared,
+                reference_positions=reference_positions,
+            )
         except ValueError:
             sequence = sorted(beat_set)  # Fallback for cycles
 

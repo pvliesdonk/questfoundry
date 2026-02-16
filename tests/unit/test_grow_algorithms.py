@@ -523,6 +523,55 @@ class TestTopologicalSortBeats:
             f"Shared beats ordered differently: arc_a={shared_order_a}, arc_b={shared_order_b}"
         )
 
+    def test_cross_arc_consistency_no_shared_beats(self) -> None:
+        """Cross-arc consistency works even with zero shared beats (#929).
+
+        When all beats are path-exclusive (no beat appears on every path of
+        its dilemma), reference_positions from a global sort must still prevent
+        inversions for beats that overlap between arcs.
+        """
+        graph = Graph.empty()
+        # Dilemma alpha: path_a1 has beats a1,a2; path_a2 has beats a3,a4
+        # (no intersection — zero shared beats for this dilemma)
+        for bid, did in [
+            ("beat::a1", "d_alpha"),
+            ("beat::a2", "d_alpha"),
+            ("beat::a3", "d_alpha"),
+            ("beat::a4", "d_alpha"),
+            ("beat::b1", "d_beta"),
+            ("beat::b2", "d_beta"),
+            ("beat::b3", "d_beta"),
+            ("beat::b4", "d_beta"),
+        ]:
+            graph.create_node(
+                bid,
+                {"type": "beat", "dilemma_impacts": [{"dilemma_id": did, "effect": "explores"}]},
+            )
+
+        # Global reference covering all beats
+        all_beats = [f"beat::{x}" for x in ["a1", "a2", "a3", "a4", "b1", "b2", "b3", "b4"]]
+        global_seq = topological_sort_beats(graph, all_beats)
+        ref_positions = {bid: idx for idx, bid in enumerate(global_seq)}
+
+        # Arc 1: a1,a2 (path_a1) + b1,b2 (path_b1)
+        arc1 = topological_sort_beats(
+            graph,
+            ["beat::a1", "beat::a2", "beat::b1", "beat::b2"],
+            reference_positions=ref_positions,
+        )
+        # Arc 2: a1,a2 (path_a1) + b3,b4 (path_b2) — shares a1,a2 with arc1
+        arc2 = topological_sort_beats(
+            graph,
+            ["beat::a1", "beat::a2", "beat::b3", "beat::b4"],
+            reference_positions=ref_positions,
+        )
+
+        # Common beats (a1, a2) must have same relative order
+        common = {"beat::a1", "beat::a2"}
+        order1 = [b for b in arc1 if b in common]
+        order2 = [b for b in arc2 if b in common]
+        assert order1 == order2, f"Common beats ordered differently: {order1} vs {order2}"
+
 
 # ---------------------------------------------------------------------------
 # compute_shared_beats
