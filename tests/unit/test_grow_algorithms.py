@@ -408,6 +408,121 @@ class TestTopologicalSortBeats:
         result = topological_sort_beats(graph, ["beat::z_beat", "beat::a_beat", "beat::m_beat"])
         assert result == ["beat::a_beat", "beat::m_beat", "beat::z_beat"]
 
+    def test_reference_positions_respected(self) -> None:
+        """Reference positions override round-robin when provided."""
+        graph = Graph.empty()
+        # Two dilemmas with interleaving beats (no requires edges)
+        graph.create_node(
+            "beat::a1",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_alpha", "effect": "explores"}]},
+        )
+        graph.create_node(
+            "beat::a2",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_alpha", "effect": "explores"}]},
+        )
+        graph.create_node(
+            "beat::b1",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_beta", "effect": "explores"}]},
+        )
+        graph.create_node(
+            "beat::b2",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_beta", "effect": "explores"}]},
+        )
+        # Reference says: a1(0), a2(1), b1(2), b2(3) — NO interleaving
+        ref_positions = {"beat::a1": 0, "beat::a2": 1, "beat::b1": 2, "beat::b2": 3}
+
+        result = topological_sort_beats(
+            graph,
+            ["beat::a1", "beat::a2", "beat::b1", "beat::b2"],
+            reference_positions=ref_positions,
+        )
+        # Reference positions should override round-robin interleaving
+        assert result == ["beat::a1", "beat::a2", "beat::b1", "beat::b2"]
+
+    def test_reference_positions_partial(self) -> None:
+        """Beats without reference positions sort after referenced beats."""
+        graph = Graph.empty()
+        graph.create_node("beat::ref_a", {"type": "beat"})
+        graph.create_node("beat::ref_b", {"type": "beat"})
+        graph.create_node("beat::no_ref", {"type": "beat"})
+        # ref_b at position 0, ref_a at position 1 — reversed from alphabetical
+        ref_positions = {"beat::ref_b": 0, "beat::ref_a": 1}
+
+        result = topological_sort_beats(
+            graph,
+            ["beat::ref_a", "beat::ref_b", "beat::no_ref"],
+            reference_positions=ref_positions,
+        )
+        # Referenced beats first (by ref position), then unreferenced
+        assert result == ["beat::ref_b", "beat::ref_a", "beat::no_ref"]
+
+    def test_reference_positions_none_is_default(self) -> None:
+        """reference_positions=None behaves identically to omitting it."""
+        graph = Graph.empty()
+        a_ids = self._create_dilemma_chain(graph, "d_alpha", "a", 3)
+        b_ids = self._create_dilemma_chain(graph, "d_beta", "b", 3)
+
+        result_none = topological_sort_beats(
+            graph,
+            a_ids + b_ids,
+            reference_positions=None,
+        )
+        result_omit = topological_sort_beats(graph, a_ids + b_ids)
+        assert result_none == result_omit
+
+    def test_cross_arc_consistency(self) -> None:
+        """Two arcs sharing beats produce compatible orderings with reference positions.
+
+        This is the key invariant: shared beats must appear in the same relative
+        order across all arcs to prevent passage DAG cycles (#929).
+        """
+        graph = Graph.empty()
+        # Shared beats (on all paths of both dilemmas)
+        shared = ["beat::s1", "beat::s2", "beat::s3"]
+        for bid in shared:
+            graph.create_node(
+                bid,
+                {
+                    "type": "beat",
+                    "dilemma_impacts": [{"dilemma_id": "d_alpha", "effect": "explores"}],
+                },
+            )
+        # Exclusive beats for arc A
+        graph.create_node(
+            "beat::ex_a",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_beta", "effect": "commits"}]},
+        )
+        # Exclusive beats for arc B
+        graph.create_node(
+            "beat::ex_b",
+            {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_beta", "effect": "explores"}]},
+        )
+
+        # Reference from spine: s1, s2, s3
+        ref_positions = {"beat::s1": 0, "beat::s2": 1, "beat::s3": 2}
+
+        # Arc A has shared + ex_a
+        arc_a = topological_sort_beats(
+            graph,
+            [*shared, "beat::ex_a"],
+            priority_beats=set(shared),
+            reference_positions=ref_positions,
+        )
+        # Arc B has shared + ex_b
+        arc_b = topological_sort_beats(
+            graph,
+            [*shared, "beat::ex_b"],
+            priority_beats=set(shared),
+            reference_positions=ref_positions,
+        )
+
+        # Extract shared-beat ordering from each arc
+        shared_order_a = [b for b in arc_a if b in set(shared)]
+        shared_order_b = [b for b in arc_b if b in set(shared)]
+        assert shared_order_a == shared_order_b, (
+            f"Shared beats ordered differently: arc_a={shared_order_a}, arc_b={shared_order_b}"
+        )
+
 
 # ---------------------------------------------------------------------------
 # compute_shared_beats
