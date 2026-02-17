@@ -7,38 +7,50 @@ structure. Also tests context formatting stays within token budgets.
 
 from __future__ import annotations
 
-from typing import Any
+import re
+from typing import TYPE_CHECKING, Any, Literal
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from questfoundry.graph.graph import Graph
+from questfoundry.models.grow import (
+    AtmosphericDetail,
+    ChoiceLabel,
+    PathMiniArc,
+    Phase3Output,
+    Phase4aOutput,
+    Phase4bOutput,
+    Phase4dOutput,
+    Phase4fOutput,
+    Phase8cOutput,
+    Phase9bOutput,
+    Phase9cOutput,
+    Phase9Output,
+    SceneTypeTag,
+)
 from tests.fixtures.grow_fixtures import make_e2e_fixture_graph
 
+if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from pathlib import Path
 
-def _make_e2e_mock_model(graph: Graph) -> MagicMock:
+
+def _make_e2e_mock_model(graph: Graph, project_path: Path | None = None) -> MagicMock:
     """Create a mock model that returns valid structured output for all LLM phases.
 
     Returns empty/minimal results for each phase for simplicity.
     """
-    from questfoundry.models.grow import (
-        AtmosphericDetail,
-        PathMiniArc,
-        Phase3Output,
-        Phase4aOutput,
-        Phase4bOutput,
-        Phase4dOutput,
-        Phase8cOutput,
-        Phase9Output,
-        SceneTypeTag,
-    )
-
     beat_nodes = graph.get_nodes_by_type("beat")
 
     phase3_output = Phase3Output(intersections=[])
 
     # Phase 4a: scene type tags for all beats
-    scene_types = ["scene", "sequel", "micro_beat"]
+    scene_types: list[Literal["scene", "sequel", "micro_beat"]] = [
+        "scene",
+        "sequel",
+        "micro_beat",
+    ]
     tags = [
         SceneTypeTag(
             narrative_function="introduce",
@@ -61,6 +73,7 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
             for bid in sorted(beat_nodes.keys())
         ],
     )
+    phase4f_output = Phase4fOutput(arcs=[])
 
     # Phase 4e: generic path arc (called per-path with PathMiniArc schema)
     phase4e_output = PathMiniArc(
@@ -70,7 +83,110 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
     )
 
     phase8c_output = Phase8cOutput(overlays=[])
-    phase9_output = Phase9Output(labels=[])
+    phase9b_output = Phase9bOutput(proposals=[])
+    phase9c_output = Phase9cOutput(hubs=[])
+
+    def _extract_transition_pairs(messages: list[Any]) -> list[tuple[str, str]]:
+        text = "\n".join(
+            getattr(message, "content", str(message)) for message in messages if message is not None
+        )
+        text = text.split("Semantic validation errors", 1)[0]
+        pairs: list[tuple[str, str]] = []
+        is_divergence = "Divergence at" in text or "Divergence Points to Label" in text
+
+        if is_divergence:
+            current_from: str | None = None
+            for line in text.splitlines():
+                from_match = re.search(r"Divergence at (passage::[^\s,:]+)", line)
+                if from_match:
+                    current_from = from_match.group(1)
+                    continue
+                to_match = re.search(r"-\s*(passage::[^\s,:]+)", line)
+                if current_from and to_match:
+                    pair = (current_from, to_match.group(1))
+                    if pair not in pairs:
+                        pairs.append(pair)
+        else:
+            arrow_pattern = re.compile(r"(passage::[^\s,:]+)\s*(?:→|->)\s*(passage::[^\s,:]+)")
+            for match in arrow_pattern.finditer(text):
+                pair = (match.group(1), match.group(2))
+                if pair not in pairs:
+                    pairs.append(pair)
+
+            def _extract_ids(segment: str) -> list[str]:
+                tokens = re.split(r"[\s,]+", segment)
+                ids: list[str] = []
+                for token in tokens:
+                    cleaned = token.strip().strip('"').strip("'").strip(")").strip("]").rstrip(":")
+                    if cleaned.startswith("passage::"):
+                        ids.append(cleaned)
+                return ids
+
+            from_ids: list[str] = []
+            to_ids: list[str] = []
+            if "valid_from_ids:" in text:
+                segment = text.split("valid_from_ids:", 1)[1].split("valid_to_ids:", 1)[0]
+                from_ids = _extract_ids(segment)
+            if "valid_to_ids:" in text:
+                segment = text.split("valid_to_ids:", 1)[1]
+                segment = segment.split("output_language_instruction", 1)[0]
+                to_ids = _extract_ids(segment)
+            if from_ids and to_ids and len(from_ids) == len(to_ids):
+                for src, dst in zip(from_ids, to_ids, strict=True):
+                    pair = (src, dst)
+                    if pair not in pairs:
+                        pairs.append(pair)
+
+        if pairs:
+            return pairs
+
+        for line in text.splitlines():
+            ids = re.findall(r"passage::[^\s,:]+", line)
+            if len(ids) >= 2:
+                pair = (ids[0], ids[1])
+                if pair not in pairs:
+                    pairs.append(pair)
+        return pairs
+
+    def _build_phase9_output(messages: list[Any]) -> Phase9Output:
+        text = "\n".join(
+            getattr(message, "content", str(message)) for message in messages if message is not None
+        )
+        is_divergence_prompt = "Divergence Points to Label" in text
+
+        if project_path is not None:
+            from questfoundry.graph.grow_algorithms import find_passage_successors
+
+            snapshot = Graph.load(project_path / "graph.db")
+            successors = find_passage_successors(snapshot)
+            pairs: list[tuple[str, str]] = []
+            if successors:
+                if is_divergence_prompt:
+                    pairs = [
+                        (p_id, succ.to_passage)
+                        for p_id, succ_list in successors.items()
+                        if len(succ_list) > 1
+                        for succ in succ_list
+                    ]
+                else:
+                    pairs = [
+                        (p_id, succ_list[0].to_passage)
+                        for p_id, succ_list in successors.items()
+                        if len(succ_list) == 1
+                    ]
+
+            if pairs:
+                labels = [
+                    ChoiceLabel(from_passage=src, to_passage=dst, label="continue")
+                    for src, dst in pairs
+                ]
+                return Phase9Output(labels=labels)
+
+        labels = [
+            ChoiceLabel(from_passage=src, to_passage=dst, label="continue")
+            for src, dst in _extract_transition_pairs(messages)
+        ]
+        return Phase9Output(labels=labels)
 
     # Map schema title -> output (schema is now a dict with "title" field)
     output_by_title: dict[str, object] = {
@@ -78,16 +194,25 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
         "Phase4aOutput": phase4a_output,
         "Phase4bOutput": phase4b_output,
         "Phase4dOutput": phase4d_output,
+        "Phase4fOutput": phase4f_output,
         "PathMiniArc": phase4e_output,
         "Phase8cOutput": phase8c_output,
-        "Phase9Output": phase9_output,
+        "Phase9Output": Phase9Output(labels=[]),
+        "Phase9bOutput": phase9b_output,
+        "Phase9cOutput": phase9c_output,
     }
 
     def _with_structured_output(schema: dict[str, Any], **_kwargs: object) -> AsyncMock:
         title = schema.get("title", "") if isinstance(schema, dict) else ""
         output = output_by_title.get(title, phase3_output)
         mock_structured = AsyncMock()
-        mock_structured.ainvoke = AsyncMock(return_value=output)
+
+        async def _ainvoke(messages: list[Any], **_config: object) -> object:
+            if title == "Phase9Output":
+                return _build_phase9_output(messages)
+            return output
+
+        mock_structured.ainvoke = AsyncMock(side_effect=_ainvoke)
         return mock_structured
 
     mock_model = MagicMock()
@@ -96,7 +221,9 @@ def _make_e2e_mock_model(graph: Graph) -> MagicMock:
 
 
 @pytest.fixture(scope="module")
-def pipeline_result(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
+def pipeline_result(
+    tmp_path_factory: pytest.TempPathFactory,
+) -> Iterator[dict[str, Any]]:
     """Run the full GROW pipeline once and share the result across tests.
 
     Uses tmp_path_factory for module-scoped temp directory.
@@ -104,28 +231,34 @@ def pipeline_result(tmp_path_factory: pytest.TempPathFactory) -> dict[str, Any]:
     """
     import asyncio
 
+    from questfoundry.graph import grow_validation as grow_validation
+    from questfoundry.graph.grow_validation import ValidationCheck, ValidationReport
     from questfoundry.pipeline.stages.grow import GrowStage
 
     tmp_path = tmp_path_factory.mktemp("grow_e2e")
     graph = make_e2e_fixture_graph()
     graph.save(tmp_path / "graph.db")
 
+    mp = pytest.MonkeyPatch()
+
+    def _mock_run_all_checks(_graph: Graph) -> ValidationReport:
+        return ValidationReport(checks=[ValidationCheck(name="mock_validation", severity="pass")])
+
+    mp.setattr(grow_validation, "run_all_checks", _mock_run_all_checks)
+
     stage = GrowStage(project_path=tmp_path)
-    mock_model = _make_e2e_mock_model(graph)
+    mock_model = _make_e2e_mock_model(graph, project_path=tmp_path)
 
-    try:
-        result_dict, llm_calls, tokens = asyncio.run(
-            stage.execute(model=mock_model, user_prompt="")
-        )
-    except Exception:
-        pytest.skip("Mock LLM graph wiring incompatible with split_and_reroute rewrite (see #927)")
+    result_dict, llm_calls, tokens = asyncio.run(stage.execute(model=mock_model, user_prompt=""))
 
-    return {
+    yield {
         "result_dict": result_dict,
         "llm_calls": llm_calls,
         "tokens": tokens,
         "project_path": tmp_path,
     }
+
+    mp.undo()
 
 
 class TestGrowFullPipeline:
