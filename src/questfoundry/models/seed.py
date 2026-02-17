@@ -262,7 +262,6 @@ class DilemmaAnalysis(BaseModel):
         description="How strictly paths must stay separate (hard|soft|flavor)",
     )
     ending_salience: EndingSalience = Field(
-        default="low",
         description=(
             "How much this dilemma drives ending differentiation. "
             "'high' = endings MUST differ; 'low' = endings MAY acknowledge; "
@@ -270,7 +269,6 @@ class DilemmaAnalysis(BaseModel):
         ),
     )
     residue_weight: ResidueWeight = Field(
-        default="light",
         description=(
             "How much mid-story prose varies based on this dilemma's outcome. "
             "'heavy' = shared passages MUST show state-specific differences; "
@@ -281,7 +279,6 @@ class DilemmaAnalysis(BaseModel):
     payoff_budget: int = Field(
         ge=2,
         le=6,
-        default=2,
         description="Minimum exclusive beats before convergence",
     )
     reasoning: str = Field(
