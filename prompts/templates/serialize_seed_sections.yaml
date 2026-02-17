@@ -867,9 +867,9 @@ dilemma_analyses_prompt: |
 
   ## Self-Check
   Count your classifications and verify ALL of these:
-  1. HARD count is 1-3. If 0 are hard: re-read each dilemma and find the one
-     with the MOST incompatible world states — promote it to hard. If more
-     than 3 are hard: demote the weakest to soft.
+  1. HARD count is 1-3. If 0 are hard: you skipped Pass 1 — go back and
+     classify the strongest dilemma as hard. If more than 3 are hard:
+     demote the weakest to soft.
   2. SOFT count is the majority.
   3. FLAVOR count is 0-2.
   4. At most 2 have `ending_salience: "high"`.
