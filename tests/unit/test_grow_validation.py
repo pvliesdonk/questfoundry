@@ -2261,3 +2261,158 @@ class TestCheckProseNeutrality:
         graph = _make_shared_passage_graph(ending_salience="high", add_routing=True)
         result = check_prose_neutrality(graph)
         assert all(c.severity == "pass" for c in result)
+
+    def test_non_diverging_dilemma_not_flagged(self) -> None:
+        """Arcs that chose the SAME path for a dilemma should not flag it.
+
+        Regression test for #938: check_prose_neutrality used to flag
+        all dilemmas present in covering arcs, even when arcs agreed on
+        the same path for that dilemma (no actual divergence).
+        """
+        graph = Graph.empty()
+
+        # Dilemma d1 with heavy residue (would fail if diverging)
+        graph.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Trust or betray?",
+                "residue_weight": "heavy",
+                "ending_salience": "high",
+            },
+        )
+        graph.create_node(
+            "path::p1",
+            {"type": "path", "raw_id": "p1", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "path::p2",
+            {"type": "path", "raw_id": "p2", "dilemma_id": "dilemma::d1"},
+        )
+
+        graph.create_node(
+            "passage::shared",
+            {
+                "type": "passage",
+                "raw_id": "shared",
+                "from_beat": "beat::shared",
+                "summary": "shared",
+            },
+        )
+
+        # Both arcs use the SAME path for d1 — no divergence
+        graph.create_node(
+            "arc::a1",
+            {
+                "type": "arc",
+                "raw_id": "a1",
+                "arc_type": "spine",
+                "paths": ["path::p1"],
+                "sequence": ["beat::shared"],
+            },
+        )
+        graph.create_node(
+            "arc::a2",
+            {
+                "type": "arc",
+                "raw_id": "a2",
+                "arc_type": "branch",
+                "paths": ["path::p1"],  # Same path as a1
+                "sequence": ["beat::shared"],
+            },
+        )
+
+        result = check_prose_neutrality(graph)
+        # No divergence on d1, so no failure should be raised
+        assert all(c.severity == "pass" for c in result)
+
+    def test_only_diverging_dilemma_flagged_in_multi_dilemma(self) -> None:
+        """With 2 dilemmas, only the one that diverges should produce a check.
+
+        Regression test for #938: combinatorial arcs that share all
+        dilemmas would generate N failures per passage instead of only
+        the diverging ones.
+        """
+        graph = Graph.empty()
+
+        # d1: heavy, arcs DIVERGE on it (p1 vs p2)
+        graph.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "d1?",
+                "residue_weight": "heavy",
+                "ending_salience": "high",
+            },
+        )
+        graph.create_node(
+            "path::p1",
+            {"type": "path", "raw_id": "p1", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "path::p2",
+            {"type": "path", "raw_id": "p2", "dilemma_id": "dilemma::d1"},
+        )
+
+        # d2: also heavy, but arcs AGREE (both use q1)
+        graph.create_node(
+            "dilemma::d2",
+            {
+                "type": "dilemma",
+                "raw_id": "d2",
+                "question": "d2?",
+                "residue_weight": "heavy",
+                "ending_salience": "high",
+            },
+        )
+        graph.create_node(
+            "path::q1",
+            {"type": "path", "raw_id": "q1", "dilemma_id": "dilemma::d2"},
+        )
+        graph.create_node(
+            "path::q2",
+            {"type": "path", "raw_id": "q2", "dilemma_id": "dilemma::d2"},
+        )
+
+        graph.create_node(
+            "passage::shared",
+            {
+                "type": "passage",
+                "raw_id": "shared",
+                "from_beat": "beat::shared",
+                "summary": "shared",
+            },
+        )
+
+        # arc a1: p1 (d1) + q1 (d2)
+        graph.create_node(
+            "arc::a1",
+            {
+                "type": "arc",
+                "raw_id": "a1",
+                "arc_type": "spine",
+                "paths": ["path::p1", "path::q1"],
+                "sequence": ["beat::shared"],
+            },
+        )
+        # arc a2: p2 (d1) + q1 (d2) — diverges on d1, agrees on d2
+        graph.create_node(
+            "arc::a2",
+            {
+                "type": "arc",
+                "raw_id": "a2",
+                "arc_type": "branch",
+                "paths": ["path::p2", "path::q1"],
+                "sequence": ["beat::shared"],
+            },
+        )
+
+        result = check_prose_neutrality(graph)
+        fails = [c for c in result if c.severity == "fail"]
+        # Only d1 diverges → exactly 1 failure
+        assert len(fails) == 1
+        assert "d1" in fails[0].message
+        # d2 should NOT produce a failure (arcs agree on q1)
+        assert all("d2" not in c.message for c in result if c.severity == "fail")

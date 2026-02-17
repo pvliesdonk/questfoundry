@@ -1430,15 +1430,29 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
         if len(covering_arcs) < 2:
             continue  # Not shared
 
-        # Find dilemmas that diverge across covering arcs
-        # (dilemma appears in some arcs but not all = paths diverged before this beat)
+        # Find dilemmas that actually diverge across covering arcs:
+        # a dilemma diverges only when covering arcs chose *different* paths
+        # for it (i.e., 2+ distinct path IDs for that dilemma).
         all_dilemma_ids: set[str] = set()
         for arc_id in covering_arcs:
             all_dilemma_ids.update(arc_dilemmas.get(arc_id, set()))
 
+        diverging_dilemmas: set[str] = set()
+        for dilemma_id in all_dilemma_ids:
+            paths_for_dilemma: set[str] = set()
+            for arc_id in covering_arcs:
+                for path_raw in arc_nodes.get(arc_id, {}).get("paths", []):
+                    p_id = normalize_scoped_id(path_raw, "path")
+                    p_data = path_nodes.get(p_id, {})
+                    raw_did = p_data.get("dilemma_id", "")
+                    if raw_did and normalize_scoped_id(raw_did, "dilemma") == dilemma_id:
+                        paths_for_dilemma.add(p_id)
+            if len(paths_for_dilemma) > 1:
+                diverging_dilemmas.add(dilemma_id)
+
         has_routing = pid in routed_passages
 
-        for dilemma_id in sorted(all_dilemma_ids):
+        for dilemma_id in sorted(diverging_dilemmas):
             ddata = dilemma_nodes.get(dilemma_id, {})
             weight = ddata.get("residue_weight", "light")
             salience = ddata.get("ending_salience", "low")
