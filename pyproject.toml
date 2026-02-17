@@ -64,7 +64,7 @@ all-providers = [
     "langchain-google-genai>=2.0",
 ]
 tracing = [
-    "langsmith>=0.2",
+    "langsmith>=0.7",
 ]
 research = [
     "ifcraftcorpus[embeddings-api]",

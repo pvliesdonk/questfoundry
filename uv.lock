@@ -1006,7 +1006,7 @@ wheels = [
 
 [[package]]
 name = "langsmith"
-version = "0.6.9"
+version = "0.7.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "httpx" },
@@ -1019,9 +1019,9 @@ dependencies = [
     { name = "xxhash" },
     { name = "zstandard" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/9a/e0/463a70b43d6755b01598bb59932eec8e2029afcab455b5312c318ac457b5/langsmith-0.6.9.tar.gz", hash = "sha256:aae04cec6e6d8e133f63ba71c332ce0fbd2cda95260db7746ff4c3b6a3c41db1", size = 973557, upload-time = "2026-02-05T20:10:55.629Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/8d/bc/8172fefad4f2da888a6d564a27d1fb7d4dbf3c640899c2b40c46235cbe98/langsmith-0.7.3.tar.gz", hash = "sha256:0223b97021af62d2cf53c8a378a27bd22e90a7327e45b353e0069ae60d5d6f9e", size = 988575, upload-time = "2026-02-13T23:25:32.916Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e6/8e/063e09c5e8a3dcd77e2a8f0bff3f71c1c52a9d238da1bcafd2df3281da17/langsmith-0.6.9-py3-none-any.whl", hash = "sha256:86ba521e042397f6fbb79d63991df9d5f7b6a6dd6a6323d4f92131291478dcff", size = 319228, upload-time = "2026-02-05T20:10:54.248Z" },
+    { url = "https://files.pythonhosted.org/packages/f4/9d/5a68b6b5e313ffabbb9725d18a71edb48177fd6d3ad329c07801d2a8e862/langsmith-0.7.3-py3-none-any.whl", hash = "sha256:03659bf9274e6efcead361c9c31a7849ea565ae0d6c0d73e1d8b239029eff3be", size = 325718, upload-time = "2026-02-13T23:25:31.52Z" },
 ]
 
 [[package]]
@@ -2009,7 +2009,7 @@ requires-dist = [
     { name = "langchain-openai", marker = "extra == 'all-providers'", specifier = ">=0.3" },
     { name = "langchain-openai", marker = "extra == 'openai'", specifier = ">=0.3" },
     { name = "langgraph", specifier = ">=0.2" },
-    { name = "langsmith", marker = "extra == 'tracing'", specifier = ">=0.2" },
+    { name = "langsmith", marker = "extra == 'tracing'", specifier = ">=0.7" },
     { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.11" },
     { name = "networkx", marker = "extra == 'viz'", specifier = ">=3.0" },
     { name = "pillow", specifier = ">=12.1.0" },
