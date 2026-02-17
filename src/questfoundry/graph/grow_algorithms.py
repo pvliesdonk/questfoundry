@@ -216,6 +216,7 @@ def topological_sort_beats(
     beat_ids: list[str],
     *,
     priority_beats: set[str] | None = None,
+    reference_positions: dict[str, int] | None = None,
 ) -> list[str]:
     """Topologically sort a subset of beats using requires edges.
 
@@ -223,10 +224,14 @@ def topological_sort_beats(
     order (highest priority first):
 
     1. **Priority tier** — beats in *priority_beats* (shared) before others.
-    2. **Dilemma round-robin** — beats from the dilemma that has emitted
+    2. **Reference position** — if *reference_positions* is provided, beats
+       with a reference position sort by that position.  Beats without a
+       reference position sort after all referenced beats.  This ensures
+       cross-arc consistency for shared beats.
+    3. **Dilemma round-robin** — beats from the dilemma that has emitted
        fewest beats so far sort first, interleaving dilemmas instead of
        clustering all of one dilemma's beats together.
-    3. **Alphabetical** — deterministic within the same tier and count.
+    4. **Alphabetical** — deterministic within the same tier and count.
 
     Args:
         graph: Graph containing requires edges and beat nodes with
@@ -235,6 +240,11 @@ def topological_sort_beats(
         priority_beats: Optional set of beat IDs that should sort before
             non-priority beats when topological constraints allow. When
             ``None``, falls back to purely alphabetical tie-breaking.
+        reference_positions: Optional mapping of beat ID → position from
+            a canonical (spine) sequence.  When provided, beats present
+            in the reference sort by their reference position before
+            falling back to round-robin, guaranteeing cross-arc ordering
+            consistency for shared beats.
 
     Returns:
         Sorted list of beat IDs (prerequisites first).
@@ -259,12 +269,14 @@ def topological_sort_beats(
                 beat_dilemma[bid] = impacts[0].get("dilemma_id", "")
 
     dilemma_emission: dict[str, int] = {}
+    _NO_REF = len(beat_ids) + 1  # Sentinel: sort after all referenced beats
 
-    def _sort_key(bid: str) -> tuple[int, int, str]:
+    def _sort_key(bid: str) -> tuple[int, int, int, str]:
         priority = 0 if priority_beats and bid in priority_beats else 1
+        ref_pos = reference_positions.get(bid, _NO_REF) if reference_positions else _NO_REF
         did = beat_dilemma.get(bid, "")
         rr = dilemma_emission.get(did, 0)
-        return (priority, rr, bid)
+        return (priority, ref_pos, rr, bid)
 
     # Build adjacency within the subset
     in_degree: dict[str, int] = dict.fromkeys(beat_set, 0)
@@ -1327,27 +1339,45 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
     # causing arcs to diverge naturally toward distinct endings.
     shared = compute_shared_beats(dict(path_beat_sets), path_lists)
 
+    # Compute a global reference ordering from ALL beats across all paths.
+    # This ensures every beat has a reference position, preventing
+    # context-dependent round-robin from producing cross-arc inversions (#929).
+    all_beats: set[str] = set()
+    for beats in path_beat_sets.values():
+        all_beats.update(beats)
+
+    reference_positions: dict[str, int] | None = None
+    try:
+        global_sequence = topological_sort_beats(
+            graph,
+            list(all_beats),
+            priority_beats=shared,
+        )
+        reference_positions = {bid: idx for idx, bid in enumerate(global_sequence)}
+    except ValueError:
+        pass  # Fallback: no reference if global beat set has cycles
+
     # Cartesian product of paths
     arcs: list[Arc] = []
     for combo in product(*path_lists):
         path_combo = list(combo)
-        # Get raw_ids for arc naming (sorted alphabetically)
         path_raw_ids = sorted(path_nodes[pid].get("raw_id", pid) for pid in path_combo)
         arc_id = "+".join(path_raw_ids)
+        is_spine = all(path_nodes[pid].get("is_canonical", False) for pid in path_combo)
 
-        # Collect beats: beats that belong to ANY path in the combo
         beat_set: set[str] = set()
         for pid in path_combo:
             beat_set.update(path_beat_sets.get(pid, set()))
 
-        # Topological sort of the beats (shared beats get priority)
         try:
-            sequence = topological_sort_beats(graph, list(beat_set), priority_beats=shared)
+            sequence = topological_sort_beats(
+                graph,
+                list(beat_set),
+                priority_beats=shared,
+                reference_positions=reference_positions,
+            )
         except ValueError:
-            sequence = sorted(beat_set)  # Fallback for cycles (Phase 1 should catch)
-
-        # Determine if spine (all canonical)
-        is_spine = all(path_nodes[pid].get("is_canonical", False) for pid in path_combo)
+            sequence = sorted(beat_set)  # Fallback for cycles
 
         arcs.append(
             Arc(

@@ -377,13 +377,14 @@ class FillStage:
             )
 
         # Re-run management:
-        # On first run (last_stage == "grow"), save a pre-fill backup snapshot.
-        # On re-runs, rewind all fill (and later stage) mutations to start fresh.
-        if last_stage == "grow" and not resume_from:
+        # Always rewind any existing fill mutations before (re-)running.
+        # A previous run may have failed mid-way, leaving last_stage
+        # unchanged but with partial fill artifacts in the graph.
+        if not resume_from:
+            n = graph.rewind_stage("fill")
+            if n > 0:
+                log.info("rewinding_graph", stage="fill", mutations=n)
             save_snapshot(graph, resolved_path, "fill")
-        elif last_stage != "grow" and not resume_from:
-            graph.rewind_stage("fill")
-            log.info("rerun_rewound", stage="fill")
 
         phase_results: list[FillPhaseResult] = []
         total_llm_calls = 0

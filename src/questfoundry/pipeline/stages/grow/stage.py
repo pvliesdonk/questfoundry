@@ -301,13 +301,14 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             )
 
         # Re-run management:
-        # On first run (last_stage == "seed"), save a pre-grow backup snapshot.
-        # On re-runs, rewind all grow (and later stage) mutations to start fresh.
-        if last_stage == "seed" and not resume_from:
+        # Always rewind any existing grow mutations before (re-)running.
+        # A previous grow run may have failed mid-way, leaving last_stage
+        # as "seed" but with partial grow artifacts in the graph (#929).
+        if not resume_from:
+            n = graph.rewind_stage("grow")
+            if n > 0:
+                log.info("rewinding_graph", stage="grow", mutations=n)
             save_snapshot(graph, resolved_path, "grow")
-        elif last_stage != "seed" and not resume_from:
-            graph.rewind_stage("grow")
-            log.info("rerun_rewound", stage="grow")
 
         phase_results: list[GrowPhaseResult] = []
         total_llm_calls = 0
