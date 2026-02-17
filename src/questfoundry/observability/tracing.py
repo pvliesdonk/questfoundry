@@ -130,7 +130,7 @@ def _safe_serialize_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
     handlers) trigger ``ProgrammingError: SQLite objects created in a
     thread can only be used in that same thread``.
 
-    This function replaces such objects with their ``repr()`` so the
+    This function replaces such objects with a ``<TypeName>`` placeholder so the
     trace still records *what* was passed without touching thread-unsafe
     resources.
     """
@@ -139,12 +139,17 @@ def _safe_serialize_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
         if isinstance(value, (str, int, float, bool, type(None))):
             safe[key] = value
         elif isinstance(value, (list, tuple)):
-            safe[key] = str(value)[:500]
+            safe[key] = f"<{type(value).__name__}[{len(value)}]>"
         elif isinstance(value, dict):
-            safe[key] = {k: str(v)[:200] for k, v in value.items()}
+            safe[key] = {
+                str(k): v
+                if isinstance(v, (str, int, float, bool, type(None)))
+                else f"<{type(v).__name__}>"
+                for k, v in value.items()
+            }
         else:
-            # Non-primitive: use type name + repr snippet to avoid
-            # deep serialization of objects with SQLite connections.
+            # Non-primitive: use type name to avoid deep serialization
+            # of objects that might hold thread-unsafe resources.
             safe[key] = f"<{type(value).__name__}>"
     return safe
 
