@@ -122,6 +122,38 @@ def get_current_run_tree() -> Any | None:
         return None
 
 
+def _safe_serialize_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
+    """Strip non-serializable objects from traced function inputs.
+
+    Langsmith serializes inputs in a background thread.  Objects that
+    hold SQLite connections (stage instances, LangChain models, callback
+    handlers) trigger ``ProgrammingError: SQLite objects created in a
+    thread can only be used in that same thread``.
+
+    This function replaces such objects with a ``<TypeName>`` placeholder so the
+    trace still records *what* was passed without touching thread-unsafe
+    resources.
+    """
+    safe: dict[str, Any] = {}
+    for key, value in inputs.items():
+        if isinstance(value, (str, int, float, bool, type(None))):
+            safe[key] = value
+        elif isinstance(value, (list, tuple)):
+            safe[key] = f"<{type(value).__name__}[{len(value)}]>"
+        elif isinstance(value, dict):
+            safe[key] = {
+                str(k): v
+                if isinstance(v, (str, int, float, bool, type(None)))
+                else f"<{type(v).__name__}>"
+                for k, v in value.items()
+            }
+        else:
+            # Non-primitive: use type name to avoid deep serialization
+            # of objects that might hold thread-unsafe resources.
+            safe[key] = f"<{type(value).__name__}>"
+    return safe
+
+
 def traceable(
     name: str | None = None,
     *,
@@ -199,6 +231,7 @@ def traceable(
             name=name or func.__name__,
             tags=effective_tags,
             metadata=effective_metadata,
+            process_inputs=_safe_serialize_inputs,
         )(wrapper)  # type: ignore[assignment]
 
         return traced_wrapper
