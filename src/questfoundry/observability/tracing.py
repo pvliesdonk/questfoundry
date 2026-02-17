@@ -122,6 +122,33 @@ def get_current_run_tree() -> Any | None:
         return None
 
 
+def _safe_serialize_inputs(inputs: dict[str, Any]) -> dict[str, Any]:
+    """Strip non-serializable objects from traced function inputs.
+
+    Langsmith serializes inputs in a background thread.  Objects that
+    hold SQLite connections (stage instances, LangChain models, callback
+    handlers) trigger ``ProgrammingError: SQLite objects created in a
+    thread can only be used in that same thread``.
+
+    This function replaces such objects with their ``repr()`` so the
+    trace still records *what* was passed without touching thread-unsafe
+    resources.
+    """
+    safe: dict[str, Any] = {}
+    for key, value in inputs.items():
+        if isinstance(value, (str, int, float, bool, type(None))):
+            safe[key] = value
+        elif isinstance(value, (list, tuple)):
+            safe[key] = str(value)[:500]
+        elif isinstance(value, dict):
+            safe[key] = {k: str(v)[:200] for k, v in value.items()}
+        else:
+            # Non-primitive: use type name + repr snippet to avoid
+            # deep serialization of objects with SQLite connections.
+            safe[key] = f"<{type(value).__name__}>"
+    return safe
+
+
 def traceable(
     name: str | None = None,
     *,
@@ -199,6 +226,7 @@ def traceable(
             name=name or func.__name__,
             tags=effective_tags,
             metadata=effective_metadata,
+            process_inputs=_safe_serialize_inputs,
         )(wrapper)  # type: ignore[assignment]
 
         return traced_wrapper
