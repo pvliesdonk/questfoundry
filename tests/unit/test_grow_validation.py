@@ -2328,7 +2328,15 @@ class TestCheckProseNeutrality:
 
         graph.create_node(
             "path::p_orphan",
-            {"type": "path", "raw_id": "p_orphan"},
+            {"type": "path", "raw_id": "p_orphan", "dilemma_id": ""},
+        )
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "question": "q"},
+        )
+        graph.create_node(
+            "path::p_valid",
+            {"type": "path", "raw_id": "p_valid", "dilemma_id": "d1"},
         )
         graph.create_node(
             "beat::shared",
@@ -2350,7 +2358,7 @@ class TestCheckProseNeutrality:
                 "type": "arc",
                 "raw_id": "a1",
                 "arc_type": "spine",
-                "paths": ["path::p_orphan"],
+                "paths": ["p_orphan", "p_valid"],
                 "sequence": ["beat::shared"],
             },
         )
@@ -2360,9 +2368,23 @@ class TestCheckProseNeutrality:
                 "type": "arc",
                 "raw_id": "a2",
                 "arc_type": "branch",
-                "paths": ["path::p_orphan"],
+                "paths": ["p_orphan", "p_valid"],
                 "sequence": ["beat::shared"],
             },
+        )
+
+        result = check_prose_neutrality(graph)
+        assert all(c.severity == "pass" for c in result)
+
+    def test_routing_choice_branches_covered(self) -> None:
+        graph = Graph.empty()
+        graph.create_node(
+            "choice::c2",
+            {"type": "choice", "is_routing": True, "raw_id": "c2"},
+        )
+        graph.create_node(
+            "choice::c3",
+            {"type": "choice", "is_routing": False, "raw_id": "c3"},
         )
 
         result = check_prose_neutrality(graph)
