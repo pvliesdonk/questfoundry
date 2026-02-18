@@ -1463,15 +1463,12 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
                 continue  # Variant routing exists, prose contract met
 
             if weight == "heavy" or salience == "high":
-                # Warn rather than fail: the grow stage does not yet
-                # wire mid-story variant routing for heavy/high
-                # dilemmas (split_and_reroute handles endings only).
-                # Tracked as a future capability; blocking the pipeline
-                # on an unimplemented feature produces false failures.
+                # Heavy/high dilemmas require variant routing. With deterministic
+                # heavy-residue routing in place, missing variants is a failure.
                 checks.append(
                     ValidationCheck(
                         name="prose_neutrality",
-                        severity="warn",
+                        severity="fail",
                         message=(
                             f"Shared passage {pid} requires variant routing "
                             f"for dilemma '{label}' "

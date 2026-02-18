@@ -2224,20 +2224,20 @@ class TestCheckProseNeutrality:
         assert len(result) == 1
         assert result[0].severity == "pass"
 
-    def test_heavy_without_routing_warns(self) -> None:
+    def test_heavy_without_routing_fails(self) -> None:
         graph = _make_shared_passage_graph(residue_weight="heavy")
         result = check_prose_neutrality(graph)
-        warns = [c for c in result if c.severity == "warn"]
-        assert len(warns) >= 1
-        assert "passage::shared" in warns[0].message
-        assert "residue_weight=heavy" in warns[0].message
+        fails = [c for c in result if c.severity == "fail"]
+        assert len(fails) >= 1
+        assert "passage::shared" in fails[0].message
+        assert "residue_weight=heavy" in fails[0].message
 
-    def test_high_salience_without_routing_warns(self) -> None:
+    def test_high_salience_without_routing_fails(self) -> None:
         graph = _make_shared_passage_graph(ending_salience="high")
         result = check_prose_neutrality(graph)
-        warns = [c for c in result if c.severity == "warn"]
-        assert len(warns) >= 1
-        assert "ending_salience=high" in warns[0].message
+        fails = [c for c in result if c.severity == "fail"]
+        assert len(fails) >= 1
+        assert "ending_salience=high" in fails[0].message
 
     def test_light_without_routing_warns(self) -> None:
         graph = _make_shared_passage_graph(residue_weight="light", ending_salience="low")
@@ -2473,9 +2473,9 @@ class TestCheckProseNeutrality:
         )
 
         result = check_prose_neutrality(graph)
-        warns = [c for c in result if c.severity == "warn"]
-        # Only d1 diverges → exactly 1 warning (heavy/high is warn-level)
-        d1_warns = [c for c in warns if "d1" in c.message]
-        assert len(d1_warns) == 1
-        # d2 should NOT produce a warning (arcs agree on q1)
-        assert all("d2" not in c.message for c in warns)
+        fails = [c for c in result if c.severity == "fail"]
+        # Only d1 diverges → exactly 1 failure (heavy/high is fail-level)
+        d1_fails = [c for c in fails if "d1" in c.message]
+        assert len(d1_fails) == 1
+        # d2 should NOT produce a failure (arcs agree on q1)
+        assert all("d2" not in c.message for c in fails)
