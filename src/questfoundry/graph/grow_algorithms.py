@@ -107,7 +107,7 @@ def validate_beat_dag(graph: Graph) -> list[GrowValidationError]:
     in_degree: dict[str, int] = dict.fromkeys(beat_nodes, 0)
     successors: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
 
-    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="requires")
+    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="sequenced_after")
     for edge in requires_edges:
         from_id = edge["from"]
         to_id = edge["to"]
@@ -282,7 +282,7 @@ def topological_sort_beats(
     in_degree: dict[str, int] = dict.fromkeys(beat_set, 0)
     successors: dict[str, list[str]] = {bid: [] for bid in beat_set}
 
-    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="requires")
+    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="sequenced_after")
     for edge in requires_edges:
         from_id = edge["from"]  # dependent
         to_id = edge["to"]  # prerequisite
@@ -380,7 +380,7 @@ def collapse_linear_beats(graph: Graph, *, min_run_length: int = 2) -> CollapseR
     if not beat_nodes:
         return CollapseResult(runs_collapsed=0, beats_removed=0)
 
-    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="requires")
+    requires_edges = graph.get_edges(from_id=None, to_id=None, edge_type="sequenced_after")
     belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
 
     forward_predecessors: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
@@ -505,9 +505,9 @@ def collapse_linear_beats(graph: Graph, *, min_run_length: int = 2) -> CollapseR
         after_ids = [bid for bid in forward_successors.get(run[-1], []) if bid not in run]
 
         if before_ids:
-            _ensure_edge("requires", keep_id, before_ids[0])
+            _ensure_edge("sequenced_after", keep_id, before_ids[0])
         if after_ids:
-            _ensure_edge("requires", after_ids[0], keep_id)
+            _ensure_edge("sequenced_after", after_ids[0], keep_id)
 
         for rid in remove_ids:
             removed_beats.add(rid)
@@ -977,7 +977,7 @@ def split_and_reroute(
                     "type": "choice",
                     "from_passage": source_passage,
                     "to_passage": variant.passage_id,
-                    "requires": list(variant.requires_codewords),
+                    "requires_codewords": list(variant.requires_codewords),
                     "grants": list(original_choice.get("grants", [])),
                     "label": original_choice.get("label"),
                     "is_routing": True,
@@ -2688,6 +2688,14 @@ def build_intersection_candidates(graph: Graph) -> list[IntersectionCandidate]:
         if not beat_nodes:
             return []
 
+    # Filter out gap beats: they are path-local by construction (their sequenced_after
+    # predecessors exist on a single path only) and are therefore never eligible as
+    # intersection beats. See spec §GROW Intersections — Intersection eligibility constraint.
+    beat_nodes = {bid: d for bid, d in beat_nodes.items() if not d.get("is_gap_beat")}
+    beat_dilemmas = {bid: ds for bid, ds in beat_dilemmas.items() if bid in beat_nodes}
+    if not beat_nodes:
+        return []
+
     # Group by location overlap (highest priority)
     location_groups = _group_by_location(beat_nodes, beat_dilemmas)
 
@@ -2910,7 +2918,7 @@ def _try_lift_prerequisite(
     # (This is a conservative check — full cycle detection is expensive.)
 
     # First, transitively lift this prereq's own prerequisites
-    for edge in graph.get_edges(from_id=prereq_id, to_id=None, edge_type="requires"):
+    for edge in graph.get_edges(from_id=prereq_id, to_id=None, edge_type="sequenced_after"):
         sub_prereq_id = edge["to"]
         sub_paths = beat_paths.get(sub_prereq_id, set())
         if not sub_paths >= target_paths and not _try_lift_prerequisite(
@@ -2985,7 +2993,7 @@ def _try_split_beat(
         graph.add_edge("belongs_to", variant_id, path_id)
 
     # Variant keeps the requires edge to the prereq
-    graph.add_edge("requires", variant_id, prereq_id)
+    graph.add_edge("sequenced_after", variant_id, prereq_id)
 
     # Remove the narrow_paths from the original beat's belongs_to
     # (The original beat keeps the wide_paths.)
@@ -3150,8 +3158,8 @@ def check_intersection_compatibility(
         # downstream checks (requires edges, conditional prerequisites).
         return errors
 
-    # Check requires edges originating from intersection beats.
-    # Two checks in one pass: (1) no circular requires between intersection
+    # Check sequenced_after edges originating from intersection beats.
+    # Two checks in one pass: (1) no circular sequenced_after between intersection
     # beats, and (2) no conditional prerequisites (see below).
     beat_set = set(beat_ids)
 
@@ -3166,16 +3174,16 @@ def check_intersection_compatibility(
     for bid in beat_ids:
         union_paths.update(beat_paths.get(bid, set()))
 
-    # Iterate only over outgoing requires edges from intersection beats
-    # (targeted lookups instead of scanning all requires edges).
+    # Iterate only over outgoing sequenced_after edges from intersection beats
+    # (targeted lookups instead of scanning all sequenced_after edges).
     for from_id in beat_set:
-        for edge in graph.get_edges(from_id=from_id, to_id=None, edge_type="requires"):
+        for edge in graph.get_edges(from_id=from_id, to_id=None, edge_type="sequenced_after"):
             to_id = edge["to"]
             if to_id in beat_set:
                 # Circular requires between intersection beats
                 errors.append(
                     GrowValidationError(
-                        field_path="intersection.requires",
+                        field_path="intersection.sequenced_after",
                         issue=(
                             f"Beat '{from_id}' requires '{to_id}' — "
                             f"intersection beats cannot have requires "
@@ -3189,7 +3197,7 @@ def check_intersection_compatibility(
                 # cannot depend on a beat that exists only on a strict
                 # subset of its paths.  After intersection marking, every
                 # beat in the group will belong to the union of all paths.
-                # If a `requires` target is narrower, that edge would be
+                # If a `sequenced_after` target is narrower, that edge would be
                 # silently dropped in arcs missing the target's path,
                 # producing inconsistent orderings and passage DAG cycles.
                 #
@@ -3520,10 +3528,10 @@ def insert_gap_beat(
     # Existing transitive requires (before_beat → after_beat) is kept as redundant
     # but harmless for topological sort correctness.
     if after_beat:
-        graph.add_edge("requires", beat_id, after_beat)
+        graph.add_edge("sequenced_after", beat_id, after_beat)
 
     if before_beat:
-        graph.add_edge("requires", before_beat, beat_id)
+        graph.add_edge("sequenced_after", before_beat, beat_id)
 
     return beat_id
 
