@@ -30,7 +30,7 @@ class ExportChoice:
     from_passage: str
     to_passage: str
     label: str
-    requires: list[str] = field(default_factory=list)
+    requires_codewords: list[str] = field(default_factory=list)
     grants: list[str] = field(default_factory=list)
     is_return: bool = False
 

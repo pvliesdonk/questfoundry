@@ -207,8 +207,8 @@ def _render_choice(choice: ExportChoice) -> str:
     else:
         link = f"[[{choice.label}->{target}]]"
 
-    if choice.requires:
-        conditions = " and ".join(_codeword_var(cw) for cw in choice.requires)
+    if choice.requires_codewords:
+        conditions = " and ".join(_codeword_var(cw) for cw in choice.requires_codewords)
         return f"<<if {conditions}>>{link}<</if>>"
     return link
 

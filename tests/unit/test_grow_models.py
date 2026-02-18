@@ -157,15 +157,15 @@ class TestChoice:
             from_passage="p1",
             to_passage="p2",
             label="Go left",
-            requires=["cw1"],
+            requires_codewords=["cw1"],
             grants=["cw2"],
         )
         assert choice.from_passage == "p1"
-        assert choice.requires == ["cw1"]
+        assert choice.requires_codewords == ["cw1"]
 
     def test_empty_requires_grants_allowed(self) -> None:
         choice = Choice(from_passage="p1", to_passage="p2", label="Continue")
-        assert choice.requires == []
+        assert choice.requires_codewords == []
         assert choice.grants == []
 
     def test_empty_label_rejected(self) -> None:

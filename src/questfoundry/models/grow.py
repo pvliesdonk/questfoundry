@@ -78,7 +78,7 @@ class Choice(BaseModel):
     from_passage: str = Field(min_length=1)
     to_passage: str = Field(min_length=1)
     label: str = Field(min_length=1)
-    requires: list[str] = Field(default_factory=list)
+    requires_codewords: list[str] = Field(default_factory=list)
     grants: list[str] = Field(default_factory=list)
     is_return: bool = Field(default=False, description="True for spoke→hub return links")
 

@@ -354,13 +354,13 @@ def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
         grants = choice_data.get("grants", [])
         grantable.update(grants)
 
-    # Check each choice's requires
+    # Check each choice's requires_codewords
     unsatisfiable: list[str] = []
     for choice_id, choice_data in sorted(choice_nodes.items()):
-        requires = choice_data.get("requires", [])
+        requires = choice_data.get("requires_codewords", [])
         for req in requires:
             if req not in grantable:
-                unsatisfiable.append(f"{choice_id} requires '{req}'")
+                unsatisfiable.append(f"{choice_id} requires_codewords '{req}'")
 
     if not unsatisfiable:
         return ValidationCheck(
@@ -424,7 +424,7 @@ def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
     # Check each gated choice
     paradoxical: list[str] = []
     for choice_id, choice_data in sorted(choice_nodes.items()):
-        requires = set(choice_data.get("requires", []))
+        requires = set(choice_data.get("requires_codewords", []))
         if not requires:
             continue
 
@@ -1143,7 +1143,7 @@ def check_codeword_gate_coverage(graph: Graph) -> ValidationCheck:
     """Check that every codeword is consumed by a gate or overlay condition.
 
     Implements the "Residue Must Be Read" invariant: checks that each
-    codeword appears in at least one ``choice.requires`` gate or
+    codeword appears in at least one ``choice.requires_codewords`` gate or
     ``overlay.when`` condition.
     """
     codeword_nodes = graph.get_nodes_by_type("codeword")
@@ -1157,7 +1157,7 @@ def check_codeword_gate_coverage(graph: Graph) -> ValidationCheck:
     choice_nodes = graph.get_nodes_by_type("choice")
     consumed: set[str] = set()
     for choice_data in choice_nodes.values():
-        consumed.update(choice_data.get("requires") or [])
+        consumed.update(choice_data.get("requires_codewords") or [])
 
     # Overlays are embedded arrays on entity nodes (type="entity"),
     # not separate typed nodes.
@@ -1180,7 +1180,7 @@ def check_codeword_gate_coverage(graph: Graph) -> ValidationCheck:
         severity="warn",
         message=(
             f"{len(unconsumed)} of {len(codeword_nodes)} codeword(s) not consumed "
-            f"by any choice.requires or overlay.when: {', '.join(unconsumed[:5])}"
+            f"by any choice.requires_codewords or overlay.when: {', '.join(unconsumed[:5])}"
             f"{'...' if len(unconsumed) > 5 else ''}"
         ),
     )
@@ -1220,7 +1220,7 @@ def check_forward_path_reachability(graph: Graph) -> ValidationCheck:
         forward = [c for c in choices if not c.get("is_return") and not c.get("is_routing")]
         if not forward:
             continue  # ending passage or routing-only — no forward choices
-        ungated = [c for c in forward if not c.get("requires")]
+        ungated = [c for c in forward if not c.get("requires_codewords")]
         if not ungated:
             soft_locked.append(pid)
 
@@ -1307,7 +1307,7 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
         # Extract requires sets from routing choices
         route_requires: list[set[str]] = []
         for rc in routing_choices:
-            reqs = rc.get("requires", [])
+            reqs = rc.get("requires_codewords", [])
             route_requires.append(set(reqs) if isinstance(reqs, list) else set())
 
         # CE check: for each covering arc, at least one route is satisfiable

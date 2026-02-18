@@ -1656,7 +1656,7 @@ class TestFormatEntityArcContext:
                 "raw_id": "b2",
                 "summary": "Doubts surface",
                 "paths": ["path::trust__yes"],
-                "requires": ["beat::b1"],
+                "sequenced_after": ["beat::b1"],
                 "entities": ["entity::mentor", "entity::letter"],
             },
         )
@@ -1667,7 +1667,7 @@ class TestFormatEntityArcContext:
                 "raw_id": "b3",
                 "summary": "Revelation",
                 "paths": ["path::trust__yes"],
-                "requires": ["beat::b2"],
+                "sequenced_after": ["beat::b2"],
                 "entities": ["entity::mentor"],
             },
         )

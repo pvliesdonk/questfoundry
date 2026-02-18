@@ -237,7 +237,7 @@ class TestRenderHtml:
                     from_passage="p1",
                     to_passage="p2",
                     label="Open the door",
-                    requires=["codeword::golden_key"],
+                    requires_codewords=["codeword::golden_key"],
                 ),
             ],
         )

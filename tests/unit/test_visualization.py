@@ -567,7 +567,7 @@ class TestGrantsEdges:
         graph = _make_simple_graph()
         graph.update_node(
             "choice::intro_middle",
-            requires=["has_key"],
+            requires_codewords=["has_key"],
             grants=["saw_truth"],
         )
         sg = build_story_graph(graph)

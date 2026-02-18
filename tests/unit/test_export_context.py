@@ -42,7 +42,7 @@ def _minimal_graph() -> Graph:
             "from_passage": "passage::intro",
             "to_passage": "passage::choice_a",
             "label": "Enter the castle",
-            "requires": [],
+            "requires_codewords": [],
             "grants": ["codeword::entered_castle"],
         },
     )
@@ -53,7 +53,7 @@ def _minimal_graph() -> Graph:
             "from_passage": "passage::intro",
             "to_passage": "passage::choice_b",
             "label": "Flee to the forest",
-            "requires": [],
+            "requires_codewords": [],
             "grants": [],
         },
     )
@@ -167,7 +167,7 @@ class TestBuildExportContext:
                 "from_passage": "passage::intro",
                 "to_passage": "passage::spoke_0",
                 "label": "Look around",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -181,7 +181,7 @@ class TestBuildExportContext:
                 "to_passage": "passage::intro",
                 "label": "Return",
                 "is_return": True,
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )

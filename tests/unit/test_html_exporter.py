@@ -89,7 +89,7 @@ class TestHtmlExporter:
                     from_passage="p1",
                     to_passage="p2",
                     label="Enter",
-                    requires=["codeword::has_key"],
+                    requires_codewords=["codeword::has_key"],
                 ),
             ],
         )
