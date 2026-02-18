@@ -6207,6 +6207,204 @@ class TestBuildArcCodewords:
         assert result == {}
 
 
+class TestHeavyResidueRouting:
+    """Tests for deterministic heavy-residue routing."""
+
+    @staticmethod
+    def _make_shared_passage_graph(*, diverging: bool = True, routed: bool = False) -> Graph:
+        """Create a minimal shared-passage graph for heavy routing tests."""
+        graph = Graph.empty()
+
+        # Dilemma + paths
+        graph.create_node(
+            "dilemma::d1",
+            {
+                "type": "dilemma",
+                "raw_id": "d1",
+                "question": "Trust or betray?",
+                "residue_weight": "heavy",
+                "ending_salience": "low",
+            },
+        )
+        graph.create_node(
+            "path::d1__yes",
+            {"type": "path", "raw_id": "d1__yes", "dilemma_id": "d1"},
+        )
+        graph.create_node(
+            "path::d1__no",
+            {"type": "path", "raw_id": "d1__no", "dilemma_id": "d1"},
+        )
+
+        # Consequences + codewords
+        graph.create_node(
+            "consequence::yes_result",
+            {"type": "consequence", "raw_id": "yes_result", "path_id": "d1__yes"},
+        )
+        graph.create_node(
+            "consequence::no_result",
+            {"type": "consequence", "raw_id": "no_result", "path_id": "d1__no"},
+        )
+        graph.add_edge("has_consequence", "path::d1__yes", "consequence::yes_result")
+        graph.add_edge("has_consequence", "path::d1__no", "consequence::no_result")
+        graph.create_node(
+            "codeword::yes_result_committed",
+            {
+                "type": "codeword",
+                "raw_id": "yes_result_committed",
+                "tracks": "consequence::yes_result",
+            },
+        )
+        graph.create_node(
+            "codeword::no_result_committed",
+            {
+                "type": "codeword",
+                "raw_id": "no_result_committed",
+                "tracks": "consequence::no_result",
+            },
+        )
+        graph.add_edge("tracks", "codeword::yes_result_committed", "consequence::yes_result")
+        graph.add_edge("tracks", "codeword::no_result_committed", "consequence::no_result")
+
+        # Shared beat + passage
+        graph.create_node(
+            "beat::shared",
+            {"type": "beat", "raw_id": "shared", "summary": "Shared beat"},
+        )
+        graph.create_node(
+            "passage::shared",
+            {
+                "type": "passage",
+                "raw_id": "shared",
+                "from_beat": "beat::shared",
+                "summary": "Shared passage",
+            },
+        )
+        graph.create_node(
+            "passage::intro",
+            {"type": "passage", "raw_id": "intro"},
+        )
+
+        # Incoming choice
+        graph.create_node(
+            "choice::to_shared",
+            {
+                "type": "choice",
+                "from_passage": "passage::intro",
+                "to_passage": "passage::shared",
+            },
+        )
+        graph.add_edge("choice_from", "choice::to_shared", "passage::intro")
+        graph.add_edge("choice_to", "choice::to_shared", "passage::shared")
+
+        # Two arcs covering shared beat
+        yes_path = "d1__yes"
+        no_path = "d1__no"
+        if not diverging:
+            no_path = "d1__yes"
+
+        graph.create_node(
+            "arc::a1",
+            {
+                "type": "arc",
+                "raw_id": "a1",
+                "arc_type": "spine",
+                "paths": [yes_path],
+                "sequence": ["beat::shared"],
+            },
+        )
+        graph.create_node(
+            "arc::a2",
+            {
+                "type": "arc",
+                "raw_id": "a2",
+                "arc_type": "branch",
+                "paths": [no_path],
+                "sequence": ["beat::shared"],
+            },
+        )
+
+        if routed:
+            graph.create_node(
+                "passage::variant",
+                {
+                    "type": "passage",
+                    "raw_id": "variant",
+                    "from_beat": "beat::shared",
+                    "is_residue": True,
+                    "residue_for": "passage::shared",
+                },
+            )
+            graph.create_node(
+                "choice::routed",
+                {
+                    "type": "choice",
+                    "from_passage": "passage::shared",
+                    "to_passage": "passage::variant",
+                    "is_routing": True,
+                    "requires": ["codeword::yes_result_committed"],
+                },
+            )
+            graph.add_edge("choice_from", "choice::routed", "passage::shared")
+            graph.add_edge("choice_to", "choice::routed", "passage::variant")
+
+        return graph
+
+    def test_heavy_routing_creates_variants(self) -> None:
+        from questfoundry.graph.grow_algorithms import wire_heavy_residue_routing
+
+        graph = self._make_shared_passage_graph()
+        result = wire_heavy_residue_routing(graph)
+
+        assert result.targets_found == 1
+        assert result.passages_routed == 1
+        assert result.variants_created == 2
+
+        passages = graph.get_nodes_by_type("passage")
+        variants = [
+            data
+            for _pid, data in passages.items()
+            if data.get("is_residue") and data.get("residue_dilemma") == "dilemma::d1"
+        ]
+        assert len(variants) == 2
+
+        choices = graph.get_nodes_by_type("choice")
+        routing = [data for _cid, data in choices.items() if data.get("is_routing")]
+        assert len(routing) == 2
+        assert all(choice.get("requires") for choice in routing)
+
+        # Original choice remains as fallback
+        assert graph.get_node("choice::to_shared") is not None
+
+    def test_non_diverging_skips(self) -> None:
+        from questfoundry.graph.grow_algorithms import wire_heavy_residue_routing
+
+        graph = self._make_shared_passage_graph(diverging=False)
+        result = wire_heavy_residue_routing(graph)
+
+        assert result.targets_found == 0
+        assert result.variants_created == 0
+
+    def test_already_routed_skips(self) -> None:
+        from questfoundry.graph.grow_algorithms import wire_heavy_residue_routing
+
+        graph = self._make_shared_passage_graph(routed=True)
+        result = wire_heavy_residue_routing(graph)
+
+        assert result.targets_found == 0
+        assert result.variants_created == 0
+
+    def test_no_incoming_edges_skips(self) -> None:
+        from questfoundry.graph.grow_algorithms import wire_heavy_residue_routing
+
+        graph = self._make_shared_passage_graph()
+        graph.delete_node("choice::to_shared", cascade=True)
+        result = wire_heavy_residue_routing(graph)
+
+        assert result.targets_found == 1
+        assert result.variants_created == 0
+        assert result.skipped_no_incoming == 1
+
+
 class TestSplitAndReroute:
     """Tests for split_and_reroute() incoming-edge rewriting primitive."""
 

@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.graph import Graph  # noqa: TC001 - used at runtime
+from questfoundry.graph.grow_algorithms import wire_heavy_residue_routing
 from questfoundry.models.grow import GrowPhaseResult
 from questfoundry.pipeline.stages.grow._helpers import log
 from questfoundry.pipeline.stages.grow.registry import grow_phase
@@ -658,10 +659,61 @@ async def phase_collapse_passages(
     )
 
 
+# --- Phase 9e: Heavy residue routing ---
+
+
+@grow_phase(
+    name="heavy_residue_routing",
+    depends_on=["collapse_passages"],
+    is_deterministic=True,
+    priority=23,
+)
+async def phase_heavy_residue_routing(
+    graph: Graph,
+    model: BaseChatModel,  # noqa: ARG001
+) -> GrowPhaseResult:
+    """Phase 9e: Deterministic routing for heavy-residue divergences.
+
+    Preconditions:
+    - Passage collapse complete (Phase 9d).
+
+    Postconditions:
+    - Shared mid-story passages where heavy/high dilemmas diverge are
+      split into variants and wired via split_and_reroute.
+
+    Invariants:
+    - Deterministic: no LLM calls.
+    - No-op when no heavy-residue targets are found.
+    """
+    result = wire_heavy_residue_routing(graph)
+
+    if result.targets_found == 0:
+        return GrowPhaseResult(
+            phase="heavy_residue_routing",
+            status="completed",
+            detail="No heavy-residue routing targets",
+        )
+
+    return GrowPhaseResult(
+        phase="heavy_residue_routing",
+        status="completed",
+        detail=(
+            f"Routed {result.passages_routed} passage(s) with "
+            f"{result.variants_created} variant(s); "
+            f"skipped {result.skipped_no_incoming} target(s)"
+        ),
+    )
+
+
 # --- Phase 10: Validation ---
 
 
-@grow_phase(name="validation", depends_on=["collapse_passages"], is_deterministic=True, priority=23)
+@grow_phase(
+    name="validation",
+    depends_on=["heavy_residue_routing"],
+    is_deterministic=True,
+    priority=24,
+)
 async def phase_validation(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 10: Graph validation.
 
@@ -717,7 +769,7 @@ async def phase_validation(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
 # --- Phase 11: Prune ---
 
 
-@grow_phase(name="prune", depends_on=["validation"], is_deterministic=True, priority=24)
+@grow_phase(name="prune", depends_on=["validation"], is_deterministic=True, priority=25)
 async def phase_prune(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 11: Prune unreachable passages.
 

@@ -216,11 +216,11 @@ class TestGrowPhaseDecorator:
 class TestGlobalRegistry:
     """Tests for the global registry populated by actual GROW phases."""
 
-    def test_global_registry_has_23_phases(self) -> None:
-        """All 23 GROW phases are registered."""
+    def test_global_registry_has_25_phases(self) -> None:
+        """All 25 GROW phases are registered."""
         registry = get_registry()
-        assert len(registry) >= 23, (
-            f"Expected at least 23 phases, got {len(registry)}: {registry.phase_names}"
+        assert len(registry) >= 25, (
+            f"Expected at least 25 phases, got {len(registry)}: {registry.phase_names}"
         )
 
     def test_global_registry_validates(self) -> None:
@@ -254,6 +254,7 @@ class TestGlobalRegistry:
             "mark_endings",
             "split_endings",
             "collapse_passages",
+            "heavy_residue_routing",
             "validation",
             "prune",
         ]

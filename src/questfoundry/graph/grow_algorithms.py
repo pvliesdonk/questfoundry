@@ -2135,6 +2135,280 @@ def create_residue_passages(
 
 
 # ---------------------------------------------------------------------------
+# Heavy-residue variant routing
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class HeavyDivergenceTarget:
+    """A shared passage needing mandatory variant routing for a heavy dilemma.
+
+    Produced by :func:`find_heavy_divergence_targets` for each
+    (passage, dilemma) pair where:
+
+    * The passage is shared across 2+ arcs,
+    * Those arcs chose *different* paths for the dilemma, and
+    * The dilemma has ``residue_weight == "heavy"`` or
+      ``ending_salience == "high"``.
+    """
+
+    passage_id: str
+    dilemma_id: str
+    residue_weight: str
+    ending_salience: str
+    path_codewords: dict[str, str]  # path_id → codeword_id
+
+
+def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
+    """Identify shared mid-story passages needing heavy-residue variant routing.
+
+    Reuses the same graph traversal logic as
+    :func:`~questfoundry.graph.grow_validation.check_prose_neutrality` but
+    returns structured targets suitable for :func:`split_and_reroute`.
+
+    Only passages meeting *all* of these criteria are returned:
+
+    * Covered by 2+ arcs (shared).
+    * Arcs diverge on a dilemma (chose different paths).
+    * The dilemma has ``residue_weight == "heavy"`` **or**
+      ``ending_salience == "high"``.
+    * The passage is **not** already routed (no ``is_routing`` choices).
+    * The passage is **not** an ending.
+    """
+    arc_nodes = graph.get_nodes_by_type("arc")
+    passage_nodes = graph.get_nodes_by_type("passage")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    path_nodes = graph.get_nodes_by_type("path")
+    choice_nodes = graph.get_nodes_by_type("choice")
+    codeword_nodes = graph.get_nodes_by_type("codeword")
+
+    if not arc_nodes or not passage_nodes or not dilemma_nodes:
+        return []
+
+    # Beat → covering arc IDs
+    beat_arcs: dict[str, set[str]] = {}
+    for arc_id, adata in arc_nodes.items():
+        for beat_id in adata.get("sequence", []):
+            beat_arcs.setdefault(str(beat_id), set()).add(arc_id)
+
+    # Arc → set of (dilemma_id, path_id) tuples
+    arc_dilemma_paths: dict[str, set[tuple[str, str]]] = {}
+    for arc_id, adata in arc_nodes.items():
+        for path_raw in adata.get("paths", []):
+            path_id = normalize_scoped_id(path_raw, "path")
+            pdata = path_nodes.get(path_id, {})
+            raw_did = pdata.get("dilemma_id", "")
+            if raw_did:
+                dilemma_id = normalize_scoped_id(raw_did, "dilemma")
+                arc_dilemma_paths.setdefault(arc_id, set()).add((dilemma_id, path_id))
+
+    # Path → codeword mapping (via consequence → codeword.tracks)
+    path_to_codeword: dict[str, str] = {}
+    has_consequence_edges = graph.get_edges(edge_type="has_consequence")
+    cons_to_path: dict[str, str] = {}
+    for edge in has_consequence_edges:
+        cons_to_path[edge["to"]] = edge["from"]
+    for cw_id, cw_data in codeword_nodes.items():
+        tracks = cw_data.get("tracks", "")
+        path_id_for_tracks = cons_to_path.get(tracks)
+        if not path_id_for_tracks:
+            continue
+        # Invariant: each path should have a single committed codeword.
+        if path_id_for_tracks in path_to_codeword:
+            log.warning(
+                "path_codeword_duplicate",
+                path_id=path_id_for_tracks,
+                codeword_id=cw_id,
+            )
+            continue
+        path_to_codeword[path_id_for_tracks] = cw_id
+
+    # Already-routed passages
+    routed_passages: set[str] = set()
+    for _cid, cdata in choice_nodes.items():
+        if cdata.get("is_routing"):
+            source = str(cdata.get("from_passage", ""))
+            if source:
+                routed_passages.add(source)
+
+    targets: list[HeavyDivergenceTarget] = []
+    seen: set[tuple[str, str]] = set()  # (passage_id, dilemma_id) dedup
+
+    for pid, pdata in passage_nodes.items():
+        # Skip endings — handled by split_ending_families
+        if pdata.get("is_ending"):
+            continue
+        # Skip residue variants (avoid re-routing synthetic passages)
+        if pdata.get("is_residue") or pdata.get("residue_for"):
+            continue
+        # Skip already-routed passages
+        if pid in routed_passages:
+            continue
+
+        from_beat = str(pdata.get("from_beat") or "")
+        if not from_beat:
+            continue
+
+        covering_arcs = beat_arcs.get(from_beat, set())
+        if len(covering_arcs) < 2:
+            continue
+
+        # For each dilemma, check if covering arcs diverge
+        all_dilemma_ids: set[str] = set()
+        for arc_id in covering_arcs:
+            for did, _pid in arc_dilemma_paths.get(arc_id, set()):
+                all_dilemma_ids.add(did)
+
+        for dilemma_id in sorted(all_dilemma_ids):
+            key = (pid, dilemma_id)
+            if key in seen:
+                continue
+
+            ddata = dilemma_nodes.get(dilemma_id, {})
+            weight = ddata.get("residue_weight", "light")
+            salience = ddata.get("ending_salience", "low")
+
+            # Only target heavy/high dilemmas
+            if weight != "heavy" and salience != "high":
+                continue
+
+            # Check arcs diverge on this dilemma (2+ distinct paths)
+            paths_for_dilemma: set[str] = set()
+            for arc_id in covering_arcs:
+                for did, p_id in arc_dilemma_paths.get(arc_id, set()):
+                    if did == dilemma_id:
+                        paths_for_dilemma.add(p_id)
+
+            if len(paths_for_dilemma) < 2:
+                continue  # Arcs agree — no divergence
+
+            # Build path → codeword mapping for the diverging paths
+            pcw: dict[str, str] = {}
+            for p_id in sorted(paths_for_dilemma):
+                cw = path_to_codeword.get(p_id)
+                if cw:
+                    pcw[p_id] = cw
+
+            if len(pcw) < 2:
+                continue  # Need at least 2 gatable codewords
+
+            seen.add(key)
+            targets.append(
+                HeavyDivergenceTarget(
+                    passage_id=pid,
+                    dilemma_id=dilemma_id,
+                    residue_weight=weight,
+                    ending_salience=salience,
+                    path_codewords=pcw,
+                )
+            )
+
+    return targets
+
+
+@dataclass
+class HeavyRoutingResult:
+    """Summary of heavy-residue variant routing."""
+
+    targets_found: int
+    variants_created: int
+    passages_routed: int
+    skipped_no_incoming: int
+
+
+def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
+    """Create mandatory variant passages for heavy/high dilemma divergences.
+
+    For each shared mid-story passage where a heavy-residue or
+    high-salience dilemma's arcs diverge, creates variant passages
+    and wires them via :func:`split_and_reroute` with
+    ``keep_fallback=True`` (the base passage is preserved for arcs
+    that don't diverge on this specific dilemma).
+
+    This is the deterministic counterpart to the LLM-driven
+    ``residue_beats`` phase — it ensures heavy dilemmas always get
+    variant routing, regardless of whether the LLM proposed them.
+    """
+    targets = find_heavy_divergence_targets(graph)
+    if not targets:
+        return HeavyRoutingResult(0, 0, 0, 0)
+
+    passage_nodes = graph.get_nodes_by_type("passage")
+    variants_created = 0
+    passages_routed = 0
+    skipped_no_incoming = 0
+    # Only one heavy-dilemma routing pass is applied per passage.
+    # Additional heavy dilemmas on the same passage are skipped and logged.
+    processed_passages: set[str] = set()
+
+    for target in targets:
+        if target.passage_id in processed_passages:
+            log.warning(
+                "heavy_residue_multiple_dilemmas",
+                passage_id=target.passage_id,
+                dilemma_id=target.dilemma_id,
+            )
+            continue
+
+        incoming_edges = graph.get_edges(edge_type="choice_to", to_id=target.passage_id)
+        if not incoming_edges:
+            skipped_no_incoming += 1
+            continue
+
+        base_data = passage_nodes.get(target.passage_id, {})
+        if not base_data:
+            continue
+
+        raw_id = strip_scope_prefix(target.passage_id)
+
+        # Create one variant passage per diverging path
+        variant_specs: list[VariantSpec] = []
+        for _path_id, cw_id in sorted(target.path_codewords.items()):
+            cw_suffix = strip_scope_prefix(cw_id).removesuffix("_committed")
+            variant_pid = f"passage::{raw_id}__heavy_{cw_suffix}"
+            # Ensure unique ID
+            counter = 1
+            while graph.get_node(variant_pid):
+                variant_pid = f"passage::{raw_id}__heavy_{cw_suffix}_{counter}"
+                counter += 1
+
+            graph.create_node(
+                variant_pid,
+                {
+                    "type": "passage",
+                    "raw_id": variant_pid.removeprefix("passage::"),
+                    "summary": base_data.get("summary", ""),
+                    "entities": list(base_data.get("entities", [])),
+                    "from_beat": base_data.get("from_beat"),
+                    "is_residue": True,
+                    "is_synthetic": True,
+                    "residue_for": target.passage_id,
+                    "residue_codeword": cw_id,
+                    "residue_dilemma": target.dilemma_id,
+                },
+            )
+            variant_specs.append(VariantSpec(variant_pid, [cw_id]))
+            variants_created += 1
+
+        if not variant_specs:
+            continue
+
+        created = split_and_reroute(graph, target.passage_id, variant_specs, keep_fallback=True)
+        if created:
+            passages_routed += 1
+            processed_passages.add(target.passage_id)
+        else:
+            skipped_no_incoming += 1
+
+    return HeavyRoutingResult(
+        targets_found=len(targets),
+        variants_created=variants_created,
+        passages_routed=passages_routed,
+        skipped_no_incoming=skipped_no_incoming,
+    )
+
+
+# ---------------------------------------------------------------------------
 # Phase 9 helpers: passage-arc membership and choice requires
 # ---------------------------------------------------------------------------
 
