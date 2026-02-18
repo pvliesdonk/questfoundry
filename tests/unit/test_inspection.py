@@ -51,7 +51,7 @@ def _make_full_graph() -> Graph:
             "from_passage": "passage::p0",
             "to_passage": "passage::p1",
             "label": "Enter the forest",
-            "requires": [],
+            "requires_codewords": [],
             "grants": [],
         },
     )
@@ -62,7 +62,7 @@ def _make_full_graph() -> Graph:
             "from_passage": "passage::p0",
             "to_passage": "passage::p1",
             "label": "continue",
-            "requires": [],
+            "requires_codewords": [],
             "grants": [],
         },
     )
@@ -200,7 +200,7 @@ class TestBranchingStats:
                 "from_passage": "passage::p0",
                 "to_passage": "passage::p1",
                 "label": "Search the room",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -215,7 +215,7 @@ class TestBranchingStats:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "continue",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -272,7 +272,7 @@ class TestBranchingStats:
                 "from_passage": "passage::p0",
                 "to_passage": "passage::p1",
                 "label": "continue",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -285,7 +285,7 @@ class TestBranchingStats:
                 "from_passage": "passage::p0",
                 "to_passage": "passage::spoke_0",
                 "label": "Look around",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -299,7 +299,7 @@ class TestBranchingStats:
                 "to_passage": "passage::p0",
                 "label": "Return",
                 "is_return": True,
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -583,7 +583,7 @@ class TestBranchingQualityScore:
                 "from_passage": "passage::mid",
                 "to_passage": "passage::ending",
                 "label": "Continue",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -667,7 +667,7 @@ class TestBranchingQualityScore:
                 "from_passage": "passage::mid",
                 "to_passage": "passage::ending",
                 "label": "Finish",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )

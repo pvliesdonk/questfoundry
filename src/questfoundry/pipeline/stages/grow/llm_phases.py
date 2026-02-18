@@ -1546,7 +1546,7 @@ class _LLMPhaseMixin:
                     "from_passage": p_id,
                     "to_passage": succ.to_passage,
                     "label": label,
-                    "requires": [],
+                    "requires_codewords": [],
                     "grants": succ.grants,
                 },
             )
@@ -1637,7 +1637,7 @@ class _LLMPhaseMixin:
                             "from_passage": p_id,
                             "to_passage": succ.to_passage,
                             "label": multi_label,
-                            "requires": choice_requires.get(succ.to_passage, []),
+                            "requires_codewords": choice_requires.get(succ.to_passage, []),
                             "grants": succ.grants,
                         },
                     )
@@ -1886,7 +1886,7 @@ class _LLMPhaseMixin:
                         "from_passage": fork_at,
                         "to_passage": opt_id,
                         "label": label,
-                        "requires": [],
+                        "requires_codewords": [],
                         "grants": [],
                     },
                 )
@@ -1905,7 +1905,7 @@ class _LLMPhaseMixin:
                         "from_passage": opt_id,
                         "to_passage": next_passage,
                         "label": "continue",
-                        "requires": [],
+                        "requires_codewords": [],
                         "grants": old_grants,
                     },
                 )
@@ -2063,7 +2063,7 @@ class _LLMPhaseMixin:
                     "type": "choice",
                     "from_passage": hub_id,
                     "to_passage": spoke_pid,
-                    "requires": [],
+                    "requires_codewords": [],
                     "grants": spoke.grants,
                     "label_style": spoke.label_style,
                 }
@@ -2082,7 +2082,7 @@ class _LLMPhaseMixin:
                         "from_passage": spoke_pid,
                         "to_passage": hub_id,
                         "label": "Return",
-                        "requires": [],
+                        "requires_codewords": [],
                         "grants": [],
                         "is_return": True,
                     },

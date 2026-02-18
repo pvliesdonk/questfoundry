@@ -753,7 +753,7 @@ class TestPhase3Knots:
         stage = GrowStage()
 
         # Add a cross-dilemma requires: artifact_discover requires mentor_meet
-        graph.add_edge("requires", "beat::artifact_discover", "beat::mentor_meet")
+        graph.add_edge("sequenced_after", "beat::artifact_discover", "beat::mentor_meet")
 
         phase3_output = Phase3Output(
             intersections=[
@@ -1185,8 +1185,8 @@ class TestPhase4cPacingGaps:
         graph.add_edge("belongs_to", "beat::b1", "path::main")
         graph.add_edge("belongs_to", "beat::b2", "path::main")
         graph.add_edge("belongs_to", "beat::b3", "path::main")
-        graph.add_edge("requires", "beat::b2", "beat::b1")
-        graph.add_edge("requires", "beat::b3", "beat::b2")
+        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
+        graph.add_edge("sequenced_after", "beat::b3", "beat::b2")
 
         stage = GrowStage()
 
@@ -1233,8 +1233,8 @@ class TestPhase4cPacingGaps:
         graph.add_edge("belongs_to", "beat::b1", "path::main")
         graph.add_edge("belongs_to", "beat::b2", "path::main")
         graph.add_edge("belongs_to", "beat::b3", "path::main")
-        graph.add_edge("requires", "beat::b2", "beat::b1")
-        graph.add_edge("requires", "beat::b3", "beat::b2")
+        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
+        graph.add_edge("sequenced_after", "beat::b3", "beat::b2")
 
         stage = GrowStage()
 
@@ -1278,8 +1278,8 @@ class TestPhase4cPacingGaps:
         graph.add_edge("belongs_to", "beat::b1", "path::main")
         graph.add_edge("belongs_to", "beat::b2", "path::main")
         graph.add_edge("belongs_to", "beat::b3", "path::main")
-        graph.add_edge("requires", "beat::b2", "beat::b1")
-        graph.add_edge("requires", "beat::b3", "beat::b2")
+        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
+        graph.add_edge("sequenced_after", "beat::b3", "beat::b2")
 
         stage = GrowStage()
         mock_model = MagicMock()
@@ -1771,8 +1771,8 @@ class TestPhase9Choices:
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Middle"})
         graph.create_node("beat::c", {"type": "beat", "raw_id": "c", "summary": "End"})
-        graph.add_edge("requires", "beat::b", "beat::a")
-        graph.add_edge("requires", "beat::c", "beat::b")
+        graph.add_edge("sequenced_after", "beat::b", "beat::a")
+        graph.add_edge("sequenced_after", "beat::c", "beat::b")
 
         # Create arc with sequence
         graph.create_node(
@@ -1851,7 +1851,7 @@ class TestPhase9Choices:
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "End"})
-        graph.add_edge("requires", "beat::b", "beat::a")
+        graph.add_edge("sequenced_after", "beat::b", "beat::a")
 
         graph.create_node(
             "arc::spine",
@@ -2119,7 +2119,7 @@ class TestPhase9Choices:
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Commit"})
-        graph.add_edge("requires", "beat::b", "beat::a")
+        graph.add_edge("sequenced_after", "beat::b", "beat::a")
 
         # beat::b grants a codeword
         graph.create_node(
@@ -2195,8 +2195,8 @@ class TestPhase9Choices:
             "beat::path2_end", {"type": "beat", "raw_id": "path2_end", "summary": "End path 2"}
         )
 
-        graph.add_edge("requires", "beat::path1_end", "beat::path1_start")
-        graph.add_edge("requires", "beat::path2_end", "beat::path2_start")
+        graph.add_edge("sequenced_after", "beat::path1_end", "beat::path1_start")
+        graph.add_edge("sequenced_after", "beat::path2_end", "beat::path2_start")
 
         # Arc 1: path1_start → path1_end
         graph.create_node(
@@ -3022,7 +3022,7 @@ class TestPhase9bForkBeats:
                     "from_passage": f"passage::{pids[i]}",
                     "to_passage": f"passage::{pids[i + 1]}",
                     "label": "continue",
-                    "requires": [],
+                    "requires_codewords": [],
                     "grants": [],
                 },
             )
@@ -3117,7 +3117,7 @@ class TestPhase9bForkBeats:
                     "from_passage": f"passage::{pids[i]}",
                     "to_passage": f"passage::{pids[i + 1]}",
                     "label": "continue",
-                    "requires": [],
+                    "requires_codewords": [],
                     "grants": [],
                 },
             )
@@ -3164,7 +3164,7 @@ class TestPhase9bForkBeats:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "continue",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": ["codeword::truth_committed"],
             },
         )
@@ -3178,7 +3178,7 @@ class TestPhase9bForkBeats:
                 "from_passage": "passage::p2",
                 "to_passage": "passage::p3",
                 "label": "continue",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -3243,7 +3243,7 @@ class TestPhase9cHubSpokes:
                 "from_passage": "passage::market",
                 "to_passage": "passage::palace",
                 "label": "continue",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -3317,7 +3317,7 @@ class TestPhase9cHubSpokes:
                 "from_passage": "passage::hub",
                 "to_passage": "passage::spoke",
                 "label": "Explore",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -3332,7 +3332,7 @@ class TestPhase9cHubSpokes:
                 "from_passage": "passage::spoke",
                 "to_passage": "passage::hub",
                 "label": "Return",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
                 "is_return": True,
             },
@@ -3364,7 +3364,7 @@ class TestPhase9cHubSpokes:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "continue",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )

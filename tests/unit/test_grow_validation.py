@@ -48,7 +48,7 @@ def _make_linear_passage_graph() -> Graph:
             "from_passage": "passage::p1",
             "to_passage": "passage::p2",
             "label": "continue",
-            "requires": [],
+            "requires_codewords": [],
             "grants": [],
         },
     )
@@ -59,7 +59,7 @@ def _make_linear_passage_graph() -> Graph:
             "from_passage": "passage::p2",
             "to_passage": "passage::p3",
             "label": "continue",
-            "requires": [],
+            "requires_codewords": [],
             "grants": [],
         },
     )
@@ -123,7 +123,7 @@ class TestSingleStart:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "go",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -134,7 +134,7 @@ class TestSingleStart:
                 "from_passage": "passage::p2",
                 "to_passage": "passage::p1",
                 "label": "back",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -165,7 +165,7 @@ class TestSingleStart:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::spoke_0",
                 "label": "Look around",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -180,7 +180,7 @@ class TestSingleStart:
                 "to_passage": "passage::p1",
                 "label": "Return",
                 "is_return": True,
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -214,7 +214,7 @@ class TestReachability:
                 "from_passage": "passage::isolated",
                 "to_passage": "passage::isolated",
                 "label": "self",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -257,7 +257,7 @@ class TestEndingsReachable:
                 "from_passage": "passage::start",
                 "to_passage": "passage::middle",
                 "label": "go",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -271,7 +271,7 @@ class TestEndingsReachable:
                 "from_passage": "passage::middle",
                 "to_passage": "passage::start",
                 "label": "back",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -352,7 +352,7 @@ class TestGateSatisfiability:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "go",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": ["codeword::cw1"],
             },
         )
@@ -364,7 +364,7 @@ class TestGateSatisfiability:
                 "from_passage": "passage::p2",
                 "to_passage": "passage::p1",
                 "label": "back",
-                "requires": ["codeword::cw1"],
+                "requires_codewords": ["codeword::cw1"],
                 "grants": [],
             },
         )
@@ -389,7 +389,7 @@ class TestGateSatisfiability:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "go",
-                "requires": ["codeword::never_granted"],
+                "requires_codewords": ["codeword::never_granted"],
                 "grants": [],
             },
         )
@@ -429,7 +429,7 @@ class TestGateCoSatisfiability:
                 "from_passage": "passage::p",
                 "to_passage": "passage::p",
                 "label": "go",
-                "requires": ["codeword::cw1"],
+                "requires_codewords": ["codeword::cw1"],
                 "grants": [],
             },
         )
@@ -468,7 +468,7 @@ class TestGateCoSatisfiability:
                 "from_passage": "passage::p",
                 "to_passage": "passage::p",
                 "label": "go",
-                "requires": ["codeword::p1_cw", "codeword::p2_cw"],
+                "requires_codewords": ["codeword::p1_cw", "codeword::p2_cw"],
                 "grants": [],
             },
         )
@@ -507,7 +507,7 @@ class TestPassageDagCycles:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "go",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -518,7 +518,7 @@ class TestPassageDagCycles:
                 "from_passage": "passage::p2",
                 "to_passage": "passage::p1",
                 "label": "back",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -561,7 +561,7 @@ def _make_timing_graph_with_arc(
         )
         graph.add_edge("belongs_to", beat_id, "path::th1")
         if i > 0:
-            graph.add_edge("requires", beat_id, f"beat::b{i - 1}")
+            graph.add_edge("sequenced_after", beat_id, f"beat::b{i - 1}")
 
     # Arc with the beat sequence
     graph.create_node(
@@ -887,8 +887,8 @@ class TestRunAllChecks:
         graph.add_edge("belongs_to", "beat::b0", "path::th1")
         graph.add_edge("belongs_to", "beat::b1", "path::th1")
         graph.add_edge("belongs_to", "beat::b2", "path::th1")
-        graph.add_edge("requires", "beat::b1", "beat::b0")
-        graph.add_edge("requires", "beat::b2", "beat::b1")
+        graph.add_edge("sequenced_after", "beat::b1", "beat::b0")
+        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
         # Update existing spine arc to include the test path and its beats
         graph.update_node(
             "arc::spine",
@@ -1006,8 +1006,8 @@ class TestPhase10Integration:
         graph.add_edge("belongs_to", "beat::b0", "path::th1")
         graph.add_edge("belongs_to", "beat::b1", "path::th1")
         graph.add_edge("belongs_to", "beat::b2", "path::th1")
-        graph.add_edge("requires", "beat::b1", "beat::b0")
-        graph.add_edge("requires", "beat::b2", "beat::b1")
+        graph.add_edge("sequenced_after", "beat::b1", "beat::b0")
+        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
         # Update existing spine arc to include the test path and its beats
         graph.update_node(
             "arc::spine",
@@ -1048,7 +1048,7 @@ def _make_chain_graph(passage_ids: list[str], beat_data: dict[str, dict] | None 
                 "from_passage": f"passage::{from_p}",
                 "to_passage": f"passage::{to_p}",
                 "label": "continue",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -1089,7 +1089,7 @@ class TestMaxConsecutiveLinear:
                 "from_passage": "passage::b",
                 "to_passage": "passage::alt",
                 "label": "Take alternative",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -1152,7 +1152,7 @@ class TestMaxConsecutiveLinear:
                 "from_passage": "passage::x",
                 "to_passage": "passage::c",
                 "label": "go",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -1654,7 +1654,7 @@ class TestCodewordGateCoverage:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "go",
-                "requires": ["codeword::cw1"],
+                "requires_codewords": ["codeword::cw1"],
                 "grants": [],
             },
         )
@@ -1672,7 +1672,7 @@ class TestCodewordGateCoverage:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "go",
-                "requires": ["codeword::cw1"],
+                "requires_codewords": ["codeword::cw1"],
                 "grants": [],
             },
         )
@@ -1765,7 +1765,7 @@ class TestForwardPathReachability:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "go",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -1782,7 +1782,7 @@ class TestForwardPathReachability:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "go",
-                "requires": ["codeword::x"],
+                "requires_codewords": ["codeword::x"],
                 "grants": [],
             },
         )
@@ -1808,7 +1808,7 @@ class TestForwardPathReachability:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "return",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
                 "is_return": True,
             },
@@ -1821,7 +1821,7 @@ class TestForwardPathReachability:
                 "from_passage": "passage::a",
                 "to_passage": "passage::c",
                 "label": "go",
-                "requires": ["codeword::x"],
+                "requires_codewords": ["codeword::x"],
                 "grants": [],
             },
         )
@@ -1850,7 +1850,7 @@ class TestForwardPathReachability:
                 "from_passage": "passage::hub",
                 "to_passage": "passage::next",
                 "label": "continue",
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -1864,7 +1864,7 @@ class TestForwardPathReachability:
                 "to_passage": "passage::end1",
                 "label": "route1",
                 "is_routing": True,
-                "requires": ["codeword::cw1"],
+                "requires_codewords": ["codeword::cw1"],
                 "grants": [],
             },
         )
@@ -1877,7 +1877,7 @@ class TestForwardPathReachability:
                 "to_passage": "passage::end2",
                 "label": "route2",
                 "is_routing": True,
-                "requires": ["codeword::cw2"],
+                "requires_codewords": ["codeword::cw2"],
                 "grants": [],
             },
         )
@@ -1960,7 +1960,7 @@ def _make_routing_graph(
                 "to_passage": target,
                 "label": choice_raw,
                 "is_routing": True,
-                "requires": [f"codeword::{cw}" for cw in reqs],
+                "requires_codewords": [f"codeword::{cw}" for cw in reqs],
                 "grants": [],
             },
         )
@@ -2060,7 +2060,7 @@ class TestCheckRoutingCoverage:
                 "to_passage": "passage::fallback",
                 "label": "fallback",
                 "is_routing": True,
-                "requires": [],
+                "requires_codewords": [],
                 "grants": [],
             },
         )
@@ -2096,7 +2096,7 @@ class TestCheckRoutingCoverage:
                 "to_passage": "passage::end1",
                 "label": "r1",
                 "is_routing": True,
-                "requires": ["codeword::cw1"],
+                "requires_codewords": ["codeword::cw1"],
                 "grants": [],
             },
         )
@@ -2181,7 +2181,7 @@ def _make_shared_passage_graph(
                 "to_passage": "passage::v1",
                 "label": "r1",
                 "is_routing": True,
-                "requires": ["codeword::cw1"],
+                "requires_codewords": ["codeword::cw1"],
                 "grants": [],
             },
         )

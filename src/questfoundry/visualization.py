@@ -57,7 +57,7 @@ class VizEdge:
     to_id: str
     label: str = ""
     is_return: bool = False
-    requires: list[str] = field(default_factory=list)
+    requires_codewords: list[str] = field(default_factory=list)
     grants: list[str] = field(default_factory=list)
 
 
@@ -184,7 +184,7 @@ def build_story_graph(
                 to_id=to_p,
                 label=cdata.get("label", ""),
                 is_return=cdata.get("is_return", False),
-                requires=cdata.get("requires", []),
+                requires_codewords=cdata.get("requires_codewords", []),
                 grants=cdata.get("grants", []),
             )
         )
@@ -239,7 +239,7 @@ def render_dot(sg: StoryGraph, *, no_labels: bool = False) -> str:
             edge_attrs["color"] = '"grey"'
         # Requires (gated) takes precedence over grants (state-changing).
         # Return edges keep their dashed grey style in both renderers.
-        if edge.requires:
+        if edge.requires_codewords:
             edge_attrs["color"] = '"orange"'
             edge_attrs["penwidth"] = '"2"'
         elif edge.grants and not edge.is_return:
@@ -306,7 +306,9 @@ def render_mermaid(sg: StoryGraph, *, no_labels: bool = False) -> str:
     lines.append(f"  classDef endingOverlay fill:#FFB6C1,stroke:{_OVERLAY_BORDER},stroke-width:3px")
     # Mermaid has limited edge styling; grants edges use linkStyle below
     grants_indices = [
-        i for i, e in enumerate(sg.edges) if e.grants and not e.is_return and not e.requires
+        i
+        for i, e in enumerate(sg.edges)
+        if e.grants and not e.is_return and not e.requires_codewords
     ]
     if grants_indices:
         idx_list = ",".join(str(i) for i in grants_indices)
