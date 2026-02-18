@@ -901,6 +901,19 @@ Per-dilemma `residue_weight` controls how much mid-story prose varies in shared 
 
 Only 1-2 dilemmas per story should be `heavy`. Most should be `light`.
 
+#### Prose Layer Obligations (Summary)
+
+| Field | Value | Obligation |
+|-------|-------|------------|
+| `ending_salience` | `high` | Ending prose MUST differ for this choice. |
+| `ending_salience` | `low` | Ending prose MAY acknowledge, but must work without it. |
+| `ending_salience` | `none` | Ending prose MUST NOT reference this choice. |
+| `residue_weight` | `heavy` | Shared passages MUST show state-specific differences. |
+| `residue_weight` | `light` | Shared passages MAY acknowledge. |
+| `residue_weight` | `cosmetic` | Shared passages MUST NOT reference this choice. |
+
+See the detailed `ending_salience` and `residue_weight` tables above for examples and additional constraints.
+
 #### Unified Variant Routing Primitive
 
 `split_and_reroute()` is the shared mechanism for both ending families and residue passages. Instead of adding extra hub passages, it rewrites incoming choice edges:
