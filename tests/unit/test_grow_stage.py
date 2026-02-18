@@ -182,10 +182,10 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_twenty_four_phases(self) -> None:
+    def test_phase_order_returns_twenty_five_phases(self) -> None:
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 24
+        assert len(phases) == 25
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -213,6 +213,7 @@ class TestGrowStagePhaseOrder:
             "mark_endings",
             "split_endings",
             "collapse_passages",
+            "heavy_residue_routing",
             "validation",
             "prune",
         ]
