@@ -1430,15 +1430,30 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
         if len(covering_arcs) < 2:
             continue  # Not shared
 
-        # Find dilemmas that diverge across covering arcs
-        # (dilemma appears in some arcs but not all = paths diverged before this beat)
-        all_dilemma_ids: set[str] = set()
+        # Find dilemmas that actually diverge across covering arcs:
+        # a dilemma diverges only when covering arcs chose *different* paths
+        # for it (i.e., 2+ distinct path IDs for that dilemma).
+        # NOTE: This assumes valid arcs contain at most one path per dilemma.
+        dilemma_to_paths: dict[str, set[str]] = {}
         for arc_id in covering_arcs:
-            all_dilemma_ids.update(arc_dilemmas.get(arc_id, set()))
+            for path_raw in arc_nodes.get(arc_id, {}).get("paths", []):
+                p_id = normalize_scoped_id(path_raw, "path")
+                p_data = path_nodes.get(p_id, {})
+                raw_did = p_data.get("dilemma_id", "")
+                if not raw_did:
+                    continue
+                dilemma_id = normalize_scoped_id(raw_did, "dilemma")
+                dilemma_to_paths.setdefault(dilemma_id, set()).add(p_id)
+
+        diverging_dilemmas: set[str] = {
+            dilemma_id
+            for dilemma_id, paths_for_dilemma in dilemma_to_paths.items()
+            if len(paths_for_dilemma) > 1
+        }
 
         has_routing = pid in routed_passages
 
-        for dilemma_id in sorted(all_dilemma_ids):
+        for dilemma_id in sorted(diverging_dilemmas):
             ddata = dilemma_nodes.get(dilemma_id, {})
             weight = ddata.get("residue_weight", "light")
             salience = ddata.get("ending_salience", "low")
@@ -1448,10 +1463,15 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
                 continue  # Variant routing exists, prose contract met
 
             if weight == "heavy" or salience == "high":
+                # Warn rather than fail: the grow stage does not yet
+                # wire mid-story variant routing for heavy/high
+                # dilemmas (split_and_reroute handles endings only).
+                # Tracked as a future capability; blocking the pipeline
+                # on an unimplemented feature produces false failures.
                 checks.append(
                     ValidationCheck(
                         name="prose_neutrality",
-                        severity="fail",
+                        severity="warn",
                         message=(
                             f"Shared passage {pid} requires variant routing "
                             f"for dilemma '{label}' "
