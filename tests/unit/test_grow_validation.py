@@ -2322,6 +2322,52 @@ class TestCheckProseNeutrality:
         # No divergence on d1, so no failure should be raised
         assert all(c.severity == "pass" for c in result)
 
+    def test_missing_dilemma_id_ignored(self) -> None:
+        """Paths without dilemma_id should be ignored in divergence checks."""
+        graph = Graph.empty()
+
+        graph.create_node(
+            "path::p_orphan",
+            {"type": "path", "raw_id": "p_orphan"},
+        )
+        graph.create_node(
+            "beat::shared",
+            {"type": "beat", "raw_id": "shared", "summary": "shared"},
+        )
+        graph.create_node(
+            "passage::shared",
+            {
+                "type": "passage",
+                "raw_id": "shared",
+                "from_beat": "beat::shared",
+                "summary": "shared",
+            },
+        )
+
+        graph.create_node(
+            "arc::a1",
+            {
+                "type": "arc",
+                "raw_id": "a1",
+                "arc_type": "spine",
+                "paths": ["path::p_orphan"],
+                "sequence": ["beat::shared"],
+            },
+        )
+        graph.create_node(
+            "arc::a2",
+            {
+                "type": "arc",
+                "raw_id": "a2",
+                "arc_type": "branch",
+                "paths": ["path::p_orphan"],
+                "sequence": ["beat::shared"],
+            },
+        )
+
+        result = check_prose_neutrality(graph)
+        assert all(c.severity == "pass" for c in result)
+
     def test_only_diverging_dilemma_flagged_in_multi_dilemma(self) -> None:
         """With 2 dilemmas, only the one that diverges should produce a check.
 
