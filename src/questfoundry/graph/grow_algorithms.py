@@ -3180,13 +3180,13 @@ def check_intersection_compatibility(
         for edge in graph.get_edges(from_id=from_id, to_id=None, edge_type="sequenced_after"):
             to_id = edge["to"]
             if to_id in beat_set:
-                # Circular requires between intersection beats
+                # Circular sequenced_after between intersection beats
                 errors.append(
                     GrowValidationError(
                         field_path="intersection.sequenced_after",
                         issue=(
-                            f"Beat '{from_id}' requires '{to_id}' — "
-                            f"intersection beats cannot have requires "
+                            f"Beat '{from_id}' is sequenced_after '{to_id}' — "
+                            f"intersection beats cannot have sequenced_after "
                             f"dependencies on each other"
                         ),
                         category=GrowErrorCategory.STRUCTURAL,
@@ -3224,7 +3224,7 @@ def check_intersection_compatibility(
                         GrowValidationError(
                             field_path="intersection.conditional_prerequisite",
                             issue=(
-                                f"Beat '{from_id}' requires '{to_id}' which "
+                                f"Beat '{from_id}' is sequenced_after '{to_id}' which "
                                 f"is only on paths {sorted(prereq_paths)}, "
                                 f"but the intersection would span "
                                 f"{sorted(union_paths)}. "

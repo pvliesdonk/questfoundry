@@ -744,7 +744,7 @@ class TestPhase3Knots:
         assert "1 applied" in result.detail
 
     @pytest.mark.asyncio
-    async def test_phase_3_fails_with_requires_conflict(self) -> None:
+    async def test_phase_3_fails_with_sequenced_after_conflict(self) -> None:
         """Phase 3 fails when all intersections have requires dependency."""
         from questfoundry.models.grow import IntersectionProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph

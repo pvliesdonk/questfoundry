@@ -354,13 +354,13 @@ def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
         grants = choice_data.get("grants", [])
         grantable.update(grants)
 
-    # Check each choice's requires
+    # Check each choice's requires_codewords
     unsatisfiable: list[str] = []
     for choice_id, choice_data in sorted(choice_nodes.items()):
         requires = choice_data.get("requires_codewords", [])
         for req in requires:
             if req not in grantable:
-                unsatisfiable.append(f"{choice_id} requires '{req}'")
+                unsatisfiable.append(f"{choice_id} requires_codewords '{req}'")
 
     if not unsatisfiable:
         return ValidationCheck(

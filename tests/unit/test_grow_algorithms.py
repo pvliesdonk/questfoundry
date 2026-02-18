@@ -318,7 +318,7 @@ class TestTopologicalSortBeats:
         )
         assert result == ["beat::m", "beat::x", "beat::a"]
 
-    def test_priority_beats_respects_requires(self) -> None:
+    def test_priority_beats_respects_sequenced_after(self) -> None:
         """Priority must not override topological (requires) constraints."""
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat"})
@@ -374,7 +374,7 @@ class TestTopologicalSortBeats:
         # With interleaving: a1, b1, a2, b2, a3, b3
         assert result == ["beat::a1", "beat::b1", "beat::a2", "beat::b2", "beat::a3", "beat::b3"]
 
-    def test_requires_edges_override_interleaving(self) -> None:
+    def test_sequenced_after_edges_override_interleaving(self) -> None:
         """Topological constraints take precedence over round-robin."""
         graph = Graph.empty()
         graph.create_node(
@@ -3021,7 +3021,7 @@ class TestCheckKnotCompatibility:
         assert len(errors) > 0
         assert any("at least 2 different dilemmas" in e.issue for e in errors)
 
-    def test_incompatible_requires_conflict(self) -> None:
+    def test_incompatible_sequenced_after_conflict(self) -> None:
         """Beats with requires edge are incompatible."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
 
@@ -3038,7 +3038,7 @@ class TestCheckKnotCompatibility:
 
         errors = check_intersection_compatibility(graph, ["beat::a", "beat::b"])
         assert len(errors) > 0
-        assert any("requires" in e.issue for e in errors)
+        assert any("sequenced_after" in e.issue for e in errors)
 
     def test_insufficient_beats(self) -> None:
         """Single beat is incompatible."""
@@ -5361,6 +5361,28 @@ class TestHardPolicyIntersectionRejection:
         # A single beat can't form an intersection, so no candidates expected.
         for c in candidates:
             assert "beat::b1" not in c.beat_ids
+
+    def test_build_candidates_excludes_gap_beats(self) -> None:
+        """Gap beats (is_gap_beat=True) are excluded from intersection candidates."""
+        from questfoundry.graph.grow_algorithms import build_intersection_candidates
+
+        graph = self._make_two_dilemma_graph(d1_policy="soft", d2_policy="soft")
+        # Add a gap beat on path::p1 sharing the same location — it should be excluded.
+        graph.create_node(
+            "beat::gap_1",
+            {
+                "type": "beat",
+                "summary": "Gap scene at tavern",
+                "location": "tavern",
+                "is_gap_beat": True,
+            },
+        )
+        graph.add_edge("belongs_to", "beat::gap_1", "path::p1")
+        graph.add_edge("sequenced_after", "beat::gap_1", "beat::b1")
+
+        candidates = build_intersection_candidates(graph)
+        gap_beat_in_candidates = any("beat::gap_1" in c.beat_ids for c in candidates)
+        assert not gap_beat_in_candidates, "Gap beats must never appear in intersection candidates"
 
 
 # ---------------------------------------------------------------------------
