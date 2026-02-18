@@ -6654,9 +6654,10 @@ class TestSplitAndReroute:
 
         cid = created[0]
         # choice_from edge: choice -> source passage
-        from_edges = graph.get_edges(edge_type="choice_from", from_id=cid)
+        # Verify choice_from edge (source -> choice)
+        from_edges = graph.get_edges(edge_type="choice_from", to_id=cid)
         assert len(from_edges) == 1
-        assert from_edges[0]["to"] == "passage::intro"
+        assert from_edges[0]["from"] == "passage::intro"
 
         # choice_to edge: choice -> variant passage
         to_edges = graph.get_edges(edge_type="choice_to", from_id=cid)

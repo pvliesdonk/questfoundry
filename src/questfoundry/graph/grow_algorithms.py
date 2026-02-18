@@ -983,7 +983,7 @@ def split_and_reroute(
                     "is_routing": True,
                 },
             )
-            graph.add_edge("choice_from", choice_id, source_passage)
+            graph.add_edge("choice_from", source_passage, choice_id)
             graph.add_edge("choice_to", choice_id, variant.passage_id)
             created_choices.append(choice_id)
 
