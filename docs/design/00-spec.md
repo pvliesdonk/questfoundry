@@ -522,7 +522,7 @@ beat:
     - dilemma_id: dilemma_id
       effect: advances | reveals | commits | complicates
       note: string              # "Player sees mentor's private communication"
-  requires: beat_id[]           # ordering constraints
+  sequenced_after: beat_id[]    # topological ordering: this beat must come after these beats (does not imply direct adjacency)
   grants: codeword_id[]
   entities: entity_id[]
   relationships: relationship_id[]
@@ -638,7 +638,7 @@ illustration_brief:
 
 | Edge | From → To | Properties | Created In | Purpose |
 |------|-----------|------------|------------|---------|
-| **Choice** | passage → passage | label, requires[], grants[], modifies{} | GROW | Player navigation |
+| **Choice** | passage → passage | label, requires_codewords[], grants[], modifies{} | GROW | Player navigation |
 | **Appears** | entity → passage | role | GROW | Entity present in scene |
 | **Involves** | relationship → passage | — | GROW | Relationship active in scene |
 | **Depicts** | illustration → passage | — | DRESS | Art shown with passage |
@@ -648,7 +648,7 @@ illustration_brief:
 ```yaml
 choice:
   label: string                 # always diegetic ("Wait for nightfall...", never "Continue")
-  requires: codeword[]          # gate
+  requires_codewords: codeword[] # gate: player must hold these codewords to traverse this choice
   grants: codeword[]            # state change
   modifies:                     # future: numeric state
     state_key: delta
@@ -663,7 +663,7 @@ choice:
 | **has_answer** | dilemma → answer | BRAINSTORM | Dilemma's possible answers |
 | **explores** | path → answer | SEED | Path explores this answer |
 | **has_consequence** | path → consequence | SEED | Path's narrative consequences |
-| **requires** | beat → beat | SEED, GROW | Ordering constraint |
+| **sequenced_after** | beat → beat | SEED, GROW | Topological ordering: from-beat is sequenced after to-beat (does not imply direct adjacency) |
 | **grants** | beat → codeword | GROW | Beat completion grants codeword |
 | **weaves** | arc → path | GROW | Arc uses this path |
 | **from_beat** | passage → beat | GROW | Traceability |
@@ -919,7 +919,7 @@ See the detailed `ending_salience` and `residue_weight` tables above for example
 `split_and_reroute()` is the shared mechanism for both ending families and residue passages. Instead of adding extra hub passages, it rewrites incoming choice edges:
 
 1. For each incoming choice to a base passage, clone it per variant
-2. Each clone gets a `requires` gate (variant's codewords) and `is_routing=True`
+2. Each clone gets a `requires_codewords` gate (variant's codewords) and `is_routing=True`
 3. Original incoming choices are deleted (or kept as fallback with `keep_fallback=True`)
 
 **Validation:** `check_routing_coverage()` validates routing choice sets are:
@@ -930,7 +930,7 @@ See the detailed `ending_salience` and `residue_weight` tables above for example
 
 #### "Residue Must Be Read" Invariant
 
-Every codeword granted must appear in at least one `choice.requires` gate. Current scope: choice gating and variant routing. Routing choices (`is_routing=True`) satisfy this invariant for their required codewords.
+Every codeword granted must appear in at least one `choice.requires_codewords` gate. Current scope: choice gating and variant routing. Routing choices (`is_routing=True`) satisfy this invariant for their required codewords.
 
 **`converges_at` semantics:** "From this beat onward, all remaining content on this arc is shared with the spine." It is NOT set at intersections (shared beats with later exclusive beats). For `hard` policy, it is never set.
 
@@ -950,7 +950,7 @@ GROW operates on the graph until completion criteria are met. It can mutate beat
 
 - Paths with initial beats (single-path, loose)
 - Exclusivity derived from shared dilemma_id
-- Internal ordering (`requires`) declared
+- Internal ordering (`sequenced_after`) declared
 - Path tiers declared (major/minor)
 - Core entities created
 - Location flexibility annotated on beats (enables intersection detection)
@@ -978,9 +978,9 @@ Intersections are beats serving multiple paths. Three operations:
 
 | Phase | Criterion |
 |-------|-----------|
-| **Initial** | Each path's beats form valid DAG (no cycles in `requires`) |
+| **Initial** | Each path's beats form valid DAG (no cycles in `sequenced_after`) |
 | **Intersections** | All paths: ≥2 intersections. Major path pairs: ≥1 shared intersection |
-| **Weaving** | Total order exists respecting all `requires`. Sequence set per arc |
+| **Weaving** | Total order exists respecting all `sequenced_after`. Sequence set per arc |
 | **Passages** | 1:1 beat → passage transform. Choice edges derived |
 | **Reachability** | All expected nodes reachable from start |
 
@@ -1225,7 +1225,7 @@ SHIP reads from the graph, ignoring working nodes.
 
 | Edge | Required fields |
 |------|-----------------|
-| Choice | from, to, label, requires, grants |
+| Choice | from, to, label, requires_codewords, grants |
 | Appears | from (entity), to (passage), role |
 | Involves | from (relationship), to (passage) |
 | Depicts | from (illustration), to (passage) |
@@ -1242,7 +1242,7 @@ SHIP reads from the graph, ignoring working nodes.
 **Ignored by SHIP:**
 - Dilemmas, paths, beats, arcs
 - `from_beat`, `summary` on passages
-- `requires` edges between beats
+- `sequenced_after` edges between beats
 - All working edges
 
 ---
@@ -1352,11 +1352,14 @@ How does the system determine that beats from different paths are compatible eno
   - Shared entity (same character appears in both beats)
   - Shared location
   - Compatible time-deltas
-  - No conflicting `requires` constraints
+  - No conflicting `sequenced_after` constraints
+  - Not a gap beat (`is_gap_beat: false` or absent) — gap beats have path-local `sequenced_after` predecessors and are never eligible as intersection beats
 
 **The Sequencing Clarification:**
 
-Weaving paths into a sequence is *not* an LLM problem. Given a set of beats for an arc, topological sort on `requires` constraints produces the order deterministically.
+Weaving paths into a sequence is *not* an LLM problem. Given a set of beats for an arc, topological sort on `sequenced_after` constraints produces the order deterministically.
+
+**Intersection eligibility constraint:** A beat B may participate in an intersection spanning paths P₁…Pₙ only if every beat in B's `sequenced_after` list is itself reachable from all of P₁…Pₙ. Gap beats (`is_gap_beat: true`) are path-local by construction — their `sequenced_after` predecessors exist on a single path only — and are therefore never eligible as intersection beats.
 
 What the LLM actually decides:
 1. **Intersection creation:** "These beats should be one scene" (merge/mark)
@@ -1409,7 +1412,7 @@ Because GROW operates on beats (summaries) rather than passages (prose), the dat
 | ID & metadata | ~10 |
 | Summary (2-3 sentences) | ~40-60 |
 | Tags (paths, dilemmas, entities) | ~20-30 |
-| Logic (requires, grants) | ~10-20 |
+| Logic (sequenced_after, grants) | ~10-20 |
 | YAML overhead | ~10 |
 | **Total per beat** | **~100-130** |
 
@@ -1604,7 +1607,7 @@ When users run `qf review`:
 | explores | No | SEED | No |
 | has_consequence | No | SEED | No |
 | belongs_to | No | SEED/GROW | No |
-| requires (beat) | No | SEED/GROW | No |
+| sequenced_after | No | SEED/GROW | No |
 | grants (beat) | No | GROW | No |
 | weaves | No | GROW | No |
 | from_beat | No | GROW | No |
@@ -1658,7 +1661,7 @@ Beat (SEED/GROW)
 ## Future Bolt-ons
 
 - **Numeric state:** `modifies` on choices, `derived` codewords
-- **Choice visibility:** `visible_when` separate from `requires`
+- **Choice visibility:** `visible_when` separate from `requires_codewords`
 - **Entity absence:** overlay with `present: false`
 - **Audit log:** Mutation history (separate from graph)
 - **GROW recovery:** Preserve partial GROW work when aborting to SEED (currently discards all)
