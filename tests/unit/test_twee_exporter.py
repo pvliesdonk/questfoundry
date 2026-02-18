@@ -102,7 +102,7 @@ class TestTweeExporter:
                     from_passage="p1",
                     to_passage="p2",
                     label="Enter secret room",
-                    requires=["codeword::has_key"],
+                    requires_codewords=["codeword::has_key"],
                 ),
             ],
         )
@@ -149,7 +149,7 @@ class TestTweeExporter:
                     from_passage="p1",
                     to_passage="p2",
                     label="Use key",
-                    requires=["codeword::has_key"],
+                    requires_codewords=["codeword::has_key"],
                     grants=["codeword::door_opened"],
                 ),
             ],
