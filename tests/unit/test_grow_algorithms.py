@@ -5356,13 +5356,9 @@ class TestHardPolicyIntersection:
 
         graph = self._make_two_dilemma_graph(d1_policy="hard", d2_policy="soft")
         candidates = build_intersection_candidates(graph)
-        # Hard beat should be included.
-        found = False
-        for c in candidates:
-            if "beat::b1" in c.beat_ids:
-                found = True
-                break
-        assert found, "Hard policy beat should be included in candidates"
+        assert any("beat::b1" in c.beat_ids for c in candidates), (
+            "Hard policy beat should be included in candidates"
+        )
 
     def test_build_candidates_excludes_gap_beats(self) -> None:
         """Gap beats (is_gap_beat=True) are excluded from intersection candidates."""

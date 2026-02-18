@@ -3131,27 +3131,8 @@ def check_intersection_compatibility(
             )
         )
 
-    # Reject intersections involving hard-policy dilemmas (topology isolation)
-    # UPDATED (Epic #911): Hard policy no longer forces topology isolation.
-    # Instead, we allow the intersection and rely on Phase 10 (Routing) to
-    # split it if necessary. This allows for unified variant routing.
-    # hard_beats = _get_hard_policy_beats(graph, beat_ids, beat_dilemma_map)
-    # if hard_beats:
-    #     hard_dilemmas = sorted({d for bid in hard_beats for d in beat_dilemma_map.get(bid, set())})
-    #     errors.append(
-    #         GrowValidationError(
-    #             field_path="intersection.hard_policy",
-    #             issue=(
-    #                 f"Beat(s) {sorted(hard_beats)} belong to hard-policy dilemma(s) "
-    #                 f"{hard_dilemmas}. Hard-policy paths require topology isolation "
-    #                 f"and cannot form intersections."
-    #             ),
-    #             category=GrowErrorCategory.STRUCTURAL,
-    #         )
-    #     )
-    #     # Early return: hard-policy violations are structural and block all
-    #     # downstream checks (requires edges, conditional prerequisites).
-    #     return errors
+    # Hard policy no longer forces topology isolation; intersections are allowed
+    # and may be split later during Phase 10 (Routing).
 
     # Check sequenced_after edges originating from intersection beats.
     # Two checks in one pass: (1) no circular sequenced_after between intersection
