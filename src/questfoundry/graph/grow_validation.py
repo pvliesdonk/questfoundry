@@ -1433,22 +1433,23 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
         # Find dilemmas that actually diverge across covering arcs:
         # a dilemma diverges only when covering arcs chose *different* paths
         # for it (i.e., 2+ distinct path IDs for that dilemma).
-        all_dilemma_ids: set[str] = set()
+        # NOTE: This assumes valid arcs contain at most one path per dilemma.
+        dilemma_to_paths: dict[str, set[str]] = {}
         for arc_id in covering_arcs:
-            all_dilemma_ids.update(arc_dilemmas.get(arc_id, set()))
+            for path_raw in arc_nodes.get(arc_id, {}).get("paths", []):
+                p_id = normalize_scoped_id(path_raw, "path")
+                p_data = path_nodes.get(p_id, {})
+                raw_did = p_data.get("dilemma_id", "")
+                if not raw_did:
+                    continue
+                dilemma_id = normalize_scoped_id(raw_did, "dilemma")
+                dilemma_to_paths.setdefault(dilemma_id, set()).add(p_id)
 
-        diverging_dilemmas: set[str] = set()
-        for dilemma_id in all_dilemma_ids:
-            paths_for_dilemma: set[str] = set()
-            for arc_id in covering_arcs:
-                for path_raw in arc_nodes.get(arc_id, {}).get("paths", []):
-                    p_id = normalize_scoped_id(path_raw, "path")
-                    p_data = path_nodes.get(p_id, {})
-                    raw_did = p_data.get("dilemma_id", "")
-                    if raw_did and normalize_scoped_id(raw_did, "dilemma") == dilemma_id:
-                        paths_for_dilemma.add(p_id)
-            if len(paths_for_dilemma) > 1:
-                diverging_dilemmas.add(dilemma_id)
+        diverging_dilemmas: set[str] = {
+            dilemma_id
+            for dilemma_id, paths_for_dilemma in dilemma_to_paths.items()
+            if len(paths_for_dilemma) > 1
+        }
 
         has_routing = pid in routed_passages
 

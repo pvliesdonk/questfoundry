@@ -2287,11 +2287,6 @@ class TestCheckProseNeutrality:
             {"type": "path", "raw_id": "p1", "dilemma_id": "dilemma::d1"},
         )
         graph.create_node(
-            "path::p2",
-            {"type": "path", "raw_id": "p2", "dilemma_id": "dilemma::d1"},
-        )
-
-        graph.create_node(
             "passage::shared",
             {
                 "type": "passage",
