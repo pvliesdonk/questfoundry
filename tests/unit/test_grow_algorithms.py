@@ -6391,6 +6391,18 @@ class TestHeavyResidueRouting:
         result = wire_heavy_residue_routing(graph)
 
         assert result.targets_found == 0
+        assert result.variants_created == 0
+
+    def test_no_incoming_edges_skips(self) -> None:
+        from questfoundry.graph.grow_algorithms import wire_heavy_residue_routing
+
+        graph = self._make_shared_passage_graph()
+        graph.delete_node("choice::to_shared", cascade=True)
+        result = wire_heavy_residue_routing(graph)
+
+        assert result.targets_found == 1
+        assert result.variants_created == 0
+        assert result.skipped_no_incoming == 1
 
 
 class TestSplitAndReroute:

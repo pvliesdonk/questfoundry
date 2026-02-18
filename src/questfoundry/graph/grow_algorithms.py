@@ -2211,8 +2211,17 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
     for cw_id, cw_data in codeword_nodes.items():
         tracks = cw_data.get("tracks", "")
         path_id_for_tracks = cons_to_path.get(tracks)
-        if path_id_for_tracks:
-            path_to_codeword[path_id_for_tracks] = cw_id
+        if not path_id_for_tracks:
+            continue
+        # Invariant: each path should have a single committed codeword.
+        if path_id_for_tracks in path_to_codeword:
+            log.warning(
+                "path_codeword_duplicate",
+                path_id=path_id_for_tracks,
+                codeword_id=cw_id,
+            )
+            continue
+        path_to_codeword[path_id_for_tracks] = cw_id
 
     # Already-routed passages
     routed_passages: set[str] = set()
@@ -2327,17 +2336,27 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
     passage_nodes = graph.get_nodes_by_type("passage")
     variants_created = 0
     passages_routed = 0
-    skipped = 0
+    skipped_no_incoming = 0
+    # Only one heavy-dilemma routing pass is applied per passage.
+    # Additional heavy dilemmas on the same passage are skipped and logged.
     processed_passages: set[str] = set()
 
     for target in targets:
         if target.passage_id in processed_passages:
-            skipped += 1
+            log.warning(
+                "heavy_residue_multiple_dilemmas",
+                passage_id=target.passage_id,
+                dilemma_id=target.dilemma_id,
+            )
+            continue
+
+        incoming_edges = graph.get_edges(edge_type="choice_to", to_id=target.passage_id)
+        if not incoming_edges:
+            skipped_no_incoming += 1
             continue
 
         base_data = passage_nodes.get(target.passage_id, {})
         if not base_data:
-            skipped += 1
             continue
 
         raw_id = strip_scope_prefix(target.passage_id)
@@ -2372,7 +2391,6 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
             variants_created += 1
 
         if not variant_specs:
-            skipped += 1
             continue
 
         created = split_and_reroute(graph, target.passage_id, variant_specs, keep_fallback=True)
@@ -2380,13 +2398,13 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
             passages_routed += 1
             processed_passages.add(target.passage_id)
         else:
-            skipped += 1
+            skipped_no_incoming += 1
 
     return HeavyRoutingResult(
         targets_found=len(targets),
         variants_created=variants_created,
         passages_routed=passages_routed,
-        skipped_no_incoming=skipped,
+        skipped_no_incoming=skipped_no_incoming,
     )
 
 

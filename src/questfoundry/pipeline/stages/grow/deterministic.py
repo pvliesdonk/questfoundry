@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.graph import Graph  # noqa: TC001 - used at runtime
+from questfoundry.graph.grow_algorithms import wire_heavy_residue_routing
 from questfoundry.models.grow import GrowPhaseResult
 from questfoundry.pipeline.stages.grow._helpers import log
 from questfoundry.pipeline.stages.grow.registry import grow_phase
@@ -684,8 +685,6 @@ async def phase_heavy_residue_routing(
     - Deterministic: no LLM calls.
     - No-op when no heavy-residue targets are found.
     """
-    from questfoundry.graph.grow_algorithms import wire_heavy_residue_routing
-
     result = wire_heavy_residue_routing(graph)
 
     if result.targets_found == 0:
