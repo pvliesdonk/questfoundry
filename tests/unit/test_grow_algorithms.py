@@ -5271,12 +5271,12 @@ class TestCollapseLinearPassages:
 
 
 # ---------------------------------------------------------------------------
-# Hard-policy intersection rejection
+# Hard-policy intersection checks (updated for Epic #911)
 # ---------------------------------------------------------------------------
 
 
-class TestHardPolicyIntersectionRejection:
-    """check_intersection_compatibility rejects intersections involving hard-policy beats."""
+class TestHardPolicyIntersection:
+    """Hard-policy intersections are now allowed (to support unified routing)."""
 
     def _make_two_dilemma_graph(
         self,
@@ -5311,15 +5311,14 @@ class TestHardPolicyIntersectionRejection:
         graph.add_edge("belongs_to", "beat::b2", "path::p2")
         return graph
 
-    def test_hard_policy_beat_rejected(self) -> None:
-        """Intersection containing a hard-policy beat is rejected."""
+    def test_hard_policy_beat_accepted(self) -> None:
+        """Intersection containing a hard-policy beat is accepted."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
 
         graph = self._make_two_dilemma_graph(d1_policy="hard", d2_policy="soft")
         errors = check_intersection_compatibility(graph, ["beat::b1", "beat::b2"])
         hard_errors = [e for e in errors if "hard_policy" in e.field_path]
-        assert len(hard_errors) == 1
-        assert "hard" in hard_errors[0].issue.lower()
+        assert not hard_errors
 
     def test_soft_policy_beats_accepted(self) -> None:
         """Intersection of two soft-policy beats passes hard-policy check."""
@@ -5351,16 +5350,19 @@ class TestHardPolicyIntersectionRejection:
         hard_errors = [e for e in errors if "hard_policy" in e.field_path]
         assert not hard_errors
 
-    def test_build_candidates_excludes_hard(self) -> None:
-        """Hard-policy beats are excluded from intersection candidates."""
+    def test_build_candidates_includes_hard(self) -> None:
+        """Hard-policy beats are included in intersection candidates."""
         from questfoundry.graph.grow_algorithms import build_intersection_candidates
 
         graph = self._make_two_dilemma_graph(d1_policy="hard", d2_policy="soft")
         candidates = build_intersection_candidates(graph)
-        # Hard beat should be filtered out; only soft beat remains.
-        # A single beat can't form an intersection, so no candidates expected.
+        # Hard beat should be included.
+        found = False
         for c in candidates:
-            assert "beat::b1" not in c.beat_ids
+            if "beat::b1" in c.beat_ids:
+                found = True
+                break
+        assert found, "Hard policy beat should be included in candidates"
 
     def test_build_candidates_excludes_gap_beats(self) -> None:
         """Gap beats (is_gap_beat=True) are excluded from intersection candidates."""

@@ -2680,14 +2680,6 @@ def build_intersection_candidates(graph: Graph) -> list[IntersectionCandidate]:
     # Build beat → dilemma mapping via belongs_to → path → dilemma
     beat_dilemmas = _build_beat_dilemmas(graph, beat_nodes)
 
-    # Filter out beats from hard-policy dilemmas (topology isolation)
-    hard_beats = _get_hard_policy_beats(graph, list(beat_nodes.keys()), beat_dilemmas)
-    if hard_beats:
-        beat_nodes = {bid: d for bid, d in beat_nodes.items() if bid not in hard_beats}
-        beat_dilemmas = {bid: ds for bid, ds in beat_dilemmas.items() if bid not in hard_beats}
-        if not beat_nodes:
-            return []
-
     # Filter out gap beats: they are path-local by construction (their sequenced_after
     # predecessors exist on a single path only) and are therefore never eligible as
     # intersection beats. See spec §GROW Intersections — Intersection eligibility constraint.
@@ -3140,23 +3132,26 @@ def check_intersection_compatibility(
         )
 
     # Reject intersections involving hard-policy dilemmas (topology isolation)
-    hard_beats = _get_hard_policy_beats(graph, beat_ids, beat_dilemma_map)
-    if hard_beats:
-        hard_dilemmas = sorted({d for bid in hard_beats for d in beat_dilemma_map.get(bid, set())})
-        errors.append(
-            GrowValidationError(
-                field_path="intersection.hard_policy",
-                issue=(
-                    f"Beat(s) {sorted(hard_beats)} belong to hard-policy dilemma(s) "
-                    f"{hard_dilemmas}. Hard-policy paths require topology isolation "
-                    f"and cannot form intersections."
-                ),
-                category=GrowErrorCategory.STRUCTURAL,
-            )
-        )
-        # Early return: hard-policy violations are structural and block all
-        # downstream checks (requires edges, conditional prerequisites).
-        return errors
+    # UPDATED (Epic #911): Hard policy no longer forces topology isolation.
+    # Instead, we allow the intersection and rely on Phase 10 (Routing) to
+    # split it if necessary. This allows for unified variant routing.
+    # hard_beats = _get_hard_policy_beats(graph, beat_ids, beat_dilemma_map)
+    # if hard_beats:
+    #     hard_dilemmas = sorted({d for bid in hard_beats for d in beat_dilemma_map.get(bid, set())})
+    #     errors.append(
+    #         GrowValidationError(
+    #             field_path="intersection.hard_policy",
+    #             issue=(
+    #                 f"Beat(s) {sorted(hard_beats)} belong to hard-policy dilemma(s) "
+    #                 f"{hard_dilemmas}. Hard-policy paths require topology isolation "
+    #                 f"and cannot form intersections."
+    #             ),
+    #             category=GrowErrorCategory.STRUCTURAL,
+    #         )
+    #     )
+    #     # Early return: hard-policy violations are structural and block all
+    #     # downstream checks (requires edges, conditional prerequisites).
+    #     return errors
 
     # Check sequenced_after edges originating from intersection beats.
     # Two checks in one pass: (1) no circular sequenced_after between intersection
