@@ -119,6 +119,20 @@ def build_stage_summary(stage_name: str, artifact_data: dict[str, Any]) -> list[
             )
         return _limit_lines(lines)
 
+    if stage_name == "grow":
+        return _limit_lines(
+            _count_simple_fields(
+                artifact_data,
+                (
+                    ("arc_count", "Arcs"),
+                    ("passage_count", "Passages"),
+                    ("choice_count", "Choices"),
+                    ("codeword_count", "Codewords"),
+                    ("overlay_count", "Overlays"),
+                ),
+            )
+        )
+
     lines = _count_lines(
         artifact_data,
         (
