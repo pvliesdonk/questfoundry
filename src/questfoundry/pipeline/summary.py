@@ -91,7 +91,7 @@ def build_stage_summary(stage_name: str, artifact_data: dict[str, Any]) -> list[
                 ("interaction_constraints", "Constraints"),
             ),
         )
-        return _limit_lines(lines)
+        return _limit_lines(lines, limit=6)
 
     if stage_name == "fill":
         lines = []
