@@ -2171,7 +2171,13 @@ def _make_shared_passage_graph(
     if add_routing:
         graph.create_node(
             "passage::v1",
-            {"type": "passage", "raw_id": "v1", "summary": "v1"},
+            {
+                "type": "passage",
+                "raw_id": "v1",
+                "summary": "v1",
+                "residue_for": "passage::shared",
+                "is_residue": True,
+            },
         )
         graph.create_node(
             "choice::r1",
