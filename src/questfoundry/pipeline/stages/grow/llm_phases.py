@@ -1036,11 +1036,7 @@ class _LLMPhaseMixin:
     # Late LLM phases (codewords → validation)
     # -------------------------------------------------------------------------
 
-    @grow_phase(
-        name="residue_beats",
-        depends_on=["codewords", "choices", "hub_spokes", "mark_endings"],
-        priority=20,
-    )
+    @grow_phase(name="residue_beats", depends_on=["codewords"], priority=15)
     async def _phase_8d_residue_beats(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 8d: Propose and create residue beat variants at convergence points.
 
@@ -1050,9 +1046,6 @@ class _LLMPhaseMixin:
 
         Preconditions:
         - Codeword nodes exist (Phase 8b complete).
-        - Choice nodes and edges exist (Phase 8a-choices complete).
-        - Hub spokes wired (Phase 9a complete).
-        - Endings marked (Phase 9b complete).
         - Passage nodes exist with from_beat edges.
         - Arc convergence metadata computed (Phase 7 complete).
 
@@ -1177,7 +1170,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
-    @grow_phase(name="overlays", depends_on=["residue_beats"], priority=20)
+    @grow_phase(name="overlays", depends_on=["residue_beats"], priority=16)
     async def _phase_8c_overlays(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 8c: Create cosmetic entity overlays conditioned on codewords.
 
