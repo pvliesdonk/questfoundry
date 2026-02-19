@@ -25,10 +25,10 @@ def build_stage_summary(stage_name: str, artifact_data: dict[str, Any]) -> list[
         genre = _as_str(artifact_data.get("genre"))
         subgenre = _as_str(artifact_data.get("subgenre"))
         if genre:
+            genre_line = f"Genre: {genre}"
             if subgenre:
-                lines.append(f"Genre: {genre} ({subgenre})")
-            else:
-                lines.append(f"Genre: {genre}")
+                genre_line += f" ({subgenre})"
+            lines.append(genre_line)
         audience = _as_str(artifact_data.get("audience"))
         if audience:
             lines.append(f"Audience: {audience}")
