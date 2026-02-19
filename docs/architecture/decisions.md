@@ -616,6 +616,89 @@ Key design choices:
 
 ---
 
+## ADR-017: Unified Routing Plan for GROW Variant Routing
+
+**Date**: 2026-02-19
+**Status**: Proposed
+
+### Context
+
+The Topology/Prose Layer Separation (Epic #911, originating from Discussion #910) introduced three routing mechanisms that mutate the graph incrementally in separate phases:
+
+- **Phase 15** (`residue_beats`): LLM proposes residue variants for `light` dilemmas
+- **Phase 21** (`split_endings`): Creates ending variants for `ending_salience=high` dilemmas
+- **Phase 23** (`heavy_residue_routing`): Creates routing for `residue_weight=heavy` dilemmas
+
+Each phase operates locally with its own codeword scope and no global view of the final routing graph. This incremental approach produced 8 bugs discovered during multi-agent deliberation (Discussion #948):
+
+1. `_build_arc_codewords()` filters to `ending_salience=="high"` only, but `check_routing_coverage()` needs all routed codewords — false validation failures for valid heavy-residue routing.
+2. Fallback choices (from `keep_fallback=True`) are not marked `is_routing=True` — invisible to CE check.
+3. `routed_passages` built from `from_passage` (upstream source) instead of target — likely primary cause of 680 `prose_neutrality` warnings (#933).
+4. Phase 15 runs at priority 15, before choices exist (priority 17) — `split_and_reroute` finds no edges, Phase 15 is silently non-functional.
+5. `find_heavy_divergence_targets` uses per-passage skip instead of per-(passage, dilemma) — multi-dilemma routing silently dropped.
+6. Phase 22 (`collapse_passages`) runs between split_endings and heavy_residue_routing — latent ordering conflict.
+7. `is_ending` skip in `find_heavy_divergence_targets` blocks routing of ending variants created by Phase 21.
+8. Phase 15/23 scope overlap for `soft + heavy` dilemmas.
+
+The root cause is architectural: the system converges upstream (shared passages) then un-converges downstream (splitting/routing) through incremental mutations with no global consistency guarantee — the same pattern Discussion #910 diagnosed.
+
+### Decision
+
+Replace incremental multi-phase graph mutation with a **plan-then-execute architecture**:
+
+1. **Compute a complete `RoutingPlan` in a single deterministic pass** before any graph mutations. The plan is a pure function: `compute_routing_plan(graph) -> RoutingPlan` — side-effect-free and trivially testable.
+
+2. **Apply all routing mutations atomically** in a single phase that consumes the plan. No interleaving with other graph-modifying phases.
+
+3. **`keep_fallback=False` is never used.** All routing preserves the original passage as a fallback. CE validation enforces exhaustiveness; fallbacks are safety nets during development and provably unreachable when routing is correct.
+
+4. **Codeword scope is explicit.** `build_arc_codewords()` takes a `scope: Literal["ending", "routing", "all"]` parameter. `"ending"` returns only `ending_salience=="high"` codewords (for ending family computation); `"routing"` returns all codewords from dilemmas with active routing needs (for validation).
+
+5. **LLM role is advisory, not structural.** Phase 15 (moved to priority ~20.5, after choices and hub_spokes exist) proposes which soft/flavor passages to split and provides prose hints, but produces plan entries rather than direct graph mutations.
+
+6. **New phase ordering:**
+   ```
+   codewords(14) → [choices(17), hub_spokes(19)] → mark_endings(20) →
+   residue_proposals(~20.5, LLM, advisory only) →
+   apply_routing(21, deterministic, unified plan) →
+   collapse_passages(22) → validation(24) → prune(25)
+   ```
+
+Key design choices:
+
+- **Plan distinguishes "exhaustive" vs "best-effort" routing sets.** Ending routing requires strict CE (every arc must match exactly one variant). Residue routing uses fallback-aware CE (unmatched arcs fall through to the base passage).
+- **Plan detects conflicts.** When a passage is targeted by multiple routing types (ending split + heavy residue), the plan resolves with priority: ending splits > heavy residue > LLM residue.
+- **Validation uses plan metadata.** `check_routing_coverage()` no longer calls `_build_arc_codewords()` independently — the plan carries its own codeword scope per routing set.
+
+### Rationale
+
+- **Plan-then-execute eliminates ordering bugs.** All routing needs are visible before any mutations, so conflicts are detected, not caused.
+- **Pure function enables testing.** `compute_routing_plan()` can be unit-tested with synthetic graphs without running the full pipeline.
+- **Atomic application prevents inconsistent intermediate states.** No other phase can observe a half-routed graph.
+- **`keep_fallback=True` is strictly safer.** It prevents dead-end states when routing is incomplete, and validation can enforce exhaustiveness without relying on destructive edge deletion.
+- **Advisory LLM preserves creative input.** The LLM still proposes which passages benefit from residue variants, but structural decisions (codeword gating, edge wiring) remain deterministic.
+- **Unanimous consensus** across three independent agents (Claude Opus 4.6, Gemini 3 Pro, GPT-5.2) in Discussion #948 after two rounds of deliberation.
+
+### Consequences
+
+- **New module:** `src/questfoundry/graph/grow_routing.py` containing `RoutingPlan`, `compute_routing_plan()`, and `apply_routing_plan()`.
+- **Phase 15 refactored:** Moves to priority ~20.5, produces plan entries instead of graph mutations.
+- **Phases 21+23 collapsed:** Single `apply_routing` phase at priority ~21 consumes the unified plan.
+- **Phase 22 moves:** `collapse_passages` runs after all routing is complete.
+- **Validation simplified:** `check_routing_coverage()` and `check_prose_neutrality()` use plan metadata for scope-aware CE/ME checks.
+- **~800 lines of new/refactored code** across 4 PRs (RoutingPlan dataclass, Phase 15 wiring, phase collapse, validation alignment).
+- **Tactical fixes first:** 4 small PRs (~60 lines total) unblock GROW runs before the strategic refactor: fix `routed_passages` semantic, fix codeword scope, switch to `keep_fallback=True`, fix per-dilemma guard.
+
+### Links
+
+- [Discussion #948: GROW Routing — Unified Routing Plan vs Incremental Graph Mutation](https://github.com/pvliesdonk/questfoundry/discussions/948)
+- [Discussion #910: Rethinking Shared Passages](https://github.com/pvliesdonk/questfoundry/discussions/910)
+- [Epic #911: Topology/Prose Layer Separation](https://github.com/pvliesdonk/questfoundry/issues/911)
+- [ADR-013: Branching Contract Design](https://github.com/pvliesdonk/questfoundry/blob/main/docs/architecture/decisions.md#adr-013-branching-contract-design)
+- [ADR-015: Residue Beats Replace Poly-State Prose](https://github.com/pvliesdonk/questfoundry/blob/main/docs/architecture/decisions.md#adr-015-residue-beats-replace-poly-state-prose)
+
+---
+
 ## Template
 
 ```markdown
