@@ -1248,14 +1248,14 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
     - CE: every arc reaching the source has at least one satisfiable route
     - ME: at most one routing choice is satisfiable per arc (excluding fallback)
 
-    Uses arc codeword signatures from ``_build_arc_codewords()`` to evaluate
+    Uses arc codeword signatures from ``build_arc_codewords()`` to evaluate
     route satisfiability deterministically.
 
     Returns:
         List of ValidationCheck results (one per routing set with issues,
         or a single pass check if all sets are valid).
     """
-    from questfoundry.graph.grow_algorithms import _build_arc_codewords
+    from questfoundry.graph.grow_algorithms import build_arc_codewords
 
     choices = graph.get_nodes_by_type("choice")
     arc_nodes = graph.get_nodes_by_type("arc")
@@ -1269,7 +1269,7 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
             )
         ]
 
-    arc_codewords = _build_arc_codewords(graph, arc_nodes)
+    arc_codewords = build_arc_codewords(graph, arc_nodes, scope="routing")
 
     # Group routing choices by source passage
     routing_sets: dict[str, list[dict[str, object]]] = {}
