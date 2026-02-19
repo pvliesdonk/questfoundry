@@ -2361,17 +2361,13 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
     variants_created = 0
     passages_routed = 0
     skipped_no_incoming = 0
-    # Only one heavy-dilemma routing pass is applied per passage.
-    # Additional heavy dilemmas on the same passage are skipped and logged.
-    processed_passages: set[str] = set()
+    # Track (passage_id, dilemma_id) pairs to allow routing the same
+    # passage for multiple dilemmas while preventing duplicate work.
+    processed: set[tuple[str, str]] = set()
 
     for target in targets:
-        if target.passage_id in processed_passages:
-            log.warning(
-                "heavy_residue_multiple_dilemmas",
-                passage_id=target.passage_id,
-                dilemma_id=target.dilemma_id,
-            )
+        key = (target.passage_id, target.dilemma_id)
+        if key in processed:
             continue
 
         incoming_edges = graph.get_edges(edge_type="choice_to", to_id=target.passage_id)
@@ -2420,7 +2416,7 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
         created = split_and_reroute(graph, target.passage_id, variant_specs, keep_fallback=True)
         if created:
             passages_routed += 1
-            processed_passages.add(target.passage_id)
+            processed.add(key)
         else:
             skipped_no_incoming += 1
 
