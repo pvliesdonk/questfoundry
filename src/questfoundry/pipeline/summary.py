@@ -171,7 +171,8 @@ def _format_truncated(items: Iterable[str], limit: int = 3) -> str:
 
 
 def _format_counts(counter: Counter[str]) -> str:
-    return ", ".join(f"{label} {count}" for label, count in counter.most_common())
+def _format_counts(counter: Counter[str]) -> str:
+    return ", ".join(f"{count} {label}" for label, count in counter.most_common())
 
 
 def _list_of_dicts(value: Any) -> list[dict[str, Any]]:
