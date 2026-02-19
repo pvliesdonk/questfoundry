@@ -5636,9 +5636,13 @@ class TestSplitEndingFamilies:
         graph = self._make_shared_ending_graph()
         split_ending_families(graph)
 
-        # Original incoming choices (c3, c4) should be deleted
-        assert graph.get_node("choice::c3") is None
-        assert graph.get_node("choice::c4") is None
+        # Original incoming choices (c3, c4) should be kept as fallbacks
+        # (keep_fallback=True per ADR-017)
+        assert graph.get_node("choice::c3") is not None
+        assert graph.get_node("choice::c4") is not None
+        # Fallback choices should NOT be marked is_routing
+        assert not graph.get_node("choice::c3").get("is_routing")
+        assert not graph.get_node("choice::c4").get("is_routing")
 
         # Routing choices should exist pointing to ending passages
         choices = graph.get_nodes_by_type("choice")

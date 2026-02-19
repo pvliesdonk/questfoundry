@@ -1044,6 +1044,15 @@ class _LLMPhaseMixin:
         that should have path-specific prose variants. Each variant is gated by
         a codeword so FILL generates different prose per path.
 
+        .. warning:: Known timing issue (#955)
+           This phase runs at priority 15, before choices (17) and hub_spokes
+           (19). ``split_and_reroute()`` called from ``create_residue_passages()``
+           looks for ``choice_to`` edges that don't exist yet and returns empty.
+           Variant passages are created but never wired — effectively a no-op
+           for routing. Moving priority higher creates a dependency cycle
+           (residue_beats → choices → overlays → residue_beats). The strategic
+           fix (Epic #950, S2) will restructure this phase to be advisory-only.
+
         Preconditions:
         - Codeword nodes exist (Phase 8b complete).
         - Passage nodes exist with from_beat edges.

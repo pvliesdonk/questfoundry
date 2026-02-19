@@ -1248,14 +1248,14 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
     - CE: every arc reaching the source has at least one satisfiable route
     - ME: at most one routing choice is satisfiable per arc (excluding fallback)
 
-    Uses arc codeword signatures from ``_build_arc_codewords()`` to evaluate
+    Uses arc codeword signatures from ``build_arc_codewords()`` to evaluate
     route satisfiability deterministically.
 
     Returns:
         List of ValidationCheck results (one per routing set with issues,
         or a single pass check if all sets are valid).
     """
-    from questfoundry.graph.grow_algorithms import _build_arc_codewords
+    from questfoundry.graph.grow_algorithms import build_arc_codewords
 
     choices = graph.get_nodes_by_type("choice")
     arc_nodes = graph.get_nodes_by_type("arc")
@@ -1269,14 +1269,21 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
             )
         ]
 
-    arc_codewords = _build_arc_codewords(graph, arc_nodes)
+    arc_codewords = build_arc_codewords(graph, arc_nodes, scope="routing")
 
-    # Group routing choices by source passage
+    # Group routing choices by source passage; also detect fallback choices
     routing_sets: dict[str, list[dict[str, object]]] = {}
+    # Source passages that also have a non-routing fallback choice
+    has_fallback: set[str] = set()
     for _cid, cdata in choices.items():
+        source = str(cdata.get("from_passage", ""))
         if cdata.get("is_routing"):
-            source = str(cdata.get("from_passage", ""))
             routing_sets.setdefault(source, []).append(cdata)
+        else:
+            # A non-routing choice from a source that has routing choices
+            # is a fallback — it covers arcs that don't match any variant
+            if source:
+                has_fallback.add(source)
 
     if not routing_sets:
         return [
@@ -1310,14 +1317,17 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
             reqs = rc.get("requires_codewords", [])
             route_requires.append(set(reqs) if isinstance(reqs, list) else set())
 
-        # CE check: for each covering arc, at least one route is satisfiable
+        # CE check: for each covering arc, at least one route is satisfiable.
+        # If a fallback choice exists, arcs that match no specific route are
+        # covered by the fallback (the original unmodified choice).
+        source_has_fallback = source_pid in has_fallback
         ce_gaps: list[str] = []
         for arc_id in covering_arcs:
             arc_cws = arc_codewords.get(arc_id, frozenset())
             satisfiable = [
                 i for i, reqs in enumerate(route_requires) if reqs and reqs.issubset(arc_cws)
             ]
-            if not satisfiable:
+            if not satisfiable and not source_has_fallback:
                 ce_gaps.append(arc_id)
 
         if ce_gaps:
@@ -1382,7 +1392,6 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
     arc_nodes = graph.get_nodes_by_type("arc")
     passage_nodes = graph.get_nodes_by_type("passage")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    choice_nodes = graph.get_nodes_by_type("choice")
 
     if not arc_nodes or not passage_nodes or not dilemma_nodes:
         return [
@@ -1411,13 +1420,20 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
                 dilemma_id = normalize_scoped_id(dilemma_raw, "dilemma")
                 arc_dilemmas.setdefault(arc_id, set()).add(dilemma_id)
 
-    # Build passage → set of routing choice targets
+    # Build set of passages that have variant routing applied.
+    # A passage is "routed" if variant passages exist that reference it
+    # via ``residue_for`` (heavy-residue variants) or if it has
+    # ``family_codewords`` (ending family variants).  We do NOT use
+    # ``from_passage`` on routing choices — that points to the upstream
+    # *source* passage, not the base passage that was split.
     routed_passages: set[str] = set()
-    for _cid, cdata in choice_nodes.items():
-        if cdata.get("is_routing"):
-            source = str(cdata.get("from_passage", ""))
-            if source:
-                routed_passages.add(source)
+    for _pid, _pdata in passage_nodes.items():
+        # Both heavy-residue variants and ending-family variants set
+        # ``residue_for`` pointing to the base passage they were split
+        # from.  Collecting these is sufficient — no sibling scan needed.
+        residue_for = _pdata.get("residue_for")
+        if residue_for:
+            routed_passages.add(str(residue_for))
 
     checks: list[ValidationCheck] = []
 

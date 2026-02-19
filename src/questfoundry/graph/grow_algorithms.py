@@ -806,6 +806,7 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
                 "summary": summary,
                 "family_codewords": distinguishing,
                 "family_arc_count": len(family_arcs),
+                "residue_for": terminal_id,
             }
             tones = _collect_family_tones(graph, family_arcs, arc_nodes)
             if tones:
@@ -815,10 +816,12 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
             variant_specs.append(VariantSpec(ending_pid, distinguishing))
             families_created += 1
 
-        # Reroute incoming choices to variant endings (no extra hops)
-        split_and_reroute(graph, terminal_id, variant_specs, keep_fallback=False)
-        # Mark the original terminal as non-ending (it may still exist
-        # if it had no incoming choices, e.g. a start passage)
+        # Reroute incoming choices to variant endings; keep the original
+        # as a fallback (CE validation will verify exhaustiveness).
+        split_and_reroute(graph, terminal_id, variant_specs, keep_fallback=True)
+        # The base passage is now a fallback — mark it as non-ending so
+        # variant endings are the real terminals.  If the routing plan is
+        # CE-complete the fallback will be unreachable and prunable.
         if graph.get_node(terminal_id):
             graph.update_node(terminal_id, is_ending=False)
 
@@ -835,31 +838,47 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
     )
 
 
-def _build_arc_codewords(
+def build_arc_codewords(
     graph: Graph,
     arc_nodes: dict[str, dict[str, Any]],
+    scope: Literal["ending", "routing", "all"] = "ending",
 ) -> dict[str, frozenset[str]]:
-    """Build mapping from arc node ID to its ending-relevant codeword signature.
+    """Build mapping from arc node ID to its codeword signature.
 
-    Only includes codewords from paths whose dilemma has
-    ``ending_salience == "high"``.  This ensures that only dilemmas
-    explicitly marked as ending-differentiating contribute to the
-    signatures used by ``split_ending_families()``.
+    Args:
+        graph: The story graph.
+        arc_nodes: Arc node data from ``graph.get_nodes_by_type("arc")``.
+        scope: Which codewords to include:
+
+            - ``"ending"`` — only codewords from ``ending_salience == "high"``
+              dilemmas (for ``split_ending_families``).
+            - ``"routing"`` — codewords from dilemmas with any active routing
+              need (``ending_salience == "high"`` OR
+              ``residue_weight == "heavy"``), for routing validation.
+            - ``"all"`` — all codewords, unfiltered.
 
     Traces: arc → paths → consequences → codewords via graph edges,
-    filtered by: path → dilemma → ending_salience.
+    filtered by: path → dilemma → ending_salience / residue_weight.
     """
-    # Build path → dilemma ending_salience lookup
+    # Build path → dilemma lookup, filtered by scope
     path_nodes = graph.get_nodes_by_type("path")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    high_salience_paths: set[str] = set()
+    included_paths: set[str] = set()
     for path_id, path_data in path_nodes.items():
         dilemma_id = path_data.get("dilemma_id")
-        if dilemma_id:
-            dilemma_node_id = normalize_scoped_id(dilemma_id, "dilemma")
-            dilemma_data = dilemma_nodes.get(dilemma_node_id, {})
-            if dilemma_data.get("ending_salience", "low") == "high":
-                high_salience_paths.add(path_id)
+        if not dilemma_id:
+            continue
+        if scope == "all":
+            included_paths.add(path_id)
+            continue
+        dilemma_node_id = normalize_scoped_id(dilemma_id, "dilemma")
+        dilemma_data = dilemma_nodes.get(dilemma_node_id, {})
+        salience = dilemma_data.get("ending_salience", "low")
+        weight = dilemma_data.get("residue_weight", "light")
+        if (scope == "ending" and salience == "high") or (
+            scope == "routing" and (salience == "high" or weight == "heavy")
+        ):
+            included_paths.add(path_id)
 
     # consequence → codeword (via tracks edges: codeword tracks consequence)
     tracks_edges = graph.get_edges(edge_type="tracks")
@@ -878,7 +897,7 @@ def _build_arc_codewords(
         cws: set[str] = set()
         for path_raw in data.get("paths", []):
             path_id = normalize_scoped_id(path_raw, "path")
-            if path_id not in high_salience_paths:
+            if path_id not in included_paths:
                 continue
             for cons_id in path_consequences.get(path_id, []):
                 if cw := consequence_to_codeword.get(cons_id):
@@ -886,6 +905,10 @@ def _build_arc_codewords(
         result[arc_id] = frozenset(cws)
 
     return result
+
+
+# Backward-compatible alias for internal callers
+_build_arc_codewords = build_arc_codewords
 
 
 def _intersect_all(sets: list[frozenset[str]]) -> frozenset[str]:
@@ -2179,7 +2202,6 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
     passage_nodes = graph.get_nodes_by_type("passage")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
     path_nodes = graph.get_nodes_by_type("path")
-    choice_nodes = graph.get_nodes_by_type("choice")
     codeword_nodes = graph.get_nodes_by_type("codeword")
 
     if not arc_nodes or not passage_nodes or not dilemma_nodes:
@@ -2223,13 +2245,15 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
             continue
         path_to_codeword[path_id_for_tracks] = cw_id
 
-    # Already-routed passages
+    # Already-routed passages — identified by variant passages that
+    # reference them via ``residue_for`` metadata.  We do NOT use
+    # ``from_passage`` on routing choices (that is the upstream source
+    # passage, not the base passage that was split).
     routed_passages: set[str] = set()
-    for _cid, cdata in choice_nodes.items():
-        if cdata.get("is_routing"):
-            source = str(cdata.get("from_passage", ""))
-            if source:
-                routed_passages.add(source)
+    for _pid, _pdata in passage_nodes.items():
+        residue_for = _pdata.get("residue_for")
+        if residue_for:
+            routed_passages.add(str(residue_for))
 
     targets: list[HeavyDivergenceTarget] = []
     seen: set[tuple[str, str]] = set()  # (passage_id, dilemma_id) dedup
@@ -2292,6 +2316,16 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
             if len(pcw) < 2:
                 continue  # Need at least 2 gatable codewords
 
+            # Detect multi-dilemma routing for the same passage.
+            existing_dilemmas = [k[1] for k in seen if k[0] == pid]
+            if existing_dilemmas:
+                log.debug(
+                    "multi_dilemma_routing_target",
+                    passage_id=pid,
+                    dilemma_id=dilemma_id,
+                    prior_dilemmas=existing_dilemmas,
+                )
+
             seen.add(key)
             targets.append(
                 HeavyDivergenceTarget(
@@ -2337,17 +2371,13 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
     variants_created = 0
     passages_routed = 0
     skipped_no_incoming = 0
-    # Only one heavy-dilemma routing pass is applied per passage.
-    # Additional heavy dilemmas on the same passage are skipped and logged.
-    processed_passages: set[str] = set()
+    # Track (passage_id, dilemma_id) pairs to allow routing the same
+    # passage for multiple dilemmas while preventing duplicate work.
+    processed: set[tuple[str, str]] = set()
 
     for target in targets:
-        if target.passage_id in processed_passages:
-            log.warning(
-                "heavy_residue_multiple_dilemmas",
-                passage_id=target.passage_id,
-                dilemma_id=target.dilemma_id,
-            )
+        key = (target.passage_id, target.dilemma_id)
+        if key in processed:
             continue
 
         incoming_edges = graph.get_edges(edge_type="choice_to", to_id=target.passage_id)
@@ -2396,7 +2426,7 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
         created = split_and_reroute(graph, target.passage_id, variant_specs, keep_fallback=True)
         if created:
             passages_routed += 1
-            processed_passages.add(target.passage_id)
+            processed.add(key)
         else:
             skipped_no_incoming += 1
 
