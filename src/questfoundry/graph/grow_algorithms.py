@@ -2223,13 +2223,15 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
             continue
         path_to_codeword[path_id_for_tracks] = cw_id
 
-    # Already-routed passages
+    # Already-routed passages — identified by variant passages that
+    # reference them via ``residue_for`` metadata.  We do NOT use
+    # ``from_passage`` on routing choices (that is the upstream source
+    # passage, not the base passage that was split).
     routed_passages: set[str] = set()
-    for _cid, cdata in choice_nodes.items():
-        if cdata.get("is_routing"):
-            source = str(cdata.get("from_passage", ""))
-            if source:
-                routed_passages.add(source)
+    for _pid, _pdata in passage_nodes.items():
+        residue_for = _pdata.get("residue_for")
+        if residue_for:
+            routed_passages.add(str(residue_for))
 
     targets: list[HeavyDivergenceTarget] = []
     seen: set[tuple[str, str]] = set()  # (passage_id, dilemma_id) dedup

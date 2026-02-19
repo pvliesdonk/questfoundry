@@ -1411,13 +1411,30 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
                 dilemma_id = normalize_scoped_id(dilemma_raw, "dilemma")
                 arc_dilemmas.setdefault(arc_id, set()).add(dilemma_id)
 
-    # Build passage → set of routing choice targets
+    # Build set of passages that have variant routing applied.
+    # A passage is "routed" if variant passages exist that reference it
+    # via ``residue_for`` (heavy-residue variants) or if it has
+    # ``family_codewords`` (ending family variants).  We do NOT use
+    # ``from_passage`` on routing choices — that points to the upstream
+    # *source* passage, not the base passage that was split.
     routed_passages: set[str] = set()
-    for _cid, cdata in choice_nodes.items():
-        if cdata.get("is_routing"):
-            source = str(cdata.get("from_passage", ""))
-            if source:
-                routed_passages.add(source)
+    for _pid, _pdata in passage_nodes.items():
+        residue_for = _pdata.get("residue_for")
+        if residue_for:
+            routed_passages.add(str(residue_for))
+        if _pdata.get("family_codewords"):
+            # Ending variant — its base terminal is routed
+            from_beat = str(_pdata.get("from_beat") or "")
+            if from_beat:
+                # Find sibling passages sharing the same beat that are
+                # the original (non-synthetic) base passage.
+                for other_pid, other_pdata in passage_nodes.items():
+                    if (
+                        other_pid != _pid
+                        and str(other_pdata.get("from_beat") or "") == from_beat
+                        and not other_pdata.get("family_codewords")
+                    ):
+                        routed_passages.add(other_pid)
 
     checks: list[ValidationCheck] = []
 
