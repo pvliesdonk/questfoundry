@@ -1392,7 +1392,6 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
     arc_nodes = graph.get_nodes_by_type("arc")
     passage_nodes = graph.get_nodes_by_type("passage")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    choice_nodes = graph.get_nodes_by_type("choice")
 
     if not arc_nodes or not passage_nodes or not dilemma_nodes:
         return [
@@ -1429,22 +1428,12 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
     # *source* passage, not the base passage that was split.
     routed_passages: set[str] = set()
     for _pid, _pdata in passage_nodes.items():
+        # Both heavy-residue variants and ending-family variants set
+        # ``residue_for`` pointing to the base passage they were split
+        # from.  Collecting these is sufficient — no sibling scan needed.
         residue_for = _pdata.get("residue_for")
         if residue_for:
             routed_passages.add(str(residue_for))
-        if _pdata.get("family_codewords"):
-            # Ending variant — its base terminal is routed
-            from_beat = str(_pdata.get("from_beat") or "")
-            if from_beat:
-                # Find sibling passages sharing the same beat that are
-                # the original (non-synthetic) base passage.
-                for other_pid, other_pdata in passage_nodes.items():
-                    if (
-                        other_pid != _pid
-                        and str(other_pdata.get("from_beat") or "") == from_beat
-                        and not other_pdata.get("family_codewords")
-                    ):
-                        routed_passages.add(other_pid)
 
     checks: list[ValidationCheck] = []
 

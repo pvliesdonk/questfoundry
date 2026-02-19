@@ -806,6 +806,7 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
                 "summary": summary,
                 "family_codewords": distinguishing,
                 "family_arc_count": len(family_arcs),
+                "residue_for": terminal_id,
             }
             tones = _collect_family_tones(graph, family_arcs, arc_nodes)
             if tones:
@@ -840,7 +841,7 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
 def build_arc_codewords(
     graph: Graph,
     arc_nodes: dict[str, dict[str, Any]],
-    scope: str = "ending",
+    scope: Literal["ending", "routing", "all"] = "ending",
 ) -> dict[str, frozenset[str]]:
     """Build mapping from arc node ID to its codeword signature.
 
@@ -874,9 +875,9 @@ def build_arc_codewords(
         dilemma_data = dilemma_nodes.get(dilemma_node_id, {})
         salience = dilemma_data.get("ending_salience", "low")
         weight = dilemma_data.get("residue_weight", "light")
-        if scope == "ending" and salience == "high":
-            included_paths.add(path_id)
-        elif scope == "routing" and (salience == "high" or weight == "heavy"):
+        if (scope == "ending" and salience == "high") or (
+            scope == "routing" and (salience == "high" or weight == "heavy")
+        ):
             included_paths.add(path_id)
 
     # consequence → codeword (via tracks edges: codeword tracks consequence)
@@ -2201,7 +2202,6 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
     passage_nodes = graph.get_nodes_by_type("passage")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
     path_nodes = graph.get_nodes_by_type("path")
-    choice_nodes = graph.get_nodes_by_type("choice")
     codeword_nodes = graph.get_nodes_by_type("codeword")
 
     if not arc_nodes or not passage_nodes or not dilemma_nodes:
@@ -2315,6 +2315,16 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
 
             if len(pcw) < 2:
                 continue  # Need at least 2 gatable codewords
+
+            # Detect multi-dilemma routing for the same passage.
+            existing_dilemmas = [k[1] for k in seen if k[0] == pid]
+            if existing_dilemmas:
+                log.debug(
+                    "multi_dilemma_routing_target",
+                    passage_id=pid,
+                    dilemma_id=dilemma_id,
+                    prior_dilemmas=existing_dilemmas,
+                )
 
             seen.add(key)
             targets.append(
