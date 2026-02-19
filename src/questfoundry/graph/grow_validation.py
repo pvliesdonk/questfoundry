@@ -1271,12 +1271,19 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
 
     arc_codewords = build_arc_codewords(graph, arc_nodes, scope="routing")
 
-    # Group routing choices by source passage
+    # Group routing choices by source passage; also detect fallback choices
     routing_sets: dict[str, list[dict[str, object]]] = {}
+    # Source passages that also have a non-routing fallback choice
+    has_fallback: set[str] = set()
     for _cid, cdata in choices.items():
+        source = str(cdata.get("from_passage", ""))
         if cdata.get("is_routing"):
-            source = str(cdata.get("from_passage", ""))
             routing_sets.setdefault(source, []).append(cdata)
+        else:
+            # A non-routing choice from a source that has routing choices
+            # is a fallback — it covers arcs that don't match any variant
+            if source:
+                has_fallback.add(source)
 
     if not routing_sets:
         return [
@@ -1310,14 +1317,17 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
             reqs = rc.get("requires_codewords", [])
             route_requires.append(set(reqs) if isinstance(reqs, list) else set())
 
-        # CE check: for each covering arc, at least one route is satisfiable
+        # CE check: for each covering arc, at least one route is satisfiable.
+        # If a fallback choice exists, arcs that match no specific route are
+        # covered by the fallback (the original unmodified choice).
+        source_has_fallback = source_pid in has_fallback
         ce_gaps: list[str] = []
         for arc_id in covering_arcs:
             arc_cws = arc_codewords.get(arc_id, frozenset())
             satisfiable = [
                 i for i, reqs in enumerate(route_requires) if reqs and reqs.issubset(arc_cws)
             ]
-            if not satisfiable:
+            if not satisfiable and not source_has_fallback:
                 ce_gaps.append(arc_id)
 
         if ce_gaps:

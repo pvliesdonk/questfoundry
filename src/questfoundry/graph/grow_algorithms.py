@@ -815,10 +815,12 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
             variant_specs.append(VariantSpec(ending_pid, distinguishing))
             families_created += 1
 
-        # Reroute incoming choices to variant endings (no extra hops)
-        split_and_reroute(graph, terminal_id, variant_specs, keep_fallback=False)
-        # Mark the original terminal as non-ending (it may still exist
-        # if it had no incoming choices, e.g. a start passage)
+        # Reroute incoming choices to variant endings; keep the original
+        # as a fallback (CE validation will verify exhaustiveness).
+        split_and_reroute(graph, terminal_id, variant_specs, keep_fallback=True)
+        # The base passage is now a fallback — mark it as non-ending so
+        # variant endings are the real terminals.  If the routing plan is
+        # CE-complete the fallback will be unreachable and prunable.
         if graph.get_node(terminal_id):
             graph.update_node(terminal_id, is_ending=False)
 
