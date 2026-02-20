@@ -9,10 +9,12 @@ import pytest
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_routing import (
     RESIDUE_PROPOSALS_NODE_ID,
+    ApplyRoutingResult,
     RoutingKind,
     RoutingOperation,
     RoutingPlan,
     VariantPassageSpec,
+    apply_routing_plan,
     clear_residue_proposals,
     compute_routing_plan,
     get_residue_proposals,
@@ -665,3 +667,172 @@ class TestResidueProposalStorage:
         node = g.get_node(RESIDUE_PROPOSALS_NODE_ID)
         assert node is not None
         assert node["type"] == "meta"
+
+
+# ---------------------------------------------------------------------------
+# apply_routing_plan — S3 tests
+# ---------------------------------------------------------------------------
+
+
+class TestApplyRoutingPlan:
+    """Tests for apply_routing_plan() (S3, Epic #950 issue #958)."""
+
+    def test_empty_plan_returns_zero_counts(self):
+        """Empty plan produces zero-count result without mutating graph."""
+        g = _make_routing_graph()
+        plan = RoutingPlan()
+        result = apply_routing_plan(g, plan)
+
+        assert isinstance(result, ApplyRoutingResult)
+        assert result.ending_splits_applied == 0
+        assert result.heavy_residue_applied == 0
+        assert result.llm_residue_applied == 0
+        assert result.total_variants_created == 0
+        assert result.skipped_no_incoming == 0
+
+    def test_ending_split_creates_variant_passages(self):
+        """Ending-split operation creates variant passage nodes in graph."""
+        g = _make_routing_graph(shared_terminal=True)
+        plan = compute_routing_plan(g)
+
+        # Graph has a shared terminal → plan should have ending splits
+        assert plan.ending_splits, "Expected ending split operations"
+
+        apply_routing_plan(g, plan)
+
+        for op in plan.ending_splits:
+            for spec in op.variants:
+                node = g.get_node(spec.variant_id)
+                assert node is not None, f"Variant {spec.variant_id} not created"
+                assert node["type"] == "passage"
+                assert node["residue_for"] == op.base_passage_id
+
+    def test_ending_split_demotes_base_passage(self):
+        """Base terminal passage loses is_ending after split."""
+        g = _make_routing_graph(shared_terminal=True)
+        plan = compute_routing_plan(g)
+        assert plan.ending_splits
+
+        apply_routing_plan(g, plan)
+
+        for op in plan.ending_splits:
+            base = g.get_node(op.base_passage_id)
+            assert base is not None
+            assert not base.get("is_ending"), (
+                f"Base passage {op.base_passage_id} should not be marked as ending"
+            )
+
+    def test_ending_split_wires_routing_choices(self):
+        """split_and_reroute creates is_routing choices for each variant."""
+        g = _make_routing_graph(shared_terminal=True)
+        plan = compute_routing_plan(g)
+        assert plan.ending_splits
+
+        apply_routing_plan(g, plan)
+
+        choices = g.get_nodes_by_type("choice")
+        routing_choices = {cid: cdata for cid, cdata in choices.items() if cdata.get("is_routing")}
+        assert routing_choices, "Expected routing choices after apply"
+
+    def test_heavy_residue_creates_variant_passages(self):
+        """Heavy-residue operation creates variant passages and sets residue_for."""
+        g = _make_routing_graph(heavy_dilemma=True)
+        plan = compute_routing_plan(g)
+
+        # Shared mid passage + heavy dilemma → heavy residue ops
+        assert plan.heavy_residue_ops, "Expected heavy-residue operations"
+
+        apply_routing_plan(g, plan)
+
+        for op in plan.heavy_residue_ops:
+            for spec in op.variants:
+                node = g.get_node(spec.variant_id)
+                assert node is not None, f"Variant {spec.variant_id} not created"
+                assert node.get("is_residue") is True
+                assert node["residue_for"] == op.base_passage_id
+
+    def test_result_counts_match_operations(self):
+        """Applied + skipped counts sum to total operations in the plan."""
+        g = _make_routing_graph(shared_terminal=True)
+        plan = compute_routing_plan(g)
+
+        result = apply_routing_plan(g, plan)
+
+        total_accounted = (
+            result.ending_splits_applied
+            + result.heavy_residue_applied
+            + result.llm_residue_applied
+            + result.skipped_no_incoming
+        )
+        assert total_accounted == len(plan.operations)
+
+    def test_skips_operation_with_no_incoming_choices(self):
+        """Operation is skipped and counted when base passage has no incoming."""
+        g = Graph.empty()
+        g.create_node("passage::orphan", {"type": "passage", "raw_id": "orphan"})
+
+        # Manually build a plan with one operation targeting the orphan passage
+        plan = RoutingPlan()
+        plan.add_operation(
+            RoutingOperation(
+                kind="ending_split",
+                base_passage_id="passage::orphan",
+                variants=(
+                    VariantPassageSpec(
+                        variant_id="passage::orphan_v0",
+                        requires_codewords=("codeword::x",),
+                        is_ending=True,
+                    ),
+                ),
+                demote_base_ending=True,
+            )
+        )
+
+        result = apply_routing_plan(g, plan)
+
+        assert result.skipped_no_incoming == 1
+        assert result.ending_splits_applied == 0
+        # Variant node IS created even when split_and_reroute finds no incoming
+        assert g.get_node("passage::orphan_v0") is not None
+
+    def test_clears_residue_proposals_after_apply(self):
+        """Stored proposals are removed from graph after apply."""
+        g = Graph.empty()
+        store_residue_proposals(g, [{"passage_id": "p1", "dilemma_id": "d1", "variants": []}])
+        assert g.get_node(RESIDUE_PROPOSALS_NODE_ID) is not None
+
+        apply_routing_plan(g, RoutingPlan())
+
+        assert g.get_node(RESIDUE_PROPOSALS_NODE_ID) is None
+
+    def test_apply_idempotent_for_existing_variants(self):
+        """Applying same plan twice does not create duplicate variant nodes."""
+        g = _make_routing_graph(shared_terminal=True)
+        plan = compute_routing_plan(g)
+
+        apply_routing_plan(g, plan)
+        passages_after_first = set(g.get_nodes_by_type("passage").keys())
+
+        apply_routing_plan(g, plan)
+        passages_after_second = set(g.get_nodes_by_type("passage").keys())
+
+        assert passages_after_first == passages_after_second
+
+    def test_full_plan_compute_and_apply(self):
+        """compute_routing_plan + apply_routing_plan end-to-end."""
+        g = _make_routing_graph(shared_terminal=True)
+
+        proposals = get_residue_proposals(g)
+        plan = compute_routing_plan(g, proposals)
+        result = apply_routing_plan(g, plan)
+
+        # All operations accounted for
+        total_ops = (
+            result.ending_splits_applied
+            + result.heavy_residue_applied
+            + result.llm_residue_applied
+            + result.skipped_no_incoming
+        )
+        assert total_ops == len(plan.operations)
+        # Proposals cleaned up
+        assert g.get_node(RESIDUE_PROPOSALS_NODE_ID) is None

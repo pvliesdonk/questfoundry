@@ -39,6 +39,7 @@ from questfoundry.pipeline.stages.grow._helpers import (
     log,
 )
 from questfoundry.pipeline.stages.grow.deterministic import (  # noqa: F401 - register phases
+    phase_apply_routing,
     phase_codewords,
     phase_collapse_linear_beats,
     phase_collapse_passages,
@@ -48,7 +49,6 @@ from questfoundry.pipeline.stages.grow.deterministic import (  # noqa: F401 - re
     phase_mark_endings,
     phase_passages,
     phase_prune,
-    phase_split_endings,
     phase_validate_dag,
     phase_validation,
 )
@@ -153,7 +153,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         "passages": "phase_passages",
         "codewords": "phase_codewords",
         "mark_endings": "phase_mark_endings",
-        "split_endings": "phase_split_endings",
+        "apply_routing": "phase_apply_routing",
         "collapse_passages": "phase_collapse_passages",
         "validation": "phase_validation",
         "prune": "phase_prune",
