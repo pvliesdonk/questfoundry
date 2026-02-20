@@ -3502,19 +3502,25 @@ class TestPhase8dResidueBeats:
         assert result.status == "completed"
         assert result.phase == "residue_beats"
         assert result.llm_calls == 1
-        assert "2 residue variants" in result.detail
-        assert "1 proposals" in result.detail
+        # S2 (ADR-017): Phase 15 now stores proposals for unified routing
+        # instead of creating variants directly
+        assert "Stored 1 residue proposals" in result.detail
 
-        # Verify variant passages exist
+        # Verify proposals are stored in graph metadata
+        from questfoundry.graph.grow_routing import get_residue_proposals
+
+        proposals = get_residue_proposals(graph)
+        assert len(proposals) == 1
+        assert proposals[0]["passage_id"] == "passage::aftermath"
+        assert proposals[0]["dilemma_id"] == "dilemma::approach"
+        assert len(proposals[0]["variants"]) == 2
+
+        # Verify variant passages do NOT exist yet (created by apply_routing_plan)
         fight_variant = graph.get_node("passage::aftermath__via_fight")
-        assert fight_variant is not None
-        assert fight_variant["is_residue"] is True
-        assert fight_variant["residue_codeword"] == "codeword::fight_committed"
+        assert fight_variant is None  # Not created until Phase 21
 
         talk_variant = graph.get_node("passage::aftermath__via_talk")
-        assert talk_variant is not None
-        assert talk_variant["is_residue"] is True
-        assert talk_variant["residue_codeword"] == "codeword::talk_committed"
+        assert talk_variant is None  # Not created until Phase 21
 
         # Base passage preserved
         base = graph.get_node("passage::aftermath")

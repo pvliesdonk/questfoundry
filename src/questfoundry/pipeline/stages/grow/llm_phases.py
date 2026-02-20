@@ -1044,14 +1044,11 @@ class _LLMPhaseMixin:
         that should have path-specific prose variants. Each variant is gated by
         a codeword so FILL generates different prose per path.
 
-        .. warning:: Known timing issue (#955)
-           This phase runs at priority 15, before choices (17) and hub_spokes
-           (19). ``split_and_reroute()`` called from ``create_residue_passages()``
-           looks for ``choice_to`` edges that don't exist yet and returns empty.
-           Variant passages are created but never wired — effectively a no-op
-           for routing. Moving priority higher creates a dependency cycle
-           (residue_beats → choices → overlays → residue_beats). The strategic
-           fix (Epic #950, S2) will restructure this phase to be advisory-only.
+        .. note:: Advisory-only mode (ADR-017, #955)
+           This phase collects LLM proposals and stores them in graph metadata.
+           It does NOT create variant passages or wire routing — that is handled
+           by the unified routing phase (Phase 21) which reads the stored proposals,
+           computes a complete RoutingPlan, and applies all routing atomically.
 
         Preconditions:
         - Codeword nodes exist (Phase 8b complete).
@@ -1069,10 +1066,8 @@ class _LLMPhaseMixin:
         - Invalid passage/codeword IDs from LLM output silently skipped.
         - Empty candidates → completed with no LLM call.
         """
-        from questfoundry.graph.grow_algorithms import (
-            create_residue_passages,
-            find_residue_candidates,
-        )
+        from questfoundry.graph.grow_algorithms import find_residue_candidates
+        from questfoundry.graph.grow_routing import store_residue_proposals
         from questfoundry.models.grow import Phase8dOutput
 
         candidates = find_residue_candidates(graph)
@@ -1155,7 +1150,7 @@ class _LLMPhaseMixin:
                 tokens_used=tokens,
             )
 
-        # Convert Pydantic proposals to dicts for create_residue_passages
+        # Convert Pydantic proposals to dicts for storage
         proposal_dicts = [
             {
                 "passage_id": p.passage_id,
@@ -1165,16 +1160,14 @@ class _LLMPhaseMixin:
             for p in result.proposals
         ]
 
-        creation = create_residue_passages(graph, proposal_dicts)
+        # Store proposals for later processing by compute_routing_plan (Phase 21)
+        # Advisory only — no graph mutations here
+        store_residue_proposals(graph, proposal_dicts)
 
         return GrowPhaseResult(
             phase="residue_beats",
             status="completed",
-            detail=(
-                f"Created {creation.variants_created} residue variants "
-                f"from {creation.proposals_applied} proposals "
-                f"({creation.proposals_skipped} skipped)"
-            ),
+            detail=f"Stored {len(proposal_dicts)} residue proposals for unified routing",
             llm_calls=llm_calls,
             tokens_used=tokens,
         )
