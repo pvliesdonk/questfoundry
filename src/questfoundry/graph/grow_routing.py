@@ -883,6 +883,8 @@ def apply_routing_plan(graph: Graph, plan: RoutingPlan) -> ApplyRoutingResult:
     residue_applied = 0
     total_variants = 0
     skipped = 0
+    applied_ending_passages: list[str] = []
+    applied_residue_passages: list[str] = []
 
     for op in plan.operations:
         # Step 1: Check if base passage has incoming choice edges before creating nodes.
@@ -911,10 +913,13 @@ def apply_routing_plan(graph: Graph, plan: RoutingPlan) -> ApplyRoutingResult:
             total_variants += len(op.variants)
             if op.kind == "ending_split":
                 ending_applied += 1
+                applied_ending_passages.append(op.base_passage_id)
             elif op.kind == "heavy_residue":
                 heavy_applied += 1
+                applied_residue_passages.append(op.base_passage_id)
             else:
                 residue_applied += 1
+                applied_residue_passages.append(op.base_passage_id)
             log.debug(
                 "apply_routing_op_done",
                 kind=op.kind,
@@ -947,10 +952,13 @@ def apply_routing_plan(graph: Graph, plan: RoutingPlan) -> ApplyRoutingResult:
         total_variants += len(op.variants)
         if op.kind == "ending_split":
             ending_applied += 1
+            applied_ending_passages.append(op.base_passage_id)
         elif op.kind == "heavy_residue":
             heavy_applied += 1
+            applied_residue_passages.append(op.base_passage_id)
         else:
             residue_applied += 1
+            applied_residue_passages.append(op.base_passage_id)
 
         log.debug(
             "apply_routing_op_done",
@@ -960,8 +968,9 @@ def apply_routing_plan(graph: Graph, plan: RoutingPlan) -> ApplyRoutingResult:
         )
 
     # Store compact plan metadata for downstream validation (S4)
-    ending_passages = [op.base_passage_id for op in plan.ending_splits]
-    residue_passages = [op.base_passage_id for op in plan.heavy_residue_ops + plan.residue_ops]
+    # Track only passages where operations were actually applied (not skipped).
+    ending_passages = applied_ending_passages
+    residue_passages = applied_residue_passages
     if graph.get_node(ROUTING_APPLIED_NODE_ID) is not None:
         graph.delete_node(ROUTING_APPLIED_NODE_ID)
     graph.create_node(

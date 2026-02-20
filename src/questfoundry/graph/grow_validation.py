@@ -1436,12 +1436,16 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
     # Primary source: the routing_applied metadata node written by
     # apply_routing_plan (S3).  Fall back to scanning residue_for on
     # variant passages for graphs that pre-date S3.
-    from questfoundry.graph.grow_routing import get_routing_applied_metadata
+    from questfoundry.graph.grow_routing import (
+        ROUTING_APPLIED_NODE_ID,
+        get_routing_applied_metadata,
+    )
 
+    routing_node = graph.get_node(ROUTING_APPLIED_NODE_ID)
     ending_split_pids, residue_pids = get_routing_applied_metadata(graph)
     routed_passages: set[str] = ending_split_pids | residue_pids
 
-    if not routed_passages:
+    if routing_node is None:
         # Legacy / pre-S3 fallback: scan residue_for on variant passages
         for _pid, _pdata in passage_nodes.items():
             residue_for = _pdata.get("residue_for")

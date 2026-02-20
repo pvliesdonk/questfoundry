@@ -2534,13 +2534,14 @@ class TestRoutingCoverageWithPlanMetadata:
         assert meta is not None
         # After apply, ending_split_passages should be populated if splits occurred
         ending_pids = meta.get("ending_split_passages", [])
-        # The graph has a shared terminal → at least one ending split expected
-        # (if the graph produced ending splits)
-        if ending_pids:
-            checks = check_routing_coverage(g)
-            # Ending splits are exhaustive: they should not have CE gaps
-            ce_fails = [c for c in checks if c.name == "routing_coverage_ce"]
-            assert not ce_fails, f"Unexpected CE failures: {ce_fails}"
+        assert ending_pids, (
+            "Expected ending_split_passages to be non-empty after apply_routing_plan "
+            "on a shared-terminal graph"
+        )
+        checks = check_routing_coverage(g)
+        # Ending splits are exhaustive: they should not have CE gaps
+        ce_fails = [c for c in checks if c.name == "routing_coverage_ce"]
+        assert not ce_fails, f"Unexpected CE failures: {ce_fails}"
 
     def test_residue_passages_allow_fallback(self):
         """Residue routing passages get lenient CE (fallback exempted)."""
