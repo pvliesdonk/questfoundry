@@ -78,43 +78,13 @@ DRESS stage (art direction, illustrations, codex) is specified in Slice 5. See `
 
 ## Development Guidelines
 
-### Code Quality
-
-- **No TODO stubs** in committed code - implement fully or not at all
-- **Type hints everywhere** - use strict mypy settings
-- **Docstrings** for public APIs
-- **Tests first** where practical
-- Keep functions focused and small
-
-### Parametric Knowledge is Stale — Use Documentation Tools
-
-**Your training data has a cutoff. Library APIs, framework patterns, and best practices
-change faster than your weights update. You MUST verify before assuming.**
-
-**Rules:**
-- NEVER rely on parametric knowledge for library APIs, configuration syntax,
-  or framework patterns — always check current documentation first
-- Use the `context7` MCP server (`resolve-library-id` → `query-docs`) to fetch
-  up-to-date documentation for any library before writing code that uses it
-- Use `WebSearch` / `WebFetch` when context7 doesn't cover the library
-- When debugging an issue that might be version-related, check the docs before
-  guessing at the fix
-- If you catch yourself writing "I believe the API is..." — STOP and look it up
-
-**Common violations:**
-- Assuming a LangChain API still works the same as 6 months ago (it doesn't)
-- Using deprecated pydantic v1 patterns when v2 is in use
-- Guessing at CLI flags for tools like `ruff`, `uv`, or `gh`
-- Writing provider integration code from memory instead of checking current docs
-
 ### Tooling-First Workflow
 
 - **Use tools as the source of truth** — avoid repo-wide reasoning or "global refactors"
 - **Locate via rg, resolve via LSP** — use `rg` to find candidates, then `pylsp` definition/references to confirm symbol meaning
 - **Renames must be semantic** — use `pylsp`/Rope rename for symbol renames; fall back to `rg` + manual edits only when LSP cannot handle the case, and explain why
-- **Minimal diffs only** — touch only files needed for the task; avoid drive-by formatting or cleanup
 - **Single formatting authority** — do not use pylsp formatters (autopep8/YAPF); use `ruff check --fix` and `ruff format` on changed files
-- **Validate with targeted checks** — prefer `uv run ruff`, `uv run mypy`, and targeted `uv run pytest` (per Testing Rules); use `pre-commit run --files ...` for touched files, and run `pre-commit run -a` only when requested or when it will not trigger a full suite
+- **Validate with targeted checks** — prefer `uv run ruff`, `uv run mypy`, and targeted `uv run pytest`; use `pre-commit run --files ...` for touched files
 
 ### Debugging Policy
 
@@ -227,320 +197,17 @@ Notice patterns as you write, not when a reviewer points them out. If you copy-p
 
 Don't just run tests—actually read the generated/output files. Tests verify behavior you thought of; inspection catches behavior you didn't.
 
-```bash
-# After running a generator, read what it produced
-cat src/questfoundry/artifacts/generated.py
-
-# After a complex operation, verify the result manually
-git diff --stat
-```
-
 #### 6. Think Like a Reviewer
 
-Before pushing, ask:
-- "What would a careful reviewer find wrong with this?"
-- "What questions would they ask?"
-- "What edge cases would they test?"
+Before pushing, ask: "What would a careful reviewer find wrong with this?" If you can anticipate the feedback, fix it before pushing.
 
-If you can anticipate the feedback, fix it before pushing.
+### Project Git Rules
 
-### Git Workflow
+Beyond the global GitHub workflow rules, these are project-specific:
 
-- **Always fetch main before creating a branch** - run `git fetch origin main` before `git checkout -b feat/...` to avoid merge conflicts from stale base
-- **Branch per feature/issue** - create from `origin/main` (not local main)
-- **Document in issues and PRs** - link to related issues
-- **Close issues from PRs** - use `Closes #123` (or `Fixes #123`) in PR descriptions so GitHub auto-closes the issue on merge. Merely referencing `#123` does NOT close it.
-
-### Pull Request Size Limits
-
-**Treat reviewer cognitive load as a primary constraint.**
-
-- **Target**: 150–400 net lines changed per PR
-- **Hard limit**: Do not exceed 800 net lines or ~20 files without explicit instruction
-- **If you exceed the target**: STOP and split into multiple PRs
-
-When a PR grows too large, proactively offer to split it before continuing.
-
-### PR Splitting Strategy
-
-When splitting is needed, use this order (each PR should be mergeable independently):
-
-1. **Mechanical-only PR** - Renames, file moves, formatting, dependency bumps. NO behavior changes.
-2. **Contract/protocol PR** - Interfaces, types, schemas, tool definitions, minimal scaffolding. Include contract tests.
-3. **Runner/plumbing PR** - Wiring and orchestration. Include integration tests.
-4. **Feature/stage PR(s)** - Actual feature implementation in slices. Each PR = one coherent capability.
-5. **Cleanup PR** - Remove dead code, tighten types, refactor, docs. Keep separate.
-
-### Stacked PRs (Vanilla Git)
-
-When a feature is too large for a single PR, split it into a stack of dependent PRs. Each PR is a separate branch with multiple atomic commits, reviewed independently, and merged bottom-up.
-
-**Why vanilla Git instead of stacking tools (stack-pr, git-branchless):**
-- Preserves atomic commits (multiple commits per PR, not one fat commit)
-- No external tool dependencies or version breakage
-- CI triggers work reliably (no force-push hash mismatches)
-- Full control over merge strategy
-
-#### Creating a Stack
-
-```bash
-# PR 1: Models
-git fetch origin main
-git checkout -b feat/dress-models origin/main
-git add -p && git commit -m "feat(models): add ArtDirection schema"
-git add -p && git commit -m "feat(models): add IllustrationBrief schema"
-git add -p && git commit -m "test(models): add DRESS model validation tests"
-git push -u origin feat/dress-models
-gh pr create --base main --title "feat(models): add DRESS stage Pydantic models"
-
-# PR 2: Mutations (depends on PR 1)
-git checkout -b feat/dress-mutations feat/dress-models
-git add -p && git commit -m "feat(graph): add dress mutation helpers"
-git add -p && git commit -m "feat(graph): add dress validation functions"
-git add -p && git commit -m "test(graph): add dress mutation tests"
-git push -u origin feat/dress-mutations
-gh pr create --base feat/dress-models --title "feat(graph): add DRESS mutations"
-
-# PR 3: Stage implementation (depends on PR 2)
-git checkout -b feat/dress-stage feat/dress-mutations
-# ... commits ...
-git push -u origin feat/dress-stage
-gh pr create --base feat/dress-mutations --title "feat(dress): implement DRESS stage"
-```
-
-**Stack visualization:**
-```
-main
-  └─ feat/dress-models     (PR1 → main)        3 commits
-      └─ feat/dress-mutations (PR2 → PR1)       3 commits
-          └─ feat/dress-stage   (PR3 → PR2)      5 commits
-```
-
-#### Addressing Review Comments
-
-Add new commits — never amend or rebase branches with open PRs:
-
-```bash
-# Fix something in PR 2
-git checkout feat/dress-mutations
-git add -p && git commit -m "fix: address review - add input validation"
-git push origin feat/dress-mutations
-
-# Propagate to dependent branches via merge
-git checkout feat/dress-stage
-git merge feat/dress-mutations
-git push origin feat/dress-stage
-```
-
-**Rules:**
-- Always `git push` (never `--force` or `--force-with-lease`) on branches with open PRs
-- Never `git commit --amend` or `git rebase` on branches with open PRs
-- Update dependent branches one at a time, push before moving to the next
-
-#### Merging the Stack (Bottom-Up)
-
-**CRITICAL: Retarget dependent PRs BEFORE merging.** If you merge with `--delete-branch` first, GitHub closes dependent PRs and they cannot be reopened. Always retarget, then merge.
-
-```bash
-# 1. Retarget PR 2 to main BEFORE merging PR 1
-gh pr edit <PR2> --base main
-
-# 2. Now merge the bottom PR (safe — PR 2 already points to main)
-gh pr merge <PR1> --squash --delete-branch
-
-# 3. Rebase PR 2 onto updated main to remove duplicate commits
-git checkout feat/dress-mutations
-git fetch origin main
-git rebase origin/main
-git push --force-with-lease origin feat/dress-mutations
-# Wait for CI to pass
-
-# 4. For the next layer, retarget FIRST again
-gh pr edit <PR3> --base main
-
-# 5. Merge PR 2
-gh pr merge <PR2> --squash --delete-branch
-
-# 6. Rebase PR 3 onto updated main
-git checkout feat/dress-stage
-git fetch origin main
-git rebase origin/main
-git push --force-with-lease origin feat/dress-stage
-gh pr merge <PR3> --squash --delete-branch
-```
-
-**Pattern: always `gh pr edit --base main` on the NEXT PR before `gh pr merge` on the CURRENT PR.** This prevents the dependent PR from being auto-closed when the base branch is deleted.
-
-**Note:** `--force-with-lease` is safe here because the parent PR was just squash-merged into main — rebasing removes the now-duplicate commits. This is the ONE case where force-push is acceptable.
-
-#### CI Not Triggering
-
-If CI doesn't trigger after a push or rebase, close and reopen the PR:
-
-```bash
-gh pr close <number> && gh pr reopen <number>
-```
-
-The `workflow_dispatch` trigger on the CI workflow also allows manual runs:
-```bash
-gh workflow run CI --ref <branch-name>
-```
-
-### Pull Request Requirements
-
-PRs must meet ALL of these criteria before merging:
-
-1. **CI must be completely green** - all checks pass, no warnings treated as errors
-2. **PR must be reviewed** - address all review comments before merging (approval not required unless branch protection requires it)
-3. **Review feedback must be addressed** - all comments resolved or responded to
-4. **Branch must be up to date** - rebase on main if needed
-
-Never force-merge a PR with failing CI or unresolved reviews.
-
-### PR Description Template
-
-Every PR description MUST include:
-
-```markdown
-## Problem
-1–3 sentences describing why this change is needed.
-
-## Changes
-- Bullet list of what changed
-
-## Not Included / Future PRs
-- What is explicitly out of scope
-- Link to follow-up issues if created
-
-## Test Plan
-- Commands run and results
-- Coverage of new code
-
-## Risk / Rollback
-- Compatibility notes
-- Feature flags if applicable
-```
-
-For PRs > 300 lines, add a **Review Guide** section with suggested file/commit order.
-
-### Review Handling
-
-**Take ALL review comments seriously. No exceptions. No excuses.**
-
-- Address **every** comment before requesting re-review
-- If you disagree, explain your reasoning **as a reply on the comment** — don't silently ignore
-- When a reviewer finds issues, fix them in the same PR before merging
-- **NEVER dismiss a concern** with "this is pre-existing", "this was not my fault", "this is not critical", or "out of scope for this PR". If the concern is valid, fix it. If it's genuinely invalid, reply explaining why. If it's valid but you don't want to fix it now, create an issue and link it.
-
-**Respect reviewer merge advice:**
-
-| Reviewer Says | What It Means | What You Do |
-|---------------|---------------|-------------|
-| **LGTM** / **Approve** | Ready to merge | Merge when CI is green |
-| **Approve with minor fixes** | Small changes needed, no re-review | Fix the items, reply to comments, push, merge when CI green |
-| **Changes requested** | Substantive issues found | Fix all items, push, re-review optional unless branch protection requires approval |
-| **Comments only** (no verdict) | Reviewer raised concerns | Address all comments, then request re-review if needed |
-
-**NEVER merge a PR with "changes requested" status** without getting re-approval after addressing the feedback.
-
-### Commit Discipline
-
-- **Conventional commits**: `feat:`, `fix:`, `docs:`, `refactor:`, `test:`, `chore:`
-- **Commit message format**: `type(scope): description`
-- **Small, atomic commits** - one logical change per commit
-- Never mix formatting/refactoring with behavior changes
-- If running a formatter, isolate it in its own commit (or separate PR for large reformats)
-
-### Pre-Push Self-Review
-
-**Before every push, do a code review of your own changes.**
-
-After rebasing, resolving conflicts, or completing a feature:
-
-1. **Run `git diff origin/main`** - review ALL changes that will be in the PR
-2. **Read each changed file** - don't just skim, actually read the code
-3. **Check for regressions** - especially after conflict resolution, verify you didn't break something that was working
-4. **Verify types and contracts** - TypedDicts, Protocols, return types should be semantically correct
-5. **Run targeted validation** - type check and lint; run specific unit tests for changed modules:
-   ```bash
-   uv run mypy src/ && uv run ruff check src/
-   uv run pytest tests/unit/test_<changed_module>.py -x -q  # Only if relevant tests exist
-   ```
-   Do NOT run the full test suite - that's CI's job.
-
-**Common mistakes to catch:**
-- Conflict resolution taking wrong version (e.g., breaking a TypedDict by making required fields optional)
-- Forgetting to handle `None` cases (use `or []` not `get(..., [])` when value might be explicitly `None`)
-- Redundant code left from earlier iterations
-- Import statements that are no longer needed
-
-**Don't blindly trust "main is correct"** - conflicts happen because code diverged, and either side might have the bug.
-
-### Stop-and-Split Protocol
-
-If estimated diff will exceed the target size:
-
-1. **Stop** - Do not proceed with a single large PR
-2. **Plan** - Write a slicing plan listing PR #1, #2, #3… with goals and file lists
-3. **Implement as stacked branches** - One branch per PR, each branching from its parent
-4. **Submit incrementally** - Create PRs with correct base branches (see "Stacked PRs" above)
-
-```bash
-# Example: splitting a large refactor into 3 PRs
-git fetch origin main
-
-# PR 1: Rename terminology in models
-git checkout -b refactor/rename-models origin/main
-git add -p && git commit -m "refactor(models): rename dilemma to choice"
-git add -p && git commit -m "refactor(models): update TypedDict fields"
-git push -u origin refactor/rename-models
-gh pr create --base main --title "refactor(models): rename dilemma terminology"
-
-# PR 2: Update graph layer (depends on PR 1)
-git checkout -b refactor/rename-graph refactor/rename-models
-git add -p && git commit -m "refactor(graph): update mutations for new names"
-git push -u origin refactor/rename-graph
-gh pr create --base refactor/rename-models --title "refactor(graph): update mutations"
-
-# PR 3: Update tests (depends on PR 2)
-git checkout -b refactor/rename-tests refactor/rename-graph
-git add -p && git commit -m "test: update tests for terminology rename"
-git push -u origin refactor/rename-tests
-gh pr create --base refactor/rename-graph --title "test: update terminology tests"
-```
-
-Merge bottom-up: PR 1, retarget PR 2 to main, merge PR 2, etc.
-
-### No Scope Creep
-
-- If you discover additional work during implementation, do NOT include it
-- Only include changes necessary for the PR's stated goal
-- **Never leave review suggestions dangling** - if a reviewer suggests follow-up work ("you could also...", "consider adding..."), create a GitHub issue immediately and link it in your response
-
-### Deferred Work MUST Have Issues
-
-**NEVER silently skip, postpone, or defer work without creating a GitHub issue.**
-
-This applies to:
-- Work identified during implementation that is out of scope for the current PR
-- Review comments suggesting improvements you choose not to fix now
-- Known limitations, TODOs, or follow-up tasks mentioned in PR descriptions
-- Findings from code review sweeps or audits
-
-Every "Not Included / Future PRs" item in a PR description MUST have a corresponding GitHub issue linked. If you write "this will be addressed later" anywhere, there must be an issue tracking it.
-
-**Common violations to avoid:**
-- Mentioning deferred work in a PR description without creating issues
-- Deciding something is "not critical" and silently dropping it
-- Noting a finding during a sweep but not tracking it
-- Promising follow-up in a review reply but never creating the issue
-
-### Documentation
-
-- **Keep architecture docs up to date** in `docs/architecture/`
-- **Design docs** in `docs/design/` are guidelines (can be questioned); **CLAUDE.md is rules** (must be followed)
-- **Document decisions** in issues/PRs with rationale
-- **Update README.md** when adding features
+- Use `Closes #123` (or `Fixes #123`) in PR descriptions — bare `#123` references do NOT auto-close issues on merge.
+- Every "Not Included / Future PRs" item in a PR description MUST link to a GitHub issue. No silent deferrals.
+- **Always fetch main before creating a branch**: `git fetch origin main` before `git checkout -b feat/...`
 
 ### File Organization
 
@@ -673,15 +340,12 @@ The test suite includes integration tests that make real LLM API calls. These ar
 
 #### Quick Validation (Default)
 
-When you need to verify changes work, use this minimal check:
 ```bash
 uv run mypy src/questfoundry/  # Type check (fast, no LLM)
 uv run ruff check src/         # Lint (fast, no LLM)
 # Only if needed:
 uv run pytest tests/unit/test_<specific>.py -x -q
 ```
-
-Let CI run the full suite. Your job is targeted verification.
 
 ## Configuration
 

@@ -7,18 +7,16 @@ model: opus
 
 You are a senior LLM architect specializing in building production LLM applications. You are working on QuestFoundry's LLM integration layer.
 
-## Project Context
+> For general LangChain patterns, dual-model strategy, and LiteLLM, the user-level
+> `llm-engineer` agent has comprehensive guidance. This agent adds QuestFoundry-specific
+> codebase context on top of that.
 
-QuestFoundry is a pipeline-driven system where LLMs are "collaborators under constraint, not autonomous agents."
+## QuestFoundry LLM Architecture
 
-### Core Principles
+**Core principle**: LLMs are "collaborators under constraint, not autonomous agents."
+Each stage starts fresh, produces a validated artifact, and cannot modify earlier stages.
 
-1. **No persistent agent state** - Each stage starts fresh
-2. **One LLM call per stage** (direct mode) or bounded conversation (interactive)
-3. **Human gates between stages** - Review and approval
-4. **Prompts as visible artifacts** - All in `/prompts/`
-
-## LLM Provider Architecture
+### Provider File Structure
 
 ```
 src/questfoundry/providers/
@@ -28,44 +26,27 @@ src/questfoundry/providers/
 └── logging_wrapper.py   # LoggingProvider for debugging
 ```
 
-### Supported Providers
+Supported providers: **Ollama** (`OLLAMA_HOST`), **OpenAI** (`OPENAI_API_KEY`), **Anthropic** (`ANTHROPIC_API_KEY`).
+All use LangChain under the hood (LangSmith tracing, tool binding, standardized messages).
 
-- **Ollama** (local): Requires `OLLAMA_HOST`
-- **OpenAI**: Requires `OPENAI_API_KEY`
-- **Anthropic**: Requires `ANTHROPIC_API_KEY`
+### Structured Output Strategy
 
-All use LangChain under the hood for:
-- Automatic LangSmith tracing (when configured)
-- Tool binding support
-- Standardized message format
-
-## Tool Calling Pattern
-
-QuestFoundry uses finalization tools for structured output:
-
+All providers use `method="json_schema"` (JSON_MODE):
 ```python
-# Tool definition
-class SubmitDreamTool(Tool):
-    @property
-    def definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name="submit_dream",
-            description="Submit the creative vision",
-            parameters={...}  # JSON Schema
-        )
-
-    def execute(self, arguments: dict) -> str:
-        return "Dream artifact submitted successfully."
+structured_model = model.with_structured_output(schema=MyOutput, method="json_schema")
 ```
+`method="function_calling"` was tried but returns None for complex schemas on Ollama. See CLAUDE.md.
 
-### Tool Choice
+### Tool Response Format
 
-- `tool_choice="auto"` - LLM decides when to call tools
-- `tool_choice="submit_dream"` - Force specific tool (for validation retry)
+All tool results return structured JSON (per ADR-008). Three shapes:
+- `{"result": "success", "data": {...}, "action": "..."}`
+- `{"result": "no_results", "query": "...", "action": "..."}`
+- `{"result": "error", "error": "...", "action": "..."}`
 
-## ConversationRunner
+This prevents infinite loops where the LLM follows "try again" instructions.
 
-Multi-turn conversation with tool support:
+### ConversationRunner API
 
 ```python
 runner = ConversationRunner(
@@ -82,16 +63,11 @@ artifact, state = await runner.run(
 )
 ```
 
-## Key Considerations
-
-1. **Context window management** - Keep prompts focused
-2. **Token optimization** - Minimize while maintaining quality
-3. **Error handling** - Graceful degradation on provider errors
-4. **Observability** - LangSmith tracing, JSONL logging
-5. **Safety** - Input validation, output filtering
+The runner handles tool execution, validation/repair loops, and token logging.
 
 ## Integration Points
 
-- `pipeline/orchestrator.py` - Creates providers per stage
-- `pipeline/stages/*.py` - Uses providers for generation
-- `conversation/runner.py` - Multi-turn conversation loop
+- `pipeline/orchestrator.py` — Creates providers per stage
+- `pipeline/stages/*.py` — Uses providers for generation
+- `conversation/runner.py` — Multi-turn conversation loop
+- `providers/structured_output.py` — `with_structured_output()` wrapper
