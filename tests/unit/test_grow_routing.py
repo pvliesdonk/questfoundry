@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 
 from questfoundry.graph.graph import Graph
@@ -196,8 +198,6 @@ def _make_routing_graph(
 
     # --- Arcs ---
     # For 1 dilemma: 2 arcs (a, b). For 2: 4 arcs (aa, ab, ba, bb).
-    import itertools
-
     path_labels = [("a", "b")] * n_dilemmas
     combos = list(itertools.product(*path_labels))
 
@@ -451,7 +451,7 @@ class TestComputeRoutingPlan:
                 "type": "arc",
                 "raw_id": "only",
                 "passage_ids": ["passage::start", "passage::end"],
-                "path_ids": [],
+                "paths": [],
             },
         )
 

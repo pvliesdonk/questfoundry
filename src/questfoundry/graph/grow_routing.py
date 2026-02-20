@@ -12,14 +12,15 @@ See: Discussion #948, Epic #950.
 
 from __future__ import annotations
 
-import logging
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
+
+from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
-log = logging.getLogger(__name__)
+log = get_logger(__name__)
 
 # ---------------------------------------------------------------------------
 # Data structures
@@ -230,12 +231,6 @@ class RoutingPlan:
 
         Priority: ending_split > heavy_residue > residue.
         """
-        _PRIORITY: dict[RoutingKind, int] = {
-            "ending_split": 0,
-            "heavy_residue": 1,
-            "residue": 2,
-        }
-
         existing_indices = [
             i
             for i, existing in enumerate(self.operations)
@@ -248,15 +243,15 @@ class RoutingPlan:
             return
 
         # Check if we should replace or skip
-        new_priority = _PRIORITY[op.kind]
+        new_priority = _ROUTING_PRIORITY[op.kind]
         for idx in existing_indices:
-            existing_priority = _PRIORITY[self.operations[idx].kind]
+            existing_priority = _ROUTING_PRIORITY[self.operations[idx].kind]
             if existing_priority <= new_priority:
                 # Existing op has equal or higher priority — skip new op
                 self.conflicts.append(
                     RoutingConflict(
                         base_passage_id=op.base_passage_id,
-                        operations=(idx, len(self.operations)),
+                        operations=(idx,),
                         resolution=(
                             f"Kept {self.operations[idx].kind} (priority "
                             f"{existing_priority}), dropped {op.kind} "
@@ -265,10 +260,10 @@ class RoutingPlan:
                     )
                 )
                 log.info(
-                    "routing_conflict_resolved base=%s kept=%s dropped=%s",
-                    op.base_passage_id,
-                    self.operations[idx].kind,
-                    op.kind,
+                    "routing_conflict_resolved",
+                    base=op.base_passage_id,
+                    kept=self.operations[idx].kind,
+                    dropped=op.kind,
                 )
                 return
 
@@ -278,15 +273,24 @@ class RoutingPlan:
             self.conflicts.append(
                 RoutingConflict(
                     base_passage_id=op.base_passage_id,
-                    operations=(idx, len(self.operations)),
+                    operations=(idx,),
                     resolution=(
                         f"Replaced {removed.kind} (priority "
-                        f"{_PRIORITY[removed.kind]}) with {op.kind} "
+                        f"{_ROUTING_PRIORITY[removed.kind]}) with {op.kind} "
                         f"(priority {new_priority})"
                     ),
                 )
             )
         self.operations.append(op)
+
+
+# Priority ordering for routing operation conflict resolution.
+# Lower numbers = higher priority (ending_split wins over residue).
+_ROUTING_PRIORITY: dict[RoutingKind, int] = {
+    "ending_split": 0,
+    "heavy_residue": 1,
+    "residue": 2,
+}
 
 
 # ---------------------------------------------------------------------------
@@ -385,9 +389,9 @@ def _compute_ending_splits(
             )
         )
         log.debug(
-            "ending_split_planned terminal=%s families=%d",
-            terminal_id,
-            len(variants),
+            "ending_split_planned",
+            terminal=terminal_id,
+            families=len(variants),
         )
 
     return operations
@@ -439,7 +443,6 @@ def _compute_heavy_residue(
         cons_to_path[edge["to"]] = edge["from"]
 
     path_to_codeword: dict[str, str] = {}
-    codeword_nodes = graph.get_nodes_by_type("codeword")
     for cw_id, cw_data in codeword_nodes.items():
         tracked_cons = cw_data.get("tracks")
         if tracked_cons and tracked_cons in cons_to_path:
@@ -497,10 +500,10 @@ def _compute_heavy_residue(
             same_passage_different_dilemma = [d for p, d in seen if p == pid and d != did]
             if same_passage_different_dilemma:
                 log.debug(
-                    "multi_dilemma_routing_target passage=%s dilemma=%s others=%s",
-                    pid,
-                    did,
-                    same_passage_different_dilemma,
+                    "multi_dilemma_routing_target",
+                    passage=pid,
+                    dilemma=did,
+                    others=same_passage_different_dilemma,
                 )
 
             # Create variant specs
@@ -537,10 +540,10 @@ def _compute_heavy_residue(
                 )
             )
             log.debug(
-                "heavy_residue_planned passage=%s dilemma=%s variants=%d",
-                pid,
-                did,
-                len(variants),
+                "heavy_residue_planned",
+                passage=pid,
+                dilemma=did,
+                variants=len(variants),
             )
 
     return operations
@@ -606,12 +609,12 @@ def compute_routing_plan(
             plan.add_operation(op)
 
     log.info(
-        "routing_plan_computed endings=%d heavy=%d residue=%d total_variants=%d conflicts=%d",
-        len(plan.ending_splits),
-        len(plan.heavy_residue_ops),
-        len(plan.residue_ops),
-        plan.total_variants,
-        len(plan.conflicts),
+        "routing_plan_computed",
+        endings=len(plan.ending_splits),
+        heavy=len(plan.heavy_residue_ops),
+        residue=len(plan.residue_ops),
+        total_variants=plan.total_variants,
+        conflicts=len(plan.conflicts),
     )
 
     return plan
@@ -646,6 +649,7 @@ def _compute_llm_residue(
     proposals that target already-routed passages.
     """
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    codeword_nodes = graph.get_nodes_by_type("codeword")
     operations: list[RoutingOperation] = []
 
     for proposal in proposals:
@@ -655,7 +659,7 @@ def _compute_llm_residue(
 
         # Validate passage exists
         if passage_id not in passage_nodes:
-            log.warning("residue_proposal_invalid_passage: %s", passage_id)
+            log.warning("residue_proposal_invalid_passage", passage_id=passage_id)
             continue
 
         # Skip already-affected (passage, dilemma) pairs
@@ -664,8 +668,8 @@ def _compute_llm_residue(
             passage_id == pair[0] and pair[1] is None for pair in already_affected
         ):
             log.debug(
-                "residue_proposal_skipped_already_routed passage=%s",
-                passage_id,
+                "residue_proposal_skipped_already_routed",
+                passage_id=passage_id,
             )
             continue
 
@@ -677,6 +681,10 @@ def _compute_llm_residue(
         for vdef in variant_defs:
             cw_id = vdef.get("codeword_id", "")
             hint = vdef.get("hint", "")
+
+            if not cw_id or cw_id not in codeword_nodes:
+                log.warning("residue_proposal_invalid_codeword", cw_id=cw_id, passage_id=passage_id)
+                continue
 
             cw_suffix = cw_id.removeprefix("codeword::").split("::")[-1].removesuffix("_committed")
             variant_id = f"passage::{raw_id}__via_{cw_suffix}"
@@ -697,9 +705,9 @@ def _compute_llm_residue(
 
         if len(variants) < 2:
             log.warning(
-                "residue_proposal_too_few_variants passage=%s count=%d",
-                passage_id,
-                len(variants),
+                "residue_proposal_too_few_variants",
+                passage_id=passage_id,
+                count=len(variants),
             )
             continue
 
@@ -714,10 +722,10 @@ def _compute_llm_residue(
             )
         )
         log.debug(
-            "residue_planned passage=%s dilemma=%s variants=%d",
-            passage_id,
-            dilemma_id,
-            len(variants),
+            "residue_planned",
+            passage_id=passage_id,
+            dilemma_id=dilemma_id,
+            variants=len(variants),
         )
 
     return operations
