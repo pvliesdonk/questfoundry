@@ -1248,14 +1248,17 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
     - CE: every arc reaching the source has at least one satisfiable route
     - ME: at most one routing choice is satisfiable per arc (excluding fallback)
 
-    Uses arc codeword signatures from ``build_arc_codewords()`` to evaluate
-    route satisfiability deterministically.
+    Uses arc codeword signatures from ``build_arc_codewords()`` with scope
+    matched to how each routing set was produced:
+    - ``ending_split`` passages use ``scope="ending"`` — strict CE required
+    - All other passages use ``scope="routing"`` — fallback-lenient CE
 
     Returns:
         List of ValidationCheck results (one per routing set with issues,
         or a single pass check if all sets are valid).
     """
     from questfoundry.graph.grow_algorithms import build_arc_codewords
+    from questfoundry.graph.grow_routing import get_routing_applied_metadata
 
     choices = graph.get_nodes_by_type("choice")
     arc_nodes = graph.get_nodes_by_type("arc")
@@ -1269,7 +1272,10 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
             )
         ]
 
-    arc_codewords = build_arc_codewords(graph, arc_nodes, scope="routing")
+    # Build both codeword scopes; select per-passage based on routing metadata
+    ending_split_passages, _residue_passages = get_routing_applied_metadata(graph)
+    arc_codewords_ending = build_arc_codewords(graph, arc_nodes, scope="ending")
+    arc_codewords_routing = build_arc_codewords(graph, arc_nodes, scope="routing")
 
     # Group routing choices by source passage; also detect fallback choices
     routing_sets: dict[str, list[dict[str, object]]] = {}
@@ -1317,10 +1323,16 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
             reqs = rc.get("requires_codewords", [])
             route_requires.append(set(reqs) if isinstance(reqs, list) else set())
 
+        # Select codeword scope: ending splits use "ending" scope (exhaustive),
+        # residue routing uses "routing" scope (best-effort, fallback OK).
+        is_ending_split = source_pid in ending_split_passages
+        arc_codewords = arc_codewords_ending if is_ending_split else arc_codewords_routing
+
         # CE check: for each covering arc, at least one route is satisfiable.
-        # If a fallback choice exists, arcs that match no specific route are
-        # covered by the fallback (the original unmodified choice).
-        source_has_fallback = source_pid in has_fallback
+        # Ending splits must be strictly exhaustive — no fallback exemption.
+        # Residue routing allows fallback (arcs not matching any variant use
+        # the original unmodified choice).
+        source_has_fallback = (not is_ending_split) and (source_pid in has_fallback)
         ce_gaps: list[str] = []
         for arc_id in covering_arcs:
             arc_cws = arc_codewords.get(arc_id, frozenset())
@@ -1421,19 +1433,24 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
                 arc_dilemmas.setdefault(arc_id, set()).add(dilemma_id)
 
     # Build set of passages that have variant routing applied.
-    # A passage is "routed" if variant passages exist that reference it
-    # via ``residue_for`` (heavy-residue variants) or if it has
-    # ``family_codewords`` (ending family variants).  We do NOT use
-    # ``from_passage`` on routing choices — that points to the upstream
-    # *source* passage, not the base passage that was split.
-    routed_passages: set[str] = set()
-    for _pid, _pdata in passage_nodes.items():
-        # Both heavy-residue variants and ending-family variants set
-        # ``residue_for`` pointing to the base passage they were split
-        # from.  Collecting these is sufficient — no sibling scan needed.
-        residue_for = _pdata.get("residue_for")
-        if residue_for:
-            routed_passages.add(str(residue_for))
+    # Primary source: the routing_applied metadata node written by
+    # apply_routing_plan (S3).  Fall back to scanning residue_for on
+    # variant passages for graphs that pre-date S3.
+    from questfoundry.graph.grow_routing import (
+        ROUTING_APPLIED_NODE_ID,
+        get_routing_applied_metadata,
+    )
+
+    routing_node = graph.get_node(ROUTING_APPLIED_NODE_ID)
+    ending_split_pids, residue_pids = get_routing_applied_metadata(graph)
+    routed_passages: set[str] = ending_split_pids | residue_pids
+
+    if routing_node is None:
+        # Legacy / pre-S3 fallback: scan residue_for on variant passages
+        for _pid, _pdata in passage_nodes.items():
+            residue_for = _pdata.get("residue_for")
+            if residue_for:
+                routed_passages.add(str(residue_for))
 
     checks: list[ValidationCheck] = []
 
