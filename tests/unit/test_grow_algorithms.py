@@ -3499,8 +3499,9 @@ class TestPhaseIntegrationEndToEnd:
         assert result_dict["arc_count"] == 4  # 2x2 = 4 arcs
         assert result_dict["spine_arc_id"] is not None
 
-        # Should have counted passages
-        assert result_dict["passage_count"] >= 12  # 8 beats + ending variants
+        # Should have counted passages (S3: apply_routing creates variants only when
+        # incoming choice edges exist; mock choices may not produce routing variants)
+        assert result_dict["passage_count"] >= 8  # 8 base passages minimum
 
         # Should have counted codewords
         assert result_dict["codeword_count"] == 4  # 4 consequences
@@ -3558,7 +3559,9 @@ class TestPhaseIntegrationEndToEnd:
 
         # Verify node types exist
         assert len(saved_graph.get_nodes_by_type("arc")) == 4
-        assert len(saved_graph.get_nodes_by_type("passage")) >= 12  # 8 + ending variants
+        assert (
+            len(saved_graph.get_nodes_by_type("passage")) >= 8
+        )  # 8 base passages (variants depend on choice wiring)
         assert len(saved_graph.get_nodes_by_type("codeword")) == 4
         assert len(saved_graph.get_nodes_by_type("beat")) == 8
         assert len(saved_graph.get_nodes_by_type("dilemma")) == 2

@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.graph import Graph  # noqa: TC001 - used at runtime
-from questfoundry.graph.grow_algorithms import wire_heavy_residue_routing
 from questfoundry.models.grow import GrowPhaseResult
 from questfoundry.pipeline.stages.grow._helpers import log
 from questfoundry.pipeline.stages.grow.registry import grow_phase
@@ -561,54 +560,79 @@ async def phase_mark_endings(
     )
 
 
-# --- Phase 9c3: Split Endings ---
+# --- Phase 9c3: Apply Routing Plan ---
 
 
 @grow_phase(
-    name="split_endings",
-    depends_on=["mark_endings", "codewords"],
+    name="apply_routing",
+    depends_on=["mark_endings", "codewords", "residue_beats"],
     is_deterministic=True,
     priority=21,
 )
-async def phase_split_endings(
+async def phase_apply_routing(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
 ) -> GrowPhaseResult:
-    """Phase 9c3: Split shared endings into per-arc-family passages.
+    """Phase 9c3: Compute and apply the unified routing plan.
+
+    Replaces the former separate ``split_endings`` (Phase 21) and
+    ``heavy_residue_routing`` (Phase 23) phases with a single plan-then-execute
+    pass per ADR-017.
 
     Preconditions:
-    - Terminal passages marked with is_ending (Phase 9c2 complete).
-    - Codeword nodes exist (Phase 8b complete).
-    - Arcs, paths, and codewords exist to derive codeword signatures.
+    - Terminal passages marked with is_ending (mark_endings complete).
+    - Codeword nodes exist (codewords phase complete).
+    - LLM residue proposals stored by Phase 15 (residue_beats complete).
 
     Postconditions:
-    - Shared terminal passages split into per-arc-family variants.
-    - Each variant gated by its distinguishing codeword set.
-    - Choice edges updated to point to appropriate variants.
-    - Original shared passage is converted to a branching point (is_ending=False).
+    - Ending-split variant passages created and wired.
+    - Heavy-residue variant passages created and wired.
+    - LLM-proposed residue variants created and wired.
+    - Residue proposals metadata node removed from graph.
 
     Invariants:
-    - No-op when all terminal passages already have unique arc families.
-    - Deterministic: splitting based on codeword signature comparison.
+    - Deterministic: plan derived from graph structure plus stored proposals.
+    - No LLM calls.
+    - No-op when no routing operations are needed.
+
+    Note:
+        Per ADR-017, heavy residue routing runs pre-collapse (as part of
+        apply_routing, before collapse_passages). This is intentional: residue
+        variants must be created before passage collapsing so the collapsed
+        graph contains the correct variant structure.
     """
-    from questfoundry.graph.grow_algorithms import split_ending_families
+    from questfoundry.graph.grow_routing import (
+        apply_routing_plan,
+        compute_routing_plan,
+        get_residue_proposals,
+    )
 
-    result = split_ending_families(graph)
+    proposals = get_residue_proposals(graph)
+    plan = compute_routing_plan(graph, proposals)
 
-    if result.families_created == 0:
+    if not plan.operations:
         return GrowPhaseResult(
-            phase="split_endings",
+            phase="apply_routing",
             status="completed",
-            detail=(f"{result.terminal_passages} terminal passage(s), all already unique"),
+            detail="No routing operations needed",
         )
 
+    result = apply_routing_plan(graph, plan)
+
+    parts: list[str] = []
+    if result.ending_splits_applied:
+        parts.append(f"{result.ending_splits_applied} ending split(s)")
+    if result.heavy_residue_applied:
+        parts.append(f"{result.heavy_residue_applied} heavy-residue split(s)")
+    if result.llm_residue_applied:
+        parts.append(f"{result.llm_residue_applied} LLM-residue split(s)")
+    if result.skipped_no_incoming:
+        parts.append(f"{result.skipped_no_incoming} skipped (no incoming)")
+
     return GrowPhaseResult(
-        phase="split_endings",
+        phase="apply_routing",
         status="completed",
-        detail=(
-            f"Split {result.terminal_passages - result.passages_already_unique} "
-            f"terminal passage(s) into {result.families_created} ending families"
-        ),
+        detail=(f"Applied {', '.join(parts)}; {result.total_variants_created} variant(s) created"),
     )
 
 
@@ -616,7 +640,7 @@ async def phase_split_endings(
 
 
 @grow_phase(
-    name="collapse_passages", depends_on=["split_endings"], is_deterministic=True, priority=22
+    name="collapse_passages", depends_on=["apply_routing"], is_deterministic=True, priority=22
 )
 async def phase_collapse_passages(
     graph: Graph,
@@ -659,58 +683,12 @@ async def phase_collapse_passages(
     )
 
 
-# --- Phase 9e: Heavy residue routing ---
-
-
-@grow_phase(
-    name="heavy_residue_routing",
-    depends_on=["collapse_passages"],
-    is_deterministic=True,
-    priority=23,
-)
-async def phase_heavy_residue_routing(
-    graph: Graph,
-    model: BaseChatModel,  # noqa: ARG001
-) -> GrowPhaseResult:
-    """Phase 9e: Deterministic routing for heavy-residue divergences.
-
-    Preconditions:
-    - Passage collapse complete (Phase 9d).
-
-    Postconditions:
-    - Shared mid-story passages where heavy/high dilemmas diverge are
-      split into variants and wired via split_and_reroute.
-
-    Invariants:
-    - Deterministic: no LLM calls.
-    - No-op when no heavy-residue targets are found.
-    """
-    result = wire_heavy_residue_routing(graph)
-
-    if result.targets_found == 0:
-        return GrowPhaseResult(
-            phase="heavy_residue_routing",
-            status="completed",
-            detail="No heavy-residue routing targets",
-        )
-
-    return GrowPhaseResult(
-        phase="heavy_residue_routing",
-        status="completed",
-        detail=(
-            f"Routed {result.passages_routed} passage(s) with "
-            f"{result.variants_created} variant(s); "
-            f"skipped {result.skipped_no_incoming} target(s)"
-        ),
-    )
-
-
 # --- Phase 10: Validation ---
 
 
 @grow_phase(
     name="validation",
-    depends_on=["heavy_residue_routing"],
+    depends_on=["collapse_passages"],
     is_deterministic=True,
     priority=24,
 )

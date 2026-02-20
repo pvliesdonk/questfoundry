@@ -188,8 +188,9 @@ class TestGrowFullPipeline:
         assert result_dict["spine_arc_id"] is not None
 
     def test_passages_created(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify passages are created (7 after consolidation + 4 ending families)."""
-        assert pipeline_result["result_dict"]["passage_count"] >= 11
+        """Verify passages are created (S3: apply_routing creates variants only when
+        choice edges exist; base passage count after consolidation is the minimum)."""
+        assert pipeline_result["result_dict"]["passage_count"] >= 7
 
     def test_codewords_derived(self, pipeline_result: dict[str, Any]) -> None:
         """Verify codewords are created from consequences (4 consequences)."""

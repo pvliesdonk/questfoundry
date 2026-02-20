@@ -217,10 +217,10 @@ class TestGlobalRegistry:
     """Tests for the global registry populated by actual GROW phases."""
 
     def test_global_registry_has_25_phases(self) -> None:
-        """All 25 GROW phases are registered."""
+        """All GROW phases are registered (24 after S3 collapsed split_endings+heavy_residue into apply_routing)."""
         registry = get_registry()
-        assert len(registry) >= 25, (
-            f"Expected at least 25 phases, got {len(registry)}: {registry.phase_names}"
+        assert len(registry) >= 24, (
+            f"Expected at least 24 phases, got {len(registry)}: {registry.phase_names}"
         )
 
     def test_global_registry_validates(self) -> None:
@@ -230,7 +230,7 @@ class TestGlobalRegistry:
         assert errors == [], f"Registry validation errors: {errors}"
 
     def test_global_registry_execution_order_matches_expected(self) -> None:
-        """Execution order matches the original hand-maintained _phase_order() list."""
+        """Execution order matches the S3 phase structure (split_endings + heavy_residue_routing collapsed into apply_routing)."""
         expected = [
             "validate_dag",
             "scene_types",
@@ -252,9 +252,8 @@ class TestGlobalRegistry:
             "fork_beats",
             "hub_spokes",
             "mark_endings",
-            "split_endings",
+            "apply_routing",
             "collapse_passages",
-            "heavy_residue_routing",
             "validation",
             "prune",
         ]
@@ -272,9 +271,9 @@ class TestGlobalRegistry:
         assert "validate_dag" in table
         assert "prune" in table
 
-    def test_split_endings_has_two_dependencies(self) -> None:
-        """split_endings depends on both mark_endings and codewords."""
+    def test_apply_routing_has_three_dependencies(self) -> None:
+        """apply_routing depends on mark_endings, codewords, and residue_beats (S3, ADR-017)."""
         registry = get_registry()
-        meta = registry.get_meta("split_endings")
+        meta = registry.get_meta("apply_routing")
         assert meta is not None
-        assert set(meta.depends_on) == {"mark_endings", "codewords"}
+        assert set(meta.depends_on) == {"mark_endings", "codewords", "residue_beats"}

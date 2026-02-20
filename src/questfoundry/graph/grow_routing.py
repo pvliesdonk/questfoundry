@@ -798,3 +798,157 @@ def _compute_llm_residue(
         )
 
     return operations
+
+
+# ---------------------------------------------------------------------------
+# Plan application
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class ApplyRoutingResult:
+    """Summary of a routing plan application.
+
+    Args:
+        ending_splits_applied: Operations of kind ``ending_split`` applied.
+        heavy_residue_applied: Operations of kind ``heavy_residue`` applied.
+        llm_residue_applied: Operations of kind ``residue`` (LLM) applied.
+        total_variants_created: Total variant passages created.
+        skipped_no_incoming: Operations skipped because the base passage had
+            no incoming choice edges (stale passage with no callers).
+    """
+
+    ending_splits_applied: int = 0
+    heavy_residue_applied: int = 0
+    llm_residue_applied: int = 0
+    total_variants_created: int = 0
+    skipped_no_incoming: int = 0
+
+
+def apply_routing_plan(graph: Graph, plan: RoutingPlan) -> ApplyRoutingResult:
+    """Apply a routing plan to the graph atomically.
+
+    Executes every :class:`RoutingOperation` in the plan in priority order
+    (ending splits → heavy residue → LLM-proposed residue). For each
+    operation:
+
+    1. Creates all variant passage nodes using :meth:`VariantPassageSpec.to_node_data`.
+    2. Wires routing choices via ``split_and_reroute(keep_fallback=True)``.
+    3. Demotes the base passage's ``is_ending`` flag when required.
+
+    Operations targeting a base passage that has no incoming choice edges are
+    silently skipped (counted in ``skipped_no_incoming``); this can happen
+    when a passage was already split by a higher-priority operation.
+
+    After applying all operations, the stored residue proposals metadata node
+    is removed from the graph.
+
+    Args:
+        graph: The GROW graph to mutate in-place.
+        plan: Routing plan produced by :func:`compute_routing_plan`.
+
+    Returns:
+        :class:`ApplyRoutingResult` with per-kind counts.
+    """
+    from questfoundry.graph.grow_algorithms import VariantSpec, split_and_reroute
+
+    ending_applied = 0
+    heavy_applied = 0
+    residue_applied = 0
+    total_variants = 0
+    skipped = 0
+
+    for op in plan.operations:
+        # Step 1: Check if base passage has incoming choice edges before creating nodes.
+        # split_and_reroute returns empty when there are no incoming edges; we skip
+        # early to avoid creating orphan variant nodes that can't be reached.
+        from_choices = graph.get_edges(edge_type="choice_to", to_id=op.base_passage_id)
+        if not from_choices:
+            skipped += 1
+            log.debug("apply_routing_skipped_no_incoming", base=op.base_passage_id, kind=op.kind)
+            continue
+
+        # Step 2: Create variant passage nodes (skip if already present)
+        for spec in op.variants:
+            if graph.get_node(spec.variant_id) is None:
+                node_data = spec.to_node_data()
+                node_data["residue_for"] = op.base_passage_id
+                graph.create_node(spec.variant_id, node_data)
+
+        # Step 3: Wire routing choices via split_and_reroute (skip if already wired)
+        # Idempotency check: if routing choices already point to the first variant,
+        # the wiring was done in a previous apply — skip to avoid duplicates.
+        already_wired = op.variants and graph.get_edges(
+            edge_type="choice_to", to_id=op.variants[0].variant_id
+        )
+        if already_wired:
+            total_variants += len(op.variants)
+            if op.kind == "ending_split":
+                ending_applied += 1
+            elif op.kind == "heavy_residue":
+                heavy_applied += 1
+            else:
+                residue_applied += 1
+            log.debug(
+                "apply_routing_op_done",
+                kind=op.kind,
+                base=op.base_passage_id,
+                variants=len(op.variants),
+            )
+            continue
+
+        variant_specs = [
+            VariantSpec(
+                passage_id=spec.variant_id,
+                requires_codewords=list(spec.requires_codewords),
+            )
+            for spec in op.variants
+        ]
+        created = split_and_reroute(graph, op.base_passage_id, variant_specs, keep_fallback=True)
+
+        if not created:
+            # split_and_reroute found no incoming despite edge check (race condition / stale data)
+            skipped += 1
+            log.debug("apply_routing_skipped_no_incoming", base=op.base_passage_id, kind=op.kind)
+            continue
+
+        # Step 4: Demote base passage ending status if required
+        if op.demote_base_ending:
+            base = graph.get_node(op.base_passage_id)
+            if base is not None:
+                graph.update_node(op.base_passage_id, is_ending=False)
+
+        total_variants += len(op.variants)
+        if op.kind == "ending_split":
+            ending_applied += 1
+        elif op.kind == "heavy_residue":
+            heavy_applied += 1
+        else:
+            residue_applied += 1
+
+        log.debug(
+            "apply_routing_op_done",
+            kind=op.kind,
+            base=op.base_passage_id,
+            variants=len(op.variants),
+        )
+
+    # Clean up the advisory proposals metadata
+    clear_residue_proposals(graph)
+
+    log.info(
+        "routing_plan_applied",
+        endings=ending_applied,
+        heavy=heavy_applied,
+        residue=residue_applied,
+        total_variants=total_variants,
+        skipped=skipped,
+    )
+
+    return ApplyRoutingResult(
+        ending_splits_applied=ending_applied,
+        heavy_residue_applied=heavy_applied,
+        llm_residue_applied=residue_applied,
+        total_variants_created=total_variants,
+        skipped_no_incoming=skipped,
+    )
