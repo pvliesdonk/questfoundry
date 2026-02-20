@@ -549,6 +549,75 @@ def _compute_heavy_residue(
     return operations
 
 
+# ---------------------------------------------------------------------------
+# Proposal storage (Phase 15 advisory mode)
+# ---------------------------------------------------------------------------
+
+RESIDUE_PROPOSALS_NODE_ID = "meta::residue_proposals"
+
+
+def store_residue_proposals(
+    graph: Graph,
+    proposals: list[dict[str, Any]],
+) -> None:
+    """Store LLM residue proposals in the graph for later processing.
+
+    Phase 15 (residue_beats) calls this instead of create_residue_passages
+    when operating in advisory mode. The proposals are stored as a metadata
+    node and later consumed by compute_routing_plan().
+
+    Args:
+        graph: The GROW graph.
+        proposals: List of proposal dicts, each with keys:
+            - passage_id: Target passage for routing
+            - dilemma_id: Dilemma whose paths determine variants
+            - variants: List of {codeword_id, hint} dicts
+
+    Note:
+        If proposals already exist (re-run), they are replaced.
+    """
+    graph.upsert_node(
+        RESIDUE_PROPOSALS_NODE_ID,
+        {
+            "type": "meta",
+            "raw_id": "residue_proposals",
+            "proposals": proposals,
+        },
+    )
+    log.info("stored_residue_proposals", count=len(proposals))
+
+
+def get_residue_proposals(graph: Graph) -> list[dict[str, Any]]:
+    """Retrieve stored LLM residue proposals from the graph.
+
+    Called by compute_routing_plan() to include Phase 15 proposals
+    in the unified routing plan.
+
+    Args:
+        graph: The GROW graph.
+
+    Returns:
+        List of proposal dicts, or empty list if none stored.
+    """
+    node = graph.get_node(RESIDUE_PROPOSALS_NODE_ID)
+    if node is None:
+        return []
+    return list(node.get("proposals", []))
+
+
+def clear_residue_proposals(graph: Graph) -> None:
+    """Remove stored residue proposals after they've been processed.
+
+    Called by apply_routing_plan() after successfully applying the plan.
+
+    Args:
+        graph: The GROW graph.
+    """
+    if graph.has_node(RESIDUE_PROPOSALS_NODE_ID):
+        graph.delete_node(RESIDUE_PROPOSALS_NODE_ID, cascade=True)
+        log.debug("cleared_residue_proposals")
+
+
 def compute_routing_plan(
     graph: Graph,
     residue_proposals: list[dict[str, Any]] | None = None,

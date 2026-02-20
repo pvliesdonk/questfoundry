@@ -8,10 +8,14 @@ import pytest
 
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_routing import (
+    RESIDUE_PROPOSALS_NODE_ID,
     RoutingOperation,
     RoutingPlan,
     VariantPassageSpec,
+    clear_residue_proposals,
     compute_routing_plan,
+    get_residue_proposals,
+    store_residue_proposals,
 )
 
 # ---------------------------------------------------------------------------
@@ -606,3 +610,57 @@ class TestComputeRoutingPlan:
         assert plan.total_variants == 0
         assert len(plan.operations) == 0
         assert len(plan.conflicts) == 0
+
+
+class TestResidueProposalStorage:
+    """Tests for store/get/clear_residue_proposals functions."""
+
+    def test_store_and_retrieve_proposals(self):
+        """Store proposals, retrieve them, verify content."""
+        g = Graph.empty()
+        proposals = [
+            {"passage_id": "passage::p1", "dilemma_id": "dilemma::d1", "variants": []},
+            {
+                "passage_id": "passage::p2",
+                "dilemma_id": "dilemma::d2",
+                "variants": [{"codeword_id": "cw::c1", "hint": "test"}],
+            },
+        ]
+        store_residue_proposals(g, proposals)
+
+        retrieved = get_residue_proposals(g)
+        assert retrieved == proposals
+
+    def test_get_from_empty_graph_returns_empty_list(self):
+        """No proposals stored → empty list."""
+        g = Graph.empty()
+        assert get_residue_proposals(g) == []
+
+    def test_clear_proposals(self):
+        """Clear removes the proposals node."""
+        g = Graph.empty()
+        proposals = [{"passage_id": "p1", "dilemma_id": "d1", "variants": []}]
+        store_residue_proposals(g, proposals)
+        assert get_residue_proposals(g) == proposals
+
+        clear_residue_proposals(g)
+        assert get_residue_proposals(g) == []
+
+    def test_store_overwrites_existing(self):
+        """Second store overwrites first."""
+        g = Graph.empty()
+        store_residue_proposals(g, [{"passage_id": "p1", "dilemma_id": "d1", "variants": []}])
+        store_residue_proposals(g, [{"passage_id": "p2", "dilemma_id": "d2", "variants": []}])
+
+        retrieved = get_residue_proposals(g)
+        assert len(retrieved) == 1
+        assert retrieved[0]["passage_id"] == "p2"
+
+    def test_proposals_node_has_correct_type(self):
+        """Proposals stored in meta::residue_proposals node with correct type."""
+        g = Graph.empty()
+        store_residue_proposals(g, [{"passage_id": "p1", "dilemma_id": "d1", "variants": []}])
+
+        node = g.get_node(RESIDUE_PROPOSALS_NODE_ID)
+        assert node is not None
+        assert node["type"] == "meta"
