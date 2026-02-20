@@ -9,6 +9,7 @@ import pytest
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_routing import (
     RESIDUE_PROPOSALS_NODE_ID,
+    RoutingKind,
     RoutingOperation,
     RoutingPlan,
     VariantPassageSpec,
