@@ -594,6 +594,12 @@ async def phase_apply_routing(
     - Deterministic: plan derived from graph structure plus stored proposals.
     - No LLM calls.
     - No-op when no routing operations are needed.
+
+    Note:
+        Per ADR-017, heavy residue routing runs pre-collapse (as part of
+        apply_routing, before collapse_passages). This is intentional: residue
+        variants must be created before passage collapsing so the collapsed
+        graph contains the correct variant structure.
     """
     from questfoundry.graph.grow_routing import (
         apply_routing_plan,

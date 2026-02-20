@@ -742,9 +742,21 @@ class TestApplyRoutingPlan:
         # Shared mid passage + heavy dilemma → heavy residue ops
         assert plan.heavy_residue_ops, "Expected heavy-residue operations"
 
-        apply_routing_plan(g, plan)
+        result = apply_routing_plan(g, plan)
 
-        for op in plan.heavy_residue_ops:
+        # Only check ops that were actually applied (base passage had incoming edges).
+        # Ops targeting passages with no incoming are silently skipped (e.g. start passage).
+        applied_ops = [
+            op
+            for op in plan.heavy_residue_ops
+            if g.get_edges(edge_type="choice_to", to_id=op.base_passage_id)
+            or any(g.get_node(spec.variant_id) is not None for spec in op.variants)
+        ]
+        assert applied_ops, (
+            f"Expected at least one heavy-residue op to be applied "
+            f"(applied={result.heavy_residue_applied}, skipped={result.skipped_no_incoming})"
+        )
+        for op in applied_ops:
             for spec in op.variants:
                 node = g.get_node(spec.variant_id)
                 assert node is not None, f"Variant {spec.variant_id} not created"
@@ -792,8 +804,8 @@ class TestApplyRoutingPlan:
 
         assert result.skipped_no_incoming == 1
         assert result.ending_splits_applied == 0
-        # Variant node IS created even when split_and_reroute finds no incoming
-        assert g.get_node("passage::orphan_v0") is not None
+        # Variant node is NOT created when skipped (no incoming edges on base passage)
+        assert g.get_node("passage::orphan_v0") is None
 
     def test_clears_residue_proposals_after_apply(self):
         """Stored proposals are removed from graph after apply."""
@@ -806,17 +818,20 @@ class TestApplyRoutingPlan:
         assert g.get_node(RESIDUE_PROPOSALS_NODE_ID) is None
 
     def test_apply_idempotent_for_existing_variants(self):
-        """Applying same plan twice does not create duplicate variant nodes."""
+        """Applying same plan twice does not create duplicate variant nodes or choices."""
         g = _make_routing_graph(shared_terminal=True)
         plan = compute_routing_plan(g)
 
         apply_routing_plan(g, plan)
         passages_after_first = set(g.get_nodes_by_type("passage").keys())
+        choices_after_first = set(g.get_nodes_by_type("choice").keys())
 
         apply_routing_plan(g, plan)
         passages_after_second = set(g.get_nodes_by_type("passage").keys())
+        choices_after_second = set(g.get_nodes_by_type("choice").keys())
 
         assert passages_after_first == passages_after_second
+        assert choices_after_first == choices_after_second
 
     def test_full_plan_compute_and_apply(self):
         """compute_routing_plan + apply_routing_plan end-to-end."""
