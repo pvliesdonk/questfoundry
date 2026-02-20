@@ -1056,9 +1056,8 @@ class _LLMPhaseMixin:
         - Arc convergence metadata computed (Phase 7 complete).
 
         Postconditions:
-        - Variant passages created for accepted proposals (is_residue=True).
-        - Base passages preserved as fallback.
-        - Each variant has residue_codeword, residue_hint, residue_for metadata.
+        - LLM proposals stored in ``meta::residue_proposals`` graph node.
+        - No passage mutations performed; routing applied atomically by Phase 21 (``apply_routing_plan``).
 
         Invariants:
         - Only soft/flavor dilemma convergences considered.
