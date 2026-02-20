@@ -554,6 +554,7 @@ def _compute_heavy_residue(
 # ---------------------------------------------------------------------------
 
 RESIDUE_PROPOSALS_NODE_ID = "meta::residue_proposals"
+ROUTING_APPLIED_NODE_ID = "meta::routing_applied"
 
 
 def store_residue_proposals(
@@ -616,6 +617,31 @@ def clear_residue_proposals(graph: Graph) -> None:
     if graph.has_node(RESIDUE_PROPOSALS_NODE_ID):
         graph.delete_node(RESIDUE_PROPOSALS_NODE_ID, cascade=True)
         log.debug("cleared_residue_proposals")
+
+
+def get_routing_applied_metadata(
+    graph: Graph,
+) -> tuple[set[str], set[str]]:
+    """Return (ending_split_passages, residue_passages) from stored metadata.
+
+    Called by validation functions to determine per-passage routing type
+    without re-running compute_routing_plan.
+
+    Args:
+        graph: The GROW graph after apply_routing_plan has run.
+
+    Returns:
+        Tuple of (ending_split_passages, residue_passages) sets.
+        Both sets are empty if the metadata node is absent (e.g., no
+        routing was needed or apply_routing_plan was never called).
+    """
+    node = graph.get_node(ROUTING_APPLIED_NODE_ID)
+    if node is None:
+        return set(), set()
+    return (
+        set(node.get("ending_split_passages", [])),
+        set(node.get("residue_passages", [])),
+    )
 
 
 def compute_routing_plan(
@@ -932,6 +958,21 @@ def apply_routing_plan(graph: Graph, plan: RoutingPlan) -> ApplyRoutingResult:
             base=op.base_passage_id,
             variants=len(op.variants),
         )
+
+    # Store compact plan metadata for downstream validation (S4)
+    ending_passages = [op.base_passage_id for op in plan.ending_splits]
+    residue_passages = [op.base_passage_id for op in plan.heavy_residue_ops + plan.residue_ops]
+    if graph.get_node(ROUTING_APPLIED_NODE_ID) is not None:
+        graph.delete_node(ROUTING_APPLIED_NODE_ID)
+    graph.create_node(
+        ROUTING_APPLIED_NODE_ID,
+        {
+            "type": "meta",
+            "raw_id": "routing_applied",
+            "ending_split_passages": ending_passages,
+            "residue_passages": residue_passages,
+        },
+    )
 
     # Clean up the advisory proposals metadata
     clear_residue_proposals(graph)

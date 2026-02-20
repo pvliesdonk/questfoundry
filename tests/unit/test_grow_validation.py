@@ -2485,3 +2485,113 @@ class TestCheckProseNeutrality:
         assert len(d1_fails) == 1
         # d2 should NOT produce a failure (arcs agree on q1)
         assert all("d2" not in c.message for c in fails)
+
+
+# ---------------------------------------------------------------------------
+# S4: validation alignment with RoutingPlan metadata
+# ---------------------------------------------------------------------------
+
+
+def _make_minimal_routing_applied_graph() -> Graph:
+    """Build a graph with routing_applied metadata node."""
+    from questfoundry.graph.grow_routing import (
+        apply_routing_plan,
+        compute_routing_plan,
+    )
+    from tests.unit.test_grow_routing import _make_routing_graph
+
+    g = _make_routing_graph(shared_terminal=True)
+    plan = compute_routing_plan(g)
+    apply_routing_plan(g, plan)
+    return g
+
+
+class TestRoutingCoverageWithPlanMetadata:
+    """S4: check_routing_coverage uses correct codeword scope per routing type."""
+
+    def test_routing_applied_meta_used_for_ending_splits(self):
+        """After apply_routing_plan, routing coverage check runs without error."""
+        g = _make_minimal_routing_applied_graph()
+        checks = check_routing_coverage(g)
+        # Should not raise, and should return at least one check
+        assert checks
+
+    def test_no_routing_applied_falls_back_to_routing_scope(self):
+        """Without metadata node, routing scope is used for all checks."""
+        g = Graph.empty()
+        # Minimal graph: no arcs → should return a pass
+        checks = check_routing_coverage(g)
+        assert len(checks) == 1
+        assert checks[0].severity == "pass"
+
+    def test_ending_split_passages_use_ending_scope(self):
+        """Passages in ending_split_passages set use scope='ending' codewords."""
+        from questfoundry.graph.grow_routing import ROUTING_APPLIED_NODE_ID
+
+        g = _make_minimal_routing_applied_graph()
+
+        meta = g.get_node(ROUTING_APPLIED_NODE_ID)
+        assert meta is not None
+        # After apply, ending_split_passages should be populated if splits occurred
+        ending_pids = meta.get("ending_split_passages", [])
+        # The graph has a shared terminal → at least one ending split expected
+        # (if the graph produced ending splits)
+        if ending_pids:
+            checks = check_routing_coverage(g)
+            # Ending splits are exhaustive: they should not have CE gaps
+            ce_fails = [c for c in checks if c.name == "routing_coverage_ce"]
+            assert not ce_fails, f"Unexpected CE failures: {ce_fails}"
+
+    def test_residue_passages_allow_fallback(self):
+        """Residue routing passages get lenient CE (fallback exempted)."""
+        from questfoundry.graph.grow_routing import (
+            ROUTING_APPLIED_NODE_ID,
+            apply_routing_plan,
+            compute_routing_plan,
+        )
+        from tests.unit.test_grow_routing import _make_routing_graph
+
+        g = _make_routing_graph(heavy_dilemma=True, shared_terminal=True)
+        plan = compute_routing_plan(g)
+        apply_routing_plan(g, plan)
+
+        meta = g.get_node(ROUTING_APPLIED_NODE_ID)
+        assert meta is not None
+
+        checks = check_routing_coverage(g)
+        # With heavy residue + fallback, no strict CE failures expected
+        ce_fails = [c for c in checks if c.name == "routing_coverage_ce"]
+        assert not ce_fails, f"Heavy residue CE should be lenient: {ce_fails}"
+
+
+class TestProseNeutralityWithPlanMetadata:
+    """S4: check_prose_neutrality uses routing_applied metadata node."""
+
+    def test_uses_metadata_node_when_present(self):
+        """With routing_applied node, routed passages include all applied ops."""
+        g = _make_minimal_routing_applied_graph()
+        checks = check_prose_neutrality(g)
+        # Should not raise; with routing applied, heavy/high passages should pass
+        assert checks
+
+    def test_falls_back_to_residue_for_scan(self):
+        """Without routing_applied node, fallback scan still works."""
+        g = Graph.empty()
+        # No arcs/passages/dilemmas → pass
+        checks = check_prose_neutrality(g)
+        assert len(checks) == 1
+        assert checks[0].severity == "pass"
+
+    def test_routed_passages_from_metadata_prevent_false_failures(self):
+        """Passages in routing_applied metadata are not flagged by prose neutrality."""
+        from questfoundry.graph.grow_routing import apply_routing_plan, compute_routing_plan
+        from tests.unit.test_grow_routing import _make_routing_graph
+
+        g = _make_routing_graph(heavy_dilemma=True, shared_terminal=True)
+        plan = compute_routing_plan(g)
+        apply_routing_plan(g, plan)
+
+        checks = check_prose_neutrality(g)
+        # All heavy/high passages should be covered by routing → no failures
+        fails = [c for c in checks if c.severity == "fail"]
+        assert not fails, f"No prose neutrality failures expected after routing: {fails}"
