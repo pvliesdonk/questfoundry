@@ -484,9 +484,9 @@ def _compute_heavy_residue(
             # Build path → codeword mapping, need 2+ gatable codewords
             path_codewords: dict[str, str] = {}
             for path_id in path_arcs_map:
-                cw_id = path_to_codeword.get(path_id)
-                if cw_id and cw_id in codeword_nodes:
-                    path_codewords[path_id] = cw_id
+                maybe_cw = path_to_codeword.get(path_id)
+                if maybe_cw is not None and maybe_cw in codeword_nodes:
+                    path_codewords[path_id] = maybe_cw
 
             if len(path_codewords) < 2:
                 continue

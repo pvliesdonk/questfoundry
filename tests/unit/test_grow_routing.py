@@ -6,13 +6,11 @@ import pytest
 
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_routing import (
-    RoutingConflict,
     RoutingOperation,
     RoutingPlan,
     VariantPassageSpec,
     compute_routing_plan,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers — build a routing-ready graph
@@ -70,7 +68,7 @@ def _make_routing_graph(
             },
         )
 
-        for pi, label in enumerate(["a", "b"]):
+        for _pi, label in enumerate(["a", "b"]):
             path_id = f"path::d{di}_{label}"
             g.create_node(
                 path_id,
