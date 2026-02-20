@@ -576,15 +576,7 @@ def store_residue_proposals(
     Note:
         If proposals already exist (re-run), they are replaced.
     """
-    existing = graph.get_node(RESIDUE_PROPOSALS_NODE_ID)
-    if existing is not None:
-        graph.delete_node(RESIDUE_PROPOSALS_NODE_ID)
-        log.debug(
-            "Replaced existing residue proposals (%d proposals)",
-            len(existing.get("proposals", [])),
-        )
-
-    graph.create_node(
+    graph.upsert_node(
         RESIDUE_PROPOSALS_NODE_ID,
         {
             "type": "meta",
@@ -592,7 +584,7 @@ def store_residue_proposals(
             "proposals": proposals,
         },
     )
-    log.info("Stored %d residue proposals for routing plan", len(proposals))
+    log.info("stored_residue_proposals", count=len(proposals))
 
 
 def get_residue_proposals(graph: Graph) -> list[dict[str, Any]]:
@@ -621,9 +613,9 @@ def clear_residue_proposals(graph: Graph) -> None:
     Args:
         graph: The GROW graph.
     """
-    if graph.get_node(RESIDUE_PROPOSALS_NODE_ID) is not None:
-        graph.delete_node(RESIDUE_PROPOSALS_NODE_ID)
-        log.debug("Cleared residue proposals metadata")
+    if graph.has_node(RESIDUE_PROPOSALS_NODE_ID):
+        graph.delete_node(RESIDUE_PROPOSALS_NODE_ID, cascade=True)
+        log.debug("cleared_residue_proposals")
 
 
 def compute_routing_plan(
