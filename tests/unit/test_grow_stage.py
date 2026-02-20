@@ -183,9 +183,10 @@ class TestGrowStageExecute:
 
 class TestGrowStagePhaseOrder:
     def test_phase_order_returns_twenty_five_phases(self) -> None:
+        """S3 collapsed split_endings + heavy_residue_routing into apply_routing; 24 phases remain."""
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 25
+        assert len(phases) == 24
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -211,9 +212,8 @@ class TestGrowStagePhaseOrder:
             "fork_beats",
             "hub_spokes",
             "mark_endings",
-            "split_endings",
+            "apply_routing",
             "collapse_passages",
-            "heavy_residue_routing",
             "validation",
             "prune",
         ]
