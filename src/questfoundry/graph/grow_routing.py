@@ -602,7 +602,7 @@ def get_residue_proposals(graph: Graph) -> list[dict[str, Any]]:
     node = graph.get_node(RESIDUE_PROPOSALS_NODE_ID)
     if node is None:
         return []
-    return node.get("proposals", [])
+    return list(node.get("proposals", []))
 
 
 def clear_residue_proposals(graph: Graph) -> None:
