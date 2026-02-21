@@ -31,6 +31,107 @@ Design docs in `docs/design/` are guidelines. This CLAUDE.md file is rules.
 
 ---
 
+## Deliberation Protocol Discipline (MANDATORY)
+
+**Context:** Multi-agent deliberations (via `/deliberate-start`) create GitHub Discussions for architectural decisions. These discussions are peer-review mechanisms designed to catch single-agent overconfidence and flawed reasoning.
+
+### Hard Rule: Never Skip Discussion Posting
+
+**When user says "add to discussion" or "post to discussion", this is MANDATORY regardless of confidence level.**
+
+Treat it as a hard constraint like "run tests before committing". No exceptions, no rationalizing.
+
+**Workflow:**
+1. Complete investigation/analysis
+2. IF discussion exists AND user requested posting to discussion:
+   - POST findings to discussion FIRST
+   - ASK: "Should I proceed with implementation or wait for multi-agent feedback?"
+   - WAIT for explicit user approval before implementing
+3. ELSE:
+   - Proceed with implementation
+
+**Never assume:** "My analysis is so conclusive that posting would be redundant."
+
+The discussion exists precisely to catch this kind of overconfident reasoning.
+
+### Confidence Calibration
+
+**Before implementing any fix where confidence > 90%, perform red-team self-review:**
+
+Ask yourself:
+1. "What would it take for my analysis to be wrong?"
+2. "What evidence would contradict my conclusion?"
+3. "If I'm wrong, what's the cost of being overconfident?"
+4. "Did I verify ALL facts, or did I assume some were true?"
+
+Spend 5 minutes actively trying to disprove your own conclusion before committing.
+
+### Explicit Uncertainty Markers
+
+**When presenting findings, always include:**
+- **Confidence level** (0-100%)
+- **Key assumptions** (what must be true for this to be correct)
+- **Verification steps skipped** (what you didn't check)
+
+**Example:**
+```
+Root cause identified: [description]
+
+Confidence: 85%
+Key assumptions:
+- [assumption 1]
+- [assumption 2]
+Verification steps skipped:
+- Did not verify [X]
+- Did not check [Y]
+
+Recommendation: Post to Discussion #XXX for multi-agent verification before implementing?
+```
+
+### Pre-Implementation Checklist
+
+Before committing any fix, verify:
+- [ ] All user instructions followed (no skipped steps)
+- [ ] If confidence > 90%, performed red-team self-review
+- [ ] If discussion exists, posted findings there (unless user explicitly said to skip)
+- [ ] If bypassed any instruction, got explicit user approval
+- [ ] Included confidence level and assumptions in analysis
+
+### When to Override an Instruction
+
+**You may suggest overriding a user instruction, but NEVER do it unilaterally.**
+
+**Correct pattern:**
+```
+User: "investigate and add to discussion"
+Agent: "Investigation complete. I'm confident in the fix, but you asked me to
+        post to the discussion. Should I:
+        A) Post findings to Discussion #XXX for multi-agent review first
+        B) Skip discussion and implement immediately
+
+        I recommend A to follow the deliberation protocol, but I'm ready to
+        proceed with B if you prefer."
+User: [makes decision]
+```
+
+**Incorrect pattern:**
+```
+User: "investigate and add to discussion"
+Agent: [posts to issues only, skips discussion because "it's redundant"]
+```
+
+### Meta-Lesson: Efficiency vs. Correctness
+
+**When in doubt, choose correctness over efficiency.**
+
+- Skipping a verification step to save time is a false economy if it leads to flawed analysis
+- User instructions exist for reasons you may not fully understand
+- The deliberation protocol was designed to catch exactly this failure mode
+
+**Remember:** The user knows the context better than you do. If they want deliberation input, there's a reason.
+
+---
+
 ## Project Overview
 
 QuestFoundry v5 is a **pipeline-driven interactive fiction generation system** that uses LLMs as collaborators under constraint, not autonomous agents. It generates complete, branching interactive stories through a six-stage pipeline with human review gates.
