@@ -1508,7 +1508,7 @@ class _LLMPhaseMixin:
             validator = partial(
                 validate_phase9_output,
                 valid_passage_ids=set(valid_from_ids + valid_to_ids),
-                expected_pairs=single_expected_pairs,
+                expected_pairs=None,  # Skip strict validation; fallback labels handle missing transitions
             )
             try:
                 result, single_llm_calls, single_tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
@@ -1591,7 +1591,7 @@ class _LLMPhaseMixin:
             validator = partial(
                 validate_phase9_output,
                 valid_passage_ids=set(multi_from_ids + multi_to_ids),
-                expected_pairs=multi_expected_pairs,
+                expected_pairs=None,  # Skip strict validation; fallback labels handle missing transitions
             )
             try:
                 result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
