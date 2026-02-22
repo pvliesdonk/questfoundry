@@ -308,6 +308,31 @@ def _intersect_all(sets: list[frozenset[str]]) -> frozenset[str]:
     return result
 
 
+def _build_passage_arcs(graph: Graph) -> dict[str, list[str]]:
+    """Build passage → covering arcs mapping via from_beat.
+
+    Returns a dict mapping passage IDs to the list of arc IDs that cover
+    the passage's from_beat. Passages without from_beat are not included.
+    """
+    passage_nodes = graph.get_nodes_by_type("passage")
+    arc_nodes = graph.get_nodes_by_type("arc")
+
+    # Build beat → covering arcs
+    beat_arcs: dict[str, list[str]] = {}
+    for arc_id, arc_data in arc_nodes.items():
+        for beat_id in arc_data.get("sequence", []):
+            beat_arcs.setdefault(beat_id, []).append(arc_id)
+
+    # Build passage → covering arcs via from_beat
+    passage_arcs: dict[str, list[str]] = {}
+    for pid, p_data in passage_nodes.items():
+        from_beat = p_data.get("from_beat")
+        if from_beat and from_beat in beat_arcs:
+            passage_arcs[pid] = beat_arcs[from_beat]
+
+    return passage_arcs
+
+
 def _compute_ending_splits(
     graph: Graph,
     arc_codewords: dict[str, frozenset[str]],
@@ -322,21 +347,7 @@ def _compute_ending_splits(
     """
     passage_nodes = graph.get_nodes_by_type("passage")
     arc_nodes = graph.get_nodes_by_type("arc")
-
-    # Build passage → covering arcs mapping
-    # First build beat → covering arcs
-    beat_arcs: dict[str, list[str]] = {}
-    for arc_id, arc_data in arc_nodes.items():
-        for beat_id in arc_data.get("sequence", []):
-            beat_arcs.setdefault(beat_id, []).append(arc_id)
-
-    # Then build passage → covering arcs via from_beat
-    passage_arcs: dict[str, list[str]] = {}
-    for pid, p_data in passage_nodes.items():
-        from_beat = p_data.get("from_beat")
-        if from_beat and from_beat in beat_arcs:
-            passage_arcs[pid] = beat_arcs[from_beat]
-
+    passage_arcs = _build_passage_arcs(graph)
     operations: list[RoutingOperation] = []
 
     for terminal_id, t_data in passage_nodes.items():
@@ -425,19 +436,7 @@ def _compute_heavy_residue(
     path_nodes = graph.get_nodes_by_type("path")
     codeword_nodes = graph.get_nodes_by_type("codeword")
 
-    # Build passage → covering arcs
-    # First build beat → covering arcs
-    beat_arcs: dict[str, list[str]] = {}
-    for arc_id, arc_data in arc_nodes.items():
-        for beat_id in arc_data.get("sequence", []):
-            beat_arcs.setdefault(beat_id, []).append(arc_id)
-
-    # Then build passage → covering arcs via from_beat
-    passage_arcs: dict[str, list[str]] = {}
-    for pid, p_data in passage_nodes.items():
-        from_beat = p_data.get("from_beat")
-        if from_beat and from_beat in beat_arcs:
-            passage_arcs[pid] = beat_arcs[from_beat]
+    passage_arcs = _build_passage_arcs(graph)
 
     # Build arc → paths (raw IDs on arc data, normalize to scoped)
     arc_paths: dict[str, list[str]] = {}
