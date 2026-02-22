@@ -900,12 +900,13 @@ class TestHeavyResidueRegression:
                 f"Heavy residue operation references non-existent passage {op.base_passage_id}"
             )
 
-    def test_runtime_warning_when_no_routing_despite_heavy_dilemmas(self):
+    def test_runtime_warning_when_no_routing_despite_heavy_dilemmas(self, caplog):
         """Verify runtime assertion warns when heavy dilemmas exist but no routing produced.
 
         This test verifies the runtime assertion added in ADR-018 to catch
         silent failures in routing plan computation.
         """
+        import logging
 
         # Create graph with heavy dilemmas but artificially break arc sequences
         g = _make_routing_graph(shared_terminal=True)
@@ -919,12 +920,18 @@ class TestHeavyResidueRegression:
         for arc_id in g.get_nodes_by_type("arc"):
             g.update_node(arc_id, sequence=[])
 
-        # Compute routing plan - should trigger warning
-        # Note: The warning is logged via structlog, captured in test logs
-        plan = compute_routing_plan(g)
+        # Capture warnings at WARNING level
+        with caplog.at_level(logging.WARNING):
+            # Compute routing plan - should trigger warning
+            plan = compute_routing_plan(g)
 
         # Should produce 0 operations due to broken sequences
         assert len(plan.heavy_residue_ops) == 0, (
             "Expected 0 heavy residue ops when arc sequences are broken. "
             "This simulates the bug condition that should trigger the warning."
         )
+
+        # Verify the warning was actually logged
+        assert any(
+            "no_heavy_routing_despite_heavy_dilemmas" in record.message for record in caplog.records
+        ), "Expected warning about heavy dilemmas with no routing"
