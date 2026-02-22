@@ -717,6 +717,15 @@ async def phase_validation(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
     fail_count = len([c for c in report.checks if c.severity == "fail"])
 
     if report.has_failures:
+        # Log each individual failure for debugging
+        for check in report.checks:
+            if check.severity == "fail":
+                log.error(
+                    "validation_check_failed",
+                    check_name=check.name,
+                    message=check.message,
+                )
+
         log.warning(
             "validation_failed",
             failures=fail_count,
@@ -731,6 +740,15 @@ async def phase_validation(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
         )
 
     if report.has_warnings:
+        # Log each individual warning for debugging
+        for check in report.checks:
+            if check.severity == "warn":
+                log.warning(
+                    "validation_check_warning",
+                    check_name=check.name,
+                    message=check.message,
+                )
+
         log.info(
             "validation_passed_with_warnings",
             warnings=warn_count,

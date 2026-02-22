@@ -321,6 +321,11 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             log.debug("phase_start", phase=phase_name)
             graph.savepoint(phase_name)
 
+            # Save snapshot before validation phase for debugging
+            if phase_name == "validation":
+                snapshot_path = save_snapshot(graph, resolved_path, "validation")
+                log.info("saved_pre_validation_snapshot", path=str(snapshot_path))
+
             with graph.mutation_context(stage="grow", phase=phase_name):
                 result = await phase_fn(graph, model)
             phase_results.append(result)
