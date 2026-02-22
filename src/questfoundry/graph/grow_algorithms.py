@@ -3364,18 +3364,29 @@ def apply_intersection_mark(
             bid_dilemmas = {path_to_dilemma.get(p) for p in bid_paths if p in path_to_dilemma}
             target_dilemma = path_to_dilemma.get(path_id)
 
-            # Allow cross-assignment if:
-            # 1. Different dilemmas (always safe)
-            # 2. Same dilemma with soft/flavor policy (allows sharing)
-            # Deny if same dilemma with hard policy (requires isolation)
-            if target_dilemma and target_dilemma in bid_dilemmas:
-                # Same dilemma - check policy
-                policy = dilemma_to_policy.get(target_dilemma, "soft")
-                if policy == "hard":
-                    # Hard policy - do NOT cross-assign within dilemma
-                    continue
+            # Deny cross-assignment if target path is from a hard dilemma
+            # Hard dilemmas must have exclusive beats (no sharing with ANY other path)
+            target_policy = (
+                dilemma_to_policy.get(target_dilemma, "soft") if target_dilemma else "soft"
+            )
+            if target_policy == "hard":
+                # Hard policy - do NOT cross-assign to this path
+                continue
 
-            # Safe to cross-assign
+            # Also deny if current beat belongs to any hard dilemma path
+            beat_from_hard = False
+            for bid_dilemma in bid_dilemmas:
+                if bid_dilemma:
+                    bid_policy = dilemma_to_policy.get(bid_dilemma, "soft")
+                    if bid_policy == "hard":
+                        # Beat from hard dilemma - do NOT cross-assign
+                        beat_from_hard = True
+                        break
+
+            if beat_from_hard:
+                continue
+
+            # Safe to cross-assign (both source and target are soft/flavor)
             new_edges.append((bid, path_id))
 
     # Update each beat's node data
