@@ -327,8 +327,8 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                 try:
                     snapshot_path = save_snapshot(graph, resolved_path, "validation")
                     log.info("saved_pre_validation_snapshot", path=str(snapshot_path))
-                except OSError as e:
-                    log.error("failed_to_save_snapshot", phase=phase_name, error=str(e))
+                except Exception as e:
+                    log.warning("failed_to_save_snapshot", phase=phase_name, error=str(e))
 
             with graph.mutation_context(stage="grow", phase=phase_name):
                 result = await phase_fn(graph, model)
