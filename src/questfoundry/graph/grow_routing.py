@@ -413,6 +413,22 @@ def _compute_ending_splits(
             families=len(variants),
         )
 
+    # Runtime assertion: warn if we found no operations but shared endings exist
+    if not operations:
+        shared_endings = [
+            pid
+            for pid, p_data in passage_nodes.items()
+            if p_data.get("is_ending") and len(passage_arcs.get(pid, [])) >= 2
+        ]
+        if shared_endings:
+            log.warning(
+                "no_ending_splits_despite_shared_endings",
+                shared_endings=len(shared_endings),
+                arc_count=len(arc_codewords),
+                message="This indicates a bug in routing plan computation. "
+                "Expected to find ending splits for shared endings but found none.",
+            )
+
     return operations
 
 
