@@ -218,10 +218,6 @@ def _make_routing_graph(
         arc_name = "".join(combo)
         arc_id = f"arc::{arc_name}"
 
-        pids = list(passage_ids)
-        if not shared_terminal:
-            pids.append(f"passage::end_{combo[0]}")
-
         # Production stores raw path IDs (without "path::" prefix)
         raw_paths = [f"d{di}_{combo[di]}" for di in range(n_dilemmas)]
         scoped_paths = [f"path::{rp}" for rp in raw_paths]

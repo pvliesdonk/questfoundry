@@ -1477,7 +1477,6 @@ class _LLMPhaseMixin:
         single_label_lookup: dict[tuple[str, str], str] = {}
         single_llm_calls = 0
         single_tokens = 0
-        single_expected_pairs: set[tuple[str, str]] = set()
 
         if single_successors:
             transition_items: list[ContextItem] = []
@@ -1488,7 +1487,6 @@ class _LLMPhaseMixin:
                 succ = succ_list[0]
                 valid_from_ids.append(p_id)
                 valid_to_ids.append(succ.to_passage)
-                single_expected_pairs.add((p_id, succ.to_passage))
                 p_summary = truncate_summary(passage_nodes.get(p_id, {}).get("summary", ""), 60)
                 succ_summary = truncate_summary(
                     passage_nodes.get(succ.to_passage, {}).get("summary", ""), 60
@@ -1564,7 +1562,6 @@ class _LLMPhaseMixin:
             divergence_lines: list[str] = []
             multi_from_ids: list[str] = []
             multi_to_ids: list[str] = []
-            multi_expected_pairs: set[tuple[str, str]] = set()
 
             for p_id, succ_list in sorted(multi_successors.items()):
                 multi_from_ids.append(p_id)
@@ -1573,7 +1570,6 @@ class _LLMPhaseMixin:
                 divergence_lines.append("  Successors:")
                 for succ in succ_list:
                     multi_to_ids.append(succ.to_passage)
-                    multi_expected_pairs.add((p_id, succ.to_passage))
                     succ_summary = truncate_summary(
                         passage_nodes.get(succ.to_passage, {}).get("summary", ""), 80
                     )
