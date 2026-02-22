@@ -218,20 +218,25 @@ def _make_routing_graph(
         arc_name = "".join(combo)
         arc_id = f"arc::{arc_name}"
 
-        pids = list(passage_ids)
-        if not shared_terminal:
-            pids.append(f"passage::end_{combo[0]}")
-
         # Production stores raw path IDs (without "path::" prefix)
         raw_paths = [f"d{di}_{combo[di]}" for di in range(n_dilemmas)]
         scoped_paths = [f"path::{rp}" for rp in raw_paths]
+
+        # Build beat sequence for this arc
+        # Arc nodes use 'sequence' (beat IDs), not 'passage_ids'
+        beat_ids = ["beat::start", "beat::mid_beat"]
+        if shared_terminal:
+            beat_ids.append("beat::end_beat")
+        else:
+            # First dilemma determines which ending beat
+            beat_ids.append(f"beat::end_beat_{combo[0]}")
 
         g.create_node(
             arc_id,
             {
                 "type": "arc",
                 "raw_id": arc_name,
-                "passage_ids": pids,
+                "sequence": beat_ids,  # FIXED: Use 'sequence' not 'passage_ids'
                 "paths": raw_paths,
             },
         )
@@ -850,3 +855,83 @@ class TestApplyRoutingPlan:
         assert total_ops == len(plan.operations)
         # Proposals cleaned up
         assert g.get_node(RESIDUE_PROPOSALS_NODE_ID) is None
+
+
+class TestHeavyResidueRegression:
+    """Regression tests for Discussion #965 data model bug.
+
+    The bug: grow_routing.py referenced non-existent 'passage_ids' field
+    on Arc nodes (should be 'sequence'), causing empty passage_arcs dict
+    and 0 heavy residue routing operations instead of ~75.
+    """
+
+    def test_heavy_residue_uses_arc_sequence_not_passage_ids(self):
+        """Verify routing plan uses Arc.sequence field, not non-existent passage_ids.
+
+        Regression test for Discussion #965. The bug was in _compute_heavy_residue()
+        which tried to build passage_arcs from arc_data.get("passage_ids", []).
+        Arc nodes have 'sequence' (beat IDs), not 'passage_ids'.
+
+        This test verifies the fix: passage_arcs is built correctly via
+        beat-based mapping (arc.sequence → beat → passage.from_beat).
+        """
+        # Create graph with shared passages on heavy dilemmas
+        g = _make_routing_graph(shared_terminal=True)
+
+        # Add heavy residue_weight to dilemmas
+        for dilemma_id in ["dilemma::d0", "dilemma::d1"]:
+            if g.get_node(dilemma_id):
+                g.update_node(dilemma_id, residue_weight="heavy")
+
+        # Compute routing plan
+        plan = compute_routing_plan(g)
+
+        # Should produce heavy residue operations for shared passages
+        # With 2 heavy dilemmas and shared_terminal=True, we expect operations
+        assert len(plan.heavy_residue_ops) > 0, (
+            "Expected heavy residue operations for shared passages with heavy dilemmas. "
+            "Got 0, which indicates the passage_ids bug has returned."
+        )
+
+        # Verify operations reference actual passages
+        passage_ids = set(g.get_nodes_by_type("passage").keys())
+        for op in plan.heavy_residue_ops:
+            assert op.base_passage_id in passage_ids, (
+                f"Heavy residue operation references non-existent passage {op.base_passage_id}"
+            )
+
+    def test_runtime_warning_when_no_routing_despite_heavy_dilemmas(self, caplog):
+        """Verify runtime assertion warns when heavy dilemmas exist but no routing produced.
+
+        This test verifies the runtime assertion added in ADR-018 to catch
+        silent failures in routing plan computation.
+        """
+        import logging
+
+        # Create graph with heavy dilemmas but artificially break arc sequences
+        g = _make_routing_graph(shared_terminal=True)
+
+        # Add heavy residue_weight
+        for dilemma_id in ["dilemma::d0", "dilemma::d1"]:
+            if g.get_node(dilemma_id):
+                g.update_node(dilemma_id, residue_weight="heavy")
+
+        # Break arc sequences (empty them) to simulate the bug condition
+        for arc_id in g.get_nodes_by_type("arc"):
+            g.update_node(arc_id, sequence=[])
+
+        # Capture warnings at WARNING level
+        with caplog.at_level(logging.WARNING):
+            # Compute routing plan - should trigger warning
+            plan = compute_routing_plan(g)
+
+        # Should produce 0 operations due to broken sequences
+        assert len(plan.heavy_residue_ops) == 0, (
+            "Expected 0 heavy residue ops when arc sequences are broken. "
+            "This simulates the bug condition that should trigger the warning."
+        )
+
+        # Verify the warning was actually logged
+        assert any(
+            "no_heavy_routing_despite_heavy_dilemmas" in record.message for record in caplog.records
+        ), "Expected warning about heavy dilemmas with no routing"

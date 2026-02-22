@@ -699,6 +699,77 @@ Key design choices:
 
 ---
 
+## ADR-018: Data Model Verification Discipline for Graph Mutations
+
+**Date**: 2026-02-21
+**Status**: Accepted
+
+### Context
+
+Despite two major architectural redesigns (Epic #911 Topology/Prose Layer Separation and Epic #950 Unified Routing Plan), GROW stage validation continued to fail with 182 errors. A three-agent deliberation (Discussion #965, Claude Opus 4.6, Gemini 3 Pro, GPT-5.2) diagnosed the root cause after 2 rounds:
+
+**The bug:** `src/questfoundry/graph/grow_routing.py` lines 329 and 423 reference a non-existent field `passage_ids` on Arc nodes. Arc nodes have `sequence: list[str]` (beat IDs), not `passage_ids`. This caused the `passage_arcs` dict to be built as empty, so `_compute_heavy_residue()` produced 0 routing operations instead of ~75, leading to validation failures.
+
+**Why it persisted:**
+1. The bug was introduced in new code (Epic #950 S1, commit f9521d8), not refactored from working code
+2. Silent failure mode: `dict.get("passage_ids", [])` returns `[]` (valid type), no exception raised
+3. No integration test verified expected operation counts
+4. PR reviews focused on architectural correctness, not data model contracts
+
+**Meta-insight from deliberation:** All three frontier LLMs (and the human reviewer) focused on architectural reasoning in Round 1 (converge-vs-diverge patterns, validation strictness, LLM capability). Only in Round 2, after cross-verification, did they converge on the data model bug. GPT-5.2 succeeded first by checking what fields Arc nodes *actually have* before reasoning about why the code didn't work.
+
+### Decision
+
+Enforce **data model verification discipline** for all graph mutation code:
+
+1. **Code review checklist item:** "Verified all `node.get(field)` and `node[field]` calls reference fields that exist in the model definition"
+
+2. **Contract tests for mutation operations:** Every graph mutation function that produces countable outputs (e.g., routing operations, beat clones, edge rewiring) must have a contract test verifying expected counts:
+   ```python
+   def test_heavy_residue_finds_all_shared_passages():
+       """Verify routing plan finds same passages as validation."""
+       graph = build_test_graph_with_shared_passages(heavy_dilemmas=2)
+       plan = compute_routing_plan(graph)
+       expected = count_shared_passages_on_heavy_dilemmas(graph)
+       assert len(plan.heavy_residue_ops) == expected
+   ```
+
+3. **Runtime assertions for silent failures:** When a graph mutation produces unexpectedly empty results, log a warning with diagnostic context:
+   ```python
+   if not heavy_ops and has_heavy_dilemmas(dilemma_nodes):
+       log.warning("no_heavy_routing_despite_heavy_dilemmas",
+                   heavy_dilemmas=count_heavy_dilemmas(dilemma_nodes),
+                   passage_count=len(passage_nodes))
+   ```
+
+4. **"Read the model definition" protocol:** Before writing code that accesses node/edge fields, read the relevant Pydantic model in `src/questfoundry/models/` to verify field names and types.
+
+### Rationale
+
+- **LLMs excel at architectural reasoning, miss data model verification.** The deliberation proved this empirically: three state-of-the-art models independently focused on design patterns over field name verification in Round 1.
+
+- **Silent failures are the worst failures.** `dict.get("passage_ids", [])` returning `[]` is type-correct but semantically wrong. Runtime assertions catch these.
+
+- **Contract tests prevent regression.** Integration tests that verify counts would have caught this bug before merge.
+
+- **Checklists work.** Aviation and surgery use checklists because humans (and LLMs) are bad at remembering every verification step under cognitive load. Code review is cognitive load.
+
+### Consequences
+
+- New PR review checklist section for graph mutation code (in AGENTS.md, CONTRIBUTING.md)
+- Contract tests added for `compute_routing_plan()`, `split_and_reroute()`, and other count-producing mutations
+- Runtime assertions added to GROW phases 15, 21, 23
+- This ADR captures the meta-lesson from Discussion #965 for future reference
+
+### Links
+
+- [Discussion #965: Root Cause Analysis - Why GROW Stage Validation Never Succeeds](https://github.com/pvliesdonk/questfoundry/discussions/965)
+- [Epic #911: Topology/Prose Layer Separation](https://github.com/pvliesdonk/questfoundry/issues/911)
+- [Epic #950: Unified Routing Plan](https://github.com/pvliesdonk/questfoundry/issues/950)
+- Related: ADR-017 (Unified Routing Plan architecture)
+
+---
+
 ## Template
 
 ```markdown

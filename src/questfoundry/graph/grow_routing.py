@@ -308,6 +308,31 @@ def _intersect_all(sets: list[frozenset[str]]) -> frozenset[str]:
     return result
 
 
+def _build_passage_arcs(graph: Graph) -> dict[str, list[str]]:
+    """Build passage → covering arcs mapping via from_beat.
+
+    Returns a dict mapping passage IDs to the list of arc IDs that cover
+    the passage's from_beat. Passages without from_beat are not included.
+    """
+    passage_nodes = graph.get_nodes_by_type("passage")
+    arc_nodes = graph.get_nodes_by_type("arc")
+
+    # Build beat → covering arcs
+    beat_arcs: dict[str, list[str]] = {}
+    for arc_id, arc_data in arc_nodes.items():
+        for beat_id in arc_data.get("sequence", []):
+            beat_arcs.setdefault(beat_id, []).append(arc_id)
+
+    # Build passage → covering arcs via from_beat
+    passage_arcs: dict[str, list[str]] = {}
+    for pid, p_data in passage_nodes.items():
+        from_beat = p_data.get("from_beat")
+        if from_beat and from_beat in beat_arcs:
+            passage_arcs[pid] = beat_arcs[from_beat]
+
+    return passage_arcs
+
+
 def _compute_ending_splits(
     graph: Graph,
     arc_codewords: dict[str, frozenset[str]],
@@ -322,13 +347,7 @@ def _compute_ending_splits(
     """
     passage_nodes = graph.get_nodes_by_type("passage")
     arc_nodes = graph.get_nodes_by_type("arc")
-
-    # Build passage → covering arcs mapping
-    passage_arcs: dict[str, list[str]] = {}
-    for arc_id, arc_data in arc_nodes.items():
-        for pid in arc_data.get("passage_ids", []):
-            passage_arcs.setdefault(pid, []).append(arc_id)
-
+    passage_arcs = _build_passage_arcs(graph)
     operations: list[RoutingOperation] = []
 
     for terminal_id, t_data in passage_nodes.items():
@@ -394,6 +413,22 @@ def _compute_ending_splits(
             families=len(variants),
         )
 
+    # Runtime assertion: warn if we found no operations but shared endings exist
+    if not operations:
+        shared_endings = [
+            pid
+            for pid, p_data in passage_nodes.items()
+            if p_data.get("is_ending") and len(passage_arcs.get(pid, [])) >= 2
+        ]
+        if shared_endings:
+            log.warning(
+                "no_ending_splits_despite_shared_endings",
+                shared_endings=len(shared_endings),
+                arc_count=len(arc_codewords),
+                message="This indicates a bug in routing plan computation. "
+                "Expected to find ending splits for shared endings but found none.",
+            )
+
     return operations
 
 
@@ -417,11 +452,7 @@ def _compute_heavy_residue(
     path_nodes = graph.get_nodes_by_type("path")
     codeword_nodes = graph.get_nodes_by_type("codeword")
 
-    # Build passage → covering arcs
-    passage_arcs: dict[str, list[str]] = {}
-    for arc_id, arc_data in arc_nodes.items():
-        for pid in arc_data.get("passage_ids", []):
-            passage_arcs.setdefault(pid, []).append(arc_id)
+    passage_arcs = _build_passage_arcs(graph)
 
     # Build arc → paths (raw IDs on arc data, normalize to scoped)
     arc_paths: dict[str, list[str]] = {}
@@ -544,6 +575,22 @@ def _compute_heavy_residue(
                 passage=pid,
                 dilemma=did,
                 variants=len(variants),
+            )
+
+    # Runtime assertion: warn if we found no operations but heavy dilemmas exist
+    if not operations:
+        heavy_dilemmas = [
+            did
+            for did, d_data in dilemma_nodes.items()
+            if d_data.get("residue_weight") == "heavy" or d_data.get("ending_salience") == "high"
+        ]
+        if heavy_dilemmas:
+            log.warning(
+                "no_heavy_routing_despite_heavy_dilemmas",
+                heavy_dilemmas=len(heavy_dilemmas),
+                passage_count=len(passage_nodes),
+                message="This indicates a bug in routing plan computation. "
+                "Expected to find shared passages for heavy-residue dilemmas but found none.",
             )
 
     return operations
