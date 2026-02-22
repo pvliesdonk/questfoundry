@@ -1455,6 +1455,14 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
     checks: list[ValidationCheck] = []
 
     for pid, pdata in passage_nodes.items():
+        # Skip variant passages - they ARE the routing solution, not a problem
+        if pdata.get("residue_for"):
+            continue
+
+        # Skip endings - they're handled by ending splits, not heavy residue
+        if pdata.get("is_ending"):
+            continue
+
         from_beat = str(pdata.get("from_beat") or "")
         if not from_beat:
             continue
