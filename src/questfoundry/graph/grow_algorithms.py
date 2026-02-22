@@ -3326,16 +3326,56 @@ def apply_intersection_mark(
 
     # Collect all path assignments across all intersection beats
     all_path_ids: set[str] = set()
-    belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
     for edge in belongs_to_edges:
         if edge["from"] in beat_set:
             all_path_ids.add(edge["to"])
 
+    # Group paths by dilemma to respect convergence_policy
+    path_to_dilemma: dict[str, str] = {}
+    dilemma_to_policy: dict[str, str] = {}
+
+    # Get dilemma for each path via 'offers' edge
+    offers_edges = graph.get_edges(edge_type="offers")
+    for path_id in all_path_ids:
+        # Find dilemma that offers this path
+        for edge in offers_edges:
+            if edge["to"] == path_id:
+                dilemma_id = edge["from"]
+                path_to_dilemma[path_id] = dilemma_id
+
+                # Get dilemma convergence_policy
+                dilemma_node = graph.get_node(dilemma_id)
+                if dilemma_node:
+                    policy = dilemma_node.get("convergence_policy", "soft")
+                    dilemma_to_policy[dilemma_id] = policy
+                break
+
     # Collect new edges to add (batch to avoid stale reads)
+    # Only cross-assign when convergence_policy allows it
     new_edges: list[tuple[str, str]] = []
     for bid in beat_ids:
         current_paths = {e["to"] for e in belongs_to_edges if e["from"] == bid}
         for path_id in all_path_ids - current_paths:
+            # Check if cross-assignment is allowed
+            bid_paths = {e["to"] for e in belongs_to_edges if e["from"] == bid}
+
+            # Get dilemmas for current beat's paths and target path
+            bid_dilemmas = {path_to_dilemma.get(p) for p in bid_paths if p in path_to_dilemma}
+            target_dilemma = path_to_dilemma.get(path_id)
+
+            # Allow cross-assignment if:
+            # 1. Different dilemmas (always safe)
+            # 2. Same dilemma with soft/flavor policy (allows sharing)
+            # Deny if same dilemma with hard policy (requires isolation)
+            if target_dilemma and target_dilemma in bid_dilemmas:
+                # Same dilemma - check policy
+                policy = dilemma_to_policy.get(target_dilemma, "soft")
+                if policy == "hard":
+                    # Hard policy - do NOT cross-assign within dilemma
+                    continue
+
+            # Safe to cross-assign
             new_edges.append((bid, path_id))
 
     # Update each beat's node data
