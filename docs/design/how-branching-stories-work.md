@@ -10,14 +10,16 @@ These terms have specific meanings in QuestFoundry. Everyone working with the sy
 
 **Shadow** — The answer not explored. Every path has a shadow — the road not taken. Shadows are not dead content; they give weight to the choice. The player chose to trust the mentor, but the *possibility* of betrayal is what makes that trust meaningful. Even unexplored dilemmas (where the player never made an active choice) can cast shadows — the narrative can touch on "what could have been."
 
-**Beat** — A concrete story moment that advances a dilemma toward resolution. Beats are the building blocks between abstract dilemmas and finished prose, and the fundamental unit manipulated throughout the pipeline. BRAINSTORM creates dilemmas. SEED turns them into initial beats. GROW interleaves beats across paths and adds intersections. POLISH reorders, collapses, and splits beats for flow and feasibility. FILL writes prose for each beat. From SEED onward, the work is essentially: creating, ordering, and refining beats.
+**Beat** — A concrete story moment that advances a dilemma toward resolution. Beats are the building blocks between abstract dilemmas and finished prose, and the fundamental unit manipulated throughout the pipeline. BRAINSTORM creates dilemmas. SEED turns them into initial beats. GROW interleaves beats across paths and adds intersections. POLISH reorders, collapses, and splits beats for flow and feasibility. FILL writes prose for each passage. From SEED onward, the work is essentially: creating, ordering, and refining beats.
 
-Each beat does one of four things:
+Each beat describes its relationship to the dilemma it serves — it does one of four things:
 
 - *Advances* the dilemma — builds tension, accumulates evidence
 - *Reveals* truth — the protagonist or reader becomes aware of something bearing on the dilemma
 - *Commits* the choice — the point of no return, the choice locks in
 - *Complicates* the situation — introduces doubt, deepens the dilemma
+
+These describe what a beat does to the dilemma, not its full narrative purpose. When SEED scaffolds a path, it assembles beats into a complete arc — typically introducing the dilemma, developing it through advances and complications, surfacing a reveal, reaching a commit, and playing out the consequences. But this is a common shape, not a formula. A path might need multiple reveals, a try-fail cycle before the commit, emotional reaction beats that process what just happened, or setup beats that establish context without directly touching the dilemma. The scaffold should serve the story, not a template.
 
 **Passage** — What the player actually reads. A passage is the player-facing version of one or more beats, turned into prose. The player sees passages; the author thinks in beats.
 
@@ -60,8 +62,8 @@ The pipeline builds a branching story in stages:
 | **DREAM** | Establish the creative vision |
 | **BRAINSTORM** | Build the cast and dilemmas |
 | **SEED** | Scaffold paths with beats, order dilemmas |
-| **GROW** | Weave independent paths into a branched topology |
-| **POLISH** | Shape the topology into a prose-ready story |
+| **GROW** | Weave independent paths into a branching structure |
+| **POLISH** | Shape the structure into a prose-ready story *(new — split from GROW)* |
 | **FILL** | Write the prose |
 | **DRESS** | Create illustrations and reference material |
 | **SHIP** | Export to playable formats |
@@ -122,13 +124,7 @@ For each dilemma that survives, SEED decides which answers to explore as full pa
 
 ### Scaffolding Paths with Beats
 
-Each explored path needs a skeleton: a sequence of beats that carries the dilemma from introduction to resolution. This scaffold must be **complete** — not every beat needs to be detailed, but the arc from beginning to end must be present:
-
-- **Introduction beats** — establish the dilemma and its stakes. The player learns that the mentor is important, that trust is in question.
-- **Development beats** — build tension, accumulate evidence, deepen the conflict. The mentor acts suspiciously. Or helpfully. Or both.
-- **Reveal beats** — the protagonist or reader becomes aware of something bearing on the dilemma. The mentor's true motives surface.
-- **Commit beats** — the point of no return. The player acts on their knowledge. The choice locks in.
-- **Consequence beats** — the aftermath. The world responds to the committed choice.
+Each explored path needs a skeleton: a sequence of beats that carries the dilemma from introduction to resolution. This scaffold must be **complete** — the arc from beginning to end must be present. A typical scaffold introduces the dilemma, develops it through advances and complications, surfaces one or more reveals, reaches a commit, and plays out the consequences — but the exact shape depends on the story. A path might need a try-fail cycle before the commit, emotional reaction beats after a major reveal, or setup beats that establish a location before the action begins.
 
 Each path's beats should form a coherent story on their own. If you read just one path's beats in order, they should make narrative sense — a beginning, a middle, and an end. GROW will interleave beats from different paths, but it shouldn't need to invent missing structural beats. If the scaffold is incomplete, GROW is forced to fill gaps that are really SEED's responsibility.
 
@@ -165,7 +161,7 @@ These are separate decisions. A soft dilemma can still have heavy residue at spe
 
 ---
 
-## Part 3: Weaving the Topology
+## Part 3: Weaving the Structure
 
 SEED produced independent paths — each a self-contained storyline with its own beats. GROW takes these separate threads and weaves them into a single branched narrative where every valid combination of choices produces a coherent story.
 
@@ -231,14 +227,14 @@ As GROW walks through the interleaved beats, it identifies two critical structur
 **Convergence** is where branched storylines rejoin. This is governed by the intent SEED expressed:
 
 - For hard dilemmas: paths never structurally rejoin. The worlds are too different. The story carries separate beats all the way to separate endings.
-- For soft dilemmas: paths rejoin after enough payoff — a few exclusive beats that let the player experience the consequences of their choice, then the storylines come back together. The residue persists (the mood is different, the details shift), but the structural path is shared again.
+- For soft dilemmas: paths rejoin after enough payoff — a few **gated** beats exclusive to each path that let the player experience the consequences of their choice, then the storylines come back together. The residue persists (the mood is different, the details shift), but the structural path is shared again.
 - For flavor-level choices: paths barely diverge. The choice affects tone and details but not which beats the player experiences.
 
 Convergence is never about erasing a choice. Even when paths rejoin, the residue — the narrative memory of what the player chose — must persist. A converged passage might be shared structurally, but the player's experience of it should still reflect their journey.
 
 ### Validation
 
-Once the topology is complete, GROW validates that it actually works:
+Once the branching structure is complete, GROW validates that it actually works:
 
 - **Every arc is complete.** For every possible combination of choices, is there a coherent sequence of beats from beginning to end?
 - **Every passage is reachable.** No orphan beats floating disconnected from the story.
@@ -252,15 +248,15 @@ If validation fails, the problem is structural — it goes back to GROW or SEED 
 
 ## Part 4: Shaping the Story
 
-GROW produced a valid topology — a branched structure where every combination of choices leads to a complete story. But a valid topology is not yet a story a player wants to read. POLISH takes the frozen topology and shapes it into something ready for prose.
+GROW produced a valid branching structure — one where every combination of choices leads to a complete story. But a valid structure is not yet a story a player wants to read. POLISH takes the frozen structure and shapes it into something ready for prose.
 
 POLISH never changes what happens or on which branches. It changes how the story is presented and ensures that every passage can actually be written well.
 
-*Note: POLISH was historically part of GROW. It is separated here because the concerns are distinct — GROW is about narrative topology, POLISH is about story craft. Mixing them made both harder to reason about.*
+*Note: POLISH was historically part of GROW. It is separated here because the concerns are distinct — GROW is about the branching structure, POLISH is about story craft. Mixing them made both harder to reason about.*
 
 ### Character Arcs
 
-The topology tells us which beats each character appears in, on which paths, in what order. POLISH synthesizes this into explicit arc descriptions: "The mentor begins as a cryptic authority figure, is gradually revealed as either a protector or a manipulator (depending on path), and ends as either a trusted ally or a defeated adversary."
+The branching structure tells us which beats each character appears in, on which paths, in what order. POLISH synthesizes this into explicit arc descriptions: "The mentor begins as a cryptic authority figure, is gradually revealed as either a protector or a manipulator (depending on path), and ends as either a trusted ally or a defeated adversary."
 
 These arc descriptions are metadata for FILL — they ensure that when the prose writer encounters the mentor in scene twelve, they know where the mentor has been and where the mentor is going. Without them, the writer sees individual beats in isolation and risks inconsistency.
 
@@ -268,19 +264,19 @@ These arc descriptions are metadata for FILL — they ensure that when the prose
 
 Within linear sections of the story (stretches where no branching occurs), beats may be reordered for better narrative flow. GROW placed them in a structurally valid order, but that is not always the most compelling reading order. A scene of quiet reflection might read better before a tense confrontation, or two beats about the same character might work better separated by a beat about someone else.
 
-Reordering is safe here because the topology is frozen — no branching logic depends on the order of beats within a linear section.
+Reordering is safe here because the branching structure is frozen — no branching logic depends on the order of beats within a linear section.
 
 ### Prose Feasibility
 
 This is where POLISH earns its place as a separate stage.
 
-Every passage in the topology will eventually need prose. POLISH audits each one: given all the choices that could be active when a player reaches this passage, **can a writer actually produce good prose for it?**
+Every passage in the branching structure will eventually need prose. POLISH audits each one: given all the choices that could be active when a player reaches this passage, **can a writer actually produce good prose for it?**
 
 The practical limit is roughly two to three active states. A writer can craft a passage that works when the mentor is trusted *and* the artifact is found — that is two states, manageable. Add a third (the romance resolved happily) and it is still feasible. But five active states with conflicting residues? No single passage can serve that honestly.
 
 POLISH applies a decision tree to each passage:
 
-- **Is this state relevant to this beat?** If the beat is about finding the artifact, the romance subplot's residue probably doesn't matter here. Annotate the passage: "don't address the romance in this scene." Irrelevant states are simply omitted from prose.
+- **Is this state relevant to this passage?** If the passage is about finding the artifact, the romance subplot's residue probably doesn't matter here. Annotate the passage: "don't address the romance in this scene." Irrelevant states are simply omitted from prose.
 
 - **Two or three compatible states?** The passage can be written as poly-state prose — text that is diegetically honest for all active states simultaneously. "The mentor's expression was unreadable" works whether the mentor is trustworthy or not.
 
@@ -304,7 +300,7 @@ Collapse happens after prose feasibility because collapsed passages need to be f
 
 Not every choice in a story needs to be a real dilemma. Sometimes the player benefits from a sense of exploration — "Do you check the library or the garden first?" — where both options advance the same plot. The player feels agency; the story structure is unchanged.
 
-False branches give the experience of choice without the structural cost of real branching. They are particularly useful in the early story, where the topology might be linear (all introduction beats, no commits yet) but the player should not feel like they are on rails.
+False branches give the experience of choice without the structural cost of real branching. They are particularly useful in the early story, where the structure might be linear (all introduction beats, no commits yet) but the player should not feel like they are on rails.
 
 ### Pacing
 
@@ -316,7 +312,7 @@ Like all POLISH operations, pacing adjustments do not change what happens in the
 
 ## Part 5: Writing the Narrative
 
-POLISH delivered a complete, prose-ready story structure. Every passage is feasible, every variant exists as a separate passage, every residue beat is in place. FILL has one job: write good prose.
+By the end of POLISH, every beat has become a passage — the player-facing unit that FILL will write prose for. Some passages correspond to a single beat; others are collapsed from a chain of beats. Variant passages and residue beats have been created where needed. Every passage is prose-feasible. FILL has one job: write good prose.
 
 FILL does not create, reorder, split, or merge beats. If a passage cannot be written well, the problem is upstream — in POLISH or GROW — not here.
 
