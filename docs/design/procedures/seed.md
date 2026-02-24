@@ -1,5 +1,13 @@
 # SEED Procedure
 
+> For the narrative description of the SEED stage, see [Document 1, Part 2](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
+>
+> **Terminology transitions (2026-02-24):** [Document 3](../document-3-ontology.md) replaces several terms used in this document. The code has not yet been updated.
+> - `convergence_policy` (hard/soft/flavor) → `dilemma_role` (hard/soft). Convergence behavior is derived from the role, not declared directly. `flavor` is removed — flavor-level choices are handled by POLISH as false branches.
+> - `InteractionConstraint` (shared_entity/causal_chain/resource_conflict) → dilemma ordering relationships. The three declared relationships are `wraps`, `concurrent`, and `serial`. `shared_entity` is derived from `anchored_to` edges (not explicitly declared). `causal_chain` is subsumed by `serial`. `resource_conflict` is removed.
+> - `central_entity_ids` (list field on dilemmas) → `anchored_to` edges in the graph.
+> - `location_alternatives` (field on beats) → entity flexibility edges (generalized to any entity category, not just locations).
+
 ## Summary
 
 **Purpose:** Triage BRAINSTORM output into committed story structure. This is the path creation gate—after SEED, no new paths or entities can be created.
