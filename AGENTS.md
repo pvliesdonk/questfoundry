@@ -134,25 +134,25 @@ Agent: [posts to issues only, skips discussion because "it's redundant"]
 
 ## Project Overview
 
-QuestFoundry v5 is a **pipeline-driven interactive fiction generation system** that uses LLMs as collaborators under constraint, not autonomous agents. It generates complete, branching interactive stories through a six-stage pipeline with human review gates.
+QuestFoundry v5 is a **pipeline-driven interactive fiction generation system** that uses LLMs as collaborators under constraint, not autonomous agents. It generates complete, branching interactive stories through a multi-stage pipeline with human review gates.
 
 **Core Philosophy**: "The LLM as a collaborator under constraint, not an autonomous agent."
 
 ## Architecture
 
-### Six-Stage Pipeline
+### Pipeline
 ```
-DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP
+DREAM → BRAINSTORM → SEED → GROW → POLISH → FILL → DRESS → SHIP
 ```
 
 - **DREAM**: Establish creative vision (genre, tone, themes)
 - **BRAINSTORM**: Generate raw material (characters, settings, hooks)
 - **SEED**: Crystallize core elements (protagonist, setting, dilemma)
-- **GROW**: Build complete branching structure (spine, anchors, branches)
+- **GROW**: Build beat DAG with intersections and state flags
+- **POLISH**: Build passage layer — group beats, derive choices, handle false branching *(specified in Documents 1/3, not yet implemented)*
 - **FILL**: Generate prose for scenes
+- **DRESS**: Art direction, illustrations, codex (see ADR-012)
 - **SHIP**: Export to playable formats (Twee, HTML, JSON)
-
-DRESS stage (art direction, illustrations, codex) is specified in Slice 5. See `docs/design/procedures/dress.md` and ADR-012.
 
 ### Key Design Principles
 
@@ -247,20 +247,20 @@ log.error("provider_error", provider="ollama", message=str(e))
 
 ### Model Workflow (Ontology → Pydantic → Graph)
 
-**The design specification (`docs/design/00-spec.md`) defines the ontology.** Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.json`) is the runtime source of truth for story state.
+**[Document 3](docs/design/document-3-ontology.md) defines the authoritative ontology.** The design specification (`docs/design/00-spec.md`) provides supplementary context. Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.db`) is the runtime source of truth for story state.
 
 ```
-docs/design/00-spec.md        ← Ontology definition (node types, relationships)
+docs/design/document-3-ontology.md  ← Authoritative ontology (node types, relationships)
         ↓
-src/questfoundry/models/*.py  ← Hand-written Pydantic models (validate LLM output)
+src/questfoundry/models/*.py        ← Hand-written Pydantic models (validate LLM output)
         ↓
-graph/mutations.py            ← Semantic validation against graph state
+graph/mutations.py                  ← Semantic validation against graph state
         ↓
-graph.json                    ← Runtime source of truth (nodes + edges)
+graph.db                            ← Runtime source of truth (SQLite, nodes + edges)
 ```
 
 **When adding new stage models:**
-1. Check the ontology in `docs/design/00-spec.md` for the node types and fields
+1. Check the ontology in `docs/design/document-3-ontology.md` for the node types and fields
 2. Create/update Pydantic models in `src/questfoundry/models/`
 3. Add semantic validation in `graph/mutations.py` if needed
 4. Export from `models/__init__.py`
@@ -308,8 +308,8 @@ Notice patterns as you write, not when a reviewer points them out. If you copy-p
 Don't just run tests—actually read the generated/output files. Tests verify behavior you thought of; inspection catches behavior you didn't.
 
 ```bash
-# After running a generator, read what it produced
-cat src/questfoundry/artifacts/generated.py
+# After running a stage, inspect the graph output
+sqlite3 projects/myproject/graph.db ".schema"
 
 # After a complex operation, verify the result manually
 git diff --stat
@@ -844,9 +844,9 @@ If asked to inspect or debug a specific project run, start with these files in `
 
 - `logs/debug.jsonl` — complete debug logs (primary signal for failures)
 - `logs/llm_calls.jsonl` — full prompt + LLM traces (use to understand model output)
-- `graph.json` — primary output artifact (current story state)
+- `graph.db` — primary output artifact (SQLite database, current story state)
 - `snapshots/` — pre-stage graph checkpoints for rollback/diagnosis
-- `artifacts/` — derived outputs from `graph.json` (use for context only)
+- `exports/` — derived outputs from `graph.db` (use for context only)
 
 ### 1. Enable LLM Logging
 

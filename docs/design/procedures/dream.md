@@ -1,5 +1,7 @@
 # DREAM Procedure
 
+> For the narrative description of the DREAM stage, see [Document 1, Part 1](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
+
 ## Summary
 
 **Purpose:** Establish the creative vision that guides all subsequent stages. Capture genre, tone, themes, constraints, and scope.

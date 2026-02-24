@@ -37,7 +37,7 @@ DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP
 
 ## Development
 
-QuestFoundry uses an **ontology-first** approach: the design specification (`docs/design/00-spec.md`) defines the ontology, and hand-written Pydantic models in `src/questfoundry/models/` implement it. The graph (`graph.json`) is the runtime source of truth.
+QuestFoundry uses an **ontology-first** approach: the [graph ontology](docs/design/document-3-ontology.md) defines node types and relationships, and hand-written Pydantic models in `src/questfoundry/models/` implement it. The graph (`graph.db`) is the runtime source of truth.
 
 ## License
 
