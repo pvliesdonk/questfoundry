@@ -1,7 +1,9 @@
 # Architecture Overview
 
-**Last Updated**: 2026-01-01
-**Implementation Status**: Slice 1 (In Progress)
+**Last Updated**: 2026-02-24
+**Implementation Status**: Slices 1–3 complete, Slice 4 (FILL) in progress
+
+> **Note (2026-02-24):** This document has not been kept fully up to date. The component status table and data flow diagram below are stale — they reflect Slice 1 state. For authoritative information, see [Document 1](../design/how-branching-stories-work.md) (story model), [Document 3](../design/document-3-ontology.md) (graph ontology), and the [ADRs](decisions.md). Key changes since this document was written: graph storage is now SQLite (`graph.db`, see ADR-014); all stage artifacts consolidated into the graph (see ADR-016); GROW is substantially implemented; POLISH stage specified but not yet implemented.
 
 ---
 
@@ -103,7 +105,7 @@ See [decisions.md](./decisions.md) for Architecture Decision Records.
 For detailed information on specific components:
 
 - **DREAM Pipeline**: See [langchain-dream-pipeline.md](./langchain-dream-pipeline.md) - Three-phase pattern, provider strategies, validation flow
-- **Graph Storage**: See [graph-storage.md](./graph-storage.md) - Graph-as-source-of-truth and mutations
+- **Graph Storage**: See ADR-014 in [decisions.md](./decisions.md) - SQLite-based graph storage
 - **Interactive Stages**: See [interactive-stages.md](./interactive-stages.md) - Multi-turn dialogue patterns
 
 ---

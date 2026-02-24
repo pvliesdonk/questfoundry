@@ -584,7 +584,7 @@ Key design choices:
 - `grow_phase2_agnostic.yaml` template deleted.
 - No behavioral change for stories — residue beats were already generating variation before the cleanup.
 
-> **Note (2026-02-24):** [Document 3](../design/document-3-ontology.md) retains the residue beats concept but renames "codewords" to "state flags" (internal routing) and "codewords" (player-facing). The structural approach is preserved; the terminology changes in a future PR. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+> **Note (2026-02-24):** [Document 3](../design/document-3-ontology.md) retains the residue beats concept but splits the unified "codeword" concept into "state flags" (internal routing) and "codewords" (player-facing gamebook markers). The structural approach is preserved; the terminology changes in a future PR. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
 
 ---
 

@@ -425,7 +425,7 @@ arc:
 
 ### Phase 8: Passage and State Derivation
 
-> **Moves to POLISH:** [Document 1, Part 4](../how-branching-stories-work.md) assigns passage creation (8a), state flag/codeword creation (8b), overlay creation (8c), and choice derivation (Phase 9) to the POLISH stage. See also [Document 3, Part 5](../document-3-ontology.md) (The Passage Layer) and [Document 3, Part 6](../document-3-ontology.md) (State, Visibility, and Conditional Content). The code has not yet been reorganized.
+> **Moves to POLISH:** [Document 1, Part 4](../how-branching-stories-work.md) assigns passage creation (8a), state flag/codeword creation (8b), overlay creation (8c), and choice derivation (Phase 9) to the POLISH stage. See also [Document 3, Part 5](../document-3-ontology.md) (The Passage Layer) and [Document 3, Part 6](../document-3-ontology.md) (Entity Overlays and State). The code has not yet been reorganized.
 
 **Purpose:** Create player-facing passages from beats, and derive codewords and overlays from consequences.
 

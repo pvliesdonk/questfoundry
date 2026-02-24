@@ -11,8 +11,8 @@ For **design specifications**, see [../design/](../design/).
 | [overview.md](./overview.md) | High-level architecture overview |
 | [decisions.md](./decisions.md) | Architecture Decision Records (ADRs) |
 | [langchain-dream-pipeline.md](./langchain-dream-pipeline.md) | DREAM stage implementation (three-phase pattern, provider strategies) |
-| [graph-storage.md](./graph-storage.md) | Graph-as-source-of-truth storage and mutations |
 | [interactive-stages.md](./interactive-stages.md) | Multi-turn dialogue patterns and interaction design |
+| [grow-implementation-plan.md](./grow-implementation-plan.md) | GROW phase implementation plan and progress tracking |
 
 ## Design vs Architecture
 
