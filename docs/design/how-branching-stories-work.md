@@ -23,7 +23,7 @@ These describe what a beat does to the dilemma, not its full narrative purpose. 
 
 **Passage** — What the player actually reads. A passage is the player-facing version of one or more beats, turned into prose. The player sees passages; the author thinks in beats.
 
-**Commit** — The moment a choice becomes irreversible. Before the commit, the story can be the same regardless of what the player will choose. At the commit, the player acts — they draw their sword, sign the contract, kiss the spy. After the commit, the story must reflect the choice.
+**Commit** — The moment a choice becomes irreversible. Before the commit, the story can be the same regardless of what the player will choose. At the commit, the player acts — they draw their sword, sign the contract, kiss the spy. After the commit, the story must reflect the choice. Most commits are a single dramatic moment, but a commit can also be distributed — accumulated across several smaller choices that collectively determine the outcome (see *Future: Distributed Commits* in the SEED section).
 
 **Reveal** — The moment the protagonist or reader becomes aware of a dilemma's truth. A reveal surfaces information; a commit locks in a choice. A story typically reveals before it commits — the player learns the mentor might be lying (reveal), then decides whether to confront them (commit). But they are distinct moments.
 
@@ -68,7 +68,7 @@ The pipeline builds a branching story in stages:
 | **DRESS** | Create illustrations and reference material |
 | **SHIP** | Export to playable formats |
 
-This document explains the creative process at each stage — not the code or the technical specification, but what an author is trying to accomplish and why.
+This document explains the creative process at each stage — not the code or the technical specification, but what an author is trying to accomplish and why. For the formal graph ontology that translates these narrative concepts into a data model, see [Document 3 — Story Graph Ontology](document-3-ontology.md).
 
 ---
 
@@ -134,7 +134,7 @@ While scaffolding beats, SEED annotates them with **flexibility** — hints abou
 
 A beat that says "the protagonist meets the spy at the docks" might be annotated: the docks could also be the market. The spy could also be the informant. These are not changes — they are invitations. They tell GROW: "if you need to merge this beat with another storyline, here's where there's room."
 
-This is how independent paths create the conditions for intersection later. If path A has "meet the spy at the docks" and path B has "find the artifact at the market," and SEED annotated that the spy meeting could happen at the market too — GROW can merge them into one scene: meeting the spy at the market, where the artifact also happens to be.
+This is how independent paths create the conditions for intersection later. If path A has "meet the spy at the docks" and path B has "find the artifact at the market," and SEED annotated that the spy meeting could happen at the market too — GROW can group them into one scene: meeting the spy at the market, where the artifact also happens to be. The beats remain separate — each still advances its own dilemma — but they co-occur, and POLISH will turn them into a single passage.
 
 ### Ordering Dilemmas
 
@@ -147,6 +147,12 @@ Not all dilemmas play the same role in the story. SEED explicitly orders them:
 This ordering has profound structural consequences. Any beat that comes after a committed dilemma exists in multiple versions — one for each path of that dilemma. Hard dilemmas committing late means most beats come *before* their commit, keeping the story shared and efficient. Soft dilemmas committing early means their brief branching resolves quickly.
 
 SEED also identifies which soft dilemmas can be **serial** — one resolving before another even introduces. Serial soft dilemmas never interact structurally, which is a major complexity reducer. Two soft dilemmas that overlap in time must account for each other; two that are sequential are independent.
+
+#### Future: Distributed Commits
+
+A dilemma's commit is typically a single dramatic moment — one choice that locks in the path. But a commit can also be **distributed** across multiple smaller choices that accumulate toward resolution. Instead of one visible fork, the player makes three or five smaller decisions whose collective weight determines the outcome. The player may not realize which moments mattered until the reckoning — the point where the story reflects their accumulated pattern back to them.
+
+This pattern (known in interactive fiction craft as "moral dilemma chains" or "the Witcher Principle") makes hard choices less obvious and more resistant to save-scumming, but it has significant structural implications. It is not part of the current pipeline and is documented here as a known future direction. See [Document 3](document-3-ontology.md) for a discussion of the implementation options.
 
 ### Convergence Sketching
 
@@ -216,7 +222,7 @@ If the mentor path has "the mentor gives cryptic advice" and the artifact path h
 
 Intersections are what make a branching story feel like a *world* rather than parallel novels. When different dilemmas collide in the same scene, the player feels that their choices interact — that the story is a living thing responding to them, not a set of isolated tracks.
 
-SEED's entity flexibility annotations are the raw material here. GROW looks for beats that share entities, overlap in location, or could plausibly occur simultaneously — and proposes merging them. The author approves, rejects, or modifies each proposed intersection.
+SEED's entity flexibility annotations are the raw material here. GROW looks for beats that share entities, overlap in location, or could plausibly occur simultaneously — and proposes grouping them into shared scenes. The author approves, rejects, or modifies each proposed intersection.
 
 ### Divergence and Convergence
 
@@ -237,10 +243,10 @@ Convergence is never about erasing a choice. Even when paths rejoin, the residue
 Once the branching structure is complete, GROW validates that it actually works:
 
 - **Every arc is complete.** For every possible combination of choices, is there a coherent sequence of beats from beginning to end?
-- **Every passage is reachable.** No orphan beats floating disconnected from the story.
+- **Every beat is reachable.** No orphan beats floating disconnected from the story.
 - **Every dilemma resolves.** Each dilemma has a commit beat on every arc that explores it.
-- **No contradictions.** No beat requires a condition that is impossible to reach. No choice demands knowledge the player couldn't have.
-- **No dead ends.** The player can always reach an ending.
+- **No contradictions.** No beat requires a condition that is impossible to reach.
+- **No dead ends.** Every arc reaches an ending.
 
 If validation fails, the problem is structural — it goes back to GROW or SEED for fixing, not forward to POLISH for patching.
 
