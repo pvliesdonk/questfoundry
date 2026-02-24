@@ -1,5 +1,7 @@
 # BRAINSTORM Procedure
 
+> For the narrative description of the BRAINSTORM stage, see [Document 1, Part 1](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
+
 ## Summary
 
 **Purpose:** Expansive exploration of story possibilities. Generate raw creative material that SEED will triage into committed structure.

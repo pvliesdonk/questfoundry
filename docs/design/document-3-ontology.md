@@ -1,5 +1,7 @@
 # Story Graph Ontology — Data Model for Branching Fiction
 
+> **Status: Authoritative.** This document, together with [Document 1](how-branching-stories-work.md), is the authoritative source of truth for QuestFoundry's graph ontology. Where other design documents contradict this one, this document takes precedence. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+
 ## Guiding Principle
 
 The graph serves the story. Every node type, edge type, and property in this ontology exists because a narrative concept from [Document 1](how-branching-stories-work.md) requires it. If a graph concept cannot be traced to a narrative purpose, it does not belong.

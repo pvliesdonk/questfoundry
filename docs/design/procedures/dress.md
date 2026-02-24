@@ -4,6 +4,10 @@
 **Parent:** docs/design/00-spec.md
 **Purpose:** Detailed specification of the DRESS stage mechanics
 
+> For the narrative description of the DRESS stage, see [Document 1, Part 6](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
+>
+> **Terminology note:** [Document 3](../document-3-ontology.md) distinguishes *state flags* (internal routing markers) from *codewords* (player-facing gamebook markers). This document uses "codewords" throughout, which maps to "state flags" in Document 3's vocabulary. Codex visibility gating uses state flags internally; SHIP projects a subset as player-facing codewords. The code has not yet been updated.
+
 ---
 
 ## Summary

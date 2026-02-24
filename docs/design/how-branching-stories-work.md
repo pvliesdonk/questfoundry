@@ -1,5 +1,7 @@
 # How to Build a Branching Interactive Story
 
+> **Status: Authoritative.** This document, together with [Document 3](document-3-ontology.md), is the authoritative source of truth for QuestFoundry's story model. Where other design documents contradict this one, this document takes precedence. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+
 ## Common Language
 
 These terms have specific meanings in QuestFoundry. Everyone working with the system — authors, developers, reviewers — must use them consistently.
