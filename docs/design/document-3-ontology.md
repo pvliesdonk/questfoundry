@@ -176,7 +176,7 @@ Dilemmas interact with each other. SEED declares these pairwise relationships:
 
 **Shared entity** — Two dilemmas are anchored to the same entity. This is not an ordering relationship but a signal for intersection potential: if both dilemmas involve the mentor, their beats may naturally share scenes.
 
-These relationships are declared by SEED as **hints** for GROW's interleaving. They express the author's intent for how dilemmas relate in the story's timeline. GROW uses them to guide beat placement; POLISH may adjust within the constraints of the finalized beat DAG.
+The three ordering relationships (wraps, concurrent, serial) are declared by SEED as **hints** for GROW's interleaving. They express the author's intent for how dilemmas relate in the story's timeline. GROW uses them to guide beat placement; POLISH may adjust within the constraints of the finalized beat DAG. The shared-entity signal requires no explicit declaration — it is derived from the `anchored_to` edges already present in the graph.
 
 ### Residue Weight
 
@@ -609,14 +609,14 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | Intersection Group | GROW | No | Declaration that beats from different paths co-occur |
 | State Flag | GROW | Yes | Boolean world-state marker derived from consequence |
 | Entity Overlay | GROW | Yes | Conditional entity state activated by state flags |
+| Character Arc Metadata | POLISH | No | Per-entity trajectory summary for FILL context (start → pivot → end per path) |
 | Passage | POLISH | Yes (partial) | Prose container holding 1+ beats |
+| Scene Blueprint | FILL | No | Per-passage writing plan (sensory palette, opening move) |
 | Codeword | SHIP | Yes | Player-facing projection of a state flag (gamebook formats) |
 | Art Direction | DRESS | No | Visual identity: style, palette, composition |
 | Entity Visual | DRESS | No | Per-entity visual profile for illustration consistency |
 | Illustration | DRESS | Yes | Image asset with caption |
 | Codex Entry | DRESS | Yes | Diegetic encyclopedia entry |
-| Character Arc Metadata | POLISH | No | Per-entity trajectory summary for FILL context (start → pivot → end per path) |
-| Scene Blueprint | FILL | No | Per-passage writing plan (sensory palette, opening move) |
 
 "Persistent (partial)" means the node is exported by SHIP, but only a subset of its fields — working metadata is stripped.
 
