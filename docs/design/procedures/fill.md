@@ -4,11 +4,18 @@
 **Parent:** questfoundry-v5-spec.md
 **Purpose:** Detailed specification of the FILL stage mechanics
 
+> For the narrative description of the FILL stage, see [Document 1, Part 5](../how-branching-stories-work.md). This document provides the detailed algorithm specification.
+>
+> **Key changes from Documents 1/3 (2026-02-24):**
+> - The Poly-State Prose section below is **superseded** by ADR-015 (residue beats) and Document 1. See the note on that section.
+> - FILL receives character arc metadata produced by POLISH. See [Document 1, Part 4](../how-branching-stories-work.md) and [Document 3, Part 1](../document-3-ontology.md).
+> - FILL's input comes from POLISH (not directly from GROW). The passage layer, choices, and state flags are created by POLISH.
+
 ---
 
 ## Overview
 
-FILL transforms passage summaries into prose. It takes a validated story graph from GROW and produces playable content.
+FILL transforms passage summaries into prose. It takes a validated story graph from POLISH and produces playable content.
 
 **Input:**
 - Validated topology (passages with summaries, choice edges)
@@ -165,6 +172,8 @@ These details should be captured for consistency in later passages.
 If prose reveals that a new recurring entity is needed, FILL should flag and pause for human review. Creating the entity requires returning to SEED.
 
 ### Poly-State Prose (Shared Beats)
+
+> **Superseded by ADR-015 and Document 1.** Poly-state prose has been replaced by residue beats (see [ADR-015](../../architecture/decisions.md#adr-015-residue-beats-replace-poly-state-prose)). Shared passages are kept neutral; residue beats set path-specific emotional context before convergence points. The `flag: incompatible_states` escape hatch described below no longer exists. This section is retained for historical context.
 
 Shared beats (path-agnostic) appear in multiple arcs. When writing shared beats, FILL must produce **poly-state prose**: prose that is diegetically accurate for the active state but compatible with all shadow states.
 

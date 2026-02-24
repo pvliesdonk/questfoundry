@@ -513,6 +513,8 @@ Key design choices:
 - Topology enforcement for `hard` policy deferred to #751
 - Spoke grants wiring deferred to #752
 
+> **Forward-looking note (2026-02-24):** [Document 3](../design/document-3-ontology.md) replaces `convergence_policy` (hard/soft/flavor) with `dilemma_role` (hard/soft). Convergence behavior is derived from the role. `flavor` is removed — handled by POLISH as false branches. A superseding ADR will be created when the code migration is implemented. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+
 ---
 
 ## ADR-014: SQLite Graph Storage
@@ -581,6 +583,8 @@ Key design choices:
 - `FillPassageOutput.flag` and `flag_reason` fields removed.
 - `grow_phase2_agnostic.yaml` template deleted.
 - No behavioral change for stories — residue beats were already generating variation before the cleanup.
+
+> **Note (2026-02-24):** [Document 3](../design/document-3-ontology.md) retains the residue beats concept but renames "codewords" to "state flags" (internal routing) and "codewords" (player-facing). The structural approach is preserved; the terminology changes in a future PR. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
 
 ---
 
@@ -696,6 +700,8 @@ Key design choices:
 - [Epic #911: Topology/Prose Layer Separation](https://github.com/pvliesdonk/questfoundry/issues/911)
 - [ADR-013: Branching Contract Design](https://github.com/pvliesdonk/questfoundry/blob/main/docs/architecture/decisions.md#adr-013-branching-contract-design)
 - [ADR-015: Residue Beats Replace Poly-State Prose](https://github.com/pvliesdonk/questfoundry/blob/main/docs/architecture/decisions.md#adr-015-residue-beats-replace-poly-state-prose)
+
+> **Note (2026-02-24):** [Document 3](../design/document-3-ontology.md) redefines intersections as co-occurrence groups (not cross-path `belongs_to` edges) and moves passage/choice creation to the POLISH stage. The Unified Routing Plan architecture may need redesign to account for the POLISH stage boundary. Status remains Proposed pending Document 3 convergence work. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
 
 ---
 
