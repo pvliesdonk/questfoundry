@@ -126,6 +126,22 @@ The total number of codewords is naturally bounded by the number of soft dilemma
 
 **Persistent (when present).** Exported by SHIP for gamebook formats. In digital formats, the engine tracks state flags silently and codewords may not exist at all.
 
+### Character Arc Metadata
+
+A per-entity summary of how a character changes across the story, synthesized by POLISH from the beat structure. "The mentor begins as a cryptic authority figure, is gradually revealed as either a protector or a manipulator (depending on path), and ends as either a trusted ally or a defeated adversary."
+
+Character arc metadata is stored as an annotation on entity nodes — it describes the entity's trajectory on each path (start → pivot → end). It is working data for FILL: when the prose writer encounters the mentor in a mid-story scene, they need to know where the mentor has been and where the mentor is going. Without it, the writer sees individual beats in isolation and risks inconsistency.
+
+**Working.** Created by POLISH, consumed by FILL. Not exported.
+
+### Scene Blueprint
+
+A per-passage writing plan created by FILL before prose generation. Each blueprint captures the sensory palette (sight, sound, smell), character gestures, the opening move (dialogue, action, sensory image, or internal thought), a craft constraint, and a one-word emotional arc.
+
+Scene blueprints are working data for FILL's own process — they structure the writing of each passage without affecting the graph. FILL creates them in a planning phase and consumes them during prose generation. They are not passed to other stages.
+
+**Working.** Created and consumed within FILL. Not exported.
+
 ---
 
 ## Part 2: Dilemma Ordering and Relationships
@@ -599,6 +615,7 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | Entity Visual | DRESS | No | Per-entity visual profile for illustration consistency |
 | Illustration | DRESS | Yes | Image asset with caption |
 | Codex Entry | DRESS | Yes | Diegetic encyclopedia entry |
+| Character Arc Metadata | POLISH | No | Per-entity trajectory summary for FILL context (start → pivot → end per path) |
 | Scene Blueprint | FILL | No | Per-passage writing plan (sensory palette, opening move) |
 
 "Persistent (partial)" means the node is exported by SHIP, but only a subset of its fields — working metadata is stripped.
@@ -620,15 +637,27 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | `grouped_in` | Beat → Passage | POLISH | This beat is part of this passage |
 | `choice` | Passage → Passage | POLISH | Player navigation with label, requires, grants |
 | `variant_of` | Passage → Passage | POLISH | This passage is a variant of the base passage |
+| `wraps` | Dilemma → Dilemma | SEED | A introduces before B, B resolves before A |
+| `concurrent` | Dilemma → Dilemma | SEED | Neither wraps the other; active simultaneously |
+| `serial` | Dilemma → Dilemma | SEED | A resolves before B introduces; no structural interaction |
 
-### Dilemma Pairwise Relationships
+### Dilemma Ordering Relationships
 
-| Relationship | Declared by | Meaning |
-|---|---|---|
-| Wraps | SEED | A introduces before B, B resolves before A |
-| Concurrent | SEED | Neither wraps the other; active simultaneously |
-| Serial | SEED | A resolves before B introduces; no structural interaction |
-| Shared Entity | SEED | Both dilemmas anchored to same entity; intersection potential |
+These are edges between dilemma nodes, declared by SEED. They express the author's intent for how dilemmas relate in time.
+
+| Relationship | Meaning |
+|---|---|
+| Wraps | A introduces before B, B resolves before A |
+| Concurrent | Neither wraps the other; active simultaneously |
+| Serial | A resolves before B introduces; no structural interaction |
+
+### Dilemma Signals
+
+Distinct from ordering — these are observations about dilemma overlap, not temporal relationships.
+
+| Signal | Meaning |
+|---|---|
+| Shared Entity | Both dilemmas anchored to same entity; intersection potential (derivable from `anchored_to` edges) |
 
 ### State Flag Scoping
 

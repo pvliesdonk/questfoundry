@@ -132,7 +132,7 @@ Each path's beats should form a coherent story on their own. If you read just on
 
 While scaffolding beats, SEED annotates them with **flexibility** — hints about what could be changed without breaking the beat's narrative purpose.
 
-A beat that says "the protagonist meets the spy at the docks" might be annotated: the docks could also be the market. The spy could also be the informant. These are not changes — they are invitations. They tell GROW: "if you need to merge this beat with another storyline, here's where there's room."
+A beat that says "the protagonist meets the spy at the docks" might be annotated: the docks could also be the market. The spy could also be the informant. These are not changes — they are invitations. They tell GROW: "if you need to group this beat with another storyline, here's where there's room."
 
 This is how independent paths create the conditions for intersection later. If path A has "meet the spy at the docks" and path B has "find the artifact at the market," and SEED annotated that the spy meeting could happen at the market too — GROW can group them into one scene: meeting the spy at the market, where the artifact also happens to be. The beats remain separate — each still advances its own dilemma — but they co-occur, and POLISH will turn them into a single passage.
 
