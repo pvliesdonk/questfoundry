@@ -21,7 +21,7 @@ Before starting:
 1. Read [Document 1](./how-branching-stories-work.md) and [Document 3](./document-3-ontology.md) — Authoritative story model and graph ontology
 2. Read [00-spec.md](./00-spec.md) — Supplementary specification
 3. Read [procedures/](./procedures/) — Stage algorithm specifications
-3. Set up development environment (see [06-proposed-dependencies.md](./06-proposed-dependencies.md))
+4. Set up development environment (see [06-proposed-dependencies.md](./06-proposed-dependencies.md))
 
 ---
 

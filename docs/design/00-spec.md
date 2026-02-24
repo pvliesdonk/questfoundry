@@ -57,7 +57,7 @@ DREAM → BRAINSTORM → SEED → GROW → POLISH → FILL → DRESS → SHIP
 | DREAM | Genre, tone, themes, constraints | Human + LLM |
 | BRAINSTORM | Entities, dilemmas, answers | LLM-heavy (discuss → summarize → serialize) |
 | SEED | Triage: curate entities, promote dilemmas to paths | Human-heavy |
-| GROW | Build beat DAG: intersections, interleaving, state flags | Layered, human gates |
+| GROW | Build beat DAG: intersections, interleaving, beat consequences | Layered, human gates |
 | POLISH | Build passage layer: group beats, derive choices, false branching | *(specified, not yet implemented)* |
 | FILL | Generate prose for passages | LLM, sequential |
 | DRESS | Illustrations, codex | LLM, optional |
