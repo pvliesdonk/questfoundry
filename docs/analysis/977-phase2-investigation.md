@@ -596,6 +596,16 @@ Scope: Large. Depends on #996 (Arc removal) and #989 (POLISH completion). Should
 
 Scope: Moderate. Currently implicit within #989 but needs explicit tracking since the split affects test organization (~2598 lines in `test_grow_validation.py`).
 
+### 9. `refactor: passage_from → grouped_in edge migration`
+
+`passage_from` edges (created at `grow_algorithms.py:1225,1227`) → `grouped_in` edges. Current 1:1 pattern (`from_beat` field) → N:1 (passages contain multiple beats via `grouped_in` edges). `fill_context.py` has 25+ references to `from_beat`/`from_beats` that must switch to edge traversal.
+
+#988 deliberately defers this migration. This issue (#1000) tracks completing the deferral. Blocks #993 (FILL context rewrite).
+
+### 10. `feat: add temporal_hint field to InitialBeat model`
+
+Document 3 (Appendix A, divergence #12) specifies temporal metadata on beats. `InitialBeat` at `seed.py:203` has no `temporal_hint` field. #981 adds the schema to docs; this issue (#1001) tracks adding the field to `models/seed.py`, `mutations.py`, and prompt templates.
+
 ---
 
 ## Recommended Implementation Order
@@ -603,17 +613,31 @@ Scope: Moderate. Currently implicit within #989 but needs explicit tracking sinc
 1. **#981** — Doc 1/3 fixes (prerequisite for all)
 2. **#982** — Write procedures/polish.md (design before code)
 3. **#986** — ADR updates (docs, no code)
-4. **#984 + #992** — Terminology renames + edge renames (mechanical, unblocks everything)
-5. **#983** — InitialBeat.paths singular (CRITICAL structural fix)
-6. **New: intersection redesign** — intersection_group nodes (fixes hard-convergence root cause, depends on #983)
-7. **#985** — InteractionConstraint redesign
-8. **#987 + #995** — POLISH skeleton + CLI wiring (unblocks POLISH phases)
-9. **New: GROW validation split** — separate beat-DAG from passage checks (unblocks clean POLISH validation)
-10. **#988** — POLISH Phases 4-6 (passage layer)
-11. **#989 + #996** — POLISH Phase 7 + GROW removal + Arc removal
-12. **New: GROW phase refactoring** — remaining phases redesigned for computed arcs
-13. **#993** — FILL context rewrite for POLISH output
-14. **#994** — SHIP state-flag projection
+4. **#984 + #992** — Terminology renames + edge renames + `anchored_to` migration
+5. **#1001** — Add `temporal_hint` to InitialBeat (small, depends on #981)
+6. **#983** — InitialBeat.paths singular (CRITICAL structural fix)
+7. **#997** — Intersection model redesign (fixes hard-convergence root cause, depends on #983; supersedes #970)
+8. **#985** — InteractionConstraint + `location_alternatives` → `flexibility` edges
+9. **#987 + #995** — POLISH skeleton + CLI wiring (unblocks POLISH phases)
+10. **#999** — GROW validation split (unblocks clean POLISH validation)
+11. **#988** — POLISH Phases 4-6 (includes `choice` edge consolidation)
+12. **#989 + #996** — POLISH Phase 7 + GROW removal + Arc removal
+13. **#998** — GROW remaining phase refactoring
+14. **#1000** — `grouped_in` edge migration (deferred from #988)
+15. **#993** — FILL context rewrite (depends on #1000)
+16. **#994** — SHIP state-flag projection
+
+---
+
+## Gap Analysis
+
+Systematic audit of report vs issues completed 2026-02-25. All changes identified in this report are now tracked by exactly one issue. Resolved gaps:
+- `central_entity_ids` → `anchored_to` edge migration: explicitly scoped in #984
+- `location_alternatives` → `flexibility` edges: explicitly scoped in #985
+- `temporal_hint` field on InitialBeat: #1001 (code-side; #981 covers docs)
+- `passage_from` → `grouped_in` edge migration: #1000 (deferred from #988)
+- `choice_from`+`choice_to` → `choice` consolidation: explicitly scoped in #988
+- #970 vs #997 coordination: comments added to both issues
 
 ---
 
@@ -623,5 +647,4 @@ Scope: Moderate. Currently implicit within #989 but needs explicit tracking sinc
 - Document 3: `docs/design/document-3-ontology.md` (Appendix A: lines 694-793)
 - Discussion #980: Design review deliberation (3 rounds)
 - Issue #977: Investigation epic
-- Issue #990: Implementation epic (tracks #981–#989, #992–#996, and GROW-specific issues)
-- Issue #990: Implementation epic (tracks #981-#989)
+- Issue #990: Implementation epic (19 issues: #981–#989, #992–#1001)
