@@ -2,7 +2,7 @@
 
 **Status:** Specification Complete
 **Parent:** [Document 1, Part 4](../how-branching-stories-work.md)
-**ADR:** [ADR-019](../../architecture/decisions.md#adr-019-polish-stage-supersedes-grow-routing) (supersedes ADR-017)
+**ADR:** [ADR-019](../../architecture/decisions.md#adr-019-polish-stage-supersedes-grow-routing) (supersedes ADR-017; created in parallel PR #1020)
 **Purpose:** Detailed specification of the POLISH stage mechanics
 
 > For the narrative description of the POLISH stage, see [Document 1, Part 4](../how-branching-stories-work.md). For the formal ontology of passages, choices, and variants, see [Document 3, Parts 5-6](../document-3-ontology.md). This document provides the algorithm specification.
@@ -124,7 +124,7 @@ Within linear sections of the beat DAG (stretches with single predecessor and si
 
 - Only beats within a single linear section are reordered — never across branching points.
 - Sections with fewer than 3 beats are not worth reordering.
-- If the LLM proposes an invalid reordering, keep the original order.
+- If the LLM proposes an invalid reordering, keep the original order and append a warning to `PolishPlan.warnings` so the user knows which sections were not reordered and why.
 
 ---
 
@@ -192,6 +192,20 @@ For each entity that appears in two or more beats, synthesizes an explicit arc d
 
 4. **Store as `CharacterArcMetadata` nodes** annotated on entity nodes. These are working data for FILL — they ensure prose consistency across passages.
 
+### CharacterArcMetadata Schema
+
+```yaml
+character_arc_metadata:
+  entity_id: <entity_id>
+  start: <string>              # How the entity is introduced
+  pivots:                       # Key trajectory changes (per path)
+    - path_id: <path_id>
+      beat_id: <beat_id>        # The beat where the pivot occurs
+      description: <string>     # What changes at this moment
+  end_per_path:                 # Where the entity ends up (per path)
+    <path_id>: <string>
+```
+
 ### Output
 
 Character arc metadata is consumed by FILL when writing prose. When the prose writer encounters the mentor in scene twelve, they know where the mentor has been and where the mentor is going.
@@ -205,8 +219,10 @@ Character arc metadata is consumed by FILL when writing prose. When the prose wr
 - No changes to predecessor/successor edges between existing beats
 - No changes to `belongs_to` edges (path membership)
 - No changes to intersection group membership
-- POLISH MAY still create new beat nodes with roles `micro_beat` (Phase 2, already done), `residue_beat`, or `sidetrack_beat` (Phase 6)
-- New beats created in Phase 6 get their own ordering edges but do not alter the structural topology
+
+**What happened before the freeze:** Phases 1-2 may have reordered beats and inserted micro-beats (`role: "micro_beat"`). These modifications are now permanent — the freeze locks them in.
+
+**What can still happen after the freeze:** Phase 6 (Atomic Plan Application) creates new beat nodes with roles `residue_beat` or `sidetrack_beat`. These new beats get their own ordering edges but do not alter the branching topology — they are inserted within linear sections or as short detours that rejoin the main path.
 
 The freeze applies to the *branching structure*, not the *node count*. This is already the pattern GROW uses — `insert_gap_beat()` creates beats after structural validation. The freeze is about branching topology (which arcs exist, how they diverge), not about node creation.
 
@@ -228,6 +244,8 @@ Groups beats into passages through three mechanisms:
 2. **Collapse grouping.** Sequential beats from the same path with no choices between them become one passage. Three beats in a row — "search the study," "find the hidden letter," "read the letter" — collapse into one flowing scene. Collapse may produce multiple passages from a chain if the beats have incompatible entities or natural hard breaks.
 
 3. **Singleton.** A beat that is not part of an intersection group and cannot be collapsed with neighbors becomes a single-beat passage.
+
+The hub-and-spoke passage pattern from GROW Phase 9b is subsumed by these mechanisms: intersection groups naturally produce hub passages (where multiple storylines converge in one scene), and collapse grouping handles the linear spoke segments that radiate from them. No special-case logic is needed.
 
 **Output:** A list of `PassageSpec` objects, each containing:
 - `passage_id`
@@ -255,9 +273,11 @@ For each structurally relevant flag:
 |----------|-----------|---------------|
 | **Clean** | 0 structurally relevant flags | No annotation needed |
 | **Annotated** | 1+ structurally relevant but narratively irrelevant flags | Annotate `irrelevant_flags` on passage; FILL ignores these |
-| **Residue** | 1-2 narratively relevant, light residue | Create residue beats before shared passage |
+| **Residue** | 1-3 narratively relevant flags, all light/cosmetic residue | Create residue beats before shared passage |
 | **Variant** | Any narratively relevant heavy residue flag | Create variant passages |
 | **Structural split** | 4+ narratively relevant conflicting flags | Flag for human review |
+
+These categories are evaluated in order: a passage with 2 light-residue flags and 1 heavy-residue flag is categorized as **Variant** (heavy takes precedence). The 4-flag threshold for structural splits is a heuristic — it represents the point where a single passage cannot honestly serve all state combinations.
 
 The "Annotated" category gives FILL explicit permission to ignore certain active state flags, preventing prose that references irrelevant subplots.
 
@@ -285,10 +305,9 @@ Finds long linear stretches where the player has no choices — candidates for f
 
 2. **For each stretch**, produce a `FalseBranchCandidate` specifying:
    - The passage IDs in the stretch
-   - The candidate type (diamond or sidetrack)
-   - Surrounding narrative context
+   - Surrounding narrative context (beat summaries, entity references, pacing flags)
 
-These are *opportunities*, not decisions. Phase 5 makes the creative choices.
+These are *opportunities*, not decisions. Phase 4d does not assign a type (diamond vs sidetrack) — that is a creative decision made by the LLM in Phase 5. Phase 4d only identifies *where* a false branch could be inserted.
 
 ### PolishPlan Dataclass
 
@@ -302,7 +321,9 @@ class PolishPlan:
     false_branch_candidates: list[FalseBranchCandidate]
     false_branch_specs: list[FalseBranchSpec]       # Populated by Phase 5
     feasibility_annotations: dict[str, list[str]]   # passage_id → irrelevant flags
-    arc_traversals: dict[str, list[str]]            # Pre-computed arc → passage sequence
+    arc_traversals: dict[str, list[str]]            # Path combination key → passage sequence
+    # Key format: sorted path IDs joined by "+" (e.g., "path::protector+path::artifact_saves")
+    # Each key is one complete playthrough; value is the ordered passage sequence for that arc
     warnings: list[str]                              # Issues for human review
 ```
 
@@ -397,7 +418,7 @@ Validates the complete passage graph.
 - No repeated passages per arc traversal (cycle detection)
 
 **Feasibility:**
-- No passage has more than 5 relevant active state flags (human review threshold)
+- No passage was categorized as "structural split" by Phase 4b without being resolved (all structural splits must have been addressed — either split into variants or flagged for human review with an explicit decision recorded)
 - Residue beats precede their target shared passages
 
 ### Failure Response
@@ -464,15 +485,18 @@ The following GROW phases move to POLISH:
 |------------|-------------|-------|
 | Phase 4c (pacing/gap beats) | Phase 2 | `detect_pacing_issues()`, `insert_gap_beat()` |
 | Phase 4f (character arc selection) | Phase 3 | `select_entities_for_arc()` |
-| Phase 7 (passage creation) | Phase 4a + 6 | Beat grouping + passage node creation |
-| Phase 8a-8c (overlays, codewords) | Stays in GROW | State flags and overlays are GROW's responsibility |
+| Phase 8a (passage creation) | Phase 4a + 6 | Beat grouping + passage node creation |
+| Phase 8b (codeword/state flag creation) | Stays in GROW | State flags derived from consequences are GROW's responsibility |
+| Phase 8c (entity overlay creation) | Stays in GROW | Overlays activated by state flags are GROW's responsibility |
 | Phase 8d (residue beats) | Phase 5 + 6 | Residue beat content + creation |
-| Phase 9a (choice derivation) | Phase 4c + 5 + 6 | Choice computation + labels + creation |
-| Phase 9b (hub/spokes) | Phase 4a | Subsumed by beat grouping |
-| Phase 9c (passage collapse) | Phase 4a | Subsumed by collapse grouping |
-| Phase 9d (false branches) | Phase 4d + 5 + 6 | Candidate identification + decisions + creation |
+| Phase 9 (choice derivation) | Phase 4c + 5 + 6 | Choice computation + labels + creation |
+| Phase 9 hub/spokes | Phase 4a | Subsumed by intersection + collapse grouping |
+| Phase 9 passage collapse | Phase 4a | Subsumed by collapse grouping |
+| Phase 9 false branches | Phase 4d + 5 + 6 | Candidate identification + decisions + creation |
 | Phase 10 (endings) | Phase 4c | Subsumed by choice edge derivation |
 | Phase 11 (pruning) | Phase 7 | Subsumed by validation |
+
+**Note:** The `grow.md` migration note (line 9) broadly states "Phases 8a-9 move to POLISH." This is imprecise — Phases 8b-8c (state flags and overlays) stay in GROW. Only 8a (passage creation) and 8d (residue beats) move. The `grow.md` note should be corrected in a follow-up PR.
 
 ---
 
