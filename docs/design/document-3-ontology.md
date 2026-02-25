@@ -268,7 +268,7 @@ temporal_hint:
 - `before_commit` — this beat should be placed before `relative_to`'s commit beat
 - `after_commit` — this beat should be placed after `relative_to`'s commit beat
 - `before_introduce` — this beat should be placed before `relative_to`'s first beat
-- `after_introduce` — this beat should be placed after `relative_to`'s introduction
+- `after_introduce` — this beat should be placed after `relative_to`'s first beat
 
 Temporal hints are optional. A beat with no hint has no constraint on its placement relative to other dilemmas — GROW places it using structural heuristics and dilemma ordering relationships alone. Hints that conflict with dilemma ordering relationships (e.g., a hint saying "after B's commit" when A wraps B and A's commit comes first) are treated as advisory — GROW resolves the conflict in favor of the ordering relationship.
 
