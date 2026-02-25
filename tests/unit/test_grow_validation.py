@@ -16,7 +16,7 @@ from questfoundry.graph.grow_validation import (
     check_arc_divergence,
     check_codeword_gate_coverage,
     check_commits_timing,
-    check_convergence_policy_compliance,
+    check_dilemma_role_compliance,
     check_dilemmas_resolved,
     check_forward_path_reachability,
     check_gate_satisfiability,
@@ -1270,7 +1270,7 @@ def _make_compliance_graph(
         {
             "type": "dilemma",
             "raw_id": "dilemma::d1",
-            "convergence_policy": policy,
+            "dilemma_role": policy,
             "payoff_budget": payoff_budget,
         },
     )
@@ -1327,37 +1327,37 @@ def _make_compliance_graph(
     return graph
 
 
-class TestConvergencePolicyCompliance:
+class TestDilemmaRoleCompliance:
     def test_hard_no_shared_passes(self) -> None:
         graph = _make_compliance_graph("hard", 2, shared_after_div=0)
-        results = check_convergence_policy_compliance(graph)
+        results = check_dilemma_role_compliance(graph)
         assert len(results) == 1
         assert results[0].severity == "pass"
 
     def test_hard_shared_fails(self) -> None:
         graph = _make_compliance_graph("hard", 2, shared_after_div=2)
-        results = check_convergence_policy_compliance(graph)
+        results = check_dilemma_role_compliance(graph)
         assert any(r.severity == "fail" for r in results)
         assert "hard policy violated" in results[0].message
 
     def test_soft_budget_met_passes(self) -> None:
         graph = _make_compliance_graph("soft", 2, exclusive_count=3)
-        results = check_convergence_policy_compliance(graph)
+        results = check_dilemma_role_compliance(graph)
         assert all(r.severity == "pass" for r in results)
 
     def test_soft_budget_not_met_warns(self) -> None:
         graph = _make_compliance_graph("soft", 5, exclusive_count=2)
-        results = check_convergence_policy_compliance(graph)
+        results = check_dilemma_role_compliance(graph)
         assert any(r.severity == "warn" for r in results)
         assert "2 exclusive" in results[0].message
 
-    def test_flavor_always_passes(self) -> None:
-        graph = _make_compliance_graph("flavor", 0, shared_after_div=3)
-        results = check_convergence_policy_compliance(graph)
+    def test_soft_zero_budget_always_passes(self) -> None:
+        graph = _make_compliance_graph("soft", 0, shared_after_div=3)
+        results = check_dilemma_role_compliance(graph)
         assert all(r.severity == "pass" for r in results)
 
     def test_no_policy_metadata_skipped(self) -> None:
-        """Arc without convergence_policy field passes silently."""
+        """Arc without dilemma_role field passes silently."""
         graph = Graph.empty()
         graph.create_node(
             "arc::spine",
@@ -1373,7 +1373,7 @@ class TestConvergencePolicyCompliance:
                 "paths": [],
             },
         )
-        results = check_convergence_policy_compliance(graph)
+        results = check_dilemma_role_compliance(graph)
         assert all(r.severity == "pass" for r in results)
         assert "No branch arcs with convergence metadata" in results[0].message
 
@@ -1396,17 +1396,17 @@ class TestConvergencePolicyCompliance:
                 "arc_type": "branch",
                 "sequence": ["beat::s0", "beat::s1"],
                 "diverges_at": "beat::s1",
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 2,
                 "paths": [],
             },
         )
-        results = check_convergence_policy_compliance(graph)
+        results = check_dilemma_role_compliance(graph)
         assert all(r.severity == "pass" for r in results)
 
     def test_no_arcs_passes(self) -> None:
         graph = Graph.empty()
-        results = check_convergence_policy_compliance(graph)
+        results = check_dilemma_role_compliance(graph)
         assert results[0].severity == "pass"
 
     def test_hard_policy_per_dilemma_passes(self) -> None:
@@ -1420,7 +1420,7 @@ class TestConvergencePolicyCompliance:
         # Dilemma 1: hard policy
         graph.create_node(
             "dilemma::d1",
-            {"type": "dilemma", "convergence_policy": "hard", "payoff_budget": 0},
+            {"type": "dilemma", "dilemma_role": "hard", "payoff_budget": 0},
         )
         graph.create_node(
             "path::d1_canon",
@@ -1434,7 +1434,7 @@ class TestConvergencePolicyCompliance:
         # Dilemma 2: soft policy
         graph.create_node(
             "dilemma::d2",
-            {"type": "dilemma", "convergence_policy": "soft", "payoff_budget": 1},
+            {"type": "dilemma", "dilemma_role": "soft", "payoff_budget": 1},
         )
         graph.create_node(
             "path::d2_canon",
@@ -1498,7 +1498,7 @@ class TestConvergencePolicyCompliance:
             },
         )
 
-        results = check_convergence_policy_compliance(graph)
+        results = check_dilemma_role_compliance(graph)
         # d1 hard: h1, h2 belong to d1_rebel → not in spine → passes
         # d2 soft: x1 belongs to d2_rebel (exclusive); d2s1 belongs to d2_canon (shared)
         #          1 exclusive >= budget 1 → passes
@@ -1511,7 +1511,7 @@ class TestConvergencePolicyCompliance:
         # Dilemma 1: hard policy
         graph.create_node(
             "dilemma::d1",
-            {"type": "dilemma", "convergence_policy": "hard", "payoff_budget": 0},
+            {"type": "dilemma", "dilemma_role": "hard", "payoff_budget": 0},
         )
         graph.create_node(
             "path::d1_canon",
@@ -1522,10 +1522,10 @@ class TestConvergencePolicyCompliance:
             {"type": "path", "raw_id": "path::d1_rebel", "dilemma_id": "dilemma::d1"},
         )
 
-        # Dilemma 2: flavor (no constraint)
+        # Dilemma 2: soft (no budget constraint)
         graph.create_node(
             "dilemma::d2",
-            {"type": "dilemma", "convergence_policy": "flavor", "payoff_budget": 0},
+            {"type": "dilemma", "dilemma_role": "soft", "payoff_budget": 0},
         )
         graph.create_node(
             "path::d2_canon",
@@ -1564,7 +1564,7 @@ class TestConvergencePolicyCompliance:
             },
         )
 
-        results = check_convergence_policy_compliance(graph)
+        results = check_dilemma_role_compliance(graph)
         assert any(r.severity == "fail" for r in results)
         assert "hard policy violated" in results[0].message
         assert "dilemma::d1" in results[0].message
@@ -1573,10 +1573,10 @@ class TestConvergencePolicyCompliance:
         """Multi-dilemma arc: soft dilemma has enough exclusive beats → passes."""
         graph = Graph.empty()
 
-        # Dilemma 1: flavor (no constraint)
+        # Dilemma 1: soft (no budget constraint)
         graph.create_node(
             "dilemma::d1",
-            {"type": "dilemma", "convergence_policy": "flavor", "payoff_budget": 0},
+            {"type": "dilemma", "dilemma_role": "soft", "payoff_budget": 0},
         )
         graph.create_node(
             "path::d1_canon",
@@ -1586,7 +1586,7 @@ class TestConvergencePolicyCompliance:
         # Dilemma 2: soft policy with budget=2
         graph.create_node(
             "dilemma::d2",
-            {"type": "dilemma", "convergence_policy": "soft", "payoff_budget": 2},
+            {"type": "dilemma", "dilemma_role": "soft", "payoff_budget": 2},
         )
         graph.create_node(
             "path::d2_canon",
@@ -1632,9 +1632,9 @@ class TestConvergencePolicyCompliance:
             },
         )
 
-        results = check_convergence_policy_compliance(graph)
+        results = check_dilemma_role_compliance(graph)
         # d2 soft: x1, x2 exclusive (2 >= budget 2) → passes
-        # d1 flavor: not checked
+        # d1 soft with budget 0: passes trivially
         assert all(r.severity == "pass" for r in results)
 
 

@@ -26,7 +26,7 @@ from pydantic import BaseModel, Field, model_validator
 EntityDisposition = Literal["retained", "cut"]
 PathTier = Literal["major", "minor"]
 DilemmaEffect = Literal["advances", "reveals", "commits", "complicates"]
-ConvergencePolicy = Literal["hard", "soft", "flavor"]
+DilemmaRole = Literal["hard", "soft"]
 EndingSalience = Literal["high", "low", "none"]
 ResidueWeight = Literal["heavy", "light", "cosmetic"]
 ConstraintType = Literal["shared_entity", "causal_chain", "resource_conflict"]
@@ -248,7 +248,7 @@ class DilemmaAnalysis(BaseModel):
 
     Attributes:
         dilemma_id: References a dilemma from Section 2.
-        convergence_policy: How strictly paths must stay separate (topology).
+        dilemma_role: How strictly paths must stay separate (topology).
         ending_salience: How much this dilemma drives ending differentiation (prose layer).
         residue_weight: How much mid-story prose varies based on this dilemma (prose layer).
         payoff_budget: Minimum exclusive beats before convergence (>=2).
@@ -258,9 +258,28 @@ class DilemmaAnalysis(BaseModel):
     """
 
     dilemma_id: str = Field(min_length=1, description="Dilemma ID from Section 2")
-    convergence_policy: ConvergencePolicy = Field(
-        description="How strictly paths must stay separate (hard|soft|flavor)",
+    dilemma_role: DilemmaRole = Field(
+        description="How strictly paths must stay separate (hard|soft)",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_flavor(cls, data: Any) -> Any:
+        """Migrate deprecated 'flavor' value to 'soft' with cosmetic residue."""
+        if isinstance(data, dict) and data.get("dilemma_role") == "flavor":
+            import warnings
+
+            warnings.warn(
+                "dilemma_role='flavor' is deprecated — use 'soft' with "
+                "residue_weight='cosmetic' instead (see ADR-013/019)",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            data["dilemma_role"] = "soft"
+            if data.get("residue_weight") is None:
+                data["residue_weight"] = "cosmetic"
+        return data
+
     ending_salience: EndingSalience = Field(
         description=(
             "How much this dilemma drives ending differentiation. "

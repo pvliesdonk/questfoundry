@@ -324,7 +324,7 @@ def _branching_quality_score(
     for data in arc_nodes.values():
         if data.get("arc_type") == "spine":
             continue
-        policy = data.get("convergence_policy", "unknown")
+        policy = data.get("dilemma_role", "unknown")
         policy_counts[policy] += 1
         seq: list[str] = data.get("sequence", [])
         diverges_at = data.get("diverges_at")

@@ -4270,14 +4270,14 @@ class TestApplySeedConvergenceAnalysis:
             ],
         }
 
-    def test_convergence_policy_stored_on_dilemma_node(self) -> None:
+    def test_dilemma_role_stored_on_dilemma_node(self) -> None:
         """Convergence policy from analysis is stored on the dilemma graph node."""
         graph = self._graph_with_dilemmas()
         output = self._base_output()
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "trust_or_not",
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 4,
                 "reasoning": "Mutually exclusive outcomes",
             },
@@ -4285,7 +4285,7 @@ class TestApplySeedConvergenceAnalysis:
         apply_seed_mutations(graph, output)
 
         node = graph.get_node("dilemma::trust_or_not")
-        assert node["convergence_policy"] == "hard"
+        assert node["dilemma_role"] == "hard"
 
     def test_payoff_budget_stored_on_dilemma_node(self) -> None:
         """Payoff budget from analysis is stored on the dilemma graph node."""
@@ -4294,7 +4294,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "stay_or_go",
-                "convergence_policy": "soft",
+                "dilemma_role": "soft",
                 "payoff_budget": 3,
                 "reasoning": "Shared beats after divergence",
             },
@@ -4312,7 +4312,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "trust_or_not",
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 4,
                 "reasoning": "test",
             },
@@ -4320,7 +4320,7 @@ class TestApplySeedConvergenceAnalysis:
         apply_seed_mutations(graph, output)
 
         node = graph.get_node("dilemma::stay_or_go")
-        assert node["convergence_policy"] == "soft"
+        assert node["dilemma_role"] == "soft"
         assert node["payoff_budget"] == 2
 
     def test_convergence_point_stored_on_dilemma_node(self) -> None:
@@ -4330,7 +4330,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "stay_or_go",
-                "convergence_policy": "soft",
+                "dilemma_role": "soft",
                 "payoff_budget": 3,
                 "reasoning": "Paths diverge then merge at the river crossing",
                 "convergence_point": "The river crossing camp",
@@ -4350,7 +4350,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "trust_or_not",
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 4,
                 "reasoning": "Mutually exclusive world states",
                 "convergence_point": None,
@@ -4370,7 +4370,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "stay_or_go",
-                "convergence_policy": "soft",
+                "dilemma_role": "soft",
                 "payoff_budget": 2,
                 "reasoning": "test",
             },
@@ -4432,7 +4432,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "trust_or_not",
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 4,
                 "reasoning": "Core story choice",
                 "ending_salience": "high",
@@ -4450,7 +4450,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "stay_or_go",
-                "convergence_policy": "flavor",
+                "dilemma_role": "soft",
                 "payoff_budget": 2,
                 "reasoning": "Cosmetic choice",
                 "ending_salience": "none",
@@ -4468,7 +4468,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "trust_or_not",
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 4,
                 "reasoning": "test",
             },
@@ -4485,7 +4485,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "trust_or_not",
-                "convergence_policy": "soft",
+                "dilemma_role": "soft",
                 "payoff_budget": 3,
                 "reasoning": "Core story choice",
                 "residue_weight": "heavy",
@@ -4503,7 +4503,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "stay_or_go",
-                "convergence_policy": "flavor",
+                "dilemma_role": "soft",
                 "payoff_budget": 2,
                 "reasoning": "Cosmetic choice",
                 "residue_weight": "cosmetic",
@@ -4521,7 +4521,7 @@ class TestApplySeedConvergenceAnalysis:
         output["dilemma_analyses"] = [
             {
                 "dilemma_id": "trust_or_not",
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 4,
                 "reasoning": "test",
             },
