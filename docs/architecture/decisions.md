@@ -514,6 +514,8 @@ Key design choices:
 - Spoke grants wiring deferred to #752
 
 > **Forward-looking note (2026-02-24):** [Document 3](../design/document-3-ontology.md) replaces `convergence_policy` (hard/soft/flavor) with `dilemma_role` (hard/soft). Convergence behavior is derived from the role. `flavor` is removed — handled by POLISH as false branches. A superseding ADR will be created when the code migration is implemented. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+>
+> **Impact on `flavor` (2026-02-25):** The `flavor` convergence category is fully removed from the ontology. During migration, existing `flavor` values are mapped to `soft` with `residue_weight: cosmetic` (a field defined in [Document 3, Part 2](../design/document-3-ontology.md)). A Pydantic model validator with a deprecation warning handles backward compatibility with existing graph data. Flavor-level choices are not dilemmas — they become false branches or minor passage variants created by POLISH. See [Issue #984](https://github.com/pvliesdonk/questfoundry/issues/984) for the migration plan.
 
 ---
 
@@ -585,6 +587,8 @@ Key design choices:
 - No behavioral change for stories — residue beats were already generating variation before the cleanup.
 
 > **Note (2026-02-24):** [Document 3](../design/document-3-ontology.md) retains the residue beats concept but splits the unified "codeword" concept into "state flags" (internal routing) and "codewords" (player-facing gamebook markers). The structural approach is preserved; the terminology changes in a future PR. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+>
+> **Stage boundary note (2026-02-25):** Residue beat creation moves from GROW Phase 8d to POLISH Phase 5 (LLM enrichment) and Phase 6 (atomic application). The concept and its structural approach are unchanged — only the stage attribution shifts. See [ADR-019](#adr-019-polish-stage-supersedes-grow-routing).
 
 ---
 
@@ -623,7 +627,7 @@ Key design choices:
 ## ADR-017: Unified Routing Plan for GROW Variant Routing
 
 **Date**: 2026-02-19
-**Status**: Proposed
+**Status**: Superseded by ADR-019
 
 ### Context
 
@@ -702,6 +706,8 @@ Key design choices:
 - [ADR-015: Residue Beats Replace Poly-State Prose](https://github.com/pvliesdonk/questfoundry/blob/main/docs/architecture/decisions.md#adr-015-residue-beats-replace-poly-state-prose)
 
 > **Note (2026-02-24):** [Document 3](../design/document-3-ontology.md) redefines intersections as co-occurrence groups (not cross-path `belongs_to` edges) and moves passage/choice creation to the POLISH stage. The Unified Routing Plan architecture may need redesign to account for the POLISH stage boundary. Status remains Proposed pending Document 3 convergence work. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
+>
+> **Superseded (2026-02-25):** ADR-019 supersedes this ADR. The plan-then-execute architecture is preserved but moves from GROW to the new POLISH stage. `RoutingPlan` becomes `PolishPlan`. See [ADR-019](#adr-019-polish-stage-supersedes-grow-routing).
 
 ---
 
@@ -773,6 +779,61 @@ Enforce **data model verification discipline** for all graph mutation code:
 - [Epic #911: Topology/Prose Layer Separation](https://github.com/pvliesdonk/questfoundry/issues/911)
 - [Epic #950: Unified Routing Plan](https://github.com/pvliesdonk/questfoundry/issues/950)
 - Related: ADR-017 (Unified Routing Plan architecture)
+
+---
+
+## ADR-019: POLISH Stage Supersedes GROW Routing
+
+**Date**: 2026-02-25
+**Status**: Accepted (supersedes ADR-017)
+
+### Context
+
+ADR-017 (Unified Routing Plan) established a plan-then-execute architecture for variant routing, passage collapse, and false-branch detection — all within GROW. Discussion #980 (Design Review) and Documents 1/3 redefined the stage boundary: GROW produces the beat DAG (ordering, intersections, state flags), and a new POLISH stage handles everything in the passage layer (passage creation, choice edges, variants, residue beats, false branches).
+
+ADR-017's architecture (compute a complete plan, then apply atomically) is sound — the bugs it fixed were caused by incremental mutation, not by the stage boundary. The architecture transfers to POLISH; the stage assignment changes.
+
+### Decision
+
+1. **POLISH replaces GROW for all passage-layer work.** GROW's output boundary is the beat DAG with predecessor/successor edges, intersection groups, and state flags. GROW does not create passages, choices, or codewords.
+
+2. **`PolishPlan` replaces `RoutingPlan`.** The plan-then-execute architecture from ADR-017 transfers to POLISH. The `PolishPlan` is computed deterministically in Phase 4, enriched by LLM in Phase 5, and applied atomically in Phase 6. The single-pass atomic application pattern is preserved.
+
+3. **POLISH uses seven phases:**
+   - Phases 1-3 (LLM-assisted): beat reordering, pacing/micro-beat injection, character arc synthesis
+   - Beat DAG freeze after Phase 3
+   - Phase 4 (deterministic): passage plan computation (grouping, feasibility, choices, false branch candidates)
+   - Phase 5 (LLM-assisted): plan enrichment (labels, residue content, false branch decisions)
+   - Phase 6 (deterministic): atomic plan application
+   - Phase 7 (deterministic): validation
+
+4. **`compute_active_flags_at_beat()` replaces Arc-dependent utilities.** A shared utility in `graph/algorithms.py` computes which state flags could be active at any beat position via reverse BFS over the predecessor DAG. This replaces `find_residue_candidates()` which depends on stored Arc nodes.
+
+5. **GROW → POLISH input contract is a validation function, not a Pydantic model.** POLISH reads from the graph store directly. A `validate_grow_output(graph)` function at POLISH entry verifies the contract (beats exist, no cycles, singular `belongs_to`, state flags present, dilemma roles set).
+
+### Rationale
+
+- **ADR-017's architecture is proven.** The plan-then-execute pattern eliminated 8 routing bugs. Moving it to POLISH preserves the fix while aligning with the stage boundary defined by Documents 1/3.
+- **Stage separation clarifies concerns.** GROW reasons about the beat DAG (structural). POLISH reasons about the passage layer (presentational). Mixing them made both harder to test and debug.
+- **Seven-phase structure mirrors GROW.** The `@polish_phase` registry pattern reuses GROW's proven `@grow_phase` infrastructure.
+- **Unanimous convergence in Discussion #980.** Three independent agents (Claude Opus 4.6, Gemini 3 Pro, GPT-5.2) converged on this architecture across three rounds.
+
+### Consequences
+
+- ADR-017 is superseded. Its `RoutingPlan` architecture transfers to POLISH as `PolishPlan`.
+- GROW phases 7-9 (passage creation, choice creation, routing) migrate to POLISH Phases 4-6.
+- GROW Phase 4c (pacing), Phase 4f (character arcs), and Phase 8d (residue beats) migrate to POLISH Phases 1-3 and Phase 5.
+- New module: `src/questfoundry/pipeline/stages/polish/` with phase registry.
+- New utility: `src/questfoundry/graph/algorithms.py` with `compute_active_flags_at_beat()`.
+- GROW validation retains structural checks (DAG completeness, arc traversal). POLISH validation adds passage-layer checks (grouping completeness, choice edge coverage, feasibility).
+
+### Links
+
+- [Discussion #980: Design Review — GROW/POLISH Stage Boundary](https://github.com/pvliesdonk/questfoundry/discussions/980)
+- [Document 1, Part 4: Shaping the Story (POLISH)](../design/how-branching-stories-work.md)
+- [Document 3, Parts 5-6: Passage Layer and Entity Overlays](../design/document-3-ontology.md)
+- [ADR-017: Unified Routing Plan (superseded)](#adr-017-unified-routing-plan-for-grow-variant-routing)
+- [Epic #990: Converge with Documents 1 and 3](https://github.com/pvliesdonk/questfoundry/issues/990)
 
 ---
 
