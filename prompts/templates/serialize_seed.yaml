@@ -40,7 +40,7 @@ system: |
   }}
   ```
   NOTES:
-  - The default path answer (is_default_path=true) MUST be in "explored", never in "unexplored".
+  - The default path answer (is_canonical=true) MUST be in "explored", never in "unexplored".
   - **Arc Count**: At least 2 dilemmas should have BOTH answers in "explored" for proper IF branching.
   - Dilemmas with only canonical answer explored don't contribute to branching.
 

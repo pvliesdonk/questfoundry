@@ -597,7 +597,7 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
     2. No duplicate dilemma IDs
     3. All central_entity_ids in dilemmas exist in entities list
     4. All answer IDs within a dilemma are unique
-    5. Each dilemma has exactly one is_default_path=true answer
+    5. Each dilemma has exactly one is_canonical=true answer
 
     Args:
         output: BRAINSTORM stage output (entities, dilemmas).
@@ -689,15 +689,15 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
                     )
                 )
 
-        # 3. Check exactly one answer has is_default_path=True
+        # 3. Check exactly one answer has is_canonical=True
         # (missing or False both count as non-default - Pydantic validation ensures
         # the field exists for valid BrainstormOutput, this handles edge cases)
-        default_count = sum(1 for a in answers if a.get("is_default_path"))
+        default_count = sum(1 for a in answers if a.get("is_canonical"))
         if default_count != 1:
             issue = (
-                f"No answer has is_default_path=true in dilemma '{dilemma_id}'"
+                f"No answer has is_canonical=true in dilemma '{dilemma_id}'"
                 if default_count == 0
-                else f"Multiple answers have is_default_path=true in dilemma '{dilemma_id}'"
+                else f"Multiple answers have is_canonical=true in dilemma '{dilemma_id}'"
             )
             errors.append(
                 BrainstormValidationError(
@@ -926,7 +926,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 "type": "answer",
                 "raw_id": answer_local_id,
                 "description": answer.get("description"),
-                "is_default_path": answer.get("is_default_path", False),
+                "is_canonical": answer.get("is_canonical", False),
             }
             answer_data = _clean_dict(answer_data)
             graph.create_node(answer_node_id, answer_data)
@@ -1499,7 +1499,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         alt_edges = graph.get_edges(from_id=prefixed_did, edge_type="has_answer")
         for edge in alt_edges:
             alt_node = graph.get_node(edge["to"])
-            if alt_node and alt_node.get("is_default_path"):
+            if alt_node and alt_node.get("is_canonical"):
                 default_answer_id = alt_node.get("raw_id", "")
                 if default_answer_id in unexplored and default_answer_id not in explored:
                     errors.append(
@@ -1676,14 +1676,14 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 full_unexplored_id = f"{prefixed_dilemma_id}::alt::{unexplored_answer_id}"
                 prefixed_unexplored.append(full_unexplored_id)
 
-        # Look up answer's is_default_path to determine if path is canonical (spine)
+        # Look up answer's is_canonical to determine if path is canonical (spine)
         is_canonical = False
         if prefixed_dilemma_id and "answer_id" in path:
             answer_local_id = path["answer_id"]
             full_answer_id = f"{prefixed_dilemma_id}::alt::{answer_local_id}"
             answer_node = graph.get_node(full_answer_id)
             if answer_node is not None:
-                is_canonical = answer_node.get("is_default_path", False)
+                is_canonical = answer_node.get("is_canonical", False)
 
         # Build path node data
         path_data = {

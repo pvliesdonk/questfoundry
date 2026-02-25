@@ -49,7 +49,7 @@ def _get_paths_for_dilemma(
 ) -> tuple[Path | None, Path | None]:
     """Get canonical and non-canonical paths for a dilemma.
 
-    When a graph is provided, uses ``is_default_path`` to determine which
+    When a graph is provided, uses ``is_canonical`` to determine which
     answer is canonical. Falls back to ``explored[0]`` without a graph.
 
     Returns (canonical_path, noncanonical_path).
@@ -109,7 +109,7 @@ def score_dilemma(
     Args:
         seed_output: The full SEED output to analyze.
         dilemma_id: The dilemma to score.
-        graph: Story graph for canonical answer lookup via is_default_path.
+        graph: Story graph for canonical answer lookup via is_canonical.
 
     Returns:
         ScoredDilemma with computed score and rationale.
@@ -238,7 +238,7 @@ def rank_dilemmas_for_exploration(
 
     Args:
         seed_output: The full SEED output to analyze.
-        graph: Story graph for canonical answer lookup via is_default_path.
+        graph: Story graph for canonical answer lookup via is_canonical.
 
     Returns:
         List of ScoredDilemma objects sorted by score descending.
@@ -275,7 +275,7 @@ def select_dilemmas_for_full_exploration(
     Args:
         seed_output: The full SEED output to analyze.
         max_fully_explored: Maximum dilemmas to fully explore (default 4 = 16 arcs).
-        graph: Story graph for canonical answer lookup via is_default_path.
+        graph: Story graph for canonical answer lookup via is_canonical.
 
     Returns:
         Tuple of (selected_dilemma_ids, demoted_dilemma_ids).

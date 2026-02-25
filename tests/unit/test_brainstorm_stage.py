@@ -103,12 +103,12 @@ async def test_execute_calls_all_three_phases() -> None:
                         {
                             "answer_id": "success",
                             "description": "Hero wins",
-                            "is_default_path": True,
+                            "is_canonical": True,
                         },
                         {
                             "answer_id": "failure",
                             "description": "Hero fails",
-                            "is_default_path": False,
+                            "is_canonical": False,
                         },
                     ],
                     "central_entity_ids": ["hero"],
@@ -173,12 +173,12 @@ async def test_execute_emits_phase_progress() -> None:
                         {
                             "answer_id": "success",
                             "description": "Hero wins",
-                            "is_default_path": True,
+                            "is_canonical": True,
                         },
                         {
                             "answer_id": "failure",
                             "description": "Hero fails",
-                            "is_default_path": False,
+                            "is_canonical": False,
                         },
                     ],
                     "central_entity_ids": ["hero"],
@@ -348,8 +348,8 @@ async def test_execute_returns_artifact_as_dict() -> None:
                     "dilemma_id": "trust",
                     "question": "Can Kay trust the mentor?",
                     "answers": [
-                        {"answer_id": "yes", "description": "Trust", "is_default_path": True},
-                        {"answer_id": "no", "description": "Betray", "is_default_path": False},
+                        {"answer_id": "yes", "description": "Trust", "is_canonical": True},
+                        {"answer_id": "no", "description": "Betray", "is_canonical": False},
                     ],
                     "central_entity_ids": ["kay"],
                     "why_it_matters": "Theme of trust",
@@ -432,12 +432,12 @@ def test_brainstorm_output_model_validates() -> None:
                     {
                         "answer_id": "success",
                         "description": "Quest complete",
-                        "is_default_path": True,
+                        "is_canonical": True,
                     },
                     {
                         "answer_id": "failure",
                         "description": "Quest failed",
-                        "is_default_path": False,
+                        "is_canonical": False,
                     },
                 ],
                 "central_entity_ids": ["hero"],
@@ -462,7 +462,7 @@ def test_dilemma_requires_two_answers() -> None:
         Dilemma(
             dilemma_id="test",
             question="Test?",
-            answers=[{"answer_id": "one", "description": "Only one", "is_default_path": True}],
+            answers=[{"answer_id": "one", "description": "Only one", "is_canonical": True}],
             central_entity_ids=[],
             why_it_matters="Test",
         )
@@ -479,8 +479,8 @@ def test_dilemma_requires_one_default_path_answer() -> None:
             dilemma_id="test",
             question="Test?",
             answers=[
-                {"answer_id": "one", "description": "First", "is_default_path": True},
-                {"answer_id": "two", "description": "Second", "is_default_path": True},
+                {"answer_id": "one", "description": "First", "is_canonical": True},
+                {"answer_id": "two", "description": "Second", "is_canonical": True},
             ],
             central_entity_ids=[],
             why_it_matters="Test",
@@ -494,8 +494,8 @@ def test_dilemma_rejects_trailing_or_in_id() -> None:
     from questfoundry.models.brainstorm import Dilemma
 
     _TWO_ANSWERS = [
-        {"answer_id": "benevolent", "description": "Kind", "is_default_path": True},
-        {"answer_id": "selfish", "description": "Mean", "is_default_path": False},
+        {"answer_id": "benevolent", "description": "Kind", "is_canonical": True},
+        {"answer_id": "selfish", "description": "Mean", "is_canonical": False},
     ]
 
     # Trailing _or_ with underscore

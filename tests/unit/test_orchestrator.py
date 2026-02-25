@@ -1082,8 +1082,8 @@ _BRAINSTORM_ARTIFACT = {
             "question": "Fight or flee?",
             "central_entity_ids": ["test_hero"],
             "answers": [
-                {"answer_id": "fight", "answer_text": "Fight", "is_default_path": True},
-                {"answer_id": "flee", "answer_text": "Flee", "is_default_path": False},
+                {"answer_id": "fight", "answer_text": "Fight", "is_canonical": True},
+                {"answer_id": "flee", "answer_text": "Flee", "is_canonical": False},
             ],
         },
     ],
@@ -1160,8 +1160,8 @@ class TestMutationRerunDetection:
                     "question": "Stay or go?",
                     "central_entity_ids": ["rerun_hero"],
                     "answers": [
-                        {"answer_id": "stay", "answer_text": "Stay", "is_default_path": True},
-                        {"answer_id": "go", "answer_text": "Go", "is_default_path": False},
+                        {"answer_id": "stay", "answer_text": "Stay", "is_canonical": True},
+                        {"answer_id": "go", "answer_text": "Go", "is_canonical": False},
                     ],
                 },
             ],

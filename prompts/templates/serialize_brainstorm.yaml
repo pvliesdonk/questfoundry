@@ -33,7 +33,7 @@ system: |
   - `answers`: Exactly 2 items, each with:
     - `answer_id`: Unique short identifier for THIS answer (e.g., "guilty", "framed", "dagger", "poison")
     - `description`: Full description
-    - `is_default_path`: true for ONE answer (the default path), false for the other
+    - `is_canonical`: true for ONE answer (the default path), false for the other
   - `central_entity_ids`: List of entity_id values related to this dilemma
   - `why_it_matters`: Thematic stakes
 
@@ -65,7 +65,7 @@ system: |
   - Extract ALL dilemmas/dramatic questions mentioned
   - Do NOT invent new details - only structure what's in the brief
   - Use snake_case for all IDs (lowercase with underscores)
-  - Each dilemma must have exactly ONE answer with is_default_path=true
+  - Each dilemma must have exactly ONE answer with is_canonical=true
   - CRITICAL: answer_id must be UNIQUE identifiers (e.g., "guilty", "framed"), NOT entity references
   {output_language_instruction}
 

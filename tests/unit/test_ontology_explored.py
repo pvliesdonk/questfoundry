@@ -697,7 +697,7 @@ def _make_graph_with_dilemma(
 
     Args:
         dilemma_id: Raw dilemma ID (without prefix).
-        answers: List of (answer_id, is_default_path) tuples.
+        answers: List of (answer_id, is_canonical) tuples.
     """
     graph = Graph()
     prefixed = f"dilemma::{dilemma_id}"
@@ -706,22 +706,22 @@ def _make_graph_with_dilemma(
         alt_id = f"{prefixed}::alt::{answer_id}"
         graph.create_node(
             alt_id,
-            {"type": "alternative", "raw_id": answer_id, "is_default_path": is_default},
+            {"type": "alternative", "raw_id": answer_id, "is_canonical": is_default},
         )
         graph.add_edge("has_answer", prefixed, alt_id)
     return graph
 
 
 class TestCanonicalAnswerFromGraph:
-    """Test that pruning uses is_default_path from the graph."""
+    """Test that pruning uses is_canonical from the graph."""
 
     def test_get_default_answer_from_graph(self) -> None:
-        """get_default_answer_from_graph returns the answer with is_default_path."""
+        """get_default_answer_from_graph returns the answer with is_canonical."""
         graph = _make_graph_with_dilemma("t1", [("alt_a", True), ("alt_b", False)])
         assert get_default_answer_from_graph(graph, "t1") == "alt_a"
 
     def test_get_default_answer_returns_none_when_missing(self) -> None:
-        """Returns None when no answer has is_default_path."""
+        """Returns None when no answer has is_canonical."""
         graph = _make_graph_with_dilemma("t1", [("alt_a", False), ("alt_b", False)])
         assert get_default_answer_from_graph(graph, "t1") is None
 
