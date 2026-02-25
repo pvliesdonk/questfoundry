@@ -529,6 +529,73 @@ Edge type `arc_contains` created at `deterministic.py:147`.
 
 This is implicitly part of #989 but the blast radius (~100 references, 5+ files) warrants explicit tracking.
 
+### 6. `fix: intersection model redesign — intersection_group nodes + PARTICIPATES_IN edges`
+
+**Root cause of the hard-convergence bug.** `apply_intersection_mark()` at `grow_algorithms.py:3306` cross-assigns `belongs_to` edges (lines 3329-3351), making beats "belong to" multiple paths. Document 3 requires:
+
+1. Create `intersection_group` node per intersection
+2. Add `PARTICIPATES_IN` edges from each participating beat to the group
+3. Keep each beat's single `belongs_to` edge to its original path
+4. Update query logic: "which beats are in intersection X?" → query `PARTICIPATES_IN` edges
+
+Functions affected:
+- `apply_intersection_mark()` — line 3306 — **complete redesign** (currently cross-assigns belongs_to)
+- `build_intersection_candidates()` — line 2694 — stays (pre-clustering)
+- `check_intersection_compatibility()` — line 3040 — stays (compatibility check)
+- `resolve_intersection_location()` — line 3251 — stays (location resolution)
+- Phase `intersections` at `llm_phases.py:56` — stays but must use new model
+
+Downstream consumers of `belongs_to` edges (15 references across 10+ functions) must be audited for multi-path assumptions.
+
+Scope: Large. Depends on #983 (InitialBeat.paths singular). Blocks #988 (POLISH passage creation needs correct intersection model).
+
+### 7. `refactor: GROW remaining phase refactoring after POLISH split`
+
+After 13 phases move to POLISH, the 12 remaining GROW phases need internal refactoring:
+
+**Registry and dependency chain:**
+- Phase registry (`registry.py`) must be updated with new dependency DAG
+- 13 removed phases break the current `depends_on` chain
+- Remaining phases need renumbered/reorganized dependencies
+
+**Phases requiring redesign (not just rename):**
+- `path_arcs` (llm_phases.py:704) — computed metadata, not stored Arc nodes
+- `enumerate_arcs` (deterministic.py:70) — validation utility, not node creator
+- `divergence` (deterministic.py:159) — must work with computed arcs, not stored nodes
+- `convergence` (deterministic.py:232) — state-flag derivation instead of Arc-dependent logic
+- `validation` (deterministic.py:689) — beat DAG only; all passage checks removed
+
+**New utility function needed:**
+- `compute_active_flags_at_beat()` — replaces Arc-dependent `find_residue_candidates()` at `grow_algorithms.py:1941`. Required for POLISH state-flag routing.
+
+Scope: Large. Depends on #996 (Arc removal) and #989 (POLISH completion). Should be done incrementally alongside POLISH PRs.
+
+### 8. `refactor: GROW validation split — separate beat-DAG from passage-layer checks`
+
+`grow_validation.py` (1580 lines, ~15 checks) mixes beat-DAG and passage-layer validation. These must be explicitly separated:
+
+**Stay in GROW (5 checks, beat DAG):**
+- `check_single_start()` — line 142
+- `check_dilemmas_resolved()` — line 274
+- `check_passage_dag_cycles()` — line 449
+- `check_spine_arc_exists()` — line 644 (refactored for computed arcs)
+- `check_convergence_policy_compliance()` — line 1017
+
+**Move to POLISH (10-11 checks, passage layer):**
+- `check_all_passages_reachable()` — line 180
+- `check_all_endings_reachable()` — line 219
+- `check_gate_satisfiability()` — line 336
+- `check_gate_co_satisfiability()` — line 378
+- `check_commits_timing()` — line 512
+- `check_codeword_gate_coverage()` — line 1142
+- `check_forward_path_reachability()` — line 1189
+- `check_routing_coverage()` — line 1244
+- `check_prose_neutrality()` — line 1390
+- `check_max_consecutive_linear()` — line 931
+- `check_arc_divergence()` — line 679 (becomes validation utility)
+
+Scope: Moderate. Currently implicit within #989 but needs explicit tracking since the split affects test organization (~2598 lines in `test_grow_validation.py`).
+
 ---
 
 ## Recommended Implementation Order
@@ -536,15 +603,17 @@ This is implicitly part of #989 but the blast radius (~100 references, 5+ files)
 1. **#981** — Doc 1/3 fixes (prerequisite for all)
 2. **#982** — Write procedures/polish.md (design before code)
 3. **#986** — ADR updates (docs, no code)
-4. **#984** — Terminology renames (mechanical, unblocks everything)
-5. **New: edge rename** — `sequenced_after` → `predecessor` (mechanical, alongside #984)
-6. **#983** — InitialBeat.paths singular (CRITICAL structural fix)
+4. **#984 + #992** — Terminology renames + edge renames (mechanical, unblocks everything)
+5. **#983** — InitialBeat.paths singular (CRITICAL structural fix)
+6. **New: intersection redesign** — intersection_group nodes (fixes hard-convergence root cause, depends on #983)
 7. **#985** — InteractionConstraint redesign
-8. **#987 + New: CLI wiring** — POLISH skeleton + CLI (unblocks POLISH phases)
-9. **#988** — POLISH Phases 4-6 (passage layer)
-10. **#989 + New: Arc removal** — POLISH Phase 7 + GROW cleanup
-11. **New: FILL rewrite** — FILL context builders for POLISH output
-12. **New: SHIP projection** — State flag → codeword projection
+8. **#987 + #995** — POLISH skeleton + CLI wiring (unblocks POLISH phases)
+9. **New: GROW validation split** — separate beat-DAG from passage checks (unblocks clean POLISH validation)
+10. **#988** — POLISH Phases 4-6 (passage layer)
+11. **#989 + #996** — POLISH Phase 7 + GROW removal + Arc removal
+12. **New: GROW phase refactoring** — remaining phases redesigned for computed arcs
+13. **#993** — FILL context rewrite for POLISH output
+14. **#994** — SHIP state-flag projection
 
 ---
 
@@ -554,4 +623,5 @@ This is implicitly part of #989 but the blast radius (~100 references, 5+ files)
 - Document 3: `docs/design/document-3-ontology.md` (Appendix A: lines 694-793)
 - Discussion #980: Design review deliberation (3 rounds)
 - Issue #977: Investigation epic
+- Issue #990: Implementation epic (tracks #981–#989, #992–#996, and GROW-specific issues)
 - Issue #990: Implementation epic (tracks #981-#989)
