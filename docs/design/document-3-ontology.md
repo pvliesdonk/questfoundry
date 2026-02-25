@@ -18,7 +18,13 @@ These are the fundamental building blocks of the graph. Each traces directly to 
 
 ### Vision
 
-A singleton configuration node. Stores the creative contract established in DREAM: genre, tone, themes, audience, scope, style preferences, and an optional point-of-view hint.
+A singleton configuration node. Stores the creative contract established in DREAM: genre, subgenre, tone, themes, audience, scope, style preferences, content guidance, and an optional point-of-view hint.
+
+The vision's fields include:
+- **Genre and subgenre** — the primary genre (e.g., "mystery") and a more specific subgenre (e.g., "cozy mystery," "noir detective"). Document 1 discusses subgenre narratively; this document formalizes it as a distinct field.
+- **Point-of-view style** — a hint, not a binding constraint. Expressed as one of four narrative perspectives (first person, second person, third person limited, third person omniscient). FILL's voice document makes the final decision — the vision's `pov_style` is advisory context.
+- **Content notes** — explicit guidance on what the story should include or exclude (themes to embrace, topics to avoid, content boundaries). This is a substantive creative constraint, not a filter — it shapes what BRAINSTORM generates and what SEED retains.
+- **Scope** — expressed as a named preset (e.g., "vignette," "short story," "novella") that implies approximate sizes for the cast, dilemma count, beat count, and passage count. The preset system provides BRAINSTORM and SEED with concrete targets.
 
 The vision has no edges to other nodes. Downstream stages receive it as context — it informs decisions but does not participate in the graph structure. It is working data, not exported to the player.
 
@@ -237,6 +243,8 @@ A beat passes through several stages, accumulating and shedding metadata:
 
 Throughout this lifecycle, the beat's core identity — what happens in this story moment — remains stable. The metadata around it evolves as each stage adds its contribution.
 
+**Stage attribution clarification:** When the Node Types table (Part 9) says "Created by: SEED, POLISH," it means both stages create beat nodes — SEED creates regular beats, POLISH creates micro-beats and residue beats. It does NOT mean POLISH mutates every beat SEED created. POLISH may adjust ordering edges on existing beats and adds new beats to the DAG, but it does not rewrite existing beat summaries or dilemma impacts. Pipeline validation tools can use stage attribution on individual beats (`created_by` property) to distinguish SEED-authored beats from POLISH-authored beats.
+
 ### Temporal Hints — The SEED→GROW Contract
 
 SEED creates beats for individual paths. Each beat's position relative to its own dilemma is clear from its function: an "advances" beat comes before the commit, a "commits" beat IS the commit, a "consequence" beat comes after. But a beat's position relative to *other* dilemmas is not yet determined — SEED hasn't interleaved the paths.
@@ -248,6 +256,21 @@ SEED expresses temporal intent through **hints**: advisory annotations that tell
 - If two dilemmas are concurrent, their beats interleave freely.
 
 The hints are **consumed by GROW** during interleaving. Once GROW produces the DAG with a total order per arc, the temporal positions are structural facts readable from the ordering — the hints have served their purpose and are not carried forward. POLISH may reorder beats within linear sections of the DAG, using its fuller knowledge of the emerging story. It is not bound by SEED's initial hints.
+
+**Temporal hint schema:**
+
+```yaml
+temporal_hint:
+  relative_to: <dilemma_id>          # The dilemma this hint is relative to
+  position: before_commit | after_commit | before_introduce | after_introduce
+```
+
+- `before_commit` — this beat should be placed before `relative_to`'s commit beat
+- `after_commit` — this beat should be placed after `relative_to`'s commit beat
+- `before_introduce` — this beat should be placed before `relative_to`'s first beat
+- `after_introduce` — this beat should be placed after `relative_to`'s introduction
+
+Temporal hints are optional. A beat with no hint has no constraint on its placement relative to other dilemmas — GROW places it using structural heuristics and dilemma ordering relationships alone. Hints that conflict with dilemma ordering relationships (e.g., a hint saying "after B's commit" when A wraps B and A's commit comes first) are treated as advisory — GROW resolves the conflict in favor of the ordering relationship.
 
 ### The 2^N Law in Graph Terms
 
@@ -619,6 +642,7 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | Entity Visual | DRESS | No | Per-entity visual profile for illustration consistency |
 | Illustration | DRESS | Yes | Image asset with caption |
 | Codex Entry | DRESS | Yes | Diegetic encyclopedia entry |
+| Illustration Brief | DRESS | No | Per-passage image generation plan with priority, category, and reference prompts |
 
 "Persistent (partial)" means the node is exported by SHIP, but only a subset of its fields — working metadata is stripped.
 
@@ -642,6 +666,11 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | `wraps` | Dilemma → Dilemma | SEED | A introduces before B, B resolves before A |
 | `concurrent` | Dilemma → Dilemma | SEED | Neither wraps the other; active simultaneously |
 | `serial` | Dilemma → Dilemma | SEED | A resolves before B introduces; no structural interaction |
+| `describes_visual` | Entity Visual → Entity | DRESS | Visual profile for this entity. Working. |
+| `targets` | Illustration Brief → Passage | DRESS | Which passage this brief illustrates. Working. |
+| `from_brief` | Illustration → Illustration Brief | DRESS | Which brief generated this illustration. Working. |
+| `HasEntry` | Codex Entry → Entity | DRESS | This codex entry describes this entity. Persistent. |
+| `Depicts` | Illustration → Passage | DRESS | This illustration depicts this passage. Persistent. |
 
 ### Dilemma Ordering Relationships
 
@@ -790,3 +819,19 @@ This section documents where the current implementation (`docs/design/00-spec.md
 **This document:** Temporal hints are working annotations on beats, consumed by GROW during interleaving. They interact with dilemma ordering relationships to guide beat placement.
 
 **Impact:** New field on `InitialBeat` model. GROW's interleaving algorithm needs to read and respect these hints.
+
+### ADR-017 Routing in GROW vs POLISH
+
+**Current:** ADR-017 (Unified Routing Plan) assigns routing, passage collapse, and false-branch detection to GROW. The `RoutingPlan` architecture computes routing in GROW phases and applies mutations there.
+
+**This document:** All passage-layer work — passage creation, choice edge derivation, variant creation, false branching, and routing — belongs to POLISH. GROW's output boundary is the beat DAG with ordering, intersections, and state flags. GROW does not create passages or choices.
+
+**Impact:** The `RoutingPlan` architecture transfers to POLISH as `PolishPlan`. ADR-017 needs supersession. GROW phases 7–9 (passage creation, choice creation, routing) move to POLISH.
+
+### InitialBeat.paths — List vs Singular belongs_to
+
+**Current:** `InitialBeat.paths` is `list[str]` with `min_length=1`. The mutation creates one `belongs_to` edge per path in the list, allowing a beat to belong to multiple paths simultaneously. The serialize prompt shows multiple paths as valid.
+
+**This document:** Each beat has exactly one `belongs_to` edge to one path (Part 1, Part 3, Part 9). Multi-path membership conflates path membership with scene co-occurrence — the exact pattern that caused the hard-convergence violation. Co-occurrence is modeled by intersection groups (Part 4), not by multiple `belongs_to` edges.
+
+**Impact:** `InitialBeat.paths` becomes singular `path_id: str`. Intersection co-occurrence is signaled through entity flexibility annotations, not multi-path assignment. The mutation, prompt, and validation all need updating.
