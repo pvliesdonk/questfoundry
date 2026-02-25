@@ -1237,9 +1237,10 @@ class _LLMPhaseMixin:
             if dilemma_node:
                 question = dilemma_node.get("question", "")
                 block.append(f'  Dilemma: "{question}"')
-                central = dilemma_node.get("central_entity_ids", [])
-                if central:
-                    block.append(f"  Central entities: {', '.join(central)}")
+                anchored = graph.get_edges(from_id=dilemma_id, edge_type="anchored_to")
+                if anchored:
+                    entity_ids = [strip_scope_prefix(e["to"]) for e in anchored]
+                    block.append(f"  Central entities: {', '.join(entity_ids)}")
             block.append(f"  Consequence: {cons_desc}")
             if narrative_effects:
                 block.append("  Effects:")

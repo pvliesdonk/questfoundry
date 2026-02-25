@@ -97,18 +97,11 @@ def _format_dilemma(dilemma_id: str, dilemma_data: dict[str, Any], graph: Graph)
     # Use raw_id for display
     display_id = dilemma_data.get("raw_id", dilemma_id)
     question = dilemma_data.get("question", "")
-    central_entities = dilemma_data.get("central_entity_ids", [])
     why_it_matters = dilemma_data.get("why_it_matters", "")
 
-    # Format central entities list - extract raw IDs from prefixed references
-    entities_display = []
-    for ref in central_entities:
-        # References use category prefix (character::pim, location::manor, etc.)
-        # Extract raw_id for display
-        if "::" in ref:
-            entities_display.append(strip_scope_prefix(ref))
-        else:
-            entities_display.append(ref)
+    # Read central entities from anchored_to edges
+    anchored_edges = graph.get_edges(from_id=dilemma_id, edge_type="anchored_to")
+    entities_display = [strip_scope_prefix(e["to"]) for e in anchored_edges]
 
     result = f"- **{display_id}**: {question}\n"
     result += f"  Central entities: {', '.join(entities_display) if entities_display else 'none specified'}\n"

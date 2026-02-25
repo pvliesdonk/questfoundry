@@ -1013,13 +1013,13 @@ def format_interaction_candidates_context(
 ) -> str:
     """Format pre-filtered candidate pairs for interaction analysis (Section 8).
 
-    Reads ``central_entity_ids`` from brainstorm dilemma nodes in the graph,
+    Reads ``anchored_to`` edges from brainstorm dilemma nodes in the graph,
     filters to surviving dilemmas, and computes candidate pairs that share
     at least one central entity.
 
     Args:
         seed_output: Pruned SEED output with surviving dilemmas.
-        graph: Graph containing brainstorm dilemma nodes with central_entity_ids.
+        graph: Graph containing brainstorm dilemma nodes with anchored_to edges.
 
     Returns:
         Formatted markdown context with candidate pairs, or a message
@@ -1030,16 +1030,15 @@ def format_interaction_candidates_context(
     if len(surviving_ids) < 2:
         return "No candidate pairs — fewer than 2 surviving dilemmas. Return an empty list."
 
-    # Read central_entity_ids from graph dilemma nodes
+    # Read anchored_to edges from graph dilemma nodes
     dilemma_entities: dict[str, set[str]] = {}
     for raw_id in sorted(surviving_ids):
         node_id = f"{SCOPE_DILEMMA}::{raw_id}"
-        node = graph.get_node(node_id)
-        if node is None:
+        if graph.get_node(node_id) is None:
             continue
-        central = node.get("central_entity_ids", [])
+        edges = graph.get_edges(from_id=node_id, edge_type="anchored_to")
         # Strip scope prefixes for readability
-        dilemma_entities[raw_id] = {strip_scope_prefix(eid) for eid in central}
+        dilemma_entities[raw_id] = {strip_scope_prefix(e["to"]) for e in edges}
 
     # Compute candidate pairs (shared central entities)
     candidate_pairs: list[tuple[str, str, list[str]]] = []

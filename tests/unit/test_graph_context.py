@@ -1466,9 +1466,13 @@ class TestFormatDilemmaAnalysisContext:
                 "raw_id": "alive_or_dead",
                 "question": "Should the hero sacrifice themselves?",
                 "why_it_matters": "Life versus duty defines the entire story",
-                "central_entity_ids": ["character::hero"],
             },
         )
+        graph.create_node(
+            "character::hero",
+            {"type": "entity", "raw_id": "hero", "entity_category": "character"},
+        )
+        graph.add_edge("anchored_to", "dilemma::alive_or_dead", "character::hero")
         seed = _seed_output(
             dilemmas=[_dilemma("alive_or_dead", explored=["alive", "dead"])],
             paths=[
@@ -1571,17 +1575,26 @@ class TestFormatInteractionCandidatesContext:
     """Tests for format_interaction_candidates_context."""
 
     def _graph_with_dilemmas(self, dilemma_entities: dict[str, list[str]]) -> Graph:
-        """Build a graph with dilemma nodes having central_entity_ids."""
+        """Build a graph with dilemma nodes and anchored_to edges."""
         graph = Graph.empty()
+        # Collect all unique entity IDs and create entity nodes
+        all_entities: set[str] = set()
+        for entities in dilemma_entities.values():
+            all_entities.update(entities)
+        for eid in sorted(all_entities):
+            if not graph.has_node(eid):
+                graph.create_node(eid, {"type": "entity", "raw_id": eid})
+        # Create dilemma nodes and anchored_to edges
         for did, entities in dilemma_entities.items():
             graph.create_node(
                 f"dilemma::{did}",
                 {
                     "type": "dilemma",
                     "raw_id": did,
-                    "central_entity_ids": entities,
                 },
             )
+            for eid in entities:
+                graph.add_edge("anchored_to", f"dilemma::{did}", eid)
         return graph
 
     def test_shared_entity_pair_found(self) -> None:

@@ -140,7 +140,7 @@ class Dilemma(BaseModel):
     )
     central_entity_ids: list[str] = Field(
         default_factory=list,
-        description="Entity IDs central to this dilemma (references entity_id values)",
+        description="Entity IDs central to this dilemma — stored as anchored_to edges, not node properties",
     )
     why_it_matters: str = Field(
         min_length=1,

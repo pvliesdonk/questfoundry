@@ -437,8 +437,9 @@ class TestBrainstormMutations:
         dilemma = graph.get_node("dilemma::mentor_trust")
         assert dilemma is not None
         assert dilemma["raw_id"] == "mentor_trust"
-        # central_entity_ids are resolved to category-based IDs
-        assert dilemma["central_entity_ids"] == ["character::kay"]
+        # central_entity_ids are stored as anchored_to edges, not node properties
+        anchored = graph.get_edges(from_id="dilemma::mentor_trust", edge_type="anchored_to")
+        assert {e["to"] for e in anchored} == {"character::kay"}
 
         protector = graph.get_node("dilemma::mentor_trust::alt::protector")
         assert protector is not None
@@ -486,8 +487,9 @@ class TestBrainstormMutations:
         assert dilemma["type"] == "dilemma"
         assert dilemma["raw_id"] == "mentor_trust"
         assert dilemma["question"] == "Can the mentor be trusted?"
-        # central_entity_ids are resolved to category-based entity IDs
-        assert dilemma["central_entity_ids"] == ["character::kay", "character::mentor"]
+        # central_entity_ids are stored as anchored_to edges, not node properties
+        anchored = graph.get_edges(from_id="dilemma::mentor_trust", edge_type="anchored_to")
+        assert {e["to"] for e in anchored} == {"character::kay", "character::mentor"}
 
         # Alternative IDs: dilemma::dilemma_id::alt::alt_id
         protector = graph.get_node("dilemma::mentor_trust::alt::protector")
@@ -4203,9 +4205,9 @@ class TestApplySeedConvergenceAnalysis:
                 "type": "dilemma",
                 "raw_id": "trust_or_not",
                 "question": "Trust the mentor?",
-                "central_entity_ids": ["entity::kay"],
             },
         )
+        graph.add_edge("anchored_to", "dilemma::trust_or_not", "entity::kay")
         graph.create_node(
             "dilemma::trust_or_not::alt::trust",
             {"type": "answer", "raw_id": "trust", "is_canonical": True},
@@ -4217,9 +4219,9 @@ class TestApplySeedConvergenceAnalysis:
                 "type": "dilemma",
                 "raw_id": "stay_or_go",
                 "question": "Stay or leave?",
-                "central_entity_ids": ["entity::kay"],
             },
         )
+        graph.add_edge("anchored_to", "dilemma::stay_or_go", "entity::kay")
         graph.create_node(
             "dilemma::stay_or_go::alt::stay",
             {"type": "answer", "raw_id": "stay", "is_canonical": True},
