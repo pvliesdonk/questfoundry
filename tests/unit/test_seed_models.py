@@ -337,6 +337,28 @@ class TestDilemmaAnalysis:
         assert da.dilemma_role == "soft"
         assert da.residue_weight == "heavy"
 
+    def test_convergence_policy_field_name_migrated(self) -> None:
+        """Old 'convergence_policy' field name is migrated to 'dilemma_role'."""
+        data = {**_ANALYSIS_KWARGS}
+        del data["dilemma_role"]
+        data["convergence_policy"] = "hard"
+        da = DilemmaAnalysis.model_validate(data)
+        assert da.dilemma_role == "hard"
+
+    def test_convergence_policy_flavor_migrated(self) -> None:
+        """Old 'convergence_policy: flavor' is fully migrated (field + value)."""
+        import warnings
+
+        data = {**_ANALYSIS_KWARGS}
+        del data["dilemma_role"]
+        del data["residue_weight"]
+        data["convergence_policy"] = "flavor"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            da = DilemmaAnalysis.model_validate(data)
+        assert da.dilemma_role == "soft"
+        assert da.residue_weight == "cosmetic"
+
     def test_convergence_point_accepted(self) -> None:
         da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_point": "The river crossing camp"})
         assert da.convergence_point == "The river crossing camp"

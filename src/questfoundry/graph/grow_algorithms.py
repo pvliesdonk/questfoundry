@@ -1555,9 +1555,8 @@ class ConvergenceInfo:
         arc_id: The branch arc that converges.
         converges_to: The arc it converges to (spine).
         converges_at: The beat where convergence occurs (None if no convergence).
-            flavor: first shared beat after divergence.
-            soft: first shared beat after last exclusive beat (if payoff_budget met).
-            hard: always None.
+            soft: boundary beat after last exclusive beat (if payoff_budget met).
+            hard: always None (no convergence).
         dilemma_role: Effective policy applied to this arc.
         payoff_budget: Effective payoff budget applied to this arc.
         dilemma_convergences: Per-dilemma convergence details.
@@ -1642,16 +1641,16 @@ def _get_effective_policy(
     arc: Arc,
     dilemma_path_counts: dict[str, int] | None = None,
 ) -> tuple[str, int]:
-    """Combine convergence policies for a (possibly multi-dilemma) arc.
+    """Combine dilemma roles for a (possibly multi-dilemma) arc.
 
     Combine rule per issue #743: hard dominates; payoff_budget = max across
     all dilemmas the arc diverges on.  Falls back to ("soft", 0) when no
-    dilemma metadata is found (preserves pre-policy behavior).
+    dilemma metadata is found (soft with zero budget = converge at first
+    shared beat after divergence).
     """
     policies = _find_arc_dilemma_policies(graph, arc, dilemma_path_counts)
     if not policies:
-        # No SEED convergence metadata — preserve pre-policy behavior
-        # (first shared beat, no budget constraint).
+        # No SEED dilemma metadata — default to soft with no budget constraint.
         return ("soft", 0)
 
     max_budget = max(dp.budget for dp in policies)

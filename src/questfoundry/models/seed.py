@@ -264,9 +264,19 @@ class DilemmaAnalysis(BaseModel):
 
     @model_validator(mode="before")
     @classmethod
-    def _migrate_flavor(cls, data: Any) -> Any:
-        """Migrate deprecated 'flavor' value to 'soft' with cosmetic residue."""
-        if isinstance(data, dict) and data.get("dilemma_role") == "flavor":
+    def _migrate_legacy_fields(cls, data: Any) -> Any:
+        """Migrate deprecated field names and values.
+
+        - ``convergence_policy`` → ``dilemma_role`` (field rename)
+        - ``dilemma_role='flavor'`` → ``'soft'`` with ``residue_weight='cosmetic'``
+        """
+        if not isinstance(data, dict):
+            return data
+        # Field-name migration: convergence_policy → dilemma_role
+        if "convergence_policy" in data and "dilemma_role" not in data:
+            data["dilemma_role"] = data.pop("convergence_policy")
+        # Value migration: flavor → soft
+        if data.get("dilemma_role") == "flavor":
             import warnings
 
             warnings.warn(

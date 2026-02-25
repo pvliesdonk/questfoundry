@@ -1132,7 +1132,7 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
         ValidationCheck(
             name="dilemma_role_compliance",
             severity="pass",
-            message=f"All {checked} dilemma-arc pair(s) comply with convergence policy"
+            message=f"All {checked} dilemma-arc pair(s) comply with dilemma role and payoff budget"
             if checked
             else "No branch arcs with convergence metadata to check",
         )
