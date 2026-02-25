@@ -515,7 +515,7 @@ Key design choices:
 
 > **Forward-looking note (2026-02-24):** [Document 3](../design/document-3-ontology.md) replaces `convergence_policy` (hard/soft/flavor) with `dilemma_role` (hard/soft). Convergence behavior is derived from the role. `flavor` is removed — handled by POLISH as false branches. A superseding ADR will be created when the code migration is implemented. See [Issue #977](https://github.com/pvliesdonk/questfoundry/issues/977).
 >
-> **Impact on `flavor` (2026-02-25):** The `flavor` convergence category is fully removed from the ontology. During migration, existing `flavor` values are mapped to `soft` with `residue_weight: cosmetic`. A Pydantic model validator with a deprecation warning handles backward compatibility with existing graph data. Flavor-level choices are not dilemmas — they become false branches or minor passage variants created by POLISH. See [Issue #984](https://github.com/pvliesdonk/questfoundry/issues/984) for the migration plan.
+> **Impact on `flavor` (2026-02-25):** The `flavor` convergence category is fully removed from the ontology. During migration, existing `flavor` values are mapped to `soft` with `residue_weight: cosmetic` (a field defined in [Document 3, Part 2](../design/document-3-ontology.md)). A Pydantic model validator with a deprecation warning handles backward compatibility with existing graph data. Flavor-level choices are not dilemmas — they become false branches or minor passage variants created by POLISH. See [Issue #984](https://github.com/pvliesdonk/questfoundry/issues/984) for the migration plan.
 
 ---
 
@@ -832,7 +832,7 @@ ADR-017's architecture (compute a complete plan, then apply atomically) is sound
 - [Discussion #980: Design Review — GROW/POLISH Stage Boundary](https://github.com/pvliesdonk/questfoundry/discussions/980)
 - [Document 1, Part 4: Shaping the Story (POLISH)](../design/how-branching-stories-work.md)
 - [Document 3, Parts 5-6: Passage Layer and Entity Overlays](../design/document-3-ontology.md)
-- [ADR-017: Unified Routing Plan (superseded)](https://github.com/pvliesdonk/questfoundry/blob/main/docs/architecture/decisions.md#adr-017-unified-routing-plan-for-grow-variant-routing)
+- [ADR-017: Unified Routing Plan (superseded)](#adr-017-unified-routing-plan-for-grow-variant-routing)
 - [Epic #990: Converge with Documents 1 and 3](https://github.com/pvliesdonk/questfoundry/issues/990)
 
 ---
