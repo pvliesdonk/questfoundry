@@ -11,8 +11,13 @@ from collections import defaultdict
 from itertools import product
 from typing import TYPE_CHECKING
 
+from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.observability.logging import get_logger
+
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
+
+log = get_logger(__name__)
 
 
 def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[str]]:
@@ -164,14 +169,11 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
     for path_id, path_data in path_nodes.items():
         dilemma_id = path_data.get("dilemma_id")
         if dilemma_id:
-            # Normalize: ensure "dilemma::" prefix
-            prefixed = (
-                dilemma_id if dilemma_id.startswith("dilemma::") else f"dilemma::{dilemma_id}"
-            )
+            prefixed = normalize_scoped_id(dilemma_id, "dilemma")
             if prefixed in dilemma_nodes:
                 dilemma_paths[prefixed].append(path_id)
 
-    if not dilemma_paths or any(not pl for pl in dilemma_paths.values()):
+    if not dilemma_paths:
         return {}
 
     # Sort paths within each dilemma for determinism
@@ -244,25 +246,28 @@ def _topological_sort_subset(
     for bid in beat_set:
         for succ in successors_all.get(bid, []):
             if succ in beat_set:
-                in_degree[succ] = in_degree.get(succ, 0) + 1
+                in_degree[succ] += 1
 
-    queue = sorted(bid for bid, deg in in_degree.items() if deg == 0)
+    import heapq
+
+    queue = [bid for bid, deg in in_degree.items() if deg == 0]
+    heapq.heapify(queue)
     result: list[str] = []
 
     while queue:
-        node = queue.pop(0)
+        node = heapq.heappop(queue)
         result.append(node)
-        new_ready: list[str] = []
         for succ in successors_all.get(node, []):
             if succ in beat_set:
                 in_degree[succ] -= 1
                 if in_degree[succ] == 0:
-                    new_ready.append(succ)
-        # Insert in sorted order for determinism
-        queue = sorted(queue + new_ready)
+                    heapq.heappush(queue, succ)
 
     if len(result) != len(beat_set):
-        # Fallback for cycles: sorted order
+        log.warning(
+            "cycle_detected_in_beat_subset",
+            remaining=sorted(beat_set - set(result)),
+        )
         return sorted(beat_set)
 
     return result
