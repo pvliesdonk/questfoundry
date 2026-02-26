@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from questfoundry.graph.algorithms import compute_active_flags_at_beat
+from questfoundry.graph.algorithms import compute_active_flags_at_beat, compute_arc_traversals
 from questfoundry.graph.graph import Graph
 
 
@@ -407,3 +407,312 @@ class TestComputeActiveFlagsCartesianProduct:
         }
         assert result == expected
         assert len(result) == 4
+
+
+# ---------------------------------------------------------------------------
+# compute_arc_traversals tests
+# ---------------------------------------------------------------------------
+
+
+def _make_path(graph: Graph, path_id: str, dilemma_id: str, *, is_canonical: bool = False) -> None:
+    """Helper to create a path node with dilemma_id."""
+    graph.create_node(
+        path_id,
+        {
+            "type": "path",
+            "raw_id": path_id.split("::")[-1],
+            "dilemma_id": dilemma_id,
+            "is_canonical": is_canonical,
+        },
+    )
+
+
+def _make_dilemma(graph: Graph, dilemma_id: str, *, role: str = "hard") -> None:
+    """Helper to create a dilemma node."""
+    graph.create_node(
+        dilemma_id,
+        {"type": "dilemma", "raw_id": dilemma_id.split("::")[-1], "dilemma_role": role},
+    )
+
+
+class TestComputeArcTraversalsEmpty:
+    """Edge cases: empty graphs, no dilemmas, no paths."""
+
+    def test_empty_graph(self) -> None:
+        graph = Graph.empty()
+        assert compute_arc_traversals(graph) == {}
+
+    def test_no_dilemmas(self) -> None:
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        assert compute_arc_traversals(graph) == {}
+
+    def test_no_paths(self) -> None:
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        assert compute_arc_traversals(graph) == {}
+
+    def test_path_without_dilemma_id(self) -> None:
+        """Path node missing dilemma_id → no mapping → empty result."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        assert compute_arc_traversals(graph) == {}
+
+
+class TestComputeArcTraversalsSingleDilemma:
+    """Single dilemma with 1 or 2 paths."""
+
+    def test_single_path_single_beat(self) -> None:
+        """One dilemma, one path, one beat → one traversal."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::alpha", "dilemma::d1", is_canonical=True)
+        _make_beat(graph, "beat::b1", "Beat 1", [])
+        _add_belongs_to(graph, "beat::b1", "path::alpha")
+
+        result = compute_arc_traversals(graph)
+        assert result == {"alpha": ["beat::b1"]}
+
+    def test_single_path_chain(self) -> None:
+        """One path with 3 beats in a chain → correct topological order."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::alpha", "dilemma::d1")
+
+        _make_beat(graph, "beat::b1", "Start", [])
+        _make_beat(graph, "beat::b2", "Middle", [])
+        _make_beat(graph, "beat::b3", "End", [])
+        _add_belongs_to(graph, "beat::b1", "path::alpha")
+        _add_belongs_to(graph, "beat::b2", "path::alpha")
+        _add_belongs_to(graph, "beat::b3", "path::alpha")
+        _add_predecessor(graph, "beat::b2", "beat::b1")
+        _add_predecessor(graph, "beat::b3", "beat::b2")
+
+        result = compute_arc_traversals(graph)
+        assert result == {"alpha": ["beat::b1", "beat::b2", "beat::b3"]}
+
+    def test_two_paths_produces_two_traversals(self) -> None:
+        """Two paths on one dilemma → two traversals with different beats."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::brave", "dilemma::d1", is_canonical=True)
+        _make_path(graph, "path::cautious", "dilemma::d1")
+
+        # Shared start beat on both paths
+        _make_beat(graph, "beat::start", "Start", [])
+        _add_belongs_to(graph, "beat::start", "path::brave")
+        _add_belongs_to(graph, "beat::start", "path::cautious")
+
+        # Path-exclusive beats
+        _make_beat(graph, "beat::brave_act", "Brave act", [])
+        _add_belongs_to(graph, "beat::brave_act", "path::brave")
+        _add_predecessor(graph, "beat::brave_act", "beat::start")
+
+        _make_beat(graph, "beat::cautious_act", "Cautious act", [])
+        _add_belongs_to(graph, "beat::cautious_act", "path::cautious")
+        _add_predecessor(graph, "beat::cautious_act", "beat::start")
+
+        result = compute_arc_traversals(graph)
+        assert len(result) == 2
+        assert "brave" in result
+        assert "cautious" in result
+
+        # Both arcs include the shared start beat
+        assert result["brave"][0] == "beat::start"
+        assert result["cautious"][0] == "beat::start"
+
+        # Each arc includes its own exclusive beat
+        assert "beat::brave_act" in result["brave"]
+        assert "beat::brave_act" not in result["cautious"]
+        assert "beat::cautious_act" in result["cautious"]
+        assert "beat::cautious_act" not in result["brave"]
+
+
+class TestComputeArcTraversalsTwoDilemmas:
+    """Two dilemmas → Cartesian product of paths."""
+
+    def _build_two_dilemma_graph(self) -> Graph:
+        """Two dilemmas, 2 paths each → 4 traversals.
+
+        Structure:
+            d1: brave / cautious
+            d2: merciful / ruthless
+
+        Beats:
+            start (shared all paths)
+            brave_b (brave only)
+            cautious_b (cautious only)
+            merciful_b (merciful only)
+            ruthless_b (ruthless only)
+            end (shared all paths)
+        """
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_dilemma(graph, "dilemma::d2")
+        _make_path(graph, "path::brave", "dilemma::d1", is_canonical=True)
+        _make_path(graph, "path::cautious", "dilemma::d1")
+        _make_path(graph, "path::merciful", "dilemma::d2", is_canonical=True)
+        _make_path(graph, "path::ruthless", "dilemma::d2")
+
+        # Shared start
+        _make_beat(graph, "beat::start", "Start", [])
+        for p in ["path::brave", "path::cautious", "path::merciful", "path::ruthless"]:
+            _add_belongs_to(graph, "beat::start", p)
+
+        # d1 exclusive beats
+        _make_beat(graph, "beat::brave_b", "Brave beat", [])
+        _add_belongs_to(graph, "beat::brave_b", "path::brave")
+        _add_predecessor(graph, "beat::brave_b", "beat::start")
+
+        _make_beat(graph, "beat::cautious_b", "Cautious beat", [])
+        _add_belongs_to(graph, "beat::cautious_b", "path::cautious")
+        _add_predecessor(graph, "beat::cautious_b", "beat::start")
+
+        # d2 exclusive beats
+        _make_beat(graph, "beat::merciful_b", "Merciful beat", [])
+        _add_belongs_to(graph, "beat::merciful_b", "path::merciful")
+        _add_predecessor(graph, "beat::merciful_b", "beat::start")
+
+        _make_beat(graph, "beat::ruthless_b", "Ruthless beat", [])
+        _add_belongs_to(graph, "beat::ruthless_b", "path::ruthless")
+        _add_predecessor(graph, "beat::ruthless_b", "beat::start")
+
+        # Shared end (on all paths)
+        _make_beat(graph, "beat::end", "End", [])
+        for p in ["path::brave", "path::cautious", "path::merciful", "path::ruthless"]:
+            _add_belongs_to(graph, "beat::end", p)
+        _add_predecessor(graph, "beat::end", "beat::brave_b")
+        _add_predecessor(graph, "beat::end", "beat::cautious_b")
+        _add_predecessor(graph, "beat::end", "beat::merciful_b")
+        _add_predecessor(graph, "beat::end", "beat::ruthless_b")
+
+        return graph
+
+    def test_four_traversals(self) -> None:
+        """2 dilemmas x 2 paths = 4 arcs."""
+        graph = self._build_two_dilemma_graph()
+        result = compute_arc_traversals(graph)
+        assert len(result) == 4
+
+        expected_keys = {
+            "brave+merciful",
+            "brave+ruthless",
+            "cautious+merciful",
+            "cautious+ruthless",
+        }
+        assert set(result.keys()) == expected_keys
+
+    def test_each_traversal_has_shared_beats(self) -> None:
+        """All 4 arcs include start and end beats."""
+        graph = self._build_two_dilemma_graph()
+        result = compute_arc_traversals(graph)
+
+        for arc_key, sequence in result.items():
+            assert "beat::start" in sequence, f"{arc_key} missing start"
+            assert "beat::end" in sequence, f"{arc_key} missing end"
+
+    def test_exclusive_beats_in_correct_arcs(self) -> None:
+        """Each arc only has beats from its selected paths."""
+        graph = self._build_two_dilemma_graph()
+        result = compute_arc_traversals(graph)
+
+        # brave+merciful should have brave_b and merciful_b, NOT cautious_b or ruthless_b
+        bm = result["brave+merciful"]
+        assert "beat::brave_b" in bm
+        assert "beat::merciful_b" in bm
+        assert "beat::cautious_b" not in bm
+        assert "beat::ruthless_b" not in bm
+
+        # cautious+ruthless should have cautious_b and ruthless_b
+        cr = result["cautious+ruthless"]
+        assert "beat::cautious_b" in cr
+        assert "beat::ruthless_b" in cr
+        assert "beat::brave_b" not in cr
+        assert "beat::merciful_b" not in cr
+
+    def test_topological_order_preserved(self) -> None:
+        """Start always before exclusive beats, exclusive beats before end."""
+        graph = self._build_two_dilemma_graph()
+        result = compute_arc_traversals(graph)
+
+        for arc_key, sequence in result.items():
+            start_idx = sequence.index("beat::start")
+            end_idx = sequence.index("beat::end")
+            assert start_idx < end_idx, f"{arc_key}: start not before end"
+
+            # All exclusive beats are between start and end
+            for beat in sequence:
+                if beat not in ("beat::start", "beat::end"):
+                    beat_idx = sequence.index(beat)
+                    assert start_idx < beat_idx < end_idx, (
+                        f"{arc_key}: {beat} not between start and end"
+                    )
+
+
+class TestComputeArcTraversalsThreePaths:
+    """Three paths on one dilemma → three traversals."""
+
+    def test_three_paths(self) -> None:
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::alpha", "dilemma::d1")
+        _make_path(graph, "path::beta", "dilemma::d1")
+        _make_path(graph, "path::gamma", "dilemma::d1")
+
+        _make_beat(graph, "beat::shared", "Shared", [])
+        for p in ["path::alpha", "path::beta", "path::gamma"]:
+            _add_belongs_to(graph, "beat::shared", p)
+
+        _make_beat(graph, "beat::a_only", "Alpha only", [])
+        _add_belongs_to(graph, "beat::a_only", "path::alpha")
+        _add_predecessor(graph, "beat::a_only", "beat::shared")
+
+        _make_beat(graph, "beat::b_only", "Beta only", [])
+        _add_belongs_to(graph, "beat::b_only", "path::beta")
+        _add_predecessor(graph, "beat::b_only", "beat::shared")
+
+        _make_beat(graph, "beat::g_only", "Gamma only", [])
+        _add_belongs_to(graph, "beat::g_only", "path::gamma")
+        _add_predecessor(graph, "beat::g_only", "beat::shared")
+
+        result = compute_arc_traversals(graph)
+        assert len(result) == 3
+        assert set(result.keys()) == {"alpha", "beta", "gamma"}
+        assert result["alpha"] == ["beat::shared", "beat::a_only"]
+        assert result["beta"] == ["beat::shared", "beat::b_only"]
+        assert result["gamma"] == ["beat::shared", "beat::g_only"]
+
+
+class TestComputeArcTraversalsDilemmaIdNormalization:
+    """Test that dilemma_id normalization works (with and without prefix)."""
+
+    def test_dilemma_id_without_prefix(self) -> None:
+        """Path with dilemma_id='d1' (no prefix) matches dilemma::d1."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        # Path stores dilemma_id WITHOUT prefix
+        graph.create_node(
+            "path::p1",
+            {"type": "path", "raw_id": "p1", "dilemma_id": "d1", "is_canonical": True},
+        )
+        _make_beat(graph, "beat::b1", "Beat", [])
+        _add_belongs_to(graph, "beat::b1", "path::p1")
+
+        result = compute_arc_traversals(graph)
+        assert result == {"p1": ["beat::b1"]}
+
+    def test_dilemma_id_with_prefix(self) -> None:
+        """Path with dilemma_id='dilemma::d1' (already prefixed) works."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        # Path stores dilemma_id WITH prefix
+        graph.create_node(
+            "path::p1",
+            {"type": "path", "raw_id": "p1", "dilemma_id": "dilemma::d1"},
+        )
+        _make_beat(graph, "beat::b1", "Beat", [])
+        _add_belongs_to(graph, "beat::b1", "path::p1")
+
+        result = compute_arc_traversals(graph)
+        assert result == {"p1": ["beat::b1"]}
