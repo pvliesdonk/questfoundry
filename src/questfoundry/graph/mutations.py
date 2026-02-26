@@ -1571,9 +1571,12 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         if expected_dilemma in beat_impact_commits_dilemmas:
             paths_with_commits.add(normalized_pid)
 
-            # Track beat effects for arc structure checks
+        # Track ALL beat effects for arc structure checks (14, 15).
+        # Must be outside the commits check so advances/reveals beats
+        # are also recorded — checks 14/15 need the full arc timeline.
+        if expected_dilemma in beat_impact_dilemmas:
             effects = beat_effects_by_dilemma.get(expected_dilemma, set())
-            path_beat_effects.setdefault(path_id, []).append((i, effects))
+            path_beat_effects.setdefault(normalized_pid, []).append((i, effects))
 
     # Report paths missing commits beats
     for path_id in sorted(path_dilemma_map.keys()):

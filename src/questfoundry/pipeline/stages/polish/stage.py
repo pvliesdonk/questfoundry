@@ -29,7 +29,7 @@ if TYPE_CHECKING:
 class PolishStage:
     """POLISH stage: transforms beat DAG into prose-ready passage graph.
 
-    Stub implementation — raises NotImplementedError until phases are
+    Stub implementation — raises PolishStageError until phases are
     wired in subsequent PRs.
 
     Attributes:
