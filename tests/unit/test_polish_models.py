@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
+from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.polish import (
     ArcPivot,
     CharacterArcMetadata,
@@ -12,7 +13,6 @@ from questfoundry.models.polish import (
     Phase1Output,
     Phase2Output,
     Phase3Output,
-    PolishPhaseResult,
     ReorderedSection,
 )
 
@@ -149,17 +149,16 @@ class TestPhase3Output:
         assert output.character_arcs == []
 
 
-class TestPolishPhaseResult:
-    """Tests for the phase result container."""
+class TestPhaseResult:
+    """Tests for the shared phase result container used by POLISH."""
 
     def test_default_values(self) -> None:
-        result = PolishPhaseResult(phase="test")
-        assert result.status == "completed"
+        result = PhaseResult(phase="test", status="completed")
         assert result.llm_calls == 0
         assert result.tokens_used == 0
 
     def test_custom_values(self) -> None:
-        result = PolishPhaseResult(
+        result = PhaseResult(
             phase="beat_reordering",
             status="completed",
             detail="Reordered 3/5 sections",

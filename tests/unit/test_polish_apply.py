@@ -148,30 +148,30 @@ class TestCreateResidueBeatAndPassage:
         )
         _create_residue_beat_and_passage(graph, rspec)
 
-        # Check residue beat was created
+        # Check residue beat was created (residue_ prefix prevents ID collision)
         beat_nodes = graph.get_nodes_by_type("beat")
-        residue_beat = beat_nodes.get("beat::r1")
+        residue_beat = beat_nodes.get("beat::residue_r1")
         assert residue_beat is not None
         assert residue_beat["role"] == "residue_beat"
         assert residue_beat["summary"] == "You feel confident"
 
         # Check residue passage was created
         passages = graph.get_nodes_by_type("passage")
-        residue_passage = passages.get("passage::r1")
+        residue_passage = passages.get("passage::residue_r1")
         assert residue_passage is not None
         assert residue_passage["is_residue"] is True
         assert residue_passage["requires"] == ["dilemma::d1:path::brave"]
 
         # Check grouped_in edge
         grouped_edges = graph.get_edges(edge_type="grouped_in")
-        residue_grouped = [e for e in grouped_edges if e["from"] == "beat::r1"]
+        residue_grouped = [e for e in grouped_edges if e["from"] == "beat::residue_r1"]
         assert len(residue_grouped) == 1
-        assert residue_grouped[0]["to"] == "passage::r1"
+        assert residue_grouped[0]["to"] == "passage::residue_r1"
 
         # Check precedes edge
         precedes = graph.get_edges(edge_type="precedes")
         assert len(precedes) == 1
-        assert precedes[0]["from"] == "passage::r1"
+        assert precedes[0]["from"] == "passage::residue_r1"
         assert precedes[0]["to"] == "passage::target"
 
     def test_residue_without_content_hint_uses_default(self) -> None:
@@ -193,8 +193,8 @@ class TestCreateResidueBeatAndPassage:
         _create_residue_beat_and_passage(graph, rspec)
 
         beat_nodes = graph.get_nodes_by_type("beat")
-        assert "beat::r2" in beat_nodes
-        assert "Residue moment for" in beat_nodes["beat::r2"]["summary"]
+        assert "beat::residue_r2" in beat_nodes
+        assert "Residue moment for" in beat_nodes["beat::residue_r2"]["summary"]
 
 
 class TestCreateChoiceEdge:
