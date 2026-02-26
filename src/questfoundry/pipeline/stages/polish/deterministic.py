@@ -922,13 +922,35 @@ async def phase_validation(
             detail=detail,
         )
 
-    # Collect summary stats
-    passage_count = len(graph.get_nodes_by_type("passage"))
-    choice_edges = graph.get_edges(edge_type="choice")
-    choice_count = len(choice_edges)
+    # Collect summary stats for PolishResult
+    passage_nodes = graph.get_nodes_by_type("passage")
+    passage_count = len(passage_nodes)
+    choice_count = len(graph.get_edges(edge_type="choice"))
+    variant_count = sum(1 for p in passage_nodes.values() if p.get("is_variant"))
+    residue_count = sum(1 for p in passage_nodes.values() if p.get("is_residue"))
 
-    detail = f"Validation passed: {passage_count} passages, {choice_count} choices"
-    log.info("phase7_validation_passed", passages=passage_count, choices=choice_count)
+    beat_nodes = graph.get_nodes_by_type("beat")
+    sidetrack_count = sum(1 for b in beat_nodes.values() if b.get("role") == "sidetrack_beat")
+
+    # Count false branches from diamond_alt and sidetrack passages
+    false_branch_count = sum(1 for p in passage_nodes.values() if p.get("is_diamond_alt")) + sum(
+        1 for p in passage_nodes.values() if p.get("is_sidetrack")
+    )
+
+    detail = (
+        f"Validation passed: {passage_count} passages, {choice_count} choices, "
+        f"{variant_count} variants, {residue_count} residue, "
+        f"{sidetrack_count} sidetracks, {false_branch_count} false branches"
+    )
+    log.info(
+        "phase7_validation_passed",
+        passages=passage_count,
+        choices=choice_count,
+        variants=variant_count,
+        residues=residue_count,
+        sidetracks=sidetrack_count,
+        false_branches=false_branch_count,
+    )
 
     return PhaseResult(
         phase="validation",

@@ -201,10 +201,10 @@ def validate_polish_output(graph: Graph) -> list[str]:
 
     _check_beat_grouping(beat_nodes, beat_to_passages, errors)
     _check_passage_beats(passage_nodes, passage_beats, errors)
-    _check_start_passage(passage_nodes, passage_beats, beat_nodes, graph, errors)
+    _check_start_passage(passage_beats, beat_nodes, graph, errors)
     _check_passage_reachability(passage_nodes, graph, errors)
     _check_variant_integrity(passage_nodes, graph, errors)
-    _check_choice_integrity(passage_nodes, graph, errors)
+    _check_choice_integrity(graph, errors)
     _check_residue_ordering(graph, errors)
 
     return errors
@@ -243,7 +243,6 @@ def _check_passage_beats(
 
 
 def _check_start_passage(
-    passage_nodes: dict[str, dict[str, Any]],  # noqa: ARG001
     passage_beats: dict[str, list[str]],
     beat_nodes: dict[str, dict[str, Any]],
     graph: Graph,
@@ -251,13 +250,20 @@ def _check_start_passage(
 ) -> None:
     """Exactly one start passage must exist (containing the earliest beat)."""
     # Find root beats (no predecessor edges pointing TO them)
+    # Exclude synthetic beats (micro_beat, residue_beat, sidetrack_beat) —
+    # they're added fresh by Phase 6 with no predecessor edges
     predecessor_edges = graph.get_edges(edge_type="predecessor")
+    _synthetic_roles = {"micro_beat", "residue_beat", "sidetrack_beat"}
     beats_with_parents: set[str] = set()
     for edge in predecessor_edges:
         if edge["from"] in beat_nodes:
             beats_with_parents.add(edge["from"])
 
-    root_beats = set(beat_nodes.keys()) - beats_with_parents
+    root_beats = {
+        bid
+        for bid in beat_nodes
+        if bid not in beats_with_parents and beat_nodes[bid].get("role", "") not in _synthetic_roles
+    }
 
     # Find which passages contain root beats
     start_passages: set[str] = set()
@@ -290,12 +296,12 @@ def _check_passage_reachability(
         from_id = edge["from"]
         to_id = edge["to"]
         if from_id in passage_nodes and to_id in passage_nodes:
-            adj.setdefault(from_id, set()).add(to_id)
+            adj[from_id].add(to_id)
     for edge in precedes_edges:
         from_id = edge["from"]
         to_id = edge["to"]
         if from_id in passage_nodes and to_id in passage_nodes:
-            adj.setdefault(from_id, set()).add(to_id)
+            adj[from_id].add(to_id)
 
     # BFS from all passages with no incoming edges
     incoming: dict[str, int] = dict.fromkeys(passage_nodes, 0)
@@ -308,10 +314,12 @@ def _check_passage_reachability(
         # No clear start — skip check
         return
 
+    from collections import deque
+
     visited: set[str] = set()
-    queue = list(starts)
+    queue: deque[str] = deque(starts)
     while queue:
-        node = queue.pop(0)
+        node = queue.popleft()
         if node in visited:
             continue
         visited.add(node)
@@ -351,7 +359,6 @@ def _check_variant_integrity(
 
 
 def _check_choice_integrity(
-    passage_nodes: dict[str, dict[str, Any]],  # noqa: ARG001
     graph: Graph,
     errors: list[str],
 ) -> None:
@@ -364,12 +371,14 @@ def _check_choice_integrity(
         from_id = edge["from"]
         choices_by_source.setdefault(from_id, []).append(edge)
 
+    from collections import Counter
+
     for source_id, choices in choices_by_source.items():
         # Check for duplicate labels
-        labels = [c.get("label", "") for c in choices if c.get("label")]
-        label_set = set(labels)
-        if len(labels) != len(label_set):
-            duplicate_labels = [lbl for lbl in label_set if labels.count(lbl) > 1]
+        labels: list[str] = [c["label"] for c in choices if c.get("label")]
+        counts = Counter(labels)
+        duplicate_labels = sorted(label for label, count in counts.items() if count > 1)
+        if duplicate_labels:
             errors.append(f"Passage {source_id} has duplicate choice labels: {duplicate_labels}")
 
 
@@ -382,10 +391,7 @@ def _check_residue_ordering(
     passage_nodes = graph.get_nodes_by_type("passage")
 
     # Check that residue passages have precedes edges
+    passages_with_precedes = {e["from"] for e in precedes_edges}
     for passage_id, pdata in passage_nodes.items():
-        if pdata.get("is_residue"):
-            has_precedes = any(e["from"] == passage_id for e in precedes_edges)
-            if not has_precedes:
-                errors.append(
-                    f"Residue passage {passage_id} has no precedes edge to a target passage"
-                )
+        if pdata.get("is_residue") and passage_id not in passages_with_precedes:
+            errors.append(f"Residue passage {passage_id} has no precedes edge to a target passage")

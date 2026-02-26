@@ -250,7 +250,7 @@ class TestValidatePolishOutputResidue:
         )
 
         errors = validate_polish_output(graph)
-        assert not any("precedes" in e for e in errors)
+        assert errors == [], f"Unexpected validation errors: {errors}"
 
 
 class TestPolishResult:
