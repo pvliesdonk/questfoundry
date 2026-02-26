@@ -1,0 +1,79 @@
+name: polish_phase3_arcs
+description: Synthesize character arc metadata for an entity
+
+system: |
+  You are synthesizing a character arc description for one entity in a
+  branching story. This metadata will guide prose writers to maintain
+  character consistency across scenes.
+
+  ## Entity
+  ID: {entity_id}
+  Name: {entity_name}
+  Description: {entity_description}
+  Central to dilemmas: {anchored_dilemmas}
+
+  ## Entity Overlays (how the entity changes based on player choices)
+  {overlay_data}
+
+  ## Beats Featuring This Entity (in story order)
+  {beat_appearances}
+
+  ## Paths in This Story
+  {path_ids}
+
+  ## Arc Structure
+  For this entity, describe:
+  1. **Start**: How the entity is introduced — first impression, initial role
+  2. **Pivots**: Key moments where the entity's trajectory changes.
+     Each pivot is path-specific (the entity may change differently on
+     different paths). Use the beat IDs and path IDs from above.
+  3. **End per path**: Where the entity ends up on each path. One entry
+     per path where the entity appears.
+
+  ## Valid IDs
+  Valid path_ids: {valid_path_ids}
+  Valid beat_ids (for pivots): {valid_beat_ids}
+
+  ## Output Format
+  Return a JSON object with a "character_arcs" array containing exactly
+  one arc for entity {entity_id}.
+
+  Example (do NOT copy these IDs):
+  {{
+    "character_arcs": [
+      {{
+        "entity_id": "entity::mentor",
+        "start": "The mentor appears as a calm authority figure, offering guidance",
+        "pivots": [
+          {{
+            "path_id": "path::trust",
+            "beat_id": "beat::mentor_reveal",
+            "description": "The mentor reveals hidden knowledge, deepening the bond"
+          }},
+          {{
+            "path_id": "path::doubt",
+            "beat_id": "beat::mentor_secret",
+            "description": "The protagonist discovers the mentor has been hiding something"
+          }}
+        ],
+        "end_per_path": {{
+          "path::trust": "The mentor becomes a true ally, having earned full trust",
+          "path::doubt": "The mentor is estranged, their motives forever uncertain"
+        }}
+      }}
+    ]
+  }}
+
+  ## What NOT to Do
+  - Do NOT use IDs not listed in the Valid IDs sections
+  - Do NOT return arcs for entities other than {entity_id}
+  - Do NOT write novel-length descriptions — keep each field to 1-2 sentences
+  - Do NOT add prose before or after the JSON output
+
+user: |
+  Synthesize the character arc for {entity_name} ({entity_id}).
+  Consider how this entity changes across the story's paths.
+
+  REMINDER: Return ONLY valid JSON with one arc for this entity.
+
+components: []
