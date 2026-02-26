@@ -4534,16 +4534,16 @@ class TestApplySeedConvergenceAnalysis:
         assert "convergence_point" not in node
         assert "residue_note" not in node
 
-    def test_interaction_constraint_edge_created(self) -> None:
-        """Interaction constraint creates an edge between dilemma nodes."""
+    def test_dilemma_ordering_edge_created(self) -> None:
+        """Dilemma ordering relationship creates an edge between dilemma nodes."""
         graph = self._graph_with_dilemmas()
         output = self._base_output()
-        output["interaction_constraints"] = [
+        output["dilemma_relationships"] = [
             {
                 "dilemma_a": "stay_or_go",
                 "dilemma_b": "trust_or_not",
-                "constraint_type": "shared_entity",
-                "description": "Both involve Kay",
+                "ordering": "wraps",
+                "description": "Stay/go wraps trust subplot",
                 "reasoning": "test",
             },
         ]
@@ -4551,22 +4551,22 @@ class TestApplySeedConvergenceAnalysis:
 
         edges = graph.get_edges(
             from_id="dilemma::stay_or_go",
-            edge_type="interaction_constraint",
+            edge_type="dilemma_ordering",
         )
         assert len(edges) == 1
         assert edges[0]["to"] == "dilemma::trust_or_not"
-        assert edges[0]["constraint_type"] == "shared_entity"
-        assert edges[0]["description"] == "Both involve Kay"
+        assert edges[0]["ordering"] == "wraps"
+        assert edges[0]["description"] == "Stay/go wraps trust subplot"
 
-    def test_constraint_edge_skipped_if_node_missing(self) -> None:
-        """Constraint edge is not created when a dilemma node is missing."""
+    def test_ordering_edge_skipped_if_node_missing(self) -> None:
+        """Ordering edge is not created when a dilemma node is missing."""
         graph = self._graph_with_dilemmas()
         output = self._base_output()
-        output["interaction_constraints"] = [
+        output["dilemma_relationships"] = [
             {
                 "dilemma_a": "trust_or_not",
                 "dilemma_b": "nonexistent_dilemma",
-                "constraint_type": "causal_chain",
+                "ordering": "serial",
                 "description": "Should be skipped",
             },
         ]
@@ -4574,7 +4574,7 @@ class TestApplySeedConvergenceAnalysis:
 
         edges = graph.get_edges(
             from_id="dilemma::trust_or_not",
-            edge_type="interaction_constraint",
+            edge_type="dilemma_ordering",
         )
         assert len(edges) == 0
 

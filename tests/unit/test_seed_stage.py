@@ -101,7 +101,7 @@ async def test_execute_calls_all_three_phases() -> None:
             "questfoundry.pipeline.stages.seed.serialize_convergence_analysis"
         ) as mock_convergence,
         patch(
-            "questfoundry.pipeline.stages.seed.serialize_interaction_constraints"
+            "questfoundry.pipeline.stages.seed.serialize_dilemma_relationships"
         ) as mock_constraints,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
     ):

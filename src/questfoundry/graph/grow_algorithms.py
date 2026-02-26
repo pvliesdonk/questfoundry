@@ -2682,7 +2682,7 @@ def format_intersection_candidates(
 def build_intersection_candidates(graph: Graph) -> list[IntersectionCandidate]:
     """Find beats that share signals and could form intersections.
 
-    Groups beats by shared locations/location_alternatives and shared entities.
+    Groups beats by shared locations/flexibility edges and shared entities.
     Only considers beats from different dilemmas (same dilemma = alternative).
 
     Args:
@@ -2707,7 +2707,7 @@ def build_intersection_candidates(graph: Graph) -> list[IntersectionCandidate]:
         return []
 
     # Group by location overlap (highest priority)
-    location_groups = _group_by_location(beat_nodes, beat_dilemmas)
+    location_groups = _group_by_location(graph, beat_nodes, beat_dilemmas)
 
     # Group by shared entity
     entity_groups = _group_by_entity(graph, beat_nodes, beat_dilemmas)
@@ -2778,13 +2778,14 @@ def _get_hard_policy_beats(
 
 
 def _group_by_location(
+    graph: Graph,
     beat_nodes: dict[str, Any],
     beat_dilemmas: dict[str, set[str]],
 ) -> list[IntersectionCandidate]:
-    """Group beats by location overlap (primary location or alternatives).
+    """Group beats by location overlap (primary location or flexibility edges).
 
     Two beats have location overlap if:
-    - Beat A's location is in Beat B's location_alternatives, or vice versa
+    - Beat A's location matches a flexibility target of Beat B, or vice versa
     - They share the same primary location
     """
     # Build location → beats mapping
@@ -2794,9 +2795,12 @@ def _group_by_location(
         primary = beat_data.get("location")
         if primary:
             location_beats[primary].append(beat_id)
-        alternatives = beat_data.get("location_alternatives", [])
-        for alt in alternatives:
-            location_beats[alt].append(beat_id)
+        # Read flexibility edges (Doc 3) instead of location_alternatives property.
+        # NOTE: No role filter applied — currently only role="location" flexibility
+        # edges exist (written by mutations.py). If other roles are added (e.g.,
+        # role="entity"), this query must filter by role="location".
+        for edge in graph.get_edges(from_id=beat_id, edge_type="flexibility"):
+            location_beats[edge["to"]].append(beat_id)
 
     candidates: list[IntersectionCandidate] = []
     for location, beats in sorted(location_beats.items()):
@@ -3265,8 +3269,9 @@ def resolve_intersection_location(graph: Graph, beat_ids: list[str]) -> str | No
         locs = set()
         if primary:
             locs.add(primary)
-        for alt in data.get("location_alternatives", []):
-            locs.add(alt)
+        # Read flexibility edges (Doc 3) instead of location_alternatives property
+        for edge in graph.get_edges(from_id=bid, edge_type="flexibility"):
+            locs.add(edge["to"])
         all_locations.append(locs)
 
     if not all_locations:

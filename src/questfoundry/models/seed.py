@@ -25,12 +25,15 @@ from pydantic import BaseModel, Field, model_validator
 
 # Type aliases for clarity
 EntityDisposition = Literal["retained", "cut"]
+# PathTier has no direct Document 1/3 counterpart but serves a real purpose:
+# dilemma scoring uses it to weight non-canonical paths, and context formatting
+# displays it to guide LLM prose generation. Kept as-is.
 PathTier = Literal["major", "minor"]
 DilemmaEffect = Literal["advances", "reveals", "commits", "complicates"]
 DilemmaRole = Literal["hard", "soft"]
 EndingSalience = Literal["high", "low", "none"]
 ResidueWeight = Literal["heavy", "light", "cosmetic"]
-ConstraintType = Literal["shared_entity", "causal_chain", "resource_conflict"]
+DilemmaOrdering = Literal["wraps", "concurrent", "serial"]
 TemporalPosition = Literal["before_commit", "after_commit", "before_introduce", "after_introduce"]
 
 
@@ -294,7 +297,8 @@ class InitialBeat(BaseModel):
     )
     location_alternatives: list[str] = Field(
         default_factory=list,
-        description="Other valid locations for intersection flexibility",
+        description="Alternate location entities for intersection flexibility. "
+        "Stored as flexibility edges in graph (Doc 3), not as node property.",
     )
     temporal_hint: TemporalHint | None = Field(
         default=None,
@@ -403,30 +407,36 @@ class DilemmaAnalysis(BaseModel):
     )
 
 
-class InteractionConstraint(BaseModel):
-    """Sparse pairwise dilemma relationship from SEED.
+class DilemmaRelationship(BaseModel):
+    """Pairwise dilemma ordering relationship from SEED (Document 3, Part 2).
 
-    Serialized as Section 8 (after prune). Tells GROW about
-    cross-dilemma interactions that affect arc enumeration.
+    Serialized as Section 8 (after prune). Tells GROW how two dilemmas
+    relate temporally: one wrapping the other, running concurrently, or
+    sequentially.
 
-    Canonical pair ordering: dilemma_a < dilemma_b (normalized
-    silently to prevent A-B / B-A duplicates).
+    For ``concurrent`` (symmetric) ordering, the pair is normalized to
+    canonical order (dilemma_a < dilemma_b) to prevent A-B / B-A duplicates.
+    For directional orderings (``wraps``, ``serial``), the supplied order is
+    preserved because direction matters: "A wraps B" != "B wraps A".
+
+    Note: ``shared_entity`` is NOT an ordering relationship — it is derived
+    from ``anchored_to`` edges in the graph.
 
     Attributes:
-        dilemma_a: First dilemma ID (lexicographically smaller after normalization).
-        dilemma_b: Second dilemma ID (lexicographically larger after normalization).
-        constraint_type: Kind of interaction between the dilemmas.
-        description: What the interaction means narratively.
+        dilemma_a: First dilemma ID. For ``concurrent``, lexicographically smaller after normalization.
+        dilemma_b: Second dilemma ID. For ``concurrent``, lexicographically larger after normalization.
+        ordering: Temporal ordering between the dilemmas (wraps|concurrent|serial).
+        description: What the relationship means narratively.
         reasoning: Chain-of-thought for the classification.
     """
 
     dilemma_a: str = Field(min_length=1, description="First dilemma ID")
     dilemma_b: str = Field(min_length=1, description="Second dilemma ID")
-    constraint_type: ConstraintType = Field(
-        description="Kind of interaction (shared_entity|causal_chain|resource_conflict)",
+    ordering: DilemmaOrdering = Field(
+        description="Temporal ordering (wraps|concurrent|serial)",
     )
     description: str = Field(
-        min_length=1, max_length=500, description="Narrative meaning of the interaction"
+        min_length=1, max_length=500, description="Narrative meaning of the relationship"
     )
     reasoning: str = Field(
         min_length=10,
@@ -435,12 +445,17 @@ class InteractionConstraint(BaseModel):
     )
 
     @model_validator(mode="after")
-    def _validate_and_normalize_pair(self) -> InteractionConstraint:
-        """Reject self-referential pairs and normalize to canonical order (a < b)."""
+    def _validate_and_normalize_pair(self) -> DilemmaRelationship:
+        """Reject self-referential pairs; normalize symmetric orderings to canonical order.
+
+        Only ``concurrent`` pairs are alphabetically normalized (a < b) because the
+        relationship is symmetric.  ``wraps`` and ``serial`` are directional — swapping
+        would invert meaning ("A wraps B" becomes "B wraps A").
+        """
         if self.dilemma_a == self.dilemma_b:
             msg = f"dilemma_a and dilemma_b cannot be the same: {self.dilemma_a}"
             raise ValueError(msg)
-        if self.dilemma_a > self.dilemma_b:
+        if self.ordering == "concurrent" and self.dilemma_a > self.dilemma_b:
             self.dilemma_a, self.dilemma_b = self.dilemma_b, self.dilemma_a
         return self
 
@@ -463,7 +478,7 @@ class SeedOutput(BaseModel):
         consequences: Narrative consequences for paths.
         initial_beats: Initial beats for each path.
         dilemma_analyses: Per-dilemma convergence classifications (Section 7).
-        interaction_constraints: Pairwise dilemma interactions (Section 8).
+        dilemma_relationships: Pairwise dilemma ordering relationships (Section 8).
     """
 
     entities: list[EntityDecision] = Field(
@@ -490,9 +505,9 @@ class SeedOutput(BaseModel):
         default_factory=list,
         description="Per-dilemma convergence classifications (Section 7, post-prune)",
     )
-    interaction_constraints: list[InteractionConstraint] = Field(
+    dilemma_relationships: list[DilemmaRelationship] = Field(
         default_factory=list,
-        description="Pairwise dilemma interactions (Section 8, post-prune)",
+        description="Pairwise dilemma ordering relationships (Section 8, post-prune)",
     )
 
 
@@ -667,19 +682,19 @@ class DilemmaAnalysisSection(BaseModel):
         return self
 
 
-class InteractionConstraintsSection(BaseModel):
-    """Wrapper for serializing interaction constraints separately (Section 8)."""
+class DilemmaRelationshipsSection(BaseModel):
+    """Wrapper for serializing dilemma ordering relationships separately (Section 8)."""
 
-    interaction_constraints: list[InteractionConstraint] = Field(
+    dilemma_relationships: list[DilemmaRelationship] = Field(
         default_factory=list,
-        description="Pairwise dilemma interactions",
+        description="Pairwise dilemma ordering relationships",
     )
 
     @model_validator(mode="after")
-    def _deduplicate_constraints(self) -> InteractionConstraintsSection:
-        """Drop identical duplicate constraints; raise on conflicting ones."""
-        self.interaction_constraints = _deduplicate_and_check(
-            self.interaction_constraints, "pair_key", "pair_key"
+    def _deduplicate_relationships(self) -> DilemmaRelationshipsSection:
+        """Drop identical duplicate relationships; raise on conflicting ones."""
+        self.dilemma_relationships = _deduplicate_and_check(
+            self.dilemma_relationships, "pair_key", "pair_key"
         )
         return self
 

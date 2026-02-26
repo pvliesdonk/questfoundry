@@ -24,7 +24,7 @@ from questfoundry.agents import (
     get_seed_discuss_prompt,
     run_discuss_phase,
     serialize_convergence_analysis,
-    serialize_interaction_constraints,
+    serialize_dilemma_relationships,
     serialize_seed_as_function,
     summarize_seed_chunked,
 )
@@ -483,10 +483,10 @@ class SeedStage:
                 final_paths=len(pruned_artifact.paths),
             )
 
-        # Phase 6: Interaction constraints (Section 8) — runs AFTER pruning
+        # Phase 6: Dilemma ordering relationships (Section 8) — runs AFTER pruning
         # since it only needs to analyze surviving dilemma pairs.
-        log.debug("seed_phase", phase="interaction_constraints")
-        constraints, constraint_tokens, constraint_calls = await serialize_interaction_constraints(
+        log.debug("seed_phase", phase="dilemma_relationships")
+        relationships, rel_tokens, rel_calls = await serialize_dilemma_relationships(
             model=serialize_model or model,
             pruned_artifact=pruned_artifact,
             graph=graph,
@@ -494,12 +494,12 @@ class SeedStage:
             callbacks=callbacks,
             on_phase_progress=on_phase_progress,
         )
-        total_llm_calls += constraint_calls
-        total_tokens += constraint_tokens
+        total_llm_calls += rel_calls
+        total_tokens += rel_tokens
 
         # Merge analysis into pruned artifact
         pruned_artifact = pruned_artifact.model_copy(
-            update={"dilemma_analyses": analyses, "interaction_constraints": constraints}
+            update={"dilemma_analyses": analyses, "dilemma_relationships": relationships}
         )
 
         # Convert to dict for return
