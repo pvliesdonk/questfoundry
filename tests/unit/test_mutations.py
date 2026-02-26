@@ -1077,7 +1077,7 @@ class TestSeedMutations:
         assert len(edges) == 1
         assert edges[0]["to"] == "dilemma::mentor_trust::alt::protector"
 
-    def test_path_is_canonical_from_alternative(self) -> None:
+    def test_path_is_canonical_from_answer(self) -> None:
         """Path's is_canonical is set from answer's is_canonical."""
         graph = Graph.empty()
         # Create dilemma with two answers - one canonical, one not

@@ -706,7 +706,7 @@ def _make_graph_with_dilemma(
         alt_id = f"{prefixed}::alt::{answer_id}"
         graph.create_node(
             alt_id,
-            {"type": "alternative", "raw_id": answer_id, "is_canonical": is_default},
+            {"type": "answer", "raw_id": answer_id, "is_canonical": is_default},
         )
         graph.add_edge("has_answer", prefixed, alt_id)
     return graph
