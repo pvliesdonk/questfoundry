@@ -231,6 +231,199 @@ def format_entity_arc_context(
     }
 
 
+def format_choice_label_context(
+    graph: Graph,
+    choice_specs: list[dict[str, Any]],
+    passage_specs: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Build context for Phase 5a (choice label generation).
+
+    Args:
+        graph: Graph containing beat DAG.
+        choice_specs: List of choice spec dicts (from_passage, to_passage, grants).
+        passage_specs: List of passage spec dicts (passage_id, summary, beat_ids).
+
+    Returns:
+        Dict with keys: choice_details, story_context, choice_count.
+    """
+    # Build passage lookup
+    passage_lookup: dict[str, dict[str, Any]] = {}
+    for spec in passage_specs:
+        passage_lookup[spec["passage_id"]] = spec
+
+    story_context = _format_story_context(graph)
+
+    # Build choice detail lines
+    choice_lines: list[str] = []
+    for i, choice in enumerate(choice_specs):
+        from_id = choice.get("from_passage", "")
+        to_id = choice.get("to_passage", "")
+        grants = choice.get("grants", [])
+
+        from_spec = passage_lookup.get(from_id, {})
+        to_spec = passage_lookup.get(to_id, {})
+
+        from_summary = truncate_summary(from_spec.get("summary", ""), 80)
+        to_summary = truncate_summary(to_spec.get("summary", ""), 80)
+
+        grants_str = f" grants=[{', '.join(grants)}]" if grants else ""
+        choice_lines.append(
+            f"  {i + 1}. From: {from_id} ({from_summary})\n"
+            f"     To: {to_id} ({to_summary}){grants_str}"
+        )
+
+    return {
+        "choice_details": "\n".join(choice_lines),
+        "story_context": story_context,
+        "choice_count": str(len(choice_specs)),
+    }
+
+
+def format_residue_content_context(
+    graph: Graph,
+    residue_specs: list[dict[str, Any]],
+    passage_specs: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Build context for Phase 5b (residue beat content).
+
+    Args:
+        graph: Graph containing beat DAG.
+        residue_specs: List of residue spec dicts.
+        passage_specs: List of passage spec dicts.
+
+    Returns:
+        Dict with keys: residue_details, story_context, residue_count.
+    """
+    passage_lookup: dict[str, dict[str, Any]] = {}
+    for spec in passage_specs:
+        passage_lookup[spec["passage_id"]] = spec
+
+    story_context = _format_story_context(graph)
+
+    residue_lines: list[str] = []
+    for r in residue_specs:
+        target = r.get("target_passage_id", "")
+        residue_id = r.get("residue_id", "")
+        flag = r.get("flag", "")
+        path_id = r.get("path_id", "")
+
+        target_spec = passage_lookup.get(target, {})
+        target_summary = truncate_summary(target_spec.get("summary", ""), 80)
+
+        residue_lines.append(
+            f"  - {residue_id}: flag={flag} path={path_id}\n"
+            f"    Target passage: {target} ({target_summary})"
+        )
+
+    return {
+        "residue_details": "\n".join(residue_lines),
+        "story_context": story_context,
+        "residue_count": str(len(residue_specs)),
+    }
+
+
+def format_false_branch_context(
+    graph: Graph,
+    candidates: list[dict[str, Any]],
+    passage_specs: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Build context for Phase 5c (false branch decisions).
+
+    Args:
+        graph: Graph containing beat DAG.
+        candidates: List of false branch candidate dicts.
+        passage_specs: List of passage spec dicts.
+
+    Returns:
+        Dict with keys: candidate_details, story_context, candidate_count.
+    """
+    passage_lookup: dict[str, dict[str, Any]] = {}
+    for spec in passage_specs:
+        passage_lookup[spec["passage_id"]] = spec
+
+    entity_nodes = graph.get_nodes_by_type("entity")
+    valid_entity_ids = ", ".join(sorted(entity_nodes.keys()))
+
+    candidate_lines: list[str] = []
+    for i, cand in enumerate(candidates):
+        passage_ids = cand.get("passage_ids", [])
+        context_summary = cand.get("context_summary", "")
+
+        passage_details: list[str] = []
+        for pid in passage_ids:
+            spec = passage_lookup.get(pid, {})
+            summary = truncate_summary(spec.get("summary", ""), 60)
+            passage_details.append(f"    - {pid}: {summary}")
+
+        candidate_lines.append(
+            f"  Candidate {i}:\n"
+            + "\n".join(passage_details)
+            + (f"\n    Context: {context_summary}" if context_summary else "")
+        )
+
+    return {
+        "candidate_details": "\n".join(candidate_lines),
+        "valid_entity_ids": valid_entity_ids,
+        "candidate_count": str(len(candidates)),
+    }
+
+
+def format_variant_summary_context(
+    graph: Graph,
+    variant_specs: list[dict[str, Any]],
+    passage_specs: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Build context for Phase 5d (variant passage summaries).
+
+    Args:
+        graph: Graph containing beat DAG.
+        variant_specs: List of variant spec dicts.
+        passage_specs: List of passage spec dicts.
+
+    Returns:
+        Dict with keys: variant_details, story_context, variant_count.
+    """
+    passage_lookup: dict[str, dict[str, Any]] = {}
+    for spec in passage_specs:
+        passage_lookup[spec["passage_id"]] = spec
+
+    story_context = _format_story_context(graph)
+
+    variant_lines: list[str] = []
+    for v in variant_specs:
+        variant_id = v.get("variant_id", "")
+        base_id = v.get("base_passage_id", "")
+        requires = v.get("requires", [])
+
+        base_spec = passage_lookup.get(base_id, {})
+        base_summary = truncate_summary(base_spec.get("summary", ""), 80)
+
+        variant_lines.append(
+            f"  - {variant_id}: base={base_id} ({base_summary})\n"
+            f"    requires=[{', '.join(requires)}]"
+        )
+
+    return {
+        "variant_details": "\n".join(variant_lines),
+        "story_context": story_context,
+        "variant_count": str(len(variant_specs)),
+    }
+
+
+def _format_story_context(graph: Graph) -> str:
+    """Extract genre/tone from dream artifacts as story context string."""
+    dream_nodes = graph.get_nodes_by_type("dream_artifact")
+    parts: list[str] = []
+    for _did, ddata in dream_nodes.items():
+        genre = ddata.get("genre", "")
+        tone = ddata.get("tone", "")
+        if genre:
+            parts.append(f"Genre: {genre}")
+        if tone:
+            parts.append(f"Tone: {tone}")
+    return "\n".join(parts) if parts else "(no story context)"
+
+
 def _format_context_beat(
     beat_nodes: dict[str, dict[str, Any]],
     beat_id: str | None,

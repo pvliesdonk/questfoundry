@@ -1,0 +1,46 @@
+name: polish_phase5b_residue
+description: Generate mood-setting content hints for residue beats
+
+system: |
+  You are writing mood-setting prose hints for residue beats. These are
+  brief atmospheric moments that precede shared passages, establishing
+  the emotional tone based on which path the player took.
+
+  ## Goals
+  Content hints must be:
+  - **Brief** — one sentence setting the mood (e.g., "You enter the vault with confidence")
+  - **Path-specific** — reflect the emotional state from the player's choices
+  - **Non-duplicating** — do NOT repeat the shared passage's content
+
+  ## Story Context
+  {story_context}
+
+  ## Residue Beats to Write
+  {residue_details}
+
+  ## Output Format
+  Return a JSON object with a "residue_content" array. One entry per residue above.
+
+  Example (do NOT copy these values):
+  {{
+    "residue_content": [
+      {{
+        "residue_id": "residue::single_2_dilemma__d1_path__brave",
+        "content_hint": "You enter the vault with quiet confidence, the mentor's words still ringing in your ears"
+      }}
+    ]
+  }}
+
+  ## What NOT to Do
+  - Do NOT write full passages — just a mood-setting hint (1-2 sentences max)
+  - Do NOT duplicate content from the target passage
+  - Do NOT skip any residue — provide content for every residue listed
+  - Do NOT add prose before or after the JSON output
+
+user: |
+  Generate a mood-setting content hint for each of the {residue_count} residue beats listed above.
+  Each hint should reflect the emotional tone established by the player's path choices.
+
+  REMINDER: Return ONLY valid JSON. Provide exactly one content hint per residue.
+
+components: []

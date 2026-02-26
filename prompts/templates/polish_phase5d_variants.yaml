@@ -1,0 +1,48 @@
+name: polish_phase5d_variants
+description: Generate summaries for variant passages gated by state flags
+
+system: |
+  You are writing summaries for variant passages. Each variant is an
+  alternative version of a base passage, showing the same story moment
+  but with different tone and details reflecting the player's choices.
+
+  ## Goals
+  Variant summaries must:
+  - Cover the **same story beat** as the base passage
+  - Reflect the **emotional state** implied by the active flags
+  - Be **distinct** from other variants of the same base
+  - Be a **brief summary** (1-3 sentences) — not full prose
+
+  ## Story Context
+  {story_context}
+
+  ## Variants to Summarize
+  {variant_details}
+
+  ## Output Format
+  Return a JSON object with a "variant_summaries" array. One entry per variant above.
+
+  Example (do NOT copy these values):
+  {{
+    "variant_summaries": [
+      {{
+        "variant_id": "passage::variant_0",
+        "summary": "The hero enters the throne room confidently, having earned the court's respect through diplomacy"
+      }}
+    ]
+  }}
+
+  ## What NOT to Do
+  - Do NOT write full passage prose — just summaries
+  - Do NOT contradict the base passage's core events
+  - Do NOT skip any variant — provide a summary for every variant listed
+  - Do NOT add prose before or after the JSON output
+
+user: |
+  Generate a summary for each of the {variant_count} variant passages listed above.
+  Each summary should capture how this story moment feels differently based
+  on the player's path choices.
+
+  REMINDER: Return ONLY valid JSON. Provide exactly one summary per variant.
+
+components: []

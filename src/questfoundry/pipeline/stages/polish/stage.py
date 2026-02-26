@@ -29,6 +29,7 @@ from questfoundry.pipeline.stages.polish._helpers import (
     log,
 )
 from questfoundry.pipeline.stages.polish.deterministic import (  # noqa: F401 - register phases
+    phase_plan_application,
     phase_plan_computation,
 )
 from questfoundry.pipeline.stages.polish.llm_helper import _PolishLLMHelperMixin
@@ -89,14 +90,14 @@ class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
         "beat_reordering": "_phase_1_beat_reordering",
         "pacing": "_phase_2_pacing",
         "character_arcs": "_phase_3_character_arcs",
-        # "llm_enrichment": "_phase_5_llm_enrichment",
+        "llm_enrichment": "_phase_5_llm_enrichment",
     }
 
     # Map from registry phase name → module-level free function.
     # Deterministic phases resolved at call time for test patchability.
     _FREE_PHASES: ClassVar[dict[str, str]] = {
         "plan_computation": "phase_plan_computation",
-        # "plan_application": "phase_plan_application",
+        "plan_application": "phase_plan_application",
         # "validation": "phase_validation",
     }
 

@@ -95,14 +95,18 @@ from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.polish import (
     ArcPivot,
     CharacterArcMetadata,
+    ChoiceLabelItem,
     ChoiceSpec,
     FalseBranchCandidate,
+    FalseBranchDecisionItem,
     FalseBranchSpec,
     MicroBeatProposal,
     PassageSpec,
     ReorderedSection,
+    ResidueContentItem,
     ResidueSpec,
     VariantSpec,
+    VariantSummaryItem,
 )
 from questfoundry.models.polish import (
     Phase1Output as PolishPhase1Output,
@@ -112,6 +116,18 @@ from questfoundry.models.polish import (
 )
 from questfoundry.models.polish import (
     Phase3Output as PolishPhase3Output,
+)
+from questfoundry.models.polish import (
+    Phase5aOutput as PolishPhase5aOutput,
+)
+from questfoundry.models.polish import (
+    Phase5bOutput as PolishPhase5bOutput,
+)
+from questfoundry.models.polish import (
+    Phase5cOutput as PolishPhase5cOutput,
+)
+from questfoundry.models.polish import (
+    Phase5dOutput as PolishPhase5dOutput,
 )
 from questfoundry.models.seed import (
     Consequence,
@@ -151,6 +167,7 @@ __all__ = [
     "CharacterArcMetadata",
     "Choice",
     "ChoiceLabel",
+    "ChoiceLabelItem",
     "ChoiceSpec",
     "Codeword",
     "CodexEntry",
@@ -184,6 +201,7 @@ __all__ = [
     "EntityVisualWithId",
     "ExpandBlueprint",
     "FalseBranchCandidate",
+    "FalseBranchDecisionItem",
     "FalseBranchSpec",
     "FillExtractOutput",
     "FillPassageOutput",
@@ -224,7 +242,12 @@ __all__ = [
     "PolishPhase1Output",
     "PolishPhase2Output",
     "PolishPhase3Output",
+    "PolishPhase5aOutput",
+    "PolishPhase5bOutput",
+    "PolishPhase5cOutput",
+    "PolishPhase5dOutput",
     "ReorderedSection",
+    "ResidueContentItem",
     "ResidueSpec",
     "ResidueWeight",
     "ReviewFlag",
@@ -237,5 +260,6 @@ __all__ = [
     "TemporalHint",
     "TemporalPosition",
     "VariantSpec",
+    "VariantSummaryItem",
     "VoiceDocument",
 ]

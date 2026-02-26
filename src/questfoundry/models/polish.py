@@ -185,6 +185,9 @@ class ResidueSpec(BaseModel):
     residue_id: str = Field(min_length=1)
     flag: str = Field(min_length=1, description="State flag this residue addresses")
     path_id: str = Field(default="")
+    content_hint: str = Field(
+        default="", description="Mood-setting prose hint (populated by Phase 5)"
+    )
 
 
 class ChoiceSpec(BaseModel):
@@ -225,6 +228,82 @@ class FalseBranchSpec(BaseModel):
         description="skip, diamond, or sidetrack",
     )
     details: str = Field(default="")
+    diamond_summary_a: str = Field(default="", description="First alternative passage (diamond)")
+    diamond_summary_b: str = Field(default="", description="Second alternative passage (diamond)")
+    sidetrack_summary: str = Field(default="", description="Detour beat summary (sidetrack)")
+    sidetrack_entities: list[str] = Field(
+        default_factory=list,
+        description="Entity IDs for sidetrack beat",
+    )
+    choice_label_enter: str = Field(default="", description="Label for entering sidetrack")
+    choice_label_return: str = Field(default="", description="Label for returning from sidetrack")
+
+
+# ---------------------------------------------------------------------------
+# Phase 5: LLM Enrichment — output schemas
+# ---------------------------------------------------------------------------
+
+
+class ChoiceLabelItem(BaseModel):
+    """A single choice label produced by the LLM."""
+
+    from_passage: str = Field(min_length=1)
+    to_passage: str = Field(min_length=1)
+    label: str = Field(min_length=1, description="Diegetic, concise label for this choice")
+
+
+class Phase5aOutput(BaseModel):
+    """Output of Phase 5a: Choice Label Generation."""
+
+    choice_labels: list[ChoiceLabelItem] = Field(default_factory=list)
+
+
+class ResidueContentItem(BaseModel):
+    """Mood-setting prose hint for a residue beat."""
+
+    residue_id: str = Field(min_length=1)
+    content_hint: str = Field(min_length=1, description="Brief mood-setting prose hint")
+
+
+class Phase5bOutput(BaseModel):
+    """Output of Phase 5b: Residue Beat Content."""
+
+    residue_content: list[ResidueContentItem] = Field(default_factory=list)
+
+
+class FalseBranchDecisionItem(BaseModel):
+    """LLM decision for a single false branch candidate."""
+
+    candidate_index: int = Field(ge=0, description="Index into the candidates list")
+    decision: str = Field(min_length=1, description="skip, diamond, or sidetrack")
+    details: str = Field(default="", description="Brief rationale")
+    diamond_summary_a: str = Field(default="")
+    diamond_summary_b: str = Field(default="")
+    sidetrack_summary: str = Field(default="")
+    sidetrack_entities: list[str] = Field(default_factory=list)
+    choice_label_enter: str = Field(default="")
+    choice_label_return: str = Field(default="")
+
+
+class Phase5cOutput(BaseModel):
+    """Output of Phase 5c: False Branch Decisions."""
+
+    decisions: list[FalseBranchDecisionItem] = Field(default_factory=list)
+
+
+class VariantSummaryItem(BaseModel):
+    """Summary for a variant passage."""
+
+    variant_id: str = Field(min_length=1)
+    summary: str = Field(
+        min_length=1, description="Variant passage summary reflecting active flags"
+    )
+
+
+class Phase5dOutput(BaseModel):
+    """Output of Phase 5d: Variant Passage Summaries."""
+
+    variant_summaries: list[VariantSummaryItem] = Field(default_factory=list)
 
 
 # Note: POLISH phases return the shared PhaseResult from models.pipeline.
