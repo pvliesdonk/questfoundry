@@ -793,6 +793,18 @@ def _prefix_entity_id(category: str, raw_id: str) -> str:
     return format_entity_id(category, raw_id)
 
 
+def _get_path_id_from_beat(beat: dict[str, Any]) -> str | None:
+    """Extract path ID from a beat dict, supporting both current and legacy formats.
+
+    Args:
+        beat: Beat dict with ``path_id`` (current) or ``paths`` (legacy).
+
+    Returns:
+        Raw path ID string, or None if not present.
+    """
+    return beat.get("path_id") or (beat.get("paths", [None])[0] if beat.get("paths") else None)
+
+
 def _resolve_entity_ref(graph: Graph, entity_ref: str) -> str:
     """Resolve an entity reference to its full prefixed ID.
 
@@ -1322,9 +1334,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 )
 
         # 6. Path reference (singular — each beat belongs to exactly one path)
-        raw_path_id = beat.get("path_id") or (
-            beat.get("paths", [None])[0] if beat.get("paths") else None
-        )
+        raw_path_id = _get_path_id_from_beat(beat)
         if raw_path_id:
             _validate_id(
                 raw_path_id,
@@ -1537,9 +1547,7 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     paths_with_commits: set[str] = set()  # path_ids that have a commits beat
     for i, beat in enumerate(output.get("initial_beats", [])):
         # Resolve beat's path (singular path_id, with legacy paths fallback)
-        raw_pid = beat.get("path_id") or (
-            beat.get("paths", [None])[0] if beat.get("paths") else None
-        )
+        raw_pid = _get_path_id_from_beat(beat)
         if not raw_pid:
             continue  # Missing path — already caught by check 6
         normalized_pid, _ = _normalize_id(raw_pid, "path")
@@ -1802,9 +1810,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         graph.create_node(beat_id, beat_data)
 
         # Link beat to its path (singular belongs_to edge)
-        raw_path_id = beat.get("path_id") or (
-            beat.get("paths", [None])[0] if beat.get("paths") else None
-        )
+        raw_path_id = _get_path_id_from_beat(beat)
         if raw_path_id:
             prefixed_path_id = _prefix_id("path", raw_path_id)
             graph.add_edge("belongs_to", beat_id, prefixed_path_id)

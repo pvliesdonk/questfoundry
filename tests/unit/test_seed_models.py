@@ -934,3 +934,8 @@ class TestInitialBeatPathId:
     def test_empty_path_id_rejected(self) -> None:
         with pytest.raises(ValidationError, match="path_id"):
             InitialBeat(beat_id="b1", summary="Test", path_id="")
+
+    def test_legacy_empty_paths_rejected(self) -> None:
+        """Empty paths list raises ValueError — beats must belong to a path."""
+        with pytest.raises(ValidationError, match="must belong to a path"):
+            InitialBeat(beat_id="b1", summary="Test", paths=[])

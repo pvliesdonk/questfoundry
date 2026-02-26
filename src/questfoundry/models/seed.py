@@ -16,6 +16,7 @@ Terminology (v5):
 
 from __future__ import annotations
 
+import warnings
 from collections import Counter
 from enum import StrEnum
 from typing import Any, Literal
@@ -267,8 +268,6 @@ class InitialBeat(BaseModel):
             if isinstance(paths, list) and len(paths) == 1:
                 data["path_id"] = paths[0]
             elif isinstance(paths, list) and len(paths) > 1:
-                import warnings
-
                 warnings.warn(
                     f"InitialBeat.paths had {len(paths)} entries; using first. "
                     "Multi-path beats are handled via intersection groups.",
@@ -276,6 +275,9 @@ class InitialBeat(BaseModel):
                     stacklevel=2,
                 )
                 data["path_id"] = paths[0]
+            elif isinstance(paths, list) and len(paths) == 0:
+                msg = "InitialBeat.paths is empty — each beat must belong to a path."
+                raise ValueError(msg)
         return data
 
     dilemma_impacts: list[DilemmaImpact] = Field(
