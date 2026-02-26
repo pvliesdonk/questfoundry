@@ -96,7 +96,6 @@ from questfoundry.models.polish import (
     ArcPivot,
     CharacterArcMetadata,
     MicroBeatProposal,
-    PolishPhaseResult,
     ReorderedSection,
 )
 from questfoundry.models.polish import (
@@ -215,7 +214,6 @@ __all__ = [
     "PolishPhase1Output",
     "PolishPhase2Output",
     "PolishPhase3Output",
-    "PolishPhaseResult",
     "ReorderedSection",
     "ResidueWeight",
     "ReviewFlag",

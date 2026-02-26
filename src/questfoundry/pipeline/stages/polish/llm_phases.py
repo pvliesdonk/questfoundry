@@ -573,8 +573,17 @@ def _check_post_commit_sequel(
         if not is_commit:
             continue
 
-        # Check if next beat is a sequel
-        if i + 1 < len(chain):
+        # Check if next beat is a sequel (or if commit is at end of chain)
+        if i + 1 >= len(chain):
+            # Commit is the last beat in the chain — no sequel follows
+            flags.append(
+                {
+                    "issue_type": "no_sequel_after_commit",
+                    "beat_ids": chain[max(0, i - 1) : i + 1],
+                    "path_id": beat_to_path.get(bid, ""),
+                }
+            )
+        else:
             next_data = beat_nodes.get(chain[i + 1], {})
             next_type = next_data.get("scene_type", "unknown")
             if next_type != "sequel":
@@ -668,14 +677,6 @@ def _collect_entity_appearances(
         for eid in entities:
             entity_beats.setdefault(eid, []).append(bid)
 
-    # Also check anchored_to edges for entities central to dilemmas
-    anchored_edges = graph.get_edges(edge_type="anchored_to")
-    for edge in anchored_edges:
-        entity_id = edge["from"]
-        # Entity is central to a dilemma, ensure it's in our map
-        if entity_id not in entity_beats:
-            entity_beats[entity_id] = []
-
     return entity_beats
 
 
@@ -686,7 +687,10 @@ def _topological_sort(
     """Kahn's algorithm for topological sort of beat DAG.
 
     Returns beat IDs in topological order (parents before children).
+    Uses a sorted list as a priority queue for deterministic ordering.
     """
+    from collections import deque
+
     in_degree: dict[str, int] = dict.fromkeys(beat_nodes, 0)
     adj: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
 
@@ -697,11 +701,11 @@ def _topological_sort(
             in_degree[from_id] += 1
             adj[to_id].append(from_id)
 
-    queue = sorted(bid for bid, deg in in_degree.items() if deg == 0)
+    queue = deque(sorted(bid for bid, deg in in_degree.items() if deg == 0))
     result: list[str] = []
 
     while queue:
-        node = queue.pop(0)
+        node = queue.popleft()
         result.append(node)
         for neighbor in sorted(adj[node]):
             in_degree[neighbor] -= 1

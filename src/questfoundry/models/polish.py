@@ -136,19 +136,6 @@ class Phase3Output(BaseModel):
     character_arcs: list[CharacterArcMetadata] = Field(default_factory=list)
 
 
-# ---------------------------------------------------------------------------
-# Stage result
-# ---------------------------------------------------------------------------
-
-
-class PolishPhaseResult(BaseModel):
-    """Result of a single POLISH phase execution.
-
-    Extends the base PhaseResult with POLISH-specific detail.
-    """
-
-    phase: str = Field(min_length=1)
-    status: str = "completed"
-    detail: str = ""
-    llm_calls: int = 0
-    tokens_used: int = 0
+# Note: POLISH phases return the shared PhaseResult from models.pipeline.
+# Stage-specific result models (PolishResult) are added in later PRs
+# when passage/choice counts are available.

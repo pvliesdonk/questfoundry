@@ -62,7 +62,10 @@ def format_linear_section_context(
 
         entity_str = ""
         if entities:
-            entity_str = f" entities=[{', '.join(entities[:5])}]"
+            # Truncate to 5 entities per beat to keep context compact
+            display = entities[:5]
+            suffix = f" +{len(entities) - 5}" if len(entities) > 5 else ""
+            entity_str = f" entities=[{', '.join(display)}{suffix}]"
 
         line = f"  {i + 1}. {bid}: [{scene_type}] {summary}{impact_str}{entity_str}"
         beat_items.append(ContextItem(id=bid, text=line))
@@ -175,8 +178,9 @@ def format_entity_arc_context(
         data = beat_nodes.get(bid, {})
         summary = truncate_summary(data.get("summary", ""), 100)
         scene_type = data.get("scene_type", "unknown")
-        path_id = beat_to_path.get(bid, "unknown")
-        paths_seen.add(path_id)
+        path_id = beat_to_path.get(bid)
+        if path_id:
+            paths_seen.add(path_id)
 
         impacts = data.get("dilemma_impacts", [])
         impact_str = ""
@@ -184,7 +188,8 @@ def format_entity_arc_context(
             effects = [imp.get("effect", "?") for imp in impacts]
             impact_str = f" dilemma_effects=[{', '.join(effects)}]"
 
-        line = f"  - {bid} (path: {path_id}) [{scene_type}]: {summary}{impact_str}"
+        path_label = path_id or "unknown"
+        line = f"  - {bid} (path: {path_label}) [{scene_type}]: {summary}{impact_str}"
         beat_items.append(ContextItem(id=bid, text=line))
 
     if config:

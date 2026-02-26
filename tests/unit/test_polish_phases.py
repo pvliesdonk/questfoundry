@@ -299,6 +299,20 @@ class TestPostCommitSequel:
         _check_post_commit_sequel(["a", "b"], beat_nodes, {}, flags)
         assert len(flags) == 1
 
+    def test_commit_at_end_of_chain_flagged(self) -> None:
+        """Commit as the last beat in a chain triggers no-sequel flag."""
+        beat_nodes = {
+            "a": {"dilemma_impacts": [], "scene_type": "scene"},
+            "b": {
+                "dilemma_impacts": [{"effect": "commits"}],
+                "scene_type": "scene",
+            },
+        }
+        flags: list = []
+        _check_post_commit_sequel(["a", "b"], beat_nodes, {}, flags)
+        assert len(flags) == 1
+        assert flags[0]["issue_type"] == "no_sequel_after_commit"
+
 
 class TestTopologicalSort:
     """Tests for _topological_sort."""
