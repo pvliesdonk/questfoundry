@@ -207,8 +207,8 @@ class TestComputeActiveFlagsTwoDilemmas:
         expected = {frozenset({"dilemma::d1:path::path_a", "dilemma::d2:path::path_x"})}
         assert result == expected
 
-    def test_intermediate_beat_has_fewer_flags(self) -> None:
-        """Beat between two commits only has the first dilemma's flag."""
+    def test_commit_beat_includes_own_and_ancestor_flags(self) -> None:
+        """A commit beat downstream of another commit has both flags."""
         graph = self._build_two_dilemma_graph()
 
         result = compute_active_flags_at_beat(graph, "beat::commit_d2_x")
@@ -315,3 +315,95 @@ class TestComputeActiveFlagsBranching:
             frozenset({"dilemma::d1:path::pb"}),
         }
         assert result == expected
+
+
+class TestComputeActiveFlagsCartesianProduct:
+    """Tests for true Cartesian product: 2 dilemmas x 2 paths each."""
+
+    def test_two_dilemmas_two_paths_each_produces_four_combos(self) -> None:
+        """Two dilemmas with commits from two paths each → 4 flag combos.
+
+        Structure (convergence point sees all 4 ancestors):
+            beat::d1_pa (commits d1, path_a)   beat::d1_pb (commits d1, path_b)
+                       ↘                      ↙
+                         beat::merge_1
+                       ↙                      ↘
+            beat::d2_px (commits d2, path_x)   beat::d2_py (commits d2, path_y)
+                       ↘                      ↙
+                          beat::final
+        """
+        graph = Graph.empty()
+
+        # Paths
+        for pid in ["pa", "pb", "px", "py"]:
+            graph.create_node(f"path::{pid}", {"type": "path", "raw_id": pid})
+
+        # Dilemmas
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "hard"},
+        )
+        graph.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "raw_id": "d2", "dilemma_role": "soft"},
+        )
+
+        # D1 commits on two paths
+        _make_beat(
+            graph,
+            "beat::d1_pa",
+            "D1 commit on A",
+            [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _add_belongs_to(graph, "beat::d1_pa", "path::pa")
+
+        _make_beat(
+            graph,
+            "beat::d1_pb",
+            "D1 commit on B",
+            [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _add_belongs_to(graph, "beat::d1_pb", "path::pb")
+
+        # Merge point
+        _make_beat(graph, "beat::merge", "Merge point", [])
+        _add_belongs_to(graph, "beat::merge", "path::pa")
+        _add_predecessor(graph, "beat::merge", "beat::d1_pa")
+        _add_predecessor(graph, "beat::merge", "beat::d1_pb")
+
+        # D2 commits on two paths
+        _make_beat(
+            graph,
+            "beat::d2_px",
+            "D2 commit on X",
+            [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
+        )
+        _add_belongs_to(graph, "beat::d2_px", "path::px")
+        _add_predecessor(graph, "beat::d2_px", "beat::merge")
+
+        _make_beat(
+            graph,
+            "beat::d2_py",
+            "D2 commit on Y",
+            [{"dilemma_id": "dilemma::d2", "effect": "commits"}],
+        )
+        _add_belongs_to(graph, "beat::d2_py", "path::py")
+        _add_predecessor(graph, "beat::d2_py", "beat::merge")
+
+        # Final convergence point
+        _make_beat(graph, "beat::final", "Final beat", [])
+        _add_belongs_to(graph, "beat::final", "path::pa")
+        _add_predecessor(graph, "beat::final", "beat::d2_px")
+        _add_predecessor(graph, "beat::final", "beat::d2_py")
+
+        result = compute_active_flags_at_beat(graph, "beat::final")
+
+        # 2 options for d1 x 2 options for d2 = 4 combinations
+        expected = {
+            frozenset({"dilemma::d1:path::pa", "dilemma::d2:path::px"}),
+            frozenset({"dilemma::d1:path::pa", "dilemma::d2:path::py"}),
+            frozenset({"dilemma::d1:path::pb", "dilemma::d2:path::px"}),
+            frozenset({"dilemma::d1:path::pb", "dilemma::d2:path::py"}),
+        }
+        assert result == expected
+        assert len(result) == 4

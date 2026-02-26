@@ -27,11 +27,11 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
     have committed to both paths of the same dilemma).
 
     Algorithm:
-        1. Find all commit beats in the DAG.
-        2. Reverse BFS from beat_id to find ancestor commit beats.
-        3. Group ancestor commits by dilemma.
-        4. Compute Cartesian product of per-dilemma options, filtered
-           by mutual exclusivity.
+        1. Build predecessor adjacency and reverse-BFS from beat_id
+           to find all ancestor beats (including beat_id itself).
+        2. Filter ancestors to commit beats (effect="commits").
+        3. Group commit beats by dilemma, using belongs_to path as flag.
+        4. Compute Cartesian product of per-dilemma flag options.
 
     Args:
         graph: Graph containing beat DAG with predecessor edges.
@@ -77,33 +77,32 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
     belongs_to_edges = graph.get_edges(edge_type="belongs_to")
     beat_to_path: dict[str, str] = {}
     for edge in belongs_to_edges:
-        if edge["from"] in beat_nodes:
-            beat_to_path[edge["from"]] = edge["to"]
+        from_id = edge["from"]
+        if from_id in beat_nodes:
+            if from_id in beat_to_path:
+                # Entry contract (validate_grow_output) enforces exactly-one belongs_to
+                # per beat, so this should never happen on valid GROW output.
+                msg = f"Beat {from_id!r} has multiple belongs_to edges"
+                raise ValueError(msg)
+            beat_to_path[from_id] = edge["to"]
+
+    # Include beat_id itself as a candidate (it may be a commit beat)
+    candidates = ancestors | {beat_id}
 
     # dilemma_id → list of state flag identifiers from different paths
     dilemma_flags: dict[str, list[str]] = {}
 
-    for ancestor_id in ancestors:
-        ancestor_data = beat_nodes.get(ancestor_id, {})
-        impacts = ancestor_data.get("dilemma_impacts", [])
+    for candidate_id in candidates:
+        candidate_data = beat_nodes[candidate_id]
+        impacts = candidate_data.get("dilemma_impacts", [])
         for impact in impacts:
             if impact.get("effect") == "commits":
                 dilemma_id = impact.get("dilemma_id", "")
-                path_id = beat_to_path.get(ancestor_id, "")
+                path_id = beat_to_path.get(candidate_id, "")
                 if dilemma_id and path_id:
                     # State flag: "{dilemma_id}:{path_id}"
                     flag = f"{dilemma_id}:{path_id}"
                     dilemma_flags.setdefault(dilemma_id, []).append(flag)
-
-    # Also check if beat_id itself is a commit beat
-    beat_data = beat_nodes.get(beat_id, {})
-    for impact in beat_data.get("dilemma_impacts", []):
-        if impact.get("effect") == "commits":
-            dilemma_id = impact.get("dilemma_id", "")
-            path_id = beat_to_path.get(beat_id, "")
-            if dilemma_id and path_id:
-                flag = f"{dilemma_id}:{path_id}"
-                dilemma_flags.setdefault(dilemma_id, []).append(flag)
 
     if not dilemma_flags:
         return {frozenset()}
