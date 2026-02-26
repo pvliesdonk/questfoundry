@@ -28,6 +28,8 @@ from questfoundry.pipeline.stages.polish._helpers import (
     PolishStageError,
     log,
 )
+from questfoundry.pipeline.stages.polish.llm_helper import _PolishLLMHelperMixin
+from questfoundry.pipeline.stages.polish.llm_phases import _PolishLLMPhaseMixin
 from questfoundry.pipeline.stages.polish.registry import get_polish_registry
 
 if TYPE_CHECKING:
@@ -46,7 +48,7 @@ if TYPE_CHECKING:
 PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[PhaseResult]]
 
 
-class PolishStage:
+class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
     """POLISH stage: transforms beat DAG into prose-ready passage graph.
 
     Executes phases sequentially with gate hooks between phases for
@@ -81,10 +83,9 @@ class PolishStage:
     # Map from registry phase name → self method name.
     # LLM phases that need binding to ``self`` at call time.
     _METHOD_PHASES: ClassVar[dict[str, str]] = {
-        # Will be populated as phases are implemented:
-        # "beat_reordering": "_phase_1_beat_reordering",
-        # "pacing": "_phase_2_pacing",
-        # "character_arcs": "_phase_3_character_arcs",
+        "beat_reordering": "_phase_1_beat_reordering",
+        "pacing": "_phase_2_pacing",
+        "character_arcs": "_phase_3_character_arcs",
         # "llm_enrichment": "_phase_5_llm_enrichment",
     }
 

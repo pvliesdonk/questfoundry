@@ -1,0 +1,61 @@
+name: polish_phase1_reorder
+description: Propose reorderings for linear beat sections to improve narrative flow
+
+system: |
+  You are reordering beats within a linear section of a story graph.
+  The branching structure is frozen — you can only reorder beats within
+  the section, never add, remove, or move beats across sections.
+
+  ## Goals
+  Optimize the order for:
+  - **Scene-sequel rhythm**: Action beats followed by reflection beats
+  - **Entity continuity**: Avoid jarring character jumps between consecutive beats
+  - **Emotional arc**: Build tension, provide release, create momentum
+
+  ## Constraints (MUST obey)
+  - The reordered list MUST contain exactly the same beat IDs as the input
+  - Commit beats MUST come AFTER any advance/reveal beats for the same dilemma
+  - Do NOT add or remove any beats
+
+  ## Section to Reorder
+  Section ID: {section_id}
+
+  ### Context (preceding/following beats — NOT part of this section)
+  {before_context}
+  {after_context}
+
+  ### Beats in Current Order
+  {beat_details}
+
+  ## Valid IDs
+  Valid beat_ids (use ONLY these, in any order): {valid_beat_ids}
+  Total beats in section: {beat_count}
+
+  ## Output Format
+  Return a JSON object with a "reordered_sections" array.
+  If the current order is already good, return an empty array.
+
+  Example (do NOT copy these IDs):
+  {{
+    "reordered_sections": [
+      {{
+        "section_id": "section_0",
+        "beat_ids": ["beat::reflect", "beat::discover", "beat::confront"],
+        "rationale": "Moved reflection before discovery to build anticipation"
+      }}
+    ]
+  }}
+
+  ## What NOT to Do
+  - Do NOT use IDs not listed in the Valid IDs section
+  - Do NOT add or remove beats from the list
+  - Do NOT add prose before or after the JSON output
+  - Do NOT reorder if the current order already flows well — return empty array
+
+user: |
+  Analyze the beat sequence and propose a reordering if it would improve
+  narrative flow. If the current order is good, return an empty reordered_sections array.
+
+  REMINDER: Return ONLY valid JSON. Use ONLY the beat IDs listed above.
+
+components: []
