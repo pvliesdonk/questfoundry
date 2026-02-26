@@ -763,6 +763,18 @@ def _prefix_entity_id(category: str, raw_id: str) -> str:
     return format_entity_id(category, raw_id)
 
 
+def _get_path_id_from_beat(beat: dict[str, Any]) -> str | None:
+    """Extract path ID from a beat dict, supporting both current and legacy formats.
+
+    Args:
+        beat: Beat dict with ``path_id`` (current) or ``paths`` (legacy).
+
+    Returns:
+        Raw path ID string, or None if not present.
+    """
+    return beat.get("path_id") or (beat.get("paths", [None])[0] if beat.get("paths") else None)
+
+
 def _resolve_entity_ref(graph: Graph, entity_ref: str) -> str:
     """Resolve an entity reference to its full prefixed ID.
 
@@ -1292,13 +1304,14 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     )
                 )
 
-        # 6. Path references
-        for raw_path_id in beat.get("paths", []):
+        # 6. Path reference (singular — each beat belongs to exactly one path)
+        raw_path_id = _get_path_id_from_beat(beat)
+        if raw_path_id:
             _validate_id(
                 raw_path_id,
                 "path",
                 seed_path_ids,
-                f"initial_beats.{i}.paths",
+                f"initial_beats.{i}.path_id",
                 errors,
                 sorted_path_ids,
                 cross_type_sets=cross_type_sets,
@@ -1504,10 +1517,11 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     # 13. Check each path has at least one commits beat for its dilemma
     paths_with_commits: set[str] = set()  # path_ids that have a commits beat
     for i, beat in enumerate(output.get("initial_beats", [])):
-        beat_path_ids: list[str] = []
-        for raw_path_id in beat.get("paths", []):
-            normalized_pid, _ = _normalize_id(raw_path_id, "path")
-            beat_path_ids.append(normalized_pid)
+        # Resolve beat's path (singular path_id, with legacy paths fallback)
+        raw_pid = _get_path_id_from_beat(beat)
+        if not raw_pid:
+            continue  # Missing path — already caught by check 6
+        normalized_pid, _ = _normalize_id(raw_pid, "path")
 
         # Collect normalized dilemma_ids referenced in this beat's impacts
         beat_impact_dilemmas: set[str] = set()
@@ -1520,32 +1534,31 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                 if impact.get("effect") == "commits":
                     beat_impact_commits_dilemmas.add(normalized_did)
 
-        # For each path this beat belongs to, check it references the parent dilemma
-        for path_id in beat_path_ids:
-            expected_dilemma = path_dilemma_map.get(path_id)
-            if not expected_dilemma:
-                continue  # Path not found in output; already caught by check 6
+        # Check the beat references its path's parent dilemma
+        expected_dilemma = path_dilemma_map.get(normalized_pid)
+        if not expected_dilemma:
+            continue  # Path not found in output; already caught by check 6
 
-            if expected_dilemma not in beat_impact_dilemmas:
-                beat_id = beat.get("beat_id", f"beat_{i}")
-                errors.append(
-                    SeedValidationError(
-                        field_path=f"initial_beats.{i}.dilemma_impacts",
-                        issue=(
-                            f"Beat '{beat_id}' belongs to path '{path_id}' "
-                            f"but does not reference its parent dilemma "
-                            f"'{expected_dilemma}' in dilemma_impacts. "
-                            f"Each beat must impact its own path's dilemma."
-                        ),
-                        available=[expected_dilemma],
-                        provided=", ".join(sorted(beat_impact_dilemmas)) or "(none)",
-                        category=SeedErrorCategory.SEMANTIC,
-                    )
+        if expected_dilemma not in beat_impact_dilemmas:
+            beat_id = beat.get("beat_id", f"beat_{i}")
+            errors.append(
+                SeedValidationError(
+                    field_path=f"initial_beats.{i}.dilemma_impacts",
+                    issue=(
+                        f"Beat '{beat_id}' belongs to path '{normalized_pid}' "
+                        f"but does not reference its parent dilemma "
+                        f"'{expected_dilemma}' in dilemma_impacts. "
+                        f"Each beat must impact its own path's dilemma."
+                    ),
+                    available=[expected_dilemma],
+                    provided=", ".join(sorted(beat_impact_dilemmas)) or "(none)",
+                    category=SeedErrorCategory.SEMANTIC,
                 )
+            )
 
-            # Track commits beats per path
-            if expected_dilemma in beat_impact_commits_dilemmas:
-                paths_with_commits.add(path_id)
+        # Track commits beats per path
+        if expected_dilemma in beat_impact_commits_dilemmas:
+            paths_with_commits.add(normalized_pid)
 
     # Report paths missing commits beats
     for path_id in sorted(path_dilemma_map.keys()):
@@ -1767,8 +1780,9 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         beat_data = _clean_dict(beat_data)
         graph.create_node(beat_id, beat_data)
 
-        # Link beat to paths it belongs to
-        for raw_path_id in beat.get("paths", []):
+        # Link beat to its path (singular belongs_to edge)
+        raw_path_id = _get_path_id_from_beat(beat)
+        if raw_path_id:
             prefixed_path_id = _prefix_id("path", raw_path_id)
             graph.add_edge("belongs_to", beat_id, prefixed_path_id)
 

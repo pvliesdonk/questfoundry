@@ -2373,7 +2373,7 @@ class TestCategorizeError:
     def test_semantic_not_in_seed(self) -> None:
         """'not defined in SEED' errors are SEMANTIC."""
         error = SeedValidationError(
-            field_path="initial_beats.0.paths",
+            field_path="initial_beats.0.path_id",
             issue="Path 'ghost' not defined in SEED paths",
             available=["real_path"],
             provided="ghost",
