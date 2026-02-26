@@ -67,7 +67,7 @@ class Answer(BaseModel):
     Attributes:
         answer_id: Unique identifier for this answer (e.g., "guilty", "framed").
         description: Full description of this answer/path.
-        is_default_path: True if this is the default story path (spine).
+        is_canonical: True if this is the default story path (spine).
     """
 
     answer_id: str = Field(
@@ -75,7 +75,7 @@ class Answer(BaseModel):
         description="Unique identifier for this answer (e.g., 'guilty', 'framed', 'betrayed')",
     )
     description: str = Field(min_length=1, description="Full description of this path")
-    is_default_path: bool = Field(
+    is_canonical: bool = Field(
         description="True if this is the default story path (spine). Exactly one per dilemma."
     )
 
@@ -159,7 +159,7 @@ class Dilemma(BaseModel):
     @model_validator(mode="after")
     def validate_exactly_one_default_path(self) -> Dilemma:
         """Ensure exactly one answer is marked as the default path."""
-        default_count = sum(1 for ans in self.answers if ans.is_default_path)
+        default_count = sum(1 for ans in self.answers if ans.is_canonical)
         if default_count != 1:
             msg = f"Dilemma '{self.dilemma_id}' must have exactly one default path answer, found {default_count}"
             raise ValueError(msg)

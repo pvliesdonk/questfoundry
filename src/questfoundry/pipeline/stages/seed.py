@@ -85,7 +85,7 @@ def _format_alternative(alt: dict[str, Any]) -> str:
     """
     # Use raw_id for display
     display_id = alt.get("raw_id", "unknown")
-    default_marker = " (default path)" if alt.get("is_default_path") else ""
+    default_marker = " (default path)" if alt.get("is_canonical") else ""
     return f"  - {display_id}: {alt.get('description', '')}{default_marker}"
 
 

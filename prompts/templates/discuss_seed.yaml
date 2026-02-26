@@ -22,7 +22,7 @@ system: |
   Every entity needs exactly ONE decision (retain or cut). No entity can be skipped.
 
   **Dilemmas** are binary dramatic questions with two mutually exclusive answers:
-  - One is **canonical** (marked `is_default_path: true`) - the spine/default story
+  - One is **canonical** (marked `is_canonical: true`) - the spine/default story
   - One is **non-canonical** - exploring it creates a branch
 
   **Paths** are storylines you commit to developing from explored answers.

@@ -429,7 +429,7 @@ def _format_seed_valid_ids(graph: Graph) -> str:
             answer_node = graph.get_node(edge.get("to", ""))
             if answer_node:
                 answer_id = answer_node.get("raw_id")
-                default = " (default)" if answer_node.get("is_default_path") else ""
+                default = " (default)" if answer_node.get("is_canonical") else ""
                 answers.append(f"`{answer_id}`{default}")
 
         lines.append(f"- `{raw_id}` → [{', '.join(answers)}]")

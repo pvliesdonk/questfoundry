@@ -455,8 +455,8 @@ def _make_mock_graph() -> MagicMock:
         {"from": "dilemma::trust_or_betray", "to": "answer::betray", "type": "has_answer"},
     ]
     answer_nodes = {
-        "answer::trust": {"raw_id": "trust", "is_default_path": True},
-        "answer::betray": {"raw_id": "betray", "is_default_path": False},
+        "answer::trust": {"raw_id": "trust", "is_canonical": True},
+        "answer::betray": {"raw_id": "betray", "is_canonical": False},
     }
 
     def get_edges(*, edge_type: str = "", from_id: str = "") -> list:

@@ -347,7 +347,7 @@ class TestBrainstormMutations:
                     "dilemma_id": "dilemma_001",
                     "question": "Test?",
                     "answers": [
-                        {"description": "Option A", "is_default_path": True}
+                        {"description": "Option A", "is_canonical": True}
                     ],  # Missing answer_id
                 }
             ],
@@ -415,12 +415,12 @@ class TestBrainstormMutations:
                         {
                             "answer_id": "answer::protector",
                             "description": "Mentor protects Kay",
-                            "is_default_path": True,
+                            "is_canonical": True,
                         },
                         {
                             "answer_id": "answer::manipulator",
                             "description": "Mentor manipulates Kay",
-                            "is_default_path": False,
+                            "is_canonical": False,
                         },
                     ],
                 }
@@ -466,12 +466,12 @@ class TestBrainstormMutations:
                         {
                             "answer_id": "protector",
                             "description": "Mentor protects Kay",
-                            "is_default_path": True,
+                            "is_canonical": True,
                         },
                         {
                             "answer_id": "manipulator",
                             "description": "Mentor manipulates Kay",
-                            "is_default_path": False,
+                            "is_canonical": False,
                         },
                     ],
                 }
@@ -494,11 +494,11 @@ class TestBrainstormMutations:
         assert protector is not None
         assert protector["type"] == "answer"
         assert protector["raw_id"] == "protector"
-        assert protector["is_default_path"] is True
+        assert protector["is_canonical"] is True
 
         manipulator = graph.get_node("dilemma::mentor_trust::alt::manipulator")
         assert manipulator is not None
-        assert manipulator["is_default_path"] is False
+        assert manipulator["is_canonical"] is False
 
         # Check edges
         edges = graph.get_edges(from_id="dilemma::mentor_trust", edge_type="has_answer")
@@ -530,8 +530,8 @@ class TestValidateBrainstormMutations:
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": ["kay", "mentor"],
                     "answers": [
-                        {"answer_id": "yes", "description": "Yes", "is_default_path": True},
-                        {"answer_id": "no", "description": "No", "is_default_path": False},
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
                     ],
                 }
             ],
@@ -562,8 +562,8 @@ class TestValidateBrainstormMutations:
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": ["entity::kay", "entity::mentor"],
                     "answers": [
-                        {"answer_id": "yes", "description": "Yes", "is_default_path": True},
-                        {"answer_id": "no", "description": "No", "is_default_path": False},
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
                     ],
                 }
             ],
@@ -585,7 +585,7 @@ class TestValidateBrainstormMutations:
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": ["kay", "phantom_entity"],  # phantom_entity doesn't exist
                     "answers": [
-                        {"answer_id": "yes", "description": "Yes", "is_default_path": True},
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
                     ],
                 }
             ],
@@ -609,11 +609,11 @@ class TestValidateBrainstormMutations:
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": [],
                     "answers": [
-                        {"answer_id": "option_a", "description": "A", "is_default_path": True},
+                        {"answer_id": "option_a", "description": "A", "is_canonical": True},
                         {
                             "answer_id": "option_a",
                             "description": "B",
-                            "is_default_path": False,
+                            "is_canonical": False,
                         },
                     ],
                 }
@@ -627,7 +627,7 @@ class TestValidateBrainstormMutations:
         assert len(duplicate_errors) == 1
 
     def test_no_default_path_detected(self) -> None:
-        """Detects when no answer has is_default_path=True."""
+        """Detects when no answer has is_canonical=True."""
         output = {
             "entities": [],
             "dilemmas": [
@@ -636,8 +636,8 @@ class TestValidateBrainstormMutations:
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": [],
                     "answers": [
-                        {"answer_id": "yes", "description": "Yes", "is_default_path": False},
-                        {"answer_id": "no", "description": "No", "is_default_path": False},
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": False},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
                     ],
                 }
             ],
@@ -646,10 +646,10 @@ class TestValidateBrainstormMutations:
         errors = validate_brainstorm_mutations(output)
 
         assert len(errors) == 1
-        assert "No answer has is_default_path=true" in errors[0].issue
+        assert "No answer has is_canonical=true" in errors[0].issue
 
     def test_multiple_default_paths_detected(self) -> None:
-        """Detects when multiple answers have is_default_path=True."""
+        """Detects when multiple answers have is_canonical=True."""
         output = {
             "entities": [],
             "dilemmas": [
@@ -658,8 +658,8 @@ class TestValidateBrainstormMutations:
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": [],
                     "answers": [
-                        {"answer_id": "yes", "description": "Yes", "is_default_path": True},
-                        {"answer_id": "no", "description": "No", "is_default_path": True},
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": True},
+                        {"answer_id": "no", "description": "No", "is_canonical": True},
                     ],
                 }
             ],
@@ -668,7 +668,7 @@ class TestValidateBrainstormMutations:
         errors = validate_brainstorm_mutations(output)
 
         assert len(errors) == 1
-        assert "Multiple answers have is_default_path=true" in errors[0].issue
+        assert "Multiple answers have is_canonical=true" in errors[0].issue
 
     def test_multiple_errors_collected(self) -> None:
         """Multiple errors across different validations are all collected."""
@@ -682,8 +682,8 @@ class TestValidateBrainstormMutations:
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": ["phantom1", "phantom2"],  # Both invalid
                     "answers": [
-                        {"answer_id": "yes", "description": "Yes", "is_default_path": False},
-                        {"answer_id": "no", "description": "No", "is_default_path": False},
+                        {"answer_id": "yes", "description": "Yes", "is_canonical": False},
+                        {"answer_id": "no", "description": "No", "is_canonical": False},
                     ],
                 }
             ],
@@ -724,7 +724,7 @@ class TestValidateBrainstormMutations:
         errors = validate_brainstorm_mutations(output)
 
         assert len(errors) == 1
-        assert "No answer has is_default_path=true" in errors[0].issue
+        assert "No answer has is_canonical=true" in errors[0].issue
 
     def test_empty_entity_id_detected(self) -> None:
         """Detects empty or missing entity_id values."""
@@ -877,8 +877,8 @@ class TestValidateBrainstormMutations:
                     "question": "Can the mentor be trusted?",
                     "central_entity_ids": [],
                     "answers": [
-                        {"answer_id": "trust", "description": "Trust", "is_default_path": True},
-                        {"answer_id": "betray", "description": "Betray", "is_default_path": False},
+                        {"answer_id": "trust", "description": "Trust", "is_canonical": True},
+                        {"answer_id": "betray", "description": "Betray", "is_canonical": False},
                     ],
                 },
                 {
@@ -886,8 +886,8 @@ class TestValidateBrainstormMutations:
                     "question": "Duplicate dilemma",
                     "central_entity_ids": [],
                     "answers": [
-                        {"answer_id": "a", "description": "A", "is_default_path": True},
-                        {"answer_id": "b", "description": "B", "is_default_path": False},
+                        {"answer_id": "a", "description": "A", "is_canonical": True},
+                        {"answer_id": "b", "description": "B", "is_canonical": False},
                     ],
                 },
             ],
@@ -1077,8 +1077,8 @@ class TestSeedMutations:
         assert len(edges) == 1
         assert edges[0]["to"] == "dilemma::mentor_trust::alt::protector"
 
-    def test_path_is_canonical_from_alternative(self) -> None:
-        """Path's is_canonical is set from answer's is_default_path."""
+    def test_path_is_canonical_from_answer(self) -> None:
+        """Path's is_canonical is set from answer's is_canonical."""
         graph = Graph.empty()
         # Create dilemma with two answers - one canonical, one not
         graph.create_node(
@@ -1091,7 +1091,7 @@ class TestSeedMutations:
                 "type": "answer",
                 "raw_id": "protector",
                 "description": "Mentor protects",
-                "is_default_path": True,  # This is the canonical path
+                "is_canonical": True,  # This is the canonical path
             },
         )
         graph.create_node(
@@ -1100,7 +1100,7 @@ class TestSeedMutations:
                 "type": "answer",
                 "raw_id": "manipulator",
                 "description": "Mentor manipulates",
-                "is_default_path": False,  # Branch path
+                "is_canonical": False,  # Branch path
             },
         )
         graph.add_edge(
@@ -1680,11 +1680,11 @@ class TestValidation11dDefaultAnswerInExplored:
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
         graph.create_node(
             "dilemma::trust::alt::yes",
-            {"type": "answer", "raw_id": "yes", "is_default_path": True},
+            {"type": "answer", "raw_id": "yes", "is_canonical": True},
         )
         graph.create_node(
             "dilemma::trust::alt::no",
-            {"type": "answer", "raw_id": "no", "is_default_path": False},
+            {"type": "answer", "raw_id": "no", "is_canonical": False},
         )
         graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
         graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::no")
@@ -1711,11 +1711,11 @@ class TestValidation11dDefaultAnswerInExplored:
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
         graph.create_node(
             "dilemma::trust::alt::yes",
-            {"type": "answer", "raw_id": "yes", "is_default_path": True},
+            {"type": "answer", "raw_id": "yes", "is_canonical": True},
         )
         graph.create_node(
             "dilemma::trust::alt::no",
-            {"type": "answer", "raw_id": "no", "is_default_path": False},
+            {"type": "answer", "raw_id": "no", "is_canonical": False},
         )
         graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
         graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::no")
@@ -1745,7 +1745,7 @@ class TestValidation11dDefaultAnswerInExplored:
         graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
         graph.create_node(
             "dilemma::trust::alt::yes",
-            {"type": "answer", "raw_id": "yes", "is_default_path": True},
+            {"type": "answer", "raw_id": "yes", "is_canonical": True},
         )
         graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
 
@@ -2110,12 +2110,12 @@ class TestMutationIntegration:
                         {
                             "answer_id": "protector",
                             "description": "Mentor protects",
-                            "is_default_path": True,
+                            "is_canonical": True,
                         },
                         {
                             "answer_id": "manipulator",
                             "description": "Mentor manipulates",
-                            "is_default_path": False,
+                            "is_canonical": False,
                         },
                     ],
                 }
@@ -3715,8 +3715,8 @@ class TestValidation11cPathAlternativeInExplored:
                 "type": "dilemma",
                 "raw_id": "choice_a_or_b",
                 "answers": [
-                    {"answer_id": "option_a", "is_default_path": True},
-                    {"answer_id": "option_b", "is_default_path": False},
+                    {"answer_id": "option_a", "is_canonical": True},
+                    {"answer_id": "option_b", "is_canonical": False},
                 ],
             },
         )
@@ -3777,8 +3777,8 @@ class TestValidation11cPathAlternativeInExplored:
                 "type": "dilemma",
                 "raw_id": "choice_a_or_b",
                 "answers": [
-                    {"answer_id": "option_a", "is_default_path": True},
-                    {"answer_id": "option_b", "is_default_path": False},
+                    {"answer_id": "option_a", "is_canonical": True},
+                    {"answer_id": "option_b", "is_canonical": False},
                 ],
             },
         )
@@ -3843,7 +3843,7 @@ class TestValidation11cPathAlternativeInExplored:
                 "type": "dilemma",
                 "raw_id": "choice_a_or_b",
                 "answers": [
-                    {"answer_id": "option_a", "is_default_path": True},
+                    {"answer_id": "option_a", "is_canonical": True},
                 ],
             },
         )
@@ -3891,7 +3891,7 @@ class TestValidation11cPathAlternativeInExplored:
                 "type": "dilemma",
                 "raw_id": "choice_a_or_b",
                 "answers": [
-                    {"answer_id": "option_a", "is_default_path": True},
+                    {"answer_id": "option_a", "is_canonical": True},
                 ],
             },
         )
@@ -3947,11 +3947,11 @@ class TestBackfillIntegrationWithApplySeedMutations:
         # Create answer nodes
         graph.create_node(
             "dilemma::choice_a_or_b::alt::option_a",
-            {"type": "answer", "raw_id": "option_a", "is_default_path": True},
+            {"type": "answer", "raw_id": "option_a", "is_canonical": True},
         )
         graph.create_node(
             "dilemma::choice_a_or_b::alt::option_b",
-            {"type": "answer", "raw_id": "option_b", "is_default_path": False},
+            {"type": "answer", "raw_id": "option_b", "is_canonical": False},
         )
         # Create has_answer edges (required for validation)
         graph.add_edge(
@@ -4049,11 +4049,11 @@ class TestValidateSeedPovCharacter:
         )
         graph.create_node(
             "dilemma::trust_mentor_or_not::alt::trust",
-            {"type": "answer", "raw_id": "trust", "is_default_path": True},
+            {"type": "answer", "raw_id": "trust", "is_canonical": True},
         )
         graph.create_node(
             "dilemma::trust_mentor_or_not::alt::distrust",
-            {"type": "answer", "raw_id": "distrust", "is_default_path": False},
+            {"type": "answer", "raw_id": "distrust", "is_canonical": False},
         )
         graph.add_edge(
             "has_answer",
@@ -4208,7 +4208,7 @@ class TestApplySeedConvergenceAnalysis:
         )
         graph.create_node(
             "dilemma::trust_or_not::alt::trust",
-            {"type": "answer", "raw_id": "trust", "is_default_path": True},
+            {"type": "answer", "raw_id": "trust", "is_canonical": True},
         )
         graph.add_edge("has_answer", "dilemma::trust_or_not", "dilemma::trust_or_not::alt::trust")
         graph.create_node(
@@ -4222,7 +4222,7 @@ class TestApplySeedConvergenceAnalysis:
         )
         graph.create_node(
             "dilemma::stay_or_go::alt::stay",
-            {"type": "answer", "raw_id": "stay", "is_default_path": True},
+            {"type": "answer", "raw_id": "stay", "is_canonical": True},
         )
         graph.add_edge("has_answer", "dilemma::stay_or_go", "dilemma::stay_or_go::alt::stay")
         return graph

@@ -165,7 +165,7 @@ def strip_scope_prefix(scoped_id: str) -> str:
 def get_default_answer_from_graph(graph: Graph, dilemma_id: str) -> str | None:
     """Look up the default (canonical) answer for a dilemma from the graph.
 
-    Uses the ``is_default_path`` flag on answer nodes rather than relying on
+    Uses the ``is_canonical`` flag on answer nodes rather than relying on
     the ordering of the ``explored`` list, which LLMs do not guarantee.
 
     Args:
@@ -180,7 +180,7 @@ def get_default_answer_from_graph(graph: Graph, dilemma_id: str) -> str | None:
     alt_edges = graph.get_edges(from_id=prefixed_did, edge_type="has_answer")
     for edge in alt_edges:
         alt_node = graph.get_node(edge["to"])
-        if alt_node and alt_node.get("is_default_path"):
+        if alt_node and alt_node.get("is_canonical"):
             raw_id = alt_node.get("raw_id")
             if raw_id:
                 return str(raw_id)
@@ -652,7 +652,7 @@ def _format_seed_valid_ids(graph: Graph, section: str | None = None) -> str:
                     if answer_node:
                         ans_id = answer_node.get("raw_id")
                         if ans_id:
-                            default = " (default)" if answer_node.get("is_default_path") else ""
+                            default = " (default)" if answer_node.get("is_canonical") else ""
                             answers.append(f"`{ans_id}`{default}")
 
                 if answers:

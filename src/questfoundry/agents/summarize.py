@@ -220,7 +220,7 @@ def _format_dilemma_answers_from_graph(graph: Graph) -> str:
             if answer_node:
                 ans_id = answer_node.get("raw_id")
                 if ans_id:
-                    default = " (default)" if answer_node.get("is_default_path") else ""
+                    default = " (default)" if answer_node.get("is_canonical") else ""
                     answers.append(f"`{ans_id}`{default}")
 
         if answers:

@@ -435,9 +435,7 @@ def test_format_brainstorm_context_includes_dilemmas() -> None:
             "why_it_matters": "Core theme",
         },
     )
-    graph.create_node(
-        "trust::yes", {"type": "answer", "description": "Yes", "is_default_path": True}
-    )
+    graph.create_node("trust::yes", {"type": "answer", "description": "Yes", "is_canonical": True})
     graph.add_edge("has_answer", "trust", "trust::yes")
 
     result = _format_brainstorm_context(graph)

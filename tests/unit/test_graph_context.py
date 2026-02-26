@@ -92,7 +92,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "answer",
                 "raw_id": "yes",
-                "is_default_path": True,
+                "is_canonical": True,
             },
         )
         graph.create_node(
@@ -100,7 +100,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "answer",
                 "raw_id": "no",
-                "is_default_path": False,
+                "is_canonical": False,
             },
         )
         graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
@@ -237,7 +237,7 @@ class TestFormatValidIdsContext:
             {
                 "type": "answer",
                 "raw_id": "accept",
-                "is_default_path": True,
+                "is_canonical": True,
             },
         )
         graph.add_edge("has_answer", "dilemma::quest", "dilemma::quest::alt::accept")
@@ -278,11 +278,11 @@ class TestSectionScopedManifest:
         )
         graph.create_node(
             "dilemma::trust_or_betray::alt::trust",
-            {"type": "answer", "raw_id": "trust", "is_default_path": True},
+            {"type": "answer", "raw_id": "trust", "is_canonical": True},
         )
         graph.create_node(
             "dilemma::trust_or_betray::alt::betray",
-            {"type": "answer", "raw_id": "betray", "is_default_path": False},
+            {"type": "answer", "raw_id": "betray", "is_canonical": False},
         )
         graph.add_edge(
             "has_answer", "dilemma::trust_or_betray", "dilemma::trust_or_betray::alt::trust"

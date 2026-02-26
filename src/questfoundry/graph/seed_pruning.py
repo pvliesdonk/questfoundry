@@ -36,7 +36,7 @@ log = get_logger(__name__)
 def _get_canonical_answer(dilemma: DilemmaDecision, graph: Graph | None = None) -> str | None:
     """Get the canonical (default) answer for a dilemma.
 
-    When a graph is provided, looks up ``is_default_path`` for a reliable
+    When a graph is provided, looks up ``is_canonical`` for a reliable
     determination. Falls back to ``explored[0]`` when no graph is available.
     """
     if graph is not None:
@@ -73,7 +73,7 @@ def prune_to_arc_limit(
     Args:
         seed_output: The full SEED output (potentially over-generated).
         max_arcs: Maximum number of arcs to allow (default 16 = 4 fully explored).
-        graph: Story graph for looking up canonical answers via is_default_path.
+        graph: Story graph for looking up canonical answers via is_canonical.
         dilemma_analyses: Section 7 convergence classifications (enables
             policy-aware pruning when provided).
 
