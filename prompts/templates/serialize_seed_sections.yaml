@@ -608,16 +608,16 @@ per_path_beats_prompt: |
         ],
         "entities": ["character::character_id"],
         "location": "location::location_id",
-        "location_alternatives": [],
-        "temporal_hint": null
+        "location_alternatives": []
       }}
     ]
   }}
   ```
 
-  NOTE: `temporal_hint` is optional (null or omit entirely). Only include it
-  when this beat must be placed relative to ANOTHER dilemma's key moment.
-  Format: `{{"relative_to": "dilemma::other_dilemma_id", "position": "before_commit"}}`
+  NOTE: `temporal_hint` is optional — omit the field entirely for most beats.
+  Only include it when this beat must be placed relative to ANOTHER dilemma's
+  key moment. When used:
+  `{{"temporal_hint": {{"relative_to": "dilemma::other_dilemma_id", "position": "before_commit"}}}}`
   Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
 
   ## Rules

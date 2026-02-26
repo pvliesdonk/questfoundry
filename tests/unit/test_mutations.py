@@ -1396,6 +1396,61 @@ class TestSeedMutations:
         # _clean_dict removes None values, so temporal_hint should not be present
         assert "temporal_hint" not in beat
 
+    def test_temporal_hint_partial_not_stored(self) -> None:
+        """Temporal hint with null position is discarded, not stored malformed."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::kay", {"type": "entity", "raw_id": "kay", "concept": "Archivist"}
+        )
+        graph.create_node(
+            "dilemma::mentor_trust",
+            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Trust?"},
+        )
+        graph.create_node(
+            "dilemma::mentor_trust::alt::protector",
+            {"type": "answer", "raw_id": "protector", "description": "Protects"},
+        )
+        graph.add_edge(
+            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
+        )
+
+        output = {
+            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "dilemmas": [
+                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
+            ],
+            "paths": [
+                {
+                    "path_id": "path_mentor_trust",
+                    "name": "Trust Arc",
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "protector",
+                    "description": "The mentor trust path",
+                }
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "opening_001",
+                    "summary": "Kay meets the mentor",
+                    "paths": ["path_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                    ],
+                    "entities": ["kay"],
+                    "temporal_hint": {
+                        "relative_to": "fight_or_flee",
+                        "position": None,
+                    },
+                },
+            ],
+        }
+
+        apply_seed_mutations(graph, output)
+
+        beat = graph.get_node("beat::opening_001")
+        # Partial hint (missing position) should be discarded
+        assert "temporal_hint" not in beat
+
     def test_validates_missing_entities(self) -> None:
         """Raises SeedMutationError when referencing non-existent entities."""
         graph = Graph.empty()

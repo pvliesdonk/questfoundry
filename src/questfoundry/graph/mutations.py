@@ -1777,10 +1777,10 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         # Resolve temporal_hint (prefix dilemma reference)
         raw_hint = beat.get("temporal_hint")
         prefixed_hint = None
-        if isinstance(raw_hint, dict) and raw_hint.get("relative_to"):
+        if isinstance(raw_hint, dict) and raw_hint.get("relative_to") and raw_hint.get("position"):
             prefixed_hint = {
                 "relative_to": _prefix_id("dilemma", raw_hint["relative_to"]),
-                "position": raw_hint.get("position"),
+                "position": raw_hint["position"],
             }
 
         beat_data = {
