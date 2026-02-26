@@ -1047,10 +1047,7 @@ def format_pov_context(graph: Graph) -> str:
         if pov_style:
             lines.append(f"**Suggested POV:** {pov_style}")
         if vision.get("protagonist_defined"):
-            lines.append("**Protagonist Defined:** Yes")
-
-    if vision_nodes and next(iter(vision_nodes.values())).get("protagonist_defined"):
-        lines.append("\n**Protagonist:** Defined (see character entities)")
+            lines.append("**Protagonist:** Defined (see character entities)")
 
     return "\n".join(lines) if lines else ""
 
@@ -1058,9 +1055,8 @@ def format_pov_context(graph: Graph) -> str:
 def format_valid_characters(graph: Graph) -> str:
     """Format valid character entities for POV selection in discuss phase.
 
-    Lists all character entities by raw_id with their concept,
-    highlighting the protagonist if defined. This prevents the LLM from
-    inventing phantom characters during voice determination.
+    Lists all character entities by raw_id with their concept. This prevents
+    the LLM from inventing phantom characters during voice determination.
 
     Note: Assumes all character entities have raw_id field (guaranteed by
     SEED stage). Falls back to scope-stripped entity ID if missing.
