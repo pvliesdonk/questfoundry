@@ -1583,7 +1583,7 @@ class TestFormatInteractionCandidatesContext:
             all_entities.update(entities)
         for eid in sorted(all_entities):
             if not graph.has_node(eid):
-                graph.create_node(eid, {"type": "entity", "raw_id": eid})
+                graph.create_node(eid, {"type": "entity", "raw_id": strip_scope_prefix(eid)})
         # Create dilemma nodes and anchored_to edges
         for did, entities in dilemma_entities.items():
             graph.create_node(
