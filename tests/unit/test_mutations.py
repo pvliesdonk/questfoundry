@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
 
 from questfoundry.graph import Graph, MutationError, SeedMutationError
@@ -25,6 +27,11 @@ from questfoundry.graph.mutations import (
     validate_brainstorm_mutations,
     validate_seed_mutations,
 )
+
+
+def _blocking_errors(errors: list[SeedValidationError]) -> list[SeedValidationError]:
+    """Filter out WARNING-category errors, returning only blocking errors."""
+    return [e for e in errors if e.category != SeedErrorCategory.WARNING]
 
 
 class TestHasMutationHandler:
@@ -1520,13 +1527,29 @@ class TestSeedCompletenessValidation:
             ],
             "initial_beats": [
                 {
+                    "beat_id": "discovery",
+                    "summary": "Trust questioned",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Tension builds"}
+                    ],
+                },
+                {
                     "beat_id": "resolution",
                     "summary": "Trust resolved",
                     "paths": ["trust_arc"],
                     "dilemma_impacts": [
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
                     ],
-                }
+                },
+                {
+                    "beat_id": "aftermath",
+                    "summary": "Consequences unfold",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
             ],
         }
 
@@ -2092,7 +2115,7 @@ class TestBeatDilemmaAlignment:
 
         errors = validate_seed_mutations(graph, output)
 
-        assert errors == []
+        assert _blocking_errors(errors) == []
 
     def test_multiple_paths_all_need_commits(self) -> None:
         """Each path independently needs a commits beat."""
@@ -2162,7 +2185,300 @@ class TestBeatDilemmaAlignment:
 
         errors = validate_seed_mutations(graph, output)
 
+        assert _blocking_errors(errors) == []
+
+
+class TestSeedArcStructureValidation:
+    """Test SEED validation checks 14-15: arc structure warnings.
+
+    Doc 1 Part 2: "This scaffold must be complete — the arc from beginning
+    to end must be present." Checks:
+    14. Each path has advances/reveals before its commit beat.
+    15. Each path has at least one beat after its commit beat.
+
+    These are non-blocking warnings (SeedErrorCategory.WARNING).
+    """
+
+    @staticmethod
+    def _make_graph() -> Graph:
+        """Create a minimal graph with one entity, dilemma, and answer."""
+        graph = Graph.empty()
+        graph.create_node("entity::hero", {"type": "entity", "raw_id": "hero"})
+        graph.create_node("dilemma::trust", {"type": "dilemma", "raw_id": "trust"})
+        graph.create_node("dilemma::trust::alt::yes", {"type": "answer", "raw_id": "yes"})
+        graph.add_edge("has_answer", "dilemma::trust", "dilemma::trust::alt::yes")
+        return graph
+
+    @staticmethod
+    def _make_output(initial_beats: list[dict[str, Any]]) -> dict[str, Any]:
+        """Create minimal valid SEED output with given beats."""
+        return {
+            "entities": [{"entity_id": "hero", "disposition": "retained"}],
+            "dilemmas": [{"dilemma_id": "trust", "explored": ["yes"], "unexplored": []}],
+            "paths": [
+                {
+                    "path_id": "trust_arc",
+                    "name": "Trust Arc",
+                    "dilemma_id": "trust",
+                    "answer_id": "yes",
+                }
+            ],
+            "initial_beats": initial_beats,
+        }
+
+    def test_complete_arc_no_warnings(self) -> None:
+        """Advances → commits → consequence produces zero warnings."""
+        graph = self._make_graph()
+        output = self._make_output(
+            [
+                {
+                    "beat_id": "develop",
+                    "summary": "Trust tested",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Builds tension"}
+                    ],
+                },
+                {
+                    "beat_id": "commit",
+                    "summary": "Trust decided",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                },
+                {
+                    "beat_id": "aftermath",
+                    "summary": "Consequences",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
+            ]
+        )
+
+        errors = validate_seed_mutations(graph, output)
+
         assert errors == []
+
+    def test_reveals_before_commit_satisfies_check_14(self) -> None:
+        """A 'reveals' beat before commit also satisfies the pre-commit check."""
+        graph = self._make_graph()
+        output = self._make_output(
+            [
+                {
+                    "beat_id": "reveal",
+                    "summary": "Secret uncovered",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "reveals", "note": "Truth emerges"}
+                    ],
+                },
+                {
+                    "beat_id": "commit",
+                    "summary": "Trust decided",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                },
+                {
+                    "beat_id": "aftermath",
+                    "summary": "Consequences",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
+            ]
+        )
+
+        errors = validate_seed_mutations(graph, output)
+
+        assert errors == []
+
+    def test_missing_pre_commit_development_warns(self) -> None:
+        """Commit without prior advances/reveals produces a warning."""
+        graph = self._make_graph()
+        output = self._make_output(
+            [
+                {
+                    "beat_id": "commit",
+                    "summary": "Trust decided",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                },
+                {
+                    "beat_id": "aftermath",
+                    "summary": "Consequences",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
+            ]
+        )
+
+        errors = validate_seed_mutations(graph, output)
+
+        warnings = [e for e in errors if e.category == SeedErrorCategory.WARNING]
+        blocking = _blocking_errors(errors)
+        assert blocking == []
+        assert len(warnings) == 1
+        assert "advances" in warnings[0].issue
+        assert "reveals" in warnings[0].issue
+        assert "before" in warnings[0].issue
+        assert warnings[0].field_path == "paths.trust_arc.arc_structure"
+
+    def test_missing_post_commit_beat_warns(self) -> None:
+        """Commit without any following beat produces a warning."""
+        graph = self._make_graph()
+        output = self._make_output(
+            [
+                {
+                    "beat_id": "develop",
+                    "summary": "Trust tested",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Builds tension"}
+                    ],
+                },
+                {
+                    "beat_id": "commit",
+                    "summary": "Trust decided",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                },
+            ]
+        )
+
+        errors = validate_seed_mutations(graph, output)
+
+        warnings = [e for e in errors if e.category == SeedErrorCategory.WARNING]
+        blocking = _blocking_errors(errors)
+        assert blocking == []
+        assert len(warnings) == 1
+        assert "after" in warnings[0].issue
+        assert "consequence" in warnings[0].issue
+        assert warnings[0].field_path == "paths.trust_arc.arc_structure"
+
+    def test_single_commit_beat_produces_both_warnings(self) -> None:
+        """A path with only a commit beat gets both pre and post warnings."""
+        graph = self._make_graph()
+        output = self._make_output(
+            [
+                {
+                    "beat_id": "commit",
+                    "summary": "Trust decided",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                },
+            ]
+        )
+
+        errors = validate_seed_mutations(graph, output)
+
+        warnings = [e for e in errors if e.category == SeedErrorCategory.WARNING]
+        blocking = _blocking_errors(errors)
+        assert blocking == []
+        assert len(warnings) == 2
+        pre_warn = [w for w in warnings if "before" in w.issue]
+        post_warn = [w for w in warnings if "after" in w.issue]
+        assert len(pre_warn) == 1
+        assert len(post_warn) == 1
+
+    def test_complicates_before_commit_does_not_satisfy_check_14(self) -> None:
+        """'complicates' is not advances/reveals, so doesn't satisfy the pre-commit check."""
+        graph = self._make_graph()
+        output = self._make_output(
+            [
+                {
+                    "beat_id": "complication",
+                    "summary": "Things get harder",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "complicates", "note": "Setback"}
+                    ],
+                },
+                {
+                    "beat_id": "commit",
+                    "summary": "Trust decided",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                },
+                {
+                    "beat_id": "aftermath",
+                    "summary": "Consequences",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
+            ]
+        )
+
+        errors = validate_seed_mutations(graph, output)
+
+        warnings = [e for e in errors if e.category == SeedErrorCategory.WARNING]
+        assert len(warnings) == 1
+        assert "advances" in warnings[0].issue
+
+    def test_warnings_do_not_block_apply_seed_mutations(self) -> None:
+        """apply_seed_mutations succeeds with warnings (logs them, doesn't raise)."""
+        graph = self._make_graph()
+        output = self._make_output(
+            [
+                {
+                    "beat_id": "commit",
+                    "summary": "Trust decided",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
+                    ],
+                },
+            ]
+        )
+
+        # Should not raise despite both arc structure warnings
+        apply_seed_mutations(graph, output)
+
+        # Verify mutation was applied (beat node exists)
+        beat_node = graph.get_node("beat::commit")
+        assert beat_node is not None
+
+    def test_path_without_commits_skips_arc_checks(self) -> None:
+        """Paths missing a commit beat get an error for check 13, not arc warnings."""
+        graph = self._make_graph()
+        output = self._make_output(
+            [
+                {
+                    "beat_id": "develop",
+                    "summary": "Trust tested",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Builds tension"}
+                    ],
+                },
+            ]
+        )
+
+        errors = validate_seed_mutations(graph, output)
+
+        blocking = _blocking_errors(errors)
+        warnings = [e for e in errors if e.category == SeedErrorCategory.WARNING]
+        # Should have a COMPLETENESS error for missing commit, no arc warnings
+        assert len(blocking) == 1
+        assert blocking[0].category == SeedErrorCategory.COMPLETENESS
+        assert warnings == []
 
 
 class TestSeedDuplicateValidation:
@@ -2696,7 +3012,7 @@ class TestScopedIdValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        assert errors == []
+        assert _blocking_errors(errors) == []
 
     def test_scoped_path_id_accepted_in_beats(self) -> None:
         """Scoped path IDs (path::mentor) are accepted in beat path references."""
@@ -2733,7 +3049,7 @@ class TestScopedIdValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        assert errors == []
+        assert _blocking_errors(errors) == []
 
     def test_wrong_scope_detected_for_entity(self) -> None:
         """Wrong scope (dilemma:: instead of entity category) is detected."""
@@ -2916,8 +3232,8 @@ class TestScopedIdValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        # No errors expected
-        assert errors == []
+        # No blocking errors expected (arc structure warnings are non-blocking)
+        assert _blocking_errors(errors) == []
 
     def test_scoped_dilemma_in_dilemma_impacts(self) -> None:
         """Scoped dilemma IDs work in beat.dilemma_impacts."""
@@ -2958,7 +3274,7 @@ class TestScopedIdValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        assert errors == []
+        assert _blocking_errors(errors) == []
 
     def test_scoped_path_in_consequences(self) -> None:
         """Scoped path IDs work in consequence.path_id."""
@@ -3000,7 +3316,7 @@ class TestScopedIdValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        assert errors == []
+        assert _blocking_errors(errors) == []
 
     def test_scoped_path_definitions_and_consequences(self) -> None:
         """Path definitions using scoped IDs work with scoped consequence references.
@@ -3047,7 +3363,7 @@ class TestScopedIdValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        assert errors == []
+        assert _blocking_errors(errors) == []
 
 
 class TestSortBySimilarity:
