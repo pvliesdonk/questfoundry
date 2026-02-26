@@ -8,6 +8,7 @@ replace Arc-dependent computations and can be used by both GROW
 from __future__ import annotations
 
 from collections import defaultdict
+import heapq
 from itertools import product
 from typing import TYPE_CHECKING
 
@@ -247,8 +248,6 @@ def _topological_sort_subset(
         for succ in successors_all.get(bid, []):
             if succ in beat_set:
                 in_degree[succ] += 1
-
-    import heapq
 
     queue = [bid for bid, deg in in_degree.items() if deg == 0]
     heapq.heapify(queue)
