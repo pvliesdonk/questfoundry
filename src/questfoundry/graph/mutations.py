@@ -900,8 +900,11 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
             try:
                 prefixed_central_entities.append(_resolve_entity_ref(graph, eid))
             except ValueError:
-                # Entity not found - keep raw ID for error reporting later
-                prefixed_central_entities.append(eid)
+                log.warning(
+                    "anchored_to_entity_not_found",
+                    dilemma_id=raw_id,
+                    entity_id=eid,
+                )
 
         # Create dilemma node (central entities stored as edges, not properties)
         dilemma_data = {
@@ -915,7 +918,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
 
         # Create anchored_to edges (dilemma → entity)
         for entity_id in prefixed_central_entities:
-            if graph.get_node(entity_id):
+            if graph.get_node(entity_id) is not None:
                 graph.add_edge("anchored_to", dilemma_node_id, entity_id)
 
         # Create answer nodes and edges
