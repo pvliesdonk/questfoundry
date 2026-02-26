@@ -95,10 +95,15 @@ DEFAULT_FILL_PROMPT = (
     "write prose per passage, review quality, and revise flagged passages."
 )
 
+DEFAULT_POLISH_PROMPT = (
+    "Transform the beat DAG into a prose-ready passage graph: "
+    "group beats into passages, compute choices and variants."
+)
+
 DEFAULT_DRESS_PROMPT = "Establish art direction, generate illustration briefs and codex entries."
 
 # Pipeline stage order and configuration
-STAGE_ORDER = ["dream", "brainstorm", "seed", "grow", "fill", "dress", "ship"]
+STAGE_ORDER = ["dream", "brainstorm", "seed", "grow", "polish", "fill", "dress", "ship"]
 
 # Stage prompt configuration for the run command
 # Maps stage name to (default_interactive_prompt, default_noninteractive_prompt)
@@ -118,6 +123,10 @@ STAGE_PROMPTS: dict[str, tuple[str, str | None]] = {
     "grow": (
         DEFAULT_GROW_PROMPT,
         DEFAULT_GROW_PROMPT,  # Same for both modes (GROW ignores prompt)
+    ),
+    "polish": (
+        DEFAULT_POLISH_PROMPT,
+        DEFAULT_POLISH_PROMPT,  # Same for both modes (POLISH is graph-driven)
     ),
     "fill": (
         DEFAULT_FILL_PROMPT,
@@ -1127,6 +1136,93 @@ def grow(
         interactive=False,  # GROW is never interactive (deterministic, graph-driven)
         default_interactive_prompt=DEFAULT_GROW_PROMPT,
         default_noninteractive_prompt=DEFAULT_GROW_PROMPT,
+        next_step_hint="qf polish",
+        provider_discuss=provider_creative or provider_discuss,
+        provider_summarize=provider_balanced or provider_summarize,
+        provider_serialize=provider_structured or provider_serialize,
+        resume_from=resume_from,
+        language=language,
+    )
+
+
+@app.command()
+def polish(
+    project: Annotated[
+        Path | None,
+        typer.Option(
+            "--project",
+            "-p",
+            help="Project directory. Can be a path or name (looks in --projects-dir).",
+        ),
+    ] = None,
+    provider: Annotated[
+        str | None,
+        typer.Option(
+            "--provider", help="LLM provider for all phases (e.g., ollama/qwen3:4b-instruct-32k)"
+        ),
+    ] = None,
+    provider_creative: Annotated[
+        str | None,
+        typer.Option("--provider-creative", help="LLM provider for creative/discuss role"),
+    ] = None,
+    provider_balanced: Annotated[
+        str | None,
+        typer.Option("--provider-balanced", help="LLM provider for balanced/summarize role"),
+    ] = None,
+    provider_structured: Annotated[
+        str | None,
+        typer.Option("--provider-structured", help="LLM provider for structured/serialize role"),
+    ] = None,
+    provider_discuss: Annotated[
+        str | None,
+        typer.Option(
+            "--provider-discuss", help="LLM provider for discuss phase (legacy)", hidden=True
+        ),
+    ] = None,
+    provider_summarize: Annotated[
+        str | None,
+        typer.Option(
+            "--provider-summarize", help="LLM provider for summarize phase (legacy)", hidden=True
+        ),
+    ] = None,
+    provider_serialize: Annotated[
+        str | None,
+        typer.Option(
+            "--provider-serialize", help="LLM provider for serialize phase (legacy)", hidden=True
+        ),
+    ] = None,
+    resume_from: Annotated[
+        str | None,
+        typer.Option("--resume-from", help="Resume from named phase (skips earlier phases)"),
+    ] = None,
+    language: Annotated[
+        str | None,
+        typer.Option("--language", "-l", help="Output language (ISO 639-1 code, e.g., nl, ja, de)"),
+    ] = None,
+) -> None:
+    """Run POLISH stage - transform beat DAG into passage graph.
+
+    Takes the beat DAG from GROW and produces a prose-ready passage
+    graph: passages with choices, variants, residue beats, and
+    character arc metadata.
+
+    This stage runs a mix of deterministic and LLM-assisted phases
+    and manages graph mutations internally.
+
+    Requires GROW stage to have completed first.
+    """
+    project_path = _resolve_project_path(project)
+    _require_project(project_path)
+    _configure_project_logging(project_path)
+
+    _run_stage_command(
+        stage_name="polish",
+        project_path=project_path,
+        prompt=None,  # Uses DEFAULT_POLISH_PROMPT via STAGE_PROMPTS
+        provider=provider,
+        interactive=False,  # POLISH is never interactive (graph-driven)
+        default_interactive_prompt=DEFAULT_POLISH_PROMPT,
+        default_noninteractive_prompt=DEFAULT_POLISH_PROMPT,
         next_step_hint="qf fill",
         provider_discuss=provider_creative or provider_discuss,
         provider_summarize=provider_balanced or provider_summarize,

@@ -689,7 +689,7 @@ def test_seed_no_prompt_noninteractive_uses_default(tmp_path: Path) -> None:
 
 def test_stage_order_constant() -> None:
     """Test STAGE_ORDER contains expected stages in order."""
-    assert STAGE_ORDER == ["dream", "brainstorm", "seed", "grow", "fill", "dress", "ship"]
+    assert STAGE_ORDER == ["dream", "brainstorm", "seed", "grow", "polish", "fill", "dress", "ship"]
 
 
 def test_ship_command_passes_embed_flag(tmp_path: Path) -> None:

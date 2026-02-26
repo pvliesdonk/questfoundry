@@ -33,6 +33,12 @@ from questfoundry.pipeline.stages.grow import (
     create_grow_stage,
     grow_stage,
 )
+from questfoundry.pipeline.stages.polish import (
+    PolishStage,
+    PolishStageError,
+    create_polish_stage,
+    polish_stage,
+)
 from questfoundry.pipeline.stages.seed import (
     SeedStage,
     SeedStageError,
@@ -46,6 +52,7 @@ register_stage(dream_stage)
 register_stage(brainstorm_stage)
 register_stage(seed_stage)
 register_stage(grow_stage)
+register_stage(polish_stage)
 register_stage(fill_stage)
 register_stage(dress_stage)
 
@@ -59,6 +66,8 @@ __all__ = [
     "FillStageError",
     "GrowStage",
     "GrowStageError",
+    "PolishStage",
+    "PolishStageError",
     "SeedStage",
     "SeedStageError",
     "ShipStage",
@@ -69,6 +78,7 @@ __all__ = [
     "create_dress_stage",
     "create_fill_stage",
     "create_grow_stage",
+    "create_polish_stage",
     "create_seed_stage",
     "dream_stage",
     "dress_stage",
@@ -76,6 +86,7 @@ __all__ = [
     "get_stage",
     "grow_stage",
     "list_stages",
+    "polish_stage",
     "register_stage",
     "seed_stage",
 ]

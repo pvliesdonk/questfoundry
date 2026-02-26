@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 # Default configuration values
 DEFAULT_PROVIDER = "ollama"
 DEFAULT_MODEL = "qwen3:4b-instruct-32k"
-DEFAULT_STAGES = ["dream", "brainstorm", "seed", "grow", "fill", "ship"]
+DEFAULT_STAGES = ["dream", "brainstorm", "seed", "grow", "polish", "fill", "ship"]
 
 # Role-based provider names and their legacy aliases.
 # Maps legacy phase names to canonical role names.
