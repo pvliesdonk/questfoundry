@@ -31,6 +31,7 @@ from questfoundry.pipeline.stages.polish._helpers import (
 from questfoundry.pipeline.stages.polish.deterministic import (  # noqa: F401 - register phases
     phase_plan_application,
     phase_plan_computation,
+    phase_validation,
 )
 from questfoundry.pipeline.stages.polish.llm_helper import _PolishLLMHelperMixin
 from questfoundry.pipeline.stages.polish.llm_phases import _PolishLLMPhaseMixin
@@ -98,7 +99,7 @@ class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
     _FREE_PHASES: ClassVar[dict[str, str]] = {
         "plan_computation": "phase_plan_computation",
         "plan_application": "phase_plan_application",
-        # "validation": "phase_validation",
+        "validation": "phase_validation",
     }
 
     def _phase_order(self) -> list[tuple[PhaseFunc, str]]:

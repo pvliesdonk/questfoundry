@@ -567,7 +567,9 @@ def _store_plan(graph: Graph, plan: PolishPlan) -> None:
 # ---------------------------------------------------------------------------
 
 
-@polish_phase(name="plan_application", depends_on=["llm_enrichment"], priority=5)
+@polish_phase(
+    name="plan_application", depends_on=["llm_enrichment"], priority=5, is_deterministic=True
+)
 async def phase_plan_application(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
@@ -887,6 +889,52 @@ def _apply_sidetrack(graph: Graph, fb_spec: FalseBranchSpec) -> tuple[int, int]:
     graph.add_edge("choice", sidetrack_passage_id, to_passage, label=return_label)
 
     return (1, 2)  # 1 sidetrack beat, 2 choice edges
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Validation (registered as @polish_phase)
+# ---------------------------------------------------------------------------
+
+
+@polish_phase(name="validation", depends_on=["plan_application"], priority=6, is_deterministic=True)
+async def phase_validation(
+    graph: Graph,
+    model: BaseChatModel,  # noqa: ARG001
+) -> PhaseResult:
+    """Phase 7: Validate the complete passage graph.
+
+    Runs structural, variant, choice, and feasibility checks on the
+    passage layer created by Phase 6. Failures indicate bugs in
+    Phases 4-6 or insufficient GROW output.
+    """
+    from questfoundry.graph.polish_validation import validate_polish_output
+
+    errors = validate_polish_output(graph)
+
+    if errors:
+        detail = f"{len(errors)} validation error(s): {'; '.join(errors[:3])}"
+        if len(errors) > 3:
+            detail += f" (and {len(errors) - 3} more)"
+        log.warning("phase7_validation_failed", errors=len(errors))
+        return PhaseResult(
+            phase="validation",
+            status="failed",
+            detail=detail,
+        )
+
+    # Collect summary stats
+    passage_count = len(graph.get_nodes_by_type("passage"))
+    choice_edges = graph.get_edges(edge_type="choice")
+    choice_count = len(choice_edges)
+
+    detail = f"Validation passed: {passage_count} passages, {choice_count} choices"
+    log.info("phase7_validation_passed", passages=passage_count, choices=choice_count)
+
+    return PhaseResult(
+        phase="validation",
+        status="completed",
+        detail=detail,
+    )
 
 
 # ---------------------------------------------------------------------------

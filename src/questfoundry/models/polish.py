@@ -306,6 +306,22 @@ class Phase5dOutput(BaseModel):
     variant_summaries: list[VariantSummaryItem] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# Stage result
+# ---------------------------------------------------------------------------
+
 # Note: POLISH phases return the shared PhaseResult from models.pipeline.
-# Stage-specific result models (PolishResult) are added in later PRs
-# when passage/choice counts are available.
+
+
+class PolishResult(BaseModel):
+    """Summary result of the complete POLISH stage execution.
+
+    Captures key metrics from the passage graph created by POLISH.
+    """
+
+    passage_count: int = Field(default=0, description="Total passages created")
+    choice_count: int = Field(default=0, description="Total choice edges created")
+    variant_count: int = Field(default=0, description="Variant passages created")
+    residue_count: int = Field(default=0, description="Residue beats created")
+    sidetrack_count: int = Field(default=0, description="Sidetrack beats created")
+    false_branch_count: int = Field(default=0, description="False branches applied")
