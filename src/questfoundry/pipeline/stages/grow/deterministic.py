@@ -236,12 +236,12 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     Preconditions:
     - Divergence points computed (Phase 6 complete).
     - Arc nodes have sequence, paths, and diverges_at metadata.
-    - Dilemma nodes have convergence_policy from SEED analysis.
+    - Dilemma nodes have dilemma_role from SEED analysis.
 
     Postconditions:
     - Arcs with soft/flavor dilemmas get converges_at and converges_to metadata.
     - converges_at edges link arcs to their convergence beat.
-    - Each arc has convergence_policy and payoff_budget stored.
+    - Each arc has dilemma_role and payoff_budget stored.
     - Hard dilemma arcs have no convergence point.
 
     Invariants:
@@ -294,7 +294,7 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
 
         # Always store policy metadata on the arc node
         update_fields: dict[str, object] = {
-            "convergence_policy": info.convergence_policy,
+            "dilemma_role": info.dilemma_role,
             "payoff_budget": info.payoff_budget,
         }
         if info.dilemma_convergences:

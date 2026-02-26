@@ -242,7 +242,7 @@ class TestPathBeatsSectionDedup:
 
 _ANALYSIS_KWARGS: dict[str, str | int] = {
     "dilemma_id": "dilemma::trust_or_betray",
-    "convergence_policy": "soft",
+    "dilemma_role": "soft",
     "ending_salience": "low",
     "residue_weight": "light",
     "payoff_budget": 3,
@@ -264,7 +264,7 @@ class TestDilemmaAnalysis:
     def test_valid_analysis(self) -> None:
         da = DilemmaAnalysis(**_ANALYSIS_KWARGS)
         assert da.dilemma_id == "dilemma::trust_or_betray"
-        assert da.convergence_policy == "soft"
+        assert da.dilemma_role == "soft"
         assert da.payoff_budget == 3
 
     def test_payoff_budget_required(self) -> None:
@@ -299,20 +299,65 @@ class TestDilemmaAnalysis:
             DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "reasoning": "short"})
 
     def test_invalid_policy_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="convergence_policy"):
-            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_policy": "extreme"})
+        with pytest.raises(ValidationError, match="dilemma_role"):
+            DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "dilemma_role": "extreme"})
 
     @pytest.mark.parametrize(
         "policy",
         [
             pytest.param("hard", id="hard"),
             pytest.param("soft", id="soft"),
-            pytest.param("flavor", id="flavor"),
         ],
     )
     def test_valid_policies(self, policy: str) -> None:
-        da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_policy": policy})
-        assert da.convergence_policy == policy
+        da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "dilemma_role": policy})
+        assert da.dilemma_role == policy
+
+    def test_flavor_migrated_to_soft(self) -> None:
+        """Deprecated 'flavor' value is migrated to 'soft' with cosmetic residue."""
+        import warnings
+
+        kwargs = {**_ANALYSIS_KWARGS, "dilemma_role": "flavor"}
+        del kwargs["residue_weight"]  # Let migration set default
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            da = DilemmaAnalysis(**kwargs)
+        assert da.dilemma_role == "soft"
+        assert da.residue_weight == "cosmetic"
+
+    def test_flavor_preserves_explicit_residue_weight(self) -> None:
+        """Flavor migration does not override explicit residue_weight."""
+        import warnings
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            da = DilemmaAnalysis(
+                **{**_ANALYSIS_KWARGS, "dilemma_role": "flavor", "residue_weight": "heavy"}
+            )
+        assert da.dilemma_role == "soft"
+        assert da.residue_weight == "heavy"
+
+    def test_convergence_policy_field_name_migrated(self) -> None:
+        """Old 'convergence_policy' field name is migrated to 'dilemma_role'."""
+        data = {**_ANALYSIS_KWARGS}
+        del data["dilemma_role"]
+        data["convergence_policy"] = "hard"
+        da = DilemmaAnalysis.model_validate(data)
+        assert da.dilemma_role == "hard"
+
+    def test_convergence_policy_flavor_migrated(self) -> None:
+        """Old 'convergence_policy: flavor' is fully migrated (field + value)."""
+        import warnings
+
+        data = {**_ANALYSIS_KWARGS}
+        del data["dilemma_role"]
+        del data["residue_weight"]
+        data["convergence_policy"] = "flavor"
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            da = DilemmaAnalysis.model_validate(data)
+        assert da.dilemma_role == "soft"
+        assert da.residue_weight == "cosmetic"
 
     def test_convergence_point_accepted(self) -> None:
         da = DilemmaAnalysis(**{**_ANALYSIS_KWARGS, "convergence_point": "The river crossing camp"})
@@ -377,7 +422,7 @@ class TestDilemmaAnalysis:
         """Model rejects input without ending_salience (no longer optional)."""
         data = {
             "dilemma_id": "legacy_dilemma",
-            "convergence_policy": "soft",
+            "dilemma_role": "soft",
             "residue_weight": "light",
             "payoff_budget": 2,
             "reasoning": "From older version without ending_salience",
@@ -413,7 +458,7 @@ class TestDilemmaAnalysis:
         """Model rejects input without residue_weight (no longer optional)."""
         data = {
             "dilemma_id": "legacy_dilemma",
-            "convergence_policy": "soft",
+            "dilemma_role": "soft",
             "ending_salience": "low",
             "payoff_budget": 2,
             "reasoning": "From older version without residue_weight",
@@ -501,7 +546,7 @@ class TestDilemmaAnalysisSectionDedup:
             DilemmaAnalysisSection(
                 dilemma_analyses=[
                     _ANALYSIS_KWARGS,
-                    {**_ANALYSIS_KWARGS, "convergence_policy": "hard"},
+                    {**_ANALYSIS_KWARGS, "dilemma_role": "hard"},
                 ]
             )
 
@@ -585,7 +630,7 @@ class TestSeedOutputBackwardCompat:
         restored = SeedOutput.model_validate(data)
         assert len(restored.dilemma_analyses) == 1
         assert len(restored.interaction_constraints) == 1
-        assert restored.dilemma_analyses[0].convergence_policy == "soft"
+        assert restored.dilemma_analyses[0].dilemma_role == "soft"
 
 
 # ---------------------------------------------------------------------------

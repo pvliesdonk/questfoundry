@@ -111,8 +111,8 @@ def prune_to_arc_limit(
 def _build_policy_lookup(
     analyses: list[DilemmaAnalysis],
 ) -> dict[str, str]:
-    """Build dilemma_id → convergence_policy lookup from analyses."""
-    return {strip_scope_prefix(a.dilemma_id): a.convergence_policy for a in analyses}
+    """Build dilemma_id → dilemma_role lookup from analyses."""
+    return {strip_scope_prefix(a.dilemma_id): a.dilemma_role for a in analyses}
 
 
 # Maximum total explored dilemmas (hard + soft + flavor) to prevent
@@ -142,13 +142,13 @@ def _policy_aware_prune(
 
     multi_path_ids = [did for did, count in paths_per_dilemma.items() if count >= 2]
 
-    # Separate by policy
+    # Separate by policy (flavor is deprecated → treated as soft)
     hard_ids = [d for d in multi_path_ids if policy_lookup.get(d) == "hard"]
-    soft_ids = [d for d in multi_path_ids if policy_lookup.get(d) == "soft"]
-    flavor_ids = [d for d in multi_path_ids if policy_lookup.get(d) == "flavor"]
-    # Unclassified dilemmas treated as soft (conservative)
-    unclassified = [d for d in multi_path_ids if d not in policy_lookup]
-    soft_ids.extend(unclassified)
+    soft_ids = [
+        d
+        for d in multi_path_ids
+        if policy_lookup.get(d) in ("soft", "flavor") or d not in policy_lookup
+    ]
 
     # Score for ranking within each group
     scores = {did: score_dilemma(seed_output, did, graph).score for did in multi_path_ids}
@@ -156,21 +156,17 @@ def _policy_aware_prune(
     # Sort each group by score descending (best first)
     hard_ids.sort(key=lambda d: scores.get(d, 0.0), reverse=True)
     soft_ids.sort(key=lambda d: scores.get(d, 0.0), reverse=True)
-    flavor_ids.sort(key=lambda d: scores.get(d, 0.0), reverse=True)
 
     # Select: keep top max_hard hard dilemmas
     kept_hard = hard_ids[:max_hard]
     demoted_hard = hard_ids[max_hard:]
 
-    # Fill remaining budget with soft, then flavor
+    # Fill remaining budget with soft
     remaining_budget = _MAX_TOTAL_EXPLORED - len(kept_hard)
     kept_soft = soft_ids[:remaining_budget]
-    remaining_budget -= len(kept_soft)
-    kept_flavor = flavor_ids[:remaining_budget]
 
     demoted_soft = soft_ids[len(kept_soft) :]
-    demoted_flavor = flavor_ids[len(kept_flavor) :]
-    demoted = demoted_hard + demoted_soft + demoted_flavor
+    demoted = demoted_hard + demoted_soft
 
     log.info(
         "policy_aware_pruning",
@@ -178,9 +174,7 @@ def _policy_aware_prune(
         hard_demoted=len(demoted_hard),
         soft_kept=len(kept_soft),
         soft_demoted=len(demoted_soft),
-        flavor_kept=len(kept_flavor),
-        flavor_demoted=len(demoted_flavor),
-        total_explored=len(kept_hard) + len(kept_soft) + len(kept_flavor),
+        total_explored=len(kept_hard) + len(kept_soft),
     )
 
     if not demoted:

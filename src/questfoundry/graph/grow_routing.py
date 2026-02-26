@@ -122,7 +122,7 @@ class RoutingOperation:
         demote_base_ending: If True, set ``is_ending=False`` on the base
             passage after splitting (ending-split only).
         dilemma_id: The dilemma driving this split (residue/heavy).
-        convergence_policy: "soft" or "flavor" (residue only).
+        dilemma_role: "soft" (residue only).
         residue_weight: The dilemma's residue weight.
         ending_salience: The dilemma's ending salience.
     """
@@ -132,7 +132,7 @@ class RoutingOperation:
     variants: tuple[VariantPassageSpec, ...]
     demote_base_ending: bool = False
     dilemma_id: str | None = None
-    convergence_policy: str | None = None
+    dilemma_role: str | None = None
     residue_weight: str | None = None
     ending_salience: str | None = None
 
@@ -859,7 +859,7 @@ def _compute_llm_residue(
                 base_passage_id=passage_id,
                 variants=tuple(variants),
                 dilemma_id=dilemma_id,
-                convergence_policy=d_data.get("convergence_policy"),
+                dilemma_role=d_data.get("dilemma_role"),
                 residue_weight=d_data.get("residue_weight"),
             )
         )

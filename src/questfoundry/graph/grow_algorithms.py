@@ -1420,7 +1420,7 @@ def enumerate_arcs(graph: Graph, *, max_arc_count: int | None = None) -> list[Ar
     hard_dilemma_count = sum(
         1
         for did in sorted_dilemmas
-        if dilemma_nodes.get(did, {}).get("convergence_policy", "soft") == "hard"
+        if dilemma_nodes.get(did, {}).get("dilemma_role", "soft") == "hard"
         and len(dilemma_paths_map.get(did, [])) >= 2
     )
     effective_arc_count = 2**hard_dilemma_count
@@ -1519,7 +1519,7 @@ class DilemmaPolicy:
 
     Attributes:
         dilemma_id: Scoped dilemma ID (e.g. ``dilemma::foo``).
-        policy: Convergence policy (hard/soft/flavor).
+        policy: Convergence policy (hard/soft).
         budget: Payoff budget for this dilemma.
         non_canon_path_id: The non-canonical path for this dilemma in this arc.
     """
@@ -1555,10 +1555,9 @@ class ConvergenceInfo:
         arc_id: The branch arc that converges.
         converges_to: The arc it converges to (spine).
         converges_at: The beat where convergence occurs (None if no convergence).
-            flavor: first shared beat after divergence.
-            soft: first shared beat after last exclusive beat (if payoff_budget met).
-            hard: always None.
-        convergence_policy: Effective policy applied to this arc.
+            soft: boundary beat after last exclusive beat (if payoff_budget met).
+            hard: always None (no convergence).
+        dilemma_role: Effective policy applied to this arc.
         payoff_budget: Effective payoff budget applied to this arc.
         dilemma_convergences: Per-dilemma convergence details.
     """
@@ -1566,7 +1565,7 @@ class ConvergenceInfo:
     arc_id: str
     converges_to: str
     converges_at: str | None = None
-    convergence_policy: str = "soft"
+    dilemma_role: str = "soft"
     payoff_budget: int = 2
     dilemma_convergences: list[DilemmaConvergence] = field(default_factory=list)
 
@@ -1629,7 +1628,7 @@ def _find_arc_dilemma_policies(
             policies.append(
                 DilemmaPolicy(
                     dilemma_id=scoped_did,
-                    policy=dilemma_node.get("convergence_policy", "soft"),
+                    policy=dilemma_node.get("dilemma_role", "soft"),
                     budget=dilemma_node.get("payoff_budget", 2),
                     non_canon_path_id=path_node_id,
                 )
@@ -1642,24 +1641,22 @@ def _get_effective_policy(
     arc: Arc,
     dilemma_path_counts: dict[str, int] | None = None,
 ) -> tuple[str, int]:
-    """Combine convergence policies for a (possibly multi-dilemma) arc.
+    """Combine dilemma roles for a (possibly multi-dilemma) arc.
 
     Combine rule per issue #743: hard dominates; payoff_budget = max across
-    all dilemmas the arc diverges on.  Falls back to ("flavor", 0) when no
-    dilemma metadata is found (preserves pre-policy behavior).
+    all dilemmas the arc diverges on.  Falls back to ("soft", 0) when no
+    dilemma metadata is found (soft with zero budget = converge at first
+    shared beat after divergence).
     """
     policies = _find_arc_dilemma_policies(graph, arc, dilemma_path_counts)
     if not policies:
-        # No SEED convergence metadata — preserve pre-policy behavior
-        # (first shared beat, no budget constraint).
-        return ("flavor", 0)
+        # No SEED dilemma metadata — default to soft with no budget constraint.
+        return ("soft", 0)
 
     max_budget = max(dp.budget for dp in policies)
     if any(dp.policy == "hard" for dp in policies):
         return ("hard", max_budget)
-    if any(dp.policy == "soft" for dp in policies):
-        return ("soft", max_budget)
-    return ("flavor", max_budget)
+    return ("soft", max_budget)
 
 
 def _find_convergence_for_soft(
@@ -1754,7 +1751,6 @@ def _compute_per_dilemma_convergence(
     For each dilemma:
     - **hard**: ``converges_at = None`` (never converges).
     - **soft**: Filter beats to this dilemma + neutral, then backward scan.
-    - **flavor**: Filter beats to this dilemma + neutral, then first shared.
 
     A beat is "relevant" to a dilemma if it has that dilemma association or
     has no dilemma association at all (neutral/shared beat).
@@ -1785,11 +1781,8 @@ def _compute_per_dilemma_convergence(
             if not beat_dilemma_map.get(b) or dp.dilemma_id in beat_dilemma_map[b]
         }
 
-        if dp.policy == "soft":
-            converges_at = _find_convergence_for_soft(filtered_branch, filtered_spine, dp.budget)
-        else:
-            # flavor: first shared beat
-            converges_at = next((b for b in filtered_branch if b in filtered_spine), None)
+        # soft (or legacy flavor): backward scan with budget
+        converges_at = _find_convergence_for_soft(filtered_branch, filtered_spine, dp.budget)
 
         results.append(
             DilemmaConvergence(
@@ -1822,7 +1815,7 @@ def find_convergence_points(
     - **hard** (all dilemmas hard): No convergence (converges_at = None).
 
     Args:
-        graph: Graph with dilemma nodes containing convergence_policy/payoff_budget.
+        graph: Graph with dilemma nodes containing dilemma_role/payoff_budget.
         arcs: List of Arc models.
         divergence_map: Pre-computed divergence info. If None, computed internally.
         spine_arc_id: ID of the spine arc. If None, detected from arc_type.
@@ -1879,12 +1872,7 @@ def find_convergence_points(
 
         if not policies:
             # No dilemma metadata → use arc-level effective policy (backward compat)
-            if eff_policy == "flavor":
-                for beat_id in branch_after_div:
-                    if beat_id in spine_seq_set:
-                        converges_at = beat_id
-                        break
-            elif eff_policy == "soft":
+            if eff_policy == "soft":
                 converges_at = _find_convergence_for_soft(
                     branch_after_div, spine_seq_set, eff_budget
                 )
@@ -1909,7 +1897,7 @@ def find_convergence_points(
             arc_id=arc.arc_id,
             converges_to=spine.arc_id,
             converges_at=converges_at,
-            convergence_policy=eff_policy,
+            dilemma_role=eff_policy,
             payoff_budget=eff_budget,
             dilemma_convergences=per_dilemma,
         )
@@ -1932,7 +1920,7 @@ class ResidueCandidate:
 
     passage_id: str
     dilemma_id: str
-    convergence_policy: str  # "soft" or "flavor"
+    dilemma_role: str  # "soft"
     residue_weight: str  # "heavy" or "light" (cosmetic filtered out)
     codeword_ids: list[str]  # Available codewords for gating variants
     dilemma_question: str  # For LLM context
@@ -1986,7 +1974,7 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
     for _arc_id, arc_data in arc_nodes.items():
         for dc in arc_data.get("dilemma_convergences", []):
             policy = dc.get("policy", "")
-            if policy not in ("soft", "flavor"):
+            if policy != "soft":
                 continue  # Skip hard dilemmas
 
             converges_at_beat = dc.get("converges_at")
@@ -2030,7 +2018,7 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
                 ResidueCandidate(
                     passage_id=passage_id,
                     dilemma_id=dilemma_id,
-                    convergence_policy=policy,
+                    dilemma_role=policy,
                     residue_weight=residue_weight,
                     codeword_ids=sorted(cw_ids),
                     dilemma_question=question,
@@ -2526,7 +2514,7 @@ def compute_all_choice_requires(
         arc_codeword_sets: list[set[str]] = []
         for arc_id in sorted(arc_ids):
             arc_data = arc_nodes.get(arc_id, {})
-            if arc_data.get("convergence_policy") != "hard":
+            if arc_data.get("dilemma_role") != "hard":
                 continue
 
             # Branch-exclusive = branch paths NOT on the spine
@@ -2765,7 +2753,7 @@ def _get_hard_policy_beats(
     """Identify beats belonging to hard-policy dilemmas.
 
     A beat is hard-policy if any of its dilemmas has
-    ``convergence_policy == "hard"``.
+    ``dilemma_role == "hard"``.
 
     Returns:
         Set of beat IDs from hard-policy dilemmas.
@@ -2783,7 +2771,7 @@ def _get_hard_policy_beats(
         for raw in beat_dilemma_map.get(bid, set()):
             prefixed = raw_to_prefixed.get(raw)
             dnode = dilemma_nodes.get(prefixed) if prefixed else None
-            if dnode and dnode.get("convergence_policy") == "hard":
+            if dnode and dnode.get("dilemma_role") == "hard":
                 hard_beats.add(bid)
                 break
     return hard_beats

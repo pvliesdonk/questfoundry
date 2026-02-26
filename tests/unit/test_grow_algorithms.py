@@ -718,7 +718,7 @@ class TestEnumerateArcs:
             dilemma_id = f"dilemma::t{i}"
             graph.create_node(
                 dilemma_id,
-                {"type": "dilemma", "raw_id": f"t{i}", "convergence_policy": "hard"},
+                {"type": "dilemma", "raw_id": f"t{i}", "dilemma_role": "hard"},
             )
             for j in range(2):
                 path_id = f"path::t{i}_th{j}"
@@ -737,7 +737,7 @@ class TestEnumerateArcs:
             enumerate_arcs(graph)
 
     def test_soft_dilemmas_do_not_count_toward_limit(self) -> None:
-        """Soft/flavor dilemmas don't count toward the arc limit.
+        """Soft dilemmas don't count toward the arc limit.
 
         1 hard + 7 soft = 2^1 = 2 effective arcs (within limit), even
         though total arcs = 2^8 = 256.
@@ -751,7 +751,7 @@ class TestEnumerateArcs:
                 {
                     "type": "dilemma",
                     "raw_id": f"t{i}",
-                    "convergence_policy": policy,
+                    "dilemma_role": policy,
                 },
             )
             for j in range(2):
@@ -774,9 +774,9 @@ class TestEnumerateArcs:
         assert len(spine_arcs) == 1
 
     def test_unclassified_dilemmas_default_to_soft(self) -> None:
-        """Dilemmas without convergence_policy default to soft (no limit impact)."""
+        """Dilemmas without dilemma_role default to soft (no limit impact)."""
         graph = Graph.empty()
-        # 7 dilemmas with no convergence_policy set (default=soft)
+        # 7 dilemmas with no dilemma_role set (default=soft)
         for i in range(7):
             dilemma_id = f"dilemma::t{i}"
             graph.create_node(dilemma_id, {"type": "dilemma", "raw_id": f"t{i}"})
@@ -1312,7 +1312,7 @@ class TestFindConvergencePointsPolicyAware:
             {
                 "type": "dilemma",
                 "raw_id": dilemma_id,
-                "convergence_policy": policy,
+                "dilemma_role": policy,
                 "payoff_budget": budget,
             },
         )
@@ -1343,7 +1343,7 @@ class TestFindConvergencePointsPolicyAware:
         result = find_convergence_points(graph, [spine, branch])
 
         assert result["branch"].converges_at == "beat::d"
-        assert result["branch"].convergence_policy == "soft"
+        assert result["branch"].dilemma_role == "soft"
 
     def test_soft_payoff_budget_enforced(self) -> None:
         """Soft policy with high budget: not enough exclusive beats → no convergence."""
@@ -1403,10 +1403,10 @@ class TestFindConvergencePointsPolicyAware:
         result = find_convergence_points(graph, [spine, branch])
 
         assert result["branch"].converges_at is None
-        assert result["branch"].convergence_policy == "hard"
+        assert result["branch"].dilemma_role == "hard"
 
-    def test_flavor_policy_first_shared(self) -> None:
-        """Flavor policy: first shared beat (original behavior)."""
+    def test_soft_budget_boundary_convergence(self) -> None:
+        """Soft policy converges at boundary after last exclusive beat."""
         spine = Arc(
             arc_id="spine",
             arc_type="spine",
@@ -1419,12 +1419,12 @@ class TestFindConvergencePointsPolicyAware:
             paths=["p_alt"],
             sequence=["beat::a", "beat::x", "beat::c", "beat::y", "beat::d"],
         )
-        graph = self._make_policy_graph("flavor", 2, path_ids=["p_canon", "p_alt"])
+        graph = self._make_policy_graph("soft", 2, path_ids=["p_canon", "p_alt"])
         result = find_convergence_points(graph, [spine, branch])
 
-        # Flavor finds first shared beat (c), not backward-scan boundary (d)
-        assert result["branch"].converges_at == "beat::c"
-        assert result["branch"].convergence_policy == "flavor"
+        # Soft policy backward-scans: last exclusive is y, so convergence is d
+        assert result["branch"].converges_at == "beat::d"
+        assert result["branch"].dilemma_role == "soft"
 
     def test_multi_dilemma_hard_plus_soft_no_belongs_to(self) -> None:
         """Mixed hard+soft without belongs_to edges: soft budget not met → None."""
@@ -1434,7 +1434,7 @@ class TestFindConvergencePointsPolicyAware:
             {
                 "type": "dilemma",
                 "raw_id": "d1",
-                "convergence_policy": "soft",
+                "dilemma_role": "soft",
                 "payoff_budget": 2,
             },
         )
@@ -1443,7 +1443,7 @@ class TestFindConvergencePointsPolicyAware:
             {
                 "type": "dilemma",
                 "raw_id": "d2",
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 4,
             },
         )
@@ -1481,7 +1481,7 @@ class TestFindConvergencePointsPolicyAware:
 
         # Only 1 exclusive beat (x) vs budget=2 → None
         assert result["branch"].converges_at is None
-        assert result["branch"].convergence_policy == "hard"
+        assert result["branch"].dilemma_role == "hard"
         assert result["branch"].payoff_budget == 4
 
     @staticmethod
@@ -1499,7 +1499,7 @@ class TestFindConvergencePointsPolicyAware:
             {
                 "type": "dilemma",
                 "raw_id": "d1",
-                "convergence_policy": d1_policy,
+                "dilemma_role": d1_policy,
                 "payoff_budget": d1_budget,
             },
         )
@@ -1508,7 +1508,7 @@ class TestFindConvergencePointsPolicyAware:
             {
                 "type": "dilemma",
                 "raw_id": "d2",
-                "convergence_policy": d2_policy,
+                "dilemma_role": d2_policy,
                 "payoff_budget": d2_budget,
             },
         )
@@ -1570,7 +1570,7 @@ class TestFindConvergencePointsPolicyAware:
         # [x_soft, c, d, e] with budget=1 → converges at c.
         assert result["branch"].converges_at == "beat::c"
         # Stored policy is arc-level effective (hard dominates)
-        assert result["branch"].convergence_policy == "hard"
+        assert result["branch"].dilemma_role == "hard"
 
     def test_all_hard_no_convergence(self) -> None:
         """All-hard multi-dilemma arc: converges_at is None."""
@@ -1597,7 +1597,7 @@ class TestFindConvergencePointsPolicyAware:
         result = find_convergence_points(graph, [spine, branch])
 
         assert result["branch"].converges_at is None
-        assert result["branch"].convergence_policy == "hard"
+        assert result["branch"].dilemma_role == "hard"
 
     def test_all_soft_multi_dilemma_converges(self) -> None:
         """All-soft multi-dilemma: convergence uses max budget across dilemmas."""
@@ -1626,11 +1626,11 @@ class TestFindConvergencePointsPolicyAware:
 
         # 2 exclusive beats (x, y), max budget=2 → met. Converges at c.
         assert result["branch"].converges_at == "beat::c"
-        assert result["branch"].convergence_policy == "soft"
+        assert result["branch"].dilemma_role == "soft"
         assert result["branch"].payoff_budget == 2
 
-    def test_effective_policy_defaults_to_flavor_when_no_metadata(self) -> None:
-        """No dilemma metadata on graph → flavor/0 (backward compat)."""
+    def test_effective_policy_defaults_to_soft_when_no_metadata(self) -> None:
+        """No dilemma metadata on graph → soft/0 (backward compat)."""
         spine = Arc(
             arc_id="spine",
             arc_type="spine",
@@ -1647,7 +1647,7 @@ class TestFindConvergencePointsPolicyAware:
         result = find_convergence_points(graph, [spine, branch])
 
         assert result["branch"].converges_at == "beat::end"
-        assert result["branch"].convergence_policy == "flavor"
+        assert result["branch"].dilemma_role == "soft"
         assert result["branch"].payoff_budget == 0
 
     def test_single_explored_dilemma_ignored_for_policy(self) -> None:
@@ -1661,7 +1661,7 @@ class TestFindConvergencePointsPolicyAware:
         # Dilemma d1: soft policy, 2 explored paths
         graph.create_node(
             "dilemma::d1",
-            {"type": "dilemma", "raw_id": "d1", "convergence_policy": "soft", "payoff_budget": 2},
+            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "soft", "payoff_budget": 2},
         )
         graph.create_node(
             "path::d1_yes", {"type": "path", "raw_id": "d1_yes", "dilemma_id": "dilemma::d1"}
@@ -1672,7 +1672,7 @@ class TestFindConvergencePointsPolicyAware:
         # Dilemma d2: hard policy, but only 1 explored path (universal)
         graph.create_node(
             "dilemma::d2",
-            {"type": "dilemma", "raw_id": "d2", "convergence_policy": "hard", "payoff_budget": 3},
+            {"type": "dilemma", "raw_id": "d2", "dilemma_role": "hard", "payoff_budget": 3},
         )
         graph.create_node(
             "path::d2_only", {"type": "path", "raw_id": "d2_only", "dilemma_id": "dilemma::d2"}
@@ -1693,14 +1693,14 @@ class TestFindConvergencePointsPolicyAware:
         result = find_convergence_points(graph, [spine, branch])
 
         # d2 should be ignored (single-explored), so policy = soft from d1
-        assert result["branch"].convergence_policy == "soft"
+        assert result["branch"].dilemma_role == "soft"
 
-    def test_all_single_explored_falls_back_to_flavor(self) -> None:
-        """When every dilemma has only 1 explored path, falls back to flavor."""
+    def test_all_single_explored_falls_back_to_soft(self) -> None:
+        """When every dilemma has only 1 explored path, falls back to soft."""
         graph = Graph.empty()
         graph.create_node(
             "dilemma::d1",
-            {"type": "dilemma", "raw_id": "d1", "convergence_policy": "hard", "payoff_budget": 5},
+            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "hard", "payoff_budget": 5},
         )
         graph.create_node(
             "path::d1_only", {"type": "path", "raw_id": "d1_only", "dilemma_id": "dilemma::d1"}
@@ -1720,8 +1720,8 @@ class TestFindConvergencePointsPolicyAware:
         )
         result = find_convergence_points(graph, [spine, branch])
 
-        # All dilemmas are single-explored → flavor fallback
-        assert result["branch"].convergence_policy == "flavor"
+        # All dilemmas are single-explored → soft fallback
+        assert result["branch"].dilemma_role == "soft"
         assert result["branch"].payoff_budget == 0
 
     def test_per_dilemma_different_convergence_points(self) -> None:
@@ -1844,7 +1844,7 @@ class TestFindConvergencePointsPolicyAware:
             "beat::y": ["p2_alt"],
             "beat::end": ["p1_canon", "p1_alt", "p2_canon", "p2_alt"],
         }
-        graph = self._make_multi_dilemma_graph("flavor", 0, "soft", 1, beat_to_paths)
+        graph = self._make_multi_dilemma_graph("soft", 0, "soft", 1, beat_to_paths)
 
         spine = Arc(
             arc_id="spine",
@@ -1866,7 +1866,7 @@ class TestFindConvergencePointsPolicyAware:
         assert dc_ids == {"dilemma::d1", "dilemma::d2"}
         # Each entry has correct fields
         for dc in info.dilemma_convergences:
-            assert dc.policy in ("flavor", "soft", "hard")
+            assert dc.policy in ("soft", "hard")
             assert isinstance(dc.budget, int)
 
 
@@ -1959,7 +1959,7 @@ class TestComputeAllChoiceRequires:
             {
                 "type": "dilemma",
                 "raw_id": "d1",
-                "convergence_policy": branch_policy,
+                "dilemma_role": branch_policy,
                 "payoff_budget": 2,
             },
         )
@@ -2014,7 +2014,7 @@ class TestComputeAllChoiceRequires:
                 "arc_type": "spine",
                 "paths": ["p_canon"],
                 "sequence": ["beat::a", "beat::b", "beat::end"],
-                "convergence_policy": "flavor",
+                "dilemma_role": "soft",
                 "payoff_budget": 0,
             },
         )
@@ -2026,7 +2026,7 @@ class TestComputeAllChoiceRequires:
                 "arc_type": "branch",
                 "paths": ["p_alt"],
                 "sequence": ["beat::a", "beat::x", "beat::y"],
-                "convergence_policy": branch_policy,
+                "dilemma_role": branch_policy,
                 "payoff_budget": 2,
             },
         )
@@ -2123,7 +2123,7 @@ class TestComputeAllChoiceRequires:
                 "arc_type": "spine",
                 "paths": [],
                 "sequence": ["beat::a"],
-                "convergence_policy": "flavor",
+                "dilemma_role": "soft",
                 "payoff_budget": 0,
             },
         )
@@ -2135,7 +2135,7 @@ class TestComputeAllChoiceRequires:
                 "arc_type": "branch",
                 "paths": ["p_alt"],
                 "sequence": ["beat::x"],
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 2,
             },
         )
@@ -2163,7 +2163,7 @@ class TestComputeAllChoiceRequires:
                 "type": "arc",
                 "arc_type": "branch",
                 "paths": ["p1"],
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "sequence": ["beat::b1"],
             },
         )
@@ -2186,7 +2186,7 @@ class TestComputeAllChoiceRequires:
         for d_id in ("d1", "d2"):
             graph.create_node(
                 f"dilemma::{d_id}",
-                {"type": "dilemma", "raw_id": d_id, "convergence_policy": "hard"},
+                {"type": "dilemma", "raw_id": d_id, "dilemma_role": "hard"},
             )
         for p_id in ("d1_a", "d1_b", "d2_a", "d2_b"):
             graph.create_node(
@@ -2211,7 +2211,7 @@ class TestComputeAllChoiceRequires:
                 "arc_type": "spine",
                 "paths": ["d1_a", "d2_a"],
                 "sequence": ["beat::shared"],
-                "convergence_policy": "flavor",
+                "dilemma_role": "soft",
                 "payoff_budget": 0,
             },
         )
@@ -2223,7 +2223,7 @@ class TestComputeAllChoiceRequires:
                 "arc_type": "branch",
                 "paths": ["d1_b", "d2_b"],
                 "sequence": ["beat::x"],
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 2,
             },
         )
@@ -2235,7 +2235,7 @@ class TestComputeAllChoiceRequires:
                 "arc_type": "branch",
                 "paths": ["d1_a", "d2_b"],
                 "sequence": ["beat::x"],
-                "convergence_policy": "hard",
+                "dilemma_role": "hard",
                 "payoff_budget": 2,
             },
         )
@@ -2365,8 +2365,8 @@ class TestPhase7Integration:
         graph = make_two_dilemma_graph()
         # Set budget=1 so per-dilemma convergence can be met
         # (each dilemma has exactly 1 exclusive beat in the fixture)
-        graph.update_node("dilemma::mentor_trust", convergence_policy="soft", payoff_budget=1)
-        graph.update_node("dilemma::artifact_quest", convergence_policy="soft", payoff_budget=1)
+        graph.update_node("dilemma::mentor_trust", dilemma_role="soft", payoff_budget=1)
+        graph.update_node("dilemma::artifact_quest", dilemma_role="soft", payoff_budget=1)
         GrowStage()
         mock_model = MagicMock()
         await phase_enumerate_arcs(graph, mock_model)
@@ -2394,8 +2394,8 @@ class TestPhase7Integration:
 
         graph = make_two_dilemma_graph()
         # Set budget=1 so per-dilemma convergence can be met
-        graph.update_node("dilemma::mentor_trust", convergence_policy="soft", payoff_budget=1)
-        graph.update_node("dilemma::artifact_quest", convergence_policy="soft", payoff_budget=1)
+        graph.update_node("dilemma::mentor_trust", dilemma_role="soft", payoff_budget=1)
+        graph.update_node("dilemma::artifact_quest", dilemma_role="soft", payoff_budget=1)
         GrowStage()
         mock_model = MagicMock()
         await phase_enumerate_arcs(graph, mock_model)
@@ -5291,7 +5291,7 @@ class TestHardPolicyIntersection:
             {
                 "type": "dilemma",
                 "raw_id": "d1",
-                "convergence_policy": d1_policy,
+                "dilemma_role": d1_policy,
                 "payoff_budget": 3,
             },
         )
@@ -5300,7 +5300,7 @@ class TestHardPolicyIntersection:
             {
                 "type": "dilemma",
                 "raw_id": "d2",
-                "convergence_policy": d2_policy,
+                "dilemma_role": d2_policy,
                 "payoff_budget": 2,
             },
         )
@@ -5330,23 +5330,14 @@ class TestHardPolicyIntersection:
         hard_errors = [e for e in errors if "hard_policy" in e.field_path]
         assert not hard_errors
 
-    def test_flavor_policy_beats_accepted(self) -> None:
-        """Intersection of flavor-policy beats passes hard-policy check."""
-        from questfoundry.graph.grow_algorithms import check_intersection_compatibility
-
-        graph = self._make_two_dilemma_graph(d1_policy="flavor", d2_policy="flavor")
-        errors = check_intersection_compatibility(graph, ["beat::b1", "beat::b2"])
-        hard_errors = [e for e in errors if "hard_policy" in e.field_path]
-        assert not hard_errors
-
     def test_no_policy_defaults_to_non_hard(self) -> None:
-        """Beats from dilemmas without convergence_policy pass the hard check."""
+        """Beats from dilemmas without dilemma_role pass the hard check."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
 
         graph = self._make_two_dilemma_graph(d1_policy="soft", d2_policy="soft")
-        # Remove convergence_policy to simulate pre-policy graph
-        graph.update_node("dilemma::d1", convergence_policy=None)
-        graph.update_node("dilemma::d2", convergence_policy=None)
+        # Remove dilemma_role to simulate pre-policy graph
+        graph.update_node("dilemma::d1", dilemma_role=None)
+        graph.update_node("dilemma::d2", dilemma_role=None)
         errors = check_intersection_compatibility(graph, ["beat::b1", "beat::b2"])
         hard_errors = [e for e in errors if "hard_policy" in e.field_path]
         assert not hard_errors
@@ -5804,7 +5795,7 @@ class TestFindResidueCandidates:
                 "arc_type": "branch",
                 "paths": ["d1__no"],
                 "sequence": ["beat::opening", "beat::commits_no", "beat::converge"],
-                "convergence_policy": policy,
+                "dilemma_role": policy,
                 "dilemma_convergences": [
                     {
                         "dilemma_id": "dilemma::d1",
@@ -5825,17 +5816,9 @@ class TestFindResidueCandidates:
         assert len(candidates) == 1
         assert candidates[0].passage_id == "passage::converge"
         assert candidates[0].dilemma_id == "dilemma::d1"
-        assert candidates[0].convergence_policy == "soft"
+        assert candidates[0].dilemma_role == "soft"
         assert len(candidates[0].codeword_ids) == 2
         assert candidates[0].dilemma_question == "Trust or betray?"
-
-    def test_flavor_dilemma_found(self) -> None:
-        from questfoundry.graph.grow_algorithms import find_residue_candidates
-
-        graph = self._make_convergence_graph(policy="flavor")
-        candidates = find_residue_candidates(graph)
-        assert len(candidates) == 1
-        assert candidates[0].convergence_policy == "flavor"
 
     def test_hard_dilemma_excluded(self) -> None:
         from questfoundry.graph.grow_algorithms import find_residue_candidates

@@ -72,7 +72,7 @@ def _make_routing_graph(
                 "question": f"Dilemma {di}?",
                 "ending_salience": salience,
                 "residue_weight": weight,
-                "convergence_policy": policy,
+                "dilemma_role": policy,
             },
         )
 

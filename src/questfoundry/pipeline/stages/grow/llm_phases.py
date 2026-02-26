@@ -1095,7 +1095,7 @@ class _LLMPhaseMixin:
             block.append(f"  Dilemma: {candidate.dilemma_id}")
             if candidate.dilemma_question:
                 block.append(f'  Question: "{candidate.dilemma_question}"')
-            block.append(f"  Policy: {candidate.convergence_policy}")
+            block.append(f"  Policy: {candidate.dilemma_role}")
             block.append(f"  Available codewords: {', '.join(candidate.codeword_ids)}")
             convergence_lines.append("\n".join(block))
 

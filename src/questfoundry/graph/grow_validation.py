@@ -1014,8 +1014,8 @@ def _build_beat_dilemma_map(graph: Graph) -> dict[str, set[str]]:
     return beat_dilemmas
 
 
-def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
-    """Verify branch arcs honor their declared convergence_policy per-dilemma.
+def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
+    """Verify branch arcs honor their declared dilemma_role per-dilemma.
 
     For each branch arc, identifies which dilemma paths differ from the spine.
     For each differing dilemma, checks only THAT dilemma's beats against its policy:
@@ -1031,7 +1031,7 @@ def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
     if not arc_nodes:
         return [
             ValidationCheck(
-                name="convergence_policy_compliance",
+                name="dilemma_role_compliance",
                 severity="pass",
                 message="No arcs to check",
             )
@@ -1089,8 +1089,8 @@ def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
             dnode = dilemma_nodes.get(dilemma_id)
             if not dnode:
                 continue
-            policy = dnode.get("convergence_policy")
-            if policy is None or policy == "flavor":
+            policy = dnode.get("dilemma_role")
+            if policy is None:
                 continue
 
             checked += 1
@@ -1104,7 +1104,7 @@ def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
             if policy == "hard" and shared:
                 violations.append(
                     ValidationCheck(
-                        name="convergence_policy_compliance",
+                        name="dilemma_role_compliance",
                         severity="fail",
                         message=(
                             f"{arc_id}: hard policy violated for {dilemma_id} — "
@@ -1117,7 +1117,7 @@ def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
                 if len(exclusive) < budget:
                     violations.append(
                         ValidationCheck(
-                            name="convergence_policy_compliance",
+                            name="dilemma_role_compliance",
                             severity="warn",
                             message=(
                                 f"{arc_id}: soft policy for {dilemma_id} — "
@@ -1130,9 +1130,9 @@ def check_convergence_policy_compliance(graph: Graph) -> list[ValidationCheck]:
         return violations
     return [
         ValidationCheck(
-            name="convergence_policy_compliance",
+            name="dilemma_role_compliance",
             severity="pass",
-            message=f"All {checked} dilemma-arc pair(s) comply with convergence policy"
+            message=f"All {checked} dilemma-arc pair(s) comply with dilemma role and payoff budget"
             if checked
             else "No branch arcs with convergence metadata to check",
         )
@@ -1574,7 +1574,7 @@ def run_all_checks(graph: Graph) -> ValidationReport:
         check_forward_path_reachability(graph),
     ]
     checks.extend(check_commits_timing(graph))
-    checks.extend(check_convergence_policy_compliance(graph))
+    checks.extend(check_dilemma_role_compliance(graph))
     checks.extend(check_routing_coverage(graph))
     checks.extend(check_prose_neutrality(graph))
     return ValidationReport(checks=checks)

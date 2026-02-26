@@ -650,14 +650,15 @@ dilemma_analyses_prompt: |
 
   ## Why This Matters
 
-  Only `hard` dilemmas multiply story endings. `soft` and `flavor` dilemmas
+  Only `hard` dilemmas multiply story endings. `soft` dilemmas
   add mid-story variety but converge back, so they do not increase arc count.
 
   ## Expected Distribution
 
   Most dilemmas should be `soft` (different middles, same ending). Target
   1-3 `hard` dilemmas per story — every story benefits from at least one
-  structural branch point. Use `flavor` for cosmetic-only differences.
+  structural branch point. Use `soft` with `residue_weight: "cosmetic"`
+  for cosmetic-only differences.
   Each `hard` dilemma DOUBLES the ending count: 2 hard = 4 endings,
   3 hard = 8 endings (unmanageable beyond 3).
 
@@ -672,8 +673,7 @@ dilemma_analyses_prompt: |
 
   ### Pass 2: Classify the rest
   For each remaining dilemma, ask: "Could the SAME scene plausibly follow BOTH answers?"
-  - YES, with meaningful differences -> `soft` (most common)
-  - YES, nearly identical -> `flavor` (cosmetic only)
+  - YES, with meaningful or cosmetic differences -> `soft` (most common)
   - NO, world states are incompatible -> `hard` (max 3 total including Pass 1)
 
   ## Convergence Policies
@@ -686,8 +686,8 @@ dilemma_analyses_prompt: |
   investigate alone vs recruit help, reveal information vs keep it secret
   (when both paths eventually reach the same confrontation).
 
-  **flavor** -- Different tone. Paths converge immediately and differ only
-  in dialogue style, description color, or cosmetic details.
+  **soft with cosmetic residue** -- Different tone. Paths converge and differ only
+  in dialogue style, description color, or cosmetic details. Set `residue_weight: "cosmetic"`.
   Examples: polite vs blunt greeting, left door vs right door (same room),
   diplomatic vs forceful persuasion with identical outcome.
 
@@ -706,19 +706,19 @@ dilemma_analyses_prompt: |
   - Revealed vs hidden information (usually `soft` — both paths can reach
     the same conclusion, UNLESS the revelation irrevocably changes identity
     or allegiance, in which case the triggers above apply)
-  - Different emotional tones (that is `flavor` or `soft`)
+  - Different emotional tones (that is `soft`)
   - Choosing different allies or methods (usually `soft` — the destination is the same)
 
   ## payoff_budget
 
   Minimum exclusive beats before convergence (2-6).
-  - `flavor`: always 2
+  - `soft` with cosmetic residue: always 2
   - `soft`: 3-4 (standard), 5 (deep divergence)
   - `hard`: 5-6 (paths stay separate through distinct endings)
 
   ## Convergence Point
 
-  For `soft` and `flavor`: a **location-based, concrete** description of
+  For `soft`: a **location-based, concrete** description of
   where paths physically merge.
   GOOD: "paths converge at archive_vault where evidence is revealed"
   BAD: "paths merge emotionally in the final act" (abstract)
@@ -731,7 +731,7 @@ dilemma_analyses_prompt: |
   ## Ending Salience
 
   How much should story ENDINGS differ based on this dilemma?
-  This is SEPARATE from convergence_policy. A `soft` dilemma CAN have
+  This is SEPARATE from dilemma_role. A `soft` dilemma CAN have
   `high` ending salience (paths converge mid-story but endings still
   differ). A `hard` dilemma CAN have `low` ending salience (paths stay
   separate but share the same ending tone/feeling).
@@ -782,7 +782,7 @@ dilemma_analyses_prompt: |
 
   Only meaningful when `ending_salience` is `high`. When `ending_salience`
   is `low` or `none`, set `ending_tone` to null regardless of
-  `convergence_policy`.
+  `dilemma_role`.
 
   For dilemmas with `ending_salience: "high"`: provide a 2-5 word
   emotional descriptor for how endings shaped by this dilemma should feel.
@@ -812,7 +812,7 @@ dilemma_analyses_prompt: |
     "dilemma_analyses": [
       {{
         "dilemma_id": "dilemma::example_soft",
-        "convergence_policy": "soft",
+        "dilemma_role": "soft",
         "payoff_budget": 3,
         "reasoning": "Trust vs suspicion changes the relationship tone but both paths lead to the same confrontation.",
         "convergence_point": "paths converge at council_chamber for the final confrontation",
@@ -822,8 +822,8 @@ dilemma_analyses_prompt: |
         "ending_tone": null
       }},
       {{
-        "dilemma_id": "dilemma::example_flavor",
-        "convergence_policy": "flavor",
+        "dilemma_id": "dilemma::example_cosmetic",
+        "dilemma_role": "soft",
         "payoff_budget": 2,
         "reasoning": "Polite vs blunt greeting changes dialogue tone but leads to the same meeting outcome.",
         "convergence_point": "paths converge at the tavern entrance after introductions",
@@ -834,7 +834,7 @@ dilemma_analyses_prompt: |
       }},
       {{
         "dilemma_id": "dilemma::example_hard",
-        "convergence_policy": "hard",
+        "dilemma_role": "hard",
         "payoff_budget": 5,
         "reasoning": "Murder vs accident produces incompatible crime scenes, suspect lists, and endings — no shared scene can follow both.",
         "convergence_point": null,
@@ -857,13 +857,13 @@ dilemma_analyses_prompt: |
   - `reasoning` must be 1-2 sentences explaining WHY (reference the question/stakes)
   - GOOD reasoning: "Homicide vs accident creates incompatible suspect lists and requires different endings."
   - BAD reasoning: "It is soft." / "Only one path."
-  - `convergence_point`: null for `hard`; location-based description for `soft`/`flavor`
+  - `convergence_point`: null for `hard`; location-based description for `soft`
   - `residue_note`: null for `hard` or if no differences persist; short description otherwise
   - `ending_salience`: "low" for most dilemmas (default); "high" for 1-2 dilemmas whose choice should shape endings; "none" for cosmetic-only choices
-  - `ending_salience` is INDEPENDENT of `convergence_policy` — a `soft` dilemma can be `high`, a `hard` dilemma can be `low`
+  - `ending_salience` is INDEPENDENT of `dilemma_role` — a `soft` dilemma can be `high`, a `hard` dilemma can be `low`
   - `ending_tone`: required when `ending_salience` is "high", null otherwise
   - `residue_weight`: "light" for most dilemmas (default); "heavy" for 1-2 dilemmas whose outcome must persist in shared mid-story prose; "cosmetic" for choices with no lasting trace
-  - `residue_weight` is INDEPENDENT of `convergence_policy` and `ending_salience` — a `soft` dilemma with `high` ending_salience can have `cosmetic` residue_weight
+  - `residue_weight` is INDEPENDENT of `dilemma_role` and `ending_salience` — a `soft` dilemma with `high` ending_salience can have `cosmetic` residue_weight
 
   ## Self-Check
   Count your classifications and verify ALL of these:
@@ -881,9 +881,9 @@ dilemma_analyses_prompt: |
   STEP 1: Find your STRONGEST dilemma — the one where answers create the MOST
   incompatible world states. Classify it as `hard`.
   STEP 2: For each remaining dilemma, ask: "Could the SAME scene follow both answers?"
-    YES with differences -> soft. YES nearly identical -> flavor.
+    YES with differences -> soft. YES nearly identical -> soft with residue_weight: cosmetic.
     NO (incompatible world states) -> hard (max 3 total).
-  STEP 3: Count. You should have 1-3 hard, majority soft, 0-2 flavor.
+  STEP 3: Count. You should have 1-3 hard, majority soft.
   If you have 0 hard, go back to STEP 1.
   Set `ending_salience` and `residue_weight` for EVERY dilemma (required fields).
   Set `ending_tone` ONLY when `ending_salience` is "high", null otherwise.

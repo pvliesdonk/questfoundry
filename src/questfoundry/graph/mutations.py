@@ -1804,7 +1804,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 )
             data = analysis or {}
             update_fields: dict[str, Any] = {
-                "convergence_policy": data.get("convergence_policy", "soft"),
+                "dilemma_role": data.get("dilemma_role", "soft"),
                 "payoff_budget": data.get("payoff_budget", 2),
             }
             for key in (
