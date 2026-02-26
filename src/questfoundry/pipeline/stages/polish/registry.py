@@ -1,19 +1,19 @@
-"""Phase registry with decorator-based dependency validation for GROW.
+"""Phase registry with decorator-based dependency validation for POLISH.
 
-Phases register via the ``@grow_phase`` decorator at import time. The registry
+Phases register via the ``@polish_phase`` decorator at import time. The registry
 validates the dependency DAG and produces a stable topological execution order.
 
 Usage::
 
-    @grow_phase(name="validate_dag", is_deterministic=True)
-    async def phase_validate_dag(graph, model):
+    @polish_phase(name="beat_reordering")
+    async def phase_beat_reordering(graph, model):
         ...
 
-    @grow_phase(name="passages", depends_on=["collapse_linear_beats"], is_deterministic=True)
-    async def phase_passages(graph, model):
+    @polish_phase(name="plan_computation", depends_on=["character_arcs"], is_deterministic=True)
+    async def phase_plan_computation(graph, model):
         ...
 
-The execution order is produced by ``get_registry().execution_order()``.
+The execution order is produced by ``get_polish_registry().execution_order()``.
 """
 
 from __future__ import annotations
@@ -26,31 +26,24 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-# Re-export for backward compatibility
-__all__ = ["PHASE_META_ATTR", "PhaseMeta", "PhaseRegistry", "get_registry", "grow_phase"]
-
-# Keep the GROW-specific constant name for backward compatibility
-_PHASE_META_ATTR = PHASE_META_ATTR
-
-
 # -- Module-level singleton ---------------------------------------------------
 
 _registry = PhaseRegistry()
 
 
-def get_registry() -> PhaseRegistry:
-    """Return the module-level phase registry singleton."""
+def get_polish_registry() -> PhaseRegistry:
+    """Return the module-level POLISH phase registry singleton."""
     return _registry
 
 
-def grow_phase(
+def polish_phase(
     name: str,
     *,
     depends_on: list[str] | None = None,
     is_deterministic: bool = False,
     priority: int | None = None,
 ) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
-    """Decorator to register a GROW phase function.
+    """Decorator to register a POLISH phase function.
 
     Args:
         name: Unique phase name (used in execution order and logging).
