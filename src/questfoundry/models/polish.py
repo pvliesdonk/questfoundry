@@ -136,6 +136,97 @@ class Phase3Output(BaseModel):
     character_arcs: list[CharacterArcMetadata] = Field(default_factory=list)
 
 
+# ---------------------------------------------------------------------------
+# Phase 4: Plan Computation — deterministic plan models
+# ---------------------------------------------------------------------------
+
+
+class PassageSpec(BaseModel):
+    """Specification for a passage grouping beats.
+
+    Created during Phase 4a (beat grouping). Each passage groups one
+    or more beats into a single scene.
+    """
+
+    passage_id: str = Field(min_length=1)
+    beat_ids: list[str] = Field(min_length=1)
+    summary: str = Field(default="")
+    entities: list[str] = Field(default_factory=list)
+    grouping_type: str = Field(
+        default="singleton",
+        description="How beats were grouped: intersection, collapse, or singleton",
+    )
+
+
+class VariantSpec(BaseModel):
+    """Specification for a variant passage.
+
+    Created during Phase 4b (feasibility audit) for passages with
+    heavy residue flags that need separate prose per state.
+    """
+
+    base_passage_id: str = Field(min_length=1)
+    variant_id: str = Field(min_length=1)
+    requires: list[str] = Field(
+        default_factory=list,
+        description="State flags that must be active for this variant",
+    )
+    summary: str = Field(default="")
+
+
+class ResidueSpec(BaseModel):
+    """Specification for a residue beat.
+
+    Created during Phase 4b for passages with light/cosmetic residue
+    flags. Residue beats are mood-setting moments before shared passages.
+    """
+
+    target_passage_id: str = Field(min_length=1)
+    residue_id: str = Field(min_length=1)
+    flag: str = Field(min_length=1, description="State flag this residue addresses")
+    path_id: str = Field(default="")
+
+
+class ChoiceSpec(BaseModel):
+    """Specification for a choice edge between passages.
+
+    Created during Phase 4c (choice edge derivation). Labels are
+    populated by Phase 5 (LLM enrichment).
+    """
+
+    from_passage: str = Field(min_length=1)
+    to_passage: str = Field(min_length=1)
+    requires: list[str] = Field(default_factory=list)
+    grants: list[str] = Field(default_factory=list)
+    label: str = Field(default="")
+
+
+class FalseBranchCandidate(BaseModel):
+    """A stretch of passages that could benefit from false branching.
+
+    Identified in Phase 4d. The decision (skip/diamond/sidetrack)
+    is made by the LLM in Phase 5.
+    """
+
+    passage_ids: list[str] = Field(min_length=1)
+    context_summary: str = Field(default="")
+
+
+class FalseBranchSpec(BaseModel):
+    """Specification for a false branch decision.
+
+    Populated by Phase 5 (LLM enrichment) based on candidates
+    from Phase 4d.
+    """
+
+    candidate_passage_ids: list[str] = Field(min_length=1)
+    branch_type: str = Field(
+        min_length=1,
+        description="skip, diamond, or sidetrack",
+    )
+    details: str = Field(default="")
+
+
 # Note: POLISH phases return the shared PhaseResult from models.pipeline.
 # Stage-specific result models (PolishResult) are added in later PRs
 # when passage/choice counts are available.
