@@ -3309,8 +3309,12 @@ def apply_intersection_mark(
     """
     # Derive a stable group ID from the sorted beat IDs
     sorted_ids = sorted(beat_ids)
-    raw_group_id = "_".join(strip_scope_prefix(b) for b in sorted_ids)
+    raw_group_id = "--".join(strip_scope_prefix(b) for b in sorted_ids)
     group_node_id = f"intersection_group::{raw_group_id}"
+
+    # Idempotency: skip if this group already exists (same beat pair proposed twice)
+    if graph.get_node(group_node_id) is not None:
+        return
 
     # Build group node data
     group_data: dict[str, Any] = {

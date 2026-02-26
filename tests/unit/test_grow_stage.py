@@ -570,6 +570,10 @@ class TestPhase3Knots:
         assert len(mentor_edges) == 1
         assert len(artifact_edges) == 1
 
+        # Verify beat locations were updated
+        assert graph.get_node("beat::mentor_meet")["location"] == "market"
+        assert graph.get_node("beat::artifact_discover")["location"] == "market"
+
     @pytest.mark.asyncio
     async def test_phase_3_resolves_location_when_missing(self) -> None:
         """Phase 3 resolves location when LLM leaves it null."""

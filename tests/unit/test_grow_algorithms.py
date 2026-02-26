@@ -3184,6 +3184,26 @@ class TestApplyKnotMark:
         assert mentor["location"] == "market"
         assert artifact["location"] == "market"
 
+    def test_idempotent_when_called_twice(self) -> None:
+        """Calling apply_intersection_mark twice with same beats is a no-op."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        apply_intersection_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            "market",
+        )
+        # Second call should not crash or create duplicates
+        apply_intersection_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            "market",
+        )
+        group_nodes = graph.get_nodes_by_type("intersection_group")
+        assert len(group_nodes) == 1
+
     def test_no_location_leaves_beats_unchanged(self) -> None:
         """When resolved_location is None, beat location is not modified."""
         from questfoundry.graph.grow_algorithms import apply_intersection_mark
