@@ -275,33 +275,12 @@ def _prune_demoted_dilemmas(
         c for c in seed_output.consequences if strip_scope_prefix(c.path_id) not in paths_to_drop
     ]
 
-    # 3. Filter and update beats
-    pruned_beats: list[InitialBeat] = []
-    for beat in seed_output.initial_beats:
-        # Get paths that aren't being dropped (compare raw IDs).
-        # Original ID format (scoped or raw) is intentionally preserved to maintain
-        # consistency with how the artifact was originally generated.
-        kept_paths = [p for p in beat.paths if strip_scope_prefix(p) not in paths_to_drop]
-
-        if kept_paths:
-            # Beat serves at least one kept path
-            if len(kept_paths) < len(beat.paths):
-                # Some paths were dropped - update the beat
-                pruned_beats.append(
-                    InitialBeat(
-                        beat_id=beat.beat_id,
-                        summary=beat.summary,
-                        paths=kept_paths,
-                        dilemma_impacts=beat.dilemma_impacts,
-                        entities=beat.entities,
-                        location=beat.location,
-                        location_alternatives=beat.location_alternatives,
-                    )
-                )
-            else:
-                # All paths kept - use as-is
-                pruned_beats.append(beat)
-        # else: beat only served dropped paths - discard it
+    # 3. Filter beats — each beat belongs to exactly one path
+    pruned_beats: list[InitialBeat] = [
+        beat
+        for beat in seed_output.initial_beats
+        if strip_scope_prefix(beat.path_id) not in paths_to_drop
+    ]
 
     dropped_beat_count = len(seed_output.initial_beats) - len(pruned_beats)
     if dropped_beat_count > 0:

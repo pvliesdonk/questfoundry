@@ -380,7 +380,7 @@ beats_prompt: |
   ## CRITICAL: ID CONSTRAINTS (read first!)
 
   The brief contains valid ID lists. You MUST copy IDs exactly from these lists:
-  - `## VALID PATH IDs` - use ONLY these in `paths` arrays
+  - `## VALID PATH IDs` - use ONLY these in `path_id` field
   - `### Entity IDs` - use ONLY these in `entities` and `location` fields
 
   ## PATH ID vs DILEMMA ID: THE CRITICAL DISTINCTION
@@ -390,8 +390,8 @@ beats_prompt: |
   - **Dilemma IDs** are BINARY questions: `dilemma::subject_optionA_or_optionB` (contains `_or_`)
   - **Entity IDs** have CATEGORY prefix: `character::name`, `location::place`, `object::item`
 
-  WRONG: Using `dilemma::...` in the `paths[]` field
-  RIGHT: Using `path::...` in the `paths[]` field
+  WRONG: Using `dilemma::...` in the `path_id` field
+  RIGHT: Using `path::...` in the `path_id` field
 
   WRONG: Using `path::...` in the `dilemma_impacts.dilemma_id` field
   RIGHT: Using `dilemma::...` in the `dilemma_impacts.dilemma_id` field
@@ -412,7 +412,7 @@ beats_prompt: |
       {
         "beat_id": "unique_beat_id",
         "summary": "What happens in this beat",
-        "paths": ["path::[your_path_id]", "path::[another_path]"],
+        "path_id": "path::[your_path_id]",
         "dilemma_impacts": [
           {
             "dilemma_id": "dilemma::[your_dilemma_id]",
@@ -486,7 +486,7 @@ beats_prompt: |
 
   | Field | Prefix | Source List | Shape |
   |-------|--------|-------------|-------|
-  | `paths[]` | `path::` | VALID PATH IDs | hierarchical: `dilemma__answer` |
+  | `path_id` | `path::` | VALID PATH IDs | hierarchical: `dilemma__answer` |
   | `dilemma_impacts.dilemma_id` | `dilemma::` | Dilemma IDs | long: `subject_X_or_Y` |
   | `entities[]` | `character::`, `object::`, `faction::` | Entity IDs (non-locations) | varies |
   | `location` | `location::` | Entity IDs (locations only) | varies |
@@ -520,10 +520,10 @@ beats_prompt: |
 
   ## FINAL CHECK (verify before output)
   Before returning JSON, check each beat one by one:
-  1. Every `paths` item appears in VALID PATH IDs (hierarchical format)
+  1. Every `path_id` appears in VALID PATH IDs (hierarchical format)
   2. Every `dilemma_impacts.dilemma_id` appears in Dilemma IDs (long binary questions)
   3. Every `dilemma_impacts.dilemma_id` contains `_or_` — if it doesn't, you used an entity ID by mistake
-  4. For EACH beat: look up the beat's path in PATH → DILEMMA MAPPING.
+  4. For EACH beat: look up the beat's `path_id` in PATH → DILEMMA MAPPING.
      Does the beat's dilemma_impacts include that mapped dilemma? If NO, fix it.
   5. For EACH path: does at least one of its beats have `effect: "commits"`
      with that path's parent dilemma? If NO, add or fix one.
@@ -544,7 +544,7 @@ per_path_beats_prompt: |
 
   You are generating beats for path: `{path_id}`
 
-  The `paths` field in EVERY beat MUST contain EXACTLY: `["{path_id}"]`
+  The `path_id` field in EVERY beat MUST be EXACTLY: `"{path_id}"`
 
   ## COMMON MISTAKE - DO NOT MAKE THIS ERROR
 
@@ -553,21 +553,21 @@ per_path_beats_prompt: |
 
   WRONG OUTPUT (will fail validation):
   ```json
-  "paths": ["{dilemma_id}"]  // WRONG! This is a DILEMMA ID
+  "path_id": "{dilemma_id}"  // WRONG! This is a DILEMMA ID
   ```
 
   CORRECT OUTPUT:
   ```json
-  "paths": ["{path_id}"]  // RIGHT! This is the PATH ID
+  "path_id": "{path_id}"  // RIGHT! This is the PATH ID
   ```
 
-  RULE: Dilemma IDs go in `dilemma_impacts[].dilemma_id`, never in `paths`.
+  RULE: Dilemma IDs go in `dilemma_impacts[].dilemma_id`, never in `path_id`.
 
   ## YOUR DILEMMA ID (for dilemma_impacts only)
 
   Parent dilemma: `{dilemma_id}`
 
-  This goes in `dilemma_impacts[].dilemma_id`, NOT in `paths`.
+  This goes in `dilemma_impacts[].dilemma_id`, NOT in `path_id`.
 
   ## BEAT ID NAMING (CRITICAL - ensures uniqueness)
 
@@ -586,7 +586,7 @@ per_path_beats_prompt: |
 
   ALL beats you generate MUST:
   1. Have beat_id starting with `{path_name}_beat_` (see BEAT ID NAMING above)
-  2. Have `paths: ["{path_id}"]` (exactly this path ID)
+  2. Have `path_id: "{path_id}"` (exactly this path ID)
   3. Have at least one dilemma_impact with `dilemma_id: "{dilemma_id}"`
   4. Include at least one beat with `effect: "commits"` for `{dilemma_id}`
 
@@ -598,7 +598,7 @@ per_path_beats_prompt: |
       {{
         "beat_id": "{path_name}_beat_01",
         "summary": "What happens in this beat",
-        "paths": ["{path_id}"],
+        "path_id": "{path_id}",
         "dilemma_impacts": [
           {{
             "dilemma_id": "{dilemma_id}",
@@ -623,7 +623,7 @@ per_path_beats_prompt: |
   ## Rules
   - Generate exactly 2-4 beats for path `{path_id}`
   - Beat IDs MUST start with `{path_name}_beat_` (e.g., `{path_name}_beat_01`)
-  - EVERY beat must include `{path_id}` in its `paths` array
+  - EVERY beat must have `path_id: "{path_id}"`
   - EVERY beat must have at least one dilemma_impact for `{dilemma_id}`
   - At least ONE beat must have `effect: "commits"` for `{dilemma_id}`
   - effect must be "advances", "reveals", "commits", or "complicates"
@@ -643,15 +643,15 @@ per_path_beats_prompt: |
   - Do NOT reference other dilemma_ids in your first dilemma_impact
   - Do NOT skip the commits beat
   - Do NOT use IDs not in the manifest
-  - Do NOT put the dilemma ID in the `paths` field (see COMMON MISTAKE above)
+  - Do NOT put the dilemma ID in the `path_id` field (see COMMON MISTAKE above)
 
   ## FINAL VERIFICATION (check before outputting)
 
   For EACH beat you generate, verify:
-  1. `paths` contains `{path_id}`
+  1. `path_id` is `{path_id}`
   2. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
 
-  If you see a dilemma ID in your `paths` value, YOU MADE A MISTAKE. Fix it.
+  If you see a dilemma ID in your `path_id` value, YOU MADE A MISTAKE. Fix it.
 
   ## Output
   Return ONLY valid JSON with the "initial_beats" array (2-4 beats).

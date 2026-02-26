@@ -205,15 +205,15 @@ class TestConsequencesSectionDedup:
 class TestPathBeatsSectionDedup:
     """PathBeatsSection should deduplicate identical beats."""
 
-    _BEAT_A: ClassVar[dict[str, str | list[str]]] = {
+    _BEAT_A: ClassVar[dict[str, str]] = {
         "beat_id": "beat_a",
         "summary": "Something happens",
-        "paths": ["path::trust_or_betray__trust"],
+        "path_id": "path::trust_or_betray__trust",
     }
-    _BEAT_B: ClassVar[dict[str, str | list[str]]] = {
+    _BEAT_B: ClassVar[dict[str, str]] = {
         "beat_id": "beat_b",
         "summary": "Something else happens",
-        "paths": ["path::trust_or_betray__trust"],
+        "path_id": "path::trust_or_betray__trust",
     }
 
     def test_unique_beats_accepted(self) -> None:
@@ -818,10 +818,10 @@ class TestMakeConstrainedDilemmasSection:
 # TemporalHint and InitialBeat.temporal_hint (#1001)
 # ---------------------------------------------------------------------------
 
-_BEAT_KWARGS: dict[str, str | list[str]] = {
+_BEAT_KWARGS: dict[str, str] = {
     "beat_id": "trust_beat_01",
     "summary": "The protagonist confronts the mentor about the hidden letter.",
-    "paths": ["path::trust_or_betray__trust"],
+    "path_id": "path::trust_or_betray__trust",
 }
 
 
@@ -894,3 +894,43 @@ class TestInitialBeatTemporalHint:
         assert restored.temporal_hint is not None
         assert restored.temporal_hint.relative_to == "dilemma::fight_or_flee"
         assert restored.temporal_hint.position == "before_introduce"
+
+
+# ---------------------------------------------------------------------------
+# InitialBeat.path_id (singular path, #983)
+# ---------------------------------------------------------------------------
+
+
+class TestInitialBeatPathId:
+    """InitialBeat.path_id enforces singular path ownership."""
+
+    def test_path_id_stored(self) -> None:
+        beat = InitialBeat(
+            beat_id="b1",
+            summary="Test",
+            path_id="path::trust__yes",
+        )
+        assert beat.path_id == "path::trust__yes"
+
+    def test_legacy_paths_list_migrated(self) -> None:
+        """Legacy single-element paths list is accepted and migrated."""
+        beat = InitialBeat(
+            beat_id="b1",
+            summary="Test",
+            paths=["path::trust__yes"],
+        )
+        assert beat.path_id == "path::trust__yes"
+
+    def test_legacy_multi_paths_warns(self) -> None:
+        """Multi-element paths list triggers deprecation warning, uses first."""
+        with pytest.warns(DeprecationWarning, match="had 2 entries"):
+            beat = InitialBeat(
+                beat_id="b1",
+                summary="Test",
+                paths=["path::a__x", "path::b__y"],
+            )
+        assert beat.path_id == "path::a__x"
+
+    def test_empty_path_id_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="path_id"):
+            InitialBeat(beat_id="b1", summary="Test", path_id="")

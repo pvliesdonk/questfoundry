@@ -235,13 +235,13 @@ class TemporalHint(BaseModel):
 class InitialBeat(BaseModel):
     """Initial beat created by SEED.
 
-    Beats are narrative units belonging to one or more paths. SEED creates
-    the initial beats for each path; GROW mutates and adds more.
+    Each beat belongs to exactly one path (single ``belongs_to`` edge in the
+    graph).  SEED creates initial beats per path; GROW mutates and adds more.
 
     Attributes:
-        id: Unique identifier for the beat.
+        beat_id: Unique identifier for the beat.
         summary: What happens in this beat.
-        paths: Path IDs this beat serves.
+        path_id: The single path this beat belongs to.
         dilemma_impacts: How this beat affects dilemmas.
         entities: Entity IDs present in this beat.
         location: Primary location entity ID.
@@ -251,10 +251,33 @@ class InitialBeat(BaseModel):
 
     beat_id: str = Field(min_length=1, description="Unique identifier for this beat")
     summary: str = Field(min_length=1, description="What happens in this beat")
-    paths: list[str] = Field(
+    path_id: str = Field(
         min_length=1,
-        description="Path IDs this beat serves",
+        description="Path ID this beat belongs to (single belongs_to edge)",
     )
+
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_paths_to_path_id(cls, data: Any) -> Any:
+        """Accept legacy ``paths: [single_id]`` and convert to ``path_id``."""
+        if not isinstance(data, dict):
+            return data
+        if "paths" in data and "path_id" not in data:
+            paths = data.pop("paths")
+            if isinstance(paths, list) and len(paths) == 1:
+                data["path_id"] = paths[0]
+            elif isinstance(paths, list) and len(paths) > 1:
+                import warnings
+
+                warnings.warn(
+                    f"InitialBeat.paths had {len(paths)} entries; using first. "
+                    "Multi-path beats are handled via intersection groups.",
+                    DeprecationWarning,
+                    stacklevel=2,
+                )
+                data["path_id"] = paths[0]
+        return data
+
     dilemma_impacts: list[DilemmaImpact] = Field(
         default_factory=list,
         description="How this beat affects dilemmas",

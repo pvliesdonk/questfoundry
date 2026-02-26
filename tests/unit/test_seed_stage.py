@@ -130,7 +130,7 @@ async def test_execute_calls_all_three_phases() -> None:
                 {
                     "beat_id": "beat1",
                     "summary": "Opening beat",
-                    "paths": ["path::trust__yes"],
+                    "path_id": "path::trust__yes",
                 }
             ],
         )
@@ -382,7 +382,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
                 {
                     "beat_id": "beat1",
                     "summary": "Test beat",
-                    "paths": ["path::t1__a1"],
+                    "path_id": "path::t1__a1",
                 }
             ],
         )
@@ -478,7 +478,7 @@ def test_seed_output_model_validates() -> None:
             {
                 "beat_id": "beat1",
                 "summary": "Opening scene",
-                "paths": ["path::trust__yes"],
+                "path_id": "path::trust__yes",
             }
         ],
     )
