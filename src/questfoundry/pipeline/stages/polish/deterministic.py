@@ -567,7 +567,9 @@ def _store_plan(graph: Graph, plan: PolishPlan) -> None:
 # ---------------------------------------------------------------------------
 
 
-@polish_phase(name="plan_application", depends_on=["llm_enrichment"], priority=5)
+@polish_phase(
+    name="plan_application", depends_on=["llm_enrichment"], priority=5, is_deterministic=True
+)
 async def phase_plan_application(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
@@ -887,6 +889,74 @@ def _apply_sidetrack(graph: Graph, fb_spec: FalseBranchSpec) -> tuple[int, int]:
     graph.add_edge("choice", sidetrack_passage_id, to_passage, label=return_label)
 
     return (1, 2)  # 1 sidetrack beat, 2 choice edges
+
+
+# ---------------------------------------------------------------------------
+# Phase 7: Validation (registered as @polish_phase)
+# ---------------------------------------------------------------------------
+
+
+@polish_phase(name="validation", depends_on=["plan_application"], priority=6, is_deterministic=True)
+async def phase_validation(
+    graph: Graph,
+    model: BaseChatModel,  # noqa: ARG001
+) -> PhaseResult:
+    """Phase 7: Validate the complete passage graph.
+
+    Runs structural, variant, choice, and feasibility checks on the
+    passage layer created by Phase 6. Failures indicate bugs in
+    Phases 4-6 or insufficient GROW output.
+    """
+    from questfoundry.graph.polish_validation import validate_polish_output
+
+    errors = validate_polish_output(graph)
+
+    if errors:
+        detail = f"{len(errors)} validation error(s): {'; '.join(errors[:3])}"
+        if len(errors) > 3:
+            detail += f" (and {len(errors) - 3} more)"
+        log.warning("phase7_validation_failed", errors=len(errors))
+        return PhaseResult(
+            phase="validation",
+            status="failed",
+            detail=detail,
+        )
+
+    # Collect summary stats for PolishResult
+    passage_nodes = graph.get_nodes_by_type("passage")
+    passage_count = len(passage_nodes)
+    choice_count = len(graph.get_edges(edge_type="choice"))
+    variant_count = sum(1 for p in passage_nodes.values() if p.get("is_variant"))
+    residue_count = sum(1 for p in passage_nodes.values() if p.get("is_residue"))
+
+    beat_nodes = graph.get_nodes_by_type("beat")
+    sidetrack_count = sum(1 for b in beat_nodes.values() if b.get("role") == "sidetrack_beat")
+
+    # Count false branches from diamond_alt and sidetrack passages
+    false_branch_count = sum(1 for p in passage_nodes.values() if p.get("is_diamond_alt")) + sum(
+        1 for p in passage_nodes.values() if p.get("is_sidetrack")
+    )
+
+    detail = (
+        f"Validation passed: {passage_count} passages, {choice_count} choices, "
+        f"{variant_count} variants, {residue_count} residue, "
+        f"{sidetrack_count} sidetracks, {false_branch_count} false branches"
+    )
+    log.info(
+        "phase7_validation_passed",
+        passages=passage_count,
+        choices=choice_count,
+        variants=variant_count,
+        residues=residue_count,
+        sidetracks=sidetrack_count,
+        false_branches=false_branch_count,
+    )
+
+    return PhaseResult(
+        phase="validation",
+        status="completed",
+        detail=detail,
+    )
 
 
 # ---------------------------------------------------------------------------
