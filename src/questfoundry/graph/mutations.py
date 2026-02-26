@@ -157,6 +157,7 @@ class SeedErrorCategory(Enum):
     - INNER: Schema/type errors - retry with Pydantic feedback
     - SEMANTIC: Invalid ID references - retry with valid ID list
     - COMPLETENESS: Missing items - retry with manifest counts
+    - WARNING: Non-blocking issues (logged but don't prevent mutation)
     - FATAL: Reserved for unrecoverable errors (corruption, impossible states)
     """
 
@@ -166,6 +167,7 @@ class SeedErrorCategory(Enum):
     CROSS_REFERENCE = (
         auto()
     )  # Cross-section ID mismatch (e.g. path answer_id not in dilemma explored)
+    WARNING = auto()  # Non-blocking scaffold warnings (e.g., minimal arc structure)
     # FATAL is reserved for future use - e.g., graph corruption that requires
     # manual intervention. Currently no errors are classified as FATAL since
     # all known error types can be retried with appropriate feedback.
@@ -1063,6 +1065,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
     11. All dilemmas have at least one path (completeness)
     12. Each beat references its path's parent dilemma in dilemma_impacts
     13. Each path has at least one beat with effect="commits" for its dilemma
+    14. Each path has advances/reveals beat before commit (WARNING, non-blocking)
+    15. Each path has at least one beat after commit (WARNING, non-blocking)
 
     Args:
         graph: Graph containing BRAINSTORM data (entities, dilemmas, answers).
@@ -1515,7 +1519,10 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
 
     # 12. Check beats reference their path's parent dilemma
     # 13. Check each path has at least one commits beat for its dilemma
+    # Also collect per-path beat data for arc structure checks (14, 15)
     paths_with_commits: set[str] = set()  # path_ids that have a commits beat
+    # Per-path: list of (beat_index, effects_set) for parent dilemma impacts
+    path_beat_effects: dict[str, list[tuple[int, set[str]]]] = {}
     for i, beat in enumerate(output.get("initial_beats", [])):
         # Resolve beat's path (singular path_id, with legacy paths fallback)
         raw_pid = _get_path_id_from_beat(beat)
@@ -1526,12 +1533,16 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         # Collect normalized dilemma_ids referenced in this beat's impacts
         beat_impact_dilemmas: set[str] = set()
         beat_impact_commits_dilemmas: set[str] = set()
+        # Effects keyed by normalized dilemma_id
+        beat_effects_by_dilemma: dict[str, set[str]] = {}
         for impact in beat.get("dilemma_impacts", []):
             raw_did = impact.get("dilemma_id")
             if raw_did:
                 normalized_did, _ = _normalize_id(raw_did, "dilemma")
                 beat_impact_dilemmas.add(normalized_did)
-                if impact.get("effect") == "commits":
+                effect = impact.get("effect", "")
+                beat_effects_by_dilemma.setdefault(normalized_did, set()).add(effect)
+                if effect == "commits":
                     beat_impact_commits_dilemmas.add(normalized_did)
 
         # Check the beat references its path's parent dilemma
@@ -1560,6 +1571,10 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
         if expected_dilemma in beat_impact_commits_dilemmas:
             paths_with_commits.add(normalized_pid)
 
+            # Track beat effects for arc structure checks
+            effects = beat_effects_by_dilemma.get(expected_dilemma, set())
+            path_beat_effects.setdefault(path_id, []).append((i, effects))
+
     # Report paths missing commits beats
     for path_id in sorted(path_dilemma_map.keys()):
         if path_id not in paths_with_commits:
@@ -1576,6 +1591,69 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     available=[expected_dilemma],
                     provided="",
                     category=SeedErrorCategory.COMPLETENESS,
+                )
+            )
+
+    # 14. Check arc structure: advances/reveals before commit (WARNING)
+    # 15. Check arc structure: beat exists after commit (WARNING)
+    # Doc 1 Part 2: "This scaffold must be complete — the arc from beginning
+    # to end must be present."
+    for path_id in sorted(path_dilemma_map.keys()):
+        if path_id not in paths_with_commits:
+            continue  # No commit beat; already reported as error in check 13
+
+        beat_entries = path_beat_effects.get(path_id, [])
+        if not beat_entries:
+            continue
+
+        # Find the index of the first commit beat for this path
+        commit_index: int | None = None
+        for beat_idx, effects in beat_entries:
+            if "commits" in effects:
+                commit_index = beat_idx
+                break
+
+        if commit_index is None:
+            continue  # Shouldn't happen given paths_with_commits check
+
+        # 14. Check for advances/reveals before the commit beat
+        has_pre_commit_development = any(
+            effects & {"advances", "reveals"}
+            for beat_idx, effects in beat_entries
+            if beat_idx < commit_index
+        )
+        if not has_pre_commit_development:
+            expected_dilemma = path_dilemma_map[path_id]
+            errors.append(
+                SeedValidationError(
+                    field_path=f"paths.{path_id}.arc_structure",
+                    issue=(
+                        f"Path '{path_id}' has no beat with effect 'advances' "
+                        f"or 'reveals' before its commit beat for dilemma "
+                        f"'{expected_dilemma}'. A complete arc should develop "
+                        f"the dilemma before committing to a resolution."
+                    ),
+                    available=["advances", "reveals"],
+                    provided="",
+                    category=SeedErrorCategory.WARNING,
+                )
+            )
+
+        # 15. Check for at least one beat after the commit beat
+        has_post_commit_beat = any(beat_idx > commit_index for beat_idx, _effects in beat_entries)
+        if not has_post_commit_beat:
+            expected_dilemma = path_dilemma_map[path_id]
+            errors.append(
+                SeedValidationError(
+                    field_path=f"paths.{path_id}.arc_structure",
+                    issue=(
+                        f"Path '{path_id}' has no beat after its commit beat "
+                        f"for dilemma '{expected_dilemma}'. A complete arc "
+                        f"should include consequence beats after the commit."
+                    ),
+                    available=[],
+                    provided="",
+                    category=SeedErrorCategory.WARNING,
                 )
             )
 
@@ -1610,7 +1688,14 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
     _backfill_explored_from_paths(output)
 
     # Validate cross-references first
-    errors = validate_seed_mutations(graph, output)
+    all_issues = validate_seed_mutations(graph, output)
+    warnings = [e for e in all_issues if e.category == SeedErrorCategory.WARNING]
+    errors = [e for e in all_issues if e.category != SeedErrorCategory.WARNING]
+
+    # Log warnings (non-blocking scaffold issues)
+    for w in warnings:
+        log.warning("seed_scaffold_warning", path=w.field_path, issue=w.issue)
+
     if errors:
         raise SeedMutationError(errors)
 

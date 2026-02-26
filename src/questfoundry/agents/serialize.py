@@ -1118,7 +1118,8 @@ async def serialize_seed_iteratively(
     # Semantic validation (if graph provided)
     if graph is not None:
         for semantic_attempt in range(1, max_semantic_retries + 1):
-            errors = validate_seed_mutations(graph, seed_output.model_dump())
+            all_errors = validate_seed_mutations(graph, seed_output.model_dump())
+            errors = [e for e in all_errors if e.category != SeedErrorCategory.WARNING]
             if not errors:
                 break
 
@@ -1914,26 +1915,29 @@ async def serialize_seed_as_function(
     if graph is not None:
         for semantic_attempt in range(1, max_semantic_retries + 1):
             semantic_errors = validate_seed_mutations(graph, seed_output.model_dump())
-            if not semantic_errors:
+            blocking_errors = [
+                e for e in semantic_errors if e.category != SeedErrorCategory.WARNING
+            ]
+            if not blocking_errors:
                 break
 
             log.warning(
                 "serialize_seed_semantic_errors",
                 attempt=semantic_attempt,
                 max_attempts=max_semantic_retries,
-                error_count=len(semantic_errors),
+                error_count=len(blocking_errors),
             )
             if on_phase_progress is not None:
                 on_phase_progress(
                     "semantic retry",
                     "retry",
-                    f"attempt {semantic_attempt}/{max_semantic_retries}: {len(semantic_errors)} errors",
+                    f"attempt {semantic_attempt}/{max_semantic_retries}: {len(blocking_errors)} errors",
                 )
 
             # Re-serialize only failing sections with corrections in system prompt.
             # _group_errors_by_section also propagates cross-reference errors to
             # upstream sections (e.g., paths answer_id mismatch → retry dilemmas too).
-            section_errors = _group_errors_by_section(semantic_errors)
+            section_errors = _group_errors_by_section(blocking_errors)
             retried_any = False
 
             # Sort sections by dependency order (upstream first) so that
