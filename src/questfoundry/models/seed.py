@@ -30,6 +30,7 @@ DilemmaRole = Literal["hard", "soft"]
 EndingSalience = Literal["high", "low", "none"]
 ResidueWeight = Literal["heavy", "light", "cosmetic"]
 ConstraintType = Literal["shared_entity", "causal_chain", "resource_conflict"]
+TemporalPosition = Literal["before_commit", "after_commit", "before_introduce", "after_introduce"]
 
 
 class EntityDecision(BaseModel):
@@ -200,6 +201,37 @@ class DilemmaImpact(BaseModel):
     note: str = Field(min_length=1, description="Explanation of the impact")
 
 
+class TemporalHint(BaseModel):
+    """Advisory placement hint for a beat relative to another dilemma.
+
+    SEED creates beats for individual paths. A beat's position relative to
+    its own dilemma is clear from its effect (advances/commits/etc.), but
+    its position relative to *other* dilemmas is not yet determined. Temporal
+    hints tell GROW where this beat should fall relative to other dilemmas'
+    key moments.
+
+    Hints are advisory — GROW resolves conflicts in favor of dilemma ordering
+    relationships (wraps/serial/concurrent).
+
+    See docs/design/document-3-ontology.md § Temporal Hints.
+
+    Attributes:
+        relative_to: The dilemma ID this hint is relative to.
+        position: Where this beat should fall relative to the dilemma's key moment.
+    """
+
+    relative_to: str = Field(
+        min_length=1,
+        description="Dilemma ID this hint is relative to",
+    )
+    position: TemporalPosition = Field(
+        description=(
+            "Placement relative to the dilemma: before_commit, after_commit, "
+            "before_introduce, after_introduce"
+        ),
+    )
+
+
 class InitialBeat(BaseModel):
     """Initial beat created by SEED.
 
@@ -214,6 +246,7 @@ class InitialBeat(BaseModel):
         entities: Entity IDs present in this beat.
         location: Primary location entity ID.
         location_alternatives: Other valid locations (enables intersection flexibility).
+        temporal_hint: Advisory placement relative to another dilemma (consumed by GROW).
     """
 
     beat_id: str = Field(min_length=1, description="Unique identifier for this beat")
@@ -237,6 +270,13 @@ class InitialBeat(BaseModel):
     location_alternatives: list[str] = Field(
         default_factory=list,
         description="Other valid locations for intersection flexibility",
+    )
+    temporal_hint: TemporalHint | None = Field(
+        default=None,
+        description=(
+            "Advisory placement relative to another dilemma's key moment. "
+            "Consumed by GROW during interleaving; not carried forward."
+        ),
     )
 
 

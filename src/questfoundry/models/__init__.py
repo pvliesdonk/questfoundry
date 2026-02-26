@@ -111,6 +111,8 @@ from questfoundry.models.seed import (
     PathTier,
     ResidueWeight,
     SeedOutput,
+    TemporalHint,
+    TemporalPosition,
 )
 
 __all__ = [
@@ -199,5 +201,7 @@ __all__ = [
     "SpokeLabelStyle",
     "SpokeLabelUpdate",
     "SpokeProposal",
+    "TemporalHint",
+    "TemporalPosition",
     "VoiceDocument",
 ]

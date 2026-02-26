@@ -13,11 +13,13 @@ from questfoundry.models.seed import (
     DilemmaAnalysisSection,
     DilemmasSection,
     EntitiesSection,
+    InitialBeat,
     InteractionConstraint,
     InteractionConstraintsSection,
     PathBeatsSection,
     PathsSection,
     SeedOutput,
+    TemporalHint,
     make_constrained_dilemmas_section,
 )
 
@@ -810,3 +812,85 @@ class TestMakeConstrainedDilemmasSection:
         """Dilemmas with empty answer lists fall back to unconstrained."""
         schema = make_constrained_dilemmas_section({"trust_or_betray": [], "fight_or_flee": []})
         assert schema is DilemmasSection
+
+
+# ---------------------------------------------------------------------------
+# TemporalHint and InitialBeat.temporal_hint (#1001)
+# ---------------------------------------------------------------------------
+
+_BEAT_KWARGS: dict[str, str | list[str]] = {
+    "beat_id": "trust_beat_01",
+    "summary": "The protagonist confronts the mentor about the hidden letter.",
+    "paths": ["path::trust_or_betray__trust"],
+}
+
+
+class TestTemporalHint:
+    """TemporalHint validates placement hints for beats."""
+
+    def test_valid_hint(self) -> None:
+        hint = TemporalHint(
+            relative_to="dilemma::fight_or_flee",
+            position="before_commit",
+        )
+        assert hint.relative_to == "dilemma::fight_or_flee"
+        assert hint.position == "before_commit"
+
+    @pytest.mark.parametrize(
+        "position",
+        [
+            pytest.param("before_commit", id="before_commit"),
+            pytest.param("after_commit", id="after_commit"),
+            pytest.param("before_introduce", id="before_introduce"),
+            pytest.param("after_introduce", id="after_introduce"),
+        ],
+    )
+    def test_valid_positions(self, position: str) -> None:
+        hint = TemporalHint(relative_to="dilemma::x_or_y", position=position)
+        assert hint.position == position
+
+    def test_invalid_position_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="position"):
+            TemporalHint(relative_to="dilemma::x_or_y", position="during_commit")
+
+    def test_empty_relative_to_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="relative_to"):
+            TemporalHint(relative_to="", position="before_commit")
+
+
+class TestInitialBeatTemporalHint:
+    """InitialBeat.temporal_hint field accepts optional placement hints."""
+
+    def test_temporal_hint_defaults_none(self) -> None:
+        beat = InitialBeat(**_BEAT_KWARGS)
+        assert beat.temporal_hint is None
+
+    def test_temporal_hint_accepted(self) -> None:
+        beat = InitialBeat(
+            **_BEAT_KWARGS,
+            temporal_hint={
+                "relative_to": "dilemma::fight_or_flee",
+                "position": "after_commit",
+            },
+        )
+        assert beat.temporal_hint is not None
+        assert beat.temporal_hint.relative_to == "dilemma::fight_or_flee"
+        assert beat.temporal_hint.position == "after_commit"
+
+    def test_temporal_hint_null_accepted(self) -> None:
+        beat = InitialBeat(**_BEAT_KWARGS, temporal_hint=None)
+        assert beat.temporal_hint is None
+
+    def test_temporal_hint_roundtrip(self) -> None:
+        beat = InitialBeat(
+            **_BEAT_KWARGS,
+            temporal_hint={
+                "relative_to": "dilemma::fight_or_flee",
+                "position": "before_introduce",
+            },
+        )
+        data = beat.model_dump()
+        restored = InitialBeat.model_validate(data)
+        assert restored.temporal_hint is not None
+        assert restored.temporal_hint.relative_to == "dilemma::fight_or_flee"
+        assert restored.temporal_hint.position == "before_introduce"

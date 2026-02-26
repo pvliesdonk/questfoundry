@@ -1774,6 +1774,15 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 prefixed_impact["dilemma_id"] = _prefix_id("dilemma", impact["dilemma_id"])
             prefixed_impacts.append(prefixed_impact)
 
+        # Resolve temporal_hint (prefix dilemma reference)
+        raw_hint = beat.get("temporal_hint")
+        prefixed_hint = None
+        if isinstance(raw_hint, dict) and raw_hint.get("relative_to") and raw_hint.get("position"):
+            prefixed_hint = {
+                "relative_to": _prefix_id("dilemma", raw_hint["relative_to"]),
+                "position": raw_hint["position"],
+            }
+
         beat_data = {
             "type": "beat",
             "raw_id": raw_id,
@@ -1782,6 +1791,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "entities": prefixed_entities,
             "location": prefixed_location,
             "location_alternatives": prefixed_location_alts,
+            "temporal_hint": prefixed_hint,
         }
         beat_data = _clean_dict(beat_data)
         graph.create_node(beat_id, beat_data)

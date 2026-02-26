@@ -1261,6 +1261,196 @@ class TestSeedMutations:
         assert len(edges) == 1
         assert edges[0]["to"] == "path::path_mentor_trust"
 
+    def test_temporal_hint_stored_on_beat(self) -> None:
+        """Temporal hint is stored on beat node with prefixed dilemma ID."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::kay", {"type": "entity", "raw_id": "kay", "concept": "Archivist"}
+        )
+        graph.create_node(
+            "dilemma::mentor_trust",
+            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Trust?"},
+        )
+        # fight_or_flee: referenced by temporal_hint, must also be a brainstorm dilemma
+        graph.create_node(
+            "dilemma::fight_or_flee",
+            {"type": "dilemma", "raw_id": "fight_or_flee", "question": "Fight?"},
+        )
+        graph.create_node(
+            "dilemma::mentor_trust::alt::protector",
+            {"type": "answer", "raw_id": "protector", "description": "Protects"},
+        )
+        graph.add_edge(
+            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
+        )
+        graph.create_node(
+            "dilemma::fight_or_flee::alt::fight",
+            {"type": "answer", "raw_id": "fight", "description": "Fights"},
+        )
+        graph.add_edge("has_answer", "dilemma::fight_or_flee", "dilemma::fight_or_flee::alt::fight")
+
+        output = {
+            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "dilemmas": [
+                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
+                {"dilemma_id": "fight_or_flee", "explored": ["fight"], "unexplored": []},
+            ],
+            "paths": [
+                {
+                    "path_id": "path_mentor_trust",
+                    "name": "Trust Arc",
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "protector",
+                    "description": "The mentor trust path",
+                },
+                {
+                    "path_id": "path_fight",
+                    "name": "Fight Arc",
+                    "dilemma_id": "fight_or_flee",
+                    "answer_id": "fight",
+                    "description": "The fight path",
+                },
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "opening_001",
+                    "summary": "Kay meets the mentor",
+                    "paths": ["path_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                    ],
+                    "entities": ["kay"],
+                    "temporal_hint": {
+                        "relative_to": "fight_or_flee",
+                        "position": "before_commit",
+                    },
+                },
+                {
+                    "beat_id": "fight_001",
+                    "summary": "Kay prepares for battle",
+                    "paths": ["path_fight"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "fight_or_flee", "effect": "commits", "note": "Engaged"}
+                    ],
+                    "entities": ["kay"],
+                },
+            ],
+        }
+
+        apply_seed_mutations(graph, output)
+
+        beat = graph.get_node("beat::opening_001")
+        assert beat["temporal_hint"] == {
+            "relative_to": "dilemma::fight_or_flee",
+            "position": "before_commit",
+        }
+
+    def test_temporal_hint_absent_not_stored(self) -> None:
+        """Beat without temporal_hint does not have the key in node data."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::kay", {"type": "entity", "raw_id": "kay", "concept": "Archivist"}
+        )
+        graph.create_node(
+            "dilemma::mentor_trust",
+            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Trust?"},
+        )
+        graph.create_node(
+            "dilemma::mentor_trust::alt::protector",
+            {"type": "answer", "raw_id": "protector", "description": "Protects"},
+        )
+        graph.add_edge(
+            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
+        )
+
+        output = {
+            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "dilemmas": [
+                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
+            ],
+            "paths": [
+                {
+                    "path_id": "path_mentor_trust",
+                    "name": "Trust Arc",
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "protector",
+                    "description": "The mentor trust path",
+                }
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "opening_001",
+                    "summary": "Kay meets the mentor",
+                    "paths": ["path_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                    ],
+                    "entities": ["kay"],
+                },
+            ],
+        }
+
+        apply_seed_mutations(graph, output)
+
+        beat = graph.get_node("beat::opening_001")
+        # _clean_dict removes None values, so temporal_hint should not be present
+        assert "temporal_hint" not in beat
+
+    def test_temporal_hint_partial_not_stored(self) -> None:
+        """Temporal hint with null position is discarded, not stored malformed."""
+        graph = Graph.empty()
+        graph.create_node(
+            "entity::kay", {"type": "entity", "raw_id": "kay", "concept": "Archivist"}
+        )
+        graph.create_node(
+            "dilemma::mentor_trust",
+            {"type": "dilemma", "raw_id": "mentor_trust", "question": "Trust?"},
+        )
+        graph.create_node(
+            "dilemma::mentor_trust::alt::protector",
+            {"type": "answer", "raw_id": "protector", "description": "Protects"},
+        )
+        graph.add_edge(
+            "has_answer", "dilemma::mentor_trust", "dilemma::mentor_trust::alt::protector"
+        )
+
+        output = {
+            "entities": [{"entity_id": "kay", "disposition": "retained"}],
+            "dilemmas": [
+                {"dilemma_id": "mentor_trust", "explored": ["protector"], "unexplored": []},
+            ],
+            "paths": [
+                {
+                    "path_id": "path_mentor_trust",
+                    "name": "Trust Arc",
+                    "dilemma_id": "mentor_trust",
+                    "answer_id": "protector",
+                    "description": "The mentor trust path",
+                }
+            ],
+            "initial_beats": [
+                {
+                    "beat_id": "opening_001",
+                    "summary": "Kay meets the mentor",
+                    "paths": ["path_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                    ],
+                    "entities": ["kay"],
+                    "temporal_hint": {
+                        "relative_to": "fight_or_flee",
+                        "position": None,
+                    },
+                },
+            ],
+        }
+
+        apply_seed_mutations(graph, output)
+
+        beat = graph.get_node("beat::opening_001")
+        # Partial hint (missing position) should be discarded
+        assert "temporal_hint" not in beat
+
     def test_validates_missing_entities(self) -> None:
         """Raises SeedMutationError when referencing non-existent entities."""
         graph = Graph.empty()

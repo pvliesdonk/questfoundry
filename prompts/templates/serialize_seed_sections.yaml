@@ -422,7 +422,11 @@ beats_prompt: |
         ],
         "entities": ["character::[character_id]", "location::[location_id]"],
         "location": "location::[location_id]",
-        "location_alternatives": ["location::[other_location]"]
+        "location_alternatives": ["location::[other_location]"],
+        "temporal_hint": {
+          "relative_to": "dilemma::[other_dilemma_id]",
+          "position": "before_commit"
+        }
       }
     ]
   }
@@ -436,6 +440,12 @@ beats_prompt: |
   - location can be null; location_alternatives can be empty array
   - Generate 2-4 beats for EACH path in the VALID PATH IDs list
   - dilemma_impacts MUST use dilemma IDs from the Dilemma IDs list — NOT entity names
+  - temporal_hint is OPTIONAL — only include it when a beat's placement relative to
+    ANOTHER dilemma matters. Most beats don't need one. When used:
+    - `relative_to` must be a dilemma ID different from the beat's own parent dilemma
+    - `position` must be: `before_commit`, `after_commit`, `before_introduce`, or `after_introduce`
+    - Example: a beat that sets up context needed before another dilemma's commit point
+      would use `"position": "before_commit"` with that dilemma's ID
 
   ## DILEMMA IMPACT CONSTRAINT (MOST IMPORTANT RULE)
 
@@ -603,6 +613,12 @@ per_path_beats_prompt: |
     ]
   }}
   ```
+
+  NOTE: `temporal_hint` is optional — omit the field entirely for most beats.
+  Only include it when this beat must be placed relative to ANOTHER dilemma's
+  key moment. When used:
+  `{{"temporal_hint": {{"relative_to": "dilemma::other_dilemma_id", "position": "before_commit"}}}}`
+  Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
 
   ## Rules
   - Generate exactly 2-4 beats for path `{path_id}`
