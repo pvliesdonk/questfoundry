@@ -423,8 +423,8 @@ class TestFormatDreamVision:
 
 
 class TestFormatPovContext:
-    def test_with_protagonist_and_pov_style(self) -> None:
-        """Returns formatted context with protagonist and POV style."""
+    def test_with_protagonist_defined_and_pov_style(self) -> None:
+        """Returns formatted context with protagonist hint and POV style."""
         from questfoundry.graph.fill_context import format_pov_context
 
         g = Graph.empty()
@@ -437,26 +437,14 @@ class TestFormatPovContext:
                 "protagonist_defined": True,
             },
         )
-        g.create_node(
-            "character::detective",
-            {
-                "type": "entity",
-                "raw_id": "detective",
-                "category": "character",
-                "concept": "A seasoned private eye",
-                "is_protagonist": True,
-            },
-        )
 
         result = format_pov_context(g)
 
         assert "**Suggested POV:** first" in result
-        assert "**Protagonist Defined:** Yes" in result
-        assert "**Protagonist:** detective" in result
-        assert "A seasoned private eye" in result
+        assert "**Protagonist:** Defined" in result
 
-    def test_without_protagonist(self) -> None:
-        """Returns context noting protagonist not marked when protagonist_defined but none found."""
+    def test_protagonist_defined_without_pov(self) -> None:
+        """Returns protagonist hint when protagonist_defined but no POV style."""
         from questfoundry.graph.fill_context import format_pov_context
 
         g = Graph.empty()
@@ -465,15 +453,13 @@ class TestFormatPovContext:
             {
                 "type": "vision",
                 "genre": "fantasy",
-                "protagonist_defined": True,  # Says there should be one
+                "protagonist_defined": True,
             },
         )
-        # No entity with is_protagonist=True
 
         result = format_pov_context(g)
 
-        assert "**Protagonist Defined:** Yes" in result
-        assert "Not explicitly marked" in result
+        assert "**Protagonist:** Defined" in result
 
     def test_no_vision(self) -> None:
         """Returns empty string when no vision node."""
@@ -524,35 +510,8 @@ class TestGetPathPovCharacter:
 
         assert result == "character::sidekick"
 
-    def test_fallback_to_protagonist(self) -> None:
-        """Falls back to global protagonist when no path override."""
-        from questfoundry.graph.fill_context import get_path_pov_character
-
-        g = Graph.empty()
-        g.create_node(
-            "arc::spine",
-            {"type": "arc", "arc_type": "spine", "paths": ["path::trust"]},
-        )
-        g.create_node(
-            "path::trust",
-            {"type": "path", "raw_id": "trust"},  # No pov_character
-        )
-        g.create_node(
-            "character::protagonist",
-            {
-                "type": "entity",
-                "raw_id": "protagonist",
-                "category": "character",
-                "is_protagonist": True,
-            },
-        )
-
-        result = get_path_pov_character(g, "arc::spine")
-
-        assert result == "character::protagonist"
-
     def test_no_pov_character(self) -> None:
-        """Returns None when no path override and no protagonist."""
+        """Returns None when no path override (FILL discuss phase determines protagonist)."""
         from questfoundry.graph.fill_context import get_path_pov_character
 
         g = Graph.empty()
@@ -2065,25 +2024,8 @@ class TestFormatValidCharacters:
         assert "PROTAGONIST" not in result
         assert "Protagonist:" not in result
 
-    def test_character_marked_as_protagonist(self) -> None:
-        """Protagonist gets marked and header added."""
-        g = Graph.empty()
-        g.create_node(
-            "entity::kay",
-            {
-                "type": "entity",
-                "raw_id": "kay",
-                "category": "character",
-                "concept": "The chosen one",
-                "is_protagonist": True,
-            },
-        )
-        result = format_valid_characters(g)
-        assert "Protagonist: **kay**" in result
-        assert "- kay (PROTAGONIST): The chosen one" in result
-
-    def test_multiple_characters_with_protagonist(self) -> None:
-        """Multiple characters with one protagonist."""
+    def test_multiple_characters_listed(self) -> None:
+        """Multiple characters listed without protagonist markers."""
         g = Graph.empty()
         g.create_node(
             "entity::alice",
@@ -2092,7 +2034,6 @@ class TestFormatValidCharacters:
                 "raw_id": "alice",
                 "category": "character",
                 "concept": "The hero",
-                "is_protagonist": True,
             },
         )
         g.create_node(
@@ -2105,9 +2046,9 @@ class TestFormatValidCharacters:
             },
         )
         result = format_valid_characters(g)
-        assert "Protagonist: **alice**" in result
-        assert "- alice (PROTAGONIST): The hero" in result
+        assert "- alice: The hero" in result
         assert "- bob: The sidekick" in result
+        assert "PROTAGONIST" not in result
 
     def test_character_with_empty_concept(self) -> None:
         """Empty concept doesn't produce trailing colon."""

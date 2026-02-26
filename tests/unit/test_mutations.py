@@ -395,6 +395,37 @@ class TestBrainstormMutations:
         assert archive is not None
         assert archive["category"] == "location"
 
+    def test_stores_entity_name(self) -> None:
+        """Entity.name is stored on graph node when provided (#1010)."""
+        graph = Graph.empty()
+        output = {
+            "entities": [
+                {
+                    "entity_id": "beatrice",
+                    "entity_category": "character",
+                    "name": "Lady Beatrice Ashford",
+                    "concept": "A sharp-tongued dowager",
+                },
+                {
+                    "entity_id": "manor",
+                    "entity_category": "location",
+                    "concept": "A crumbling estate",
+                    # name omitted — should not appear on node
+                },
+            ],
+            "dilemmas": [],
+        }
+
+        apply_brainstorm_mutations(graph, output)
+
+        beatrice = graph.get_node("character::beatrice")
+        assert beatrice is not None
+        assert beatrice["name"] == "Lady Beatrice Ashford"
+
+        manor = graph.get_node("location::manor")
+        assert manor is not None
+        assert "name" not in manor  # _clean_dict removes None values
+
     def test_strips_scope_prefixes_in_raw_ids(self) -> None:
         """Scoped IDs are stored unscoped in raw_id fields."""
         graph = Graph.empty()
@@ -750,76 +781,6 @@ class TestValidateBrainstormMutations:
         assert "entities.1.entity_id" in error_paths  # Empty string
         assert "entities.2.entity_id" in error_paths  # None
         assert "entities.3.entity_id" in error_paths  # Missing key
-
-    def test_protagonist_on_non_character_detected(self) -> None:
-        """is_protagonist=true on non-character entity raises error."""
-        output = {
-            "entities": [
-                {
-                    "entity_id": "location_1",
-                    "entity_category": "location",
-                    "concept": "A manor",
-                    "is_protagonist": True,  # Invalid - only characters can be protagonist
-                },
-            ],
-            "dilemmas": [],
-        }
-
-        errors = validate_brainstorm_mutations(output)
-
-        assert len(errors) == 1
-        assert "is_protagonist" in errors[0].field_path
-        assert "character" in errors[0].available
-        assert "location" in errors[0].provided
-
-    def test_multiple_protagonists_detected(self) -> None:
-        """Multiple entities with is_protagonist=true raises error."""
-        output = {
-            "entities": [
-                {
-                    "entity_id": "kay",
-                    "entity_category": "character",
-                    "concept": "Archivist",
-                    "is_protagonist": True,
-                },
-                {
-                    "entity_id": "mentor",
-                    "entity_category": "character",
-                    "concept": "Mentor",
-                    "is_protagonist": True,  # Second protagonist - invalid
-                },
-            ],
-            "dilemmas": [],
-        }
-
-        errors = validate_brainstorm_mutations(output)
-
-        assert len(errors) == 1
-        assert "Multiple protagonists" in errors[0].issue
-        assert "2" in errors[0].provided
-
-    def test_single_protagonist_valid(self) -> None:
-        """Single character with is_protagonist=true is valid."""
-        output = {
-            "entities": [
-                {
-                    "entity_id": "kay",
-                    "entity_category": "character",
-                    "concept": "Archivist",
-                    "is_protagonist": True,
-                },
-                {
-                    "entity_id": "mentor",
-                    "entity_category": "character",
-                    "concept": "Mentor",
-                },
-            ],
-            "dilemmas": [],
-        }
-
-        errors = validate_brainstorm_mutations(output)
-
-        assert errors == []
 
     def test_duplicate_entity_ids_detected(self) -> None:
         """Detects duplicate entity IDs within the same category."""
