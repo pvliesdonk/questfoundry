@@ -1180,7 +1180,7 @@ class TestBeatRetryAndContextRefresh:
         # Beat error - will be in "beats" section after grouping
         beat_errors = [
             SeedValidationError(
-                field_path="initial_beats.0.paths",
+                field_path="initial_beats.0.path_id",
                 issue="Path 'bad_path' not defined in SEED paths",
                 available=["good_path"],
                 provided="bad_path",
@@ -1352,7 +1352,7 @@ class TestBeatRetryAndContextRefresh:
         # Beat error that triggers retry
         beat_errors = [
             SeedValidationError(
-                field_path="initial_beats.0.paths",
+                field_path="initial_beats.0.path_id",
                 issue="Path 'bad_path' not defined",
                 available=["good_path"],
                 provided="bad_path",

@@ -495,7 +495,7 @@ class TestScopedIdStandardization:
                 InitialBeat(
                     beat_id="artifact_beat_01",
                     summary="Discovery of the artifact",
-                    paths=["path::artifact_natural", "path::artifact_crafted"],  # Scoped!
+                    path_id="path::artifact_natural",  # Scoped! belongs to natural path
                     dilemma_impacts=[
                         {
                             "dilemma_id": "dilemma::artifact_origin",
@@ -507,7 +507,7 @@ class TestScopedIdStandardization:
                 InitialBeat(
                     beat_id="artifact_beat_02",
                     summary="Beat only for crafted path",
-                    paths=["path::artifact_crafted"],  # Scoped!
+                    path_id="path::artifact_crafted",  # Scoped! belongs to crafted path
                     dilemma_impacts=[
                         {
                             "dilemma_id": "dilemma::artifact_origin",
@@ -528,15 +528,14 @@ class TestScopedIdStandardization:
         assert "path::artifact_natural" in path_ids
         assert "path::artifact_crafted" not in path_ids
 
-        # Beat 2 should be dropped (only served crafted path)
+        # Beat 2 should be dropped (belonged to crafted path)
         beat_ids = [b.beat_id for b in pruned.initial_beats]
-        assert "artifact_beat_01" in beat_ids  # Kept - serves natural
-        assert "artifact_beat_02" not in beat_ids  # Dropped - only served crafted
+        assert "artifact_beat_01" in beat_ids  # Kept - belongs to natural path
+        assert "artifact_beat_02" not in beat_ids  # Dropped - belonged to crafted path
 
-        # Beat 1 should have crafted path removed from its paths list
+        # Beat 1 should still point to natural path (scoped ID preserved)
         beat_1 = next(b for b in pruned.initial_beats if b.beat_id == "artifact_beat_01")
-        assert "path::artifact_natural" in beat_1.paths
-        assert "path::artifact_crafted" not in beat_1.paths
+        assert beat_1.path_id == "path::artifact_natural"
         # Demoted dilemma should keep canonical and move non-canonical to unexplored
         pruned_dilemma = next(
             d for d in pruned.dilemmas if d.dilemma_id == "dilemma::artifact_origin"
@@ -638,7 +637,7 @@ class TestScopedIdStandardization:
                 InitialBeat(
                     beat_id="keeper_beat_1",
                     summary="Meeting the keeper",
-                    paths=["path::keeper_protector", "path::keeper_manipulator"],
+                    path_id="path::keeper_protector",  # Scoped!
                     dilemma_impacts=[
                         {
                             "dilemma_id": "dilemma::keeper_trust",
@@ -767,7 +766,7 @@ class TestCanonicalAnswerFromGraph:
                 InitialBeat(
                     beat_id="beat_1",
                     summary="Test",
-                    paths=["path_a", "path_b"],
+                    path_id="path_b",  # Belongs to the graph-default path
                     dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
                 ),
             ],
@@ -817,7 +816,7 @@ class TestCanonicalAnswerFromGraph:
                 InitialBeat(
                     beat_id="beat_1",
                     summary="Test",
-                    paths=["path_a", "path_b"],
+                    path_id="path_a",  # Belongs to explored[0] (canonical without graph)
                     dilemma_impacts=[{"dilemma_id": "t1", "effect": "commits", "note": "n"}],
                 ),
             ],
