@@ -251,17 +251,7 @@ def format_choice_label_context(
     for spec in passage_specs:
         passage_lookup[spec["passage_id"]] = spec
 
-    # Build dream context for story tone
-    dream_nodes = graph.get_nodes_by_type("dream_artifact")
-    story_context_parts: list[str] = []
-    for _did, ddata in dream_nodes.items():
-        genre = ddata.get("genre", "")
-        tone = ddata.get("tone", "")
-        if genre:
-            story_context_parts.append(f"Genre: {genre}")
-        if tone:
-            story_context_parts.append(f"Tone: {tone}")
-    story_context = "\n".join(story_context_parts) if story_context_parts else "(no story context)"
+    story_context = _format_story_context(graph)
 
     # Build choice detail lines
     choice_lines: list[str] = []
@@ -308,16 +298,7 @@ def format_residue_content_context(
     for spec in passage_specs:
         passage_lookup[spec["passage_id"]] = spec
 
-    dream_nodes = graph.get_nodes_by_type("dream_artifact")
-    story_context_parts: list[str] = []
-    for _did, ddata in dream_nodes.items():
-        genre = ddata.get("genre", "")
-        tone = ddata.get("tone", "")
-        if genre:
-            story_context_parts.append(f"Genre: {genre}")
-        if tone:
-            story_context_parts.append(f"Tone: {tone}")
-    story_context = "\n".join(story_context_parts) if story_context_parts else "(no story context)"
+    story_context = _format_story_context(graph)
 
     residue_lines: list[str] = []
     for r in residue_specs:
@@ -406,16 +387,7 @@ def format_variant_summary_context(
     for spec in passage_specs:
         passage_lookup[spec["passage_id"]] = spec
 
-    dream_nodes = graph.get_nodes_by_type("dream_artifact")
-    story_context_parts: list[str] = []
-    for _did, ddata in dream_nodes.items():
-        genre = ddata.get("genre", "")
-        tone = ddata.get("tone", "")
-        if genre:
-            story_context_parts.append(f"Genre: {genre}")
-        if tone:
-            story_context_parts.append(f"Tone: {tone}")
-    story_context = "\n".join(story_context_parts) if story_context_parts else "(no story context)"
+    story_context = _format_story_context(graph)
 
     variant_lines: list[str] = []
     for v in variant_specs:
@@ -436,6 +408,20 @@ def format_variant_summary_context(
         "story_context": story_context,
         "variant_count": str(len(variant_specs)),
     }
+
+
+def _format_story_context(graph: Graph) -> str:
+    """Extract genre/tone from dream artifacts as story context string."""
+    dream_nodes = graph.get_nodes_by_type("dream_artifact")
+    parts: list[str] = []
+    for _did, ddata in dream_nodes.items():
+        genre = ddata.get("genre", "")
+        tone = ddata.get("tone", "")
+        if genre:
+            parts.append(f"Genre: {genre}")
+        if tone:
+            parts.append(f"Tone: {tone}")
+    return "\n".join(parts) if parts else "(no story context)"
 
 
 def _format_context_beat(

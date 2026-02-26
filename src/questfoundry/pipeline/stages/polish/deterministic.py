@@ -581,7 +581,7 @@ async def phase_plan_application(
     All operations run atomically — if any step fails, the
     mutation_context wrapper ensures no partial state persists.
     """
-    plan_data = _load_enriched_plan(graph)
+    plan_data = _load_plan_data(graph)
     if plan_data is None:
         return PhaseResult(
             phase="plan_application",
@@ -666,8 +666,8 @@ async def phase_plan_application(
 # ---------------------------------------------------------------------------
 
 
-def _load_enriched_plan(graph: Graph) -> dict[str, Any] | None:
-    """Load the enriched plan node data from the graph."""
+def _load_plan_data(graph: Graph) -> dict[str, Any] | None:
+    """Load the plan node data from the graph."""
     plan_nodes = graph.get_nodes_by_type("polish_plan")
     if not plan_nodes:
         return None
@@ -713,12 +713,18 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
     The residue passage is gated by the residue's state flag and
     precedes the target shared passage.
     """
+    # Derive IDs from residue_id — use residue_ prefix to avoid collision
+    # with regular beat/passage IDs
+    residue_suffix = rspec.residue_id.split("::")[-1]
+    beat_id = f"beat::residue_{residue_suffix}"
+    residue_passage_id = f"passage::residue_{residue_suffix}"
+
     # Create residue beat node
     graph.create_node(
-        f"beat::{rspec.residue_id.split('::')[-1]}",
+        beat_id,
         {
             "type": "beat",
-            "raw_id": rspec.residue_id.split("::")[-1],
+            "raw_id": f"residue_{residue_suffix}",
             "summary": rspec.content_hint or f"Residue moment for {rspec.flag}",
             "role": "residue_beat",
             "scene_type": "sequel",
@@ -727,19 +733,16 @@ def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
         },
     )
 
-    beat_id = f"beat::{rspec.residue_id.split('::')[-1]}"
-
     # Add belongs_to edge to path if specified
     if rspec.path_id:
         graph.add_edge("belongs_to", beat_id, rspec.path_id)
 
     # Create residue passage containing this beat
-    residue_passage_id = f"passage::{rspec.residue_id.split('::')[-1]}"
     graph.create_node(
         residue_passage_id,
         {
             "type": "passage",
-            "raw_id": rspec.residue_id.split("::")[-1],
+            "raw_id": f"residue_{residue_suffix}",
             "summary": rspec.content_hint or f"Residue for {rspec.flag}",
             "requires": [rspec.flag],
             "is_residue": True,
@@ -820,8 +823,10 @@ def _apply_diamond(graph: Graph, fb_spec: FalseBranchSpec) -> tuple[int, int]:
     )
 
     # Wire choice edges: from_passage → alt_a, from_passage → alt_b
-    graph.add_edge("choice", from_passage, alt_a_id, label=fb_spec.diamond_summary_a[:50])
-    graph.add_edge("choice", from_passage, alt_b_id, label=fb_spec.diamond_summary_b[:50])
+    label_a = (fb_spec.diamond_summary_a or "Option A")[:50]
+    label_b = (fb_spec.diamond_summary_b or "Option B")[:50]
+    graph.add_edge("choice", from_passage, alt_a_id, label=label_a)
+    graph.add_edge("choice", from_passage, alt_b_id, label=label_b)
 
     # Wire reconvergence: alt_a → to_passage, alt_b → to_passage
     graph.add_edge("choice", alt_a_id, to_passage, label="Continue")

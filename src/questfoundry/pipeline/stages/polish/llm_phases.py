@@ -33,6 +33,7 @@ from questfoundry.models.polish import (
     Phase5dOutput,
 )
 from questfoundry.pipeline.stages.polish._helpers import log
+from questfoundry.pipeline.stages.polish.deterministic import _load_plan_data
 from questfoundry.pipeline.stages.polish.registry import polish_phase
 
 if TYPE_CHECKING:
@@ -329,10 +330,20 @@ class _PolishLLMPhaseMixin:
             total_llm_calls += llm_calls
             total_tokens += tokens
 
-            # Apply labels to choice specs
-            label_lookup = {
-                (item.from_passage, item.to_passage): item.label for item in result.choice_labels
-            }
+            # Apply labels to choice specs — detect duplicate (from, to) pairs
+            label_lookup: dict[tuple[str, str], str] = {}
+            for item in result.choice_labels:
+                key = (item.from_passage, item.to_passage)
+                if key in label_lookup:
+                    log.warning(
+                        "phase5a_duplicate_choice_label",
+                        from_passage=item.from_passage,
+                        to_passage=item.to_passage,
+                        kept=label_lookup[key],
+                        discarded=item.label,
+                    )
+                else:
+                    label_lookup[key] = item.label
             for spec in choice_specs:
                 key = (spec["from_passage"], spec["to_passage"])
                 if key in label_lookup:
@@ -444,14 +455,6 @@ class _PolishLLMPhaseMixin:
 # ---------------------------------------------------------------------------
 # Phase 5 helpers
 # ---------------------------------------------------------------------------
-
-
-def _load_plan_data(graph: Graph) -> dict[str, Any] | None:
-    """Load the plan node data from the graph."""
-    plan_nodes = graph.get_nodes_by_type("polish_plan")
-    if not plan_nodes:
-        return None
-    return plan_nodes.get("polish_plan::current")
 
 
 def _update_plan_data(
