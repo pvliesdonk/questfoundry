@@ -654,11 +654,13 @@ def format_continuity_warning(
         cur_beat = cur.get("from_beat", "")
         if not prev_beat or not cur_beat:
             return False
-        prev_b = graph.get_node(prev_beat) or {}
-        cur_b = graph.get_node(cur_beat) or {}
-        prev_group = set(prev_b.get("intersection_group") or [])
-        cur_group = set(cur_b.get("intersection_group") or [])
-        return (cur_beat in prev_group) or (prev_beat in cur_group)
+        # Two beats share an intersection group if they both have
+        # intersection edges to the same group node.
+        prev_groups = {
+            e["to"] for e in graph.get_edges(from_id=prev_beat, edge_type="intersection")
+        }
+        cur_groups = {e["to"] for e in graph.get_edges(from_id=cur_beat, edge_type="intersection")}
+        return bool(prev_groups & cur_groups)
 
     passage_order = get_arc_passage_order(graph, arc_id)
     if not passage_order or current_idx <= 0 or current_idx >= len(passage_order):

@@ -3109,8 +3109,66 @@ class TestResolveKnotLocation:
 
 
 class TestApplyKnotMark:
-    def test_marks_beats_with_intersection_group(self) -> None:
-        """Applying intersection mark updates beat nodes."""
+    def test_creates_intersection_group_node(self) -> None:
+        """Applying intersection mark creates an intersection_group node."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        apply_intersection_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            "market",
+        )
+
+        # Group node exists with expected data
+        group_nodes = graph.get_nodes_by_type("intersection_group")
+        assert len(group_nodes) == 1
+        group_id = next(iter(group_nodes))
+        group = group_nodes[group_id]
+        assert group["type"] == "intersection_group"
+        assert set(group["beat_ids"]) == {"beat::artifact_discover", "beat::mentor_meet"}
+        assert group["resolved_location"] == "market"
+
+    def test_creates_intersection_edges(self) -> None:
+        """Each beat gets an intersection edge to the group node."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        apply_intersection_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            "market",
+        )
+
+        # Both beats have intersection edges to the group
+        mentor_edges = graph.get_edges(from_id="beat::mentor_meet", edge_type="intersection")
+        artifact_edges = graph.get_edges(
+            from_id="beat::artifact_discover", edge_type="intersection"
+        )
+        assert len(mentor_edges) == 1
+        assert len(artifact_edges) == 1
+        assert mentor_edges[0]["to"] == artifact_edges[0]["to"]  # Same group
+
+    def test_no_cross_path_belongs_to_edges(self) -> None:
+        """Intersection does NOT add cross-path belongs_to edges (Doc 3)."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        # Count belongs_to edges before
+        before = len(graph.get_edges(edge_type="belongs_to"))
+        apply_intersection_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            "market",
+        )
+        after = len(graph.get_edges(edge_type="belongs_to"))
+        assert after == before  # No new belongs_to edges
+
+    def test_resolved_location_applied_to_beats(self) -> None:
+        """Resolved location is applied to each beat node."""
         from questfoundry.graph.grow_algorithms import apply_intersection_mark
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
@@ -3122,15 +3180,12 @@ class TestApplyKnotMark:
         )
 
         mentor = graph.get_node("beat::mentor_meet")
-        assert mentor["intersection_group"] == ["beat::artifact_discover"]
-        assert mentor["location"] == "market"
-
         artifact = graph.get_node("beat::artifact_discover")
-        assert artifact["intersection_group"] == ["beat::mentor_meet"]
+        assert mentor["location"] == "market"
         assert artifact["location"] == "market"
 
-    def test_adds_cross_path_belongs_to_edges(self) -> None:
-        """Intersection marking adds belongs_to edges for cross-path assignment."""
+    def test_idempotent_when_called_twice(self) -> None:
+        """Calling apply_intersection_mark twice with same beats is a no-op."""
         from questfoundry.graph.grow_algorithms import apply_intersection_mark
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
@@ -3140,19 +3195,17 @@ class TestApplyKnotMark:
             ["beat::mentor_meet", "beat::artifact_discover"],
             "market",
         )
-
-        # mentor_meet should now also belong to artifact paths
-        mentor_edges = graph.get_edges(
-            from_id="beat::mentor_meet", to_id=None, edge_type="belongs_to"
+        # Second call should not crash or create duplicates
+        apply_intersection_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            "market",
         )
-        mentor_paths = {e["to"] for e in mentor_edges}
-        # Originally: mentor_trust_canonical, mentor_trust_alt
-        # Now also: artifact_quest_canonical, artifact_quest_alt
-        assert "path::artifact_quest_canonical" in mentor_paths
-        assert "path::artifact_quest_alt" in mentor_paths
+        group_nodes = graph.get_nodes_by_type("intersection_group")
+        assert len(group_nodes) == 1
 
-    def test_no_location_leaves_location_unchanged(self) -> None:
-        """When resolved_location is None, location field is not added."""
+    def test_no_location_leaves_beats_unchanged(self) -> None:
+        """When resolved_location is None, beat location is not modified."""
         from questfoundry.graph.grow_algorithms import apply_intersection_mark
 
         graph = make_two_dilemma_graph()
@@ -3163,8 +3216,12 @@ class TestApplyKnotMark:
         )
 
         mentor = graph.get_node("beat::mentor_meet")
-        assert mentor["intersection_group"] == ["beat::artifact_discover"]
         assert "location" not in mentor
+        # Group node still exists
+        group_nodes = graph.get_nodes_by_type("intersection_group")
+        assert len(group_nodes) == 1
+        group = next(iter(group_nodes.values()))
+        assert "resolved_location" not in group
 
 
 class TestFormatIntersectionCandidates:

@@ -3296,47 +3296,43 @@ def apply_intersection_mark(
     beat_ids: list[str],
     resolved_location: str | None,
 ) -> None:
-    """Mark beats as belonging to an intersection (multi-path scene).
+    """Mark beats as co-occurring in an intersection group (Doc 3, Part 4).
 
-    Updates beat nodes with:
-    - intersection_group: list of other beat IDs in the intersection
-    - resolved_location: the location chosen for the combined scene
-
-    Also adds additional belongs_to edges so each beat is assigned to
-    all paths from all beats in the intersection.
+    Creates an ``intersection_group`` node and links each participating
+    beat to it via ``intersection`` edges.  Each beat keeps its single
+    ``belongs_to`` edge to its original path — no cross-path assignment.
 
     Args:
         graph: Graph to mutate.
         beat_ids: Beat IDs to group into intersection.
         resolved_location: Resolved location, or None.
     """
-    beat_set = set(beat_ids)
+    # Derive a stable group ID from the sorted beat IDs
+    sorted_ids = sorted(beat_ids)
+    raw_group_id = "--".join(strip_scope_prefix(b) for b in sorted_ids)
+    group_node_id = f"intersection_group::{raw_group_id}"
 
-    # Collect all path assignments across all intersection beats
-    all_path_ids: set[str] = set()
-    belongs_to_edges = graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to")
-    for edge in belongs_to_edges:
-        if edge["from"] in beat_set:
-            all_path_ids.add(edge["to"])
+    # Idempotency: skip if this group already exists (same beat pair proposed twice)
+    if graph.get_node(group_node_id) is not None:
+        return
 
-    # Collect new edges to add (batch to avoid stale reads)
-    new_edges: list[tuple[str, str]] = []
+    # Build group node data
+    group_data: dict[str, Any] = {
+        "type": "intersection_group",
+        "raw_id": raw_group_id,
+        "beat_ids": sorted_ids,
+    }
+    if resolved_location:
+        group_data["resolved_location"] = resolved_location
+
+    graph.create_node(group_node_id, group_data)
+
+    # Link each beat to the group via intersection edges
     for bid in beat_ids:
-        current_paths = {e["to"] for e in belongs_to_edges if e["from"] == bid}
-        for path_id in all_path_ids - current_paths:
-            new_edges.append((bid, path_id))
-
-    # Update each beat's node data
-    for bid in beat_ids:
-        others = sorted(b for b in beat_ids if b != bid)
-        update_data: dict[str, Any] = {"intersection_group": others}
+        graph.add_edge("intersection", bid, group_node_id)
+        # Update beat's location if a resolved location was determined
         if resolved_location:
-            update_data["location"] = resolved_location
-        graph.update_node(bid, **update_data)
-
-    # Apply cross-path edges
-    for from_id, to_id in new_edges:
-        graph.add_edge("belongs_to", from_id, to_id)
+            graph.update_node(bid, location=resolved_location)
 
 
 # ---------------------------------------------------------------------------
