@@ -708,36 +708,6 @@ def validate_brainstorm_mutations(output: dict[str, Any]) -> list[BrainstormVali
                 )
             )
 
-    # 4. Validate is_protagonist constraints
-    protagonist_count = 0
-    protagonist_indices: list[int] = []
-    for i, entity in enumerate(entities):
-        if entity.get("is_protagonist"):
-            protagonist_count += 1
-            protagonist_indices.append(i)
-            # is_protagonist only valid for character entities
-            entity_category = entity.get("entity_category", "")
-            if entity_category != "character":
-                errors.append(
-                    BrainstormValidationError(
-                        field_path=f"entities.{i}.is_protagonist",
-                        issue=f"is_protagonist=true only valid for character entities, not '{entity_category}'",
-                        available=["character"],
-                        provided=entity_category,
-                    )
-                )
-
-    # At most one protagonist allowed
-    if protagonist_count > 1:
-        errors.append(
-            BrainstormValidationError(
-                field_path="entities",
-                issue=f"Multiple protagonists defined ({protagonist_count} at indices {protagonist_indices}). Only one character can be the protagonist.",
-                available=[],
-                provided=str(protagonist_count),
-            )
-        )
-
     return errors
 
 
@@ -875,6 +845,7 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         node_data = {
             "type": "entity",
             "raw_id": raw_id,
+            "name": entity.get("name"),
             "category": category,  # Store category for easy access
             "entity_type": category,  # Backwards compat: some code still uses entity_type
             "concept": entity.get("concept"),

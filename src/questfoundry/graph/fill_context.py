@@ -1049,23 +1049,8 @@ def format_pov_context(graph: Graph) -> str:
         if vision.get("protagonist_defined"):
             lines.append("**Protagonist Defined:** Yes")
 
-    # Find protagonist entity (entity with is_protagonist=True)
-    entity_nodes = graph.get_nodes_by_type("entity")
-    protagonist: tuple[str, dict[str, object]] | None = None
-    for eid, edata in entity_nodes.items():
-        if edata.get("is_protagonist") and edata.get("category") == "character":
-            protagonist = (eid, edata)
-            break
-
-    if protagonist:
-        eid, edata = protagonist
-        raw_id = edata.get("raw_id", eid)
-        lines.append(f"\n**Protagonist:** {raw_id}")
-        concept = edata.get("concept")
-        if concept:
-            lines.append(f"Concept: {concept}")
-    elif vision_nodes and next(iter(vision_nodes.values())).get("protagonist_defined"):
-        lines.append("\n**Protagonist:** Not explicitly marked in entities")
+    if vision_nodes and next(iter(vision_nodes.values())).get("protagonist_defined"):
+        lines.append("\n**Protagonist:** Defined (see character entities)")
 
     return "\n".join(lines) if lines else ""
 
@@ -1088,25 +1073,17 @@ def format_valid_characters(graph: Graph) -> str:
     """
     entity_nodes = graph.get_nodes_by_type("entity")
     characters: list[str] = []
-    protagonist_id: str | None = None
 
     for eid, edata in entity_nodes.items():
         if edata.get("category") == "character":
             raw_id = edata.get("raw_id", strip_scope_prefix(eid))
             concept = edata.get("concept", "")
-            is_protag = edata.get("is_protagonist", False)
-
-            if is_protag:
-                protagonist_id = raw_id
-                marker = " (PROTAGONIST)"
-            else:
-                marker = ""
 
             # Conditionally add concept to avoid trailing colon
             if concept:
-                characters.append(f"- {raw_id}{marker}: {concept}")
+                characters.append(f"- {raw_id}: {concept}")
             else:
-                characters.append(f"- {raw_id}{marker}")
+                characters.append(f"- {raw_id}")
 
     if not characters:
         log.warning("no_character_entities", stage="fill", phase="voice_research")
@@ -1116,11 +1093,7 @@ def format_valid_characters(graph: Graph) -> str:
             "Do NOT invent characters."
         )
 
-    header = ""
-    if protagonist_id:
-        header = f"Protagonist: **{protagonist_id}** (use for first/third_limited POV)\n\n"
-
-    return header + "\n".join(characters)
+    return "\n".join(characters)
 
 
 def get_path_pov_character(graph: Graph, arc_id: str) -> str | None:
@@ -1128,8 +1101,7 @@ def get_path_pov_character(graph: Graph, arc_id: str) -> str | None:
 
     Resolution order:
     1. Path-specific pov_character (if any path in arc has one)
-    2. Global protagonist (entity with is_protagonist=True)
-    3. None
+    2. None (FILL discuss phase determines protagonist)
 
     Args:
         graph: Graph containing arc, path, and entity nodes.
@@ -1149,12 +1121,6 @@ def get_path_pov_character(graph: Graph, arc_id: str) -> str | None:
         path_node = graph.get_node(path_id)
         if path_node and path_node.get("pov_character"):
             return str(path_node["pov_character"])
-
-    # Fall back to global protagonist
-    entity_nodes = graph.get_nodes_by_type("entity")
-    for eid, edata in entity_nodes.items():
-        if edata.get("is_protagonist") and edata.get("category") == "character":
-            return eid
 
     return None
 
