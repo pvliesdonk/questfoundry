@@ -478,13 +478,39 @@ class TestDilemmaRelationship:
         assert dr.dilemma_b == "dilemma::beta"
         assert dr.ordering == "wraps"
 
-    def test_pair_order_normalized(self) -> None:
-        """Reversed pair is silently swapped to canonical order."""
+    def test_concurrent_pair_order_normalized(self) -> None:
+        """Reversed concurrent pair is silently swapped to canonical order."""
         dr = DilemmaRelationship(
-            **{**_RELATIONSHIP_KWARGS, "dilemma_a": "dilemma::zeta", "dilemma_b": "dilemma::alpha"}
+            **{
+                **_RELATIONSHIP_KWARGS,
+                "ordering": "concurrent",
+                "dilemma_a": "dilemma::zeta",
+                "dilemma_b": "dilemma::alpha",
+            }
         )
         assert dr.dilemma_a == "dilemma::alpha"
         assert dr.dilemma_b == "dilemma::zeta"
+
+    def test_wraps_preserves_direction(self) -> None:
+        """Directional ordering (wraps) preserves supplied pair order."""
+        dr = DilemmaRelationship(
+            **{**_RELATIONSHIP_KWARGS, "dilemma_a": "dilemma::zeta", "dilemma_b": "dilemma::alpha"}
+        )
+        assert dr.dilemma_a == "dilemma::zeta"
+        assert dr.dilemma_b == "dilemma::alpha"
+
+    def test_serial_preserves_direction(self) -> None:
+        """Directional ordering (serial) preserves supplied pair order."""
+        dr = DilemmaRelationship(
+            **{
+                **_RELATIONSHIP_KWARGS,
+                "ordering": "serial",
+                "dilemma_a": "dilemma::zeta",
+                "dilemma_b": "dilemma::alpha",
+            }
+        )
+        assert dr.dilemma_a == "dilemma::zeta"
+        assert dr.dilemma_b == "dilemma::alpha"
 
     def test_already_ordered_unchanged(self) -> None:
         dr = DilemmaRelationship(**_RELATIONSHIP_KWARGS)
@@ -585,8 +611,21 @@ class TestDilemmaRelationshipsSectionDedup:
                 ]
             )
 
-    def test_reversed_pair_treated_as_duplicate(self) -> None:
-        """(a,b) and (b,a) with identical content normalize to same pair → deduplicated."""
+    def test_reversed_concurrent_pair_treated_as_duplicate(self) -> None:
+        """(a,b) and (b,a) concurrent pairs normalize to same pair → deduplicated."""
+        concurrent_kwargs = {**_RELATIONSHIP_KWARGS, "ordering": "concurrent"}
+        reversed_kwargs = {
+            **concurrent_kwargs,
+            "dilemma_a": concurrent_kwargs["dilemma_b"],
+            "dilemma_b": concurrent_kwargs["dilemma_a"],
+        }
+        section = DilemmaRelationshipsSection(
+            dilemma_relationships=[concurrent_kwargs, reversed_kwargs]
+        )
+        assert len(section.dilemma_relationships) == 1
+
+    def test_reversed_directional_pair_not_deduplicated(self) -> None:
+        """(a,b) and (b,a) wraps pairs are distinct — direction matters."""
         reversed_kwargs = {
             **_RELATIONSHIP_KWARGS,
             "dilemma_a": _RELATIONSHIP_KWARGS["dilemma_b"],
@@ -595,19 +634,20 @@ class TestDilemmaRelationshipsSectionDedup:
         section = DilemmaRelationshipsSection(
             dilemma_relationships=[_RELATIONSHIP_KWARGS, reversed_kwargs]
         )
-        assert len(section.dilemma_relationships) == 1
+        assert len(section.dilemma_relationships) == 2
 
-    def test_reversed_non_identical_duplicate_rejected(self) -> None:
-        """Reversed pair with different content is a conflict after normalization."""
+    def test_reversed_concurrent_non_identical_duplicate_rejected(self) -> None:
+        """Reversed concurrent pair with different content is a conflict after normalization."""
+        concurrent_kwargs = {**_RELATIONSHIP_KWARGS, "ordering": "concurrent"}
         reversed_different = {
-            **_RELATIONSHIP_KWARGS,
-            "dilemma_a": _RELATIONSHIP_KWARGS["dilemma_b"],
-            "dilemma_b": _RELATIONSHIP_KWARGS["dilemma_a"],
+            **concurrent_kwargs,
+            "dilemma_a": concurrent_kwargs["dilemma_b"],
+            "dilemma_b": concurrent_kwargs["dilemma_a"],
             "description": "A completely different narrative meaning.",
         }
         with pytest.raises(ValidationError, match="Duplicates found"):
             DilemmaRelationshipsSection(
-                dilemma_relationships=[_RELATIONSHIP_KWARGS, reversed_different]
+                dilemma_relationships=[concurrent_kwargs, reversed_different]
             )
 
     def test_empty_accepted(self) -> None:

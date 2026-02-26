@@ -978,9 +978,9 @@ dilemma_relationships_prompt: |
   - `reasoning` must explain the temporal (not thematic) relationship
 
   ## REMINDER
-  ONLY use pairs from the Candidate Pairs list. Empty list is normal. Do NOT invent constraints.
+  ONLY use pairs from the Candidate Pairs list. Empty list is normal. Do NOT invent relationships.
 
   ## Output
-  Return ONLY valid JSON with the "interaction_constraints" array. An empty array is expected.
+  Return ONLY valid JSON with the "dilemma_relationships" array. An empty array is expected.
 
 components: []

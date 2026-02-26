@@ -2795,7 +2795,10 @@ def _group_by_location(
         primary = beat_data.get("location")
         if primary:
             location_beats[primary].append(beat_id)
-        # Read flexibility edges (Doc 3) instead of location_alternatives property
+        # Read flexibility edges (Doc 3) instead of location_alternatives property.
+        # NOTE: No role filter applied — currently only role="location" flexibility
+        # edges exist (written by mutations.py). If other roles are added (e.g.,
+        # role="entity"), this query must filter by role="location".
         for edge in graph.get_edges(from_id=beat_id, edge_type="flexibility"):
             location_beats[edge["to"]].append(beat_id)
 

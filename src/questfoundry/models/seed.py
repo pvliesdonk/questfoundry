@@ -389,15 +389,17 @@ class DilemmaRelationship(BaseModel):
     relate temporally: one wrapping the other, running concurrently, or
     sequentially.
 
-    Canonical pair ordering: dilemma_a < dilemma_b (normalized
-    silently to prevent A-B / B-A duplicates).
+    For ``concurrent`` (symmetric) ordering, the pair is normalized to
+    canonical order (dilemma_a < dilemma_b) to prevent A-B / B-A duplicates.
+    For directional orderings (``wraps``, ``serial``), the supplied order is
+    preserved because direction matters: "A wraps B" != "B wraps A".
 
     Note: ``shared_entity`` is NOT an ordering relationship — it is derived
     from ``anchored_to`` edges in the graph.
 
     Attributes:
-        dilemma_a: First dilemma ID (lexicographically smaller after normalization).
-        dilemma_b: Second dilemma ID (lexicographically larger after normalization).
+        dilemma_a: First dilemma ID. For ``concurrent``, lexicographically smaller after normalization.
+        dilemma_b: Second dilemma ID. For ``concurrent``, lexicographically larger after normalization.
         ordering: Temporal ordering between the dilemmas (wraps|concurrent|serial).
         description: What the relationship means narratively.
         reasoning: Chain-of-thought for the classification.
@@ -419,11 +421,16 @@ class DilemmaRelationship(BaseModel):
 
     @model_validator(mode="after")
     def _validate_and_normalize_pair(self) -> DilemmaRelationship:
-        """Reject self-referential pairs and normalize to canonical order (a < b)."""
+        """Reject self-referential pairs; normalize symmetric orderings to canonical order.
+
+        Only ``concurrent`` pairs are alphabetically normalized (a < b) because the
+        relationship is symmetric.  ``wraps`` and ``serial`` are directional — swapping
+        would invert meaning ("A wraps B" becomes "B wraps A").
+        """
         if self.dilemma_a == self.dilemma_b:
             msg = f"dilemma_a and dilemma_b cannot be the same: {self.dilemma_a}"
             raise ValueError(msg)
-        if self.dilemma_a > self.dilemma_b:
+        if self.ordering == "concurrent" and self.dilemma_a > self.dilemma_b:
             self.dilemma_a, self.dilemma_b = self.dilemma_b, self.dilemma_a
         return self
 
