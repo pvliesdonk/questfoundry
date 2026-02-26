@@ -77,7 +77,13 @@ def test_continuity_warning_suppressed_for_micro_beat() -> None:
 
 def test_continuity_warning_suppressed_for_intersection_hint() -> None:
     graph, arc_id = _make_two_passages_graph(shared_entity=False)
-    graph.update_node("beat::a", intersection_group=["beat::b"])
+    # Create intersection group node and edges (Doc 3 model)
+    graph.create_node(
+        "intersection_group::a_b",
+        {"type": "intersection_group", "raw_id": "a_b", "beat_ids": ["beat::a", "beat::b"]},
+    )
+    graph.add_edge("intersection", "beat::a", "intersection_group::a_b")
+    graph.add_edge("intersection", "beat::b", "intersection_group::a_b")
     assert format_continuity_warning(graph, arc_id, 1) == ""
 
 

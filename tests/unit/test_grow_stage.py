@@ -555,14 +555,20 @@ class TestPhase3Knots:
         assert result.llm_calls == 1
         assert "1 applied" in result.detail
 
-        # Verify intersection was applied
-        mentor_beat = graph.get_node("beat::mentor_meet")
-        assert mentor_beat["intersection_group"] == ["beat::artifact_discover"]
-        assert mentor_beat["location"] == "market"
+        # Verify intersection group node was created
+        group_nodes = graph.get_nodes_by_type("intersection_group")
+        assert len(group_nodes) == 1
+        group = next(iter(group_nodes.values()))
+        assert set(group["beat_ids"]) == {"beat::artifact_discover", "beat::mentor_meet"}
+        assert group["resolved_location"] == "market"
 
-        artifact_beat = graph.get_node("beat::artifact_discover")
-        assert artifact_beat["intersection_group"] == ["beat::mentor_meet"]
-        assert artifact_beat["location"] == "market"
+        # Verify beats have intersection edges (not cross-path belongs_to)
+        mentor_edges = graph.get_edges(from_id="beat::mentor_meet", edge_type="intersection")
+        artifact_edges = graph.get_edges(
+            from_id="beat::artifact_discover", edge_type="intersection"
+        )
+        assert len(mentor_edges) == 1
+        assert len(artifact_edges) == 1
 
     @pytest.mark.asyncio
     async def test_phase_3_resolves_location_when_missing(self) -> None:
