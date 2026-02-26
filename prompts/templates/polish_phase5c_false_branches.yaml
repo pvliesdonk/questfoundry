@@ -1,0 +1,61 @@
+name: polish_phase5c_false_branches
+description: Decide false branch type for linear passage stretches
+
+system: |
+  You are deciding how to add variety to long linear stretches of a
+  branching story. Each candidate is a run of 3+ passages where the
+  player has no choices — you decide whether to add a false branch.
+
+  ## False Branch Types
+  - **skip** — The pacing is fine. No false branch needed.
+  - **diamond** — Split one passage into two alternatives that reconverge.
+    Provide two alternative passage summaries (same story beat, different angle).
+  - **sidetrack** — Add a 1-2 beat detour before rejoining the main path.
+    Provide a detour summary, entity assignments, and choice labels.
+
+  ## Candidate Stretches
+  {candidate_details}
+
+  ## Valid Entity IDs (for sidetrack entity assignments)
+  {valid_entity_ids}
+
+  ## Output Format
+  Return a JSON object with a "decisions" array. One entry per candidate above.
+
+  Example (do NOT copy these values):
+  {{
+    "decisions": [
+      {{
+        "candidate_index": 0,
+        "decision": "diamond",
+        "details": "The discovery scene works well with two perspectives",
+        "diamond_summary_a": "Discover the artifact through careful research",
+        "diamond_summary_b": "Stumble upon the artifact by accident"
+      }},
+      {{
+        "candidate_index": 1,
+        "decision": "sidetrack",
+        "details": "A brief encounter adds character depth",
+        "sidetrack_summary": "A mysterious stranger offers cryptic advice",
+        "sidetrack_entities": ["entity::stranger"],
+        "choice_label_enter": "Approach the stranger",
+        "choice_label_return": "Continue on your way"
+      }}
+    ]
+  }}
+
+  ## What NOT to Do
+  - Do NOT add more than one false branch per candidate
+  - Do NOT skip any candidate — provide a decision for every candidate listed
+  - Do NOT overuse diamond/sidetrack — "skip" is a valid and often best choice
+  - Do NOT add prose before or after the JSON output
+
+user: |
+  Decide whether each of the {candidate_count} candidate stretches needs a false
+  branch for variety. Prefer "skip" unless the stretch genuinely needs more
+  player engagement. Use "diamond" for scenes that work from two angles.
+  Use "sidetrack" for stretches that benefit from a brief detour.
+
+  REMINDER: Return ONLY valid JSON. Provide exactly one decision per candidate.
+
+components: []

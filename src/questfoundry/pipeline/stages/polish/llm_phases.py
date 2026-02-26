@@ -1,7 +1,8 @@
 """LLM-powered phase implementations for the POLISH stage.
 
-Contains _PolishLLMPhaseMixin with Phases 1-3: beat reordering,
-pacing/micro-beat injection, and character arc synthesis.
+Contains _PolishLLMPhaseMixin with Phases 1-3 (beat reordering,
+pacing/micro-beat injection, character arc synthesis) and Phase 5
+(LLM enrichment of the deterministic plan).
 
 PolishStage inherits this mixin so ``execute()`` can delegate to
 ``self._phase_1_beat_reordering()``, etc.
@@ -12,15 +13,24 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.polish_context import (
+    format_choice_label_context,
     format_entity_arc_context,
+    format_false_branch_context,
     format_linear_section_context,
     format_pacing_context,
+    format_residue_content_context,
+    format_variant_summary_context,
 )
 from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.polish import (
+    FalseBranchSpec,
     Phase1Output,
     Phase2Output,
     Phase3Output,
+    Phase5aOutput,
+    Phase5bOutput,
+    Phase5cOutput,
+    Phase5dOutput,
 )
 from questfoundry.pipeline.stages.polish._helpers import log
 from questfoundry.pipeline.stages.polish.registry import polish_phase
@@ -32,7 +42,7 @@ if TYPE_CHECKING:
 
 
 class _PolishLLMPhaseMixin:
-    """Mixin providing LLM-powered POLISH phases (1, 2, 3).
+    """Mixin providing LLM-powered POLISH phases (1, 2, 3, 5).
 
     Expects the host class to provide (via ``_PolishLLMHelperMixin``):
 
@@ -275,6 +285,191 @@ class _PolishLLMPhaseMixin:
             llm_calls=total_llm_calls,
             tokens_used=total_tokens,
         )
+
+    @polish_phase(name="llm_enrichment", depends_on=["plan_computation"], priority=4)
+    async def _phase_5_llm_enrichment(self, graph: Graph, model: BaseChatModel) -> PhaseResult:
+        """Phase 5: LLM Enrichment of the deterministic plan.
+
+        Enriches the plan from Phase 4 with creative content:
+        5a: Choice labels (diegetic, distinct, concise)
+        5b: Residue beat content (mood-setting prose hints)
+        5c: False branch decisions (skip/diamond/sidetrack)
+        5d: Variant passage summaries
+
+        Postconditions:
+        - Plan node updated with enriched specs.
+        """
+        plan_data = _load_plan_data(graph)
+        if plan_data is None:
+            return PhaseResult(
+                phase="llm_enrichment",
+                status="failed",
+                detail="No polish plan found — Phase 4 must run first",
+            )
+
+        passage_specs = plan_data.get("passage_specs", [])
+        choice_specs = plan_data.get("choice_specs", [])
+        residue_specs = plan_data.get("residue_specs", [])
+        false_branch_candidates = plan_data.get("false_branch_candidates", [])
+        variant_specs = plan_data.get("variant_specs", [])
+
+        total_llm_calls = 0
+        total_tokens = 0
+        enrichment_parts: list[str] = []
+
+        # 5a: Choice labels
+        if choice_specs:
+            context = format_choice_label_context(graph, choice_specs, passage_specs)
+            result, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+                model=model,
+                template_name="polish_phase5a_choice_labels",
+                context=context,
+                output_schema=Phase5aOutput,
+            )
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            # Apply labels to choice specs
+            label_lookup = {
+                (item.from_passage, item.to_passage): item.label for item in result.choice_labels
+            }
+            for spec in choice_specs:
+                key = (spec["from_passage"], spec["to_passage"])
+                if key in label_lookup:
+                    spec["label"] = label_lookup[key]
+
+            enrichment_parts.append(f"{len(result.choice_labels)} choice labels")
+            log.debug("phase5a_complete", labels=len(result.choice_labels))
+
+        # 5b: Residue beat content
+        if residue_specs:
+            context = format_residue_content_context(graph, residue_specs, passage_specs)
+            result_b, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+                model=model,
+                template_name="polish_phase5b_residue",
+                context=context,
+                output_schema=Phase5bOutput,
+            )
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            # Apply content hints to residue specs
+            hint_lookup = {item.residue_id: item.content_hint for item in result_b.residue_content}
+            for spec in residue_specs:
+                rid = spec.get("residue_id", "")
+                if rid in hint_lookup:
+                    spec["content_hint"] = hint_lookup[rid]
+
+            enrichment_parts.append(f"{len(result_b.residue_content)} residue hints")
+            log.debug("phase5b_complete", hints=len(result_b.residue_content))
+
+        # 5c: False branch decisions
+        false_branch_specs: list[dict[str, Any]] = []
+        if false_branch_candidates:
+            context = format_false_branch_context(graph, false_branch_candidates, passage_specs)
+            result_c, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+                model=model,
+                template_name="polish_phase5c_false_branches",
+                context=context,
+                output_schema=Phase5cOutput,
+            )
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            for decision in result_c.decisions:
+                idx = decision.candidate_index
+                if idx < 0 or idx >= len(false_branch_candidates):
+                    log.warning("phase5c_invalid_index", index=idx)
+                    continue
+
+                candidate = false_branch_candidates[idx]
+                fb_spec = FalseBranchSpec(
+                    candidate_passage_ids=candidate.get("passage_ids", []),
+                    branch_type=decision.decision,
+                    details=decision.details,
+                    diamond_summary_a=decision.diamond_summary_a,
+                    diamond_summary_b=decision.diamond_summary_b,
+                    sidetrack_summary=decision.sidetrack_summary,
+                    sidetrack_entities=decision.sidetrack_entities,
+                    choice_label_enter=decision.choice_label_enter,
+                    choice_label_return=decision.choice_label_return,
+                )
+                false_branch_specs.append(fb_spec.model_dump())
+
+            enrichment_parts.append(f"{len(false_branch_specs)} false branch decisions")
+            log.debug("phase5c_complete", decisions=len(false_branch_specs))
+
+        # 5d: Variant passage summaries
+        if variant_specs:
+            context = format_variant_summary_context(graph, variant_specs, passage_specs)
+            result_d, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+                model=model,
+                template_name="polish_phase5d_variants",
+                context=context,
+                output_schema=Phase5dOutput,
+            )
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            # Apply summaries to variant specs
+            summary_lookup = {item.variant_id: item.summary for item in result_d.variant_summaries}
+            for spec in variant_specs:
+                vid = spec.get("variant_id", "")
+                if vid in summary_lookup:
+                    spec["summary"] = summary_lookup[vid]
+
+            enrichment_parts.append(f"{len(result_d.variant_summaries)} variant summaries")
+            log.debug("phase5d_complete", summaries=len(result_d.variant_summaries))
+
+        # Store enriched plan back to graph
+        _update_plan_data(
+            graph,
+            choice_specs=choice_specs,
+            residue_specs=residue_specs,
+            false_branch_specs=false_branch_specs,
+            variant_specs=variant_specs,
+        )
+
+        detail = "; ".join(enrichment_parts) if enrichment_parts else "No enrichment needed"
+
+        return PhaseResult(
+            phase="llm_enrichment",
+            status="completed",
+            detail=detail,
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
+        )
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_plan_data(graph: Graph) -> dict[str, Any] | None:
+    """Load the plan node data from the graph."""
+    plan_nodes = graph.get_nodes_by_type("polish_plan")
+    if not plan_nodes:
+        return None
+    return plan_nodes.get("polish_plan::current")
+
+
+def _update_plan_data(
+    graph: Graph,
+    *,
+    choice_specs: list[dict[str, Any]],
+    residue_specs: list[dict[str, Any]],
+    false_branch_specs: list[dict[str, Any]],
+    variant_specs: list[dict[str, Any]],
+) -> None:
+    """Update the plan node with enriched data from Phase 5."""
+    graph.update_node(
+        "polish_plan::current",
+        choice_specs=choice_specs,
+        residue_specs=residue_specs,
+        false_branch_specs=false_branch_specs,
+        variant_specs=variant_specs,
+    )
 
 
 # ---------------------------------------------------------------------------

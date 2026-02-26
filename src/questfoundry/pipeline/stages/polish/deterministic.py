@@ -563,6 +563,328 @@ def _store_plan(graph: Graph, plan: PolishPlan) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Phase 6: Atomic Plan Application (registered as @polish_phase)
+# ---------------------------------------------------------------------------
+
+
+@polish_phase(name="plan_application", depends_on=["llm_enrichment"], priority=5)
+async def phase_plan_application(
+    graph: Graph,
+    model: BaseChatModel,  # noqa: ARG001
+) -> PhaseResult:
+    """Phase 6: Atomic plan application.
+
+    Applies the complete enriched PolishPlan in a single pass.
+    Creates passage nodes, variant passages, residue beats,
+    choice edges, and false branch structures.
+
+    All operations run atomically — if any step fails, the
+    mutation_context wrapper ensures no partial state persists.
+    """
+    plan_data = _load_enriched_plan(graph)
+    if plan_data is None:
+        return PhaseResult(
+            phase="plan_application",
+            status="failed",
+            detail="No polish plan found — Phases 4 and 5 must run first",
+        )
+
+    passage_specs = [PassageSpec(**s) for s in plan_data.get("passage_specs", [])]
+    variant_specs = [VariantSpec(**s) for s in plan_data.get("variant_specs", [])]
+    residue_specs = [ResidueSpec(**s) for s in plan_data.get("residue_specs", [])]
+    choice_specs = [ChoiceSpec(**s) for s in plan_data.get("choice_specs", [])]
+    false_branch_specs = [FalseBranchSpec(**s) for s in plan_data.get("false_branch_specs", [])]
+
+    counts: dict[str, int] = {
+        "passages": 0,
+        "variants": 0,
+        "residue_beats": 0,
+        "residue_passages": 0,
+        "choices": 0,
+        "false_branches": 0,
+        "sidetrack_beats": 0,
+    }
+
+    # 1. Create passage nodes with grouped_in edges
+    for spec in passage_specs:
+        _create_passage_node(graph, spec)
+        counts["passages"] += 1
+
+    log.debug("phase6_passages_created", count=counts["passages"])
+
+    # 2. Create variant passages with variant_of edges
+    for vspec in variant_specs:
+        _create_variant_passage(graph, vspec)
+        counts["variants"] += 1
+
+    log.debug("phase6_variants_created", count=counts["variants"])
+
+    # 3-4. Create residue beat nodes and residue passages
+    for rspec in residue_specs:
+        _create_residue_beat_and_passage(graph, rspec)
+        counts["residue_beats"] += 1
+        counts["residue_passages"] += 1
+
+    log.debug("phase6_residues_created", count=counts["residue_beats"])
+
+    # 5. Create choice edges
+    for cspec in choice_specs:
+        _create_choice_edge(graph, cspec)
+        counts["choices"] += 1
+
+    log.debug("phase6_choices_created", count=counts["choices"])
+
+    # 6-7. Create false branch passages and sidetrack beats
+    for fb_spec in false_branch_specs:
+        if fb_spec.branch_type == "skip":
+            continue
+
+        new_beats, new_choices = _apply_false_branch(graph, fb_spec)
+        counts["false_branches"] += 1
+        counts["sidetrack_beats"] += new_beats
+        counts["choices"] += new_choices
+
+    log.debug("phase6_false_branches_applied", count=counts["false_branches"])
+
+    detail = (
+        f"{counts['passages']} passages, "
+        f"{counts['choices']} choices, "
+        f"{counts['variants']} variants, "
+        f"{counts['residue_beats']} residue beats, "
+        f"{counts['false_branches']} false branches"
+    )
+
+    return PhaseResult(
+        phase="plan_application",
+        status="completed",
+        detail=detail,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Phase 6 helpers
+# ---------------------------------------------------------------------------
+
+
+def _load_enriched_plan(graph: Graph) -> dict[str, Any] | None:
+    """Load the enriched plan node data from the graph."""
+    plan_nodes = graph.get_nodes_by_type("polish_plan")
+    if not plan_nodes:
+        return None
+    return plan_nodes.get("polish_plan::current")
+
+
+def _create_passage_node(graph: Graph, spec: PassageSpec) -> None:
+    """Create a passage node and grouped_in edges from beats to the passage."""
+    graph.create_node(
+        spec.passage_id,
+        {
+            "type": "passage",
+            "raw_id": spec.passage_id.split("::")[-1],
+            "summary": spec.summary,
+            "entities": spec.entities,
+            "grouping_type": spec.grouping_type,
+        },
+    )
+
+    for beat_id in spec.beat_ids:
+        graph.add_edge("grouped_in", beat_id, spec.passage_id)
+
+
+def _create_variant_passage(graph: Graph, vspec: VariantSpec) -> None:
+    """Create a variant passage node with variant_of edge to base."""
+    graph.create_node(
+        vspec.variant_id,
+        {
+            "type": "passage",
+            "raw_id": vspec.variant_id.split("::")[-1],
+            "summary": vspec.summary,
+            "requires": vspec.requires,
+            "is_variant": True,
+        },
+    )
+
+    graph.add_edge("variant_of", vspec.variant_id, vspec.base_passage_id)
+
+
+def _create_residue_beat_and_passage(graph: Graph, rspec: ResidueSpec) -> None:
+    """Create a residue beat node and a residue passage containing it.
+
+    The residue passage is gated by the residue's state flag and
+    precedes the target shared passage.
+    """
+    # Create residue beat node
+    graph.create_node(
+        f"beat::{rspec.residue_id.split('::')[-1]}",
+        {
+            "type": "beat",
+            "raw_id": rspec.residue_id.split("::")[-1],
+            "summary": rspec.content_hint or f"Residue moment for {rspec.flag}",
+            "role": "residue_beat",
+            "scene_type": "sequel",
+            "dilemma_impacts": [],
+            "entities": [],
+        },
+    )
+
+    beat_id = f"beat::{rspec.residue_id.split('::')[-1]}"
+
+    # Add belongs_to edge to path if specified
+    if rspec.path_id:
+        graph.add_edge("belongs_to", beat_id, rspec.path_id)
+
+    # Create residue passage containing this beat
+    residue_passage_id = f"passage::{rspec.residue_id.split('::')[-1]}"
+    graph.create_node(
+        residue_passage_id,
+        {
+            "type": "passage",
+            "raw_id": rspec.residue_id.split("::")[-1],
+            "summary": rspec.content_hint or f"Residue for {rspec.flag}",
+            "requires": [rspec.flag],
+            "is_residue": True,
+        },
+    )
+
+    graph.add_edge("grouped_in", beat_id, residue_passage_id)
+    graph.add_edge("precedes", residue_passage_id, rspec.target_passage_id)
+
+
+def _create_choice_edge(graph: Graph, cspec: ChoiceSpec) -> None:
+    """Create a choice edge between two passages."""
+    edge_data: dict[str, Any] = {}
+    if cspec.label:
+        edge_data["label"] = cspec.label
+    if cspec.requires:
+        edge_data["requires"] = cspec.requires
+    if cspec.grants:
+        edge_data["grants"] = cspec.grants
+
+    graph.add_edge("choice", cspec.from_passage, cspec.to_passage, **edge_data)
+
+
+def _apply_false_branch(
+    graph: Graph,
+    fb_spec: FalseBranchSpec,
+) -> tuple[int, int]:
+    """Apply a false branch decision (diamond or sidetrack).
+
+    Returns:
+        Tuple of (sidetrack_beats_created, choice_edges_created).
+    """
+    if fb_spec.branch_type == "diamond":
+        return _apply_diamond(graph, fb_spec)
+    if fb_spec.branch_type == "sidetrack":
+        return _apply_sidetrack(graph, fb_spec)
+    return (0, 0)
+
+
+def _apply_diamond(graph: Graph, fb_spec: FalseBranchSpec) -> tuple[int, int]:
+    """Apply a diamond false branch: split one passage into two alternatives.
+
+    Creates two alternative passages that diverge from the passage before
+    the split and reconverge at the passage after the split.
+    """
+    passage_ids = fb_spec.candidate_passage_ids
+    if len(passage_ids) < 3:
+        return (0, 0)
+
+    # The middle passage gets split into two alternatives
+    split_idx = len(passage_ids) // 2
+    from_passage = passage_ids[split_idx - 1]
+    to_passage = passage_ids[split_idx + 1] if split_idx + 1 < len(passage_ids) else passage_ids[-1]
+    split_passage = passage_ids[split_idx]
+
+    # Create alternative A
+    alt_a_id = f"{split_passage}_alt_a"
+    graph.create_node(
+        alt_a_id,
+        {
+            "type": "passage",
+            "raw_id": f"{split_passage.split('::')[-1]}_alt_a",
+            "summary": fb_spec.diamond_summary_a or "Alternative A",
+            "is_diamond_alt": True,
+        },
+    )
+
+    # Create alternative B
+    alt_b_id = f"{split_passage}_alt_b"
+    graph.create_node(
+        alt_b_id,
+        {
+            "type": "passage",
+            "raw_id": f"{split_passage.split('::')[-1]}_alt_b",
+            "summary": fb_spec.diamond_summary_b or "Alternative B",
+            "is_diamond_alt": True,
+        },
+    )
+
+    # Wire choice edges: from_passage → alt_a, from_passage → alt_b
+    graph.add_edge("choice", from_passage, alt_a_id, label=fb_spec.diamond_summary_a[:50])
+    graph.add_edge("choice", from_passage, alt_b_id, label=fb_spec.diamond_summary_b[:50])
+
+    # Wire reconvergence: alt_a → to_passage, alt_b → to_passage
+    graph.add_edge("choice", alt_a_id, to_passage, label="Continue")
+    graph.add_edge("choice", alt_b_id, to_passage, label="Continue")
+
+    return (0, 4)  # 0 sidetrack beats, 4 choice edges
+
+
+def _apply_sidetrack(graph: Graph, fb_spec: FalseBranchSpec) -> tuple[int, int]:
+    """Apply a sidetrack false branch: add a brief detour.
+
+    Creates a sidetrack beat + passage that branches off and rejoins.
+    """
+    passage_ids = fb_spec.candidate_passage_ids
+    if len(passage_ids) < 3:
+        return (0, 0)
+
+    # Insert sidetrack at the midpoint
+    insert_idx = len(passage_ids) // 2
+    from_passage = passage_ids[insert_idx]
+    to_passage = (
+        passage_ids[insert_idx + 1] if insert_idx + 1 < len(passage_ids) else passage_ids[-1]
+    )
+
+    # Create sidetrack beat
+    sidetrack_beat_id = f"beat::sidetrack_{from_passage.split('::')[-1]}"
+    graph.create_node(
+        sidetrack_beat_id,
+        {
+            "type": "beat",
+            "raw_id": f"sidetrack_{from_passage.split('::')[-1]}",
+            "summary": fb_spec.sidetrack_summary or "A brief detour",
+            "role": "sidetrack_beat",
+            "scene_type": "scene",
+            "dilemma_impacts": [],
+            "entities": fb_spec.sidetrack_entities,
+        },
+    )
+
+    # Create sidetrack passage
+    sidetrack_passage_id = f"passage::sidetrack_{from_passage.split('::')[-1]}"
+    graph.create_node(
+        sidetrack_passage_id,
+        {
+            "type": "passage",
+            "raw_id": f"sidetrack_{from_passage.split('::')[-1]}",
+            "summary": fb_spec.sidetrack_summary or "A brief detour",
+            "is_sidetrack": True,
+        },
+    )
+    graph.add_edge("grouped_in", sidetrack_beat_id, sidetrack_passage_id)
+
+    # Wire choice edges
+    enter_label = fb_spec.choice_label_enter or "Take the detour"
+    return_label = fb_spec.choice_label_return or "Continue on your way"
+
+    graph.add_edge("choice", from_passage, sidetrack_passage_id, label=enter_label)
+    graph.add_edge("choice", sidetrack_passage_id, to_passage, label=return_label)
+
+    return (1, 2)  # 1 sidetrack beat, 2 choice edges
+
+
+# ---------------------------------------------------------------------------
 # Internal helpers
 # ---------------------------------------------------------------------------
 

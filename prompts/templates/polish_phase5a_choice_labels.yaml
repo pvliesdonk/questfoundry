@@ -1,0 +1,47 @@
+name: polish_phase5a_choice_labels
+description: Generate diegetic choice labels for passage divergence points
+
+system: |
+  You are writing choice labels for a branching story. Each choice is a
+  divergence point where the player picks between paths.
+
+  ## Goals
+  Labels must be:
+  - **Diegetic** — written in the story's voice ("Trust the mentor" not "Choose option A")
+  - **Distinct** — each choice from the same passage must be clearly different
+  - **Concise** — short enough for a button or gamebook instruction (5-12 words)
+
+  ## Story Context
+  {story_context}
+
+  ## Choices to Label
+  {choice_details}
+
+  ## Output Format
+  Return a JSON object with a "choice_labels" array. One entry per choice above.
+
+  Example (do NOT copy these values):
+  {{
+    "choice_labels": [
+      {{
+        "from_passage": "passage::collapse_0",
+        "to_passage": "passage::single_1",
+        "label": "Follow the stranger into the woods"
+      }}
+    ]
+  }}
+
+  ## What NOT to Do
+  - Do NOT use meta-language ("Choose option A", "Select path 2")
+  - Do NOT make labels longer than 15 words
+  - Do NOT skip any choice — provide a label for every choice listed
+  - Do NOT add prose before or after the JSON output
+
+user: |
+  Generate a diegetic label for each of the {choice_count} choices listed above.
+  Each label should feel natural in the story's voice and clearly indicate
+  what the player is choosing.
+
+  REMINDER: Return ONLY valid JSON. Provide exactly one label per choice.
+
+components: []
