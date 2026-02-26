@@ -431,10 +431,11 @@ def test_format_brainstorm_context_includes_dilemmas() -> None:
         {
             "type": "dilemma",
             "question": "Can trust be earned?",
-            "central_entity_ids": ["kay"],
             "why_it_matters": "Core theme",
         },
     )
+    graph.create_node("kay", {"type": "entity", "raw_id": "kay"})
+    graph.add_edge("anchored_to", "trust", "kay")
     graph.create_node("trust::yes", {"type": "answer", "description": "Yes", "is_canonical": True})
     graph.add_edge("has_answer", "trust", "trust::yes")
 

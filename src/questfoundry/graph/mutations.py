@@ -893,26 +893,34 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         dilemma_node_id = _prefix_id("dilemma", raw_id)
         raw_id = strip_scope_prefix(dilemma_node_id)
 
-        # Resolve entity references in central_entity_ids list
+        # Resolve entity references for anchored_to edges
         raw_central_entities = dilemma.get("central_entity_ids", [])
         prefixed_central_entities = []
         for eid in raw_central_entities:
             try:
                 prefixed_central_entities.append(_resolve_entity_ref(graph, eid))
             except ValueError:
-                # Entity not found - keep raw ID for error reporting later
-                prefixed_central_entities.append(eid)
+                log.warning(
+                    "anchored_to_entity_not_found",
+                    dilemma_id=raw_id,
+                    entity_id=eid,
+                )
 
-        # Create dilemma node
+        # Create dilemma node (central entities stored as edges, not properties)
         dilemma_data = {
             "type": "dilemma",
             "raw_id": raw_id,
             "question": dilemma.get("question"),
-            "central_entity_ids": prefixed_central_entities,
             "why_it_matters": dilemma.get("why_it_matters"),
         }
         dilemma_data = _clean_dict(dilemma_data)
         graph.create_node(dilemma_node_id, dilemma_data)
+
+        # Create anchored_to edges (dilemma → entity)
+        # All IDs in prefixed_central_entities were resolved by _resolve_entity_ref,
+        # which guarantees the entity exists in the graph.
+        for entity_id in prefixed_central_entities:
+            graph.add_edge("anchored_to", dilemma_node_id, entity_id)
 
         # Create answer nodes and edges
         for j, answer in enumerate(dilemma.get("answers", [])):

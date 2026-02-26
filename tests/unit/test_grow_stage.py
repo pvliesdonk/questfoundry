@@ -1585,14 +1585,24 @@ class TestPhase8cOverlays:
             },
         )
         graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "entity_category": "character",
+                "concept": "The protagonist",
+            },
+        )
+        graph.create_node(
             "dilemma::trust_or_betray",
             {
                 "type": "dilemma",
                 "raw_id": "trust_or_betray",
                 "question": "Do you trust or betray the mentor?",
-                "central_entity_ids": ["entity::mentor", "entity::hero"],
             },
         )
+        graph.add_edge("anchored_to", "dilemma::trust_or_betray", "entity::mentor")
+        graph.add_edge("anchored_to", "dilemma::trust_or_betray", "entity::hero")
         graph.create_node(
             "path::trust_or_betray__trust",
             {
@@ -1645,7 +1655,7 @@ class TestPhase8cOverlays:
         assert "codeword::mentor_trusted_committed" in ctx
         assert 'Path: path::trust_or_betray__trust ("The Trusting Path")' in ctx
         assert 'Dilemma: "Do you trust or betray the mentor?"' in ctx
-        assert "Central entities: entity::mentor, entity::hero" in ctx
+        assert "Central entities: mentor, hero" in ctx
         assert "Consequence: Mentor becomes your ally" in ctx
         assert "Trust grows between you" in ctx
         assert "Mentor reveals hidden knowledge" in ctx
