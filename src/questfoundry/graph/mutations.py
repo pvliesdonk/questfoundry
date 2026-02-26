@@ -917,9 +917,10 @@ def apply_brainstorm_mutations(graph: Graph, output: dict[str, Any]) -> None:
         graph.create_node(dilemma_node_id, dilemma_data)
 
         # Create anchored_to edges (dilemma → entity)
+        # All IDs in prefixed_central_entities were resolved by _resolve_entity_ref,
+        # which guarantees the entity exists in the graph.
         for entity_id in prefixed_central_entities:
-            if graph.get_node(entity_id) is not None:
-                graph.add_edge("anchored_to", dilemma_node_id, entity_id)
+            graph.add_edge("anchored_to", dilemma_node_id, entity_id)
 
         # Create answer nodes and edges
         for j, answer in enumerate(dilemma.get("answers", [])):
