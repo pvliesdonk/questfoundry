@@ -2429,6 +2429,7 @@ class TestSeedArcStructureValidation:
         errors = validate_seed_mutations(graph, output)
 
         warnings = [e for e in errors if e.category == SeedErrorCategory.WARNING]
+        assert not _blocking_errors(errors)
         assert len(warnings) == 1
         assert "advances" in warnings[0].issue
 
