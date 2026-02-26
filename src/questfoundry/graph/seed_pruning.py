@@ -319,7 +319,7 @@ def _prune_demoted_dilemmas(
         consequences=pruned_consequences,
         initial_beats=pruned_beats,
         dilemma_analyses=seed_output.dilemma_analyses,
-        interaction_constraints=seed_output.interaction_constraints,
+        dilemma_relationships=seed_output.dilemma_relationships,
     )
 
 

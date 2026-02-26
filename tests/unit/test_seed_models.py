@@ -11,11 +11,11 @@ from questfoundry.models.seed import (
     ConsequencesSection,
     DilemmaAnalysis,
     DilemmaAnalysisSection,
+    DilemmaRelationship,
+    DilemmaRelationshipsSection,
     DilemmasSection,
     EntitiesSection,
     InitialBeat,
-    InteractionConstraint,
-    InteractionConstraintsSection,
     PathBeatsSection,
     PathsSection,
     SeedOutput,
@@ -251,12 +251,12 @@ _ANALYSIS_KWARGS: dict[str, str | int] = {
     "reasoning": "Trust path needs several exclusive beats to develop before rejoining.",
 }
 
-_CONSTRAINT_KWARGS: dict[str, str] = {
+_RELATIONSHIP_KWARGS: dict[str, str] = {
     "dilemma_a": "dilemma::alpha",
     "dilemma_b": "dilemma::beta",
-    "constraint_type": "shared_entity",
-    "description": "Both dilemmas involve the mentor character.",
-    "reasoning": "The mentor appears in both dilemma paths, creating narrative coupling.",
+    "ordering": "wraps",
+    "description": "The central mystery wraps the mentor subplot.",
+    "reasoning": "The mystery introduces first and resolves last, containing the mentor arc.",
 }
 
 
@@ -469,62 +469,62 @@ class TestDilemmaAnalysis:
             DilemmaAnalysis.model_validate(data)
 
 
-class TestInteractionConstraint:
-    """InteractionConstraint normalizes pair order and validates fields."""
+class TestDilemmaRelationship:
+    """DilemmaRelationship normalizes pair order and validates fields."""
 
-    def test_valid_constraint(self) -> None:
-        ic = InteractionConstraint(**_CONSTRAINT_KWARGS)
-        assert ic.dilemma_a == "dilemma::alpha"
-        assert ic.dilemma_b == "dilemma::beta"
-        assert ic.constraint_type == "shared_entity"
+    def test_valid_relationship(self) -> None:
+        dr = DilemmaRelationship(**_RELATIONSHIP_KWARGS)
+        assert dr.dilemma_a == "dilemma::alpha"
+        assert dr.dilemma_b == "dilemma::beta"
+        assert dr.ordering == "wraps"
 
     def test_pair_order_normalized(self) -> None:
         """Reversed pair is silently swapped to canonical order."""
-        ic = InteractionConstraint(
-            **{**_CONSTRAINT_KWARGS, "dilemma_a": "dilemma::zeta", "dilemma_b": "dilemma::alpha"}
+        dr = DilemmaRelationship(
+            **{**_RELATIONSHIP_KWARGS, "dilemma_a": "dilemma::zeta", "dilemma_b": "dilemma::alpha"}
         )
-        assert ic.dilemma_a == "dilemma::alpha"
-        assert ic.dilemma_b == "dilemma::zeta"
+        assert dr.dilemma_a == "dilemma::alpha"
+        assert dr.dilemma_b == "dilemma::zeta"
 
     def test_already_ordered_unchanged(self) -> None:
-        ic = InteractionConstraint(**_CONSTRAINT_KWARGS)
-        assert ic.dilemma_a == "dilemma::alpha"
-        assert ic.dilemma_b == "dilemma::beta"
+        dr = DilemmaRelationship(**_RELATIONSHIP_KWARGS)
+        assert dr.dilemma_a == "dilemma::alpha"
+        assert dr.dilemma_b == "dilemma::beta"
 
     def test_pair_key_property(self) -> None:
-        ic = InteractionConstraint(**_CONSTRAINT_KWARGS)
-        assert ic.pair_key == "dilemma::alpha__dilemma::beta"
+        dr = DilemmaRelationship(**_RELATIONSHIP_KWARGS)
+        assert dr.pair_key == "dilemma::alpha__dilemma::beta"
 
     def test_self_referential_rejected(self) -> None:
-        """A constraint between a dilemma and itself is semantically invalid."""
+        """A relationship between a dilemma and itself is semantically invalid."""
         with pytest.raises(ValidationError, match="cannot be the same"):
-            InteractionConstraint(
-                **{**_CONSTRAINT_KWARGS, "dilemma_b": _CONSTRAINT_KWARGS["dilemma_a"]}
+            DilemmaRelationship(
+                **{**_RELATIONSHIP_KWARGS, "dilemma_b": _RELATIONSHIP_KWARGS["dilemma_a"]}
             )
 
     def test_empty_dilemma_a_rejected(self) -> None:
         with pytest.raises(ValidationError, match="dilemma_a"):
-            InteractionConstraint(**{**_CONSTRAINT_KWARGS, "dilemma_a": ""})
+            DilemmaRelationship(**{**_RELATIONSHIP_KWARGS, "dilemma_a": ""})
 
     def test_empty_dilemma_b_rejected(self) -> None:
         with pytest.raises(ValidationError, match="dilemma_b"):
-            InteractionConstraint(**{**_CONSTRAINT_KWARGS, "dilemma_b": ""})
+            DilemmaRelationship(**{**_RELATIONSHIP_KWARGS, "dilemma_b": ""})
 
-    def test_invalid_constraint_type_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="constraint_type"):
-            InteractionConstraint(**{**_CONSTRAINT_KWARGS, "constraint_type": "magical"})
+    def test_invalid_ordering_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="ordering"):
+            DilemmaRelationship(**{**_RELATIONSHIP_KWARGS, "ordering": "magical"})
 
     @pytest.mark.parametrize(
-        "ctype",
+        "ordering",
         [
-            pytest.param("shared_entity", id="shared_entity"),
-            pytest.param("causal_chain", id="causal_chain"),
-            pytest.param("resource_conflict", id="resource_conflict"),
+            pytest.param("wraps", id="wraps"),
+            pytest.param("concurrent", id="concurrent"),
+            pytest.param("serial", id="serial"),
         ],
     )
-    def test_valid_constraint_types(self, ctype: str) -> None:
-        ic = InteractionConstraint(**{**_CONSTRAINT_KWARGS, "constraint_type": ctype})
-        assert ic.constraint_type == ctype
+    def test_valid_ordering_types(self, ordering: str) -> None:
+        dr = DilemmaRelationship(**{**_RELATIONSHIP_KWARGS, "ordering": ordering})
+        assert dr.ordering == ordering
 
 
 class TestDilemmaAnalysisSectionDedup:
@@ -557,62 +557,62 @@ class TestDilemmaAnalysisSectionDedup:
         assert len(section.dilemma_analyses) == 0
 
 
-class TestInteractionConstraintsSectionDedup:
-    """InteractionConstraintsSection deduplicates on (dilemma_a, dilemma_b) pair."""
+class TestDilemmaRelationshipsSectionDedup:
+    """DilemmaRelationshipsSection deduplicates on (dilemma_a, dilemma_b) pair."""
 
-    def test_unique_constraints_accepted(self) -> None:
-        section = InteractionConstraintsSection(
-            interaction_constraints=[
-                _CONSTRAINT_KWARGS,
-                {**_CONSTRAINT_KWARGS, "dilemma_a": "dilemma::gamma"},
+    def test_unique_relationships_accepted(self) -> None:
+        section = DilemmaRelationshipsSection(
+            dilemma_relationships=[
+                _RELATIONSHIP_KWARGS,
+                {**_RELATIONSHIP_KWARGS, "dilemma_a": "dilemma::gamma"},
             ]
         )
-        assert len(section.interaction_constraints) == 2
+        assert len(section.dilemma_relationships) == 2
 
     def test_identical_duplicates_silently_deduplicated(self) -> None:
-        section = InteractionConstraintsSection(
-            interaction_constraints=[_CONSTRAINT_KWARGS, _CONSTRAINT_KWARGS]
+        section = DilemmaRelationshipsSection(
+            dilemma_relationships=[_RELATIONSHIP_KWARGS, _RELATIONSHIP_KWARGS]
         )
-        assert len(section.interaction_constraints) == 1
+        assert len(section.dilemma_relationships) == 1
 
     def test_non_identical_duplicates_rejected(self) -> None:
         """Same pair_key, different content → conflict."""
         with pytest.raises(ValidationError, match="Duplicates found"):
-            InteractionConstraintsSection(
-                interaction_constraints=[
-                    _CONSTRAINT_KWARGS,
-                    {**_CONSTRAINT_KWARGS, "constraint_type": "causal_chain"},
+            DilemmaRelationshipsSection(
+                dilemma_relationships=[
+                    _RELATIONSHIP_KWARGS,
+                    {**_RELATIONSHIP_KWARGS, "ordering": "serial"},
                 ]
             )
 
     def test_reversed_pair_treated_as_duplicate(self) -> None:
         """(a,b) and (b,a) with identical content normalize to same pair → deduplicated."""
         reversed_kwargs = {
-            **_CONSTRAINT_KWARGS,
-            "dilemma_a": _CONSTRAINT_KWARGS["dilemma_b"],
-            "dilemma_b": _CONSTRAINT_KWARGS["dilemma_a"],
+            **_RELATIONSHIP_KWARGS,
+            "dilemma_a": _RELATIONSHIP_KWARGS["dilemma_b"],
+            "dilemma_b": _RELATIONSHIP_KWARGS["dilemma_a"],
         }
-        section = InteractionConstraintsSection(
-            interaction_constraints=[_CONSTRAINT_KWARGS, reversed_kwargs]
+        section = DilemmaRelationshipsSection(
+            dilemma_relationships=[_RELATIONSHIP_KWARGS, reversed_kwargs]
         )
-        assert len(section.interaction_constraints) == 1
+        assert len(section.dilemma_relationships) == 1
 
     def test_reversed_non_identical_duplicate_rejected(self) -> None:
         """Reversed pair with different content is a conflict after normalization."""
         reversed_different = {
-            **_CONSTRAINT_KWARGS,
-            "dilemma_a": _CONSTRAINT_KWARGS["dilemma_b"],
-            "dilemma_b": _CONSTRAINT_KWARGS["dilemma_a"],
+            **_RELATIONSHIP_KWARGS,
+            "dilemma_a": _RELATIONSHIP_KWARGS["dilemma_b"],
+            "dilemma_b": _RELATIONSHIP_KWARGS["dilemma_a"],
             "description": "A completely different narrative meaning.",
         }
         with pytest.raises(ValidationError, match="Duplicates found"):
-            InteractionConstraintsSection(
-                interaction_constraints=[_CONSTRAINT_KWARGS, reversed_different]
+            DilemmaRelationshipsSection(
+                dilemma_relationships=[_RELATIONSHIP_KWARGS, reversed_different]
             )
 
     def test_empty_accepted(self) -> None:
-        section = InteractionConstraintsSection(interaction_constraints=[])
-        assert len(section.interaction_constraints) == 0
+        section = DilemmaRelationshipsSection(dilemma_relationships=[])
+        assert len(section.dilemma_relationships) == 0
 
 
 class TestSeedOutputBackwardCompat:
@@ -621,17 +621,17 @@ class TestSeedOutputBackwardCompat:
     def test_new_fields_default_empty(self) -> None:
         output = SeedOutput()
         assert output.dilemma_analyses == []
-        assert output.interaction_constraints == []
+        assert output.dilemma_relationships == []
 
     def test_with_analyses_roundtrip(self) -> None:
         output = SeedOutput(
             dilemma_analyses=[DilemmaAnalysis(**_ANALYSIS_KWARGS)],
-            interaction_constraints=[InteractionConstraint(**_CONSTRAINT_KWARGS)],
+            dilemma_relationships=[DilemmaRelationship(**_RELATIONSHIP_KWARGS)],
         )
         data = output.model_dump()
         restored = SeedOutput.model_validate(data)
         assert len(restored.dilemma_analyses) == 1
-        assert len(restored.interaction_constraints) == 1
+        assert len(restored.dilemma_relationships) == 1
         assert restored.dilemma_analyses[0].dilemma_role == "soft"
 
 

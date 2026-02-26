@@ -627,7 +627,7 @@ def make_intersection_candidate_graph() -> Graph:
 
     Key beats for intersection testing:
         beat::mentor_meet: location="market", mentor_trust paths
-        beat::artifact_discover: location="docks", location_alternatives=["market"],
+        beat::artifact_discover: location="docks", flexibility edge to "market",
                                  artifact_quest paths
 
     These beats share "market" as a location signal and are from different
@@ -638,13 +638,19 @@ def make_intersection_candidate_graph() -> Graph:
     """
     graph = make_two_dilemma_graph()
 
-    # Add location data to some beats for intersection detection
-    graph.update_node("beat::mentor_meet", location="market")
-    graph.update_node(
-        "beat::artifact_discover",
-        location="docks",
-        location_alternatives=["market"],
+    # Create location entity nodes referenced by beats
+    graph.create_node(
+        "location::market", {"type": "entity", "raw_id": "market", "category": "location"}
     )
+    graph.create_node(
+        "location::docks", {"type": "entity", "raw_id": "docks", "category": "location"}
+    )
+
+    # Add location data to some beats for intersection detection
+    graph.update_node("beat::mentor_meet", location="location::market")
+    graph.update_node("beat::artifact_discover", location="location::docks")
+    # Flexibility edge (Doc 3): beat can also occur at market
+    graph.add_edge("flexibility", "beat::artifact_discover", "location::market", role="location")
 
     return graph
 

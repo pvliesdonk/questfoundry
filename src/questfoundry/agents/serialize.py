@@ -53,7 +53,7 @@ if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
     from questfoundry.models.seed import (
         DilemmaAnalysis,
-        InteractionConstraint,
+        DilemmaRelationship,
         SeedOutput,
     )
     from questfoundry.pipeline.stages.base import PhaseProgressFn
@@ -498,7 +498,7 @@ _REQUIRED_SECTION_PROMPT_KEYS = [
     "beats_prompt",
     "per_path_beats_prompt",
     "dilemma_analyses_prompt",
-    "interaction_constraints_prompt",
+    "dilemma_relationships_prompt",
 ]
 
 
@@ -548,7 +548,7 @@ def _load_seed_section_prompts() -> dict[str, str]:
         "per_path_beats": data["per_path_beats_prompt"],
         "per_dilemma_paths": data["per_dilemma_paths_prompt"],
         "dilemma_analyses": data["dilemma_analyses_prompt"],
-        "interaction_constraints": data["interaction_constraints_prompt"],
+        "dilemma_relationships": data["dilemma_relationships_prompt"],
     }
 
 
@@ -2189,7 +2189,7 @@ async def serialize_convergence_analysis(
         return [], 0, 0
 
 
-async def serialize_interaction_constraints(
+async def serialize_dilemma_relationships(
     model: BaseChatModel,
     pruned_artifact: SeedOutput,
     graph: Graph,
@@ -2197,11 +2197,11 @@ async def serialize_interaction_constraints(
     max_retries: int = 3,
     callbacks: list[BaseCallbackHandler] | None = None,
     on_phase_progress: PhaseProgressFn | None = None,
-) -> tuple[list[InteractionConstraint], int, int]:
-    """Run interaction constraint analysis (Section 8).
+) -> tuple[list[DilemmaRelationship], int, int]:
+    """Run dilemma ordering relationship analysis (Section 8, Doc 3).
 
-    Identifies pairwise dilemma interactions. Runs AFTER pruning so only
-    surviving dilemmas are analyzed.
+    Identifies pairwise dilemma ordering (wraps, concurrent, serial).
+    Runs AFTER pruning so only surviving dilemmas are analyzed.
 
     Soft failure: if the LLM call fails, logs a WARNING and returns empty.
 
@@ -2215,21 +2215,21 @@ async def serialize_interaction_constraints(
         on_phase_progress: Progress callback.
 
     Returns:
-        Tuple of (interaction_constraints, tokens_used, llm_calls).
+        Tuple of (dilemma_relationships, tokens_used, llm_calls).
     """
     from questfoundry.graph.context import (
         format_interaction_candidates_context,
         strip_scope_prefix,
     )
-    from questfoundry.models.seed import InteractionConstraintsSection
+    from questfoundry.models.seed import DilemmaRelationshipsSection
 
     if not pruned_artifact.dilemmas:
-        log.debug("interaction_constraints_skipped", reason="no_dilemmas")
+        log.debug("dilemma_relationships_skipped", reason="no_dilemmas")
         return [], 0, 0
 
     prompts = _load_seed_section_prompts()
 
-    interaction_constraints: list[InteractionConstraint] = []
+    dilemma_relationships: list[DilemmaRelationship] = []
     try:
         candidates_context = format_interaction_candidates_context(pruned_artifact, graph)
 
@@ -2239,16 +2239,16 @@ async def serialize_interaction_constraints(
             return [], 0, 0
 
         if on_phase_progress is not None:
-            on_phase_progress("Identifying dilemma interactions", "section_8", "")
+            on_phase_progress("Classifying dilemma ordering", "section_8", "")
 
-        section8_prompt = prompts["interaction_constraints"].format(
+        section8_prompt = prompts["dilemma_relationships"].format(
             candidate_pairs_context=candidates_context
         )
 
         section8_result, section8_tokens = await serialize_to_artifact(
             model=model,
             brief=candidates_context,
-            schema=InteractionConstraintsSection,
+            schema=DilemmaRelationshipsSection,
             provider_name=provider_name,
             max_retries=max_retries,
             system_prompt=section8_prompt,
@@ -2258,30 +2258,30 @@ async def serialize_interaction_constraints(
 
         # Validate: reject pairs not in candidate set
         surviving_ids = {strip_scope_prefix(d.dilemma_id) for d in pruned_artifact.dilemmas}
-        valid_constraints = []
-        for c in section8_result.interaction_constraints:
-            a_raw = strip_scope_prefix(c.dilemma_a)
-            b_raw = strip_scope_prefix(c.dilemma_b)
+        valid_relationships = []
+        for r in section8_result.dilemma_relationships:
+            a_raw = strip_scope_prefix(r.dilemma_a)
+            b_raw = strip_scope_prefix(r.dilemma_b)
             if a_raw in surviving_ids and b_raw in surviving_ids:
-                valid_constraints.append(c)
+                valid_relationships.append(r)
             else:
                 log.warning(
-                    "interaction_constraint_rejected",
-                    dilemma_a=c.dilemma_a,
-                    dilemma_b=c.dilemma_b,
+                    "dilemma_relationship_rejected",
+                    dilemma_a=r.dilemma_a,
+                    dilemma_b=r.dilemma_b,
                     reason="pair_not_in_candidate_set",
                 )
-        interaction_constraints = valid_constraints
+        dilemma_relationships = valid_relationships
         log.info(
             "post_prune_section8_complete",
-            constraints=len(interaction_constraints),
+            relationships=len(dilemma_relationships),
             tokens=section8_tokens,
         )
-        return interaction_constraints, section8_tokens, 1
+        return dilemma_relationships, section8_tokens, 1
     except Exception as e:
         log.warning(
             "seed_analysis_defaulted",
-            section="interaction_constraints",
+            section="dilemma_relationships",
             reason="serialization_failed",
             error=str(e),
             error_type=type(e).__name__,
@@ -2297,17 +2297,17 @@ async def serialize_post_prune_analysis(
     max_retries: int = 3,
     callbacks: list[BaseCallbackHandler] | None = None,
     on_phase_progress: PhaseProgressFn | None = None,
-) -> tuple[list[DilemmaAnalysis], list[InteractionConstraint], int, int]:
+) -> tuple[list[DilemmaAnalysis], list[DilemmaRelationship], int, int]:
     """Run post-prune analysis (Sections 7+8).
 
     .. deprecated::
         Use ``serialize_convergence_analysis`` (before pruning) and
-        ``serialize_interaction_constraints`` (after pruning) separately
+        ``serialize_dilemma_relationships`` (after pruning) separately
         for policy-aware pruning. This combined function runs both after
         pruning for backward compatibility.
 
     Returns:
-        Tuple of (dilemma_analyses, interaction_constraints, tokens_used, llm_calls).
+        Tuple of (dilemma_analyses, dilemma_relationships, tokens_used, llm_calls).
     """
     analyses, a_tokens, a_calls = await serialize_convergence_analysis(
         model=model,
@@ -2318,7 +2318,7 @@ async def serialize_post_prune_analysis(
         callbacks=callbacks,
         on_phase_progress=on_phase_progress,
     )
-    constraints, c_tokens, c_calls = await serialize_interaction_constraints(
+    relationships, r_tokens, r_calls = await serialize_dilemma_relationships(
         model=model,
         pruned_artifact=pruned_artifact,
         graph=graph,
@@ -2327,4 +2327,4 @@ async def serialize_post_prune_analysis(
         callbacks=callbacks,
         on_phase_progress=on_phase_progress,
     )
-    return analyses, constraints, a_tokens + c_tokens, a_calls + c_calls
+    return analyses, relationships, a_tokens + r_tokens, a_calls + r_calls

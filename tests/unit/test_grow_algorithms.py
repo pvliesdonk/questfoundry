@@ -2890,7 +2890,7 @@ class TestBuildKnotCandidates:
 
         # The market location should link mentor_meet and artifact_discover
         market_candidate = next(
-            (c for c in location_candidates if c.shared_value == "market"), None
+            (c for c in location_candidates if c.shared_value == "location::market"), None
         )
         assert market_candidate is not None
         assert "beat::mentor_meet" in market_candidate.beat_ids
@@ -3073,8 +3073,8 @@ class TestResolveKnotLocation:
         )
         assert location == "market"
 
-    def test_primary_in_alternatives(self) -> None:
-        """Resolves when primary of one is in alternatives of another."""
+    def test_primary_in_flexibility_edges(self) -> None:
+        """Resolves when primary of one matches flexibility edge of another."""
         from questfoundry.graph.grow_algorithms import resolve_intersection_location
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
 
@@ -3082,7 +3082,7 @@ class TestResolveKnotLocation:
         location = resolve_intersection_location(
             graph, ["beat::mentor_meet", "beat::artifact_discover"]
         )
-        assert location == "market"
+        assert location == "location::market"
 
     def test_no_shared_location(self) -> None:
         """Returns None when no shared location exists."""
@@ -3193,7 +3193,6 @@ class TestFormatIntersectionCandidates:
             "beat::artifact_discover": {
                 "summary": "Hero finds artifact",
                 "location": "docks",
-                "location_alternatives": ["market"],
                 "entities": ["artifact"],
             },
         }

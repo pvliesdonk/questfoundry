@@ -594,7 +594,7 @@ class TestPhase3Knots:
         assert "1 applied" in result.detail
 
         mentor_beat = graph.get_node("beat::mentor_meet")
-        assert mentor_beat["location"] == "market"
+        assert mentor_beat["location"] == "location::market"
 
     @pytest.mark.asyncio
     async def test_phase_3_skips_no_candidates(self) -> None:

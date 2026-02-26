@@ -1758,7 +1758,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             with contextlib.suppress(ValueError):
                 prefixed_location = _resolve_entity_ref(graph, raw_location)
 
-        # Resolve location_alternatives (also entity IDs)
+        # Resolve location_alternatives → flexibility edges (Doc 3)
         raw_location_alts = beat.get("location_alternatives", [])
         prefixed_location_alts = []
         for eid in raw_location_alts:
@@ -1790,7 +1790,6 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "dilemma_impacts": prefixed_impacts,
             "entities": prefixed_entities,
             "location": prefixed_location,
-            "location_alternatives": prefixed_location_alts,
             "temporal_hint": prefixed_hint,
         }
         beat_data = _clean_dict(beat_data)
@@ -1800,6 +1799,10 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
         for raw_path_id in beat.get("paths", []):
             prefixed_path_id = _prefix_id("path", raw_path_id)
             graph.add_edge("belongs_to", beat_id, prefixed_path_id)
+
+        # Create flexibility edges for location alternatives (Doc 3)
+        for alt_entity in prefixed_location_alts:
+            graph.add_edge("flexibility", beat_id, alt_entity, role="location")
 
     # Store convergence analysis on dilemma nodes (from sections 7+8)
     analysis_by_id: dict[str, dict[str, Any]] = {}
@@ -1836,26 +1839,26 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                     update_fields[key] = data[key]
             graph.update_node(dilemma_node_id, **update_fields)
 
-    # Create interaction constraint edges between dilemma pairs
-    for constraint in output.get("interaction_constraints", []):
-        a_raw = constraint.get("dilemma_a", "")
-        b_raw = constraint.get("dilemma_b", "")
+    # Create dilemma ordering edges between dilemma pairs (Doc 3, Part 2)
+    for relationship in output.get("dilemma_relationships", []):
+        a_raw = relationship.get("dilemma_a", "")
+        b_raw = relationship.get("dilemma_b", "")
         a_node = _prefix_id("dilemma", a_raw)
         b_node = _prefix_id("dilemma", b_raw)
         if not graph.has_node(a_node) or not graph.has_node(b_node):
             log.warning(
-                "interaction_constraint_edge_skipped",
+                "dilemma_ordering_edge_skipped",
                 dilemma_a=a_raw,
                 dilemma_b=b_raw,
                 reason="node_missing",
             )
             continue
         graph.add_edge(
-            "interaction_constraint",
+            "dilemma_ordering",
             a_node,
             b_node,
-            constraint_type=constraint.get("constraint_type", "shared_entity"),
-            description=constraint.get("description", ""),
+            ordering=relationship.get("ordering", "concurrent"),
+            description=relationship.get("description", ""),
         )
 
 

@@ -907,60 +907,65 @@ dilemma_analyses_prompt: |
   ## Output
   Return ONLY valid JSON with the "dilemma_analyses" array. Classify ALL dilemmas.
 
-# Section 8: Interaction Constraints (post-prune)
-interaction_constraints_prompt: |
-  You are identifying pairwise dilemma interactions for a SEED stage.
+# Section 8: Dilemma Ordering Relationships (post-prune, Doc 3)
+dilemma_relationships_prompt: |
+  You are classifying the temporal ordering between dilemma pairs for a SEED stage.
 
-  Some dilemmas interact with each other — they share characters, have causal
-  dependencies, or compete for narrative resources. MOST pairs have NO
-  interaction. It is normal and expected to return an empty list.
+  Each dilemma pair has a structural relationship that affects how GROW
+  interleaves their beats. MOST pairs are "concurrent" (the default).
+  It is normal and expected to return few or no relationships.
 
-  ## Constraint Types
+  ## Ordering Types
 
-  - **shared_entity**: Both dilemmas involve the same character, location, or
-    object as a central element. Example: "both dilemmas center on the mentor
-    character, so the mentor's arc must be consistent across both."
-  - **causal_chain**: Resolving dilemma A directly affects dilemma B. Example:
-    "whether the bridge is destroyed (dilemma A) determines access to the
-    fortress (dilemma B)."
-  - **resource_conflict**: Both dilemmas compete for the same limited narrative
-    resource (time, character attention, location availability). Example:
-    "both dilemmas need the protagonist at the same location simultaneously."
+  - **wraps**: Dilemma A introduces before B and B resolves before A. A is the
+    outer dilemma containing B as a subplot. Example: "the central mystery (A)
+    wraps the mentor's betrayal subplot (B) — the mystery is present from the
+    start and resolves at the climax, while the betrayal plays out in the middle."
+  - **concurrent**: Neither wraps the other. Both are active simultaneously,
+    interleaving but without nesting. This is the DEFAULT for most pairs.
+    Example: "both the romance and the political intrigue develop in parallel."
+  - **serial**: A resolves (commits and converges) before B introduces. The
+    dilemmas never structurally interact. Example: "the escape subplot resolves
+    in Act 1 before the revenge plot begins in Act 2."
+
+  NOTE: shared_entity is NOT an ordering type — it is derived automatically
+  from entity anchoring in the graph. Do NOT classify pairs as shared_entity.
 
   ## What NOT to Do
-  - Do NOT invent constraints for pairs not in the Candidate Pairs list
-  - Do NOT force constraints where none exist — empty list is fine
-  - Do NOT use constraint_type values other than the three above
+  - Do NOT invent relationships for pairs not in the Candidate Pairs list
+  - Do NOT force relationships where none exist — empty list is fine
+  - Do NOT use ordering values other than wraps, concurrent, serial
+  - Do NOT classify shared characters/locations as ordering — that is derived
 
-  GOOD constraint: "Both dilemmas involve the mentor (shared_entity), so the
-  mentor's betrayal in dilemma A affects trust in dilemma B."
-  BAD constraint: "Both dilemmas are thematically about trust" (thematic
-  similarity is NOT a structural constraint).
+  GOOD: "The central mystery wraps the betrayal subplot — it introduces first
+  and resolves last."
+  BAD: "Both dilemmas involve the mentor" (that is shared_entity, derived from
+  anchored_to edges, not an ordering relationship).
 
   ## Context
 
   {candidate_pairs_context}
 
   ## Schema
-  Return a JSON object with an "interaction_constraints" array:
+  Return a JSON object with a "dilemma_relationships" array:
   ```json
   {{
-    "interaction_constraints": [
+    "dilemma_relationships": [
       {{
         "dilemma_a": "dilemma::first_id",
         "dilemma_b": "dilemma::second_id",
-        "constraint_type": "shared_entity",
-        "description": "The observable structural fact (1-3 sentences, max ~500 chars).",
-        "reasoning": "Why this matters for story structure (1-2 sentences)."
+        "ordering": "wraps",
+        "description": "The observable structural relationship (1-3 sentences, max ~500 chars).",
+        "reasoning": "Why this ordering matters for beat interleaving (1-2 sentences)."
       }}
     ]
   }}
   ```
 
-  If no interactions exist (common), return an empty array:
+  If no non-concurrent relationships exist (common), return an empty array:
   ```json
   {{
-    "interaction_constraints": []
+    "dilemma_relationships": []
   }}
   ```
 
@@ -969,8 +974,8 @@ interaction_constraints_prompt: |
   ## Rules
   - ONLY consider pairs from the ### Candidate Pairs list in the Context
   - Use canonical ordering: dilemma_a < dilemma_b (alphabetically)
-  - Most stories have 0-2 constraints. Empty list is expected and normal.
-  - `reasoning` must explain the structural (not thematic) relationship
+  - Most stories have 0-2 non-concurrent relationships. Empty list is expected.
+  - `reasoning` must explain the temporal (not thematic) relationship
 
   ## REMINDER
   ONLY use pairs from the Candidate Pairs list. Empty list is normal. Do NOT invent constraints.
