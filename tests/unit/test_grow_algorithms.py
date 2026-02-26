@@ -126,9 +126,9 @@ class TestValidateBeatDag:
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
         graph.create_node("beat::c", {"type": "beat", "raw_id": "c"})
         # a → b → c → a (cycle)
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
-        graph.add_edge("sequenced_after", "beat::c", "beat::b")
-        graph.add_edge("sequenced_after", "beat::a", "beat::c")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::b")
+        graph.add_edge("predecessor", "beat::a", "beat::c")
 
         errors = validate_beat_dag(graph)
         assert len(errors) == 1
@@ -139,7 +139,7 @@ class TestValidateBeatDag:
     def test_self_loop_detected(self) -> None:
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
-        graph.add_edge("sequenced_after", "beat::a", "beat::a")
+        graph.add_edge("predecessor", "beat::a", "beat::a")
 
         errors = validate_beat_dag(graph)
         assert len(errors) == 1
@@ -221,8 +221,8 @@ class TestTopologicalSortBeats:
         graph.create_node("beat::a", {"type": "beat"})
         graph.create_node("beat::b", {"type": "beat"})
         graph.create_node("beat::c", {"type": "beat"})
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
-        graph.add_edge("sequenced_after", "beat::c", "beat::b")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::b")
 
         result = topological_sort_beats(graph, ["beat::a", "beat::b", "beat::c"])
         assert result == ["beat::a", "beat::b", "beat::c"]
@@ -234,10 +234,10 @@ class TestTopologicalSortBeats:
         graph.create_node("beat::c", {"type": "beat"})
         graph.create_node("beat::d", {"type": "beat"})
         # a → b, a → c, b → d, c → d
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
-        graph.add_edge("sequenced_after", "beat::c", "beat::a")
-        graph.add_edge("sequenced_after", "beat::d", "beat::b")
-        graph.add_edge("sequenced_after", "beat::d", "beat::c")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::a")
+        graph.add_edge("predecessor", "beat::d", "beat::b")
+        graph.add_edge("predecessor", "beat::d", "beat::c")
 
         result = topological_sort_beats(graph, ["beat::a", "beat::b", "beat::c", "beat::d"])
         assert result[0] == "beat::a"
@@ -271,8 +271,8 @@ class TestTopologicalSortBeats:
         graph.create_node("beat::a", {"type": "beat"})
         graph.create_node("beat::b", {"type": "beat"})
         graph.create_node("beat::c", {"type": "beat"})
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
-        graph.add_edge("sequenced_after", "beat::c", "beat::b")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::b")
 
         # Sort only a and c - the edge through b is not relevant
         result = topological_sort_beats(graph, ["beat::a", "beat::c"])
@@ -283,8 +283,8 @@ class TestTopologicalSortBeats:
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat"})
         graph.create_node("beat::b", {"type": "beat"})
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
-        graph.add_edge("sequenced_after", "beat::a", "beat::b")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::a", "beat::b")
 
         with pytest.raises(ValueError, match="Cycle detected"):
             topological_sort_beats(graph, ["beat::a", "beat::b"])
@@ -295,8 +295,8 @@ class TestTopologicalSortBeats:
         graph.create_node("beat::a", {"type": "beat"})
         graph.create_node("beat::b", {"type": "beat"})
         graph.create_node("beat::c", {"type": "beat"})
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
-        graph.add_edge("sequenced_after", "beat::c", "beat::a")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::a")
 
         result = topological_sort_beats(graph, ["beat::a", "beat::b", "beat::c"])
         assert result[0] == "beat::a"
@@ -318,14 +318,14 @@ class TestTopologicalSortBeats:
         )
         assert result == ["beat::m", "beat::x", "beat::a"]
 
-    def test_priority_beats_respects_sequenced_after(self) -> None:
+    def test_priority_beats_respects_predecessor(self) -> None:
         """Priority must not override topological (requires) constraints."""
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat"})
         graph.create_node("beat::b", {"type": "beat"})
         graph.create_node("beat::c", {"type": "beat"})
         # b requires a → a must come before b regardless of priority
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
         # Mark b as priority but a is not — a still must come first
         result = topological_sort_beats(
             graph,
@@ -358,7 +358,7 @@ class TestTopologicalSortBeats:
                 },
             )
             if i > 1:
-                graph.add_edge("sequenced_after", bid, f"beat::{prefix}{i - 1}")
+                graph.add_edge("predecessor", bid, f"beat::{prefix}{i - 1}")
             ids.append(bid)
         return ids
 
@@ -374,7 +374,7 @@ class TestTopologicalSortBeats:
         # With interleaving: a1, b1, a2, b2, a3, b3
         assert result == ["beat::a1", "beat::b1", "beat::a2", "beat::b2", "beat::a3", "beat::b3"]
 
-    def test_sequenced_after_edges_override_interleaving(self) -> None:
+    def test_predecessor_edges_override_interleaving(self) -> None:
         """Topological constraints take precedence over round-robin."""
         graph = Graph.empty()
         graph.create_node(
@@ -386,7 +386,7 @@ class TestTopologicalSortBeats:
             {"type": "beat", "dilemma_impacts": [{"dilemma_id": "d_beta", "effect": "explores"}]},
         )
         # b1 requires a1 — a1 must come first even though b has 0 emissions
-        graph.add_edge("sequenced_after", "beat::b1", "beat::a1")
+        graph.add_edge("predecessor", "beat::b1", "beat::a1")
 
         result = topological_sort_beats(graph, ["beat::a1", "beat::b1"])
         assert result == ["beat::a1", "beat::b1"]
@@ -1067,8 +1067,8 @@ class TestPhase1Integration:
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
-        graph.add_edge("sequenced_after", "beat::a", "beat::b")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::a", "beat::b")
 
         GrowStage()
         mock_model = MagicMock()
@@ -3021,7 +3021,7 @@ class TestCheckKnotCompatibility:
         assert len(errors) > 0
         assert any("at least 2 different dilemmas" in e.issue for e in errors)
 
-    def test_incompatible_sequenced_after_conflict(self) -> None:
+    def test_incompatible_predecessor_conflict(self) -> None:
         """Beats with requires edge are incompatible."""
         from questfoundry.graph.grow_algorithms import check_intersection_compatibility
 
@@ -3034,11 +3034,11 @@ class TestCheckKnotCompatibility:
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
         graph.add_edge("belongs_to", "beat::a", "path::a1")
         graph.add_edge("belongs_to", "beat::b", "path::b1")
-        graph.add_edge("sequenced_after", "beat::a", "beat::b")
+        graph.add_edge("predecessor", "beat::a", "beat::b")
 
         errors = check_intersection_compatibility(graph, ["beat::a", "beat::b"])
         assert len(errors) > 0
-        assert any("sequenced_after" in e.issue for e in errors)
+        assert any("predecessor" in e.issue for e in errors)
 
     def test_insufficient_beats(self) -> None:
         """Single beat is incompatible."""
@@ -3663,8 +3663,8 @@ class TestGetPathBeatSequence:
         graph.add_edge("belongs_to", "beat::a", "path::t1")
         graph.add_edge("belongs_to", "beat::b", "path::t1")
         # Create a cycle: a requires b, b requires a
-        graph.add_edge("sequenced_after", "beat::a", "beat::b")
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::a", "beat::b")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
 
         with pytest.raises(ValueError, match="Cycle detected"):
             get_path_beat_sequence(graph, "path::t1")
@@ -3762,13 +3762,13 @@ class TestInsertGapBeat:
 
         # New beat requires after_beat
         requires_from_new = graph.get_edges(
-            from_id=beat_id, to_id="beat::opening", edge_type="sequenced_after"
+            from_id=beat_id, to_id="beat::opening", edge_type="predecessor"
         )
         assert len(requires_from_new) == 1
 
         # before_beat requires new beat
         requires_to_new = graph.get_edges(
-            from_id="beat::mentor_meet", to_id=beat_id, edge_type="sequenced_after"
+            from_id="beat::mentor_meet", to_id=beat_id, edge_type="predecessor"
         )
         assert len(requires_to_new) == 1
 
@@ -3806,14 +3806,12 @@ class TestInsertGapBeat:
         )
 
         # No requires from new beat (no after_beat)
-        requires_from_new = graph.get_edges(
-            from_id=beat_id, to_id=None, edge_type="sequenced_after"
-        )
+        requires_from_new = graph.get_edges(from_id=beat_id, to_id=None, edge_type="predecessor")
         assert len(requires_from_new) == 0
 
         # before_beat requires new beat
         requires_to_new = graph.get_edges(
-            from_id="beat::opening", to_id=beat_id, edge_type="sequenced_after"
+            from_id="beat::opening", to_id=beat_id, edge_type="predecessor"
         )
         assert len(requires_to_new) == 1
 
@@ -3867,7 +3865,7 @@ class TestInsertGapBeat:
         )
         graph.add_edge("belongs_to", "beat::a", "path::t1")
         graph.add_edge("belongs_to", "beat::b", "path::t1")
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
 
         beat_id = insert_gap_beat(
             graph,
@@ -4412,9 +4410,9 @@ class TestCollapseLinearBeats:
             )
             graph.add_edge("belongs_to", f"beat::{bid}", "path::p1")
 
-        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
-        graph.add_edge("sequenced_after", "beat::b3", "beat::b2")
-        graph.add_edge("sequenced_after", "beat::b4", "beat::b3")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
+        graph.add_edge("predecessor", "beat::b4", "beat::b3")
 
         graph.create_node(
             "arc::spine",
@@ -4440,7 +4438,7 @@ class TestCollapseLinearBeats:
         assert arc_seq == ["beat::b1", "beat::b2", "beat::b4"]
 
         requires_edges = graph.get_edges(
-            from_id="beat::b4", to_id="beat::b2", edge_type="sequenced_after"
+            from_id="beat::b4", to_id="beat::b2", edge_type="predecessor"
         )
         assert requires_edges
 
@@ -4480,9 +4478,9 @@ class TestCollapseLinearBeats:
         for bid in ["b1", "b2", "b3", "b4"]:
             graph.add_edge("belongs_to", f"beat::{bid}", "path::p1")
 
-        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
-        graph.add_edge("sequenced_after", "beat::b3", "beat::b2")
-        graph.add_edge("sequenced_after", "beat::b4", "beat::b3")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
+        graph.add_edge("predecessor", "beat::b4", "beat::b3")
 
         result = collapse_linear_beats(graph, min_run_length=2)
         assert result.beats_removed == 0
@@ -4507,10 +4505,10 @@ class TestCollapseLinearBeats:
             graph.add_edge("belongs_to", f"beat::{bid}", "path::p1")
         graph.add_edge("belongs_to", "beat::bx", "path::p2")
 
-        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
-        graph.add_edge("sequenced_after", "beat::b3", "beat::b2")
-        graph.add_edge("sequenced_after", "beat::b4", "beat::b3")
-        graph.add_edge("sequenced_after", "beat::bx", "beat::b2")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
+        graph.add_edge("predecessor", "beat::b4", "beat::b3")
+        graph.add_edge("predecessor", "beat::bx", "beat::b2")
 
         result = collapse_linear_beats(graph, min_run_length=2)
         assert result.beats_removed == 0
@@ -4618,7 +4616,7 @@ class TestConditionalPrerequisiteInvariant:
             "beat::orphan_prereq",
             {"type": "beat", "raw_id": "orphan_prereq", "summary": "Orphan."},
         )
-        graph.add_edge("sequenced_after", "beat::mentor_meet", "beat::orphan_prereq")
+        graph.add_edge("predecessor", "beat::mentor_meet", "beat::orphan_prereq")
 
         errors = check_intersection_compatibility(
             graph,
@@ -4651,7 +4649,7 @@ class TestConditionalPrerequisiteInvariant:
             },
         )
         graph.add_edge("belongs_to", "beat::gap_2", "path::artifact_quest_canonical")
-        graph.add_edge("sequenced_after", "beat::artifact_discover", "beat::gap_2")
+        graph.add_edge("predecessor", "beat::artifact_discover", "beat::gap_2")
 
         errors = check_intersection_compatibility(
             graph,
@@ -4673,7 +4671,7 @@ class TestConditionalPrerequisiteInvariant:
             {"type": "beat", "raw_id": "gap_0", "summary": "Root gap."},
         )
         graph.add_edge("belongs_to", "beat::gap_0", "path::mentor_trust_canonical")
-        graph.add_edge("sequenced_after", "beat::gap_1", "beat::gap_0")
+        graph.add_edge("predecessor", "beat::gap_1", "beat::gap_0")
 
         errors = check_intersection_compatibility(
             graph,
@@ -4704,7 +4702,7 @@ class TestConditionalPrerequisiteInvariant:
                 {"type": "beat", "raw_id": f"deep_{i}", "summary": f"Deep {i}."},
             )
             graph.add_edge("belongs_to", deep_id, "path::mentor_trust_canonical")
-            graph.add_edge("sequenced_after", prev, deep_id)
+            graph.add_edge("predecessor", prev, deep_id)
             prev = deep_id
 
         # Pre-create the split variant nodes to block the split fallback,
@@ -4746,7 +4744,7 @@ class TestConditionalPrerequisiteInvariant:
                 {"type": "beat", "raw_id": f"deep_{i}", "summary": f"Deep {i}."},
             )
             graph.add_edge("belongs_to", deep_id, "path::mentor_trust_canonical")
-            graph.add_edge("sequenced_after", prev, deep_id)
+            graph.add_edge("predecessor", prev, deep_id)
             prev = deep_id
 
         errors = check_intersection_compatibility(
@@ -5379,7 +5377,7 @@ class TestHardPolicyIntersection:
             },
         )
         graph.add_edge("belongs_to", "beat::gap_1", "path::p1")
-        graph.add_edge("sequenced_after", "beat::gap_1", "beat::b1")
+        graph.add_edge("predecessor", "beat::gap_1", "beat::b1")
 
         candidates = build_intersection_candidates(graph)
         gap_beat_in_candidates = any("beat::gap_1" in c.beat_ids for c in candidates)

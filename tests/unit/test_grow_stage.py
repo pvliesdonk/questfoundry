@@ -744,7 +744,7 @@ class TestPhase3Knots:
         assert "1 applied" in result.detail
 
     @pytest.mark.asyncio
-    async def test_phase_3_fails_with_sequenced_after_conflict(self) -> None:
+    async def test_phase_3_fails_with_predecessor_conflict(self) -> None:
         """Phase 3 fails when all intersections have requires dependency."""
         from questfoundry.models.grow import IntersectionProposal, Phase3Output
         from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
@@ -753,7 +753,7 @@ class TestPhase3Knots:
         stage = GrowStage()
 
         # Add a cross-dilemma requires: artifact_discover requires mentor_meet
-        graph.add_edge("sequenced_after", "beat::artifact_discover", "beat::mentor_meet")
+        graph.add_edge("predecessor", "beat::artifact_discover", "beat::mentor_meet")
 
         phase3_output = Phase3Output(
             intersections=[
@@ -1185,8 +1185,8 @@ class TestPhase4cPacingGaps:
         graph.add_edge("belongs_to", "beat::b1", "path::main")
         graph.add_edge("belongs_to", "beat::b2", "path::main")
         graph.add_edge("belongs_to", "beat::b3", "path::main")
-        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
-        graph.add_edge("sequenced_after", "beat::b3", "beat::b2")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
 
         stage = GrowStage()
 
@@ -1233,8 +1233,8 @@ class TestPhase4cPacingGaps:
         graph.add_edge("belongs_to", "beat::b1", "path::main")
         graph.add_edge("belongs_to", "beat::b2", "path::main")
         graph.add_edge("belongs_to", "beat::b3", "path::main")
-        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
-        graph.add_edge("sequenced_after", "beat::b3", "beat::b2")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
 
         stage = GrowStage()
 
@@ -1278,8 +1278,8 @@ class TestPhase4cPacingGaps:
         graph.add_edge("belongs_to", "beat::b1", "path::main")
         graph.add_edge("belongs_to", "beat::b2", "path::main")
         graph.add_edge("belongs_to", "beat::b3", "path::main")
-        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
-        graph.add_edge("sequenced_after", "beat::b3", "beat::b2")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
 
         stage = GrowStage()
         mock_model = MagicMock()
@@ -1771,8 +1771,8 @@ class TestPhase9Choices:
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Middle"})
         graph.create_node("beat::c", {"type": "beat", "raw_id": "c", "summary": "End"})
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
-        graph.add_edge("sequenced_after", "beat::c", "beat::b")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::b")
 
         # Create arc with sequence
         graph.create_node(
@@ -1851,7 +1851,7 @@ class TestPhase9Choices:
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "End"})
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
 
         graph.create_node(
             "arc::spine",
@@ -2119,7 +2119,7 @@ class TestPhase9Choices:
         graph = Graph.empty()
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Commit"})
-        graph.add_edge("sequenced_after", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
 
         # beat::b grants a codeword
         graph.create_node(
@@ -2195,8 +2195,8 @@ class TestPhase9Choices:
             "beat::path2_end", {"type": "beat", "raw_id": "path2_end", "summary": "End path 2"}
         )
 
-        graph.add_edge("sequenced_after", "beat::path1_end", "beat::path1_start")
-        graph.add_edge("sequenced_after", "beat::path2_end", "beat::path2_start")
+        graph.add_edge("predecessor", "beat::path1_end", "beat::path1_start")
+        graph.add_edge("predecessor", "beat::path2_end", "beat::path2_start")
 
         # Arc 1: path1_start → path1_end
         graph.create_node(

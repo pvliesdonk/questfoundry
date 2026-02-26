@@ -561,7 +561,7 @@ def _make_timing_graph_with_arc(
         )
         graph.add_edge("belongs_to", beat_id, "path::th1")
         if i > 0:
-            graph.add_edge("sequenced_after", beat_id, f"beat::b{i - 1}")
+            graph.add_edge("predecessor", beat_id, f"beat::b{i - 1}")
 
     # Arc with the beat sequence
     graph.create_node(
@@ -887,8 +887,8 @@ class TestRunAllChecks:
         graph.add_edge("belongs_to", "beat::b0", "path::th1")
         graph.add_edge("belongs_to", "beat::b1", "path::th1")
         graph.add_edge("belongs_to", "beat::b2", "path::th1")
-        graph.add_edge("sequenced_after", "beat::b1", "beat::b0")
-        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b1", "beat::b0")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
         # Update existing spine arc to include the test path and its beats
         graph.update_node(
             "arc::spine",
@@ -1006,8 +1006,8 @@ class TestPhase10Integration:
         graph.add_edge("belongs_to", "beat::b0", "path::th1")
         graph.add_edge("belongs_to", "beat::b1", "path::th1")
         graph.add_edge("belongs_to", "beat::b2", "path::th1")
-        graph.add_edge("sequenced_after", "beat::b1", "beat::b0")
-        graph.add_edge("sequenced_after", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b1", "beat::b0")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
         # Update existing spine arc to include the test path and its beats
         graph.update_node(
             "arc::spine",

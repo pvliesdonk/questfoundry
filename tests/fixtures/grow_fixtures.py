@@ -161,9 +161,9 @@ def make_single_dilemma_graph() -> Graph:
     graph.add_edge("belongs_to", "beat::mentor_commits_alt", "path::mentor_trust_alt")
 
     # Beat ordering (requires edges): opening → mentor_meet → commits
-    graph.add_edge("sequenced_after", "beat::mentor_meet", "beat::opening")
-    graph.add_edge("sequenced_after", "beat::mentor_commits_canonical", "beat::mentor_meet")
-    graph.add_edge("sequenced_after", "beat::mentor_commits_alt", "beat::mentor_meet")
+    graph.add_edge("predecessor", "beat::mentor_meet", "beat::opening")
+    graph.add_edge("predecessor", "beat::mentor_commits_canonical", "beat::mentor_meet")
+    graph.add_edge("predecessor", "beat::mentor_commits_alt", "beat::mentor_meet")
 
     # Consequences
     graph.create_node(
@@ -363,19 +363,19 @@ def make_two_dilemma_graph() -> Graph:
 
     # Beat ordering (requires edges)
     # opening → mentor_meet, artifact_discover
-    graph.add_edge("sequenced_after", "beat::mentor_meet", "beat::opening")
-    graph.add_edge("sequenced_after", "beat::artifact_discover", "beat::opening")
+    graph.add_edge("predecessor", "beat::mentor_meet", "beat::opening")
+    graph.add_edge("predecessor", "beat::artifact_discover", "beat::opening")
     # mentor_meet → mentor_commits_*
-    graph.add_edge("sequenced_after", "beat::mentor_commits_canonical", "beat::mentor_meet")
-    graph.add_edge("sequenced_after", "beat::mentor_commits_alt", "beat::mentor_meet")
+    graph.add_edge("predecessor", "beat::mentor_commits_canonical", "beat::mentor_meet")
+    graph.add_edge("predecessor", "beat::mentor_commits_alt", "beat::mentor_meet")
     # artifact_discover → artifact_commits_*
-    graph.add_edge("sequenced_after", "beat::artifact_commits_canonical", "beat::artifact_discover")
-    graph.add_edge("sequenced_after", "beat::artifact_commits_alt", "beat::artifact_discover")
+    graph.add_edge("predecessor", "beat::artifact_commits_canonical", "beat::artifact_discover")
+    graph.add_edge("predecessor", "beat::artifact_commits_alt", "beat::artifact_discover")
     # commits → finale
-    graph.add_edge("sequenced_after", "beat::finale", "beat::mentor_commits_canonical")
-    graph.add_edge("sequenced_after", "beat::finale", "beat::mentor_commits_alt")
-    graph.add_edge("sequenced_after", "beat::finale", "beat::artifact_commits_canonical")
-    graph.add_edge("sequenced_after", "beat::finale", "beat::artifact_commits_alt")
+    graph.add_edge("predecessor", "beat::finale", "beat::mentor_commits_canonical")
+    graph.add_edge("predecessor", "beat::finale", "beat::mentor_commits_alt")
+    graph.add_edge("predecessor", "beat::finale", "beat::artifact_commits_canonical")
+    graph.add_edge("predecessor", "beat::finale", "beat::artifact_commits_alt")
 
     # Consequences
     for cons_id, path_id, desc in [
@@ -594,7 +594,7 @@ def make_e2e_fixture_graph() -> Graph:
         ("climax", "aq_corrupt"),
     ]
     for from_beat, to_beat in ordering:
-        graph.add_edge("sequenced_after", f"beat::{from_beat}", f"beat::{to_beat}")
+        graph.add_edge("predecessor", f"beat::{from_beat}", f"beat::{to_beat}")
 
     # Consequences
     for cons_id, path_id, desc in [
@@ -685,6 +685,6 @@ def make_conditional_prerequisite_graph() -> Graph:
     graph.add_edge("belongs_to", "beat::gap_1", "path::mentor_trust_canonical")
 
     # mentor_meet requires gap_1 (gap_1 must come first)
-    graph.add_edge("sequenced_after", "beat::mentor_meet", "beat::gap_1")
+    graph.add_edge("predecessor", "beat::mentor_meet", "beat::gap_1")
 
     return graph
