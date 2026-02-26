@@ -29,9 +29,6 @@ if TYPE_CHECKING:
 # Re-export for backward compatibility
 __all__ = ["PHASE_META_ATTR", "PhaseMeta", "PhaseRegistry", "get_registry", "grow_phase"]
 
-# Keep the GROW-specific constant name for backward compatibility
-_PHASE_META_ATTR = PHASE_META_ATTR
-
 
 # -- Module-level singleton ---------------------------------------------------
 

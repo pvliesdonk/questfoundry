@@ -148,7 +148,9 @@ class TestValidateGrowOutput:
         graph.add_edge("belongs_to", "beat::intro", "path::coward")
 
         errors = validate_grow_output(graph)
-        assert any("beat::intro" in e and "2 belongs_to" in e for e in errors)
+        multi_errors = [e for e in errors if "beat::intro" in e and "belongs_to" in e]
+        assert multi_errors, f"Expected multiple belongs_to error for beat::intro, got: {errors}"
+        assert any("must have exactly 1" in e for e in multi_errors)
 
     def test_dilemma_missing_role(self) -> None:
         """Dilemma without dilemma_role fails validation."""
@@ -195,6 +197,21 @@ class TestValidateGrowOutput:
 
         errors = validate_grow_output(graph)
         assert any("same path" in e.lower() for e in errors)
+
+    def test_intersection_group_empty_node_ids_fails(self) -> None:
+        """Intersection group with empty node_ids fails validation."""
+        graph = _make_valid_grow_graph()
+        graph.create_node(
+            "intersection_group::ig_empty",
+            {
+                "type": "intersection_group",
+                "raw_id": "ig_empty",
+                "node_ids": [],
+            },
+        )
+
+        errors = validate_grow_output(graph)
+        assert any("ig_empty" in e and "empty node_ids" in e for e in errors)
 
     def test_intersection_group_different_paths_passes(self) -> None:
         """Intersection group with beats from different paths passes."""

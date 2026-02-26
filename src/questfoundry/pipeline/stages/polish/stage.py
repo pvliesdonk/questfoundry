@@ -42,6 +42,9 @@ if TYPE_CHECKING:
         UserInputFn,
     )
 
+# Type for async phase functions: (Graph, BaseChatModel) -> PhaseResult
+PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[PhaseResult]]
+
 
 class PolishStage:
     """POLISH stage: transforms beat DAG into prose-ready passage graph.
@@ -75,9 +78,6 @@ class PolishStage:
         self._serialize_model: BaseChatModel | None = None
         self._serialize_provider_name: str | None = None
 
-    # Type for async phase functions: (Graph, BaseChatModel) -> PhaseResult
-    PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[PhaseResult]]
-
     # Map from registry phase name → self method name.
     # LLM phases that need binding to ``self`` at call time.
     _METHOD_PHASES: ClassVar[dict[str, str]] = {
@@ -107,7 +107,7 @@ class PolishStage:
         import questfoundry.pipeline.stages.polish.stage as _this_module
 
         registry = get_polish_registry()
-        result: list[tuple[PolishStage.PhaseFunc, str]] = []
+        result: list[tuple[PhaseFunc, str]] = []
 
         for phase_name in registry.execution_order():
             method_name = self._METHOD_PHASES.get(phase_name)
@@ -118,6 +118,12 @@ class PolishStage:
             elif free_name is not None:
                 fn = getattr(_this_module, free_name)
             else:
+                log.warning(
+                    "phase_fallback_to_registry",
+                    phase=phase_name,
+                    hint="Phase not in _METHOD_PHASES or _FREE_PHASES; "
+                    "using registry.get_function() fallback",
+                )
                 fn = registry.get_function(phase_name)
 
             result.append((fn, phase_name))
@@ -218,7 +224,9 @@ class PolishStage:
                 log.info("rewinding_graph", stage="polish", mutations=n)
             save_snapshot(graph, resolved_path, "polish")
 
-        # Validate GROW output (entry contract)
+        # Validate GROW output (entry contract).
+        # Runs after rewind so we validate the base GROW state, not stale
+        # POLISH mutations from a previous run.
         entry_errors = validate_grow_output(graph)
         if entry_errors:
             raise PolishStageError(

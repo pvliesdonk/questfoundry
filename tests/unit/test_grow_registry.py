@@ -5,7 +5,7 @@ from __future__ import annotations
 import pytest
 
 from questfoundry.pipeline.stages.grow.registry import (
-    _PHASE_META_ATTR,
+    PHASE_META_ATTR,
     PhaseMeta,
     PhaseRegistry,
     get_registry,
@@ -203,10 +203,10 @@ class TestGrowPhaseDecorator:
             pass
 
         reg.register(my_phase, meta)
-        setattr(my_phase, _PHASE_META_ATTR, meta)
+        setattr(my_phase, PHASE_META_ATTR, meta)
 
-        assert hasattr(my_phase, _PHASE_META_ATTR)
-        attached = getattr(my_phase, _PHASE_META_ATTR)
+        assert hasattr(my_phase, PHASE_META_ATTR)
+        attached = getattr(my_phase, PHASE_META_ATTR)
         assert attached.name == "test_deco"
         assert attached.depends_on == ()
         assert attached.is_deterministic is True

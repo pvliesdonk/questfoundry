@@ -32,6 +32,8 @@ def validate_grow_output(graph: Graph) -> list[str]:
         for beat_id, beat_data in beat_nodes.items():
             if not beat_data.get("summary"):
                 errors.append(f"Beat {beat_id} missing summary")
+            # Accept both plural "dilemma_impacts" and legacy singular "dilemma_impact"
+            # from older GROW outputs that used the singular key.
             if "dilemma_impacts" not in beat_data and "dilemma_impact" not in beat_data:
                 errors.append(f"Beat {beat_id} missing dilemma_impacts")
 
@@ -63,7 +65,8 @@ def validate_grow_output(graph: Graph) -> list[str]:
     explored_dilemmas = {
         did
         for did, ddata in dilemma_nodes.items()
-        if ddata.get("status") in ("explored", None)  # default to explored
+        # GROW may omit status for dilemmas it fully explored; treat None as "explored".
+        if ddata.get("status") in ("explored", None)
     }
     dilemmas_with_flags: set[str] = set()
     for _flag_id, flag_data in state_flag_nodes.items():
@@ -141,6 +144,7 @@ def _check_intersection_group_paths(
     # Intersection group nodes store beat IDs in node_ids field
     node_ids = group_data.get("node_ids", [])
     if not node_ids:
+        errors.append(f"Intersection group {group_id} has empty node_ids")
         return
 
     paths_seen: set[str] = set()
