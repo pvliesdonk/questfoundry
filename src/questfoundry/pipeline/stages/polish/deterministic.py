@@ -20,6 +20,7 @@ from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.polish import (
     ChoiceSpec,
     FalseBranchCandidate,
+    FalseBranchSpec,
     PassageSpec,
     ResidueSpec,
     VariantSpec,
@@ -51,7 +52,7 @@ class PolishPlan:
     residue_specs: list[ResidueSpec] = field(default_factory=list)
     choice_specs: list[ChoiceSpec] = field(default_factory=list)
     false_branch_candidates: list[FalseBranchCandidate] = field(default_factory=list)
-    false_branch_specs: list[Any] = field(default_factory=list)  # Populated by Phase 5
+    false_branch_specs: list[FalseBranchSpec] = field(default_factory=list)  # Phase 5
     feasibility_annotations: dict[str, list[str]] = field(default_factory=dict)
     arc_traversals: dict[str, list[str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
@@ -293,7 +294,8 @@ def compute_prose_feasibility(
             try:
                 flags = compute_active_flags_at_beat(graph, beat_id)
                 all_flags.update(flags)
-            except ValueError:
+            except ValueError as e:
+                log.warning("feasibility_flag_error", beat_id=beat_id, error=str(e))
                 continue
 
         # Collect all structurally relevant individual flags
@@ -443,8 +445,8 @@ def compute_choice_edges(
             continue
 
         for path_id, path_children in sorted(child_paths.items()):
-            # Pick the first child on each path as the divergence target
-            target_beat = path_children[0]
+            # Pick the first child (alphabetically) on each path for determinism
+            target_beat = sorted(path_children)[0]
             to_passage = beat_to_passage.get(target_beat, "")
             if not to_passage or to_passage == from_passage:
                 continue
@@ -480,7 +482,7 @@ def find_false_branch_candidates(
     graph: Graph,  # noqa: ARG001
     specs: list[PassageSpec],
 ) -> list[FalseBranchCandidate]:
-    """Find stretches of 3+ passages with no choices between them.
+    """Find stretches of 3+ consecutive non-intersection passages.
 
     Args:
         graph: Graph (for future context enrichment).
@@ -492,34 +494,37 @@ def find_false_branch_candidates(
     if len(specs) < 3:
         return []
 
-    # Build passage adjacency from beat DAG relationships
-    # For now, use the spec order as a linear approximation
-    # A more sophisticated version would use the actual passage graph
-    # from choice_edges, but that creates a circular dependency with 4c
+    # Build passage adjacency from beat DAG relationships.
+    # Use the spec order as a linear approximation. A more
+    # sophisticated version would use the actual passage graph
+    # from choice_edges, but that creates a circular dependency with 4c.
     candidates: list[FalseBranchCandidate] = []
 
-    # Group specs by path for linear stretch detection
-    path_passages: dict[str, list[PassageSpec]] = {}
-    for spec in specs:
-        # Determine primary path from first beat
-        if spec.beat_ids:
-            # Use grouping type to determine path membership
-            if spec.grouping_type == "intersection":
-                continue  # Intersection passages span multiple paths
-            path_passages.setdefault(spec.grouping_type + "_default", []).append(spec)
-
-    # Look for linear stretches within each group
-    # For a simple first implementation, scan all specs in order
+    # Scan specs in order, collecting linear runs of non-intersection passages.
+    # Intersection passages break runs because they span multiple paths.
     linear_run: list[str] = []
     for spec in specs:
-        linear_run.append(spec.passage_id)
-        if len(linear_run) == 3:
-            candidates.append(
-                FalseBranchCandidate(
-                    passage_ids=list(linear_run),
-                    context_summary=f"Linear stretch of {len(linear_run)} passages",
+        if spec.grouping_type == "intersection":
+            # Intersection breaks the run — flush if 3+
+            if len(linear_run) >= 3:
+                candidates.append(
+                    FalseBranchCandidate(
+                        passage_ids=list(linear_run),
+                        context_summary=f"Linear stretch of {len(linear_run)} passages",
+                    )
                 )
+            linear_run = []
+        else:
+            linear_run.append(spec.passage_id)
+
+    # Flush final run
+    if len(linear_run) >= 3:
+        candidates.append(
+            FalseBranchCandidate(
+                passage_ids=list(linear_run),
+                context_summary=f"Linear stretch of {len(linear_run)} passages",
             )
+        )
 
     return candidates
 
@@ -568,12 +573,14 @@ def _topological_order(
     children: dict[str, list[str]],
 ) -> list[str]:
     """Return beat IDs in topological order (parents before children)."""
+    from collections import deque
+
     in_degree: dict[str, int] = {bid: len(parents.get(bid, [])) for bid in beat_nodes}
-    queue = sorted(bid for bid, deg in in_degree.items() if deg == 0)
+    queue = deque(sorted(bid for bid, deg in in_degree.items() if deg == 0))
     result: list[str] = []
 
     while queue:
-        node = queue.pop(0)
+        node = queue.popleft()
         result.append(node)
         for neighbor in sorted(children.get(node, [])):
             in_degree[neighbor] -= 1
