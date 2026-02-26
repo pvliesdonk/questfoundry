@@ -7,11 +7,17 @@ replace Arc-dependent computations and can be used by both GROW
 
 from __future__ import annotations
 
+from collections import defaultdict
 from itertools import product
 from typing import TYPE_CHECKING
 
+from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.observability.logging import get_logger
+
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
+
+log = get_logger(__name__)
 
 
 def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[str]]:
@@ -123,5 +129,145 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
     result: set[frozenset[str]] = set()
     for combo in product(*per_dilemma_options):
         result.add(frozenset(combo))
+
+    return result
+
+
+def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
+    """Compute arc traversals from graph structure without stored Arc nodes.
+
+    Replicates the logic of ``enumerate_arcs()`` in ``grow_algorithms.py``
+    but as a pure read-only computation. For each Cartesian product
+    combination of paths across dilemmas, collects all beats belonging
+    to those paths and topologically sorts them.
+
+    The arc key is the sorted path raw_ids joined by ``"+"``, matching
+    the ``arc_id`` convention used by stored Arc nodes.
+
+    Algorithm:
+        1. Build dilemma → paths mapping from path node ``dilemma_id``.
+        2. Build path → beat set mapping from ``belongs_to`` edges.
+        3. Compute Cartesian product of paths (one per dilemma).
+        4. For each combination, union the beat sets and topologically sort.
+
+    Args:
+        graph: Graph containing dilemma, path, and beat nodes with
+            ``belongs_to`` and ``predecessor`` edges.
+
+    Returns:
+        Dict mapping arc key (``"path_a+path_b"``) to topologically sorted
+        list of beat IDs. Returns empty dict if no dilemmas or paths exist.
+    """
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    if not dilemma_nodes or not path_nodes:
+        return {}
+
+    # Step 1: Build dilemma → paths mapping
+    dilemma_paths: dict[str, list[str]] = defaultdict(list)
+    for path_id, path_data in path_nodes.items():
+        dilemma_id = path_data.get("dilemma_id")
+        if dilemma_id:
+            prefixed = normalize_scoped_id(dilemma_id, "dilemma")
+            if prefixed in dilemma_nodes:
+                dilemma_paths[prefixed].append(path_id)
+
+    if not dilemma_paths:
+        return {}
+
+    # Sort paths within each dilemma for determinism
+    for paths in dilemma_paths.values():
+        paths.sort()
+
+    sorted_dilemmas = sorted(dilemma_paths.keys())
+    path_lists = [dilemma_paths[did] for did in sorted_dilemmas]
+
+    # Step 2: Build path → beat set mapping via belongs_to edges
+    path_beat_sets: dict[str, set[str]] = defaultdict(set)
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beat_nodes = graph.get_nodes_by_type("beat")
+    for edge in belongs_to_edges:
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        if beat_id in beat_nodes and path_id in path_nodes:
+            path_beat_sets[path_id].add(beat_id)
+
+    # Step 3: Build predecessor adjacency for topological sort
+    # successors_all: parent → [children] (prerequisite → dependents)
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+    successors_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+    for edge in predecessor_edges:
+        from_id = edge["from"]  # dependent (child)
+        to_id = edge["to"]  # prerequisite (parent)
+        if from_id in beat_nodes and to_id in beat_nodes:
+            successors_all[to_id].append(from_id)
+
+    # Step 4: Cartesian product of paths, build traversals
+    result: dict[str, list[str]] = {}
+    for combo in product(*path_lists):
+        path_combo = list(combo)
+        path_raw_ids = sorted(path_nodes[pid].get("raw_id", pid) for pid in path_combo)
+        arc_key = "+".join(path_raw_ids)
+
+        # Collect beats from all selected paths
+        beat_set: set[str] = set()
+        for pid in path_combo:
+            beat_set.update(path_beat_sets.get(pid, set()))
+
+        # Topological sort within the beat subset
+        sequence = _topological_sort_subset(beat_set, successors_all)
+        result[arc_key] = sequence
+
+    return result
+
+
+def _topological_sort_subset(
+    beat_set: set[str],
+    successors_all: dict[str, list[str]],
+) -> list[str]:
+    """Topologically sort a subset of beats using Kahn's algorithm.
+
+    Uses alphabetical tie-breaking for determinism. Falls back to
+    sorted order if a cycle is detected.
+
+    Args:
+        beat_set: Set of beat IDs to sort.
+        successors_all: Successor adjacency for all beats in the full graph.
+
+    Returns:
+        Topologically sorted list of beat IDs.
+    """
+    if not beat_set:
+        return []
+
+    # Build in-degree restricted to the subset
+    in_degree: dict[str, int] = dict.fromkeys(beat_set, 0)
+    for bid in beat_set:
+        for succ in successors_all.get(bid, []):
+            if succ in beat_set:
+                in_degree[succ] += 1
+
+    import heapq
+
+    queue = [bid for bid, deg in in_degree.items() if deg == 0]
+    heapq.heapify(queue)
+    result: list[str] = []
+
+    while queue:
+        node = heapq.heappop(queue)
+        result.append(node)
+        for succ in successors_all.get(node, []):
+            if succ in beat_set:
+                in_degree[succ] -= 1
+                if in_degree[succ] == 0:
+                    heapq.heappush(queue, succ)
+
+    if len(result) != len(beat_set):
+        log.warning(
+            "cycle_detected_in_beat_subset",
+            remaining=sorted(beat_set - set(result)),
+        )
+        return sorted(beat_set)
 
     return result
