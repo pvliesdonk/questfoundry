@@ -58,15 +58,15 @@ def test_polish_stage_class() -> None:
     assert stage.project_path is None
 
 
-def test_polish_stage_execute_raises_not_implemented() -> None:
-    """Stub execute() raises PolishStageError."""
+def test_polish_stage_execute_requires_project_path() -> None:
+    """execute() raises PolishStageError when no project_path is set."""
     import asyncio
     from unittest.mock import MagicMock
 
     stage = PolishStage()
     mock_model = MagicMock()
 
-    with pytest.raises(PolishStageError, match="not yet implemented"):
+    with pytest.raises(PolishStageError, match="project_path is required"):
         asyncio.run(stage.execute(mock_model, "test prompt"))
 
 
