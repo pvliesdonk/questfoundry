@@ -139,17 +139,40 @@ def get_spine_arc_id(graph: Graph) -> str | None:
 def get_arc_passage_order(graph: Graph, arc_id: str) -> list[str]:
     """Get passage IDs in traversal order for an arc.
 
-    Follows the arc's beat sequence and maps each beat to its passage
-    via ``passage_from`` edges.
+    Primary path: computes the traversal from graph structure (paths,
+    beats, ``grouped_in`` / ``passage_from`` edges) via
+    :func:`~questfoundry.graph.algorithms.compute_passage_traversals`,
+    matching the ``arc_id`` to a computed arc key through the arc node's
+    ``paths`` field.
+
+    Fallback: reads the arc node's ``sequence`` field directly and maps
+    beats to passages via ``passage_from`` edges.  This handles legacy
+    graphs and minimal test fixtures that lack full dilemma/path nodes.
 
     Args:
         graph: Graph containing arc, beat, and passage nodes.
-        arc_id: The arc node ID (e.g., ``arc::spine_0_0``).
+        arc_id: The arc node ID (e.g., ``arc::spine_0_0``) or a computed
+            arc key (e.g., ``"path_a+path_b"``).
 
     Returns:
         Ordered list of passage node IDs. Beats without passages are
         silently skipped.
     """
+    from questfoundry.graph.algorithms import compute_passage_traversals
+
+    traversals = compute_passage_traversals(graph)
+
+    if traversals:
+        # Direct arc key lookup (caller may pass a computed arc key)
+        if arc_id in traversals:
+            return traversals[arc_id]
+
+        # Map arc node ID → arc key via the arc node's paths field
+        arc_key = _resolve_arc_key(graph, arc_id)
+        if arc_key and arc_key in traversals:
+            return traversals[arc_key]
+
+    # Fallback: read arc node sequence + beat→passage mapping
     arc_node = graph.get_node(arc_id)
     if not arc_node:
         return []
@@ -158,18 +181,44 @@ def get_arc_passage_order(graph: Graph, arc_id: str) -> list[str]:
     if not sequence:
         return []
 
-    # Build beat→passage lookup from passage_from edges
-    beat_to_passage: dict[str, str] = {}
-    for edge in graph.get_edges(edge_type="passage_from"):
-        beat_to_passage[edge["to"]] = edge["from"]
+    beat_to_passages: dict[str, list[str]] = {}
+    for edge in graph.get_edges(edge_type="grouped_in"):
+        beat_to_passages.setdefault(edge["from"], []).append(edge["to"])
+    if not beat_to_passages:
+        for edge in graph.get_edges(edge_type="passage_from"):
+            beat_to_passages.setdefault(edge["to"], []).append(edge["from"])
 
-    passages = []
+    passages: list[str] = []
+    seen: set[str] = set()
     for beat_id in sequence:
-        passage_id = beat_to_passage.get(beat_id)
-        if passage_id:
-            passages.append(passage_id)
+        for passage_id in sorted(beat_to_passages.get(beat_id, [])):
+            if passage_id not in seen:
+                seen.add(passage_id)
+                passages.append(passage_id)
 
     return passages
+
+
+def _resolve_arc_key(graph: Graph, arc_id: str) -> str | None:
+    """Map an arc node ID to its computed arc key.
+
+    Reads the arc node's ``paths`` list and derives the arc key
+    (sorted path ``raw_id`` values joined by ``"+"``) to match keys
+    produced by :func:`compute_arc_traversals`.
+
+    Returns:
+        Arc key string, or None if the arc node doesn't exist or has
+        no paths.
+    """
+    arc_node = graph.get_node(arc_id)
+    if not arc_node:
+        return None
+    path_ids = arc_node.get("paths", [])
+    if not path_ids:
+        return None
+    path_nodes = graph.get_nodes_by_type("path")
+    raw_ids = sorted(path_nodes.get(pid, {}).get("raw_id", pid) for pid in path_ids)
+    return "+".join(raw_ids)
 
 
 def format_story_identity(graph: Graph) -> str:

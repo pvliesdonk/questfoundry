@@ -209,6 +209,60 @@ def _resolve_entity_id(graph: Graph, raw_id: str) -> str | None:
     return None
 
 
+def _build_arc_key_to_node_map(graph: Graph) -> dict[str, str]:
+    """Build mapping from computed arc key to stored arc node ID.
+
+    Arc keys are sorted path ``raw_id`` values joined by ``"+"``.
+    """
+    from questfoundry.graph.algorithms import arc_key_for_paths
+
+    path_nodes = graph.get_nodes_by_type("path")
+    arc_nodes = graph.get_nodes_by_type("arc")
+    mapping: dict[str, str] = {}
+    for arc_id, arc_data in arc_nodes.items():
+        path_ids = arc_data.get("paths", [])
+        if not path_ids:
+            continue
+        arc_key = arc_key_for_paths(path_nodes, path_ids)
+        mapping[arc_key] = arc_id
+    return mapping
+
+
+def _find_spine_arc_key(graph: Graph) -> str | None:
+    """Compute the spine arc key from graph structure.
+
+    The spine arc is the path combination where all paths are canonical.
+    Returns the arc key string or None.
+    """
+    from questfoundry.graph.algorithms import arc_key_for_paths
+    from questfoundry.graph.context import normalize_scoped_id
+
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    if not dilemma_nodes or not path_nodes:
+        return None
+
+    dilemma_canonical: dict[str, list[str]] = {}
+    for path_id, path_data in path_nodes.items():
+        if not path_data.get("is_canonical", False):
+            continue
+        dilemma_id = path_data.get("dilemma_id")
+        if dilemma_id:
+            prefixed = normalize_scoped_id(dilemma_id, "dilemma")
+            if prefixed in dilemma_nodes:
+                dilemma_canonical.setdefault(prefixed, []).append(path_id)
+
+    if len(dilemma_canonical) != len(dilemma_nodes):
+        return None
+
+    # Collect all canonical path IDs across dilemmas
+    all_canonical_pids: list[str] = []
+    for _did in sorted(dilemma_canonical):
+        all_canonical_pids.extend(dilemma_canonical[_did])
+
+    return arc_key_for_paths(path_nodes, all_canonical_pids)
+
+
 class FillStageError(ValueError):
     """Error raised when FILL stage cannot proceed."""
 
@@ -873,38 +927,73 @@ class FillStage:
         Spine arc passages first, then branch arc passages.
         Passages already filled (have prose) are skipped unless flagged.
 
+        Primary path: uses :func:`compute_passage_traversals` to derive
+        passage ordering from graph structure (no arc node dependency).
+        Falls back to stored arc nodes when computed traversals are empty
+        (legacy graphs, minimal test fixtures).
+
         Returns:
-            List of (passage_id, arc_id) tuples.
+            List of (passage_id, arc_id) tuples.  The ``arc_id`` is the
+            arc node ID when arc nodes exist, or the computed arc key
+            otherwise.
         """
+        from questfoundry.graph.algorithms import compute_passage_traversals
+
         seen: set[str] = set()
         order: list[tuple[str, str]] = []
 
-        spine_id = get_spine_arc_id(graph)
-        all_arcs = graph.get_nodes_by_type("arc")
+        traversals = compute_passage_traversals(graph)
 
-        # Spine first
-        if spine_id:
-            for pid in get_arc_passage_order(graph, spine_id):
-                if pid not in seen:
-                    seen.add(pid)
-                    order.append((pid, spine_id))
+        if traversals:
+            # Build arc_key → arc_node_id mapping for downstream compat
+            arc_key_to_node = _build_arc_key_to_node_map(graph)
 
-        # Branch arcs next
-        for arc_id, _arc_data in all_arcs.items():
-            if arc_id == spine_id:
-                continue
-            for pid in get_arc_passage_order(graph, arc_id):
-                if pid in seen:
+            # Identify spine: arc whose paths are all canonical
+            spine_key = _find_spine_arc_key(graph)
+            spine_arc_id = arc_key_to_node.get(spine_key, spine_key) if spine_key else None
+
+            # Spine first
+            if spine_key and spine_key in traversals:
+                for pid in traversals[spine_key]:
+                    if pid not in seen:
+                        seen.add(pid)
+                        order.append((pid, spine_arc_id or spine_key))
+
+            # Branch arcs next (deterministic sort by arc key)
+            for arc_key in sorted(traversals):
+                if arc_key == spine_key:
                     continue
-                seen.add(pid)
-                order.append((pid, arc_id))
+                arc_id = arc_key_to_node.get(arc_key, arc_key)
+                for pid in traversals[arc_key]:
+                    if pid not in seen:
+                        seen.add(pid)
+                        order.append((pid, arc_id))
+        else:
+            # Fallback: iterate stored arc nodes
+            spine_id = get_spine_arc_id(graph)
+            all_arcs = graph.get_nodes_by_type("arc")
 
-        # Collect synthetic passages (fork-beats, hub-spokes) not in any arc sequence
+            if spine_id:
+                for pid in get_arc_passage_order(graph, spine_id):
+                    if pid not in seen:
+                        seen.add(pid)
+                        order.append((pid, spine_id))
+
+            for arc_id, _arc_data in all_arcs.items():
+                if arc_id == spine_id:
+                    continue
+                for pid in get_arc_passage_order(graph, arc_id):
+                    if pid not in seen:
+                        seen.add(pid)
+                        order.append((pid, arc_id))
+
+        # Collect synthetic passages (fork-beats, hub-spokes) not in any arc
+        default_arc = order[0][1] if order else ""
         all_passages = graph.get_nodes_by_type("passage")
         for pid, pdata in all_passages.items():
             if pid not in seen and not pdata.get("prose"):
                 seen.add(pid)
-                order.append((pid, spine_id or ""))
+                order.append((pid, default_arc))
 
         return order
 
@@ -1571,11 +1660,17 @@ class FillStage:
         total_flags = sum(len(f) for f in flagged_passages.values())
         revised_flags = 0
 
+        # Pre-compute traversals once for all passage lookups
+        from questfoundry.graph.algorithms import compute_passage_traversals
+
+        traversals = compute_passage_traversals(graph)
+        arc_key_to_node = _build_arc_key_to_node_map(graph) if traversals else {}
+
         # Pre-compute arc info and passage data for each passage (graph reads only)
         passage_arc_info: dict[str, tuple[str | None, int]] = {}
         passage_data: dict[str, dict[str, Any]] = {}
         for passage_id in flagged_passages:
-            arc_id = self._find_arc_for_passage(graph, passage_id)
+            arc_id = self._find_arc_for_passage(graph, passage_id, traversals, arc_key_to_node)
             current_idx = 0
             if arc_id:
                 order = get_arc_passage_order(graph, arc_id)
@@ -1703,11 +1798,37 @@ class FillStage:
             tokens_used=total_tokens,
         )
 
-    def _find_arc_for_passage(self, graph: Graph, passage_id: str) -> str | None:
-        """Find the first arc containing a passage's beat."""
-        passage = graph.get_node(passage_id)
-        if not passage:
-            return None
+    def _find_arc_for_passage(
+        self,
+        graph: Graph,
+        passage_id: str,
+        traversals: dict[str, list[str]] | None = None,
+        arc_key_to_node: dict[str, str] | None = None,
+    ) -> str | None:
+        """Find the first arc containing a passage.
+
+        Primary path: checks computed passage traversals.
+        Fallback: reads stored arc node sequences.
+
+        Args:
+            graph: Graph containing passage/arc data.
+            passage_id: The passage to look up.
+            traversals: Pre-computed passage traversals (avoids recomputation).
+            arc_key_to_node: Pre-computed arc key → node ID map.
+        """
+        if traversals is None:
+            from questfoundry.graph.algorithms import compute_passage_traversals
+
+            traversals = compute_passage_traversals(graph)
+
+        if traversals:
+            if arc_key_to_node is None:
+                arc_key_to_node = _build_arc_key_to_node_map(graph)
+            for arc_key in sorted(traversals):
+                if passage_id in traversals[arc_key]:
+                    return arc_key_to_node.get(arc_key, arc_key)
+
+        # Fallback: stored arc node sequences
         beat_id = get_primary_beat(graph, passage_id) or ""
         if not beat_id:
             return None

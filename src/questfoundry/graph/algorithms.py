@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from itertools import product
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.observability.logging import get_logger
@@ -133,6 +133,28 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
     return result
 
 
+def arc_key_for_paths(
+    path_nodes: dict[str, dict[str, Any]],
+    path_ids: list[str],
+) -> str:
+    """Build a canonical arc key from path node IDs.
+
+    Arc keys are sorted path ``raw_id`` values joined by ``"+"``.
+    This is the shared formula used by :func:`compute_arc_traversals`,
+    ``_build_arc_key_to_node_map``, ``_find_spine_arc_key``, and
+    ``_resolve_arc_key``.
+
+    Args:
+        path_nodes: Mapping of path node ID → path data (must contain ``raw_id``).
+        path_ids: List of path node IDs to include in the key.
+
+    Returns:
+        Arc key string (e.g. ``"alpha+beta"``).
+    """
+    raw_ids = sorted(str(path_nodes.get(pid, {}).get("raw_id", pid)) for pid in path_ids)
+    return "+".join(raw_ids)
+
+
 def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
     """Compute arc traversals from graph structure without stored Arc nodes.
 
@@ -218,6 +240,57 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
         # Topological sort within the beat subset
         sequence = _topological_sort_subset(beat_set, successors_all)
         result[arc_key] = sequence
+
+    return result
+
+
+def compute_passage_traversals(graph: Graph) -> dict[str, list[str]]:
+    """Compute passage traversal orders from graph structure.
+
+    Builds on :func:`compute_arc_traversals` which provides beat sequences
+    per arc.  Maps beats to passages via ``grouped_in`` edges
+    (beat → passage), falling back to ``passage_from`` edges
+    (passage → beat) for legacy graphs.
+
+    Multiple beats in the same passage are deduplicated — each passage
+    appears at most once per arc traversal, at its first occurrence.
+
+    Args:
+        graph: Graph with beat, path, passage nodes and ``grouped_in``
+            (or ``passage_from``) edges.
+
+    Returns:
+        Dict mapping arc key (``"path_a+path_b"``) to ordered list of
+        unique passage IDs.  Returns empty dict if no arc traversals can
+        be computed (e.g. missing dilemma / path nodes).
+    """
+    arc_traversals = compute_arc_traversals(graph)
+    if not arc_traversals:
+        return {}
+
+    # Build beat→passages lookup from grouped_in edges (primary)
+    beat_to_passages: dict[str, list[str]] = defaultdict(list)
+    for edge in graph.get_edges(edge_type="grouped_in"):
+        beat_to_passages[edge["from"]].append(edge["to"])
+
+    # Fallback: passage_from edges (legacy, passage→beat)
+    if not beat_to_passages:
+        for edge in graph.get_edges(edge_type="passage_from"):
+            # passage_from: from=passage, to=beat
+            beat_to_passages[edge["to"]].append(edge["from"])
+
+    result: dict[str, list[str]] = {}
+    for arc_key, beat_sequence in arc_traversals.items():
+        passages: list[str] = []
+        seen: set[str] = set()
+        for beat_id in beat_sequence:
+            # Sort passage IDs for determinism when multiple passages
+            # share the same beat.
+            for passage_id in sorted(beat_to_passages.get(beat_id, [])):
+                if passage_id not in seen:
+                    seen.add(passage_id)
+                    passages.append(passage_id)
+        result[arc_key] = passages
 
     return result
 

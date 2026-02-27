@@ -251,6 +251,64 @@ class TestGetArcPassageOrder:
     def test_nonexistent_arc(self, fill_graph: Graph) -> None:
         assert get_arc_passage_order(fill_graph, "arc::nonexistent") == []
 
+    def test_computed_traversal_primary_path(self) -> None:
+        """get_arc_passage_order uses computed traversals when full graph exists."""
+        g = Graph.empty()
+
+        # Dilemma + paths
+        g.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "hard"},
+        )
+        g.create_node(
+            "path::alpha",
+            {
+                "type": "path",
+                "raw_id": "alpha",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
+            },
+        )
+
+        # Beats with predecessor chain
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1", "summary": "B1"})
+        g.create_node("beat::b2", {"type": "beat", "raw_id": "b2", "summary": "B2"})
+        g.add_edge("belongs_to", "beat::b1", "path::alpha")
+        g.add_edge("belongs_to", "beat::b2", "path::alpha")
+        g.add_edge("predecessor", "beat::b2", "beat::b1")
+
+        # Passages with grouped_in edges
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "summary": "P1"},
+        )
+        g.create_node(
+            "passage::p2",
+            {"type": "passage", "raw_id": "p2", "summary": "P2"},
+        )
+        g.add_edge("grouped_in", "beat::b1", "passage::p1")
+        g.add_edge("grouped_in", "beat::b2", "passage::p2")
+
+        # Arc node that maps to the computed key "alpha"
+        g.create_node(
+            "arc::spine_0",
+            {
+                "type": "arc",
+                "raw_id": "spine_0",
+                "arc_type": "spine",
+                "paths": ["path::alpha"],
+                "sequence": ["beat::b1", "beat::b2"],
+            },
+        )
+
+        # Calling with arc node ID should resolve via computed traversals
+        order = get_arc_passage_order(g, "arc::spine_0")
+        assert order == ["passage::p1", "passage::p2"]
+
+        # Calling with computed arc key directly also works
+        order_by_key = get_arc_passage_order(g, "alpha")
+        assert order_by_key == ["passage::p1", "passage::p2"]
+
 
 # ---------------------------------------------------------------------------
 # format_voice_context
