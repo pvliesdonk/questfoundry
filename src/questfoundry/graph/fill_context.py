@@ -237,6 +237,8 @@ def get_arc_paths(graph: Graph, arc_id: str) -> list[str]:
     """
     from questfoundry.graph.algorithms import compute_arc_traversals
 
+    # TODO: compute_arc_traversals is called per helper invocation; consider
+    # caching or accepting a pre-computed dict for hot paths.
     traversals = compute_arc_traversals(graph)
 
     # Resolve to arc key
@@ -247,13 +249,10 @@ def get_arc_paths(graph: Graph, arc_id: str) -> list[str]:
     if arc_key and arc_key in traversals:
         path_raw_ids = arc_key.split("+")
         path_nodes = graph.get_nodes_by_type("path")
-        path_ids: list[str] = []
-        for raw_id in path_raw_ids:
-            for pid, pdata in path_nodes.items():
-                if pdata.get("raw_id") == raw_id:
-                    path_ids.append(pid)
-                    break
-        return path_ids
+        raw_id_to_pid = {
+            pdata.get("raw_id"): pid for pid, pdata in path_nodes.items() if pdata.get("raw_id")
+        }
+        return [raw_id_to_pid[r] for r in path_raw_ids if r in raw_id_to_pid]
 
     # Fallback: arc node
     arc_node = graph.get_node(arc_id)
@@ -857,6 +856,11 @@ def format_lookahead_context(
 
     At convergence points: includes beat summaries of connecting branches.
     At divergence points: includes the divergence passage prose.
+
+    Note: ``arc_id`` may or may not have a stored arc node — this function
+    handles both cases. Convergence context comes from the ``all_arcs`` loop.
+    Divergence/echo sections read the arc node for ``arc_type``,
+    ``diverges_at``, and ``converges_at`` but gracefully degrade when absent.
 
     Args:
         graph: Graph containing arc, passage, and beat nodes.

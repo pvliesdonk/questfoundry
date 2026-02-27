@@ -42,6 +42,9 @@ def check_intensity_progression(graph: Graph, arc_id: str) -> ValidationCheck:
     Returns:
         ValidationCheck with pass/warn/fail severity.
     """
+    # get_arc_beat_sequence returns [] for unknown arc IDs, which is
+    # intentionally handled by the "too short" check below (arc presence
+    # is now derived from graph traversal, not stored nodes).
     sequence = get_arc_beat_sequence(graph, arc_id)
     if len(sequence) < 3:
         return ValidationCheck(
