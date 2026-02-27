@@ -127,8 +127,68 @@ def _extract_entities(graph: Graph) -> list[ExportEntity]:
     ]
 
 
+def _project_state_flags_to_codewords(graph: Graph) -> list[ExportCodeword]:
+    """Project state flags to player-facing codewords based on dilemma role.
+
+    Per Document 3 ontology: soft dilemma state flags become codewords
+    (the player carries state across convergence points). Hard dilemma
+    state flags remain internal routing machinery and are not exported.
+
+    Args:
+        graph: Graph containing state_flag and dilemma nodes.
+
+    Returns:
+        Projected codewords for export (only soft dilemma flags).
+    """
+    state_flags = graph.get_nodes_by_type("state_flag")
+    if not state_flags:
+        return []
+
+    # Build dilemma role lookup
+    dilemmas = graph.get_nodes_by_type("dilemma")
+    dilemma_roles: dict[str, str] = {
+        did: role for did, ddata in dilemmas.items() if (role := ddata.get("dilemma_role", ""))
+    }
+
+    result: list[ExportCodeword] = []
+    for flag_id, flag_data in sorted(state_flags.items()):
+        # Check both keys: "dilemma_id" is canonical, "dilemma" is a legacy
+        # alias from older graphs that stored the reference under that key.
+        dilemma_ref = flag_data.get("dilemma_id") or flag_data.get("dilemma", "")
+        role = dilemma_roles.get(str(dilemma_ref), "")
+
+        if role == "soft":
+            result.append(
+                ExportCodeword(
+                    id=flag_id,
+                    codeword_type=flag_data.get("codeword_type", "granted"),
+                    tracks=flag_data.get("tracks"),
+                )
+            )
+        elif not role:
+            log.warning(
+                "state_flag_no_dilemma_role",
+                flag_id=flag_id,
+                dilemma_ref=dilemma_ref,
+            )
+
+    return result
+
+
 def _extract_codewords(graph: Graph) -> list[ExportCodeword]:
-    """Extract codeword nodes."""
+    """Extract player-facing codewords via state flag projection.
+
+    Prefers state_flag nodes with dilemma-role-based projection.
+    Falls back to legacy codeword nodes for backward compatibility.
+    """
+    # Use state_flag projection when state_flag nodes exist (even if all are
+    # hard flags and projection returns []).  Only fall back to legacy codeword
+    # nodes when no state_flag nodes exist at all.
+    state_flags = graph.get_nodes_by_type("state_flag")
+    if state_flags:
+        return _project_state_flags_to_codewords(graph)
+
+    # Fallback: legacy codeword nodes (pre-projection graphs)
     nodes = graph.get_nodes_by_type("codeword")
     return [
         ExportCodeword(
