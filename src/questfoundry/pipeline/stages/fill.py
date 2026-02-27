@@ -1819,7 +1819,9 @@ class FillStage:
             elif final_cycle:
                 # Exhausted all revision cycles — escalate as upstream problem.
                 # Preserve review_flags on the passage (do NOT clear them).
-                remaining = passage.get("review_flags", [])
+                # Re-fetch after possible prose update above to avoid stale data.
+                current_node = graph.get_node(passage_id) or {}
+                remaining = current_node.get("review_flags", [])
                 issue_types = [f.get("issue_type", "unknown") for f in remaining]
                 log.warning(
                     "upstream_escalation",
@@ -1829,13 +1831,8 @@ class FillStage:
                     reason="revision exhausted after 2 cycles; problem likely upstream (POLISH/GROW)",
                 )
 
-        # Count escalated passages for the summary
-        escalated = 0
-        if final_cycle:
-            for pid in flagged_passages:
-                node = graph.get_node(pid)
-                if node and node.get("review_flags"):
-                    escalated += 1
+        # Count escalated passages from results (avoids redundant graph reads)
+        escalated = sum(1 for item in results if item and not item[2]) if final_cycle else 0
 
         phase_label = "revision_final" if final_cycle else "revision"
         detail = f"{revised_flags} of {total_flags} flags addressed across {len(flagged_passages)} passages"
@@ -1857,10 +1854,11 @@ class FillStage:
     ) -> FillPhaseResult:
         """Phase 2 (cycle 2): Fresh full review of revised prose.
 
-        Clears flags on passages that still have unresolved review_flags,
-        then performs a full review of all passages with prose. This
-        defensively catches regressions introduced by revisions.
-        Skips entirely if no flags remain.
+        Skips entirely if no passages have unresolved review_flags after
+        the first revision cycle. When triggered, clears existing flags
+        on flagged passages and performs a fresh full review of all
+        passages with prose (defensive: catches regressions introduced
+        during revision, not just re-checking flagged passages).
         """
         # Check if any passages still have unresolved flags
         passage_nodes = graph.get_nodes_by_type("passage")
