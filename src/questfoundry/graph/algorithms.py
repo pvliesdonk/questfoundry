@@ -222,6 +222,57 @@ def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:
     return result
 
 
+def compute_passage_traversals(graph: Graph) -> dict[str, list[str]]:
+    """Compute passage traversal orders from graph structure.
+
+    Builds on :func:`compute_arc_traversals` which provides beat sequences
+    per arc.  Maps beats to passages via ``grouped_in`` edges
+    (beat → passage), falling back to ``passage_from`` edges
+    (passage → beat) for legacy graphs.
+
+    Multiple beats in the same passage are deduplicated — each passage
+    appears at most once per arc traversal, at its first occurrence.
+
+    Args:
+        graph: Graph with beat, path, passage nodes and ``grouped_in``
+            (or ``passage_from``) edges.
+
+    Returns:
+        Dict mapping arc key (``"path_a+path_b"``) to ordered list of
+        unique passage IDs.  Returns empty dict if no arc traversals can
+        be computed (e.g. missing dilemma / path nodes).
+    """
+    arc_traversals = compute_arc_traversals(graph)
+    if not arc_traversals:
+        return {}
+
+    # Build beat→passages lookup from grouped_in edges (primary)
+    beat_to_passages: dict[str, list[str]] = defaultdict(list)
+    for edge in graph.get_edges(edge_type="grouped_in"):
+        beat_to_passages[edge["from"]].append(edge["to"])
+
+    # Fallback: passage_from edges (legacy, passage→beat)
+    if not beat_to_passages:
+        for edge in graph.get_edges(edge_type="passage_from"):
+            # passage_from: from=passage, to=beat
+            beat_to_passages[edge["to"]].append(edge["from"])
+
+    result: dict[str, list[str]] = {}
+    for arc_key, beat_sequence in arc_traversals.items():
+        passages: list[str] = []
+        seen: set[str] = set()
+        for beat_id in beat_sequence:
+            # Sort passage IDs for determinism when multiple passages
+            # share the same beat.
+            for passage_id in sorted(beat_to_passages.get(beat_id, [])):
+                if passage_id not in seen:
+                    seen.add(passage_id)
+                    passages.append(passage_id)
+        result[arc_key] = passages
+
+    return result
+
+
 def _topological_sort_subset(
     beat_set: set[str],
     successors_all: dict[str, list[str]],

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 import pytest
 
-from questfoundry.graph.algorithms import compute_active_flags_at_beat, compute_arc_traversals
+from questfoundry.graph.algorithms import (
+    compute_active_flags_at_beat,
+    compute_arc_traversals,
+    compute_passage_traversals,
+)
 from questfoundry.graph.graph import Graph
 
 
@@ -738,3 +742,170 @@ class TestComputeArcTraversalsCycleFallback:
         result = compute_arc_traversals(graph)
         # Cycle fallback returns sorted order
         assert result == {"p1": ["beat::a", "beat::b"]}
+
+
+# ---------------------------------------------------------------------------
+# compute_passage_traversals tests
+# ---------------------------------------------------------------------------
+
+
+def _make_passage(graph: Graph, passage_id: str, from_beat: str) -> None:
+    """Helper to create a passage node."""
+    graph.create_node(
+        passage_id,
+        {
+            "type": "passage",
+            "raw_id": passage_id.split("::")[-1],
+            "from_beat": from_beat,
+            "summary": f"Passage for {from_beat}",
+        },
+    )
+
+
+def _add_grouped_in(graph: Graph, beat_id: str, passage_id: str) -> None:
+    """Helper to create a grouped_in edge (beat → passage)."""
+    graph.add_edge("grouped_in", beat_id, passage_id)
+
+
+def _add_passage_from(graph: Graph, passage_id: str, beat_id: str) -> None:
+    """Helper to create a passage_from edge (passage → beat)."""
+    graph.add_edge("passage_from", passage_id, beat_id)
+
+
+class TestComputePassageTraversalsEmpty:
+    """Edge cases: empty graphs, missing nodes."""
+
+    def test_empty_graph(self) -> None:
+        graph = Graph.empty()
+        assert compute_passage_traversals(graph) == {}
+
+    def test_no_passages_or_edges(self) -> None:
+        """Arc traversals exist but no beat→passage edges → empty passage lists."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::p1", "dilemma::d1")
+        _make_beat(graph, "beat::b1", "Beat 1", [])
+        _add_belongs_to(graph, "beat::b1", "path::p1")
+
+        result = compute_passage_traversals(graph)
+        assert result == {"p1": []}
+
+
+class TestComputePassageTraversalsGroupedIn:
+    """Tests using grouped_in edges (primary path)."""
+
+    def test_single_beat_single_passage(self) -> None:
+        """One beat grouped into one passage."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::alpha", "dilemma::d1")
+
+        _make_beat(graph, "beat::b1", "Beat 1", [])
+        _add_belongs_to(graph, "beat::b1", "path::alpha")
+
+        _make_passage(graph, "passage::p1", "beat::b1")
+        _add_grouped_in(graph, "beat::b1", "passage::p1")
+
+        result = compute_passage_traversals(graph)
+        assert result == {"alpha": ["passage::p1"]}
+
+    def test_chain_preserves_order(self) -> None:
+        """Three beats in a chain → passages in same order."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::alpha", "dilemma::d1")
+
+        _make_beat(graph, "beat::b1", "Start", [])
+        _make_beat(graph, "beat::b2", "Middle", [])
+        _make_beat(graph, "beat::b3", "End", [])
+        _add_belongs_to(graph, "beat::b1", "path::alpha")
+        _add_belongs_to(graph, "beat::b2", "path::alpha")
+        _add_belongs_to(graph, "beat::b3", "path::alpha")
+        _add_predecessor(graph, "beat::b2", "beat::b1")
+        _add_predecessor(graph, "beat::b3", "beat::b2")
+
+        _make_passage(graph, "passage::p1", "beat::b1")
+        _make_passage(graph, "passage::p2", "beat::b2")
+        _make_passage(graph, "passage::p3", "beat::b3")
+        _add_grouped_in(graph, "beat::b1", "passage::p1")
+        _add_grouped_in(graph, "beat::b2", "passage::p2")
+        _add_grouped_in(graph, "beat::b3", "passage::p3")
+
+        result = compute_passage_traversals(graph)
+        assert result == {"alpha": ["passage::p1", "passage::p2", "passage::p3"]}
+
+    def test_multiple_beats_same_passage_deduplicated(self) -> None:
+        """Two beats grouped into the same passage → passage appears once."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::alpha", "dilemma::d1")
+
+        _make_beat(graph, "beat::b1", "Start", [])
+        _make_beat(graph, "beat::b2", "Middle", [])
+        _add_belongs_to(graph, "beat::b1", "path::alpha")
+        _add_belongs_to(graph, "beat::b2", "path::alpha")
+        _add_predecessor(graph, "beat::b2", "beat::b1")
+
+        _make_passage(graph, "passage::merged", "beat::b1")
+        _add_grouped_in(graph, "beat::b1", "passage::merged")
+        _add_grouped_in(graph, "beat::b2", "passage::merged")
+
+        result = compute_passage_traversals(graph)
+        assert result == {"alpha": ["passage::merged"]}
+
+    def test_two_paths_share_passage(self) -> None:
+        """Two paths share a start passage; each also has exclusive passages."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::brave", "dilemma::d1", is_canonical=True)
+        _make_path(graph, "path::cautious", "dilemma::d1")
+
+        # Shared start
+        _make_beat(graph, "beat::start", "Start", [])
+        _add_belongs_to(graph, "beat::start", "path::brave")
+        _add_belongs_to(graph, "beat::start", "path::cautious")
+
+        # Path-exclusive beats
+        _make_beat(graph, "beat::brave_act", "Brave", [])
+        _add_belongs_to(graph, "beat::brave_act", "path::brave")
+        _add_predecessor(graph, "beat::brave_act", "beat::start")
+
+        _make_beat(graph, "beat::cautious_act", "Cautious", [])
+        _add_belongs_to(graph, "beat::cautious_act", "path::cautious")
+        _add_predecessor(graph, "beat::cautious_act", "beat::start")
+
+        # Passages
+        _make_passage(graph, "passage::p_start", "beat::start")
+        _make_passage(graph, "passage::p_brave", "beat::brave_act")
+        _make_passage(graph, "passage::p_cautious", "beat::cautious_act")
+        _add_grouped_in(graph, "beat::start", "passage::p_start")
+        _add_grouped_in(graph, "beat::brave_act", "passage::p_brave")
+        _add_grouped_in(graph, "beat::cautious_act", "passage::p_cautious")
+
+        result = compute_passage_traversals(graph)
+        assert result["brave"] == ["passage::p_start", "passage::p_brave"]
+        assert result["cautious"] == ["passage::p_start", "passage::p_cautious"]
+
+
+class TestComputePassageTraversalsFallback:
+    """Tests using passage_from edges (legacy fallback)."""
+
+    def test_passage_from_fallback(self) -> None:
+        """When no grouped_in edges exist, uses passage_from."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::alpha", "dilemma::d1")
+
+        _make_beat(graph, "beat::b1", "Start", [])
+        _make_beat(graph, "beat::b2", "End", [])
+        _add_belongs_to(graph, "beat::b1", "path::alpha")
+        _add_belongs_to(graph, "beat::b2", "path::alpha")
+        _add_predecessor(graph, "beat::b2", "beat::b1")
+
+        _make_passage(graph, "passage::p1", "beat::b1")
+        _make_passage(graph, "passage::p2", "beat::b2")
+        _add_passage_from(graph, "passage::p1", "beat::b1")
+        _add_passage_from(graph, "passage::p2", "beat::b2")
+
+        result = compute_passage_traversals(graph)
+        assert result == {"alpha": ["passage::p1", "passage::p2"]}
