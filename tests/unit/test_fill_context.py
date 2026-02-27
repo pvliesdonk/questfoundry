@@ -2803,7 +2803,7 @@ class TestResidueWeightObligations:
 # ---------------------------------------------------------------------------
 
 
-def _make_shadow_graph(*, with_second_path: bool = True, with_shadow_answer: bool = True) -> Graph:
+def _make_shadow_graph(*, with_second_path: bool = True) -> Graph:
     """Build a graph with a dilemma, two answers, one explored path, and optional shadow.
 
     Structure:
@@ -2842,8 +2842,7 @@ def _make_shadow_graph(*, with_second_path: bool = True, with_shadow_answer: boo
             "path::beta",
             {"type": "path", "raw_id": "beta", "dilemma_id": "dilemma::d1"},
         )
-        if with_shadow_answer:
-            g.add_edge("explores", "path::beta", "answer::a2")
+        g.add_edge("explores", "path::beta", "answer::a2")
 
     # Beat on chosen path
     g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})

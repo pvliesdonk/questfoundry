@@ -13,7 +13,12 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from questfoundry.graph.context import get_passage_beats, get_primary_beat, strip_scope_prefix
+from questfoundry.graph.context import (
+    get_passage_beats,
+    get_primary_beat,
+    normalize_scoped_id,
+    strip_scope_prefix,
+)
 from questfoundry.observability.logging import get_logger
 
 # ---------------------------------------------------------------------------
@@ -1882,8 +1887,6 @@ def format_shadow_context(graph: Graph, passage_id: str, arc_id: str) -> str:  #
         pdata = path_nodes.get(pid, {})
         did = pdata.get("dilemma_id", "")
         if did:
-            from questfoundry.graph.context import normalize_scoped_id
-
             dilemma_ids.add(normalize_scoped_id(did, "dilemma"))
 
     if not dilemma_ids:
@@ -1937,7 +1940,7 @@ def format_shadow_context(graph: Graph, passage_id: str, arc_id: str) -> str:  #
         "## Shadow Paths (roads not taken)\n\n"
         "The player did NOT choose these paths. Their absence gives weight "
         "to what was chosen. Write with awareness of what didn't happen — "
-        "the consequences avoided, the allies unmet, the truths left hidden.\n"
+        "the consequences avoided, the allies unmet, the truths left hidden.\n\n"
     )
     return header + "\n".join(lines)
 
