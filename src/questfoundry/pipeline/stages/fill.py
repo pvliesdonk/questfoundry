@@ -1340,6 +1340,20 @@ class FillStage:
             else:
                 entity_updates = passage_output.entity_updates
 
+            # Warn about entity updates on non-spine passages (likely
+            # path-dependent details that should be overlays, not base state).
+            arc_data = graph.get_node(arc_id) if arc_id else None
+            is_spine_arc = (arc_data.get("arc_type") == "spine") if arc_data is not None else False
+
+            if entity_updates and not is_spine_arc and arc_id is not None:
+                log.warning(
+                    "entity_update_non_spine",
+                    passage_id=passage_id,
+                    arc_id=arc_id,
+                    fields=[u.field for u in entity_updates],
+                    entity_ids=[u.entity_id for u in entity_updates],
+                )
+
             for update in entity_updates:
                 # Resolve entity ID using category prefixes (character::, location::, etc.)
                 entity_id = _resolve_entity_id(graph, update.entity_id)
