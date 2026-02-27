@@ -20,7 +20,7 @@ class TestCheckIntensityProgression:
         g = Graph.empty()
         result = check_intensity_progression(g, "arc::nope")
         assert result.severity == "pass"
-        assert "not found" in result.message
+        assert "too short" in result.message
 
     def test_short_arc(self) -> None:
         g = Graph.empty()

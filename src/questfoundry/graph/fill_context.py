@@ -203,13 +203,15 @@ def _resolve_arc_key(graph: Graph, arc_id: str) -> str | None:
     """Map an arc node ID to its computed arc key.
 
     Reads the arc node's ``paths`` list and derives the arc key
-    (sorted path ``raw_id`` values joined by ``"+"``) to match keys
-    produced by :func:`compute_arc_traversals`.
+    via :func:`~questfoundry.graph.algorithms.arc_key_for_paths` to
+    match keys produced by :func:`compute_arc_traversals`.
 
     Returns:
         Arc key string, or None if the arc node doesn't exist or has
         no paths.
     """
+    from questfoundry.graph.algorithms import arc_key_for_paths
+
     arc_node = graph.get_node(arc_id)
     if not arc_node:
         return None
@@ -217,8 +219,80 @@ def _resolve_arc_key(graph: Graph, arc_id: str) -> str | None:
     if not path_ids:
         return None
     path_nodes = graph.get_nodes_by_type("path")
-    raw_ids = sorted(path_nodes.get(pid, {}).get("raw_id", pid) for pid in path_ids)
-    return "+".join(raw_ids)
+    return arc_key_for_paths(path_nodes, path_ids)
+
+
+def get_arc_paths(graph: Graph, arc_id: str) -> list[str]:
+    """Get path node IDs for an arc.
+
+    Primary: resolves ``arc_id`` to an arc key and derives path IDs
+    from the key's constituent path ``raw_id`` values.
+    Fallback: reads the stored arc node's ``paths`` field.
+
+    Args:
+        graph: Graph containing path and (optionally) arc nodes.
+        arc_id: Arc node ID or computed arc key.
+
+    Returns:
+        List of path node IDs.
+    """
+    from questfoundry.graph.algorithms import compute_arc_traversals
+
+    # TODO: compute_arc_traversals is called per helper invocation; consider
+    # caching or accepting a pre-computed dict for hot paths.
+    traversals = compute_arc_traversals(graph)
+
+    # Resolve to arc key
+    arc_key: str | None = arc_id if arc_id in traversals else None
+    if not arc_key:
+        arc_key = _resolve_arc_key(graph, arc_id)
+
+    if arc_key and arc_key in traversals:
+        path_raw_ids = arc_key.split("+")
+        path_nodes = graph.get_nodes_by_type("path")
+        raw_id_to_pid = {
+            pdata.get("raw_id"): pid for pid, pdata in path_nodes.items() if pdata.get("raw_id")
+        }
+        return [raw_id_to_pid[r] for r in path_raw_ids if r in raw_id_to_pid]
+
+    # Fallback: arc node
+    arc_node = graph.get_node(arc_id)
+    if arc_node:
+        return list(arc_node.get("paths", []))
+    return []
+
+
+def get_arc_beat_sequence(graph: Graph, arc_id: str) -> list[str]:
+    """Get beat sequence for an arc.
+
+    Primary: uses :func:`compute_arc_traversals` keyed by arc key.
+    Fallback: reads the stored arc node's ``sequence`` field.
+
+    Args:
+        graph: Graph containing beat, path, and (optionally) arc nodes.
+        arc_id: Arc node ID or computed arc key.
+
+    Returns:
+        Topologically sorted list of beat IDs.
+    """
+    from questfoundry.graph.algorithms import compute_arc_traversals
+
+    traversals = compute_arc_traversals(graph)
+
+    # Direct arc key lookup
+    if arc_id in traversals:
+        return traversals[arc_id]
+
+    # Map arc node ID → arc key
+    arc_key = _resolve_arc_key(graph, arc_id)
+    if arc_key and arc_key in traversals:
+        return traversals[arc_key]
+
+    # Fallback: arc node
+    arc_node = graph.get_node(arc_id)
+    if arc_node:
+        return list(arc_node.get("sequence", []))
+    return []
 
 
 def format_story_identity(graph: Graph) -> str:
@@ -784,6 +858,11 @@ def format_lookahead_context(
     At convergence points: includes beat summaries of connecting branches.
     At divergence points: includes the divergence passage prose.
 
+    Note: ``arc_id`` may or may not have a stored arc node — this function
+    handles both cases. Convergence context comes from the ``all_arcs`` loop.
+    Divergence/echo sections read the arc node for ``arc_type``,
+    ``diverges_at``, and ``converges_at`` but gracefully degrade when absent.
+
     Args:
         graph: Graph containing arc, passage, and beat nodes.
         passage_id: The current passage being generated.
@@ -792,10 +871,6 @@ def format_lookahead_context(
     Returns:
         Formatted lookahead context, or empty string if no lookahead needed.
     """
-    arc_node = graph.get_node(arc_id)
-    if not arc_node:
-        return ""
-
     passage = graph.get_node(passage_id)
     if not passage:
         return ""
@@ -804,7 +879,7 @@ def format_lookahead_context(
     lines: list[str] = []
 
     # Check if this beat is a convergence point for any arc
-    convergence_arcs = []
+    convergence_arcs: list[tuple[str, dict[str, Any]]] = []
     all_arcs = graph.get_nodes_by_type("arc")
     for aid, adata in all_arcs.items():
         if adata.get("converges_at") == beat_id and aid != arc_id:
@@ -812,10 +887,9 @@ def format_lookahead_context(
 
     if convergence_arcs:
         lines.append("**Convergence — branches arriving here:**")
-        for aid, adata in convergence_arcs:
-            arc_raw = adata.get("raw_id", aid)
-            # Get the last few beats from the arriving arc
-            seq = adata.get("sequence", [])
+        for aid, _adata in convergence_arcs:
+            arc_raw = _adata.get("raw_id", aid)
+            seq = get_arc_beat_sequence(graph, aid)
             if seq:
                 last_beats = seq[-3:]  # last 3 beats for context
                 for bid in last_beats:
@@ -827,27 +901,28 @@ def format_lookahead_context(
         lines.append("")
 
     # Check if this is a divergence point — include divergence passage prose
-    if arc_node.get("arc_type") == "branch":
-        diverge_beat = arc_node.get("diverges_at")
-        if diverge_beat == beat_id or _is_first_branch_beat(graph, arc_id, beat_id):
-            # Find the divergence passage prose
-            diverge_passage = _find_passage_for_beat(graph, diverge_beat) if diverge_beat else None
-            if diverge_passage:
-                dpnode = graph.get_node(diverge_passage)
-                if dpnode:
-                    prose = dpnode.get("prose", "")
-                    if prose:
-                        lines.append("**Divergence — continue from this passage:**")
-                        lines.append(prose)
-                        lines.append("")
+    arc_node = graph.get_node(arc_id)
+    arc_type = arc_node.get("arc_type", "") if arc_node else ""
+    diverge_beat = arc_node.get("diverges_at") if arc_node else None
+
+    if arc_type == "branch" and (
+        diverge_beat == beat_id or _is_first_branch_beat(graph, arc_id, beat_id)
+    ):
+        diverge_passage = _find_passage_for_beat(graph, diverge_beat) if diverge_beat else None
+        if diverge_passage:
+            dpnode = graph.get_node(diverge_passage)
+            if dpnode:
+                prose = dpnode.get("prose", "")
+                if prose:
+                    lines.append("**Divergence — continue from this passage:**")
+                    lines.append(prose)
+                    lines.append("")
 
     # Echo prompt: at structural junctures (convergence or divergence),
     # inject the opening sentence from the story's first passage as a
     # thematic callback anchor. The LLM can echo imagery or phrasing
     # to create narrative resonance.
-    if convergence_arcs or (
-        arc_node.get("arc_type") == "branch" and arc_node.get("diverges_at") == beat_id
-    ):
+    if convergence_arcs or (arc_type == "branch" and diverge_beat == beat_id):
         echo = _extract_opening_echo(graph, arc_id)
         if echo:
             lines.append("**Thematic Echo (for callback):**")
@@ -910,8 +985,11 @@ def format_entity_states(graph: Graph, passage_id: str) -> str:
 def _find_passage_for_beat(graph: Graph, beat_id: str | None) -> str | None:
     """Find the passage node ID for a given beat.
 
+    Checks ``grouped_in`` edges first (beat → passage), falling back
+    to ``passage_from`` edges (passage → beat).
+
     Args:
-        graph: Graph with passage_from edges.
+        graph: Graph with grouped_in or passage_from edges.
         beat_id: The beat node ID.
 
     Returns:
@@ -919,6 +997,10 @@ def _find_passage_for_beat(graph: Graph, beat_id: str | None) -> str | None:
     """
     if not beat_id:
         return None
+    # Primary: grouped_in (beat → passage)
+    for edge in graph.get_edges(from_id=beat_id, edge_type="grouped_in"):
+        return str(edge["to"])
+    # Fallback: passage_from (passage → beat)
     for edge in graph.get_edges(to_id=beat_id, edge_type="passage_from"):
         return str(edge["from"])
     return None
@@ -982,12 +1064,8 @@ def _is_first_branch_beat(graph: Graph, arc_id: str, beat_id: str) -> bool:
     if not spine_id:
         return False
 
-    spine_node = graph.get_node(spine_id)
-    if not spine_node:
-        return False
-
-    spine_beats = set(spine_node.get("sequence", []))
-    sequence = arc_node.get("sequence", [])
+    spine_beats = set(get_arc_beat_sequence(graph, spine_id))
+    sequence = get_arc_beat_sequence(graph, arc_id)
 
     for bid in sequence:
         if bid not in spine_beats:
@@ -1154,11 +1232,7 @@ def get_path_pov_character(graph: Graph, arc_id: str) -> str | None:
     Returns:
         Entity ID of POV character, or None if not determined.
     """
-    arc_node = graph.get_node(arc_id)
-    if not arc_node:
-        return None
-
-    arc_paths = arc_node.get("paths", [])
+    arc_paths = get_arc_paths(graph, arc_id)
 
     # Check path-specific override (first path with pov_character wins)
     for path_id in arc_paths:
@@ -1194,11 +1268,7 @@ def compute_open_questions(
         ``dilemma_id``, ``question``, ``escalations``, ``action_here``.
         Sorted by escalation count (most escalated first).
     """
-    arc_node = graph.get_node(arc_id)
-    if not arc_node:
-        return []
-
-    sequence = arc_node.get("sequence", [])
+    sequence = get_arc_beat_sequence(graph, arc_id)
     if not sequence:
         return []
 
@@ -1476,11 +1546,7 @@ def format_path_arc_context(graph: Graph, passage_id: str, arc_id: str) -> str:
     if not passage:
         return ""
 
-    arc_node = graph.get_node(arc_id)
-    if not arc_node:
-        return ""
-
-    arc_paths = arc_node.get("paths", [])
+    arc_paths = get_arc_paths(graph, arc_id)
     if not arc_paths:
         return ""
 
@@ -1910,11 +1976,7 @@ def compute_arc_hints(
     if not entity_ids:
         return {}
 
-    arc_node = graph.get_node(arc_id)
-    if not arc_node:
-        return {}
-
-    arc_paths = arc_node.get("paths", [])
+    arc_paths = get_arc_paths(graph, arc_id)
     if not arc_paths:
         return {}
 
@@ -2070,11 +2132,7 @@ def format_entity_arc_context(
     if not beat_id:
         return ""
 
-    arc_node = graph.get_node(arc_id)
-    if not arc_node:
-        return ""
-
-    arc_paths = arc_node.get("paths", [])
+    arc_paths = get_arc_paths(graph, arc_id)
     if not arc_paths:
         return ""
 
