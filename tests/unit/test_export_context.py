@@ -284,6 +284,52 @@ class TestBuildExportContext:
 
         assert ctx.cover is None
 
+    def test_state_flag_projection_soft_only(self) -> None:
+        """Soft dilemma state flags are projected as codewords; hard ones are not."""
+        g = _minimal_graph()
+        # Dilemmas
+        g.create_node(
+            "dilemma::trust",
+            {"type": "dilemma", "raw_id": "trust", "dilemma_role": "soft"},
+        )
+        g.create_node(
+            "dilemma::loyalty",
+            {"type": "dilemma", "raw_id": "loyalty", "dilemma_role": "hard"},
+        )
+        # State flags
+        g.create_node(
+            "state_flag::trusted_mentor",
+            {
+                "type": "state_flag",
+                "raw_id": "trusted_mentor",
+                "dilemma_id": "dilemma::trust",
+                "codeword_type": "granted",
+                "tracks": "consequence::trust_given",
+            },
+        )
+        g.create_node(
+            "state_flag::loyal_to_crown",
+            {
+                "type": "state_flag",
+                "raw_id": "loyal_to_crown",
+                "dilemma_id": "dilemma::loyalty",
+                "codeword_type": "granted",
+                "tracks": "consequence::loyalty",
+            },
+        )
+        ctx = build_export_context(g, "test")
+        # Only soft dilemma flag should be exported
+        assert len(ctx.codewords) == 1
+        assert ctx.codewords[0].id == "state_flag::trusted_mentor"
+        assert ctx.codewords[0].tracks == "consequence::trust_given"
+
+    def test_legacy_codeword_fallback(self) -> None:
+        """When no state_flag nodes exist, legacy codeword nodes are used."""
+        g = _graph_with_entities(_minimal_graph())
+        ctx = build_export_context(g, "test")
+        assert len(ctx.codewords) == 1
+        assert ctx.codewords[0].id == "codeword::entered_castle"
+
     def test_language_default_english(self) -> None:
         g = _minimal_graph()
         ctx = build_export_context(g, "test")
