@@ -11,7 +11,12 @@ from typing import TYPE_CHECKING
 
 import yaml
 
-from questfoundry.graph.context import ENTITY_CATEGORIES, parse_scoped_id, strip_scope_prefix
+from questfoundry.graph.context import (
+    ENTITY_CATEGORIES,
+    get_primary_beat,
+    parse_scoped_id,
+    strip_scope_prefix,
+)
 from questfoundry.graph.fill_context import format_dream_vision, get_spine_arc_id
 
 if TYPE_CHECKING:
@@ -115,7 +120,7 @@ def format_passage_for_brief(graph: Graph, passage_id: str) -> str:
         lines.append("")
 
     # Beat metadata
-    beat_id = passage.get("from_beat", "")
+    beat_id = get_primary_beat(graph, passage_id) or ""
     beat = graph.get_node(beat_id) if beat_id else None
 
     if beat:
@@ -298,7 +303,7 @@ def describe_priority_context(graph: Graph, passage_id: str, base_score: int) ->
     if not passage:
         return parts[0]
 
-    beat_id = passage.get("from_beat", "")
+    beat_id = get_primary_beat(graph, passage_id) or ""
     beat = graph.get_node(beat_id) if beat_id else None
     scene_type = beat.get("scene_type", "") if beat else ""
     if scene_type:

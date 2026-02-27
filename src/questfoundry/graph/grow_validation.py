@@ -16,7 +16,7 @@ from __future__ import annotations
 from collections import deque
 from typing import TYPE_CHECKING
 
-from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.graph.context import get_primary_beat, normalize_scoped_id
 from questfoundry.graph.validation_types import ValidationCheck, ValidationReport
 
 if TYPE_CHECKING:
@@ -120,7 +120,8 @@ def build_exempt_passages(graph: Graph, passages: dict[str, dict[str, object]]) 
     exempt: set[str] = set()
     for pid, pdata in passages.items():
         # Exempt confront/resolve passages
-        if pdata.get("from_beat") in exempt_beats:
+        beat = get_primary_beat(graph, pid)
+        if beat and beat in exempt_beats:
             exempt.add(pid)
         # Exempt merged passages (they ARE the result of collapse)
         from_beats = pdata.get("from_beats")

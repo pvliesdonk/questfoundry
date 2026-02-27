@@ -14,7 +14,7 @@ from __future__ import annotations
 from collections import deque
 from typing import TYPE_CHECKING, Any
 
-from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.graph.context import get_primary_beat, normalize_scoped_id
 from questfoundry.graph.grow_validation import (
     build_exempt_passages,
     build_outgoing_count,
@@ -1121,12 +1121,10 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
             beat_to_arcs.setdefault(str(beat_id), []).append(arc_id)
 
     checks: list[ValidationCheck] = []
-    passages = graph.get_nodes_by_type("passage")
 
     for source_pid, routing_choices in sorted(routing_sets.items()):
         # Find arcs covering this passage's beat
-        source_data = passages.get(source_pid, {})
-        from_beat = str(source_data.get("from_beat") or source_data.get("primary_beat") or "")
+        from_beat = get_primary_beat(graph, source_pid) or ""
         covering_arcs = beat_to_arcs.get(from_beat, [])
         if not covering_arcs:
             continue
@@ -1267,7 +1265,7 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
         if pdata.get("is_ending"):
             continue
 
-        from_beat = str(pdata.get("from_beat") or "")
+        from_beat = get_primary_beat(graph, pid) or ""
         if not from_beat:
             continue
 

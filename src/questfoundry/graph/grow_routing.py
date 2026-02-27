@@ -15,6 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Literal
 
+from questfoundry.graph.context import get_primary_beat
 from questfoundry.observability.logging import get_logger
 
 if TYPE_CHECKING:
@@ -325,8 +326,8 @@ def _build_passage_arcs(graph: Graph) -> dict[str, list[str]]:
 
     # Build passage → covering arcs via from_beat
     passage_arcs: dict[str, list[str]] = {}
-    for pid, p_data in passage_nodes.items():
-        from_beat = p_data.get("from_beat")
+    for pid in passage_nodes:
+        from_beat = get_primary_beat(graph, pid)
         if from_beat and from_beat in beat_arcs:
             passage_arcs[pid] = beat_arcs[from_beat]
 
@@ -390,7 +391,7 @@ def _compute_ending_splits(
                     variant_id=variant_id,
                     requires_codewords=tuple(distinguishing),
                     summary=t_data.get("summary", ""),
-                    from_beat=t_data.get("from_beat"),
+                    from_beat=get_primary_beat(graph, terminal_id),
                     entities=tuple(t_data.get("entities", [])),
                     is_ending=True,
                     family_codewords=tuple(distinguishing),
@@ -552,7 +553,7 @@ def _compute_heavy_residue(
                         variant_id=variant_id,
                         requires_codewords=(cw_id,),
                         summary=p_data.get("summary", ""),
-                        from_beat=p_data.get("from_beat"),
+                        from_beat=get_primary_beat(graph, pid),
                         entities=tuple(p_data.get("entities", [])),
                         is_residue=True,
                         residue_codeword=cw_id,
@@ -836,7 +837,7 @@ def _compute_llm_residue(
                     variant_id=variant_id,
                     requires_codewords=(cw_id,),
                     summary=p_data.get("summary", ""),
-                    from_beat=p_data.get("from_beat"),
+                    from_beat=get_primary_beat(graph, passage_id),
                     entities=tuple(p_data.get("entities", [])),
                     is_residue=True,
                     residue_codeword=cw_id,
