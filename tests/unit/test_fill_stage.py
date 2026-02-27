@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -116,8 +117,33 @@ def _mock_implemented_phases(stage: FillStage) -> None:
     async def _fake_phase_3(
         graph: Graph,  # noqa: ARG001
         model: MagicMock,  # noqa: ARG001
+        **kwargs: Any,  # noqa: ARG001
     ) -> FillPhaseResult:
         return FillPhaseResult(phase="revision", status="completed", llm_calls=0, tokens_used=0)
+
+    async def _fake_phase_2_cycle2(
+        graph: Graph,  # noqa: ARG001
+        model: MagicMock,  # noqa: ARG001
+    ) -> FillPhaseResult:
+        return FillPhaseResult(
+            phase="review_cycle2", status="completed", llm_calls=0, tokens_used=0
+        )
+
+    async def _fake_phase_3_final(
+        graph: Graph,  # noqa: ARG001
+        model: MagicMock,  # noqa: ARG001
+    ) -> FillPhaseResult:
+        return FillPhaseResult(
+            phase="revision_final", status="completed", llm_calls=0, tokens_used=0
+        )
+
+    async def _fake_phase_4(
+        graph: Graph,  # noqa: ARG001
+        model: MagicMock,  # noqa: ARG001
+    ) -> FillPhaseResult:
+        return FillPhaseResult(
+            phase="arc_validation", status="completed", llm_calls=0, tokens_used=0
+        )
 
     stage._phase_0_voice = _fake_phase_0  # type: ignore[method-assign]
     stage._phase_1a_expand = _fake_phase_1a  # type: ignore[method-assign]
@@ -125,6 +151,9 @@ def _mock_implemented_phases(stage: FillStage) -> None:
     stage._phase_1c_mechanical_gate = _fake_phase_1c  # type: ignore[method-assign]
     stage._phase_2_review = _fake_phase_2  # type: ignore[method-assign]
     stage._phase_3_revision = _fake_phase_3  # type: ignore[method-assign]
+    stage._phase_2_review_cycle2 = _fake_phase_2_cycle2  # type: ignore[method-assign]
+    stage._phase_3_revision_final = _fake_phase_3_final  # type: ignore[method-assign]
+    stage._phase_4_arc_validation = _fake_phase_4  # type: ignore[method-assign]
 
 
 class TestFillStageExecute:
@@ -338,7 +367,7 @@ class TestFillStageExecute:
         _mock_implemented_phases(stage)
         await stage.execute(mock_model, "", on_phase_progress=on_progress)
 
-        assert len(progress_calls) == 7
+        assert len(progress_calls) == 9
         assert progress_calls[0][0] == "voice"
         assert progress_calls[1][0] == "expand"
 
@@ -357,10 +386,10 @@ class TestFillStageExecute:
 
 
 class TestPhaseOrder:
-    def test_seven_phases(self) -> None:
+    def test_nine_phases(self) -> None:
         stage = FillStage()
         phases = stage._phase_order()
-        assert len(phases) == 7
+        assert len(phases) == 9
 
     def test_phase_names(self) -> None:
         stage = FillStage()
@@ -372,6 +401,8 @@ class TestPhaseOrder:
             "quality_gate",
             "review",
             "revision",
+            "review_cycle2",
+            "revision_final",
             "arc_validation",
         ]
 
