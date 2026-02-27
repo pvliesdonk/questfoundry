@@ -1231,12 +1231,85 @@ class DressStage:
 
             await unload_ollama_model(model)
 
-        # --- Pass 2: generate images (GPU-only, LLM no longer needed) -----
-        total_render = len(prepared)
-        for render_idx, (brief_id, positive, negative, brief_data) in enumerate(prepared):
+        # --- Sample gate: generate ONE image for style confirmation ---------
+        if prepared:
+            sample_brief_id, sample_pos, sample_neg, sample_bdata = prepared[0]
             if on_phase_progress:
                 on_phase_progress(
-                    "generate", "in_progress", f"Rendering {render_idx + 1}/{total_render}"
+                    "generate", "in_progress", "Rendering sample for style confirmation"
+                )
+
+            try:
+                sample_result = await provider.generate(
+                    sample_pos,
+                    negative_prompt=sample_neg,
+                    aspect_ratio=aspect_ratio,
+                )
+                sample_asset_path = asset_mgr.store(
+                    sample_result.image_data, sample_result.content_type
+                )
+
+                provider_metadata = getattr(sample_result, "provider_metadata", None)
+                if not isinstance(provider_metadata, dict):
+                    provider_metadata = {}
+                quality_raw = provider_metadata.get("quality", "high")
+                quality = quality_raw if isinstance(quality_raw, str) else str(quality_raw)
+                apply_dress_illustration(
+                    graph,
+                    brief_id=sample_brief_id,
+                    asset_path=sample_asset_path,
+                    caption=sample_bdata.get("caption", ""),
+                    category=sample_bdata.get("category", "scene"),
+                    quality=quality,
+                )
+                graph.save(self.project_path / "graph.db")
+                generated += 1
+
+                # Present sample for user confirmation via gate
+                sample_phase_result = DressPhaseResult(
+                    phase="generate_sample",
+                    status="completed",
+                    detail=(
+                        f"Sample image from brief {sample_brief_id} "
+                        f"({sample_bdata.get('subject', 'unknown')})"
+                    ),
+                )
+                decision = await self.gate.on_phase_complete(
+                    "dress", "generate_sample", sample_phase_result
+                )
+                if decision == "reject":
+                    log.info(
+                        "sample_rejected",
+                        brief_id=sample_brief_id,
+                        detail="User rejected sample; adjust art direction and retry",
+                    )
+                    return DressPhaseResult(
+                        phase="generate",
+                        status="failed",
+                        detail=(
+                            "Sample image rejected — adjust art direction or "
+                            "brief and re-run Phase 4"
+                        ),
+                    )
+                log.info("sample_approved", brief_id=sample_brief_id)
+
+            except ImageProviderError as e:
+                log.warning("sample_gen_failed", brief_id=sample_brief_id, error=str(e))
+                failed += 1
+
+            # Remaining briefs (skip index 0 — already rendered as sample)
+            remaining = prepared[1:]
+        else:
+            remaining = []
+
+        # --- Pass 2: generate remaining images (GPU-only) -----------------
+        total_render = len(remaining)
+        for render_idx, (brief_id, positive, negative, brief_data) in enumerate(remaining):
+            if on_phase_progress:
+                on_phase_progress(
+                    "generate",
+                    "in_progress",
+                    f"Rendering {render_idx + 1}/{total_render}",
                 )
 
             try:
