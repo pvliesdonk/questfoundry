@@ -269,7 +269,7 @@ def get_passage_entity_ids(graph: Graph, passage_id: str) -> list[str]:
 
     # Fallback: entities field on passage node
     passage = graph.get_node(passage_id)
-    if not passage:
+    if passage is None:
         return []
     return list(passage.get("entities", []))
 

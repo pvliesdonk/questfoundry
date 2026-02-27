@@ -204,7 +204,7 @@ class TestGetPassageEntityIds:
         # Deliberately omit location::bridge edge
         ids = get_passage_entity_ids(dress_graph, "passage::opening")
         # Should only return entities with appears edges, ignoring entities field
-        assert ids == ["character::protagonist"]
+        assert set(ids) == {"character::protagonist"}
 
     def test_nonexistent_passage(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import get_passage_entity_ids
