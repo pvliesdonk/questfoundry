@@ -10,7 +10,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
-from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
+from questfoundry.graph.context import get_primary_beat, normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.fill_context import compute_lexical_diversity
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_validation import (
@@ -384,7 +384,7 @@ def _branching_quality_score(
         if family_cws is not None:
             variant_signatures.add(frozenset(family_cws))
         else:
-            from_beat = pdata.get("from_beat") or pdata.get("primary_beat") or ""
+            from_beat = get_primary_beat(graph, pid) or ""
             covering_arcs = beat_to_arcs.get(from_beat, [])
             for arc_id in covering_arcs:
                 variant_signatures.add(arc_codewords.get(arc_id, frozenset()))
@@ -449,8 +449,8 @@ def _prose_neutrality_stats(graph: Graph) -> ProseNeutralityStats | None:
 
     # Find shared passages (beat covered by 2+ arcs)
     shared: list[str] = []
-    for pid, pdata in passage_nodes.items():
-        from_beat = str(pdata.get("from_beat") or "")
+    for pid in passage_nodes:
+        from_beat = get_primary_beat(graph, pid) or ""
         if from_beat and len(beat_arcs.get(from_beat, set())) >= 2:
             shared.append(pid)
 
@@ -480,8 +480,7 @@ def _prose_neutrality_stats(graph: Graph) -> ProseNeutralityStats | None:
         if pid in routed:
             continue
         # Find beat paths for this passage
-        pdata = passage_nodes.get(pid, {})
-        beat_id = str(pdata.get("from_beat") or "")
+        beat_id = get_primary_beat(graph, pid) or ""
         beat = graph.get_node(beat_id) if beat_id else None
         beat_paths: set[str] = set(beat.get("paths", [])) if beat else set()
 

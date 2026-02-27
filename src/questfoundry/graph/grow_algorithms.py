@@ -24,7 +24,7 @@ from dataclasses import dataclass, field
 from itertools import product
 from typing import TYPE_CHECKING, Any, Literal
 
-from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
+from questfoundry.graph.context import get_primary_beat, normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.mutations import GrowErrorCategory, GrowValidationError
 from questfoundry.models.grow import Arc
 from questfoundry.observability.logging import get_logger
@@ -750,7 +750,7 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
 
     for terminal_id in terminal_ids:
         t_data = passages[terminal_id]
-        from_beat = t_data.get("from_beat") or t_data.get("primary_beat") or ""
+        from_beat = get_primary_beat(graph, terminal_id) or ""
         covering_arcs = beat_to_arcs.get(from_beat, [])
         if not covering_arcs:
             if not from_beat:
@@ -1043,7 +1043,7 @@ def _build_collapse_exempt_passages(
             continue
 
         # Check beat properties
-        beat_id = pdata.get("from_beat")
+        beat_id = get_primary_beat(graph, pid)
         if not beat_id:
             continue
         beat = beats.get(str(beat_id), {})
@@ -1128,10 +1128,9 @@ def _should_collapse_chain(graph: Graph, chain: list[str]) -> bool:
     if len(chain) < 2:
         return False
 
-    passages = {pid: graph.get_node(pid) or {} for pid in chain}
     beats = {}
-    for pid, pdata in passages.items():
-        beat_id = pdata.get("from_beat")
+    for pid in chain:
+        beat_id = get_primary_beat(graph, pid)
         if beat_id:
             beats[pid] = graph.get_node(str(beat_id)) or {}
 
@@ -1161,8 +1160,7 @@ def _create_merged_passage(graph: Graph, chain: list[str]) -> str | None:
     if not chain:
         return None
 
-    passages = [graph.get_node(pid) or {} for pid in chain]
-    beat_ids = [str(p.get("from_beat", "")) for p in passages if p.get("from_beat")]
+    beat_ids = [b for pid in chain if (b := get_primary_beat(graph, pid))]
 
     if not beat_ids:
         return None
@@ -2121,7 +2119,7 @@ def create_residue_passages(
                     "raw_id": variant_pid.removeprefix("passage::"),
                     "summary": base_data.get("summary", ""),
                     "entities": base_data.get("entities", []),
-                    "from_beat": base_data.get("from_beat"),
+                    "from_beat": get_primary_beat(graph, passage_id),
                     "is_residue": True,
                     "is_synthetic": True,
                     "residue_for": passage_id,
@@ -2257,7 +2255,7 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
         if pid in routed_passages:
             continue
 
-        from_beat = str(pdata.get("from_beat") or "")
+        from_beat = get_primary_beat(graph, pid) or ""
         if not from_beat:
             continue
 
@@ -2397,7 +2395,7 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
                     "raw_id": variant_pid.removeprefix("passage::"),
                     "summary": base_data.get("summary", ""),
                     "entities": list(base_data.get("entities", [])),
-                    "from_beat": base_data.get("from_beat"),
+                    "from_beat": get_primary_beat(graph, target.passage_id),
                     "is_residue": True,
                     "is_synthetic": True,
                     "residue_for": target.passage_id,

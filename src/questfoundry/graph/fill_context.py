@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 
 import yaml
 
-from questfoundry.graph.context import strip_scope_prefix
+from questfoundry.graph.context import get_passage_beats, get_primary_beat, strip_scope_prefix
 from questfoundry.observability.logging import get_logger
 
 # ---------------------------------------------------------------------------
@@ -250,7 +250,7 @@ def format_passage_context(graph: Graph, passage_id: str) -> str:
     if not passage:
         return ""
 
-    beat_id = passage.get("from_beat", "")
+    beat_id = get_primary_beat(graph, passage_id) or ""
     beat = graph.get_node(beat_id) if beat_id else None
 
     lines: list[str] = []
@@ -441,8 +441,8 @@ def format_merged_passage_context(graph: Graph, passage_id: str) -> str:
     if not is_merged_passage(passage):
         return format_passage_context(graph, passage_id)
 
-    from_beats = passage.get("from_beats", [])
-    primary_beat_id = passage.get("primary_beat", from_beats[0] if from_beats else "")
+    from_beats = get_passage_beats(graph, passage_id)
+    primary_beat_id = get_primary_beat(graph, passage_id) or ""
     primary_beat = graph.get_node(str(primary_beat_id)) if primary_beat_id else None
 
     lines: list[str] = ["## Merged Passage Context"]
@@ -625,7 +625,7 @@ def format_continuity_warning(
         passage = graph.get_node(passage_id) or {}
         entities = passage.get("entities") or []
         if not entities:
-            beat_id = passage.get("from_beat", "")
+            beat_id = get_primary_beat(graph, passage_id) or ""
             beat = graph.get_node(beat_id) if beat_id else {}
             entities = (beat or {}).get("entities") or []
         # Normalize to raw IDs for comparison (handles character::, location::, etc.)
@@ -638,8 +638,7 @@ def format_continuity_warning(
         return normalized
 
     def _location_for(passage_id: str) -> str | None:
-        passage = graph.get_node(passage_id) or {}
-        beat_id = passage.get("from_beat", "")
+        beat_id = get_primary_beat(graph, passage_id) or ""
         beat = graph.get_node(beat_id) if beat_id else None
         loc = (beat or {}).get("location")
         if not loc:
@@ -648,10 +647,8 @@ def format_continuity_warning(
         return strip_scope_prefix(str(loc))
 
     def _intersection_hint(prev_passage_id: str, cur_passage_id: str) -> bool:
-        prev = graph.get_node(prev_passage_id) or {}
-        cur = graph.get_node(cur_passage_id) or {}
-        prev_beat = prev.get("from_beat", "")
-        cur_beat = cur.get("from_beat", "")
+        prev_beat = get_primary_beat(graph, prev_passage_id) or ""
+        cur_beat = get_primary_beat(graph, cur_passage_id) or ""
         if not prev_beat or not cur_beat:
             return False
         # Two beats share an intersection group if they both have
@@ -674,7 +671,7 @@ def format_continuity_warning(
     if prev_passage.get("is_synthetic") or cur_passage.get("is_synthetic"):
         return ""
 
-    cur_beat_id = cur_passage.get("from_beat", "")
+    cur_beat_id = get_primary_beat(graph, cur_passage_id) or ""
     cur_beat = graph.get_node(cur_beat_id) if cur_beat_id else None
     if (cur_beat or {}).get("scene_type") == "micro_beat":
         return ""
@@ -754,7 +751,7 @@ def format_lookahead_context(
     if not passage:
         return ""
 
-    beat_id = passage.get("from_beat", "")
+    beat_id = get_primary_beat(graph, passage_id) or ""
     lines: list[str] = []
 
     # Check if this beat is a convergence point for any arc
@@ -1338,7 +1335,7 @@ def format_narrative_context(graph: Graph, passage_id: str) -> str:
     if not passage:
         return ""
 
-    beat_id = passage.get("from_beat", "")
+    beat_id = get_primary_beat(graph, passage_id) or ""
     beat = graph.get_node(beat_id) if beat_id else None
     if not beat:
         return ""
@@ -1391,7 +1388,7 @@ def format_atmospheric_detail(graph: Graph, passage_id: str) -> str:
     if not passage:
         return ""
 
-    beat_id = passage.get("from_beat", "")
+    beat_id = get_primary_beat(graph, passage_id) or ""
     beat = graph.get_node(beat_id) if beat_id else None
     if not beat:
         return ""
@@ -1688,7 +1685,7 @@ def format_residue_weight_obligations(graph: Graph, passage_id: str) -> str:
         return ""  # Endings use ending_salience, not residue_weight
 
     # Find the beat for this passage to determine which paths cover it
-    beat_id = passage.get("from_beat") or passage.get("primary_beat", "")
+    beat_id = get_primary_beat(graph, passage_id) or ""
     beat = graph.get_node(beat_id) if beat_id else None
     beat_paths: set[str] = set(beat.get("paths", [])) if beat else set()
     if len(beat_paths) < 2:
@@ -2020,7 +2017,7 @@ def format_entity_arc_context(
     if not passage:
         return ""
 
-    beat_id = passage.get("from_beat", "")
+    beat_id = get_primary_beat(graph, passage_id) or ""
     if not beat_id:
         return ""
 
@@ -2118,7 +2115,7 @@ def format_passages_batch(
             continue
         raw_id = pnode.get("raw_id", pid)
         prose = pnode.get("prose", "")
-        beat_id = pnode.get("from_beat", "")
+        beat_id = get_primary_beat(graph, pid) or ""
         beat = graph.get_node(beat_id) if beat_id else None
         scene_type = beat.get("scene_type", "unknown") if beat else "unknown"
 

@@ -214,6 +214,51 @@ def normalize_scoped_id(raw_id: str, scope: str) -> str:
     return raw_id if raw_id.startswith(prefix) else f"{prefix}{raw_id}"
 
 
+def get_passage_beats(graph: Graph, passage_id: str) -> list[str]:
+    """Get beat IDs grouped into a passage via ``grouped_in`` edges.
+
+    Falls back to the legacy ``from_beats`` / ``from_beat`` fields when
+    no ``grouped_in`` edges exist (pre-POLISH graphs).
+
+    Args:
+        graph: The story graph.
+        passage_id: Passage node ID to look up.
+
+    Returns:
+        List of beat IDs (typically single-element, multiple for merged passages).
+    """
+    edges = graph.get_edges(to_id=passage_id, edge_type="grouped_in")
+    if edges:
+        return [e["from"] for e in edges]
+    # Fallback for GROW-era passages (before POLISH creates grouped_in edges)
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return []
+    from_beats = passage.get("from_beats")
+    if from_beats and isinstance(from_beats, list):
+        return list(from_beats)
+    from_beat = passage.get("from_beat")
+    if from_beat:
+        return [str(from_beat)]
+    return []
+
+
+def get_primary_beat(graph: Graph, passage_id: str) -> str | None:
+    """Get the primary (first) beat ID for a passage.
+
+    Shorthand for ``get_passage_beats(graph, pid)[0]`` with None fallback.
+
+    Args:
+        graph: The story graph.
+        passage_id: Passage node ID to look up.
+
+    Returns:
+        First beat ID, or None if passage has no beats.
+    """
+    beats = get_passage_beats(graph, passage_id)
+    return beats[0] if beats else None
+
+
 def is_entity_id(scoped_id: str) -> bool:
     """Check if an ID has an entity category prefix.
 

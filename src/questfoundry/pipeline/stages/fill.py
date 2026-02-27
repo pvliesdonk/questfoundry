@@ -28,6 +28,7 @@ from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
 from questfoundry.graph.context import (
     ENTITY_CATEGORIES,
+    get_primary_beat,
     normalize_scoped_id,
     strip_scope_prefix,
 )
@@ -969,7 +970,7 @@ class FillStage:
             passage = graph.get_node(passage_id)
             if not passage:
                 continue
-            beat_id = passage.get("from_beat", "")
+            beat_id = get_primary_beat(graph, passage_id) or ""
             beat = graph.get_node(beat_id) if beat_id else None
             nf = beat.get("narrative_function", "develop") if beat else "develop"
             constraint = select_constraint(nf, recently_used, rng=rng)
@@ -987,7 +988,7 @@ class FillStage:
                 passage = graph.get_node(pid)
                 if not passage:
                     continue
-                beat_id = passage.get("from_beat", "")
+                beat_id = get_primary_beat(graph, pid) or ""
                 beat = graph.get_node(beat_id) if beat_id else None
                 beat_summary = beat.get("summary", "") if beat else ""
                 scene_type = beat.get("scene_type", "scene") if beat else "scene"
@@ -1125,7 +1126,7 @@ class FillStage:
                 log.warning("passage_not_found", passage_id=passage_id)
                 continue
 
-            beat_id = passage.get("from_beat", "")
+            beat_id = get_primary_beat(graph, passage_id) or ""
             beat = graph.get_node(beat_id) if beat_id else None
             beat_summary = beat.get("summary", "") if beat else ""
             scene_type = beat.get("scene_type", "scene") if beat else "scene"
@@ -1707,7 +1708,7 @@ class FillStage:
         passage = graph.get_node(passage_id)
         if not passage:
             return None
-        beat_id = passage.get("from_beat", "")
+        beat_id = get_primary_beat(graph, passage_id) or ""
         if not beat_id:
             return None
 
