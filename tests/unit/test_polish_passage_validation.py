@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.grow_validation import (
-    _compute_linear_threshold,
+    compute_linear_threshold,
     run_all_checks,
 )
 from questfoundry.graph.polish_validation import (
@@ -162,89 +162,6 @@ def _make_chain_graph(passage_ids: list[str], beat_data: dict[str, dict] | None 
         graph.add_edge("choice_from", cid, f"passage::{from_p}")
         graph.add_edge("choice_to", cid, f"passage::{to_p}")
 
-    return graph
-
-
-def _make_compliance_graph(
-    policy: str,
-    payoff_budget: int,
-    *,
-    shared_after_div: int = 0,
-    exclusive_count: int = 3,
-) -> Graph:
-    """Build a graph with spine + one branch arc for compliance testing.
-
-    Creates full graph topology: dilemma -> answer -> path -> beat (belongs_to)
-    so the per-dilemma validation can trace beats back to their dilemma.
-
-    Args:
-        policy: Convergence policy for the dilemma.
-        payoff_budget: payoff_budget for the dilemma.
-        shared_after_div: Number of spine beats shared after divergence.
-        exclusive_count: Number of beats exclusive to the branch.
-    """
-    graph = Graph.empty()
-
-    # Dilemma with the given policy
-    graph.create_node(
-        "dilemma::d1",
-        {
-            "type": "dilemma",
-            "raw_id": "dilemma::d1",
-            "dilemma_role": policy,
-            "payoff_budget": payoff_budget,
-        },
-    )
-    # Two paths: canon (spine) and rebel (branch)
-    graph.create_node(
-        "path::canon",
-        {"type": "path", "raw_id": "path::canon", "dilemma_id": "dilemma::d1"},
-    )
-    graph.create_node(
-        "path::rebel",
-        {"type": "path", "raw_id": "path::rebel", "dilemma_id": "dilemma::d1"},
-    )
-
-    # Spine beats -- all belong to canon path
-    spine_beats = [f"beat::s{i}" for i in range(6)]
-    for bid in spine_beats:
-        graph.create_node(bid, {"type": "beat"})
-        graph.add_edge("belongs_to", bid, "path::canon")
-
-    graph.create_node(
-        "arc::spine",
-        {
-            "type": "arc",
-            "arc_type": "spine",
-            "sequence": spine_beats,
-            "paths": ["path::canon"],
-        },
-    )
-
-    # Branch: diverges after s1; has exclusive beats, then optionally shares
-    branch_seq = ["beat::s0", "beat::s1"]
-    exclusive_beats = [f"beat::b{i}" for i in range(exclusive_count)]
-    for bid in exclusive_beats:
-        graph.create_node(bid, {"type": "beat"})
-        graph.add_edge("belongs_to", bid, "path::rebel")
-    branch_seq.extend(exclusive_beats)
-
-    # Shared beats after divergence belong to BOTH paths
-    for i in range(shared_after_div):
-        shared_bid = spine_beats[2 + i]
-        graph.add_edge("belongs_to", shared_bid, "path::rebel")
-        branch_seq.append(shared_bid)
-
-    graph.create_node(
-        "arc::branch_0",
-        {
-            "type": "arc",
-            "arc_type": "branch",
-            "sequence": branch_seq,
-            "diverges_at": "beat::s1",
-            "paths": ["path::rebel"],
-        },
-    )
     return graph
 
 
@@ -1079,29 +996,29 @@ class TestMaxConsecutiveLinear:
 
 
 class TestLinearThresholdScaling:
-    """Verify _compute_linear_threshold scales with passage count."""
+    """Verify compute_linear_threshold scales with passage count."""
 
     def test_small_story_uses_default(self) -> None:
         graph = Graph.empty()
         for i in range(10):
             graph.create_node(f"passage::p{i}", {"type": "passage"})
-        assert _compute_linear_threshold(graph) == 2
+        assert compute_linear_threshold(graph) == 2
 
     def test_medium_story_scales_up(self) -> None:
         graph = Graph.empty()
         for i in range(60):
             graph.create_node(f"passage::p{i}", {"type": "passage"})
-        assert _compute_linear_threshold(graph) == 3
+        assert compute_linear_threshold(graph) == 3
 
     def test_large_story_scales_further(self) -> None:
         graph = Graph.empty()
         for i in range(100):
             graph.create_node(f"passage::p{i}", {"type": "passage"})
-        assert _compute_linear_threshold(graph) == 5
+        assert compute_linear_threshold(graph) == 5
 
     def test_empty_graph_uses_default(self) -> None:
         graph = Graph.empty()
-        assert _compute_linear_threshold(graph) == 2
+        assert compute_linear_threshold(graph) == 2
 
 
 # ---------------------------------------------------------------------------
