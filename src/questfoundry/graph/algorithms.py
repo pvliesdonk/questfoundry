@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from itertools import product
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.observability.logging import get_logger
@@ -131,6 +131,28 @@ def compute_active_flags_at_beat(graph: Graph, beat_id: str) -> set[frozenset[st
         result.add(frozenset(combo))
 
     return result
+
+
+def arc_key_for_paths(
+    path_nodes: dict[str, dict[str, Any]],
+    path_ids: list[str],
+) -> str:
+    """Build a canonical arc key from path node IDs.
+
+    Arc keys are sorted path ``raw_id`` values joined by ``"+"``.
+    This is the shared formula used by :func:`compute_arc_traversals`,
+    ``_build_arc_key_to_node_map``, ``_find_spine_arc_key``, and
+    ``_resolve_arc_key``.
+
+    Args:
+        path_nodes: Mapping of path node ID → path data (must contain ``raw_id``).
+        path_ids: List of path node IDs to include in the key.
+
+    Returns:
+        Arc key string (e.g. ``"alpha+beta"``).
+    """
+    raw_ids = sorted(str(path_nodes.get(pid, {}).get("raw_id", pid)) for pid in path_ids)
+    return "+".join(raw_ids)
 
 
 def compute_arc_traversals(graph: Graph) -> dict[str, list[str]]:

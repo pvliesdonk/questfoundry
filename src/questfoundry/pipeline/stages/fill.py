@@ -214,6 +214,8 @@ def _build_arc_key_to_node_map(graph: Graph) -> dict[str, str]:
 
     Arc keys are sorted path ``raw_id`` values joined by ``"+"``.
     """
+    from questfoundry.graph.algorithms import arc_key_for_paths
+
     path_nodes = graph.get_nodes_by_type("path")
     arc_nodes = graph.get_nodes_by_type("arc")
     mapping: dict[str, str] = {}
@@ -221,8 +223,7 @@ def _build_arc_key_to_node_map(graph: Graph) -> dict[str, str]:
         path_ids = arc_data.get("paths", [])
         if not path_ids:
             continue
-        raw_ids = sorted(path_nodes.get(pid, {}).get("raw_id", pid) for pid in path_ids)
-        arc_key = "+".join(raw_ids)
+        arc_key = arc_key_for_paths(path_nodes, path_ids)
         mapping[arc_key] = arc_id
     return mapping
 
@@ -233,6 +234,7 @@ def _find_spine_arc_key(graph: Graph) -> str | None:
     The spine arc is the path combination where all paths are canonical.
     Returns the arc key string or None.
     """
+    from questfoundry.graph.algorithms import arc_key_for_paths
     from questfoundry.graph.context import normalize_scoped_id
 
     path_nodes = graph.get_nodes_by_type("path")
@@ -253,12 +255,12 @@ def _find_spine_arc_key(graph: Graph) -> str | None:
     if len(dilemma_canonical) != len(dilemma_nodes):
         return None
 
-    raw_ids: list[str] = []
+    # Collect all canonical path IDs across dilemmas
+    all_canonical_pids: list[str] = []
     for _did in sorted(dilemma_canonical):
-        pids = dilemma_canonical[_did]
-        raw_ids.extend(path_nodes[pid].get("raw_id", pid) for pid in pids)
+        all_canonical_pids.extend(dilemma_canonical[_did])
 
-    return "+".join(sorted(raw_ids))
+    return arc_key_for_paths(path_nodes, all_canonical_pids)
 
 
 class FillStageError(ValueError):
@@ -1658,11 +1660,17 @@ class FillStage:
         total_flags = sum(len(f) for f in flagged_passages.values())
         revised_flags = 0
 
+        # Pre-compute traversals once for all passage lookups
+        from questfoundry.graph.algorithms import compute_passage_traversals
+
+        traversals = compute_passage_traversals(graph)
+        arc_key_to_node = _build_arc_key_to_node_map(graph) if traversals else {}
+
         # Pre-compute arc info and passage data for each passage (graph reads only)
         passage_arc_info: dict[str, tuple[str | None, int]] = {}
         passage_data: dict[str, dict[str, Any]] = {}
         for passage_id in flagged_passages:
-            arc_id = self._find_arc_for_passage(graph, passage_id)
+            arc_id = self._find_arc_for_passage(graph, passage_id, traversals, arc_key_to_node)
             current_idx = 0
             if arc_id:
                 order = get_arc_passage_order(graph, arc_id)
@@ -1790,17 +1798,32 @@ class FillStage:
             tokens_used=total_tokens,
         )
 
-    def _find_arc_for_passage(self, graph: Graph, passage_id: str) -> str | None:
+    def _find_arc_for_passage(
+        self,
+        graph: Graph,
+        passage_id: str,
+        traversals: dict[str, list[str]] | None = None,
+        arc_key_to_node: dict[str, str] | None = None,
+    ) -> str | None:
         """Find the first arc containing a passage.
 
         Primary path: checks computed passage traversals.
         Fallback: reads stored arc node sequences.
-        """
-        from questfoundry.graph.algorithms import compute_passage_traversals
 
-        traversals = compute_passage_traversals(graph)
+        Args:
+            graph: Graph containing passage/arc data.
+            passage_id: The passage to look up.
+            traversals: Pre-computed passage traversals (avoids recomputation).
+            arc_key_to_node: Pre-computed arc key → node ID map.
+        """
+        if traversals is None:
+            from questfoundry.graph.algorithms import compute_passage_traversals
+
+            traversals = compute_passage_traversals(graph)
+
         if traversals:
-            arc_key_to_node = _build_arc_key_to_node_map(graph)
+            if arc_key_to_node is None:
+                arc_key_to_node = _build_arc_key_to_node_map(graph)
             for arc_key in sorted(traversals):
                 if passage_id in traversals[arc_key]:
                     return arc_key_to_node.get(arc_key, arc_key)
