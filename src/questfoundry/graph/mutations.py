@@ -2026,6 +2026,16 @@ def format_semantic_errors_as_content(errors: list[SeedValidationError]) -> str:
         if len(cross_ref_errors) > _MAX_ERRORS_DISPLAY:
             lines.append(f"  ... and {len(cross_ref_errors) - _MAX_ERRORS_DISPLAY} more")
 
+    # Warning-level issues (non-blocking scaffold notes — defense-in-depth)
+    warning_errors = by_category.get(SeedErrorCategory.WARNING, [])
+    if warning_errors:
+        lines.append("")
+        lines.append("**Scaffold notes** (non-blocking) — these are suggestions for improvement:")
+        for e in warning_errors[:_MAX_ERRORS_DISPLAY]:
+            lines.append(f"  - {e.field_path}: {e.issue}")
+        if len(warning_errors) > _MAX_ERRORS_DISPLAY:
+            lines.append(f"  ... and {len(warning_errors) - _MAX_ERRORS_DISPLAY} more")
+
     # Inner/structural errors (rarely should make it to outer loop, but handle gracefully)
     inner_errors = by_category.get(SeedErrorCategory.INNER, [])
     if inner_errors:

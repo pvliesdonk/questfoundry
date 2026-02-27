@@ -630,6 +630,15 @@ per_path_beats_prompt: |
   - Use entity IDs from the Entity IDs list only
   - Use location IDs from the Entity IDs list (location category only)
 
+  ## ARC STRUCTURE (CRITICAL — determines beat ordering)
+  Beats must follow this arc pattern for a complete path scaffold:
+  1. **Setup** (advances/reveals): Introduce tensions, reveal information
+  2. **Turning point** (commits): The moment the dilemma locks in — NOT the last beat
+  3. **Aftermath**: At least one beat AFTER commits showing consequences
+
+  WRONG: [advances, reveals, commits] — commits is last, no aftermath
+  RIGHT: [advances, commits, reveals] — aftermath beat follows the turning point
+
   ## COMMITS BEAT REQUIREMENT
   You MUST include exactly one beat with `effect: "commits"` for `{dilemma_id}`.
   This beat represents the moment where this path's dilemma is locked in.

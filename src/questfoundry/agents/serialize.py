@@ -2094,12 +2094,20 @@ async def serialize_seed_as_function(
             # Re-merge and continue loop for re-validation
             seed_output = SeedOutput.model_validate(collected)
 
-        # Return with remaining errors if any
-        if semantic_errors:
+        # Return with remaining blocking errors (filter non-blocking warnings)
+        blocking_errors = [e for e in semantic_errors if e.category != SeedErrorCategory.WARNING]
+        warnings = [e for e in semantic_errors if e.category == SeedErrorCategory.WARNING]
+        if warnings:
+            log.info(
+                "seed_warnings_stripped_from_result",
+                warning_count=len(warnings),
+                warnings=[w.issue for w in warnings],
+            )
+        if blocking_errors:
             return SerializeResult(
                 artifact=seed_output,
                 tokens_used=total_tokens,
-                semantic_errors=semantic_errors,
+                semantic_errors=blocking_errors,
             )
 
     log.info(

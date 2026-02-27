@@ -703,6 +703,61 @@ class TestSerializeResult:
 
         assert result.success is False
 
+    def test_warnings_do_not_block_success(self) -> None:
+        """WARNING-only semantic errors should not prevent success."""
+        from questfoundry.agents.serialize import SerializeResult
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+        from questfoundry.models.seed import SeedOutput
+
+        artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+        warnings = [
+            SeedValidationError(
+                field_path="beats.path_1",
+                issue="No beat after commit",
+                category=SeedErrorCategory.WARNING,
+            )
+        ]
+        # Warnings should NOT be included in semantic_errors that block success.
+        # The fix filters them before constructing SerializeResult.
+        result = SerializeResult(artifact=artifact, tokens_used=100, semantic_errors=[])
+
+        assert result.success is True
+
+        # But if they leak through (pre-fix behavior), success is False:
+        result_leaked = SerializeResult(
+            artifact=artifact, tokens_used=100, semantic_errors=warnings
+        )
+        assert result_leaked.success is False
+
+    def test_mixed_warnings_and_errors_returns_only_blocking(self) -> None:
+        """When both warnings and blocking errors exist, only blocking errors matter."""
+        from questfoundry.agents.serialize import SerializeResult
+        from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
+        from questfoundry.models.seed import SeedOutput
+
+        artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+        mixed_errors = [
+            SeedValidationError(
+                field_path="beats.path_1",
+                issue="No beat after commit",
+                category=SeedErrorCategory.WARNING,
+            ),
+            SeedValidationError(
+                field_path="entities.0.entity_id",
+                issue="Entity not found",
+                available=["a", "b"],
+                provided="x",
+                category=SeedErrorCategory.SEMANTIC,
+            ),
+        ]
+        # Filter out warnings, keep only blocking errors
+        blocking_only = [e for e in mixed_errors if e.category != SeedErrorCategory.WARNING]
+        result = SerializeResult(artifact=artifact, tokens_used=100, semantic_errors=blocking_only)
+
+        assert result.success is False
+        assert len(result.semantic_errors) == 1
+        assert result.semantic_errors[0].category == SeedErrorCategory.SEMANTIC
+
     def test_result_is_immutable(self) -> None:
         """SerializeResult should be frozen (immutable)."""
         from questfoundry.agents.serialize import SerializeResult
