@@ -95,7 +95,7 @@ def fill_graph() -> Graph:
         {
             "type": "beat",
             "raw_id": "opening",
-            "summary": "Kay enters the tower and meets the mentor",
+            "summary": "Kay ascends the crumbling staircase to confront the mentor",
             "scene_type": "scene",
             "entities": ["entity::kay", "entity::mentor"],
         },
@@ -614,6 +614,28 @@ class TestFormatPassagesBatch:
         assert "tower stairs" in result
         assert "scene_type: scene" in result
 
+    def test_includes_beat_summary(self, fill_graph: Graph) -> None:
+        result = format_passages_batch(
+            fill_graph,
+            ["passage::p_opening"],
+        )
+        assert "**Beat summary:**" in result
+        assert "Kay ascends the crumbling staircase to confront the mentor" in result
+
+    def test_beat_summary_falls_back_to_passage(self, fill_graph: Graph) -> None:
+        # Create passage with no beat link but with its own summary
+        fill_graph.create_node(
+            "passage::p_orphan",
+            {
+                "type": "passage",
+                "raw_id": "p_orphan",
+                "summary": "Orphan passage summary",
+                "prose": "Some prose.",
+            },
+        )
+        result = format_passages_batch(fill_graph, ["passage::p_orphan"])
+        assert "**Beat summary:** Orphan passage summary" in result
+
     def test_empty_batch(self, fill_graph: Graph) -> None:
         result = format_passages_batch(fill_graph, [])
         assert result == ""
@@ -621,6 +643,8 @@ class TestFormatPassagesBatch:
     def test_passage_without_prose(self, fill_graph: Graph) -> None:
         result = format_passages_batch(fill_graph, ["passage::p_aftermath"])
         assert "(no prose)" in result
+        # Should still include beat summary even without prose
+        assert "Kay reflects on choices made" in result
 
 
 # ---------------------------------------------------------------------------

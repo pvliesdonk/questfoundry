@@ -2322,7 +2322,16 @@ def format_passages_batch(
         beat = graph.get_node(beat_id) if beat_id else None
         scene_type = beat.get("scene_type", "unknown") if beat else "unknown"
 
+        # Beat summary for summary_deviation review criterion
+        beat_summary = ""
+        if beat:
+            beat_summary = beat.get("summary", "")
+        if not beat_summary:
+            beat_summary = pnode.get("summary", "")
+
         lines.append(f"### {raw_id} (scene_type: {scene_type})")
+        if beat_summary:
+            lines.append(f"**Beat summary:** {beat_summary}")
         lines.append(prose if prose else "(no prose)")
         lines.append("")
 
