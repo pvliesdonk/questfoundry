@@ -229,14 +229,14 @@ def get_passage_beats(graph: Graph, passage_id: str) -> list[str]:
     """
     edges = graph.get_edges(to_id=passage_id, edge_type="grouped_in")
     if edges:
-        return [e["from"] for e in edges]
+        return sorted(e["from"] for e in edges)
     # Fallback for GROW-era passages (before POLISH creates grouped_in edges)
     passage = graph.get_node(passage_id)
     if not passage:
         return []
     from_beats = passage.get("from_beats")
     if from_beats and isinstance(from_beats, list):
-        return list(from_beats)
+        return [str(b) for b in from_beats]
     from_beat = passage.get("from_beat")
     if from_beat:
         return [str(from_beat)]
@@ -244,17 +244,24 @@ def get_passage_beats(graph: Graph, passage_id: str) -> list[str]:
 
 
 def get_primary_beat(graph: Graph, passage_id: str) -> str | None:
-    """Get the primary (first) beat ID for a passage.
+    """Get the primary beat ID for a passage.
 
-    Shorthand for ``get_passage_beats(graph, pid)[0]`` with None fallback.
+    Checks the stored ``primary_beat`` field first (set by merged-passage
+    creation to skip gap/bridge beats), then falls back to the first beat
+    from ``get_passage_beats()``.
 
     Args:
         graph: The story graph.
         passage_id: Passage node ID to look up.
 
     Returns:
-        First beat ID, or None if passage has no beats.
+        Primary beat ID, or None if passage has no beats.
     """
+    passage = graph.get_node(passage_id)
+    if passage:
+        primary = passage.get("primary_beat")
+        if primary:
+            return str(primary)
     beats = get_passage_beats(graph, passage_id)
     return beats[0] if beats else None
 
