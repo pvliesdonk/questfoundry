@@ -329,6 +329,8 @@ class FillStage:
             (self._phase_1c_mechanical_gate, "quality_gate"),
             (self._phase_2_review, "review"),
             (self._phase_3_revision, "revision"),
+            (self._phase_2_review_cycle2, "review_cycle2"),
+            (self._phase_3_revision_final, "revision_final"),
             (self._phase_4_arc_validation, "arc_validation"),
         ]
 
@@ -1653,11 +1655,20 @@ class FillStage:
         self,
         graph: Graph,
         model: BaseChatModel,
+        *,
+        final_cycle: bool = False,
     ) -> FillPhaseResult:
         """Phase 3: Revision.
 
         Regenerates flagged passages with extended context and
         specific issue guidance.
+
+        Args:
+            graph: Story graph.
+            model: LLM model for revision calls.
+            final_cycle: If True, this is the last revision attempt.
+                Unresolved flags trigger upstream escalation warnings
+                instead of being silently cleared.
         """
         # Collect and group flags by passage to chain revisions
         passage_nodes = graph.get_nodes_by_type("passage")
@@ -1805,14 +1816,92 @@ class FillStage:
 
             if all_addressed:
                 graph.update_node(passage_id, review_flags=[])
+            elif final_cycle:
+                # Exhausted all revision cycles — escalate as upstream problem.
+                # Preserve review_flags on the passage (do NOT clear them).
+                remaining = passage.get("review_flags", [])
+                issue_types = [f.get("issue_type", "unknown") for f in remaining]
+                log.warning(
+                    "upstream_escalation",
+                    passage_id=passage_id,
+                    remaining_flags=len(remaining),
+                    issue_types=issue_types,
+                    reason="revision exhausted after 2 cycles; problem likely upstream (POLISH/GROW)",
+                )
+
+        # Count escalated passages for the summary
+        escalated = 0
+        if final_cycle:
+            for pid in flagged_passages:
+                node = graph.get_node(pid)
+                if node and node.get("review_flags"):
+                    escalated += 1
+
+        phase_label = "revision_final" if final_cycle else "revision"
+        detail = f"{revised_flags} of {total_flags} flags addressed across {len(flagged_passages)} passages"
+        if escalated:
+            detail += f"; {escalated} passages escalated (upstream structural problem)"
 
         return FillPhaseResult(
-            phase="revision",
+            phase=phase_label,
             status="completed",
-            detail=f"{revised_flags} of {total_flags} flags addressed across {len(flagged_passages)} passages",
+            detail=detail,
             llm_calls=total_llm_calls,
             tokens_used=total_tokens,
         )
+
+    async def _phase_2_review_cycle2(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+    ) -> FillPhaseResult:
+        """Phase 2 (cycle 2): Fresh full review of revised prose.
+
+        Clears flags on passages that still have unresolved review_flags,
+        then performs a full review of all passages with prose. This
+        defensively catches regressions introduced by revisions.
+        Skips entirely if no flags remain.
+        """
+        # Check if any passages still have unresolved flags
+        passage_nodes = graph.get_nodes_by_type("passage")
+        still_flagged = [
+            pid
+            for pid, pdata in passage_nodes.items()
+            if pdata.get("review_flags") and pdata.get("prose")
+        ]
+        if not still_flagged:
+            return FillPhaseResult(
+                phase="review_cycle2",
+                status="completed",
+                detail="no passages need re-review",
+            )
+
+        # Clear old flags before second review (fresh review of revised prose)
+        for pid in still_flagged:
+            graph.update_node(pid, review_flags=[])
+
+        # Re-use the standard review logic
+        result = await self._phase_2_review(graph, model)
+        # Override phase name for tracking
+        return FillPhaseResult(
+            phase="review_cycle2",
+            status=result.status,
+            detail=f"cycle 2: {result.detail}",
+            llm_calls=result.llm_calls,
+            tokens_used=result.tokens_used,
+        )
+
+    async def _phase_3_revision_final(
+        self,
+        graph: Graph,
+        model: BaseChatModel,
+    ) -> FillPhaseResult:
+        """Phase 3 (final cycle): Last revision attempt with escalation.
+
+        Unresolved flags after this cycle are preserved on the passage
+        and logged as upstream structural problems.
+        """
+        return await self._phase_3_revision(graph, model, final_cycle=True)
 
     def _find_arc_for_passage(
         self,
