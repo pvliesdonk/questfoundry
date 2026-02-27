@@ -113,6 +113,14 @@ system: |
   voice), list them in entity_updates so they persist for later passages.
   Only update EXISTING entities — do not create new ones.
 
+  **CRITICAL: Only add UNIVERSAL details** — things that are true regardless of
+  which path the player takes. Examples:
+  - GOOD: "smokes a pipe", "has a scar above the left eye", "speaks with a stammer"
+  - BAD: "betrayed the protagonist", "chose to help", "lost their weapon in the fight"
+
+  Path-dependent details (allegiance shifts, knowledge gained, items acquired)
+  belong in entity overlays, not base entity state.
+
   {spoke_context}
 
   ## Output Format

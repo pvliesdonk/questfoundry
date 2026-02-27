@@ -18,6 +18,9 @@ system: |
   - Focus on concrete, observable details: physical appearance, habits, voice
     qualities, distinctive objects, sensory markers
   - Do NOT extract emotional states, plot developments, or abstract qualities
+  - **Only extract UNIVERSAL details** — things true regardless of which path
+    the player takes (e.g., "smokes a pipe", "has a scar"). Do NOT extract
+    path-dependent details (allegiance, knowledge, items gained/lost)
   - If no new entity details were introduced, return an empty list
 
 user: |
