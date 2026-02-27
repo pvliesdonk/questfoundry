@@ -94,7 +94,7 @@ def fill_graph() -> Graph:
         {
             "type": "beat",
             "raw_id": "opening",
-            "summary": "Kay enters the tower and meets the mentor",
+            "summary": "Kay ascends the crumbling staircase to confront the mentor",
             "scene_type": "scene",
             "entities": ["entity::kay", "entity::mentor"],
         },
@@ -561,7 +561,7 @@ class TestFormatPassagesBatch:
             ["passage::p_opening"],
         )
         assert "**Beat summary:**" in result
-        assert "Kay enters the tower and meets the mentor" in result
+        assert "Kay ascends the crumbling staircase to confront the mentor" in result
 
     def test_beat_summary_falls_back_to_passage(self, fill_graph: Graph) -> None:
         # Create passage with no beat link but with its own summary
