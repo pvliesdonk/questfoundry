@@ -323,6 +323,25 @@ class TestBuildExportContext:
         assert ctx.codewords[0].id == "state_flag::trusted_mentor"
         assert ctx.codewords[0].tracks == "consequence::trust_given"
 
+    def test_hard_only_state_flags_yield_no_codewords(self) -> None:
+        """Hard-only state flags produce empty codewords, not a legacy fallback."""
+        g = _minimal_graph()
+        g.create_node(
+            "dilemma::routing",
+            {"type": "dilemma", "raw_id": "routing", "dilemma_role": "hard"},
+        )
+        g.create_node(
+            "state_flag::branch_taken",
+            {
+                "type": "state_flag",
+                "raw_id": "branch_taken",
+                "dilemma_id": "dilemma::routing",
+                "codeword_type": "granted",
+            },
+        )
+        ctx = build_export_context(g, "test")
+        assert ctx.codewords == []
+
     def test_legacy_codeword_fallback(self) -> None:
         """When no state_flag nodes exist, legacy codeword nodes are used."""
         g = _graph_with_entities(_minimal_graph())

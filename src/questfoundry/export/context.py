@@ -146,14 +146,14 @@ def _project_state_flags_to_codewords(graph: Graph) -> list[ExportCodeword]:
 
     # Build dilemma role lookup
     dilemmas = graph.get_nodes_by_type("dilemma")
-    dilemma_roles: dict[str, str] = {}
-    for did, ddata in dilemmas.items():
-        role = ddata.get("dilemma_role", "")
-        if role:
-            dilemma_roles[did] = role
+    dilemma_roles: dict[str, str] = {
+        did: role for did, ddata in dilemmas.items() if (role := ddata.get("dilemma_role", ""))
+    }
 
     result: list[ExportCodeword] = []
     for flag_id, flag_data in sorted(state_flags.items()):
+        # Check both keys: "dilemma_id" is canonical, "dilemma" is a legacy
+        # alias from older graphs that stored the reference under that key.
         dilemma_ref = flag_data.get("dilemma_id") or flag_data.get("dilemma", "")
         role = dilemma_roles.get(str(dilemma_ref), "")
 
@@ -181,10 +181,12 @@ def _extract_codewords(graph: Graph) -> list[ExportCodeword]:
     Prefers state_flag nodes with dilemma-role-based projection.
     Falls back to legacy codeword nodes for backward compatibility.
     """
-    # Try projection from state_flag nodes first
-    projected = _project_state_flags_to_codewords(graph)
-    if projected:
-        return projected
+    # Use state_flag projection when state_flag nodes exist (even if all are
+    # hard flags and projection returns []).  Only fall back to legacy codeword
+    # nodes when no state_flag nodes exist at all.
+    state_flags = graph.get_nodes_by_type("state_flag")
+    if state_flags:
+        return _project_state_flags_to_codewords(graph)
 
     # Fallback: legacy codeword nodes (pre-projection graphs)
     nodes = graph.get_nodes_by_type("codeword")
