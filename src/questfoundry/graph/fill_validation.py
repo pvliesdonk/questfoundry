@@ -14,7 +14,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from questfoundry.graph.fill_context import compute_open_questions, derive_pacing
+from questfoundry.graph.context import get_primary_beat
+from questfoundry.graph.fill_context import (
+    compute_open_questions,
+    derive_pacing,
+    get_arc_beat_sequence,
+)
 from questfoundry.graph.grow_validation import ValidationCheck, ValidationReport
 
 if TYPE_CHECKING:
@@ -37,15 +42,7 @@ def check_intensity_progression(graph: Graph, arc_id: str) -> ValidationCheck:
     Returns:
         ValidationCheck with pass/warn/fail severity.
     """
-    arc_node = graph.get_node(arc_id)
-    if not arc_node:
-        return ValidationCheck(
-            name="intensity_progression",
-            severity="pass",
-            message=f"Arc {arc_id} not found, skipping",
-        )
-
-    sequence = arc_node.get("sequence", [])
+    sequence = get_arc_beat_sequence(graph, arc_id)
     if len(sequence) < 3:
         return ValidationCheck(
             name="intensity_progression",
@@ -115,15 +112,7 @@ def check_dramatic_questions_closed(graph: Graph, arc_id: str) -> ValidationChec
     Returns:
         ValidationCheck with pass/warn severity.
     """
-    arc_node = graph.get_node(arc_id)
-    if not arc_node:
-        return ValidationCheck(
-            name="dramatic_questions_closed",
-            severity="pass",
-            message=f"Arc {arc_id} not found, skipping",
-        )
-
-    sequence = arc_node.get("sequence", [])
+    sequence = get_arc_beat_sequence(graph, arc_id)
     if not sequence:
         return ValidationCheck(
             name="dramatic_questions_closed",
@@ -165,15 +154,7 @@ def check_narrative_function_variety(graph: Graph, arc_id: str) -> ValidationChe
     Returns:
         ValidationCheck with pass/warn severity.
     """
-    arc_node = graph.get_node(arc_id)
-    if not arc_node:
-        return ValidationCheck(
-            name="narrative_function_variety",
-            severity="pass",
-            message=f"Arc {arc_id} not found, skipping",
-        )
-
-    sequence = arc_node.get("sequence", [])
+    sequence = get_arc_beat_sequence(graph, arc_id)
     if not sequence:
         return ValidationCheck(
             name="narrative_function_variety",
@@ -255,9 +236,9 @@ def path_has_prose(graph: Graph, path_id: str) -> bool:
         return False
 
     passages = graph.get_nodes_by_type("passage")
-    for _pid, pdata in passages.items():
-        from_beat = pdata.get("from_beat", "")
-        if from_beat in beat_ids:
+    for pid, pdata in passages.items():
+        beat_id = get_primary_beat(graph, pid)
+        if beat_id and beat_id in beat_ids:
             prose = pdata.get("prose")
             if prose and str(prose).strip():
                 return True
