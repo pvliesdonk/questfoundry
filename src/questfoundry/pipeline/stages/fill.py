@@ -256,7 +256,7 @@ def _find_spine_arc_key(graph: Graph) -> str | None:
     raw_ids: list[str] = []
     for _did in sorted(dilemma_canonical):
         pids = dilemma_canonical[_did]
-        raw_ids.extend(sorted(path_nodes[pid].get("raw_id", pid) for pid in pids))
+        raw_ids.extend(path_nodes[pid].get("raw_id", pid) for pid in pids)
 
     return "+".join(sorted(raw_ids))
 
@@ -1801,8 +1801,8 @@ class FillStage:
         traversals = compute_passage_traversals(graph)
         if traversals:
             arc_key_to_node = _build_arc_key_to_node_map(graph)
-            for arc_key, passages in traversals.items():
-                if passage_id in passages:
+            for arc_key in sorted(traversals):
+                if passage_id in traversals[arc_key]:
                     return arc_key_to_node.get(arc_key, arc_key)
 
         # Fallback: stored arc node sequences

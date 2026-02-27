@@ -181,20 +181,20 @@ def get_arc_passage_order(graph: Graph, arc_id: str) -> list[str]:
     if not sequence:
         return []
 
-    beat_to_passage: dict[str, str] = {}
+    beat_to_passages: dict[str, list[str]] = {}
     for edge in graph.get_edges(edge_type="grouped_in"):
-        beat_to_passage[edge["from"]] = edge["to"]
-    if not beat_to_passage:
+        beat_to_passages.setdefault(edge["from"], []).append(edge["to"])
+    if not beat_to_passages:
         for edge in graph.get_edges(edge_type="passage_from"):
-            beat_to_passage[edge["to"]] = edge["from"]
+            beat_to_passages.setdefault(edge["to"], []).append(edge["from"])
 
     passages: list[str] = []
     seen: set[str] = set()
     for beat_id in sequence:
-        passage_id = beat_to_passage.get(beat_id)
-        if passage_id and passage_id not in seen:
-            seen.add(passage_id)
-            passages.append(passage_id)
+        for passage_id in sorted(beat_to_passages.get(beat_id, [])):
+            if passage_id not in seen:
+                seen.add(passage_id)
+                passages.append(passage_id)
 
     return passages
 

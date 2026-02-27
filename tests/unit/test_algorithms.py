@@ -909,3 +909,24 @@ class TestComputePassageTraversalsFallback:
 
         result = compute_passage_traversals(graph)
         assert result == {"alpha": ["passage::p1", "passage::p2"]}
+
+    def test_grouped_in_takes_precedence(self) -> None:
+        """When both grouped_in and passage_from edges exist, grouped_in wins."""
+        graph = Graph.empty()
+        _make_dilemma(graph, "dilemma::d1")
+        _make_path(graph, "path::alpha", "dilemma::d1")
+
+        _make_beat(graph, "beat::b1", "Start", [])
+        _add_belongs_to(graph, "beat::b1", "path::alpha")
+
+        _make_passage(graph, "passage::p1", "beat::b1")
+        _make_passage(graph, "passage::p_legacy", "beat::b1")
+
+        # grouped_in links beat::b1 → passage::p1
+        _add_grouped_in(graph, "beat::b1", "passage::p1")
+        # passage_from links passage::p_legacy → beat::b1 (legacy)
+        _add_passage_from(graph, "passage::p_legacy", "beat::b1")
+
+        result = compute_passage_traversals(graph)
+        # Should use grouped_in only, ignoring passage_from
+        assert result == {"alpha": ["passage::p1"]}
