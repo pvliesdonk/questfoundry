@@ -67,6 +67,8 @@ system: |
   ## Path Arcs
   {path_arcs}
 
+  {shadow_context}
+
   ## Vocabulary Note
   {vocabulary_note}
 

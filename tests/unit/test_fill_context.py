@@ -32,6 +32,7 @@ from questfoundry.graph.fill_context import (
     format_path_arc_context,
     format_residue_weight_obligations,
     format_scene_types_summary,
+    format_shadow_context,
     format_sliding_window,
     format_used_imagery_blocklist,
     format_valid_characters,
@@ -2795,3 +2796,174 @@ class TestResidueWeightObligations:
             {"type": "passage", "raw_id": "branch", "from_beat": "beat::branch"},
         )
         assert format_residue_weight_obligations(g, "passage::branch") == ""
+
+
+# ---------------------------------------------------------------------------
+# format_shadow_context
+# ---------------------------------------------------------------------------
+
+
+def _make_shadow_graph(*, with_second_path: bool = True) -> Graph:
+    """Build a graph with a dilemma, two answers, one explored path, and optional shadow.
+
+    Structure:
+    - dilemma::d1 --has_answer--> answer::a1, answer::a2
+    - path::alpha --explores--> answer::a1 (chosen)
+    - path::beta --explores--> answer::a2 (shadow, if with_second_path)
+    - beat::b1 --belongs_to--> path::alpha
+    - beat::b1 --predecessor chain for arc traversal
+    """
+    g = Graph.empty()
+
+    g.create_node(
+        "dilemma::d1",
+        {"type": "dilemma", "raw_id": "d1", "question": "Trust or betray?"},
+    )
+    g.create_node(
+        "answer::a1",
+        {"type": "answer", "raw_id": "a1", "description": "Trust the mentor"},
+    )
+    g.create_node(
+        "answer::a2",
+        {"type": "answer", "raw_id": "a2", "description": "Betray for power"},
+    )
+    g.add_edge("has_answer", "dilemma::d1", "answer::a1")
+    g.add_edge("has_answer", "dilemma::d1", "answer::a2")
+
+    # Chosen path (alpha explores answer a1)
+    g.create_node(
+        "path::alpha",
+        {"type": "path", "raw_id": "alpha", "dilemma_id": "dilemma::d1"},
+    )
+    g.add_edge("explores", "path::alpha", "answer::a1")
+
+    if with_second_path:
+        g.create_node(
+            "path::beta",
+            {"type": "path", "raw_id": "beta", "dilemma_id": "dilemma::d1"},
+        )
+        g.add_edge("explores", "path::beta", "answer::a2")
+
+    # Beat on chosen path
+    g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+    g.add_edge("belongs_to", "beat::b1", "path::alpha")
+
+    # Arc node mapping to chosen path
+    g.create_node(
+        "arc::spine_0",
+        {
+            "type": "arc",
+            "raw_id": "spine_0",
+            "paths": ["path::alpha"],
+            "sequence": ["beat::b1"],
+        },
+    )
+
+    return g
+
+
+class TestFormatShadowContext:
+    """Tests for format_shadow_context."""
+
+    def test_empty_graph(self) -> None:
+        """Empty graph returns empty string."""
+        g = Graph.empty()
+        assert format_shadow_context(g, "passage::p1", "arc::nope") == ""
+
+    def test_no_dilemmas(self) -> None:
+        """Arc with paths but no dilemma_id returns empty."""
+        g = Graph.empty()
+        g.create_node("path::alpha", {"type": "path", "raw_id": "alpha"})
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        g.add_edge("belongs_to", "beat::b1", "path::alpha")
+        g.create_node(
+            "arc::spine_0",
+            {
+                "type": "arc",
+                "raw_id": "spine_0",
+                "paths": ["path::alpha"],
+                "sequence": ["beat::b1"],
+            },
+        )
+        assert format_shadow_context(g, "passage::p1", "arc::spine_0") == ""
+
+    def test_shadow_answer_present(self) -> None:
+        """When one answer is unexplored, it appears as a shadow."""
+        g = _make_shadow_graph()
+        result = format_shadow_context(g, "passage::p1", "arc::spine_0")
+        assert "Shadow Paths" in result
+        assert "Trust or betray?" in result
+        assert "a2" in result
+        assert "Betray for power" in result
+
+    def test_no_shadow_when_all_answers_explored(self) -> None:
+        """When the arc's paths explore all answers, no shadow context."""
+        g = _make_shadow_graph()
+        # Also add path::beta to the arc's paths so both answers are explored
+        g.update_node("arc::spine_0", paths=["path::alpha", "path::beta"])
+        # Both paths need beats for traversal
+        g.create_node("beat::b2", {"type": "beat", "raw_id": "b2"})
+        g.add_edge("belongs_to", "beat::b2", "path::beta")
+        g.add_edge("predecessor", "beat::b2", "beat::b1")
+
+        result = format_shadow_context(g, "passage::p1", "arc::spine_0")
+        assert result == ""
+
+    def test_shadow_without_description(self) -> None:
+        """Shadow answer without description shows only raw_id."""
+        g = _make_shadow_graph()
+        # Remove description from shadow answer
+        g.update_node("answer::a2", description=None)
+
+        result = format_shadow_context(g, "passage::p1", "arc::spine_0")
+        assert "**a2**" in result
+        assert "Betray for power" not in result
+
+    def test_dilemma_id_without_prefix(self) -> None:
+        """dilemma_id stored without prefix is still resolved."""
+        g = _make_shadow_graph()
+        # Store dilemma_id without scope prefix
+        g.update_node("path::alpha", dilemma_id="d1")
+
+        result = format_shadow_context(g, "passage::p1", "arc::spine_0")
+        assert "Shadow Paths" in result
+        assert "Trust or betray?" in result
+
+    def test_multiple_dilemmas(self) -> None:
+        """Multiple dilemmas each produce shadow sections."""
+        g = _make_shadow_graph()
+
+        # Add a second dilemma
+        g.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "raw_id": "d2", "question": "Fight or flee?"},
+        )
+        g.create_node(
+            "answer::a3",
+            {"type": "answer", "raw_id": "a3", "description": "Stand and fight"},
+        )
+        g.create_node(
+            "answer::a4",
+            {"type": "answer", "raw_id": "a4", "description": "Run away"},
+        )
+        g.add_edge("has_answer", "dilemma::d2", "answer::a3")
+        g.add_edge("has_answer", "dilemma::d2", "answer::a4")
+
+        # Add second path for d2 that explores a3
+        g.create_node(
+            "path::gamma",
+            {"type": "path", "raw_id": "gamma", "dilemma_id": "dilemma::d2"},
+        )
+        g.add_edge("explores", "path::gamma", "answer::a3")
+        g.create_node("beat::b2", {"type": "beat", "raw_id": "b2"})
+        g.add_edge("belongs_to", "beat::b2", "path::gamma")
+        g.add_edge("predecessor", "beat::b2", "beat::b1")
+
+        # Update arc to include gamma
+        g.update_node("arc::spine_0", paths=["path::alpha", "path::gamma"])
+
+        result = format_shadow_context(g, "passage::p1", "arc::spine_0")
+        assert "Trust or betray?" in result
+        assert "Fight or flee?" in result
+        assert "a2" in result  # shadow from d1
+        assert "a4" in result  # shadow from d2
