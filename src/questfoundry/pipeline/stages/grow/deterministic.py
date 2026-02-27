@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Literal
 
 from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.graph import Graph  # noqa: TC001 - used at runtime
+from questfoundry.models.grow import Arc as ArcModel
 from questfoundry.models.grow import GrowPhaseResult
 from questfoundry.pipeline.stages.grow._helpers import log
 from questfoundry.pipeline.stages.grow.registry import grow_phase
@@ -26,7 +27,7 @@ if TYPE_CHECKING:
 PROLOGUE_ID = "passage::prologue"
 
 
-def _arcs_from_traversals(graph: Graph) -> tuple[list[Any], str | None]:
+def _arcs_from_traversals(graph: Graph) -> tuple[list[ArcModel], str | None]:
     """Build Arc models from computed traversals (no stored arc nodes needed).
 
     Uses ``compute_arc_traversals()`` and path metadata to reconstruct
@@ -37,28 +38,26 @@ def _arcs_from_traversals(graph: Graph) -> tuple[list[Any], str | None]:
         of the spine arc, or None if no spine exists.
     """
     from questfoundry.graph.algorithms import compute_arc_traversals
-    from questfoundry.models.grow import Arc as ArcModel
 
     traversals = compute_arc_traversals(graph)
     if not traversals:
         return [], None
 
     path_nodes = graph.get_nodes_by_type("path")
+    raw_id_to_pid = {
+        pdata.get("raw_id"): pid for pid, pdata in path_nodes.items() if "raw_id" in pdata
+    }
     arcs: list[ArcModel] = []
     spine_arc_id: str | None = None
 
     for arc_key, sequence in traversals.items():
-        # Determine path IDs from arc key (raw_ids joined by "+")
         raw_ids = arc_key.split("+")
-        path_ids = []
-        for raw_id in raw_ids:
-            for pid, pdata in path_nodes.items():
-                if pdata.get("raw_id") == raw_id:
-                    path_ids.append(pid)
-                    break
+        path_ids = [raw_id_to_pid[rid] for rid in raw_ids if rid in raw_id_to_pid]
 
-        # Spine arc: all paths are canonical
-        is_spine = all(path_nodes.get(pid, {}).get("is_canonical", False) for pid in path_ids)
+        # Spine arc: all paths are canonical (guard against empty path_ids)
+        is_spine = bool(path_ids) and all(
+            path_nodes.get(pid, {}).get("is_canonical", False) for pid in path_ids
+        )
         arc_type: Literal["spine", "branch"] = "spine" if is_spine else "branch"
         if is_spine:
             spine_arc_id = arc_key
@@ -67,7 +66,7 @@ def _arcs_from_traversals(graph: Graph) -> tuple[list[Any], str | None]:
             ArcModel(
                 arc_id=arc_key,
                 arc_type=arc_type,
-                paths=path_ids,
+                paths=raw_ids,
                 sequence=sequence,
             )
         )
@@ -225,11 +224,17 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
 
     arcs, spine_arc_id = _arcs_from_traversals(graph)
     if not arcs:
-        return GrowPhaseResult(
-            phase="divergence",
-            status="completed",
-            detail="No arcs to process",
-        )
+        # Fallback: read stored arc nodes for backward compatibility
+        from questfoundry.graph.grow_algorithms import enumerate_arcs
+
+        arcs = enumerate_arcs(graph)
+        spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
+        if not arcs:
+            return GrowPhaseResult(
+                phase="divergence",
+                status="completed",
+                detail="No arcs to process",
+            )
 
     divergence_map = compute_divergence_points(arcs, spine_arc_id)
 
@@ -288,11 +293,17 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
 
     arcs, spine_arc_id = _arcs_from_traversals(graph)
     if not arcs:
-        return GrowPhaseResult(
-            phase="convergence",
-            status="completed",
-            detail="No arcs to process",
-        )
+        # Fallback: read stored arc nodes for backward compatibility
+        from questfoundry.graph.grow_algorithms import enumerate_arcs
+
+        arcs = enumerate_arcs(graph)
+        spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
+        if not arcs:
+            return GrowPhaseResult(
+                phase="convergence",
+                status="completed",
+                detail="No arcs to process",
+            )
 
     # Compute divergence first (needed for convergence)
     divergence_map = compute_divergence_points(arcs, spine_arc_id)
@@ -849,27 +860,26 @@ def _reachable_via_choices(graph: Graph, passage_nodes: dict[str, dict[str, Any]
         arcs, _spine_id = _arcs_from_traversals(graph)
         start_passage = None
 
-        if not arcs:
-            # Fallback: read stored arc nodes
+        # Find first beat in spine arc's sequence
+        spine_sequence: list[str] | None = None
+        if arcs:
+            for arc in arcs:
+                if arc.arc_type == "spine" and arc.sequence:
+                    spine_sequence = arc.sequence
+                    break
+        else:
+            # Fallback: read stored arc nodes directly
             arc_nodes = graph.get_nodes_by_type("arc")
             for _arc_id, arc_data in arc_nodes.items():
                 if arc_data.get("arc_type") == "spine":
-                    sequence = arc_data.get("sequence", [])
-                    if sequence:
-                        first_beat = sequence[0]
-                        for p_id, p_data in passage_nodes.items():
-                            if p_data.get("from_beat") == first_beat:
-                                start_passage = p_id
-                                break
+                    spine_sequence = arc_data.get("sequence", [])
                     break
-        else:
-            for arc in arcs:
-                if arc.arc_type == "spine" and arc.sequence:
-                    first_beat = arc.sequence[0]
-                    for p_id, p_data in passage_nodes.items():
-                        if p_data.get("from_beat") == first_beat:
-                            start_passage = p_id
-                            break
+
+        if spine_sequence:
+            first_beat = spine_sequence[0]
+            for p_id, p_data in passage_nodes.items():
+                if p_data.get("from_beat") == first_beat:
+                    start_passage = p_id
                     break
 
     if not start_passage:
@@ -910,8 +920,7 @@ def _reachable_via_arcs(graph: Graph, passage_nodes: dict[str, dict[str, Any]]) 
     beats_in_arcs: set[str] = set()
 
     if traversals:
-        for sequence in traversals.values():
-            beats_in_arcs.update(sequence)
+        beats_in_arcs.update(*traversals.values())
     else:
         # Fallback: stored arc_contains edges
         arc_contains_edges = graph.get_edges(edge_type="arc_contains")
