@@ -203,13 +203,15 @@ def _resolve_arc_key(graph: Graph, arc_id: str) -> str | None:
     """Map an arc node ID to its computed arc key.
 
     Reads the arc node's ``paths`` list and derives the arc key
-    (sorted path ``raw_id`` values joined by ``"+"``) to match keys
-    produced by :func:`compute_arc_traversals`.
+    via :func:`~questfoundry.graph.algorithms.arc_key_for_paths` to
+    match keys produced by :func:`compute_arc_traversals`.
 
     Returns:
         Arc key string, or None if the arc node doesn't exist or has
         no paths.
     """
+    from questfoundry.graph.algorithms import arc_key_for_paths
+
     arc_node = graph.get_node(arc_id)
     if not arc_node:
         return None
@@ -217,8 +219,7 @@ def _resolve_arc_key(graph: Graph, arc_id: str) -> str | None:
     if not path_ids:
         return None
     path_nodes = graph.get_nodes_by_type("path")
-    raw_ids = sorted(path_nodes.get(pid, {}).get("raw_id", pid) for pid in path_ids)
-    return "+".join(raw_ids)
+    return arc_key_for_paths(path_nodes, path_ids)
 
 
 def get_arc_paths(graph: Graph, arc_id: str) -> list[str]:
