@@ -188,6 +188,30 @@ class TestFormatEntitiesBatchForCodex:
         assert format_entities_batch_for_codex(dress_graph, []) == ""
 
 
+class TestGetPassageEntityIds:
+    def test_falls_back_to_entities_field(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import get_passage_entity_ids
+
+        ids = get_passage_entity_ids(dress_graph, "passage::opening")
+        assert "character::protagonist" in ids
+        assert "location::bridge" in ids
+
+    def test_prefers_appears_edges(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import get_passage_entity_ids
+
+        # Add appears edges (entity → passage)
+        dress_graph.add_edge("appears", "character::protagonist", "passage::opening")
+        # Deliberately omit location::bridge edge
+        ids = get_passage_entity_ids(dress_graph, "passage::opening")
+        # Should only return entities with appears edges, ignoring entities field
+        assert set(ids) == {"character::protagonist"}
+
+    def test_nonexistent_passage(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import get_passage_entity_ids
+
+        assert get_passage_entity_ids(dress_graph, "passage::nope") == []
+
+
 class TestFormatEntityVisualsForPassage:
     def test_includes_visual_fragments(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_entity_visuals_for_passage
@@ -202,6 +226,29 @@ class TestFormatEntityVisualsForPassage:
         result = format_entity_visuals_for_passage(dress_graph, "passage::opening")
         assert "young woman, short dark hair" in result
         assert "protagonist" in result
+
+    def test_uses_appears_edges(self, dress_graph: Graph) -> None:
+        from questfoundry.graph.dress_context import format_entity_visuals_for_passage
+
+        dress_graph.create_node(
+            "entity_visual::protagonist",
+            {
+                "type": "entity_visual",
+                "reference_prompt_fragment": "young woman, short dark hair",
+            },
+        )
+        dress_graph.create_node(
+            "entity_visual::bridge",
+            {
+                "type": "entity_visual",
+                "reference_prompt_fragment": "crumbling stone arch",
+            },
+        )
+        # Only protagonist has an appears edge
+        dress_graph.add_edge("appears", "character::protagonist", "passage::opening")
+        result = format_entity_visuals_for_passage(dress_graph, "passage::opening")
+        assert "protagonist" in result
+        assert "bridge" not in result
 
     def test_no_visuals(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_entity_visuals_for_passage
