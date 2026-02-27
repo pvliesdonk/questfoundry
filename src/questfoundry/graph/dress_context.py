@@ -247,11 +247,38 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
     return "\n".join(lines).strip()
 
 
+def get_passage_entity_ids(graph: Graph, passage_id: str) -> list[str]:
+    """Get entity IDs for a passage via ``appears`` edges, falling back to field.
+
+    Follows the ontology convention: entity presence in a passage is recorded
+    as ``appears`` edges (entity → passage).  When those edges exist they are
+    the authoritative source.  Falls back to the passage node's ``entities``
+    field for graphs that pre-date edge creation.
+
+    Args:
+        graph: Graph containing passage and entity nodes.
+        passage_id: The passage node ID.
+
+    Returns:
+        List of entity node IDs present in the passage (may be empty).
+    """
+    # Prefer appears edges (entity → passage)
+    edges = graph.get_edges(to_id=passage_id, edge_type="appears")
+    if edges:
+        return [e["from"] for e in edges]
+
+    # Fallback: entities field on passage node
+    passage = graph.get_node(passage_id)
+    if not passage:
+        return []
+    return list(passage.get("entities", []))
+
+
 def format_entity_visuals_for_passage(graph: Graph, passage_id: str) -> str:
     """Format entity visual profiles for entities present in a passage.
 
-    Used by illustration brief generation to include reference prompt
-    fragments for visual consistency.
+    Uses ``appears`` edges to determine which entities are in this passage,
+    falling back to the passage's ``entities`` field.
 
     Args:
         graph: Graph containing passage, entity, and entity_visual nodes.
@@ -260,11 +287,7 @@ def format_entity_visuals_for_passage(graph: Graph, passage_id: str) -> str:
     Returns:
         Formatted visual reference strings, or empty string if none.
     """
-    passage = graph.get_node(passage_id)
-    if not passage:
-        return ""
-
-    entity_ids = passage.get("entities", [])
+    entity_ids = get_passage_entity_ids(graph, passage_id)
     if not entity_ids:
         return ""
 
@@ -351,6 +374,9 @@ def format_passages_batch_for_briefs(
 def format_all_entity_visuals(graph: Graph, passage_ids: list[str]) -> str:
     """Collect deduplicated entity visual references for a batch of passages.
 
+    Uses ``appears`` edges per passage to determine entity presence,
+    falling back to the passage's ``entities`` field.
+
     Args:
         graph: Graph containing passage, entity, and entity_visual nodes.
         passage_ids: Passage node IDs in this batch.
@@ -362,10 +388,7 @@ def format_all_entity_visuals(graph: Graph, passage_ids: list[str]) -> str:
     lines: list[str] = []
 
     for pid in passage_ids:
-        passage = graph.get_node(pid)
-        if not passage:
-            continue
-        for eid in passage.get("entities", []):
+        for eid in get_passage_entity_ids(graph, pid):
             raw_eid = strip_scope_prefix(eid)
             if raw_eid in seen:
                 continue
