@@ -469,13 +469,6 @@ def _bfs_reachable(start: str, successors: dict[str, list[str]]) -> set[str]:
     return reachable
 
 
-def _compute_linear_threshold(graph: Graph) -> int:
-    """Scale max consecutive linear threshold with passage count."""
-    from questfoundry.graph.grow_validation import compute_linear_threshold
-
-    return compute_linear_threshold(graph)
-
-
 def check_all_passages_reachable(graph: Graph) -> ValidationCheck:
     """Verify all passages are reachable from the start passage via choice edges.
 
@@ -1241,15 +1234,7 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
         for beat_id in adata.get("sequence", []):
             beat_arcs.setdefault(str(beat_id), set()).add(arc_id)
 
-    # Build arc → dilemma mapping via arc paths
     path_nodes = graph.get_nodes_by_type("path")
-    for _arc_id, adata in arc_nodes.items():
-        for path_raw in adata.get("paths", []):
-            path_id = normalize_scoped_id(path_raw, "path")
-            pdata = path_nodes.get(path_id, {})
-            dilemma_raw = pdata.get("dilemma_id", "")
-            if dilemma_raw:
-                normalize_scoped_id(dilemma_raw, "dilemma")
 
     # Build set of passages that have variant routing applied.
     # Primary source: the routing_applied metadata node written by

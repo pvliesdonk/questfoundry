@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 __all__ = [
     "ValidationCheck",
     "ValidationReport",
+    "build_exempt_passages",
     "build_outgoing_count",
     "build_passage_adjacency",
     "check_dilemma_role_compliance",
@@ -35,15 +36,12 @@ __all__ = [
     "check_spine_arc_exists",
     "compute_linear_threshold",
     "find_max_consecutive_linear",
+    "find_start_passages",
     "passages_with_forward_incoming",
     "run_all_checks",
     "run_grow_checks",
+    "walk_linear_stretches",
 ]
-
-# Default narrative pacing thresholds (used as minimums for scaling).
-_DEFAULT_MIN_BEATS_BEFORE_COMMITS = 3
-_DEFAULT_MAX_COMMITS_POSITION_RATIO = 0.8
-_DEFAULT_MAX_BUILDUP_GAP_BEATS = 5
 
 
 # ---------------------------------------------------------------------------
