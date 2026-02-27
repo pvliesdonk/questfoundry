@@ -1,84 +1,55 @@
-"""Graph validation checks for GROW Phase 10.
+"""Graph validation checks for GROW stage.
 
-Validates structural integrity and narrative pacing of the story graph
-after all construction phases (1-9) have built it. These are pure,
-deterministic functions operating on the graph — no LLM calls.
+Beat-DAG validation checks that verify the story's structural integrity
+at the beat/path/dilemma level. These are pure, deterministic functions
+operating on the graph — no LLM calls.
 
-Validation categories:
-- Structural: single start, reachability, DAG cycles, gate satisfiability
-- Narrative: dilemma resolution, commits timing heuristics
+Passage-layer checks (reachability, gates, routing, prose neutrality)
+have moved to ``polish_validation.py`` and run during POLISH Phase 7.
+
+Validation categories retained here:
+- Beat-DAG: single start, dilemma resolution, DAG cycles, spine arc, role compliance
 """
 
 from __future__ import annotations
 
 from collections import deque
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 from questfoundry.graph.context import normalize_scoped_id
+from questfoundry.graph.validation_types import ValidationCheck, ValidationReport
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
-# Default narrative pacing thresholds (used as minimums for scaling).
-_DEFAULT_MIN_BEATS_BEFORE_COMMITS = 3
-_DEFAULT_MAX_COMMITS_POSITION_RATIO = 0.8
-_DEFAULT_MAX_BUILDUP_GAP_BEATS = 5
+# Re-export types for backward compatibility — many modules import from here.
+__all__ = [
+    "ValidationCheck",
+    "ValidationReport",
+    "build_exempt_passages",
+    "build_outgoing_count",
+    "build_passage_adjacency",
+    "check_dilemma_role_compliance",
+    "check_dilemmas_resolved",
+    "check_passage_dag_cycles",
+    "check_single_start",
+    "check_spine_arc_exists",
+    "compute_linear_threshold",
+    "find_max_consecutive_linear",
+    "find_start_passages",
+    "passages_with_forward_incoming",
+    "run_all_checks",
+    "run_grow_checks",
+    "walk_linear_stretches",
+]
 
 
-@dataclass
-class ValidationCheck:
-    """Result of a single validation check.
-
-    Attributes:
-        name: Identifier for the check.
-        severity: "pass", "warn", or "fail".
-        message: Human-readable description of the result.
-    """
-
-    name: str
-    severity: Literal["pass", "warn", "fail"]
-    message: str = ""
+# ---------------------------------------------------------------------------
+# Shared passage-graph utilities (used by GROW phases and POLISH validation)
+# ---------------------------------------------------------------------------
 
 
-@dataclass
-class ValidationReport:
-    """Aggregated results of all Phase 10 checks.
-
-    Attributes:
-        checks: List of individual validation check results.
-    """
-
-    checks: list[ValidationCheck] = field(default_factory=list)
-
-    @property
-    def has_failures(self) -> bool:
-        """True if any check has severity 'fail'."""
-        return any(c.severity == "fail" for c in self.checks)
-
-    @property
-    def has_warnings(self) -> bool:
-        """True if any check has severity 'warn'."""
-        return any(c.severity == "warn" for c in self.checks)
-
-    @property
-    def summary(self) -> str:
-        """Human-readable summary of all checks."""
-        fails = [c for c in self.checks if c.severity == "fail"]
-        warns = [c for c in self.checks if c.severity == "warn"]
-        passes = [c for c in self.checks if c.severity == "pass"]
-
-        parts: list[str] = []
-        if fails:
-            parts.append(f"{len(fails)} failed")
-        if warns:
-            parts.append(f"{len(warns)} warnings")
-        if passes:
-            parts.append(f"{len(passes)} passed")
-        return ", ".join(parts)
-
-
-def _passages_with_forward_incoming(graph: Graph) -> set[str]:
+def passages_with_forward_incoming(graph: Graph) -> set[str]:
     """Return passage IDs that have at least one non-return incoming choice.
 
     Excludes ``is_return`` choices (spoke→hub back-links) so that hub
@@ -96,47 +67,216 @@ def _passages_with_forward_incoming(graph: Graph) -> set[str]:
     return has_incoming
 
 
-def _find_start_passage(graph: Graph) -> str | None:
-    """Find the unique start passage (no forward incoming choice edges).
+def build_passage_adjacency(graph: Graph) -> dict[str, list[str]]:
+    """Build passage → successor passages adjacency list from choice nodes.
 
-    Returns the passage ID if exactly one start exists, None otherwise.
-    Excludes ``is_return`` edges from spoke→hub back-links.
+    Args:
+        graph: The story graph.
+
+    Returns:
+        Dict mapping each passage ID to a list of successor passage IDs.
     """
-    passage_nodes = graph.get_nodes_by_type("passage")
-    if not passage_nodes:
-        return None
-    passages_with_incoming = _passages_with_forward_incoming(graph)
-    start_passages = [pid for pid in passage_nodes if pid not in passages_with_incoming]
-    return start_passages[0] if len(start_passages) == 1 else None
-
-
-def _build_passage_successors(graph: Graph) -> dict[str, list[str]]:
-    """Build passage->passage successor map from choice nodes.
-
-    Each choice node has from_passage and to_passage fields defining
-    the directed edge in the passage graph.
-    """
-    choice_nodes = graph.get_nodes_by_type("choice")
-    successors: dict[str, list[str]] = {}
-    for choice_data in choice_nodes.values():
-        from_p = choice_data.get("from_passage")
-        to_p = choice_data.get("to_passage")
+    choices = graph.get_nodes_by_type("choice")
+    adjacency: dict[str, list[str]] = {}
+    for _cid, cdata in choices.items():
+        from_p = cdata.get("from_passage", "")
+        to_p = cdata.get("to_passage", "")
         if from_p and to_p:
-            successors.setdefault(from_p, []).append(to_p)
-    return successors
+            adjacency.setdefault(from_p, []).append(to_p)
+    return adjacency
 
 
-def _bfs_reachable(start: str, successors: dict[str, list[str]]) -> set[str]:
-    """BFS to find all reachable passages from start."""
-    reachable: set[str] = {start}
-    queue: deque[str] = deque([start])
-    while queue:
-        current = queue.popleft()
-        for next_p in successors.get(current, []):
-            if next_p not in reachable:
-                reachable.add(next_p)
-                queue.append(next_p)
-    return reachable
+def build_outgoing_count(graph: Graph) -> dict[str, int]:
+    """Count outgoing choices per passage from choice_from edges.
+
+    Args:
+        graph: The story graph.
+
+    Returns:
+        Dict mapping passage ID to number of outgoing choices.
+    """
+    # choice_from edges point choice → source_passage, so e["to"] = source passage.
+    choice_from_edges = graph.get_edges(edge_type="choice_from")
+    outgoing_count: dict[str, int] = {}
+    for edge in choice_from_edges:
+        source = edge["to"]
+        outgoing_count[source] = outgoing_count.get(source, 0) + 1
+    return outgoing_count
+
+
+def build_exempt_passages(graph: Graph, passages: dict[str, dict[str, object]]) -> set[str]:
+    """Build set of passages exempt from linearity checks.
+
+    Exempt passages include:
+    - Passages with confront/resolve narrative function (climax/resolution)
+    - Merged passages (already collapsed from linear stretches)
+    """
+    beats = graph.get_nodes_by_type("beat")
+    exempt_beats: set[str] = set()
+    for bid, bdata in beats.items():
+        if bdata.get("narrative_function") in {"confront", "resolve"}:
+            exempt_beats.add(bid)
+
+    exempt: set[str] = set()
+    for pid, pdata in passages.items():
+        # Exempt confront/resolve passages
+        if pdata.get("from_beat") in exempt_beats:
+            exempt.add(pid)
+        # Exempt merged passages (they ARE the result of collapse)
+        from_beats = pdata.get("from_beats")
+        if from_beats and isinstance(from_beats, list) and len(from_beats) > 1:
+            exempt.add(pid)
+    return exempt
+
+
+def find_start_passages(graph: Graph, passages: dict[str, dict[str, object]]) -> list[str]:
+    """Find passages with no forward incoming choice edges.
+
+    Excludes ``is_return`` spoke→hub back-links.
+    """
+    has_incoming = passages_with_forward_incoming(graph)
+    return [pid for pid in passages if pid not in has_incoming]
+
+
+def walk_linear_stretches(
+    starts: list[str],
+    adjacency: dict[str, list[str]],
+    outgoing_count: dict[str, int],
+    exempt_passages: set[str],
+    threshold: int,
+) -> list[list[str]]:
+    """BFS walk to find linear stretches exceeding threshold.
+
+    Tracks per-path run context so convergence points are evaluated
+    correctly from each incoming path.
+
+    Args:
+        starts: Start passage IDs for BFS.
+        adjacency: Passage → successors mapping.
+        outgoing_count: Passage → outgoing choice count.
+        exempt_passages: Passages exempt from linearity (confront/resolve).
+        threshold: Minimum run length to report. 0 = report all runs.
+
+    Returns:
+        List of passage ID lists, one per linear stretch exceeding threshold.
+    """
+    stretches: list[list[str]] = []
+    # Track best known run reaching each node to prune redundant BFS paths
+    best_run_at: dict[str, int] = {}
+
+    for start in starts:
+        queue: deque[tuple[str, list[str]]] = deque()
+        is_linear = outgoing_count.get(start, 0) == 1 and start not in exempt_passages
+        initial_run = [start] if is_linear else []
+        queue.append((start, initial_run))
+
+        while queue:
+            current, run = queue.popleft()
+
+            for successor in adjacency.get(current, []):
+                is_succ_linear = (
+                    outgoing_count.get(successor, 0) == 1 and successor not in exempt_passages
+                )
+                if is_succ_linear:
+                    new_run = [*run, successor]
+                    # Only continue if this path offers a longer run than previously seen
+                    if len(new_run) <= best_run_at.get(successor, 0):
+                        continue
+                    best_run_at[successor] = len(new_run)
+                    if (threshold > 0 and len(new_run) > threshold) or threshold == 0:
+                        stretches.append(new_run)
+                    queue.append((successor, new_run))
+                else:
+                    # Reset run at branching/exempt nodes; only visit if not yet seen
+                    if successor not in best_run_at:
+                        best_run_at[successor] = 0
+                        queue.append((successor, []))
+
+    return stretches
+
+
+def find_max_consecutive_linear(graph: Graph) -> int:
+    """Compute the longest consecutive single-outgoing passage stretch.
+
+    Uses BFS from start passages, tracking per-path run lengths.
+    Passages whose beat has ``narrative_function`` in {"confront", "resolve"}
+    are exempt (linearity is narratively appropriate at climax/resolution).
+
+    Args:
+        graph: The story graph.
+
+    Returns:
+        Length of the longest linear stretch (0 if no passages or no linear runs).
+    """
+    passages = graph.get_nodes_by_type("passage")
+    if not passages:
+        return 0
+
+    outgoing_count = build_outgoing_count(graph)
+    adjacency = build_passage_adjacency(graph)
+    exempt = build_exempt_passages(graph, passages)
+    starts = find_start_passages(graph, passages)
+
+    max_len = 0
+    for _violation in walk_linear_stretches(starts, adjacency, outgoing_count, exempt, threshold=0):
+        max_len = max(max_len, len(_violation))
+    return max_len
+
+
+def compute_linear_threshold(graph: Graph) -> int:
+    """Scale max consecutive linear threshold with passage count.
+
+    Larger stories naturally have longer linear stretches between branch
+    points (each dilemma adds ~10 passages). The default of 2 is kept for
+    small stories; larger stories get proportionally wider tolerance.
+    """
+    passage_count = len(graph.get_nodes_by_type("passage"))
+    return max(2, passage_count // 20)
+
+
+# ---------------------------------------------------------------------------
+# Beat-DAG helpers (private)
+# ---------------------------------------------------------------------------
+
+
+def _get_spine_sequence(arc_nodes: dict[str, dict[str, object]]) -> set[str]:
+    """Extract the spine arc's beat sequence as a set.
+
+    Returns an empty set if no spine arc is found.
+    """
+    for data in arc_nodes.values():
+        if data.get("arc_type") == "spine":
+            seq = data.get("sequence", [])
+            return set(seq) if isinstance(seq, list) else set()
+    return set()
+
+
+def _build_beat_dilemma_map(graph: Graph) -> dict[str, set[str]]:
+    """Map each beat to its prefixed dilemma IDs via belongs_to → path → dilemma."""
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    path_to_dilemma: dict[str, str] = {}
+    for path_id, path_data in path_nodes.items():
+        did = path_data.get("dilemma_id")
+        if did:
+            prefixed = normalize_scoped_id(did, "dilemma")
+            if prefixed in dilemma_nodes:
+                path_to_dilemma[path_id] = prefixed
+
+    beat_dilemmas: dict[str, set[str]] = {}
+    for edge in graph.get_edges(edge_type="belongs_to"):
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        if path_id in path_to_dilemma:
+            beat_dilemmas.setdefault(beat_id, set()).add(path_to_dilemma[path_id])
+
+    return beat_dilemmas
+
+
+# ---------------------------------------------------------------------------
+# Beat-DAG check functions (stay in GROW)
+# ---------------------------------------------------------------------------
 
 
 def check_single_start(graph: Graph) -> ValidationCheck:
@@ -155,8 +295,8 @@ def check_single_start(graph: Graph) -> ValidationCheck:
 
     # Start passages = passages without forward incoming choice edges
     # (excludes is_return spoke→hub back-links)
-    passages_with_incoming = _passages_with_forward_incoming(graph)
-    start_passages = [pid for pid in passage_nodes if pid not in passages_with_incoming]
+    has_incoming = passages_with_forward_incoming(graph)
+    start_passages = [pid for pid in passage_nodes if pid not in has_incoming]
 
     if len(start_passages) == 1:
         return ValidationCheck(
@@ -174,100 +314,6 @@ def check_single_start(graph: Graph) -> ValidationCheck:
         name="single_start",
         severity="fail",
         message=f"Multiple start passages found: {', '.join(sorted(start_passages))}",
-    )
-
-
-def check_all_passages_reachable(graph: Graph) -> ValidationCheck:
-    """Verify all passages are reachable from the start passage via choice edges.
-
-    BFS from the start passage (no incoming choice_to edges) via choice_to edges.
-    Reports any unreachable passages.
-    """
-    passage_nodes = graph.get_nodes_by_type("passage")
-    if not passage_nodes:
-        return ValidationCheck(
-            name="all_passages_reachable",
-            severity="pass",
-            message="No passages to check",
-        )
-
-    start = _find_start_passage(graph)
-    if start is None:
-        return ValidationCheck(
-            name="all_passages_reachable",
-            severity="fail",
-            message="Cannot check reachability: no unique start passage",
-        )
-
-    successors = _build_passage_successors(graph)
-    reachable = _bfs_reachable(start, successors)
-
-    unreachable = set(passage_nodes.keys()) - reachable
-    if not unreachable:
-        return ValidationCheck(
-            name="all_passages_reachable",
-            severity="pass",
-            message=f"All {len(passage_nodes)} passages reachable from start",
-        )
-    return ValidationCheck(
-        name="all_passages_reachable",
-        severity="fail",
-        message=f"{len(unreachable)} unreachable passages: {', '.join(sorted(unreachable)[:5])}",
-    )
-
-
-def check_all_endings_reachable(graph: Graph) -> ValidationCheck:
-    """Verify at least one ending is reachable from the start passage.
-
-    Endings are passages with no outgoing choice_from edges. At least one
-    ending must be reachable for the story to be completable.
-
-    Edge semantics:
-    - choice_from: choice -> originating_passage (passage the choice leads FROM)
-    - choice_to: choice -> destination_passage (passage the choice leads TO)
-    """
-    passage_nodes = graph.get_nodes_by_type("passage")
-    if not passage_nodes:
-        return ValidationCheck(
-            name="all_endings_reachable",
-            severity="pass",
-            message="No passages to check",
-        )
-
-    start = _find_start_passage(graph)
-    if start is None:
-        return ValidationCheck(
-            name="all_endings_reachable",
-            severity="fail",
-            message="Cannot check endings: no unique start passage",
-        )
-
-    # Find endings: passages with no outgoing choices (choice_from -> passage)
-    choice_from_edges = graph.get_edges(from_id=None, to_id=None, edge_type="choice_from")
-    passages_with_outgoing: set[str] = {edge["to"] for edge in choice_from_edges}
-    endings = [pid for pid in passage_nodes if pid not in passages_with_outgoing]
-
-    if not endings:
-        return ValidationCheck(
-            name="all_endings_reachable",
-            severity="fail",
-            message="No ending passages found (all passages have outgoing edges)",
-        )
-
-    successors = _build_passage_successors(graph)
-    reachable = _bfs_reachable(start, successors)
-
-    reachable_endings = [e for e in endings if e in reachable]
-    if reachable_endings:
-        return ValidationCheck(
-            name="all_endings_reachable",
-            severity="pass",
-            message=f"{len(reachable_endings)}/{len(endings)} endings reachable",
-        )
-    return ValidationCheck(
-        name="all_endings_reachable",
-        severity="fail",
-        message=f"No endings reachable from start (0/{len(endings)} reachable)",
     )
 
 
@@ -330,119 +376,6 @@ def check_dilemmas_resolved(graph: Graph) -> ValidationCheck:
         name="dilemmas_resolved",
         severity="fail",
         message=f"Unresolved dilemmas: {', '.join(unresolved[:5])}",
-    )
-
-
-def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
-    """Verify all choice requires are satisfiable (required codewords exist globally).
-
-    Collects all grantable codewords (union of all grants lists). For each
-    choice with non-empty requires, verifies every required codeword is in
-    the global grantable set.
-    """
-    choice_nodes = graph.get_nodes_by_type("choice")
-    if not choice_nodes:
-        return ValidationCheck(
-            name="gate_satisfiability",
-            severity="pass",
-            message="No choices to check",
-        )
-
-    # Collect all globally grantable codewords
-    grantable: set[str] = set()
-    for choice_data in choice_nodes.values():
-        grants = choice_data.get("grants", [])
-        grantable.update(grants)
-
-    # Check each choice's requires_codewords
-    unsatisfiable: list[str] = []
-    for choice_id, choice_data in sorted(choice_nodes.items()):
-        requires = choice_data.get("requires_codewords", [])
-        for req in requires:
-            if req not in grantable:
-                unsatisfiable.append(f"{choice_id} requires_codewords '{req}'")
-
-    if not unsatisfiable:
-        return ValidationCheck(
-            name="gate_satisfiability",
-            severity="pass",
-            message=f"All gates satisfiable ({len(grantable)} codewords grantable)",
-        )
-    return ValidationCheck(
-        name="gate_satisfiability",
-        severity="fail",
-        message=f"Unsatisfiable gates: {', '.join(unsatisfiable[:5])}",
-    )
-
-
-def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
-    """Verify all required codewords are co-reachable in a single playthrough.
-
-    For each choice with non-empty requires, checks that at least one arc
-    provides ALL required codewords.  A gate that requires codewords from
-    mutually exclusive paths is paradoxical — the player can never satisfy it.
-    """
-    choice_nodes = graph.get_nodes_by_type("choice")
-    if not choice_nodes:
-        return ValidationCheck(
-            name="gate_co_satisfiability",
-            severity="pass",
-            message="No choices to check",
-        )
-
-    arc_nodes = graph.get_nodes_by_type("arc")
-    if not arc_nodes:
-        return ValidationCheck(
-            name="gate_co_satisfiability",
-            severity="pass",
-            message="No arcs to check",
-        )
-
-    # Build consequence→codeword lookup
-    cons_to_codeword = {
-        edge["to"]: edge["from"]
-        for edge in graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
-    }
-
-    # Build path→consequences lookup
-    path_consequences: dict[str, list[str]] = {}
-    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="has_consequence"):
-        path_consequences.setdefault(edge["from"], []).append(edge["to"])
-
-    # Build earnable codewords per arc
-    arc_codewords: dict[str, set[str]] = {}
-    for arc_id, arc_data in arc_nodes.items():
-        cws: set[str] = set()
-        for raw_path in arc_data.get("paths", []):
-            path_id = normalize_scoped_id(raw_path, "path")
-            for cons_id in path_consequences.get(path_id, []):
-                cw = cons_to_codeword.get(cons_id)
-                if cw:
-                    cws.add(cw)
-        arc_codewords[arc_id] = cws
-
-    # Check each gated choice
-    paradoxical: list[str] = []
-    for choice_id, choice_data in sorted(choice_nodes.items()):
-        requires = set(choice_data.get("requires_codewords", []))
-        if not requires:
-            continue
-
-        # A gate is satisfiable if ANY arc provides all required codewords
-        satisfiable = any(requires <= cws for cws in arc_codewords.values())
-        if not satisfiable:
-            paradoxical.append(f"{choice_id} requires {sorted(requires)}")
-
-    if not paradoxical:
-        return ValidationCheck(
-            name="gate_co_satisfiability",
-            severity="pass",
-            message="All gates co-satisfiable",
-        )
-    return ValidationCheck(
-        name="gate_co_satisfiability",
-        severity="fail",
-        message=f"Paradoxical gates ({len(paradoxical)}): {', '.join(paradoxical[:3])}",
     )
 
 
@@ -509,138 +442,6 @@ def check_passage_dag_cycles(graph: Graph) -> ValidationCheck:
     )
 
 
-def check_commits_timing(graph: Graph) -> list[ValidationCheck]:
-    """Check narrative pacing heuristics around commits beats.
-
-    The player walks the *arc* sequence (all beats from all paths in the arc),
-    not individual path beats. Measuring commits position against path-local
-    beats produces false positives on short branch paths that sit inside
-    longer arcs.
-
-    For each path, checks against its arc's beat sequence:
-    1. commits too early (<3 beats from arc start)
-    2. No reveals/advances before commits (no buildup)
-    3. commits too late (final 20% of arc)
-    4. Large gap (>5 beats) after last reveals before commits
-
-    Returns list of warning-level checks (timing issues are advisory, not blocking).
-    """
-    path_nodes = graph.get_nodes_by_type("path")
-    beat_nodes = graph.get_nodes_by_type("beat")
-    dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    arc_nodes = graph.get_nodes_by_type("arc")
-
-    if not path_nodes or not beat_nodes:
-        return []
-
-    # No arcs = pre-GROW or incomplete graph; skip timing checks
-    if not arc_nodes:
-        return []
-
-    # Build path → dilemma node ID mapping for beat impact comparison
-    path_dilemma: dict[str, str] = {}
-    for path_id, path_data in path_nodes.items():
-        did = path_data.get("dilemma_id")
-        if did:
-            prefixed = normalize_scoped_id(did, "dilemma")
-            if prefixed in dilemma_nodes:
-                path_dilemma[path_id] = prefixed
-
-    # Build path → arc sequence mapping (prefer spine arc)
-    path_to_arc_seq: dict[str, list[str]] = {}
-    for _arc_id, arc_data in sorted(arc_nodes.items()):
-        seq = arc_data.get("sequence", [])
-        is_spine = arc_data.get("arc_type") == "spine"
-        for path_raw in arc_data.get("paths", []):
-            path_id = normalize_scoped_id(path_raw, "path")
-            if is_spine:
-                path_to_arc_seq[path_id] = seq  # spine takes priority
-            elif path_id not in path_to_arc_seq:
-                path_to_arc_seq[path_id] = seq  # branch as fallback
-
-    checks: list[ValidationCheck] = []
-
-    for path_id in sorted(path_nodes):
-        if path_id not in path_dilemma:
-            continue
-        dilemma_node_id = path_dilemma[path_id]
-        path_raw = path_nodes[path_id].get("raw_id", path_id)
-
-        # Get arc sequence for this path
-        arc_seq = path_to_arc_seq.get(path_id)
-        if not arc_seq or len(arc_seq) < 2:
-            continue
-
-        # Scan arc sequence for this dilemma's commits/buildup beats
-        commits_idx: int | None = None
-        last_buildup_idx: int | None = None
-
-        for idx, beat_id in enumerate(arc_seq):
-            beat_data = beat_nodes.get(beat_id, {})
-            for impact in beat_data.get("dilemma_impacts", []):
-                if impact.get("dilemma_id") != dilemma_node_id:
-                    continue
-                effect = impact.get("effect", "")
-                if effect == "commits":
-                    commits_idx = idx
-                elif effect in ("reveals", "advances"):
-                    last_buildup_idx = idx
-
-        if commits_idx is None:
-            continue
-
-        total_beats = len(arc_seq)
-
-        # Scale thresholds with arc length — larger arcs get slightly wider
-        # tolerances since beats are spread across more dilemmas.
-        min_beats = max(_DEFAULT_MIN_BEATS_BEFORE_COMMITS, total_beats // 10)
-        max_gap = max(_DEFAULT_MAX_BUILDUP_GAP_BEATS, total_beats // 8)
-
-        # Check 1: commits too early
-        if commits_idx < min_beats:
-            checks.append(
-                ValidationCheck(
-                    name="commits_timing",
-                    severity="warn",
-                    message=f"Path '{path_raw}': commits at arc position {commits_idx + 1}/{total_beats} (too early, <{min_beats} beats of setup)",
-                )
-            )
-
-        # Check 2: No buildup before commits
-        if last_buildup_idx is None:
-            checks.append(
-                ValidationCheck(
-                    name="commits_timing",
-                    severity="warn",
-                    message=f"Path '{path_raw}': no reveals/advances before commits",
-                )
-            )
-
-        # Check 3: commits too late (final portion of arc)
-        threshold = total_beats * _DEFAULT_MAX_COMMITS_POSITION_RATIO
-        if commits_idx >= threshold:
-            checks.append(
-                ValidationCheck(
-                    name="commits_timing",
-                    severity="warn",
-                    message=f"Path '{path_raw}': commits at arc position {commits_idx + 1}/{total_beats} (too late, >80%)",
-                )
-            )
-
-        # Check 4: Large gap after last buildup
-        if last_buildup_idx is not None and commits_idx - last_buildup_idx > max_gap:
-            gap = commits_idx - last_buildup_idx
-            checks.append(
-                ValidationCheck(
-                    name="commits_timing",
-                    severity="warn",
-                    message=f"Path '{path_raw}': {gap} beat gap between last reveals and commits",
-                )
-            )
-
-    return checks
-
-
 def check_spine_arc_exists(graph: Graph) -> ValidationCheck:
     """Verify that a spine arc exists in the graph.
 
@@ -674,344 +475,6 @@ def check_spine_arc_exists(graph: Graph) -> ValidationCheck:
             f"Story has no complete canonical path through all dilemmas."
         ),
     )
-
-
-def check_arc_divergence(
-    graph: Graph,
-    *,
-    min_exclusive_beats: int = 2,
-    max_shared_ratio: float = 0.9,
-) -> ValidationCheck:
-    """Warn when branch arcs are too similar to the spine arc.
-
-    Low divergence can produce a linear-feeling story even when multiple
-    dilemmas exist. This check compares each branch arc's beat sequence
-    against the spine arc and flags cases with too few exclusive beats
-    or extremely high overlap.
-
-    Args:
-        graph: Story graph.
-        min_exclusive_beats: Minimum beats in a branch arc not in spine.
-        max_shared_ratio: Maximum allowed fraction of branch beats shared
-            with the spine arc before warning.
-
-    Returns:
-        ValidationCheck with severity "warn" when divergence is insufficient.
-    """
-    arc_nodes = graph.get_nodes_by_type("arc")
-    if not arc_nodes:
-        return ValidationCheck(
-            name="arc_divergence",
-            severity="pass",
-            message="No arcs to check",
-        )
-
-    spine_id = None
-    for arc_id, data in arc_nodes.items():
-        if data.get("arc_type") == "spine":
-            spine_id = arc_id
-            break
-
-    if not spine_id:
-        return ValidationCheck(
-            name="arc_divergence",
-            severity="warn",
-            message="No spine arc found; divergence check skipped",
-        )
-
-    spine_seq = arc_nodes[spine_id].get("sequence", [])
-    if not spine_seq:
-        return ValidationCheck(
-            name="arc_divergence",
-            severity="warn",
-            message="Spine arc has no sequence; divergence check skipped",
-        )
-
-    spine_set = set(spine_seq)
-    total_branches = 0
-    low_divergence: list[tuple[str, int, float]] = []
-
-    for arc_id, data in arc_nodes.items():
-        if arc_id == spine_id:
-            continue
-        seq = data.get("sequence", [])
-        if not seq:
-            continue
-        total_branches += 1
-        exclusive = [beat for beat in seq if beat not in spine_set]
-        exclusive_count = len(exclusive)
-        shared_ratio = 1 - (exclusive_count / len(seq))
-        if exclusive_count < min_exclusive_beats or shared_ratio >= max_shared_ratio:
-            low_divergence.append((arc_id, exclusive_count, shared_ratio))
-
-    if not total_branches:
-        return ValidationCheck(
-            name="arc_divergence",
-            severity="pass",
-            message="No branch arcs to check",
-        )
-
-    if low_divergence:
-        worst = max(low_divergence, key=lambda item: item[2])
-        return ValidationCheck(
-            name="arc_divergence",
-            severity="warn",
-            message=(
-                f"Low divergence in {len(low_divergence)}/{total_branches} branch arcs "
-                f"(min_exclusive_beats={min_exclusive_beats}, max_shared_ratio={max_shared_ratio:.2f}). "
-                f"Worst: {worst[0]} exclusive={worst[1]} shared_ratio={worst[2]:.2f}"
-            ),
-        )
-
-    return ValidationCheck(
-        name="arc_divergence",
-        severity="pass",
-        message="All branch arcs show sufficient divergence from spine",
-    )
-
-
-def build_passage_adjacency(graph: Graph) -> dict[str, list[str]]:
-    """Build passage → successor passages adjacency list from choice nodes.
-
-    Args:
-        graph: The story graph.
-
-    Returns:
-        Dict mapping each passage ID to a list of successor passage IDs.
-    """
-    choices = graph.get_nodes_by_type("choice")
-    adjacency: dict[str, list[str]] = {}
-    for _cid, cdata in choices.items():
-        from_p = cdata.get("from_passage", "")
-        to_p = cdata.get("to_passage", "")
-        if from_p and to_p:
-            adjacency.setdefault(from_p, []).append(to_p)
-    return adjacency
-
-
-def build_outgoing_count(graph: Graph) -> dict[str, int]:
-    """Count outgoing choices per passage from choice_from edges.
-
-    Args:
-        graph: The story graph.
-
-    Returns:
-        Dict mapping passage ID to number of outgoing choices.
-    """
-    # choice_from edges point choice → source_passage, so e["to"] = source passage.
-    choice_from_edges = graph.get_edges(edge_type="choice_from")
-    outgoing_count: dict[str, int] = {}
-    for edge in choice_from_edges:
-        source = edge["to"]
-        outgoing_count[source] = outgoing_count.get(source, 0) + 1
-    return outgoing_count
-
-
-def find_max_consecutive_linear(graph: Graph) -> int:
-    """Compute the longest consecutive single-outgoing passage stretch.
-
-    Uses BFS from start passages, tracking per-path run lengths.
-    Passages whose beat has ``narrative_function`` in {"confront", "resolve"}
-    are exempt (linearity is narratively appropriate at climax/resolution).
-
-    Args:
-        graph: The story graph.
-
-    Returns:
-        Length of the longest linear stretch (0 if no passages or no linear runs).
-    """
-    passages = graph.get_nodes_by_type("passage")
-    if not passages:
-        return 0
-
-    outgoing_count = build_outgoing_count(graph)
-    adjacency = build_passage_adjacency(graph)
-    exempt_passages = _build_exempt_passages(graph, passages)
-    starts = _find_start_passages(graph, passages)
-
-    max_len = 0
-    for _violation in _walk_linear_stretches(
-        starts, adjacency, outgoing_count, exempt_passages, threshold=0
-    ):
-        max_len = max(max_len, len(_violation))
-    return max_len
-
-
-def _build_exempt_passages(graph: Graph, passages: dict[str, dict[str, object]]) -> set[str]:
-    """Build set of passages exempt from linearity checks.
-
-    Exempt passages include:
-    - Passages with confront/resolve narrative function (climax/resolution)
-    - Merged passages (already collapsed from linear stretches)
-    """
-    beats = graph.get_nodes_by_type("beat")
-    exempt_beats: set[str] = set()
-    for bid, bdata in beats.items():
-        if bdata.get("narrative_function") in {"confront", "resolve"}:
-            exempt_beats.add(bid)
-
-    exempt: set[str] = set()
-    for pid, pdata in passages.items():
-        # Exempt confront/resolve passages
-        if pdata.get("from_beat") in exempt_beats:
-            exempt.add(pid)
-        # Exempt merged passages (they ARE the result of collapse)
-        from_beats = pdata.get("from_beats")
-        if from_beats and isinstance(from_beats, list) and len(from_beats) > 1:
-            exempt.add(pid)
-    return exempt
-
-
-def _find_start_passages(graph: Graph, passages: dict[str, dict[str, object]]) -> list[str]:
-    """Find passages with no forward incoming choice edges.
-
-    Excludes ``is_return`` spoke→hub back-links.
-    """
-    has_incoming = _passages_with_forward_incoming(graph)
-    return [pid for pid in passages if pid not in has_incoming]
-
-
-def _walk_linear_stretches(
-    starts: list[str],
-    adjacency: dict[str, list[str]],
-    outgoing_count: dict[str, int],
-    exempt_passages: set[str],
-    threshold: int,
-) -> list[list[str]]:
-    """BFS walk to find linear stretches exceeding threshold.
-
-    Tracks per-path run context so convergence points are evaluated
-    correctly from each incoming path.
-
-    Args:
-        starts: Start passage IDs for BFS.
-        adjacency: Passage → successors mapping.
-        outgoing_count: Passage → outgoing choice count.
-        exempt_passages: Passages exempt from linearity (confront/resolve).
-        threshold: Minimum run length to report. 0 = report all runs.
-
-    Returns:
-        List of passage ID lists, one per linear stretch exceeding threshold.
-    """
-    stretches: list[list[str]] = []
-    # Track best known run reaching each node to prune redundant BFS paths
-    best_run_at: dict[str, int] = {}
-
-    for start in starts:
-        queue: deque[tuple[str, list[str]]] = deque()
-        is_linear = outgoing_count.get(start, 0) == 1 and start not in exempt_passages
-        initial_run = [start] if is_linear else []
-        queue.append((start, initial_run))
-
-        while queue:
-            current, run = queue.popleft()
-
-            for successor in adjacency.get(current, []):
-                is_succ_linear = (
-                    outgoing_count.get(successor, 0) == 1 and successor not in exempt_passages
-                )
-                if is_succ_linear:
-                    new_run = [*run, successor]
-                    # Only continue if this path offers a longer run than previously seen
-                    if len(new_run) <= best_run_at.get(successor, 0):
-                        continue
-                    best_run_at[successor] = len(new_run)
-                    if (threshold > 0 and len(new_run) > threshold) or threshold == 0:
-                        stretches.append(new_run)
-                    queue.append((successor, new_run))
-                else:
-                    # Reset run at branching/exempt nodes; only visit if not yet seen
-                    if successor not in best_run_at:
-                        best_run_at[successor] = 0
-                        queue.append((successor, []))
-
-    return stretches
-
-
-def check_max_consecutive_linear(graph: Graph, max_run: int = 2) -> ValidationCheck:
-    """Warn when too many consecutive single-outgoing passages form a linear stretch.
-
-    Long linear stretches create a passive reading experience. This check walks
-    the passage graph and flags any path with more than ``max_run`` consecutive
-    passages that each have exactly one outgoing choice.
-
-    Passages whose beat has ``narrative_function`` in {"confront", "resolve"} are
-    exempt, since linearity is narratively appropriate for climax/resolution.
-
-    Args:
-        graph: The story graph to validate.
-        max_run: Maximum allowed consecutive single-outgoing passages.
-
-    Returns:
-        A ValidationCheck with severity "warn" if a violation is found, "pass" otherwise.
-    """
-    passages = graph.get_nodes_by_type("passage")
-    if not passages:
-        return ValidationCheck(
-            name="max_consecutive_linear",
-            severity="pass",
-            message="No passages to check",
-        )
-
-    outgoing_count = build_outgoing_count(graph)
-    adjacency = build_passage_adjacency(graph)
-    exempt_passages = _build_exempt_passages(graph, passages)
-    starts = _find_start_passages(graph, passages)
-
-    violations = _walk_linear_stretches(starts, adjacency, outgoing_count, exempt_passages, max_run)
-
-    if violations:
-        longest = max(violations, key=len)
-        return ValidationCheck(
-            name="max_consecutive_linear",
-            severity="warn",
-            message=(
-                f"Found {len(violations)} linear stretch(es) exceeding {max_run} "
-                f"consecutive single-outgoing passages. Longest: {len(longest)} "
-                f"passages ({', '.join(longest[:5])}{'...' if len(longest) > 5 else ''})"
-            ),
-        )
-
-    return ValidationCheck(
-        name="max_consecutive_linear",
-        severity="pass",
-        message=f"No linear stretches exceed {max_run} consecutive passages",
-    )
-
-
-def _get_spine_sequence(arc_nodes: dict[str, dict[str, object]]) -> set[str]:
-    """Extract the spine arc's beat sequence as a set.
-
-    Returns an empty set if no spine arc is found.
-    """
-    for data in arc_nodes.values():
-        if data.get("arc_type") == "spine":
-            seq = data.get("sequence", [])
-            return set(seq) if isinstance(seq, list) else set()
-    return set()
-
-
-def _build_beat_dilemma_map(graph: Graph) -> dict[str, set[str]]:
-    """Map each beat to its prefixed dilemma IDs via belongs_to → path → dilemma."""
-    path_nodes = graph.get_nodes_by_type("path")
-    dilemma_nodes = graph.get_nodes_by_type("dilemma")
-
-    path_to_dilemma: dict[str, str] = {}
-    for path_id, path_data in path_nodes.items():
-        did = path_data.get("dilemma_id")
-        if did:
-            prefixed = normalize_scoped_id(did, "dilemma")
-            if prefixed in dilemma_nodes:
-                path_to_dilemma[path_id] = prefixed
-
-    beat_dilemmas: dict[str, set[str]] = {}
-    for edge in graph.get_edges(edge_type="belongs_to"):
-        beat_id = edge["from"]
-        path_id = edge["to"]
-        if path_id in path_to_dilemma:
-            beat_dilemmas.setdefault(beat_id, set()).add(path_to_dilemma[path_id])
-
-    return beat_dilemmas
 
 
 def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
@@ -1139,442 +602,68 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
     ]
 
 
-def check_codeword_gate_coverage(graph: Graph) -> ValidationCheck:
-    """Check that every codeword is consumed by a gate or overlay condition.
+# ---------------------------------------------------------------------------
+# Entry points
+# ---------------------------------------------------------------------------
 
-    Implements the "Residue Must Be Read" invariant: checks that each
-    codeword appears in at least one ``choice.requires_codewords`` gate or
-    ``overlay.when`` condition.
+
+def run_grow_checks(graph: Graph) -> ValidationReport:
+    """Run beat-DAG validation checks only (GROW Phase 10).
+
+    Returns a ValidationReport containing structural beat-DAG checks.
     """
-    codeword_nodes = graph.get_nodes_by_type("codeword")
-    if not codeword_nodes:
-        return ValidationCheck(
-            name="codeword_gate_coverage",
-            severity="pass",
-            message="No codewords in graph",
-        )
-
-    choice_nodes = graph.get_nodes_by_type("choice")
-    consumed: set[str] = set()
-    for choice_data in choice_nodes.values():
-        consumed.update(choice_data.get("requires_codewords") or [])
-
-    # Overlays are embedded arrays on entity nodes (type="entity"),
-    # not separate typed nodes.
-    consumed.update(
-        cw
-        for entity_data in graph.get_nodes_by_type("entity").values()
-        for overlay in entity_data.get("overlays") or []
-        for cw in overlay.get("when") or []
-    )
-
-    unconsumed = sorted(set(codeword_nodes.keys()) - consumed)
-    if not unconsumed:
-        return ValidationCheck(
-            name="codeword_gate_coverage",
-            severity="pass",
-            message=f"All {len(codeword_nodes)} codeword(s) consumed by gates or overlays",
-        )
-    return ValidationCheck(
-        name="codeword_gate_coverage",
-        severity="warn",
-        message=(
-            f"{len(unconsumed)} of {len(codeword_nodes)} codeword(s) not consumed "
-            f"by any choice.requires_codewords or overlay.when: {', '.join(unconsumed[:5])}"
-            f"{'...' if len(unconsumed) > 5 else ''}"
-        ),
-    )
-
-
-def check_forward_path_reachability(graph: Graph) -> ValidationCheck:
-    """Warn when a non-ending passage has only gated outgoing choices.
-
-    Catches soft-lock risks where ``requires`` wiring accidentally gates
-    ALL forward paths from a passage. Excludes ``is_return`` choices
-    (spoke-to-hub return links) from the forward-path count.
-
-    v1 simplification: does not check whether requires are already
-    satisfiable (would require path simulation).
-    """
-    choice_nodes = graph.get_nodes_by_type("choice")
-    if not choice_nodes:
-        return ValidationCheck(
-            name="forward_path_reachability",
-            severity="pass",
-            message="No choices in graph",
-        )
-
-    # Build from_passage → list of choice data
-    from_passage_choices: dict[str, list[dict[str, object]]] = {}
-    for choice_data in choice_nodes.values():
-        fp = choice_data.get("from_passage")
-        if fp:
-            from_passage_choices.setdefault(fp, []).append(choice_data)
-
-    # Identify endings (no outgoing choices at all, or only return links)
-    passages = graph.get_nodes_by_type("passage")
-    soft_locked: list[str] = []
-
-    for pid in sorted(passages):
-        choices = from_passage_choices.get(pid, [])
-        forward = [c for c in choices if not c.get("is_return") and not c.get("is_routing")]
-        if not forward:
-            continue  # ending passage or routing-only — no forward choices
-        ungated = [c for c in forward if not c.get("requires_codewords")]
-        if not ungated:
-            soft_locked.append(pid)
-
-    if not soft_locked:
-        return ValidationCheck(
-            name="forward_path_reachability",
-            severity="pass",
-            message="All non-ending passages have at least one ungated forward choice",
-        )
-    return ValidationCheck(
-        name="forward_path_reachability",
-        severity="warn",
-        message=(
-            f"{len(soft_locked)} passage(s) have only gated forward choices "
-            f"(potential soft-lock): {', '.join(soft_locked[:5])}"
-            f"{'...' if len(soft_locked) > 5 else ''}"
-        ),
-    )
-
-
-def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
-    """Verify routing choice sets are collectively-exhaustive and mutually-exclusive.
-
-    For each source passage that has ``is_routing=True`` choices, checks:
-    - CE: every arc reaching the source has at least one satisfiable route
-    - ME: at most one routing choice is satisfiable per arc (excluding fallback)
-
-    Uses arc codeword signatures from ``build_arc_codewords()`` with scope
-    matched to how each routing set was produced:
-    - ``ending_split`` passages use ``scope="ending"`` — strict CE required
-    - All other passages use ``scope="routing"`` — fallback-lenient CE
-
-    Returns:
-        List of ValidationCheck results (one per routing set with issues,
-        or a single pass check if all sets are valid).
-    """
-    from questfoundry.graph.grow_algorithms import build_arc_codewords
-    from questfoundry.graph.grow_routing import get_routing_applied_metadata
-
-    choices = graph.get_nodes_by_type("choice")
-    arc_nodes = graph.get_nodes_by_type("arc")
-
-    if not arc_nodes:
-        return [
-            ValidationCheck(
-                name="routing_coverage",
-                severity="pass",
-                message="No arcs to validate routing against",
-            )
-        ]
-
-    # Build both codeword scopes; select per-passage based on routing metadata
-    ending_split_passages, _residue_passages = get_routing_applied_metadata(graph)
-    arc_codewords_ending = build_arc_codewords(graph, arc_nodes, scope="ending")
-    arc_codewords_routing = build_arc_codewords(graph, arc_nodes, scope="routing")
-
-    # Group routing choices by source passage; also detect fallback choices
-    routing_sets: dict[str, list[dict[str, object]]] = {}
-    # Source passages that also have a non-routing fallback choice
-    has_fallback: set[str] = set()
-    for _cid, cdata in choices.items():
-        source = str(cdata.get("from_passage", ""))
-        if cdata.get("is_routing"):
-            routing_sets.setdefault(source, []).append(cdata)
-        else:
-            # A non-routing choice from a source that has routing choices
-            # is a fallback — it covers arcs that don't match any variant
-            if source:
-                has_fallback.add(source)
-
-    if not routing_sets:
-        return [
-            ValidationCheck(
-                name="routing_coverage",
-                severity="pass",
-                message="No routing choice sets to validate",
-            )
-        ]
-
-    # Build beat → covering arcs mapping
-    beat_to_arcs: dict[str, list[str]] = {}
-    for arc_id, adata in arc_nodes.items():
-        for beat_id in adata.get("sequence", []):
-            beat_to_arcs.setdefault(str(beat_id), []).append(arc_id)
-
-    checks: list[ValidationCheck] = []
-    passages = graph.get_nodes_by_type("passage")
-
-    for source_pid, routing_choices in sorted(routing_sets.items()):
-        # Find arcs covering this passage's beat
-        source_data = passages.get(source_pid, {})
-        from_beat = str(source_data.get("from_beat") or source_data.get("primary_beat") or "")
-        covering_arcs = beat_to_arcs.get(from_beat, [])
-        if not covering_arcs:
-            continue
-
-        # Extract requires sets from routing choices
-        route_requires: list[set[str]] = []
-        for rc in routing_choices:
-            reqs = rc.get("requires_codewords", [])
-            route_requires.append(set(reqs) if isinstance(reqs, list) else set())
-
-        # Select codeword scope: ending splits use "ending" scope (exhaustive),
-        # residue routing uses "routing" scope (best-effort, fallback OK).
-        is_ending_split = source_pid in ending_split_passages
-        arc_codewords = arc_codewords_ending if is_ending_split else arc_codewords_routing
-
-        # CE check: for each covering arc, at least one route is satisfiable.
-        # Ending splits must be strictly exhaustive — no fallback exemption.
-        # Residue routing allows fallback (arcs not matching any variant use
-        # the original unmodified choice).
-        source_has_fallback = (not is_ending_split) and (source_pid in has_fallback)
-        ce_gaps: list[str] = []
-        for arc_id in covering_arcs:
-            arc_cws = arc_codewords.get(arc_id, frozenset())
-            satisfiable = [
-                i for i, reqs in enumerate(route_requires) if reqs and reqs.issubset(arc_cws)
-            ]
-            if not satisfiable and not source_has_fallback:
-                ce_gaps.append(arc_id)
-
-        if ce_gaps:
-            checks.append(
-                ValidationCheck(
-                    name="routing_coverage_ce",
-                    severity="fail",
-                    message=(
-                        f"Routing set at {source_pid}: {len(ce_gaps)} arc(s) have "
-                        f"no satisfiable route: {', '.join(ce_gaps[:3])}"
-                    ),
-                )
-            )
-
-        # ME check: at most one route satisfiable per arc
-        me_violations: list[str] = []
-        for arc_id in covering_arcs:
-            arc_cws = arc_codewords.get(arc_id, frozenset())
-            satisfiable = [
-                i for i, reqs in enumerate(route_requires) if reqs and reqs.issubset(arc_cws)
-            ]
-            if len(satisfiable) > 1:
-                me_violations.append(arc_id)
-
-        if me_violations:
-            checks.append(
-                ValidationCheck(
-                    name="routing_coverage_me",
-                    severity="warn",
-                    message=(
-                        f"Routing set at {source_pid}: {len(me_violations)} arc(s) "
-                        f"satisfy multiple routes: {', '.join(me_violations[:3])}"
-                    ),
-                )
-            )
-
-    if not checks:
-        checks.append(
-            ValidationCheck(
-                name="routing_coverage",
-                severity="pass",
-                message="All routing choice sets are CE+ME valid",
-            )
-        )
-    return checks
-
-
-def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
-    """Validate prose-layer contracts for shared (converged) passages.
-
-    For each passage shared across arcs from different paths of the same
-    dilemma, checks whether the dilemma's prose-layer settings require
-    variant routing:
-
-    - ``residue_weight: heavy`` or ``ending_salience: high`` without routing
-      → fail (prose MUST vary but no mechanism exists)
-    - ``residue_weight: light`` without routing → warn (prose MAY vary)
-    - ``residue_weight: cosmetic`` / ``ending_salience: none`` → pass
-
-    Returns one check per violation, or a single pass if all contracts hold.
-    """
-    arc_nodes = graph.get_nodes_by_type("arc")
-    passage_nodes = graph.get_nodes_by_type("passage")
-    dilemma_nodes = graph.get_nodes_by_type("dilemma")
-
-    if not arc_nodes or not passage_nodes or not dilemma_nodes:
-        return [
-            ValidationCheck(
-                name="prose_neutrality",
-                severity="pass",
-                message="No arcs/passages/dilemmas to validate prose neutrality",
-            )
-        ]
-
-    # Build beat → set of arc IDs covering it
-    beat_arcs: dict[str, set[str]] = {}
-    for arc_id, adata in arc_nodes.items():
-        for beat_id in adata.get("sequence", []):
-            beat_arcs.setdefault(str(beat_id), set()).add(arc_id)
-
-    # Build arc → dilemma mapping via arc paths
-    arc_dilemmas: dict[str, set[str]] = {}
-    path_nodes = graph.get_nodes_by_type("path")
-    for arc_id, adata in arc_nodes.items():
-        for path_raw in adata.get("paths", []):
-            path_id = normalize_scoped_id(path_raw, "path")
-            pdata = path_nodes.get(path_id, {})
-            dilemma_raw = pdata.get("dilemma_id", "")
-            if dilemma_raw:
-                dilemma_id = normalize_scoped_id(dilemma_raw, "dilemma")
-                arc_dilemmas.setdefault(arc_id, set()).add(dilemma_id)
-
-    # Build set of passages that have variant routing applied.
-    # Primary source: the routing_applied metadata node written by
-    # apply_routing_plan (S3).  Fall back to scanning residue_for on
-    # variant passages for graphs that pre-date S3.
-    from questfoundry.graph.grow_routing import (
-        ROUTING_APPLIED_NODE_ID,
-        get_routing_applied_metadata,
-    )
-
-    routing_node = graph.get_node(ROUTING_APPLIED_NODE_ID)
-    ending_split_pids, residue_pids = get_routing_applied_metadata(graph)
-    routed_passages: set[str] = ending_split_pids | residue_pids
-
-    if routing_node is None:
-        # Legacy / pre-S3 fallback: scan residue_for on variant passages
-        for _pid, _pdata in passage_nodes.items():
-            residue_for = _pdata.get("residue_for")
-            if residue_for:
-                routed_passages.add(str(residue_for))
-
-    checks: list[ValidationCheck] = []
-
-    for pid, pdata in passage_nodes.items():
-        # Skip variant passages - they ARE the routing solution, not a problem
-        if pdata.get("residue_for"):
-            continue
-
-        # Skip endings - they're handled by ending splits, not heavy residue
-        if pdata.get("is_ending"):
-            continue
-
-        from_beat = str(pdata.get("from_beat") or "")
-        if not from_beat:
-            continue
-
-        covering_arcs = beat_arcs.get(from_beat, set())
-        if len(covering_arcs) < 2:
-            continue  # Not shared
-
-        # Find dilemmas that actually diverge across covering arcs:
-        # a dilemma diverges only when covering arcs chose *different* paths
-        # for it (i.e., 2+ distinct path IDs for that dilemma).
-        # NOTE: This assumes valid arcs contain at most one path per dilemma.
-        dilemma_to_paths: dict[str, set[str]] = {}
-        for arc_id in covering_arcs:
-            for path_raw in arc_nodes.get(arc_id, {}).get("paths", []):
-                p_id = normalize_scoped_id(path_raw, "path")
-                p_data = path_nodes.get(p_id, {})
-                raw_did = p_data.get("dilemma_id", "")
-                if not raw_did:
-                    continue
-                dilemma_id = normalize_scoped_id(raw_did, "dilemma")
-                dilemma_to_paths.setdefault(dilemma_id, set()).add(p_id)
-
-        diverging_dilemmas: set[str] = {
-            dilemma_id
-            for dilemma_id, paths_for_dilemma in dilemma_to_paths.items()
-            if len(paths_for_dilemma) > 1
-        }
-
-        has_routing = pid in routed_passages
-
-        for dilemma_id in sorted(diverging_dilemmas):
-            ddata = dilemma_nodes.get(dilemma_id, {})
-            weight = ddata.get("residue_weight", "light")
-            salience = ddata.get("ending_salience", "low")
-            label = ddata.get("question", dilemma_id)
-
-            if has_routing:
-                continue  # Variant routing exists, prose contract met
-
-            if weight == "heavy" or salience == "high":
-                # Heavy/high dilemmas require variant routing. With deterministic
-                # heavy-residue routing in place, missing variants is a failure.
-                checks.append(
-                    ValidationCheck(
-                        name="prose_neutrality",
-                        severity="fail",
-                        message=(
-                            f"Shared passage {pid} requires variant routing "
-                            f"for dilemma '{label}' "
-                            f"(residue_weight={weight}, ending_salience={salience})"
-                        ),
-                    )
-                )
-            elif weight == "light" and salience == "low":
-                checks.append(
-                    ValidationCheck(
-                        name="prose_neutrality",
-                        severity="warn",
-                        message=(
-                            f"Shared passage {pid} has no variant routing "
-                            f"for dilemma '{label}' (residue_weight=light)"
-                        ),
-                    )
-                )
-            # cosmetic/none → pass, no check needed
-
-    if not checks:
-        checks.append(
-            ValidationCheck(
-                name="prose_neutrality",
-                severity="pass",
-                message="All shared passages satisfy prose-layer contracts",
-            )
-        )
-
-    return checks
-
-
-def _compute_linear_threshold(graph: Graph) -> int:
-    """Scale max consecutive linear threshold with passage count.
-
-    Larger stories naturally have longer linear stretches between branch
-    points (each dilemma adds ~10 passages). The default of 2 is kept for
-    small stories; larger stories get proportionally wider tolerance.
-    """
-    passage_count = len(graph.get_nodes_by_type("passage"))
-    return max(2, passage_count // 20)
+    checks: list[ValidationCheck] = [
+        check_single_start(graph),
+        check_passage_dag_cycles(graph),
+        check_spine_arc_exists(graph),
+        check_dilemmas_resolved(graph),
+    ]
+    checks.extend(check_dilemma_role_compliance(graph))
+    return ValidationReport(checks=checks)
 
 
 def run_all_checks(graph: Graph) -> ValidationReport:
-    """Run all Phase 10 validation checks and aggregate results.
+    """Run all validation checks (beat-DAG + passage-layer) and aggregate results.
 
-    Returns a ValidationReport containing all structural and timing checks.
+    Combines GROW beat-DAG checks with POLISH passage-layer checks for
+    backward compatibility. Individual stages should prefer
+    ``run_grow_checks()`` or ``run_passage_checks()``.
     """
-    linear_threshold = _compute_linear_threshold(graph)
-    checks: list[ValidationCheck] = [
-        check_single_start(graph),
-        check_all_passages_reachable(graph),
-        check_all_endings_reachable(graph),
-        check_spine_arc_exists(graph),
-        check_arc_divergence(graph),
-        check_dilemmas_resolved(graph),
-        check_gate_satisfiability(graph),
-        check_gate_co_satisfiability(graph),
-        check_passage_dag_cycles(graph),
-        check_max_consecutive_linear(graph, max_run=linear_threshold),
-        check_codeword_gate_coverage(graph),
-        check_forward_path_reachability(graph),
-    ]
-    checks.extend(check_commits_timing(graph))
-    checks.extend(check_dilemma_role_compliance(graph))
-    checks.extend(check_routing_coverage(graph))
-    checks.extend(check_prose_neutrality(graph))
-    return ValidationReport(checks=checks)
+    from questfoundry.graph.polish_validation import run_passage_checks
+
+    grow_report = run_grow_checks(graph)
+    passage_report = run_passage_checks(graph)
+    return ValidationReport(checks=grow_report.checks + passage_report.checks)
+
+
+# ---------------------------------------------------------------------------
+# Backward-compatible lazy re-exports (passage-layer checks moved to
+# polish_validation). Uses __getattr__ to avoid circular import at load time.
+# ---------------------------------------------------------------------------
+
+_MOVED_TO_POLISH = {
+    "check_all_endings_reachable",
+    "check_all_passages_reachable",
+    "check_arc_divergence",
+    "check_codeword_gate_coverage",
+    "check_commits_timing",
+    "check_forward_path_reachability",
+    "check_gate_co_satisfiability",
+    "check_gate_satisfiability",
+    "check_max_consecutive_linear",
+    "check_prose_neutrality",
+    "check_routing_coverage",
+}
+
+# Legacy private name alias (tests import this directly).
+_compute_linear_threshold = compute_linear_threshold
+
+
+def __getattr__(name: str) -> object:
+    """Lazy re-export of passage-layer checks moved to polish_validation."""
+    if name in _MOVED_TO_POLISH:
+        from questfoundry.graph import polish_validation
+
+        return getattr(polish_validation, name)
+    msg = f"module {__name__!r} has no attribute {name!r}"
+    raise AttributeError(msg)
