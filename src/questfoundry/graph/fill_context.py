@@ -1849,6 +1849,99 @@ def format_residue_weight_obligations(graph: Graph, passage_id: str) -> str:
     return "\n".join(lines)
 
 
+def format_shadow_context(graph: Graph, passage_id: str, arc_id: str) -> str:  # noqa: ARG001
+    """Format shadow path context — the paths not taken.
+
+    For each dilemma active in the current arc, identifies which answer
+    was chosen (explored) and which answers remain unchosen (shadows).
+    Provides concise context about what didn't happen so the prose writer
+    can work with awareness of "the road not taken."
+
+    A shadow answer is one connected to a dilemma via ``has_answer`` but
+    NOT linked from any path in the current arc via ``explores``.
+
+    Args:
+        graph: Graph containing dilemma, answer, and path nodes with
+            ``has_answer`` and ``explores`` edges.
+        passage_id: The passage being generated (unused, reserved for
+            future position-aware filtering).
+        arc_id: The arc being traversed.
+
+    Returns:
+        Formatted shadow context, or empty string if no shadows apply.
+    """
+    arc_paths = get_arc_paths(graph, arc_id)
+    if not arc_paths:
+        return ""
+
+    path_nodes = graph.get_nodes_by_type("path")
+
+    # Collect dilemma IDs active in this arc
+    dilemma_ids: set[str] = set()
+    for pid in arc_paths:
+        pdata = path_nodes.get(pid, {})
+        did = pdata.get("dilemma_id", "")
+        if did:
+            from questfoundry.graph.context import normalize_scoped_id
+
+            dilemma_ids.add(normalize_scoped_id(did, "dilemma"))
+
+    if not dilemma_ids:
+        return ""
+
+    # Build explored answer set for this arc's paths
+    explores_edges = graph.get_edges(edge_type="explores")
+    arc_path_set = set(arc_paths)
+    explored_answers: set[str] = set()
+    for edge in explores_edges:
+        if edge["from"] in arc_path_set:
+            explored_answers.add(edge["to"])
+
+    # Build dilemma → answers mapping
+    has_answer_edges = graph.get_edges(edge_type="has_answer")
+    dilemma_answers: dict[str, list[str]] = {}
+    for edge in has_answer_edges:
+        if edge["from"] in dilemma_ids:
+            dilemma_answers.setdefault(edge["from"], []).append(edge["to"])
+
+    # Format shadow answers per dilemma
+    lines: list[str] = []
+    for did in sorted(dilemma_ids):
+        dilemma_node = graph.get_node(did)
+        if not dilemma_node:
+            continue
+        question = dilemma_node.get("question", "")
+        answers = dilemma_answers.get(did, [])
+        shadow_answers = [a for a in answers if a not in explored_answers]
+
+        if not shadow_answers:
+            continue
+
+        dilemma_label = question or strip_scope_prefix(did)
+        shadow_descs: list[str] = []
+        for aid in sorted(shadow_answers):
+            anode = graph.get_node(aid)
+            if anode:
+                desc = anode.get("description", "")
+                raw_id = anode.get("raw_id", strip_scope_prefix(aid))
+                shadow_descs.append(f"- **{raw_id}**: {desc}" if desc else f"- **{raw_id}**")
+
+        if shadow_descs:
+            lines.append(f"**{dilemma_label}** — unchosen path(s):")
+            lines.extend(shadow_descs)
+
+    if not lines:
+        return ""
+
+    header = (
+        "## Shadow Paths (roads not taken)\n\n"
+        "The player did NOT choose these paths. Their absence gives weight "
+        "to what was chosen. Write with awareness of what didn't happen — "
+        "the consequences avoided, the allies unmet, the truths left hidden.\n"
+    )
+    return header + "\n".join(lines)
+
+
 def compute_first_appearances(
     graph: Graph, passage_id: str, arc_passage_ids: list[str]
 ) -> list[str]:
