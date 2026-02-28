@@ -677,16 +677,26 @@ def _make_prose_graph() -> Graph:
     )
     g.add_edge("passage_from", "passage::p1", "beat::b1")
     g.add_edge("passage_from", "passage::p2", "beat::b2")
+
+    # Dilemma + path structure for computed arcs
     g.create_node(
-        "arc::spine_0_0",
+        "dilemma::d1",
+        {"type": "dilemma", "raw_id": "d1"},
+    )
+    g.create_node(
+        "path::main",
         {
-            "type": "arc",
-            "raw_id": "spine_0_0",
-            "arc_type": "spine",
-            "paths": ["path::main"],
-            "sequence": ["beat::b1", "beat::b2"],
+            "type": "path",
+            "raw_id": "main",
+            "dilemma_id": "dilemma::d1",
+            "is_canonical": True,
         },
     )
+    g.add_edge("belongs_to", "beat::b1", "path::main")
+    g.add_edge("belongs_to", "beat::b2", "path::main")
+    g.add_edge("predecessor", "beat::b2", "beat::b1")
+    g.add_edge("grouped_in", "beat::b1", "passage::p1")
+    g.add_edge("grouped_in", "beat::b2", "passage::p2")
     return g
 
 
@@ -788,22 +798,24 @@ class TestGenerationOrder:
         stage = FillStage()
         order = stage._get_generation_order(graph)
         assert len(order) == 2
-        assert order[0] == ("passage::p1", "arc::spine_0_0")
-        assert order[1] == ("passage::p2", "arc::spine_0_0")
+        assert order[0] == ("passage::p1", "main")
+        assert order[1] == ("passage::p2", "main")
 
     def test_skips_already_filled(self) -> None:
         graph = _make_prose_graph()
-        # Add a branch arc that shares p1
+        # Add a non-canonical path to create a branch arc
         graph.create_node(
-            "arc::branch_1_0",
+            "path::alt",
             {
-                "type": "arc",
-                "raw_id": "branch_1_0",
-                "arc_type": "branch",
-                "paths": ["path::alt"],
-                "sequence": ["beat::b1", "beat::b2"],
+                "type": "path",
+                "raw_id": "alt",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
             },
         )
+        # Both beats also belong to the alt path (shared beats)
+        graph.add_edge("belongs_to", "beat::b1", "path::alt")
+        graph.add_edge("belongs_to", "beat::b2", "path::alt")
         # Mark p1 as already having prose
         graph.update_node("passage::p1", prose="Already filled.")
         stage = FillStage()
@@ -1410,16 +1422,23 @@ class TestTwoStepFill:
             },
         )
         graph.add_edge("passage_from", "passage::p1", "beat::b1")
+
+        # Dilemma + path structure for computed arcs
         graph.create_node(
-            "arc::spine_0_0",
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1"},
+        )
+        graph.create_node(
+            "path::main",
             {
-                "type": "arc",
-                "raw_id": "spine_0_0",
-                "arc_type": "spine",
-                "paths": ["path::main"],
-                "sequence": ["beat::b1"],
+                "type": "path",
+                "raw_id": "main",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
+        graph.add_edge("belongs_to", "beat::b1", "path::main")
+        graph.add_edge("grouped_in", "beat::b1", "passage::p1")
 
         stage = FillStage()
         stage._two_step = True
