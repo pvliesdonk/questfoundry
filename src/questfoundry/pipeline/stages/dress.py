@@ -51,7 +51,7 @@ from questfoundry.graph.dress_mutations import (
     apply_dress_illustration,
     validate_dress_codex_entries,
 )
-from questfoundry.graph.fill_context import format_dream_vision, get_spine_arc_id
+from questfoundry.graph.fill_context import format_dream_vision
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.dress import (
@@ -1563,12 +1563,13 @@ def compute_structural_score(graph: Graph, passage_id: str) -> int:
     elif scene_type == "transition":
         score -= 1
 
-    # Check arc position
-    spine_id = get_spine_arc_id(graph)
-    arcs = graph.get_nodes_by_type("arc")
+    # Check arc position using computed arcs
+    from questfoundry.graph.grow_algorithms import enumerate_arcs
 
-    for arc_id, arc_data in arcs.items():
-        sequence = arc_data.get("sequence", [])
+    arcs = enumerate_arcs(graph)
+
+    for arc in arcs:
+        sequence = arc.sequence
         if not sequence or not beat_id:
             continue
 
@@ -1576,7 +1577,7 @@ def compute_structural_score(graph: Graph, passage_id: str) -> int:
             continue
 
         # Spine bonus
-        if arc_id == spine_id:
+        if arc.arc_type == "spine":
             score += 3
 
         # Opening/ending

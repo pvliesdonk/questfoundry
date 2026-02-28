@@ -777,24 +777,40 @@ class TestExtractArtifact:
 def scored_graph() -> Graph:
     """Graph with arcs, beats, and passages for priority scoring tests."""
     g = Graph()
-    # Spine arc with 3 beats
+    # Beats
     g.create_node(
-        "arc::spine",
+        "beat::opening", {"type": "beat", "raw_id": "opening", "scene_type": "establishing"}
+    )
+    g.create_node("beat::climax", {"type": "beat", "raw_id": "climax", "scene_type": "climax"})
+    g.create_node("beat::ending", {"type": "beat", "raw_id": "ending", "scene_type": "resolution"})
+    g.create_node("beat::side", {"type": "beat", "raw_id": "side", "scene_type": "transition"})
+    # Predecessor edges for ordering
+    g.add_edge("predecessor", "beat::climax", "beat::opening")
+    g.add_edge("predecessor", "beat::ending", "beat::climax")
+    # Computed-arc pattern: dilemma + paths + belongs_to
+    g.create_node(
+        "dilemma::d1",
+        {"type": "dilemma", "raw_id": "d1", "paths": ["spine_path", "branch_path"]},
+    )
+    g.create_node(
+        "path::spine_path",
+        {"type": "path", "raw_id": "spine_path", "dilemma_id": "dilemma::d1", "is_canonical": True},
+    )
+    g.create_node(
+        "path::branch_path",
         {
-            "type": "arc",
-            "arc_type": "spine",
-            "sequence": ["beat::opening", "beat::climax", "beat::ending"],
+            "type": "path",
+            "raw_id": "branch_path",
+            "dilemma_id": "dilemma::d1",
+            "is_canonical": False,
         },
     )
-    g.create_node("beat::opening", {"type": "beat", "scene_type": "establishing"})
-    g.create_node("beat::climax", {"type": "beat", "scene_type": "climax"})
-    g.create_node("beat::ending", {"type": "beat", "scene_type": "resolution"})
-    # Branch arc
-    g.create_node(
-        "arc::branch1",
-        {"type": "arc", "arc_type": "branch", "sequence": ["beat::side"]},
-    )
-    g.create_node("beat::side", {"type": "beat", "scene_type": "transition"})
+    # Spine beats belong to spine_path
+    g.add_edge("belongs_to", "beat::opening", "path::spine_path")
+    g.add_edge("belongs_to", "beat::climax", "path::spine_path")
+    g.add_edge("belongs_to", "beat::ending", "path::spine_path")
+    # Branch beat belongs to branch_path
+    g.add_edge("belongs_to", "beat::side", "path::branch_path")
     # Passages
     g.create_node(
         "passage::opening",
@@ -1052,8 +1068,13 @@ class TestPhase1Briefs:
             {"type": "art_direction", "style": "ink", "palette": ["grey"]},
         )
         # High-priority passage: spine arc opening + climax = high score
-        g.create_node("arc::spine", {"type": "arc", "arc_type": "spine", "sequence": ["beat::a"]})
         g.create_node("beat::a", {"type": "beat", "raw_id": "a", "scene_type": "climax"})
+        g.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "paths": ["t1"]})
+        g.create_node(
+            "path::t1",
+            {"type": "path", "raw_id": "t1", "dilemma_id": "dilemma::d1", "is_canonical": True},
+        )
+        g.add_edge("belongs_to", "beat::a", "path::t1")
         g.create_node(
             "passage::important",
             {

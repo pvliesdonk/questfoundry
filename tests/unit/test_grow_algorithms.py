@@ -1079,7 +1079,7 @@ class TestPhase1Integration:
 
 class TestPhase5Integration:
     @pytest.mark.asyncio
-    async def test_phase_5_creates_arc_nodes(self) -> None:
+    async def test_phase_5_does_not_create_arc_nodes(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
@@ -1089,10 +1089,10 @@ class TestPhase5Integration:
 
         assert result.status == "completed"
         arc_nodes = graph.get_nodes_by_type("arc")
-        assert len(arc_nodes) == 2
+        assert len(arc_nodes) == 0
 
     @pytest.mark.asyncio
-    async def test_phase_5_creates_arc_contains_edges(self) -> None:
+    async def test_phase_5_does_not_create_arc_contains_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
@@ -1101,7 +1101,7 @@ class TestPhase5Integration:
         await phase_enumerate_arcs(graph, mock_model)
 
         arc_contains_edges = graph.get_edges(from_id=None, to_id=None, edge_type="arc_contains")
-        assert len(arc_contains_edges) > 0
+        assert len(arc_contains_edges) == 0
 
     @pytest.mark.asyncio
     async def test_phase_5_empty_graph(self) -> None:
@@ -1124,32 +1124,27 @@ class TestPhase6Integration:
         GrowStage()
         mock_model = MagicMock()
 
-        # First run phase 5 to create arcs
+        # First run phase 5 (no longer stores arc nodes)
         await phase_enumerate_arcs(graph, mock_model)
 
-        # Then run phase 6
+        # Then run phase 6 — computes divergence points without graph writes
         result = await phase_divergence(graph, mock_model)
         assert result.status == "completed"
-
-        # Check that branch arc has divergence info
-        arc_nodes = graph.get_nodes_by_type("arc")
-        branch_arcs = {aid: data for aid, data in arc_nodes.items() if data["arc_type"] == "branch"}
-        for _arc_id, arc_data in branch_arcs.items():
-            assert "diverges_from" in arc_data or "diverges_at" in arc_data
+        assert "divergence" in result.detail.lower()
 
     @pytest.mark.asyncio
-    async def test_phase_6_creates_diverges_at_edges(self) -> None:
+    async def test_phase_6_reports_divergence_count(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
         GrowStage()
         mock_model = MagicMock()
         await phase_enumerate_arcs(graph, mock_model)
-        await phase_divergence(graph, mock_model)
+        result = await phase_divergence(graph, mock_model)
 
-        diverges_edges = graph.get_edges(from_id=None, to_id=None, edge_type="diverges_at")
-        # Should have at least one diverges_at edge for the branch
-        assert len(diverges_edges) >= 1
+        # Should report computed divergence points for the branch arc
+        assert result.status == "completed"
+        assert "Computed" in result.detail
 
     @pytest.mark.asyncio
     async def test_phase_6_no_arcs(self) -> None:
@@ -1875,16 +1870,23 @@ class TestComputePassageArcMembership:
 
     def test_basic_membership(self) -> None:
         graph = Graph.empty()
+        # DAG for one spine arc: sequence [beat::a, beat::b]
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
         graph.create_node(
-            "arc::spine",
+            "path::p1",
             {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": [],
-                "sequence": ["beat::a", "beat::b"],
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        graph.add_edge("belongs_to", "beat::a", "path::p1")
+        graph.add_edge("belongs_to", "beat::b", "path::p1")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+
         graph.create_node(
             "passage::p1",
             {
@@ -1904,31 +1906,45 @@ class TestComputePassageArcMembership:
 
         result = compute_passage_arc_membership(graph)
 
-        assert result["passage::p1"] == {"arc::spine"}
-        assert result["passage::p2"] == {"arc::spine"}
+        # Arc ID from enumerate_arcs: "p1" (single path raw_id)
+        assert result["passage::p1"] == {"arc::p1"}
+        assert result["passage::p2"] == {"arc::p1"}
 
     def test_passage_on_multiple_arcs(self) -> None:
         graph = Graph.empty()
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
         graph.create_node(
-            "arc::spine",
+            "path::canon",
             {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": [],
-                "sequence": ["beat::a", "beat::shared"],
+                "type": "path",
+                "raw_id": "canon",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
         graph.create_node(
-            "arc::branch",
+            "path::alt",
             {
-                "type": "arc",
-                "raw_id": "branch",
-                "arc_type": "branch",
-                "paths": [],
-                "sequence": ["beat::a", "beat::x", "beat::shared"],
+                "type": "path",
+                "raw_id": "alt",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
             },
         )
+        # Beats: a (both), shared (both), x (alt only)
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.add_edge("belongs_to", "beat::a", "path::canon")
+        graph.add_edge("belongs_to", "beat::a", "path::alt")
+        graph.create_node("beat::shared", {"type": "beat", "raw_id": "shared"})
+        graph.add_edge("belongs_to", "beat::shared", "path::canon")
+        graph.add_edge("belongs_to", "beat::shared", "path::alt")
+        graph.create_node("beat::x", {"type": "beat", "raw_id": "x"})
+        graph.add_edge("belongs_to", "beat::x", "path::alt")
+        # Ordering
+        graph.add_edge("predecessor", "beat::shared", "beat::a")
+        graph.add_edge("predecessor", "beat::x", "beat::a")
+        graph.add_edge("predecessor", "beat::shared", "beat::x")  # x before shared in branch
+
         graph.create_node(
             "passage::ps",
             {
@@ -1940,7 +1956,8 @@ class TestComputePassageArcMembership:
 
         result = compute_passage_arc_membership(graph)
 
-        assert result["passage::ps"] == {"arc::spine", "arc::branch"}
+        # Spine arc ID: "canon", branch arc ID: "alt"
+        assert result["passage::ps"] == {"arc::canon", "arc::alt"}
 
 
 class TestComputeAllChoiceRequires:
@@ -1950,7 +1967,7 @@ class TestComputeAllChoiceRequires:
     def _make_requires_graph(
         branch_policy: str = "hard",
     ) -> tuple[Graph, dict[str, set[str]]]:
-        """Build a graph with arcs, paths, consequences, and codewords."""
+        """Build a graph with paths, consequences, codewords, and beat DAG."""
         graph = Graph.empty()
 
         # Dilemma
@@ -1971,6 +1988,7 @@ class TestComputeAllChoiceRequires:
                 "type": "path",
                 "raw_id": "p_canon",
                 "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
         graph.create_node(
@@ -1979,6 +1997,7 @@ class TestComputeAllChoiceRequires:
                 "type": "path",
                 "raw_id": "p_alt",
                 "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
             },
         )
 
@@ -2005,31 +2024,25 @@ class TestComputeAllChoiceRequires:
         )
         graph.add_edge("tracks", "codeword::alt_outcome_committed", "consequence::alt_outcome")
 
-        # Arc nodes
-        graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["p_canon"],
-                "sequence": ["beat::a", "beat::b", "beat::end"],
-                "dilemma_role": "soft",
-                "payoff_budget": 0,
-            },
-        )
-        graph.create_node(
-            "arc::branch",
-            {
-                "type": "arc",
-                "raw_id": "branch",
-                "arc_type": "branch",
-                "paths": ["p_alt"],
-                "sequence": ["beat::a", "beat::x", "beat::y"],
-                "dilemma_role": branch_policy,
-                "payoff_budget": 2,
-            },
-        )
+        # Beat nodes with belongs_to edges
+        # a: shared (both paths), b: canon only, end: canon only,
+        # x: alt only, y: alt only
+        for bid, paths in [
+            ("a", ["p_canon", "p_alt"]),
+            ("b", ["p_canon"]),
+            ("end", ["p_canon"]),
+            ("x", ["p_alt"]),
+            ("y", ["p_alt"]),
+        ]:
+            graph.create_node(f"beat::{bid}", {"type": "beat", "raw_id": bid})
+            for p in paths:
+                graph.add_edge("belongs_to", f"beat::{bid}", f"path::{p}")
+
+        # Predecessor edges (ordering)
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::end", "beat::b")
+        graph.add_edge("predecessor", "beat::x", "beat::a")
+        graph.add_edge("predecessor", "beat::y", "beat::x")
 
         # Passages
         graph.create_node(
@@ -2113,32 +2126,41 @@ class TestComputeAllChoiceRequires:
         assert result.get("passage::px", []) == []
 
     def test_no_codewords_returns_empty(self) -> None:
-        """Branch with hard policy but no consequences/codewords → empty requires."""
+        """Branch with hard policy but no consequences/codewords -> empty requires."""
         graph = Graph.empty()
         graph.create_node(
-            "arc::spine",
+            "dilemma::d1",
             {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": [],
-                "sequence": ["beat::a"],
-                "dilemma_role": "soft",
-                "payoff_budget": 0,
-            },
-        )
-        graph.create_node(
-            "arc::branch",
-            {
-                "type": "arc",
-                "raw_id": "branch",
-                "arc_type": "branch",
-                "paths": ["p_alt"],
-                "sequence": ["beat::x"],
+                "type": "dilemma",
+                "raw_id": "d1",
                 "dilemma_role": "hard",
                 "payoff_budget": 2,
             },
         )
+        graph.create_node(
+            "path::canon",
+            {
+                "type": "path",
+                "raw_id": "canon",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::alt",
+            {
+                "type": "path",
+                "raw_id": "alt",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
+            },
+        )
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.add_edge("belongs_to", "beat::a", "path::canon")
+        graph.add_edge("belongs_to", "beat::a", "path::alt")
+        graph.create_node("beat::x", {"type": "beat", "raw_id": "x"})
+        graph.add_edge("belongs_to", "beat::x", "path::alt")
+        graph.add_edge("predecessor", "beat::x", "beat::a")
         graph.create_node(
             "passage::px",
             {
@@ -2151,22 +2173,27 @@ class TestComputeAllChoiceRequires:
         passage_arcs = compute_passage_arc_membership(graph)
         result = compute_all_choice_requires(graph, passage_arcs)
 
-        # No consequences → no codewords → empty
+        # No consequences -> no codewords -> empty
         assert result.get("passage::px", []) == []
 
     def test_no_spine_arc_returns_empty(self) -> None:
-        """No spine arc in graph produces empty requirements."""
+        """No spine arc (all paths non-canonical) produces empty requirements."""
         graph = Graph.empty()
         graph.create_node(
-            "arc::branch_only",
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "hard"},
+        )
+        graph.create_node(
+            "path::p1",
             {
-                "type": "arc",
-                "arc_type": "branch",
-                "paths": ["p1"],
-                "dilemma_role": "hard",
-                "sequence": ["beat::b1"],
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
             },
         )
+        graph.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        graph.add_edge("belongs_to", "beat::b1", "path::p1")
         graph.create_node("passage::p1", {"type": "passage", "from_beat": "beat::b1"})
         passage_arcs = compute_passage_arc_membership(graph)
         result = compute_all_choice_requires(graph, passage_arcs)
@@ -2188,11 +2215,44 @@ class TestComputeAllChoiceRequires:
                 f"dilemma::{d_id}",
                 {"type": "dilemma", "raw_id": d_id, "dilemma_role": "hard"},
             )
-        for p_id in ("d1_a", "d1_b", "d2_a", "d2_b"):
-            graph.create_node(
-                f"path::{p_id}",
-                {"type": "path", "raw_id": p_id},
-            )
+        # d1 paths
+        graph.create_node(
+            "path::d1_a",
+            {
+                "type": "path",
+                "raw_id": "d1_a",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::d1_b",
+            {
+                "type": "path",
+                "raw_id": "d1_b",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
+            },
+        )
+        # d2 paths
+        graph.create_node(
+            "path::d2_a",
+            {
+                "type": "path",
+                "raw_id": "d2_a",
+                "dilemma_id": "dilemma::d2",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::d2_b",
+            {
+                "type": "path",
+                "raw_id": "d2_b",
+                "dilemma_id": "dilemma::d2",
+                "is_canonical": False,
+            },
+        )
 
         # Consequences + codewords for each non-spine path
         for p_id in ("d1_b", "d2_b"):
@@ -2203,56 +2263,30 @@ class TestComputeAllChoiceRequires:
             graph.create_node(cw_id, {"type": "codeword", "raw_id": f"{p_id}_cw"})
             graph.add_edge("tracks", cw_id, cons_id)
 
-        # Spine: [d1_a, d2_a]
-        graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "arc_type": "spine",
-                "paths": ["d1_a", "d2_a"],
-                "sequence": ["beat::shared"],
-                "dilemma_role": "soft",
-                "payoff_budget": 0,
-            },
-        )
-        # Branch 1: [d1_b, d2_b] — both off-spine
-        graph.create_node(
-            "arc::branch_bb",
-            {
-                "type": "arc",
-                "arc_type": "branch",
-                "paths": ["d1_b", "d2_b"],
-                "sequence": ["beat::x"],
-                "dilemma_role": "hard",
-                "payoff_budget": 2,
-            },
-        )
-        # Branch 2: [d1_a, d2_b] — only d2_b off-spine
-        graph.create_node(
-            "arc::branch_ab",
-            {
-                "type": "arc",
-                "arc_type": "branch",
-                "paths": ["d1_a", "d2_b"],
-                "sequence": ["beat::x"],
-                "dilemma_role": "hard",
-                "payoff_budget": 2,
-            },
-        )
+        # Beat DAG: shared (all paths), x (d1_b only — appears on arcs
+        # d1_b+d2_a and d1_b+d2_b, both requiring d1_b_cw)
+        graph.create_node("beat::shared", {"type": "beat", "raw_id": "shared"})
+        for p in ["d1_a", "d1_b", "d2_a", "d2_b"]:
+            graph.add_edge("belongs_to", "beat::shared", f"path::{p}")
+        graph.create_node("beat::x", {"type": "beat", "raw_id": "x"})
+        graph.add_edge("belongs_to", "beat::x", "path::d1_b")
+        graph.add_edge("predecessor", "beat::x", "beat::shared")
 
-        # passage::x on both branch arcs
+        # passage::x on branch beat only
         graph.create_node("passage::x", {"type": "passage", "from_beat": "beat::x"})
-        passage_arcs: dict[str, set[str]] = {
-            "passage::x": {"arc::branch_bb", "arc::branch_ab"},
-        }
+
+        passage_arcs = compute_passage_arc_membership(graph)
 
         result = compute_all_choice_requires(graph, passage_arcs)
 
-        # branch_bb exclusive codewords: {d1_b_cw, d2_b_cw}
-        # branch_ab exclusive codewords: {d2_b_cw}
-        # Intersection: {d2_b_cw}
+        # Arc IDs from enumerate_arcs (sorted path raw_ids joined by +):
+        #   spine: "d1_a+d2_a", branches: "d1_a+d2_b", "d1_b+d2_a", "d1_b+d2_b"
+        # beat::x belongs to d1_b only, so passage::x is on:
+        #   "d1_b+d2_a" (exclusive={d1_b}) → codewords={d1_b_cw}
+        #   "d1_b+d2_b" (exclusive={d1_b, d2_b}) → codewords={d1_b_cw, d2_b_cw}
+        # Intersection: {d1_b_cw}
         assert "passage::x" in result
-        assert result["passage::x"] == ["codeword::d2_b_cw"]
+        assert set(result["passage::x"]) == {"codeword::d1_b_cw"}
 
 
 # ---------------------------------------------------------------------------
@@ -2359,23 +2393,22 @@ class TestPhase7Integration:
         assert result.status == "completed"
 
     @pytest.mark.asyncio
-    async def test_phase_7_creates_converges_at_edges(self) -> None:
+    async def test_phase_7_reports_convergence_metadata(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
         # Set budget=1 so per-dilemma convergence can be met
-        # (each dilemma has exactly 1 exclusive beat in the fixture)
         graph.update_node("dilemma::mentor_trust", dilemma_role="soft", payoff_budget=1)
         graph.update_node("dilemma::artifact_quest", dilemma_role="soft", payoff_budget=1)
         GrowStage()
         mock_model = MagicMock()
         await phase_enumerate_arcs(graph, mock_model)
         await phase_divergence(graph, mock_model)
-        await phase_convergence(graph, mock_model)
+        result = await phase_convergence(graph, mock_model)
 
-        converges_edges = graph.get_edges(from_id=None, to_id=None, edge_type="converges_at")
-        # Two-dilemma graph: branches converge at finale
-        assert len(converges_edges) >= 1
+        # Phase 7 computes convergence metadata without graph writes
+        assert result.status == "completed"
+        assert "convergence" in result.detail.lower()
 
     @pytest.mark.asyncio
     async def test_phase_7_no_arcs(self) -> None:
@@ -2389,7 +2422,7 @@ class TestPhase7Integration:
         assert "No arcs" in result.detail
 
     @pytest.mark.asyncio
-    async def test_phase_7_updates_arc_nodes(self) -> None:
+    async def test_phase_7_completes_convergence(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
@@ -2400,14 +2433,8 @@ class TestPhase7Integration:
         mock_model = MagicMock()
         await phase_enumerate_arcs(graph, mock_model)
         await phase_divergence(graph, mock_model)
-        await phase_convergence(graph, mock_model)
-
-        arc_nodes = graph.get_nodes_by_type("arc")
-        # Check that at least some branch arcs have convergence data
-        converging_arcs = [
-            data for data in arc_nodes.values() if data.get("converges_at") is not None
-        ]
-        assert len(converging_arcs) >= 1
+        result = await phase_convergence(graph, mock_model)
+        assert result.status == "completed"
 
 
 class TestPhase8aIntegration:
@@ -2661,21 +2688,22 @@ class TestPhase11Integration:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
-        # Create spine arc with 2 beats
+        # DAG for spine arc so prune can find BFS start
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
         graph.create_node(
-            "arc::spine",
+            "path::p1",
             {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b"],
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
-        graph.add_edge("arc_contains", "arc::spine", "beat::a")
-        graph.add_edge("arc_contains", "arc::spine", "beat::b")
+        graph.add_edge("belongs_to", "beat::a", "path::p1")
+        graph.add_edge("belongs_to", "beat::b", "path::p1")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
 
         # Create passages
         graph.create_node(
@@ -3614,7 +3642,7 @@ class TestPhaseIntegrationEndToEnd:
         saved_graph = Graph.load(tmp_path)
 
         # Verify node types exist
-        assert len(saved_graph.get_nodes_by_type("arc")) == 4
+        assert len(saved_graph.get_nodes_by_type("arc")) == 0
         assert (
             len(saved_graph.get_nodes_by_type("passage")) >= 8
         )  # 8 base passages (variants depend on choice wiring)
@@ -3642,7 +3670,7 @@ class TestPhaseIntegrationEndToEnd:
 
         # Verify edge types exist
         arc_contains = saved_graph.get_edges(from_id=None, to_id=None, edge_type="arc_contains")
-        assert len(arc_contains) > 0
+        assert len(arc_contains) == 0
 
         passage_from = saved_graph.get_edges(from_id=None, to_id=None, edge_type="passage_from")
         assert len(passage_from) > 0
@@ -4192,19 +4220,21 @@ class TestFindPassageSuccessors:
         from questfoundry.graph.grow_algorithms import find_passage_successors
 
         graph = Graph.empty()
-        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
-        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
-        graph.create_node("beat::c", {"type": "beat", "raw_id": "c"})
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
         graph.create_node(
-            "arc::spine",
+            "path::p1",
             {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b", "beat::c"],
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
+        for bid in ["a", "b", "c"]:
+            graph.create_node(f"beat::{bid}", {"type": "beat", "raw_id": bid})
+            graph.add_edge("belongs_to", f"beat::{bid}", "path::p1")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::b")
         for bid in ["a", "b", "c"]:
             graph.create_node(
                 f"passage::{bid}",
@@ -4229,29 +4259,35 @@ class TestFindPassageSuccessors:
         from questfoundry.graph.grow_algorithms import find_passage_successors
 
         graph = Graph.empty()
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::canon",
+            {
+                "type": "path",
+                "raw_id": "canon",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::alt",
+            {
+                "type": "path",
+                "raw_id": "alt",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
+            },
+        )
+        # a: shared, b: canon only, c: alt only
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.add_edge("belongs_to", "beat::a", "path::canon")
+        graph.add_edge("belongs_to", "beat::a", "path::alt")
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        graph.add_edge("belongs_to", "beat::b", "path::canon")
         graph.create_node("beat::c", {"type": "beat", "raw_id": "c"})
-        graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b"],
-            },
-        )
-        graph.create_node(
-            "arc::branch",
-            {
-                "type": "arc",
-                "raw_id": "branch",
-                "arc_type": "branch",
-                "paths": ["t2"],
-                "sequence": ["beat::a", "beat::c"],
-            },
-        )
+        graph.add_edge("belongs_to", "beat::c", "path::alt")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::a")
         for bid in ["a", "b", "c"]:
             graph.create_node(
                 f"passage::{bid}",
@@ -4270,29 +4306,33 @@ class TestFindPassageSuccessors:
         from questfoundry.graph.grow_algorithms import find_passage_successors
 
         graph = Graph.empty()
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::canon",
+            {
+                "type": "path",
+                "raw_id": "canon",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::alt",
+            {
+                "type": "path",
+                "raw_id": "alt",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
+            },
+        )
+        # Both paths share beats a and b (same sequence in both arcs)
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.add_edge("belongs_to", "beat::a", "path::canon")
+        graph.add_edge("belongs_to", "beat::a", "path::alt")
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
-        # Two arcs with same sequence
-        graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b"],
-            },
-        )
-        graph.create_node(
-            "arc::branch",
-            {
-                "type": "arc",
-                "raw_id": "branch",
-                "arc_type": "branch",
-                "paths": ["t2"],
-                "sequence": ["beat::a", "beat::b"],
-            },
-        )
+        graph.add_edge("belongs_to", "beat::b", "path::canon")
+        graph.add_edge("belongs_to", "beat::b", "path::alt")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
         for bid in ["a", "b"]:
             graph.create_node(
                 f"passage::{bid}",
@@ -4309,21 +4349,24 @@ class TestFindPassageSuccessors:
         from questfoundry.graph.grow_algorithms import find_passage_successors
 
         graph = Graph.empty()
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::p1",
+            {
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
+            },
+        )
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        graph.add_edge("belongs_to", "beat::a", "path::p1")
+        graph.add_edge("belongs_to", "beat::b", "path::p1")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
         graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
         graph.add_edge("grants", "beat::b", "codeword::cw1")
 
-        graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b"],
-            },
-        )
         for bid in ["a", "b"]:
             graph.create_node(
                 f"passage::{bid}",
@@ -4340,24 +4383,27 @@ class TestFindPassageSuccessors:
         from questfoundry.graph.grow_algorithms import find_passage_successors
 
         graph = Graph.empty()
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::p1",
+            {
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
+            },
+        )
         for bid in ["a", "b", "c"]:
             graph.create_node(f"beat::{bid}", {"type": "beat", "raw_id": bid})
+            graph.add_edge("belongs_to", f"beat::{bid}", "path::p1")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::b")
 
         graph.create_node("codeword::cw_b", {"type": "codeword", "raw_id": "cw_b"})
         graph.add_edge("grants", "beat::b", "codeword::cw_b")
         graph.create_node("codeword::cw_c", {"type": "codeword", "raw_id": "cw_c"})
         graph.add_edge("grants", "beat::c", "codeword::cw_c")
 
-        graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b", "beat::c"],
-            },
-        )
         for bid in ["a", "b", "c"]:
             graph.create_node(
                 f"passage::{bid}",
@@ -4391,17 +4437,18 @@ class TestFindPassageSuccessors:
         from questfoundry.graph.grow_algorithms import find_passage_successors
 
         graph = Graph.empty()
-        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
         graph.create_node(
-            "arc::tiny",
+            "path::p1",
             {
-                "type": "arc",
-                "raw_id": "tiny",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a"],
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.add_edge("belongs_to", "beat::a", "path::p1")
         graph.create_node("passage::a", {"type": "passage", "raw_id": "a", "from_beat": "beat::a"})
 
         assert find_passage_successors(graph) == {}
@@ -4411,10 +4458,24 @@ class TestFindPassageSuccessors:
         from questfoundry.graph.grow_algorithms import find_passage_successors
 
         graph = Graph.empty()
-        # Arc: beat::a → beat::mid (no passage) → beat::b
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node(
+            "path::p1",
+            {
+                "type": "path",
+                "raw_id": "p1",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
+            },
+        )
+        # Arc: beat::a -> beat::mid (no passage) -> beat::b
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
         graph.create_node("beat::mid", {"type": "beat", "raw_id": "mid"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        for bid in ["a", "mid", "b"]:
+            graph.add_edge("belongs_to", f"beat::{bid}", "path::p1")
+        graph.add_edge("predecessor", "beat::mid", "beat::a")
+        graph.add_edge("predecessor", "beat::b", "beat::mid")
 
         # beat::mid grants a codeword
         graph.create_node("codeword::mid_cw", {"type": "codeword", "raw_id": "mid_cw"})
@@ -4424,23 +4485,13 @@ class TestFindPassageSuccessors:
         graph.create_node("codeword::b_cw", {"type": "codeword", "raw_id": "b_cw"})
         graph.add_edge("grants", "beat::b", "codeword::b_cw")
 
-        graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::mid", "beat::b"],
-            },
-        )
         # Only a and b have passages (mid is skipped)
         graph.create_node("passage::a", {"type": "passage", "raw_id": "a", "from_beat": "beat::a"})
         graph.create_node("passage::b", {"type": "passage", "raw_id": "b", "from_beat": "beat::b"})
 
         result = find_passage_successors(graph)
 
-        # passage::a → passage::b (skipping beat::mid which has no passage)
+        # passage::a -> passage::b (skipping beat::mid which has no passage)
         assert "passage::a" in result
         assert len(result["passage::a"]) == 1
         assert result["passage::a"][0].to_passage == "passage::b"
@@ -5832,36 +5883,18 @@ class TestFindResidueCandidates:
                 },
             )
 
-        # Arcs with convergence metadata
-        graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["d1__yes"],
-                "sequence": ["beat::opening", "beat::commits_yes", "beat::converge"],
-            },
-        )
-        graph.create_node(
-            "arc::branch",
-            {
-                "type": "arc",
-                "raw_id": "branch",
-                "arc_type": "branch",
-                "paths": ["d1__no"],
-                "sequence": ["beat::opening", "beat::commits_no", "beat::converge"],
-                "dilemma_role": policy,
-                "dilemma_convergences": [
-                    {
-                        "dilemma_id": "dilemma::d1",
-                        "policy": policy,
-                        "budget": 3,
-                        "converges_at": "beat::converge",
-                    }
-                ],
-            },
-        )
+        # Predecessor edges for beat ordering
+        graph.add_edge("predecessor", "beat::commits_yes", "beat::opening")
+        graph.add_edge("predecessor", "beat::commits_no", "beat::opening")
+        graph.add_edge("predecessor", "beat::converge", "beat::commits_yes")
+        graph.add_edge("predecessor", "beat::converge", "beat::commits_no")
+
+        # Set dilemma_role on the dilemma node so convergence metadata
+        # is computed correctly by enumerate_arcs + find_convergence_points
+        # payoff_budget=1: branch has only 1 exclusive beat (commits_yes/no)
+        # before the shared convergence beat (converge)
+        graph.update_node("dilemma::d1", dilemma_role=policy, payoff_budget=1)
+
         return graph
 
     def test_soft_dilemma_found(self) -> None:
@@ -5891,29 +5924,12 @@ class TestFindResidueCandidates:
         assert candidates == []
 
     def test_dedup_by_passage_and_dilemma(self) -> None:
-        """Multiple arcs converging at the same passage for the same dilemma produce one candidate."""
+        """Computed arcs converging at the same passage for the same dilemma produce one candidate."""
         from questfoundry.graph.grow_algorithms import find_residue_candidates
 
         graph = self._make_convergence_graph(policy="soft")
-        # Add a second branch arc converging at the same beat for the same dilemma
-        graph.create_node(
-            "arc::branch2",
-            {
-                "type": "arc",
-                "raw_id": "branch2",
-                "arc_type": "branch",
-                "paths": ["d1__no"],
-                "sequence": ["beat::opening", "beat::commits_no", "beat::converge"],
-                "dilemma_convergences": [
-                    {
-                        "dilemma_id": "dilemma::d1",
-                        "policy": "soft",
-                        "budget": 3,
-                        "converges_at": "beat::converge",
-                    }
-                ],
-            },
-        )
+        # With 1 dilemma x 2 paths, enumerate_arcs produces spine + branch.
+        # The branch converges at beat::converge -> only 1 candidate (deduped).
         candidates = find_residue_candidates(graph)
         assert len(candidates) == 1  # Deduped
 
