@@ -1794,20 +1794,15 @@ class TestPhase9Choices:
         graph.add_edge("predecessor", "beat::b", "beat::a")
         graph.add_edge("predecessor", "beat::c", "beat::b")
 
-        # Create arc with sequence
+        # Computed-arc pattern: dilemma + path + belongs_to
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "paths": ["t1"]})
         graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b", "beat::c"],
-            },
+            "path::t1",
+            {"type": "path", "raw_id": "t1", "dilemma_id": "dilemma::d1", "is_canonical": True},
         )
-        graph.add_edge("arc_contains", "arc::spine", "beat::a")
-        graph.add_edge("arc_contains", "arc::spine", "beat::b")
-        graph.add_edge("arc_contains", "arc::spine", "beat::c")
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+        graph.add_edge("belongs_to", "beat::c", "path::t1")
 
         # Create passages
         for bid in ["a", "b", "c"]:
@@ -1873,18 +1868,14 @@ class TestPhase9Choices:
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "End"})
         graph.add_edge("predecessor", "beat::b", "beat::a")
 
+        # Computed-arc pattern: dilemma + path + belongs_to
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "paths": ["t1"]})
         graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b"],
-            },
+            "path::t1",
+            {"type": "path", "raw_id": "t1", "dilemma_id": "dilemma::d1", "is_canonical": True},
         )
-        graph.add_edge("arc_contains", "arc::spine", "beat::a")
-        graph.add_edge("arc_contains", "arc::spine", "beat::b")
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
 
         for bid in ["a", "b"]:
             graph.create_node(
@@ -1918,16 +1909,20 @@ class TestPhase9Choices:
         for bid in ["a", "b", "c", "d", "e"]:
             graph.create_node(f"beat::{bid}", {"type": "beat", "raw_id": bid, "summary": bid})
 
+        # Predecessor edges for ordering
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::b")
+        graph.add_edge("predecessor", "beat::d", "beat::c")
+        graph.add_edge("predecessor", "beat::e", "beat::d")
+
+        # Computed-arc pattern: dilemma + path + belongs_to
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "paths": ["t1"]})
         graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b", "beat::c", "beat::d", "beat::e"],
-            },
+            "path::t1",
+            {"type": "path", "raw_id": "t1", "dilemma_id": "dilemma::d1", "is_canonical": True},
         )
+        for bid in ["a", "b", "c", "d", "e"]:
+            graph.add_edge("belongs_to", f"beat::{bid}", "path::t1")
 
         for bid in ["a", "b", "c", "d", "e"]:
             graph.create_node(
@@ -1968,28 +1963,37 @@ class TestPhase9Choices:
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Opening"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Trust mentor"})
         graph.create_node("beat::c", {"type": "beat", "raw_id": "c", "summary": "Reject mentor"})
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::a")
 
-        # Two arcs diverging at 'a'
+        # Computed-arc pattern: dilemma with two paths diverging at 'a'
         graph.create_node(
-            "arc::spine",
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "paths": ["t1_canon", "t1_alt"]},
+        )
+        graph.create_node(
+            "path::t1_canon",
             {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1_canon"],
-                "sequence": ["beat::a", "beat::b"],
+                "type": "path",
+                "raw_id": "t1_canon",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
         graph.create_node(
-            "arc::branch",
+            "path::t1_alt",
             {
-                "type": "arc",
-                "raw_id": "branch",
-                "arc_type": "branch",
-                "paths": ["t1_alt"],
-                "sequence": ["beat::a", "beat::c"],
+                "type": "path",
+                "raw_id": "t1_alt",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
             },
         )
+        # Shared beat 'a' belongs to both paths; b only to canon, c only to alt
+        graph.add_edge("belongs_to", "beat::a", "path::t1_canon")
+        graph.add_edge("belongs_to", "beat::a", "path::t1_alt")
+        graph.add_edge("belongs_to", "beat::b", "path::t1_canon")
+        graph.add_edge("belongs_to", "beat::c", "path::t1_alt")
 
         # Create passages
         for bid in ["a", "b", "c"]:
@@ -2083,27 +2087,26 @@ class TestPhase9Choices:
         graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Fork"})
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Left"})
         graph.create_node("beat::c", {"type": "beat", "raw_id": "c", "summary": "Right"})
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::a")
 
+        # Computed-arc pattern: dilemma with two paths
         graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b"],
-            },
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "paths": ["t1", "t2"]},
         )
         graph.create_node(
-            "arc::branch",
-            {
-                "type": "arc",
-                "raw_id": "branch",
-                "arc_type": "branch",
-                "paths": ["t2"],
-                "sequence": ["beat::a", "beat::c"],
-            },
+            "path::t1",
+            {"type": "path", "raw_id": "t1", "dilemma_id": "dilemma::d1", "is_canonical": True},
         )
+        graph.create_node(
+            "path::t2",
+            {"type": "path", "raw_id": "t2", "dilemma_id": "dilemma::d1", "is_canonical": False},
+        )
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::a", "path::t2")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+        graph.add_edge("belongs_to", "beat::c", "path::t2")
 
         for bid in ["a", "b", "c"]:
             graph.create_node(
@@ -2148,16 +2151,14 @@ class TestPhase9Choices:
         )
         graph.add_edge("grants", "beat::b", "codeword::cw1")
 
+        # Computed-arc pattern: dilemma + path + belongs_to
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "paths": ["t1"]})
         graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1"],
-                "sequence": ["beat::a", "beat::b"],
-            },
+            "path::t1",
+            {"type": "path", "raw_id": "t1", "dilemma_id": "dilemma::d1", "is_canonical": True},
         )
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
 
         for bid in ["a", "b"]:
             graph.create_node(
@@ -2218,29 +2219,33 @@ class TestPhase9Choices:
         graph.add_edge("predecessor", "beat::path1_end", "beat::path1_start")
         graph.add_edge("predecessor", "beat::path2_end", "beat::path2_start")
 
-        # Arc 1: path1_start → path1_end
+        # Computed-arc pattern: dilemma with two paths (different starts)
         graph.create_node(
-            "arc::spine",
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "paths": ["t1_canon", "t1_alt"]},
+        )
+        graph.create_node(
+            "path::t1_canon",
             {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["t1_canon"],
-                "sequence": ["beat::path1_start", "beat::path1_end"],
+                "type": "path",
+                "raw_id": "t1_canon",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
-
-        # Arc 2: path2_start → path2_end (different start!)
         graph.create_node(
-            "arc::branch",
+            "path::t1_alt",
             {
-                "type": "arc",
-                "raw_id": "branch",
-                "arc_type": "branch",
-                "paths": ["t1_alt"],
-                "sequence": ["beat::path2_start", "beat::path2_end"],
+                "type": "path",
+                "raw_id": "t1_alt",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
             },
         )
+        graph.add_edge("belongs_to", "beat::path1_start", "path::t1_canon")
+        graph.add_edge("belongs_to", "beat::path1_end", "path::t1_canon")
+        graph.add_edge("belongs_to", "beat::path2_start", "path::t1_alt")
+        graph.add_edge("belongs_to", "beat::path2_end", "path::t1_alt")
 
         # Create passages for all beats
         for bid in ["path1_start", "path1_end", "path2_start", "path2_end"]:
@@ -2626,13 +2631,38 @@ class TestPhase9ErrorHandling:
 
         graph = Graph.empty()
         # Build a graph with multi-successor passages
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "Start"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Path B"})
+        graph.create_node("beat::c", {"type": "beat", "raw_id": "c", "summary": "Path C"})
+        graph.create_node("beat::d", {"type": "beat", "raw_id": "d", "summary": "Path D"})
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+        graph.add_edge("predecessor", "beat::c", "beat::b")
+        graph.add_edge("predecessor", "beat::d", "beat::a")
+
+        # Computed-arc pattern: dilemma with two paths
         graph.create_node(
-            "arc::spine",
-            {"type": "arc", "arc_type": "spine", "sequence": ["beat::a", "beat::b", "beat::c"]},
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "paths": ["t1", "t1_alt"]},
         )
         graph.create_node(
-            "arc::alt", {"type": "arc", "arc_type": "branch", "sequence": ["beat::a", "beat::d"]}
+            "path::t1",
+            {"type": "path", "raw_id": "t1", "dilemma_id": "dilemma::d1", "is_canonical": True},
         )
+        graph.create_node(
+            "path::t1_alt",
+            {
+                "type": "path",
+                "raw_id": "t1_alt",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
+            },
+        )
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+        graph.add_edge("belongs_to", "beat::a", "path::t1_alt")
+        graph.add_edge("belongs_to", "beat::b", "path::t1")
+        graph.add_edge("belongs_to", "beat::c", "path::t1")
+        graph.add_edge("belongs_to", "beat::d", "path::t1_alt")
+
         graph.create_node(
             "passage::a", {"type": "passage", "from_beat": "beat::a", "summary": "Start"}
         )
@@ -2645,12 +2675,6 @@ class TestPhase9ErrorHandling:
         graph.create_node(
             "passage::d", {"type": "passage", "from_beat": "beat::d", "summary": "Path D"}
         )
-        # Arc contains edges
-        graph.add_edge("arc_contains", "arc::spine", "passage::a")
-        graph.add_edge("arc_contains", "arc::spine", "passage::b")
-        graph.add_edge("arc_contains", "arc::spine", "passage::c")
-        graph.add_edge("arc_contains", "arc::alt", "passage::a")
-        graph.add_edge("arc_contains", "arc::alt", "passage::d")
 
         stage = GrowStage()
         mock_model = MagicMock()
@@ -3418,19 +3442,31 @@ class TestPhase8dResidueBeats:
                 "type": "dilemma",
                 "raw_id": "approach",
                 "question": "Fight or negotiate?",
-                "dilemma_type": "soft",
+                "dilemma_role": "soft",
+                "payoff_budget": 0,
+            },
+        )
+        graph.create_node(
+            "path::fight",
+            {
+                "type": "path",
+                "raw_id": "fight",
+                "name": "Fight",
+                "dilemma_id": "dilemma::approach",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::talk",
+            {
+                "type": "path",
+                "raw_id": "talk",
+                "name": "Negotiate",
+                "dilemma_id": "dilemma::approach",
+                "is_canonical": False,
             },
         )
         for suffix, name in [("fight", "Fight"), ("talk", "Negotiate")]:
-            graph.create_node(
-                f"path::{suffix}",
-                {
-                    "type": "path",
-                    "raw_id": suffix,
-                    "name": name,
-                    "dilemma_id": "dilemma::approach",
-                },
-            )
             graph.create_node(
                 f"consequence::{suffix}_result",
                 {
@@ -3449,11 +3485,40 @@ class TestPhase8dResidueBeats:
                     "codeword_type": "granted",
                 },
             )
-        # Beat and passage at convergence
+
+        # Beats: shared start → exclusive beats → shared aftermath (convergence)
+        graph.create_node(
+            "beat::start",
+            {"type": "beat", "raw_id": "start", "summary": "The confrontation begins"},
+        )
+        graph.create_node(
+            "beat::fight_action",
+            {"type": "beat", "raw_id": "fight_action", "summary": "Fists fly"},
+        )
+        graph.create_node(
+            "beat::talk_action",
+            {"type": "beat", "raw_id": "talk_action", "summary": "Words are exchanged"},
+        )
         graph.create_node(
             "beat::aftermath",
             {"type": "beat", "raw_id": "aftermath", "summary": "The dust settles"},
         )
+
+        # Predecessor edges for ordering
+        graph.add_edge("predecessor", "beat::fight_action", "beat::start")
+        graph.add_edge("predecessor", "beat::talk_action", "beat::start")
+        graph.add_edge("predecessor", "beat::aftermath", "beat::fight_action")
+        graph.add_edge("predecessor", "beat::aftermath", "beat::talk_action")
+
+        # belongs_to: shared beats on both paths, exclusive beats on their path
+        graph.add_edge("belongs_to", "beat::start", "path::fight")
+        graph.add_edge("belongs_to", "beat::start", "path::talk")
+        graph.add_edge("belongs_to", "beat::fight_action", "path::fight")
+        graph.add_edge("belongs_to", "beat::talk_action", "path::talk")
+        graph.add_edge("belongs_to", "beat::aftermath", "path::fight")
+        graph.add_edge("belongs_to", "beat::aftermath", "path::talk")
+
+        # Passage at convergence
         graph.create_node(
             "passage::aftermath",
             {
@@ -3461,23 +3526,6 @@ class TestPhase8dResidueBeats:
                 "raw_id": "aftermath",
                 "summary": "The dust settles after the confrontation",
                 "from_beat": "beat::aftermath",
-            },
-        )
-        # Arc with convergence metadata
-        graph.create_node(
-            "arc::spine",
-            {
-                "type": "arc",
-                "raw_id": "spine",
-                "arc_type": "spine",
-                "paths": ["path::fight", "path::talk"],
-                "dilemma_convergences": [
-                    {
-                        "dilemma_id": "dilemma::approach",
-                        "policy": "soft",
-                        "converges_at": "beat::aftermath",
-                    },
-                ],
             },
         )
         return graph
