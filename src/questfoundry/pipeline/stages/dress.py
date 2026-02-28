@@ -36,7 +36,7 @@ from questfoundry.agents import (
 from questfoundry.agents.serialize import extract_tokens
 from questfoundry.artifacts.validator import get_all_field_paths
 from questfoundry.export.i18n import get_output_language_instruction
-from questfoundry.graph.context import ENTITY_CATEGORIES, strip_scope_prefix
+from questfoundry.graph.context import ENTITY_CATEGORIES, get_primary_beat, strip_scope_prefix
 from questfoundry.graph.dress_context import (
     format_all_entity_visuals,
     format_art_direction_context,
@@ -1554,7 +1554,7 @@ def compute_structural_score(graph: Graph, passage_id: str) -> int:
         return score
 
     # Get beat metadata
-    beat_id = passage.get("from_beat", "")
+    beat_id = get_primary_beat(graph, passage_id) or ""
     beat = graph.get_node(beat_id) if beat_id else None
     scene_type = beat.get("scene_type", "") if beat else ""
 

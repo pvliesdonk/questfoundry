@@ -36,10 +36,12 @@ def _make_linear_passage_graph() -> Graph:
     """Create a minimal linear passage graph: p1 -> p2 -> p3 (via choices)."""
     graph = Graph.empty()
     for pid in ["p1", "p2", "p3"]:
+        graph.create_node(f"beat::{pid}", {"type": "beat", "raw_id": pid})
         graph.create_node(
             f"passage::{pid}",
             {"type": "passage", "raw_id": pid, "from_beat": f"beat::{pid}", "summary": pid},
         )
+        graph.add_edge("grouped_in", f"beat::{pid}", f"passage::{pid}")
 
     # Choices: p1->p2, p2->p3
     graph.create_node(
@@ -143,6 +145,7 @@ def _make_chain_graph(passage_ids: list[str], beat_data: dict[str, dict] | None 
         if beat_data and pid in beat_data:
             bdata.update(beat_data[pid])
         graph.create_node(f"beat::{pid}", bdata)
+        graph.add_edge("grouped_in", f"beat::{pid}", f"passage::{pid}")
 
     for i in range(len(passage_ids) - 1):
         from_p = passage_ids[i]
@@ -180,11 +183,13 @@ def _make_routing_graph(
     """
     graph = Graph.empty()
 
-    # Source passage
+    # Source passage and its beat
+    graph.create_node(beat, {"type": "beat", "raw_id": beat.split("::")[-1]})
     graph.create_node(
         "passage::hub",
         {"type": "passage", "raw_id": "hub", "from_beat": beat, "summary": "hub"},
     )
+    graph.add_edge("grouped_in", beat, "passage::hub")
 
     # Collect all unique paths across arcs
     all_paths: set[str] = set()
@@ -282,10 +287,12 @@ def _make_shared_passage_graph(
         {"type": "path", "raw_id": "p2", "dilemma_id": "dilemma::d1"},
     )
 
+    graph.create_node("beat::shared", {"type": "beat", "raw_id": "shared"})
     graph.create_node(
         "passage::shared",
         {"type": "passage", "raw_id": "shared", "from_beat": "beat::shared", "summary": "shared"},
     )
+    graph.add_edge("grouped_in", "beat::shared", "passage::shared")
 
     # Two arcs covering the same beat
     graph.create_node(
@@ -943,6 +950,10 @@ class TestMaxConsecutiveLinear:
             primary_beat="beat::b1",
             merged_from=["passage::orig_b1", "passage::orig_b2", "passage::orig_b3"],
         )
+        # Add grouped_in edges for each merged beat (overrides the single one from _make_chain_graph)
+        for extra_beat in ["beat::b1", "beat::b2", "beat::b3"]:
+            graph.create_node(extra_beat, {"type": "beat"})
+            graph.add_edge("grouped_in", extra_beat, "passage::b")
         # a->b(merged)->c->d: b is exempt, so runs are [a] and [c] only
         result = check_max_consecutive_linear(graph, max_run=2)
         assert result.severity == "pass"
@@ -1714,6 +1725,7 @@ class TestCheckProseNeutrality:
             {"type": "path", "raw_id": "q2", "dilemma_id": "dilemma::d2"},
         )
 
+        graph.create_node("beat::shared", {"type": "beat", "raw_id": "shared"})
         graph.create_node(
             "passage::shared",
             {
@@ -1723,6 +1735,7 @@ class TestCheckProseNeutrality:
                 "summary": "shared",
             },
         )
+        graph.add_edge("grouped_in", "beat::shared", "passage::shared")
 
         # arc a1: p1 (d1) + q1 (d2)
         graph.create_node(

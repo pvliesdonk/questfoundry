@@ -549,20 +549,19 @@ def format_spoke_context(graph: Graph, hub_passage_id: str) -> str:
     return "\n".join(lines)
 
 
-def is_merged_passage(passage: dict[str, object]) -> bool:
+def is_merged_passage(graph: Graph, passage_id: str) -> bool:
     """Check if a passage is a merge of multiple beats.
 
-    Merged passages have a ``from_beats`` field (list) instead of a single
-    ``from_beat`` field.
+    Merged passages have multiple ``grouped_in`` edges pointing to them.
 
     Args:
-        passage: The passage node data.
+        graph: The story graph.
+        passage_id: Passage node ID to check.
 
     Returns:
-        True if the passage has from_beats (N:1 beat-to-passage mapping).
+        True if the passage has multiple beats grouped into it.
     """
-    from_beats = passage.get("from_beats")
-    return bool(from_beats and isinstance(from_beats, list) and len(from_beats) > 1)
+    return len(get_passage_beats(graph, passage_id)) > 1
 
 
 def format_merged_passage_context(graph: Graph, passage_id: str) -> str:
@@ -588,10 +587,10 @@ def format_merged_passage_context(graph: Graph, passage_id: str) -> str:
         return ""
 
     # Fall back to standard formatting for non-merged passages
-    if not is_merged_passage(passage):
+    if not is_merged_passage(graph, passage_id):
         return format_passage_context(graph, passage_id)
 
-    from_beats = get_passage_beats(graph, passage_id)
+    beat_ids = get_passage_beats(graph, passage_id)
     primary_beat_id = get_primary_beat(graph, passage_id) or ""
     primary_beat = graph.get_node(str(primary_beat_id)) if primary_beat_id else None
 
@@ -608,7 +607,7 @@ def format_merged_passage_context(graph: Graph, passage_id: str) -> str:
 
     # Beat sequence
     lines.append("\n**Beat Sequence:**")
-    for i, beat_id in enumerate(from_beats, 1):
+    for i, beat_id in enumerate(beat_ids, 1):
         beat = graph.get_node(str(beat_id))
         if not beat:
             lines.append(f"{i}. [{beat_id}] (not found)")
@@ -633,8 +632,8 @@ def format_merged_passage_context(graph: Graph, passage_id: str) -> str:
             note = tp.get("note", "")
 
             # Get the prior beat for context
-            if idx > 0 and idx <= len(from_beats):
-                prior_beat_id = from_beats[idx - 1]
+            if idx > 0 and idx <= len(beat_ids):
+                prior_beat_id = beat_ids[idx - 1]
                 prior_beat = graph.get_node(str(prior_beat_id))
                 if prior_beat:
                     prior_summary = str(prior_beat.get("summary", ""))[:50]
@@ -653,7 +652,7 @@ def format_merged_passage_context(graph: Graph, passage_id: str) -> str:
 
     # Entities present across all beats
     all_entities: set[str] = set()
-    for beat_id in from_beats:
+    for beat_id in beat_ids:
         beat = graph.get_node(str(beat_id))
         if beat:
             beat_entities = beat.get("entities", [])
@@ -680,7 +679,7 @@ def format_merged_passage_context(graph: Graph, passage_id: str) -> str:
 
     # Location (from first beat if shared)
     locations: set[str] = set()
-    for beat_id in from_beats:
+    for beat_id in beat_ids:
         beat = graph.get_node(str(beat_id))
         if beat:
             loc = beat.get("location")

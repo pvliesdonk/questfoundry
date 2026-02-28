@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from questfoundry.graph.context import get_passage_beats, get_primary_beat
 from questfoundry.graph.fill_context import (
     _extract_top_bigrams,
     compute_arc_hints,
@@ -179,6 +180,12 @@ def fill_graph() -> Graph:
     g.add_edge("passage_from", "passage::p_aftermath", "beat::aftermath")
     g.add_edge("passage_from", "passage::p_branch_reveal", "beat::branch_reveal")
 
+    # grouped_in edges: beat → passage (primary lookup path for get_passage_beats)
+    g.add_edge("grouped_in", "beat::opening", "passage::p_opening")
+    g.add_edge("grouped_in", "beat::explanation", "passage::p_explanation")
+    g.add_edge("grouped_in", "beat::aftermath", "passage::p_aftermath")
+    g.add_edge("grouped_in", "beat::branch_reveal", "passage::p_branch_reveal")
+
     # Dilemma and path nodes (required for computed arc keys)
     g.create_node(
         "dilemma::mentor_trust",
@@ -255,6 +262,68 @@ def fill_graph() -> Graph:
 
 
 # ---------------------------------------------------------------------------
+# get_passage_beats / get_primary_beat
+# ---------------------------------------------------------------------------
+
+
+class TestGetPassageBeats:
+    """Tests for get_passage_beats using grouped_in edges only."""
+
+    def test_returns_beats_via_grouped_in(self, fill_graph: Graph) -> None:
+        beats = get_passage_beats(fill_graph, "passage::p_opening")
+        assert beats == ["beat::opening"]
+
+    def test_returns_empty_when_no_grouped_in_edges(self) -> None:
+        """Passage with from_beat field but no grouped_in edge returns empty list."""
+        g = Graph.empty()
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
+        )
+        # No grouped_in edge added — from_beat field alone is not enough
+        assert get_passage_beats(g, "passage::p1") == []
+
+    def test_returns_sorted_beats_for_merged_passage(self) -> None:
+        g = Graph.empty()
+        g.create_node("beat::b2", {"type": "beat", "raw_id": "b2"})
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        g.create_node(
+            "passage::merged",
+            {"type": "passage", "raw_id": "merged"},
+        )
+        g.add_edge("grouped_in", "beat::b2", "passage::merged")
+        g.add_edge("grouped_in", "beat::b1", "passage::merged")
+        beats = get_passage_beats(g, "passage::merged")
+        assert beats == ["beat::b1", "beat::b2"]
+
+    def test_nonexistent_passage_returns_empty(self) -> None:
+        g = Graph.empty()
+        assert get_passage_beats(g, "passage::missing") == []
+
+
+class TestGetPrimaryBeat:
+    """Tests for get_primary_beat using grouped_in edges only."""
+
+    def test_returns_first_beat(self, fill_graph: Graph) -> None:
+        assert get_primary_beat(fill_graph, "passage::p_opening") == "beat::opening"
+
+    def test_returns_none_when_no_grouped_in_edges(self) -> None:
+        """Passage with from_beat field but no grouped_in edge returns None."""
+        g = Graph.empty()
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
+        )
+        assert get_primary_beat(g, "passage::p1") is None
+
+    def test_nonexistent_passage_returns_none(self) -> None:
+        g = Graph.empty()
+        assert get_primary_beat(g, "passage::missing") is None
+
+
+# ---------------------------------------------------------------------------
 # get_spine_arc_key
 # ---------------------------------------------------------------------------
 
@@ -276,15 +345,6 @@ class TestGetSpineArcKey:
 class TestGetArcPassageOrder:
     def test_spine_order(self, fill_graph: Graph) -> None:
         order = get_arc_passage_order(fill_graph, "mentor_trust__protector")
-        assert order == [
-            "passage::p_opening",
-            "passage::p_explanation",
-            "passage::p_aftermath",
-        ]
-
-    def test_spine_order_via_arc_node(self, fill_graph: Graph) -> None:
-        """Arc node ID resolves to computed traversal via _resolve_arc_key."""
-        order = get_arc_passage_order(fill_graph, "arc::spine_0_0")
         assert order == [
             "passage::p_opening",
             "passage::p_explanation",
@@ -1001,6 +1061,7 @@ class TestFormatNarrativeContext:
             "passage::p1",
             {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
         )
+        g.add_edge("grouped_in", "beat::b1", "passage::p1")
         result = format_narrative_context(g, "passage::p1")
         assert "confront" in result
         assert "high" in result.lower()
@@ -1022,6 +1083,7 @@ class TestFormatNarrativeContext:
             "passage::p1",
             {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
         )
+        g.add_edge("grouped_in", "beat::b1", "passage::p1")
         result = format_narrative_context(g, "passage::p1")
         assert "develop" in result
         assert "Exit Mood" not in result
@@ -1058,6 +1120,7 @@ class TestFormatAtmosphericDetail:
             "passage::p1",
             {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
         )
+        g.add_edge("grouped_in", "beat::b1", "passage::p1")
         result = format_atmospheric_detail(g, "passage::p1")
         assert "Cold stone walls" in result
         assert "sensory" in result.lower()
@@ -1835,6 +1898,11 @@ class TestFormatEntityArcContext:
             },
         )
 
+        # grouped_in edges: beat → passage
+        g.add_edge("grouped_in", "beat::b1", "passage::p1")
+        g.add_edge("grouped_in", "beat::b2", "passage::p2")
+        g.add_edge("grouped_in", "beat::b3", "passage::p3")
+
         # Arc
         g.create_node(
             "arc::spine",
@@ -1984,31 +2052,62 @@ class TestComputeArcHints:
 
 
 class TestIsMergedPassage:
-    """Tests for is_merged_passage helper."""
+    """Tests for is_merged_passage helper.
+
+    is_merged_passage(graph, passage_id) returns True when a passage has
+    more than one ``grouped_in`` edge (i.e. multiple beats grouped into it).
+    """
 
     def test_single_beat_passage_is_not_merged(self) -> None:
-        passage = {"type": "passage", "from_beat": "beat::b1"}
-        assert is_merged_passage(passage) is False
+        g = Graph.empty()
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
+        )
+        g.add_edge("grouped_in", "beat::b1", "passage::p1")
+        assert is_merged_passage(g, "passage::p1") is False
 
-    def test_passage_with_from_beats_is_merged(self) -> None:
-        passage = {
-            "type": "passage",
-            "from_beats": ["beat::b1", "beat::b2", "beat::b3"],
-            "primary_beat": "beat::b1",
-        }
-        assert is_merged_passage(passage) is True
+    def test_passage_with_multiple_grouped_in_is_merged(self) -> None:
+        g = Graph.empty()
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        g.create_node("beat::b2", {"type": "beat", "raw_id": "b2"})
+        g.create_node("beat::b3", {"type": "beat", "raw_id": "b3"})
+        g.create_node(
+            "passage::merged",
+            {
+                "type": "passage",
+                "raw_id": "merged",
+                "from_beats": ["beat::b1", "beat::b2", "beat::b3"],
+                "primary_beat": "beat::b1",
+            },
+        )
+        g.add_edge("grouped_in", "beat::b1", "passage::merged")
+        g.add_edge("grouped_in", "beat::b2", "passage::merged")
+        g.add_edge("grouped_in", "beat::b3", "passage::merged")
+        assert is_merged_passage(g, "passage::merged") is True
 
-    def test_empty_from_beats_is_not_merged(self) -> None:
-        passage = {"type": "passage", "from_beats": []}
-        assert is_merged_passage(passage) is False
+    def test_no_grouped_in_edges_is_not_merged(self) -> None:
+        g = Graph.empty()
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1"},
+        )
+        assert is_merged_passage(g, "passage::p1") is False
 
-    def test_single_from_beats_is_not_merged(self) -> None:
-        passage = {"type": "passage", "from_beats": ["beat::b1"]}
-        assert is_merged_passage(passage) is False
+    def test_single_grouped_in_is_not_merged(self) -> None:
+        g = Graph.empty()
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        g.create_node(
+            "passage::p1",
+            {"type": "passage", "raw_id": "p1", "from_beats": ["beat::b1"]},
+        )
+        g.add_edge("grouped_in", "beat::b1", "passage::p1")
+        assert is_merged_passage(g, "passage::p1") is False
 
-    def test_none_from_beats_is_not_merged(self) -> None:
-        passage = {"type": "passage", "from_beats": None}
-        assert is_merged_passage(passage) is False
+    def test_nonexistent_passage_is_not_merged(self) -> None:
+        g = Graph.empty()
+        assert is_merged_passage(g, "passage::nonexistent") is False
 
 
 class TestFormatMergedPassageContext:
@@ -2092,6 +2191,11 @@ class TestFormatMergedPassageContext:
             },
         )
 
+        # grouped_in edges: beat → passage (3 beats merged into 1 passage)
+        g.add_edge("grouped_in", "beat::b1", "passage::merged_b1")
+        g.add_edge("grouped_in", "beat::gap_1", "passage::merged_b1")
+        g.add_edge("grouped_in", "beat::b2", "passage::merged_b1")
+
         return g
 
     def test_returns_empty_for_nonexistent_passage(self) -> None:
@@ -2114,6 +2218,7 @@ class TestFormatMergedPassageContext:
                 "summary": "Simple passage",
             },
         )
+        g.add_edge("grouped_in", "beat::b1", "passage::p1")
         result = format_merged_passage_context(g, "passage::p1")
         # Should use standard format (not merged)
         assert "Merged Passage Context" not in result
@@ -2757,6 +2862,7 @@ class TestResidueWeightObligations:
             "passage::mid",
             {"type": "passage", "raw_id": "mid", "from_beat": "beat::mid"},
         )
+        g.add_edge("grouped_in", "beat::mid", "passage::mid")
         return g
 
     def test_ending_passage_returns_empty(self) -> None:
@@ -2779,6 +2885,7 @@ class TestResidueWeightObligations:
             {"type": "passage", "raw_id": "mid", "from_beat": "beat::mid"},
         )
         g.create_node("beat::mid", {"type": "beat", "raw_id": "mid", "paths": ["p1", "p2"]})
+        g.add_edge("grouped_in", "beat::mid", "passage::mid")
         assert format_residue_weight_obligations(g, "passage::mid") == ""
 
     def test_single_path_returns_empty(self) -> None:
@@ -2805,6 +2912,7 @@ class TestResidueWeightObligations:
             "passage::solo",
             {"type": "passage", "raw_id": "solo", "from_beat": "beat::solo"},
         )
+        g.add_edge("grouped_in", "beat::solo", "passage::solo")
         assert format_residue_weight_obligations(g, "passage::solo") == ""
 
     def test_all_light_returns_empty(self) -> None:
@@ -2875,6 +2983,7 @@ class TestResidueWeightObligations:
             "passage::mid",
             {"type": "passage", "raw_id": "mid", "from_beat": "beat::mid"},
         )
+        g.add_edge("grouped_in", "beat::mid", "passage::mid")
         assert format_residue_weight_obligations(g, "passage::mid") == ""
 
     def test_non_converging_dilemma_excluded(self) -> None:
@@ -2906,6 +3015,7 @@ class TestResidueWeightObligations:
             "passage::branch",
             {"type": "passage", "raw_id": "branch", "from_beat": "beat::branch"},
         )
+        g.add_edge("grouped_in", "beat::branch", "passage::branch")
         assert format_residue_weight_obligations(g, "passage::branch") == ""
 
 

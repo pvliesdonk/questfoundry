@@ -954,6 +954,9 @@ def apply_routing_plan(graph: Graph, plan: RoutingPlan) -> ApplyRoutingResult:
                 node_data = spec.to_node_data()
                 node_data["residue_for"] = op.base_passage_id
                 graph.create_node(spec.variant_id, node_data)
+                # Add grouped_in edge (beat → passage) for get_passage_beats()
+                if spec.from_beat and graph.get_node(spec.from_beat):
+                    graph.add_edge("grouped_in", spec.from_beat, spec.variant_id)
 
         # Step 3: Wire routing choices via split_and_reroute (skip if already wired)
         # Idempotency check: if routing choices already point to the first variant,
