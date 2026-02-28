@@ -123,13 +123,13 @@ def validate_phase8c_output(
                     available=sorted(valid_entity_ids)[:10],
                 )
             )
-        for cw_id in overlay.when:
-            if cw_id not in valid_state_flag_ids:
+        for sf_id in overlay.when:
+            if sf_id not in valid_state_flag_ids:
                 errors.append(
                     GrowValidationError(
                         field_path=f"overlays.{i}.when",
-                        issue=f"State flag ID not found: {cw_id}",
-                        provided=cw_id,
+                        issue=f"State flag ID not found: {sf_id}",
+                        provided=sf_id,
                         available=sorted(valid_state_flag_ids)[:10],
                     )
                 )

@@ -234,20 +234,20 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
     # decides which state flags are actually meaningful for gating.
     state_flags = graph.get_nodes_by_type("state_flag")
     related: list[tuple[str, str]] = []
-    for cw_id, cw_data in state_flags.items():
-        trigger = cw_data.get("trigger", "")
-        cw_raw = cw_data.get("raw_id", strip_scope_prefix(cw_id))
-        if raw_id.lower() in trigger.lower() or raw_id.lower() in cw_raw.lower():
-            related.append((cw_raw, trigger))
+    for sf_id, sf_data in state_flags.items():
+        trigger = sf_data.get("trigger", "")
+        sf_raw = sf_data.get("raw_id", strip_scope_prefix(sf_id))
+        if raw_id.lower() in trigger.lower() or raw_id.lower() in sf_raw.lower():
+            related.append((sf_raw, trigger))
 
     if related:
         lines.append("")
         lines.append("### Related State Flags (potential codex gates)")
-        for cw_raw, trigger in sorted(related):
+        for sf_raw, trigger in sorted(related):
             if trigger:
-                lines.append(f"- `{cw_raw}`: {trigger}")
+                lines.append(f"- `{sf_raw}`: {trigger}")
             else:
-                lines.append(f"- `{cw_raw}`")
+                lines.append(f"- `{sf_raw}`")
 
     return "\n".join(lines).strip()
 

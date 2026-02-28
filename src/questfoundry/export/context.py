@@ -83,8 +83,7 @@ def _extract_choices(graph: Graph) -> list[ExportChoice]:
             from_passage=data["from_passage"],
             to_passage=data["to_passage"],
             label=data.get("label", "continue"),
-            requires_codewords=data.get("requires_state_flags")
-            or data.get("requires_codewords", []),
+            requires_codewords=data.get("requires_state_flags", data.get("requires_codewords", [])),
             grants=data.get("grants", []),
             is_return=data.get("is_return", False),
         )

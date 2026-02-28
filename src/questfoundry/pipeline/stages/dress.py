@@ -864,7 +864,7 @@ class DressStage:
                 "vision_context": vision_ctx or "No creative vision available.",
                 "entities_batch": entities_batch,
                 "entity_count": str(len(chunk)),
-                "codewords": state_flag_list or "No state flags defined.",
+                "codewords": state_flag_list or "No codewords defined.",
                 "output_language_instruction": self._lang_instruction,
             }
             output, llm_calls, tokens = await self._dress_llm_call(
