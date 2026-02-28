@@ -444,24 +444,26 @@ def check_passage_dag_cycles(graph: Graph) -> ValidationCheck:
 
 
 def check_spine_arc_exists(graph: Graph) -> ValidationCheck:
-    """Verify that a spine arc exists in the graph.
+    """Verify that a spine arc exists (computed from the beat DAG).
 
     The spine arc contains all canonical paths and is required for
     pruning and reachability analysis. Its absence indicates that
     enumerate_arcs failed to find a complete path combination.
     """
-    arc_nodes = graph.get_nodes_by_type("arc")
+    from questfoundry.graph.grow_algorithms import enumerate_arcs
+
+    arcs = enumerate_arcs(graph)
 
     # No arcs at all is a degenerate case (empty story) — warn, not fail.
-    if not arc_nodes:
+    if not arcs:
         return ValidationCheck(
             name="spine_arc_exists",
             severity="warn",
             message="No arcs exist — spine arc check skipped",
         )
 
-    for data in arc_nodes.values():
-        if data.get("arc_type") == "spine":
+    for arc in arcs:
+        if arc.arc_type == "spine":
             return ValidationCheck(
                 name="spine_arc_exists",
                 severity="pass",
@@ -472,7 +474,7 @@ def check_spine_arc_exists(graph: Graph) -> ValidationCheck:
         name="spine_arc_exists",
         severity="fail",
         message=(
-            f"No spine arc among {len(arc_nodes)} arcs. "
+            f"No spine arc among {len(arcs)} arcs. "
             f"Story has no complete canonical path through all dilemmas."
         ),
     )
@@ -480,6 +482,8 @@ def check_spine_arc_exists(graph: Graph) -> ValidationCheck:
 
 def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
     """Verify branch arcs honor their declared dilemma_role per-dilemma.
+
+    Uses computed arcs and divergence points (not stored arc nodes).
 
     For each branch arc, identifies which dilemma paths differ from the spine.
     For each differing dilemma, checks only THAT dilemma's beats against its policy:
@@ -491,8 +495,13 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
     beats from ALL dilemmas, and only the flipped dilemma's beats should be
     checked against its policy.
     """
-    arc_nodes = graph.get_nodes_by_type("arc")
-    if not arc_nodes:
+    from questfoundry.graph.grow_algorithms import (
+        compute_divergence_points,
+        enumerate_arcs,
+    )
+
+    arcs = enumerate_arcs(graph)
+    if not arcs:
         return [
             ValidationCheck(
                 name="dilemma_role_compliance",
@@ -501,14 +510,13 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
             )
         ]
 
-    spine_seq_set = _get_spine_sequence(arc_nodes)
+    # Find spine arc and compute divergence points
+    spine = next((a for a in arcs if a.arc_type == "spine"), None)
+    spine_seq_set = set(spine.sequence) if spine else set()
+    spine_paths = set(spine.paths) if spine else set()
 
-    # Get spine path set for comparison
-    spine_paths: set[str] = set()
-    for _aid, adata in arc_nodes.items():
-        if adata.get("arc_type") == "spine":
-            spine_paths = set(adata.get("paths", []))
-            break
+    spine_arc_id = spine.arc_id if spine else None
+    divergence_map = compute_divergence_points(arcs, spine_arc_id)
 
     beat_dilemmas = _build_beat_dilemma_map(graph)
 
@@ -526,12 +534,13 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
     violations: list[ValidationCheck] = []
     checked = 0
 
-    for arc_id, data in sorted(arc_nodes.items()):
-        if data.get("arc_type") == "spine":
+    for arc in arcs:
+        if arc.arc_type == "spine":
             continue
 
-        sequence: list[str] = data.get("sequence", [])
-        diverges_at = data.get("diverges_at")
+        sequence = arc.sequence
+        div_info = divergence_map.get(arc.arc_id)
+        diverges_at = div_info.diverges_at if div_info else None
         if not sequence or not diverges_at:
             continue
 
@@ -542,7 +551,7 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
         branch_after_div = sequence[div_idx + 1 :]
 
         # Find which dilemmas differ from spine (symmetric difference of path sets)
-        arc_paths = set(data.get("paths", []))
+        arc_paths = set(arc.paths)
         flipped_dilemmas: set[str] = set()
         for path_raw in arc_paths.symmetric_difference(spine_paths):
             if did := raw_path_to_dilemma.get(path_raw):
@@ -571,7 +580,7 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
                         name="dilemma_role_compliance",
                         severity="fail",
                         message=(
-                            f"{arc_id}: hard policy violated for {dilemma_id} — "
+                            f"arc::{arc.arc_id}: hard policy violated for {dilemma_id} — "
                             f"{len(shared)} shared beat(s) after divergence"
                         ),
                     )
@@ -584,7 +593,7 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
                             name="dilemma_role_compliance",
                             severity="warn",
                             message=(
-                                f"{arc_id}: soft policy for {dilemma_id} — "
+                                f"arc::{arc.arc_id}: soft policy for {dilemma_id} — "
                                 f"{len(exclusive)} exclusive beat(s), needs {budget}"
                             ),
                         )
@@ -598,7 +607,7 @@ def check_dilemma_role_compliance(graph: Graph) -> list[ValidationCheck]:
             severity="pass",
             message=f"All {checked} dilemma-arc pair(s) comply with dilemma role and payoff budget"
             if checked
-            else "No branch arcs with convergence metadata to check",
+            else "No branch arcs with divergence metadata to check",
         )
     ]
 

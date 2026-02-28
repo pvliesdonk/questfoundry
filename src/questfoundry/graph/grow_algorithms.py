@@ -1927,17 +1927,29 @@ class ResidueCandidate:
 def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
     """Find convergence passages eligible for residue variants.
 
-    Scans arc convergence metadata for soft/flavor dilemmas and identifies
-    the first shared passage after convergence as a residue candidate.
+    Computes arc convergence metadata on-the-fly (no stored arc nodes)
+    for soft/flavor dilemmas and identifies the first shared passage
+    after convergence as a residue candidate.
     Hard dilemmas are excluded (they never converge).
 
     Returns one candidate per distinct (passage_id, dilemma_id) pair.
     """
-    arc_nodes = graph.get_nodes_by_type("arc")
     passage_nodes = graph.get_nodes_by_type("passage")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
 
-    if not arc_nodes or not passage_nodes:
+    if not passage_nodes:
+        return []
+
+    # Compute arc convergence metadata on-the-fly
+    arcs = enumerate_arcs(graph)
+    if not arcs:
+        return []
+
+    spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
+    divergence_map = compute_divergence_points(arcs, spine_arc_id)
+    convergence_map = find_convergence_points(graph, arcs, divergence_map, spine_arc_id)
+
+    if not convergence_map:
         return []
 
     # Build beat → passage lookup
@@ -1963,45 +1975,42 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
             path_codewords.setdefault(path_id, []).append(cw_id)
 
     # Build dilemma → paths mapping
-    dilemma_paths = build_dilemma_paths(graph)
+    dilemma_paths_map = build_dilemma_paths(graph)
 
-    # Scan arcs for convergence metadata
+    # Scan computed convergence metadata
     seen: set[tuple[str, str]] = set()  # (passage_id, dilemma_id) dedup
     candidates: list[ResidueCandidate] = []
 
-    for _arc_id, arc_data in arc_nodes.items():
-        for dc in arc_data.get("dilemma_convergences", []):
-            policy = dc.get("policy", "")
-            if policy != "soft":
+    for _arc_id, conv_info in convergence_map.items():
+        for dc in conv_info.dilemma_convergences:
+            if dc.policy != "soft":
                 continue  # Skip hard dilemmas
 
-            converges_at_beat = dc.get("converges_at")
-            if not converges_at_beat:
+            if not dc.converges_at:
                 continue
 
-            dilemma_id = dc.get("dilemma_id", "")
-            if not dilemma_id:
+            if not dc.dilemma_id:
                 continue
 
             # Check residue_weight: cosmetic dilemmas never produce residue
-            dilemma_data = dilemma_nodes.get(dilemma_id, {})
+            dilemma_data = dilemma_nodes.get(dc.dilemma_id, {})
             residue_weight = dilemma_data.get("residue_weight", "light")
             if residue_weight == "cosmetic":
                 continue
 
             # Convert convergence beat to passage
-            passage_id = beat_to_passage.get(converges_at_beat)
+            passage_id = beat_to_passage.get(dc.converges_at)
             if not passage_id:
                 continue
 
             # Dedup by (passage_id, dilemma_id)
-            key = (passage_id, dilemma_id)
+            key = (passage_id, dc.dilemma_id)
             if key in seen:
                 continue
             seen.add(key)
 
             # Collect codewords for this dilemma's paths
-            paths = dilemma_paths.get(dilemma_id, [])
+            paths = dilemma_paths_map.get(dc.dilemma_id, [])
             cw_ids: list[str] = []
             for path_id in paths:
                 cw_ids.extend(path_codewords.get(path_id, []))
@@ -2015,8 +2024,8 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
             candidates.append(
                 ResidueCandidate(
                     passage_id=passage_id,
-                    dilemma_id=dilemma_id,
-                    dilemma_role=policy,
+                    dilemma_id=dc.dilemma_id,
+                    dilemma_role=dc.policy,
                     residue_weight=residue_weight,
                     codeword_ids=sorted(cw_ids),
                     dilemma_question=question,
@@ -2432,9 +2441,10 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
 def compute_passage_arc_membership(graph: Graph) -> dict[str, set[str]]:
     """Map each passage to the set of (prefixed) arc IDs whose sequences include it.
 
+    Computes arcs on-the-fly from the beat DAG (no stored arc nodes).
     Converts beat sequences to passage IDs via passage ``from_beat`` fields.
     """
-    arc_nodes = graph.get_nodes_by_type("arc")
+    arcs = enumerate_arcs(graph)
     passage_nodes = graph.get_nodes_by_type("passage")
 
     # Build beat → passage mapping
@@ -2445,8 +2455,9 @@ def compute_passage_arc_membership(graph: Graph) -> dict[str, set[str]]:
             beat_to_passage[from_beat] = p_id
 
     membership: dict[str, set[str]] = {}
-    for arc_id, arc_data in arc_nodes.items():
-        for beat_id in arc_data.get("sequence", []):
+    for arc in arcs:
+        arc_id = f"arc::{arc.arc_id}"
+        for beat_id in arc.sequence:
             passage_id = beat_to_passage.get(beat_id)
             if passage_id:
                 membership.setdefault(passage_id, set()).add(arc_id)
@@ -2474,18 +2485,32 @@ def compute_all_choice_requires(
         Mapping of ``passage_id`` → list of required codeword IDs.
         Empty dict if no spine arc exists or no hard-policy branches.
     """
-    arc_nodes = graph.get_nodes_by_type("arc")
-    if not arc_nodes:
+    arcs = enumerate_arcs(graph)
+    if not arcs:
         return {}
 
-    # 1. Find spine arc and its paths
+    # Compute convergence metadata on-the-fly (provides dilemma_role per arc)
+    spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
+    divergence_map = compute_divergence_points(arcs, spine_arc_id)
+    convergence_map = find_convergence_points(graph, arcs, divergence_map, spine_arc_id)
+
+    # Build arc lookup by prefixed ID
+    from questfoundry.models.grow import Arc as ArcModel
+
+    arc_by_id: dict[str, ArcModel] = {}
     spine_paths: set[str] = set()
-    for arc_data in arc_nodes.values():
-        if arc_data.get("arc_type") == "spine":
-            spine_paths = {normalize_scoped_id(p, "path") for p in arc_data.get("paths", [])}
-            break
+    for arc in arcs:
+        prefixed = f"arc::{arc.arc_id}"
+        arc_by_id[prefixed] = arc
+        if arc.arc_type == "spine":
+            spine_paths = {normalize_scoped_id(p, "path") for p in arc.paths}
     if not spine_paths:
         return {}
+
+    # Build arc_id → dilemma_role from convergence metadata
+    arc_dilemma_role: dict[str, str] = {}
+    for arc_id_raw, conv_info in convergence_map.items():
+        arc_dilemma_role[f"arc::{arc_id_raw}"] = conv_info.dilemma_role
 
     # 2. Build consequence→codeword lookup (reverse of tracks edges)
     cons_to_codeword = {
@@ -2504,19 +2529,19 @@ def compute_all_choice_requires(
     requires: dict[str, list[str]] = {}
     for passage_id, arc_ids in passage_arcs.items():
         # Skip passages reachable via the spine — no gating needed
-        if any(arc_nodes.get(a, {}).get("arc_type") == "spine" for a in arc_ids):
+        if any((a := arc_by_id.get(aid)) is not None and a.arc_type == "spine" for aid in arc_ids):
             continue
 
         # Collect per-arc codeword sets; intersection gives codewords
         # that ANY player on a qualifying arc will have.
         arc_codeword_sets: list[set[str]] = []
-        for arc_id in sorted(arc_ids):
-            arc_data = arc_nodes.get(arc_id, {})
-            if arc_data.get("dilemma_role") != "hard":
+        for aid in sorted(arc_ids):
+            arc_obj = arc_by_id.get(aid)
+            if arc_obj is None or arc_dilemma_role.get(aid) != "hard":
                 continue
 
             # Branch-exclusive = branch paths NOT on the spine
-            branch_paths = {normalize_scoped_id(p, "path") for p in arc_data.get("paths", [])}
+            branch_paths = {normalize_scoped_id(p, "path") for p in arc_obj.paths}
             branch_exclusive = branch_paths - spine_paths
 
             arc_codewords: set[str] = set()
@@ -2526,13 +2551,10 @@ def compute_all_choice_requires(
                     if cw:
                         arc_codewords.add(cw)
 
-            # Only consider arcs with branch-exclusive codewords.
-            # Arcs with no branch-exclusive paths don't contribute to gating.
             if arc_codewords:
                 arc_codeword_sets.append(arc_codewords)
 
         if arc_codeword_sets:
-            # Intersection: codewords shared by all qualifying arcs
             codewords = set.intersection(*arc_codeword_sets)
             if codewords:
                 requires[passage_id] = sorted(codewords)
@@ -3598,10 +3620,10 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
     Returns:
         Mapping of passage_id -> list of unique PassageSuccessor objects.
     """
-    arc_nodes = graph.get_nodes_by_type("arc")
+    arcs = enumerate_arcs(graph)
     passage_nodes = graph.get_nodes_by_type("passage")
 
-    if not arc_nodes or not passage_nodes:
+    if not arcs or not passage_nodes:
         return {}
 
     # Build beat → passage mapping
@@ -3620,8 +3642,9 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
     successors: dict[str, list[PassageSuccessor]] = {}
     seen_targets: dict[str, set[str]] = {}
 
-    for arc_id, arc_data in sorted(arc_nodes.items()):
-        sequence: list[str] = arc_data.get("sequence", [])
+    for arc in sorted(arcs, key=lambda a: a.arc_id):
+        arc_id = f"arc::{arc.arc_id}"
+        sequence = arc.sequence
         if len(sequence) < 2:
             continue
 

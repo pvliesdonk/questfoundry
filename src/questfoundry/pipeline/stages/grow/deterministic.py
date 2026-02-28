@@ -10,11 +10,10 @@ All graph mutations happen in-place on the graph argument.
 from __future__ import annotations
 
 from collections import deque
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.graph import Graph  # noqa: TC001 - used at runtime
-from questfoundry.models.grow import Arc as ArcModel
 from questfoundry.models.grow import GrowPhaseResult
 from questfoundry.pipeline.stages.grow._helpers import log
 from questfoundry.pipeline.stages.grow.registry import grow_phase
@@ -25,53 +24,6 @@ if TYPE_CHECKING:
     from questfoundry.pipeline.size import SizeProfile
 
 PROLOGUE_ID = "passage::prologue"
-
-
-def _arcs_from_traversals(graph: Graph) -> tuple[list[ArcModel], str | None]:
-    """Build Arc models from computed traversals (no stored arc nodes needed).
-
-    Uses ``compute_arc_traversals()`` and path metadata to reconstruct
-    the same Arc model objects that ``enumerate_arcs()`` produces.
-
-    Returns:
-        Tuple of (arc_list, spine_arc_id) where spine_arc_id is the raw_id
-        of the spine arc, or None if no spine exists.
-    """
-    from questfoundry.graph.algorithms import compute_arc_traversals
-
-    traversals = compute_arc_traversals(graph)
-    if not traversals:
-        return [], None
-
-    path_nodes = graph.get_nodes_by_type("path")
-    raw_id_to_pid = {
-        pdata.get("raw_id"): pid for pid, pdata in path_nodes.items() if "raw_id" in pdata
-    }
-    arcs: list[ArcModel] = []
-    spine_arc_id: str | None = None
-
-    for arc_key, sequence in traversals.items():
-        raw_ids = arc_key.split("+")
-        path_ids = [raw_id_to_pid[rid] for rid in raw_ids if rid in raw_id_to_pid]
-
-        # Spine arc: all paths are canonical (guard against empty path_ids)
-        is_spine = bool(path_ids) and all(
-            path_nodes.get(pid, {}).get("is_canonical", False) for pid in path_ids
-        )
-        arc_type: Literal["spine", "branch"] = "spine" if is_spine else "branch"
-        if is_spine:
-            spine_arc_id = arc_key
-
-        arcs.append(
-            ArcModel(
-                arc_id=arc_key,
-                arc_type=arc_type,
-                paths=raw_ids,
-                sequence=sequence,
-            )
-        )
-
-    return arcs, spine_arc_id
 
 
 # --- Phase 1: Validate DAG ---
@@ -122,7 +74,7 @@ async def phase_enumerate_arcs(
     *,
     size_profile: SizeProfile | None = None,
 ) -> GrowPhaseResult:
-    """Phase 5: Enumerate arcs from path combinations.
+    """Phase 5: Enumerate arcs from path combinations (validation only).
 
     Preconditions:
     - Beat DAG is valid (Phase 1 passed).
@@ -130,10 +82,11 @@ async def phase_enumerate_arcs(
     - Path and beat nodes exist with belongs_to edges.
 
     Postconditions:
-    - Arc nodes created for each valid path combination.
-    - arc_contains edges link arcs to their beat sequences.
+    - Arc enumeration validated (Cartesian product of paths is tractable).
     - Exactly one spine arc exists (containing all canonical paths).
     - Arc count bounded by 4x size_profile.max_arcs (if provided).
+    - No arc nodes or arc_contains edges are stored — arcs are computed
+      traversals per Document 3 ontology.
 
     Invariants:
     - Deterministic: same graph always produces same arcs.
@@ -176,28 +129,10 @@ async def phase_enumerate_arcs(
             ),
         )
 
-    # Create arc nodes and arc_contains edges
-    for arc in arcs:
-        arc_node_id = f"arc::{arc.arc_id}"
-        graph.create_node(
-            arc_node_id,
-            {
-                "type": "arc",
-                "raw_id": arc.arc_id,
-                "arc_type": arc.arc_type,
-                "paths": arc.paths,
-                "sequence": arc.sequence,
-            },
-        )
-
-        # Add arc_contains edges for each beat in the sequence
-        for beat_id in arc.sequence:
-            graph.add_edge("arc_contains", arc_node_id, beat_id)
-
     return GrowPhaseResult(
         phase="enumerate_arcs",
         status="completed",
-        detail=f"Created {len(arcs)} arcs",
+        detail=f"Validated {len(arcs)} arcs (computed, not stored)",
     )
 
 
@@ -206,36 +141,32 @@ async def phase_enumerate_arcs(
 
 @grow_phase(name="divergence", depends_on=["enumerate_arcs"], is_deterministic=True, priority=10)
 async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 6: Compute divergence points between arcs.
+    """Phase 6: Compute divergence points between arcs (validation only).
 
     Preconditions:
     - Arc enumeration complete (Phase 5).
     - At least one spine arc exists for reference.
 
     Postconditions:
-    - Each non-spine arc has diverges_from and diverges_at metadata.
-    - diverges_at edges link arcs to their first diverging beat.
+    - Divergence points computed and validated.
+    - No graph writes — divergence metadata is computed on-the-fly
+      by downstream consumers per Document 3 ontology.
 
     Invariants:
     - Deterministic: divergence points derived from sequence comparison.
     - No-op if only one arc exists (no branching).
     """
-    from questfoundry.graph.grow_algorithms import compute_divergence_points
+    from questfoundry.graph.grow_algorithms import compute_divergence_points, enumerate_arcs
 
-    arcs, spine_arc_id = _arcs_from_traversals(graph)
+    arcs = enumerate_arcs(graph)
     if not arcs:
-        # Fallback: read stored arc nodes for backward compatibility
-        from questfoundry.graph.grow_algorithms import enumerate_arcs
+        return GrowPhaseResult(
+            phase="divergence",
+            status="completed",
+            detail="No arcs to process",
+        )
 
-        arcs = enumerate_arcs(graph)
-        spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
-        if not arcs:
-            return GrowPhaseResult(
-                phase="divergence",
-                status="completed",
-                detail="No arcs to process",
-            )
-
+    spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
     divergence_map = compute_divergence_points(arcs, spine_arc_id)
 
     if not divergence_map:
@@ -244,19 +175,6 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
             status="completed",
             detail="No divergence points (single arc or no branches)",
         )
-
-    # Update arc nodes and create diverges_at edges
-    for arc_id_raw, info in divergence_map.items():
-        arc_node_id = f"arc::{arc_id_raw}"
-        updates: dict[str, str | None] = {
-            "diverges_from": f"arc::{info.diverges_from}" if info.diverges_from else None,
-            "diverges_at": info.diverges_at,
-        }
-        graph.update_node(arc_node_id, **{k: v for k, v in updates.items() if v is not None})
-
-        # Create diverges_at edge from arc to the divergence beat
-        if info.diverges_at:
-            graph.add_edge("diverges_at", arc_node_id, info.diverges_at)
 
     return GrowPhaseResult(
         phase="divergence",
@@ -270,40 +188,35 @@ async def phase_divergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
 
 @grow_phase(name="convergence", depends_on=["divergence"], is_deterministic=True, priority=11)
 async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 7: Find convergence points for diverged arcs.
+    """Phase 7: Find convergence points for diverged arcs (validation only).
 
     Preconditions:
     - Divergence points computed (Phase 6 complete).
     - Dilemma nodes have dilemma_role from SEED analysis.
 
     Postconditions:
-    - Arcs with soft/flavor dilemmas get converges_at and converges_to metadata.
-    - converges_at edges link arcs to their convergence beat.
-    - Each arc has dilemma_role and payoff_budget stored.
-    - Hard dilemma arcs have no convergence point.
+    - Convergence points computed and validated.
+    - No graph writes — convergence metadata is computed on-the-fly
+      by downstream consumers per Document 3 ontology.
 
     Invariants:
     - Deterministic: convergence derived from dilemma policies and beat sequences.
-    - dilemma_convergences list stored per arc for multi-dilemma arcs.
     """
     from questfoundry.graph.grow_algorithms import (
         compute_divergence_points,
+        enumerate_arcs,
         find_convergence_points,
     )
 
-    arcs, spine_arc_id = _arcs_from_traversals(graph)
+    arcs = enumerate_arcs(graph)
     if not arcs:
-        # Fallback: read stored arc nodes for backward compatibility
-        from questfoundry.graph.grow_algorithms import enumerate_arcs
+        return GrowPhaseResult(
+            phase="convergence",
+            status="completed",
+            detail="No arcs to process",
+        )
 
-        arcs = enumerate_arcs(graph)
-        spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
-        if not arcs:
-            return GrowPhaseResult(
-                phase="convergence",
-                status="completed",
-                detail="No arcs to process",
-            )
+    spine_arc_id = next((a.arc_id for a in arcs if a.arc_type == "spine"), None)
 
     # Compute divergence first (needed for convergence)
     divergence_map = compute_divergence_points(arcs, spine_arc_id)
@@ -316,39 +229,7 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
             detail="No convergence points found",
         )
 
-    # Update arc nodes and create converges_at edges
-    convergence_count = 0
-    for arc_id_raw, info in convergence_map.items():
-        arc_node_id = f"arc::{arc_id_raw}"
-
-        # Always store policy metadata on the arc node
-        update_fields: dict[str, object] = {
-            "dilemma_role": info.dilemma_role,
-            "payoff_budget": info.payoff_budget,
-        }
-        if info.dilemma_convergences:
-            update_fields["dilemma_convergences"] = [
-                {
-                    "dilemma_id": dc.dilemma_id,
-                    "policy": dc.policy,
-                    "budget": dc.budget,
-                    "converges_at": dc.converges_at,
-                }
-                for dc in info.dilemma_convergences
-            ]
-        graph.update_node(arc_node_id, **update_fields)
-
-        if not info.converges_at:
-            continue
-
-        graph.update_node(
-            arc_node_id,
-            converges_to=f"arc::{info.converges_to}" if info.converges_to else None,
-            converges_at=info.converges_at,
-        )
-        graph.add_edge("converges_at", arc_node_id, info.converges_at)
-        convergence_count += 1
-
+    convergence_count = sum(1 for info in convergence_map.values() if info.converges_at)
     return GrowPhaseResult(
         phase="convergence",
         status="completed",
@@ -802,7 +683,7 @@ async def phase_prune(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  #
     Postconditions:
     - Passages unreachable from the story start are deleted (cascade).
     - When choices exist: BFS via choice_to from prologue or spine start.
-    - When no choices: fallback to arc_contains membership.
+    - When no choices: fallback to computed arc traversal membership.
 
     Invariants:
     - Prologue passage (if synthetic) is always the BFS start.
@@ -855,25 +736,17 @@ def _reachable_via_choices(graph: Graph, passage_nodes: dict[str, dict[str, Any]
         start_passage = PROLOGUE_ID
         log.debug("prune_start_from_prologue", start=PROLOGUE_ID)
     else:
-        # Find spine arc's first passage via computed traversals,
-        # falling back to stored arc nodes for backward compatibility.
-        arcs, _spine_id = _arcs_from_traversals(graph)
+        from questfoundry.graph.grow_algorithms import enumerate_arcs
+
+        arcs = enumerate_arcs(graph)
         start_passage = None
 
         # Find first beat in spine arc's sequence
         spine_sequence: list[str] | None = None
-        if arcs:
-            for arc in arcs:
-                if arc.arc_type == "spine" and arc.sequence:
-                    spine_sequence = arc.sequence
-                    break
-        else:
-            # Fallback: read stored arc nodes directly
-            arc_nodes = graph.get_nodes_by_type("arc")
-            for _arc_id, arc_data in arc_nodes.items():
-                if arc_data.get("arc_type") == "spine":
-                    spine_sequence = arc_data.get("sequence", [])
-                    break
+        for arc in arcs:
+            if arc.arc_type == "spine" and arc.sequence:
+                spine_sequence = arc.sequence
+                break
 
         if spine_sequence:
             first_beat = spine_sequence[0]
@@ -910,10 +783,7 @@ def _reachable_via_choices(graph: Graph, passage_nodes: dict[str, dict[str, Any]
 
 
 def _reachable_via_arcs(graph: Graph, passage_nodes: dict[str, dict[str, Any]]) -> set[str]:
-    """Fallback: passages whose beats are in any arc traversal.
-
-    Prefers computed traversals; falls back to stored arc_contains edges.
-    """
+    """Fallback: passages whose beats are in any arc traversal."""
     from questfoundry.graph.algorithms import compute_arc_traversals
 
     traversals = compute_arc_traversals(graph)
@@ -921,10 +791,6 @@ def _reachable_via_arcs(graph: Graph, passage_nodes: dict[str, dict[str, Any]]) 
 
     if traversals:
         beats_in_arcs.update(*traversals.values())
-    else:
-        # Fallback: stored arc_contains edges
-        arc_contains_edges = graph.get_edges(edge_type="arc_contains")
-        beats_in_arcs = {edge["to"] for edge in arc_contains_edges}
 
     reachable: set[str] = set()
     for passage_id, passage_data in passage_nodes.items():

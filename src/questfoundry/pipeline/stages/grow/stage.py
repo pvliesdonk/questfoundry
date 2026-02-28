@@ -356,23 +356,25 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         graph.set_last_stage("grow")
         graph.save(resolved_path / "graph.db")
 
-        # Count created nodes
-        arc_nodes = graph.get_nodes_by_type("arc")
+        # Count created nodes and compute arc count from DAG
+        from questfoundry.graph.grow_algorithms import enumerate_arcs
+
+        arcs = enumerate_arcs(graph)
         passage_nodes = graph.get_nodes_by_type("passage")
         codeword_nodes = graph.get_nodes_by_type("codeword")
         choice_nodes = graph.get_nodes_by_type("choice")
         entity_nodes = graph.get_nodes_by_type("entity")
 
         spine_arc_id = None
-        for arc_id, arc_data in arc_nodes.items():
-            if arc_data.get("arc_type") == "spine":
-                spine_arc_id = arc_id
+        for arc in arcs:
+            if arc.arc_type == "spine":
+                spine_arc_id = f"arc::{arc.arc_id}"
                 break
 
         overlay_count = sum(len(data.get("overlays", [])) for data in entity_nodes.values())
 
         grow_result = GrowResult(
-            arc_count=len(arc_nodes),
+            arc_count=len(arcs),
             passage_count=len(passage_nodes),
             codeword_count=len(codeword_nodes),
             choice_count=len(choice_nodes),
