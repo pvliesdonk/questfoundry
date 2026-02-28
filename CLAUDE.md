@@ -208,6 +208,9 @@ Beyond the global GitHub workflow rules, these are project-specific:
 - Use `Closes #123` (or `Fixes #123`) in PR descriptions — bare `#123` references do NOT auto-close issues on merge.
 - Every "Not Included / Future PRs" item in a PR description MUST link to a GitHub issue. No silent deferrals.
 - **Always fetch main before creating a branch**: `git fetch origin main` before `git checkout -b feat/...`
+- **Removal issues MUST have a Verification section** with grep/shell commands confirming the old code is gone, AND test updates asserting the new expected state. Run verification before closing.
+- **Separate add from remove** — never bundle "add feature X" and "remove old feature Y" in one issue unless the removal is < 10 lines.
+- **Epics ≤ 10 issues.** Split larger efforts into milestones. Audit completion between milestones.
 
 ### File Organization
 
@@ -302,6 +305,10 @@ qf inspect -p <project> --json # Machine-readable JSON output
 - Unbounded iteration
 - Hidden prompts in code
 - Complex object graphs instead of flat YAML
+- Backward-compatibility shims during internal refactoring (replace directly, don't wrap)
+- Closing removal issues by adding code alongside the thing to be removed
+- Using "tests pass" as sole evidence that a removal/refactoring issue is complete
+- Epics larger than 10 issues (split into sequential milestones)
 
 ## Testing Strategy
 
