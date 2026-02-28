@@ -3724,6 +3724,30 @@ class TestFormatSemanticErrorsAsContent:
         assert "Missing items" in result
         assert "Bucket misplacement" in result
 
+    def test_formats_warning_errors_as_scaffold_notes(self) -> None:
+        """Should format WARNING-category errors as non-blocking scaffold notes."""
+        from questfoundry.graph.mutations import format_semantic_errors_as_content
+
+        errors = [
+            SeedValidationError(
+                field_path="beats.path_1",
+                issue="No advances/reveals beat before commit",
+                category=SeedErrorCategory.WARNING,
+            ),
+            SeedValidationError(
+                field_path="beats.path_2",
+                issue="No beat after commit",
+                category=SeedErrorCategory.WARNING,
+            ),
+        ]
+
+        result = format_semantic_errors_as_content(errors)
+
+        assert "Scaffold notes" in result
+        assert "non-blocking" in result
+        assert "No advances/reveals beat before commit" in result
+        assert "No beat after commit" in result
+
 
 class TestTypeAwareFeedback:
     """Tests for type-aware cross-type error messages in validate_seed_mutations.
