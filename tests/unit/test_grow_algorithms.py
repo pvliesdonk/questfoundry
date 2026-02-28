@@ -5108,6 +5108,7 @@ class TestCollapseLinearPassages:
                 },
             )
             graph.add_edge("passage_from", f"passage::b{i}", f"beat::b{i}")
+            graph.add_edge("grouped_in", f"beat::b{i}", f"passage::b{i}")
 
         # Create linear choice edges (single outgoing each except last)
         for i in range(chain_length - 1):
@@ -5610,6 +5611,7 @@ class TestSplitEndingFamilies:
                     "summary": f"Passage for {beat_id}",
                 },
             )
+            graph.add_edge("grouped_in", f"beat::{beat_id}", pid)
 
         # Choice edges: opening → commits, commits → finale
         for from_p, to_p, cid in [
@@ -6390,6 +6392,7 @@ class TestHeavyResidueRouting:
                 "summary": "Shared passage",
             },
         )
+        graph.add_edge("grouped_in", "beat::shared", "passage::shared")
         graph.create_node(
             "passage::intro",
             {"type": "passage", "raw_id": "intro"},
@@ -6445,6 +6448,7 @@ class TestHeavyResidueRouting:
                     "residue_for": "passage::shared",
                 },
             )
+            graph.add_edge("grouped_in", "beat::shared", "passage::variant")
             graph.create_node(
                 "choice::routed",
                 {

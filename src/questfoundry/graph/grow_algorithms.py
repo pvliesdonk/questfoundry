@@ -1224,6 +1224,10 @@ def _create_merged_passage(graph: Graph, chain: list[str]) -> str | None:
     for bid in beat_ids:
         graph.add_edge("passage_from", merged_id, bid)
 
+    # Add grouped_in edges (beat → passage) so get_passage_beats() can find them
+    for bid in beat_ids:
+        graph.add_edge("grouped_in", bid, merged_id)
+
     log.info(
         "passage_collapsed",
         merged_id=merged_id,
@@ -2397,6 +2401,7 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
                 variant_pid = f"passage::{raw_id}__heavy_{sf_suffix}_{counter}"
                 counter += 1
 
+            beat_id = get_primary_beat(graph, target.passage_id)
             graph.create_node(
                 variant_pid,
                 {
@@ -2404,7 +2409,7 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
                     "raw_id": variant_pid.removeprefix("passage::"),
                     "summary": base_data.get("summary", ""),
                     "entities": list(base_data.get("entities", [])),
-                    "from_beat": get_primary_beat(graph, target.passage_id),
+                    "from_beat": beat_id,
                     "is_residue": True,
                     "is_synthetic": True,
                     "residue_for": target.passage_id,
@@ -2412,6 +2417,9 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
                     "residue_dilemma": target.dilemma_id,
                 },
             )
+            # Add grouped_in edge (beat → passage) for get_passage_beats()
+            if beat_id:
+                graph.add_edge("grouped_in", beat_id, variant_pid)
             variant_specs.append(VariantSpec(variant_pid, [sf_id]))
             variants_created += 1
 

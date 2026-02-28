@@ -112,6 +112,18 @@ def _make_routing_graph(
             )
             g.add_edge("tracks", sf_id, cons_id)
 
+    # --- Beats (needed for grouped_in edges and arc sequences) ---
+    g.create_node("beat::start", {"type": "beat", "raw_id": "start", "summary": "Start"})
+    g.create_node("beat::mid_beat", {"type": "beat", "raw_id": "mid_beat", "summary": "Mid"})
+    if shared_terminal:
+        g.create_node("beat::end_beat", {"type": "beat", "raw_id": "end_beat", "summary": "End"})
+    else:
+        for label in ("a", "b"):
+            g.create_node(
+                f"beat::end_beat_{label}",
+                {"type": "beat", "raw_id": f"end_beat_{label}", "summary": f"End {label}"},
+            )
+
     # --- Passages ---
     g.create_node(
         "passage::start",
@@ -130,6 +142,7 @@ def _make_routing_graph(
             "from_beat": "beat::mid_beat",
         },
     )
+    g.add_edge("grouped_in", "beat::mid_beat", "passage::mid")
     if shared_terminal:
         g.create_node(
             "passage::end",
@@ -141,6 +154,7 @@ def _make_routing_graph(
                 "from_beat": "beat::end_beat",
             },
         )
+        g.add_edge("grouped_in", "beat::end_beat", "passage::end")
     else:
         # Separate endings per path of first dilemma
         g.create_node(

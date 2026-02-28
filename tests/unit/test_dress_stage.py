@@ -833,6 +833,11 @@ def scored_graph() -> Graph:
         "passage::side",
         {"type": "passage", "from_beat": "beat::side", "prose": "Meanwhile..."},
     )
+    # grouped_in edges (beat → passage)
+    g.add_edge("grouped_in", "beat::opening", "passage::opening")
+    g.add_edge("grouped_in", "beat::climax", "passage::climax")
+    g.add_edge("grouped_in", "beat::ending", "passage::ending")
+    g.add_edge("grouped_in", "beat::side", "passage::side")
     # Location entity
     g.create_node("entity::castle", {"type": "entity", "entity_type": "location"})
     return g
@@ -1067,14 +1072,18 @@ class TestPhase1Briefs:
             "art_direction::main",
             {"type": "art_direction", "style": "ink", "palette": ["grey"]},
         )
+        # Dilemma/path structure for computed arcs
+        g.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "paths": ["sp"]},
+        )
+        g.create_node(
+            "path::sp",
+            {"type": "path", "raw_id": "sp", "dilemma_id": "dilemma::d1", "is_canonical": True},
+        )
         # High-priority passage: spine arc opening + climax = high score
         g.create_node("beat::a", {"type": "beat", "raw_id": "a", "scene_type": "climax"})
-        g.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "paths": ["t1"]})
-        g.create_node(
-            "path::t1",
-            {"type": "path", "raw_id": "t1", "dilemma_id": "dilemma::d1", "is_canonical": True},
-        )
-        g.add_edge("belongs_to", "beat::a", "path::t1")
+        g.add_edge("belongs_to", "beat::a", "path::sp")
         g.create_node(
             "passage::important",
             {
@@ -1084,6 +1093,7 @@ class TestPhase1Briefs:
                 "from_beat": "beat::a",
             },
         )
+        g.add_edge("grouped_in", "beat::a", "passage::important")
         # Low-priority passage: no beat, no arc = score 0 → priority 0 (or 3 if score=1+)
         g.create_node(
             "passage::filler",

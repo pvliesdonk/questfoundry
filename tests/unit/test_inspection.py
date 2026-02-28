@@ -533,6 +533,13 @@ class TestBranchingQualityScore:
         """Each arc's state flag signature counts as a separate ending variant."""
         graph = Graph.empty()
         spine_beats = [f"beat::s{i}" for i in range(3)]
+        # Create beat nodes (needed for grouped_in edges)
+        for i in range(3):
+            graph.create_node(
+                f"beat::s{i}",
+                {"type": "beat", "raw_id": f"s{i}", "summary": f"Spine beat {i}"},
+            )
+        graph.create_node("beat::b0", {"type": "beat", "raw_id": "b0", "summary": "Branch beat 0"})
         # Two arcs sharing the same ending beat but with different state flag paths
         graph.create_node(
             "arc::spine",
@@ -566,6 +573,7 @@ class TestBranchingQualityScore:
                 "is_ending": True,
             },
         )
+        graph.add_edge("grouped_in", "beat::s2", "passage::ending")
         # Non-ending passage with outgoing choice
         graph.create_node(
             "passage::mid",
@@ -576,6 +584,7 @@ class TestBranchingQualityScore:
                 "summary": "Middle",
             },
         )
+        graph.add_edge("grouped_in", "beat::s0", "passage::mid")
         graph.create_node(
             "choice::mid__ending",
             {
@@ -630,6 +639,12 @@ class TestBranchingQualityScore:
         """Merged passages (primary_beat instead of from_beat) contribute to ending variants."""
         graph = Graph.empty()
         spine_beats = [f"beat::s{i}" for i in range(5)]
+        # Create beat nodes (needed for grouped_in edges)
+        for i in range(5):
+            graph.create_node(
+                f"beat::s{i}",
+                {"type": "beat", "raw_id": f"s{i}", "summary": f"Spine beat {i}"},
+            )
         graph.create_node(
             "arc::spine",
             {
@@ -650,6 +665,9 @@ class TestBranchingQualityScore:
                 "summary": "The end",
             },
         )
+        # Add grouped_in edges for both beats in the merged passage
+        graph.add_edge("grouped_in", "beat::s3", "passage::ending")
+        graph.add_edge("grouped_in", "beat::s4", "passage::ending")
         # Non-ending passage with outgoing choice (so it's NOT a terminal)
         graph.create_node(
             "passage::mid",
@@ -660,6 +678,7 @@ class TestBranchingQualityScore:
                 "summary": "Middle",
             },
         )
+        graph.add_edge("grouped_in", "beat::s2", "passage::mid")
         graph.create_node(
             "choice::mid__ending",
             {
