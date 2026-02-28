@@ -174,7 +174,7 @@ class TestGrowFullPipeline:
             "arc_count",
             "passage_count",
             "choice_count",
-            "codeword_count",
+            "state_flag_count",
             "overlay_count",
             "spine_arc_id",
             "phases_completed",
@@ -192,9 +192,9 @@ class TestGrowFullPipeline:
         choice edges exist; base passage count after consolidation is the minimum)."""
         assert pipeline_result["result_dict"]["passage_count"] >= 7
 
-    def test_codewords_derived(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify codewords are created from consequences (4 consequences)."""
-        assert pipeline_result["result_dict"]["codeword_count"] == 4
+    def test_state_flags_derived(self, pipeline_result: dict[str, Any]) -> None:
+        """Verify state flags are created from consequences (4 consequences)."""
+        assert pipeline_result["result_dict"]["state_flag_count"] == 4
 
     def test_choices_created(self, pipeline_result: dict[str, Any]) -> None:
         """Verify choices are created at divergence points."""
@@ -211,7 +211,7 @@ class TestGrowFullPipeline:
         expected_keys = {
             "arc_count",
             "passage_count",
-            "codeword_count",
+            "state_flag_count",
             "choice_count",
             "overlay_count",
         }
