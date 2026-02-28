@@ -69,6 +69,7 @@ def dress_graph() -> Graph:
             "entities": ["character::protagonist", "location::bridge"],
         },
     )
+    g.add_edge("grouped_in", "beat::opening", "passage::opening")
     g.create_node(
         "state_flag::met_aldric",
         {

@@ -306,6 +306,7 @@ def _make_dilemma_graph(path_a_prose: bool, path_b_prose: bool) -> Graph:
             "prose": "Path one prose." if path_a_prose else None,
         },
     )
+    graph.add_edge("grouped_in", "beat::b1", "passage::b1")
 
     # Beats and passages for path 2
     graph.create_node("beat::b2", {"type": "beat", "raw_id": "b2"})
@@ -319,6 +320,7 @@ def _make_dilemma_graph(path_a_prose: bool, path_b_prose: bool) -> Graph:
             "prose": "Path two prose." if path_b_prose else None,
         },
     )
+    graph.add_edge("grouped_in", "beat::b2", "passage::b2")
 
     return graph
 

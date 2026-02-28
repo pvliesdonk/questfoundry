@@ -42,6 +42,8 @@ def _make_two_passages_graph(*, shared_entity: bool = False) -> tuple[Graph, str
     )
     graph.add_edge("passage_from", "passage::a", "beat::a")
     graph.add_edge("passage_from", "passage::b", "beat::b")
+    graph.add_edge("grouped_in", "beat::a", "passage::a")
+    graph.add_edge("grouped_in", "beat::b", "passage::b")
     return graph, "arc::spine"
 
 
