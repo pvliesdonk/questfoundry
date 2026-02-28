@@ -125,20 +125,42 @@ log = get_logger(__name__)
 
 
 def get_spine_arc_id(graph: Graph) -> str | None:
-    """Find the spine arc's node ID in the graph.
+    """Compute the spine arc key from graph structure.
+
+    The spine arc is the path combination where all paths are canonical.
+    Returns the computed arc key (sorted path raw_ids joined by ``"+"``).
 
     Args:
-        graph: Graph containing GROW arc nodes.
+        graph: Graph containing dilemma and path nodes.
 
     Returns:
-        The spine arc node ID (e.g., ``arc::spine_0_0``), or None if
-        no spine arc exists.
+        Spine arc key string, or None if no spine arc can be determined.
     """
-    arcs = graph.get_nodes_by_type("arc")
-    for arc_id, arc_data in arcs.items():
-        if arc_data.get("arc_type") == "spine":
-            return arc_id
-    return None
+    from questfoundry.graph.algorithms import arc_key_for_paths
+
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    if not dilemma_nodes or not path_nodes:
+        return None
+
+    dilemma_canonical: dict[str, list[str]] = {}
+    for path_id, path_data in path_nodes.items():
+        if not path_data.get("is_canonical", False):
+            continue
+        dilemma_id = path_data.get("dilemma_id")
+        if dilemma_id:
+            prefixed = normalize_scoped_id(dilemma_id, "dilemma")
+            if prefixed in dilemma_nodes:
+                dilemma_canonical.setdefault(prefixed, []).append(path_id)
+
+    if len(dilemma_canonical) != len(dilemma_nodes):
+        return None
+
+    all_canonical_pids: list[str] = []
+    for _did in sorted(dilemma_canonical):
+        all_canonical_pids.extend(dilemma_canonical[_did])
+
+    return arc_key_for_paths(path_nodes, all_canonical_pids)
 
 
 def get_arc_passage_order(graph: Graph, arc_id: str) -> list[str]:
@@ -883,36 +905,25 @@ def format_lookahead_context(
     beat_id = get_primary_beat(graph, passage_id) or ""
     lines: list[str] = []
 
-    # Check if this beat is a convergence point for any arc
-    convergence_arcs: list[tuple[str, dict[str, Any]]] = []
-    all_arcs = graph.get_nodes_by_type("arc")
-    for aid, adata in all_arcs.items():
-        if adata.get("converges_at") == beat_id and aid != arc_id:
-            convergence_arcs.append((aid, adata))
+    # Check if this is a divergence point — include divergence passage prose.
+    # Derive arc type from path canonical flags instead of stored arc node.
+    path_ids = get_arc_paths(graph, arc_id)
+    path_nodes = graph.get_nodes_by_type("path")
+    is_branch = bool(
+        path_ids and not all(path_nodes.get(pid, {}).get("is_canonical", False) for pid in path_ids)
+    )
 
-    if convergence_arcs:
-        lines.append("**Convergence — branches arriving here:**")
-        for aid, _adata in convergence_arcs:
-            arc_raw = _adata.get("raw_id", aid)
-            seq = get_arc_beat_sequence(graph, aid)
-            if seq:
-                last_beats = seq[-3:]  # last 3 beats for context
-                for bid in last_beats:
-                    bnode = graph.get_node(bid)
-                    if bnode:
-                        summary = bnode.get("summary", "")
-                        if summary:
-                            lines.append(f"- [{arc_raw}] {summary}")
-        lines.append("")
-
-    # Check if this is a divergence point — include divergence passage prose
-    arc_node = graph.get_node(arc_id)
-    arc_type = arc_node.get("arc_type", "") if arc_node else ""
-    diverge_beat = arc_node.get("diverges_at") if arc_node else None
-
-    if arc_type == "branch" and (
-        diverge_beat == beat_id or _is_first_branch_beat(graph, arc_id, beat_id)
-    ):
+    if is_branch and _is_first_branch_beat(graph, arc_id, beat_id):
+        # Compute divergence beat: last shared beat in spine before the
+        # first branch-specific beat in this arc's sequence.
+        spine_id = get_spine_arc_id(graph)
+        spine_beats = set(get_arc_beat_sequence(graph, spine_id)) if spine_id else set()
+        branch_seq = get_arc_beat_sequence(graph, arc_id)
+        diverge_beat: str | None = None
+        for bid in branch_seq:
+            if bid not in spine_beats:
+                break
+            diverge_beat = bid
         diverge_passage = _find_passage_for_beat(graph, diverge_beat) if diverge_beat else None
         if diverge_passage:
             dpnode = graph.get_node(diverge_passage)
@@ -927,7 +938,7 @@ def format_lookahead_context(
     # inject the opening sentence from the story's first passage as a
     # thematic callback anchor. The LLM can echo imagery or phrasing
     # to create narrative resonance.
-    if convergence_arcs or (arc_type == "branch" and diverge_beat == beat_id):
+    if is_branch and _is_first_branch_beat(graph, arc_id, beat_id):
         echo = _extract_opening_echo(graph, arc_id)
         if echo:
             lines.append("**Thematic Echo (for callback):**")
@@ -1053,16 +1064,23 @@ def _is_first_branch_beat(graph: Graph, arc_id: str, beat_id: str) -> bool:
     The first branch-specific beat is the one right after the divergence
     point — the first beat in the arc's sequence that is NOT in the spine.
 
+    Works with both computed arc keys and legacy arc node IDs.
+
     Args:
-        graph: Graph with arc nodes.
-        arc_id: The branch arc ID.
+        graph: Graph with arc data.
+        arc_id: The branch arc ID (key or node ID).
         beat_id: The beat to check.
 
     Returns:
         True if this is the first branch-specific beat.
     """
-    arc_node = graph.get_node(arc_id)
-    if not arc_node or arc_node.get("arc_type") != "branch":
+    # Check if this is a branch arc (not spine)
+    path_ids = get_arc_paths(graph, arc_id)
+    if not path_ids:
+        return False
+    path_nodes = graph.get_nodes_by_type("path")
+    is_spine = all(path_nodes.get(pid, {}).get("is_canonical", False) for pid in path_ids)
+    if is_spine:
         return False
 
     spine_id = get_spine_arc_id(graph)
@@ -1113,12 +1131,14 @@ def format_grow_summary(graph: Graph) -> str:
     Returns:
         Summary string.
     """
-    arcs = graph.get_nodes_by_type("arc")
+    from questfoundry.graph.grow_algorithms import enumerate_arcs
+
+    arcs = enumerate_arcs(graph)
     passages = graph.get_nodes_by_type("passage")
     beats = graph.get_nodes_by_type("beat")
 
-    spine_count = sum(1 for a in arcs.values() if a.get("arc_type") == "spine")
-    branch_count = sum(1 for a in arcs.values() if a.get("arc_type") == "branch")
+    spine_count = sum(1 for a in arcs if a.arc_type == "spine")
+    branch_count = sum(1 for a in arcs if a.arc_type == "branch")
 
     lines = [
         f"Arcs: {len(arcs)} ({spine_count} spine, {branch_count} branch)",
