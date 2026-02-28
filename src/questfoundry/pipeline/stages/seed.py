@@ -391,6 +391,7 @@ class SeedStage:
                 callbacks=callbacks,
                 graph=graph,  # Enables semantic validation
                 on_phase_progress=on_phase_progress,
+                size_profile=size_profile,
             )
             # Iterative serialization makes one call per section plus potential retries
             # (actual count depends on serialize_seed_as_function implementation)

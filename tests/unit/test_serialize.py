@@ -2026,3 +2026,38 @@ class TestBuildConsequencesPathsBrief:
         a_pos = result.index("a_dilemma")
         z_pos = result.index("z_dilemma")
         assert a_pos < z_pos
+
+
+class TestSizeProfileInjectedIntoBeatPrompts:
+    """Test that size_profile controls beat count range in prompts."""
+
+    def test_size_profile_renders_beats_range_in_prompts(self) -> None:
+        """Beat prompts should use size_beats_per_path from size profile."""
+        from questfoundry.agents.serialize import _load_seed_section_prompts
+        from questfoundry.pipeline.size import get_size_profile, size_template_vars
+
+        prompts = _load_seed_section_prompts()
+
+        # Verify the template placeholder exists before rendering
+        assert "{size_beats_per_path}" in prompts["beats"]
+        assert "{size_beats_per_path}" in prompts["per_path_beats"]
+
+        # Render with 'long' preset (3-5 beats)
+        long_profile = get_size_profile("long")
+        size_vars = size_template_vars(long_profile)
+        beats_range = size_vars["size_beats_per_path"]
+
+        rendered_beats = prompts["beats"].replace("{size_beats_per_path}", beats_range)
+        rendered_per_path = prompts["per_path_beats"].replace("{size_beats_per_path}", beats_range)
+
+        assert "3-5" in rendered_beats
+        assert "3-5" in rendered_per_path
+        assert "{size_beats_per_path}" not in rendered_beats
+        assert "{size_beats_per_path}" not in rendered_per_path
+
+    def test_default_profile_uses_standard_range(self) -> None:
+        """Without explicit size_profile, standard preset (2-4) is used."""
+        from questfoundry.pipeline.size import size_template_vars
+
+        size_vars = size_template_vars(None)
+        assert size_vars["size_beats_per_path"] == "2-4"
