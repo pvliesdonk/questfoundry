@@ -56,6 +56,7 @@ if TYPE_CHECKING:
         DilemmaRelationship,
         SeedOutput,
     )
+    from questfoundry.pipeline.size import SizeProfile
     from questfoundry.pipeline.stages.base import PhaseProgressFn
 
 log = get_logger(__name__)
@@ -1620,6 +1621,7 @@ async def serialize_seed_as_function(
     graph: Graph | None = None,
     max_semantic_retries: int = 2,
     on_phase_progress: PhaseProgressFn | None = None,
+    size_profile: SizeProfile | None = None,
 ) -> SerializeResult:
     """Serialize SEED brief to structured output, returning result for outer loop.
 
@@ -1645,6 +1647,7 @@ async def serialize_seed_as_function(
         graph: Graph containing BRAINSTORM data for semantic validation.
             If None, semantic validation is skipped.
         max_semantic_retries: Maximum section-level retries for semantic errors.
+        size_profile: Size profile for beat count ranges. Defaults to standard.
 
     Returns:
         SerializeResult with artifact and any semantic errors.
@@ -1677,7 +1680,17 @@ async def serialize_seed_as_function(
         monolithic_brief = brief
         log.info("serialize_seed_as_function_started", brief_mode="monolithic")
 
-    prompts = _load_seed_section_prompts()
+    prompts = dict(_load_seed_section_prompts())  # Copy — cached original is immutable
+
+    # Inject size-aware beat count range into beat prompts
+    from questfoundry.pipeline.size import size_template_vars
+
+    size_vars = size_template_vars(size_profile)
+    beats_range = size_vars.get("size_beats_per_path", "2-4")
+    for key in ("beats", "per_path_beats"):
+        if key in prompts:
+            prompts[key] = prompts[key].replace("{size_beats_per_path}", beats_range)
+
     total_tokens = 0
 
     def _build_section_brief(section_name: str) -> str:

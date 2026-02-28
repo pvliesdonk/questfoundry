@@ -654,8 +654,8 @@ class PathBeatsSection(BaseModel):
 
     initial_beats: list[InitialBeat] = Field(
         min_length=2,
-        max_length=4,
-        description="2-4 initial beats for this specific path",
+        max_length=6,
+        description="2-6 initial beats for this specific path (range set by size preset)",
     )
 
     @model_validator(mode="after")

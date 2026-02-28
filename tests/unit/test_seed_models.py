@@ -237,6 +237,32 @@ class TestPathBeatsSectionDedup:
                 ]
             )
 
+    def test_five_beats_accepted_for_long_preset(self) -> None:
+        """PathBeatsSection allows up to 6 beats for long presets (3-5 range)."""
+        beats = [
+            {
+                "beat_id": f"beat_{i}",
+                "summary": f"Beat {i}",
+                "path_id": "path::trust_or_betray__trust",
+            }
+            for i in range(5)
+        ]
+        section = PathBeatsSection(initial_beats=beats)
+        assert len(section.initial_beats) == 5
+
+    def test_seven_beats_rejected(self) -> None:
+        """PathBeatsSection rejects more than 6 beats."""
+        beats = [
+            {
+                "beat_id": f"beat_{i}",
+                "summary": f"Beat {i}",
+                "path_id": "path::trust_or_betray__trust",
+            }
+            for i in range(7)
+        ]
+        with pytest.raises(ValidationError):
+            PathBeatsSection(initial_beats=beats)
+
 
 # ---------------------------------------------------------------------------
 # Branching contract models (#741)

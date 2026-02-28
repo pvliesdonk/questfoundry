@@ -871,8 +871,8 @@ class TestPathBeatsSectionValidation:
                 ]
             )
 
-    def test_five_beats_rejected(self) -> None:
-        """More than 4 beats is rejected by Pydantic max_length."""
+    def test_seven_beats_rejected(self) -> None:
+        """More than 6 beats is rejected by Pydantic max_length."""
         from pydantic import ValidationError
 
         from questfoundry.models.seed import InitialBeat, PathBeatsSection
@@ -883,7 +883,7 @@ class TestPathBeatsSectionValidation:
                 summary=f"Beat {i}",
                 paths=["path_a"],
             )
-            for i in range(5)
+            for i in range(7)
         ]
         with pytest.raises(ValidationError, match="initial_beats"):
             PathBeatsSection(initial_beats=beats)
