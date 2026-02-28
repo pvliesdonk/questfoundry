@@ -2495,9 +2495,7 @@ def compute_all_choice_requires(
     convergence_map = find_convergence_points(graph, arcs, divergence_map, spine_arc_id)
 
     # Build arc lookup by prefixed ID
-    from questfoundry.models.grow import Arc as ArcModel
-
-    arc_by_id: dict[str, ArcModel] = {}
+    arc_by_id: dict[str, Arc] = {}
     spine_paths: set[str] = set()
     for arc in arcs:
         prefixed = f"arc::{arc.arc_id}"
