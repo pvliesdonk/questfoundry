@@ -39,7 +39,7 @@ from questfoundry.graph.fill_context import (
     format_vocabulary_note,
     format_voice_context,
     get_arc_passage_order,
-    get_spine_arc_id,
+    get_spine_arc_key,
     is_merged_passage,
 )
 from questfoundry.graph.graph import Graph
@@ -179,7 +179,49 @@ def fill_graph() -> Graph:
     g.add_edge("passage_from", "passage::p_aftermath", "beat::aftermath")
     g.add_edge("passage_from", "passage::p_branch_reveal", "beat::branch_reveal")
 
-    # Arcs
+    # Dilemma and path nodes (required for computed arc keys)
+    g.create_node(
+        "dilemma::mentor_trust",
+        {"type": "dilemma", "raw_id": "mentor_trust"},
+    )
+    g.create_node(
+        "path::mentor_trust__protector",
+        {
+            "type": "path",
+            "raw_id": "mentor_trust__protector",
+            "dilemma_id": "dilemma::mentor_trust",
+            "is_canonical": True,
+        },
+    )
+    g.create_node(
+        "path::mentor_trust__manipulator",
+        {
+            "type": "path",
+            "raw_id": "mentor_trust__manipulator",
+            "dilemma_id": "dilemma::mentor_trust",
+            "is_canonical": False,
+        },
+    )
+
+    # belongs_to edges: beat → path
+    # opening, explanation, aftermath are shared across both paths
+    g.add_edge("belongs_to", "beat::opening", "path::mentor_trust__protector")
+    g.add_edge("belongs_to", "beat::opening", "path::mentor_trust__manipulator")
+    g.add_edge("belongs_to", "beat::explanation", "path::mentor_trust__protector")
+    g.add_edge("belongs_to", "beat::explanation", "path::mentor_trust__manipulator")
+    g.add_edge("belongs_to", "beat::aftermath", "path::mentor_trust__protector")
+    g.add_edge("belongs_to", "beat::aftermath", "path::mentor_trust__manipulator")
+    # branch_reveal only on manipulator path
+    g.add_edge("belongs_to", "beat::branch_reveal", "path::mentor_trust__manipulator")
+
+    # predecessor edges: child → parent (dependent → prerequisite)
+    g.add_edge("predecessor", "beat::explanation", "beat::opening")
+    g.add_edge("predecessor", "beat::aftermath", "beat::explanation")
+    g.add_edge("predecessor", "beat::branch_reveal", "beat::explanation")
+    # On the manipulator path, branch_reveal comes before aftermath
+    g.add_edge("predecessor", "beat::aftermath", "beat::branch_reveal")
+
+    # Arcs (kept for get_arc_passage_order fallback and _resolve_arc_key)
     g.create_node(
         "arc::spine_0_0",
         {
@@ -213,17 +255,17 @@ def fill_graph() -> Graph:
 
 
 # ---------------------------------------------------------------------------
-# get_spine_arc_id
+# get_spine_arc_key
 # ---------------------------------------------------------------------------
 
 
-class TestGetSpineArcId:
+class TestGetSpineArcKey:
     def test_finds_spine(self, fill_graph: Graph) -> None:
-        assert get_spine_arc_id(fill_graph) == "arc::spine_0_0"
+        assert get_spine_arc_key(fill_graph) == "mentor_trust__protector"
 
     def test_no_arcs(self) -> None:
         g = Graph.empty()
-        assert get_spine_arc_id(g) is None
+        assert get_spine_arc_key(g) is None
 
 
 # ---------------------------------------------------------------------------
@@ -233,6 +275,15 @@ class TestGetSpineArcId:
 
 class TestGetArcPassageOrder:
     def test_spine_order(self, fill_graph: Graph) -> None:
+        order = get_arc_passage_order(fill_graph, "mentor_trust__protector")
+        assert order == [
+            "passage::p_opening",
+            "passage::p_explanation",
+            "passage::p_aftermath",
+        ]
+
+    def test_spine_order_via_arc_node(self, fill_graph: Graph) -> None:
+        """Arc node ID resolves to computed traversal via _resolve_arc_key."""
         order = get_arc_passage_order(fill_graph, "arc::spine_0_0")
         assert order == [
             "passage::p_opening",
@@ -241,7 +292,7 @@ class TestGetArcPassageOrder:
         ]
 
     def test_branch_order(self, fill_graph: Graph) -> None:
-        order = get_arc_passage_order(fill_graph, "arc::branch_1_0")
+        order = get_arc_passage_order(fill_graph, "mentor_trust__manipulator")
         assert order == [
             "passage::p_opening",
             "passage::p_explanation",
@@ -363,23 +414,23 @@ class TestFormatPassageContext:
 
 class TestFormatSlidingWindow:
     def test_first_passage_no_window(self, fill_graph: Graph) -> None:
-        result = format_sliding_window(fill_graph, "arc::spine_0_0", 0)
+        result = format_sliding_window(fill_graph, "mentor_trust__protector", 0)
         assert result == "(no previous passages)"
 
     def test_second_passage_has_window(self, fill_graph: Graph) -> None:
-        result = format_sliding_window(fill_graph, "arc::spine_0_0", 1)
+        result = format_sliding_window(fill_graph, "mentor_trust__protector", 1)
         assert "p_opening" in result
         assert "tower stairs" in result
 
     def test_window_size_limits(self, fill_graph: Graph) -> None:
-        result = format_sliding_window(fill_graph, "arc::spine_0_0", 2, window_size=1)
+        result = format_sliding_window(fill_graph, "mentor_trust__protector", 2, window_size=1)
         # Should only include the immediately preceding passage
         assert "p_explanation" in result
         assert "p_opening" not in result
 
     def test_no_prose_skipped(self, fill_graph: Graph) -> None:
         # p_aftermath has no prose — window should skip it
-        result = format_sliding_window(fill_graph, "arc::spine_0_0", 2, window_size=3)
+        result = format_sliding_window(fill_graph, "mentor_trust__protector", 2, window_size=3)
         assert "p_opening" in result
         assert "p_explanation" in result
 
@@ -390,14 +441,18 @@ class TestFormatSlidingWindow:
 
 
 class TestFormatLookaheadContext:
-    def test_convergence_point(self, fill_graph: Graph) -> None:
-        # p_aftermath is convergence point for branch_1_0
-        result = format_lookahead_context(fill_graph, "passage::p_aftermath", "arc::spine_0_0")
-        assert "Convergence" in result
-        assert "branch_1_0" in result
+    def test_convergence_point_no_longer_emitted(self, fill_graph: Graph) -> None:
+        # Convergence context was removed (relied on stored arc nodes).
+        # p_aftermath is on the spine arc, so lookahead returns empty.
+        result = format_lookahead_context(
+            fill_graph, "passage::p_aftermath", "mentor_trust__protector"
+        )
+        assert result == ""
 
     def test_no_lookahead_needed(self, fill_graph: Graph) -> None:
-        result = format_lookahead_context(fill_graph, "passage::p_opening", "arc::spine_0_0")
+        result = format_lookahead_context(
+            fill_graph, "passage::p_opening", "mentor_trust__protector"
+        )
         assert result == ""
 
 
@@ -1469,70 +1524,102 @@ class TestEndingDifferentiation:
 
 
 class TestEchoPrompt:
-    """Tests for thematic echo at convergence points."""
+    """Tests for thematic echo at branch divergence points."""
 
-    def test_convergence_includes_echo(self) -> None:
-        """At convergence, lookahead should include opening passage echo."""
+    def test_divergence_includes_echo(self) -> None:
+        """At branch divergence, lookahead should include opening passage echo."""
         g = Graph()
-        # Spine arc with two beats
+
+        # Dilemma + paths for computed arcs
+        g.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
         g.create_node(
-            "arc::spine",
+            "path::canon",
             {
-                "type": "arc",
-                "arc_type": "spine",
-                "sequence": ["beat::b1", "beat::conv"],
+                "type": "path",
+                "raw_id": "canon",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
-        # Branch arc converging at beat::conv
         g.create_node(
-            "arc::branch",
+            "path::alt",
             {
-                "type": "arc",
-                "arc_type": "branch",
-                "converges_at": "beat::conv",
-                "sequence": ["beat::br1"],
+                "type": "path",
+                "raw_id": "alt",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": False,
             },
         )
-        g.create_node("beat::b1", {"type": "beat", "summary": "opening"})
-        g.create_node("beat::conv", {"type": "beat", "summary": "convergence"})
-        g.create_node("beat::br1", {"type": "beat", "summary": "branch beat"})
+
+        # Shared beat (on both paths) and branch-only beat
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1", "summary": "opening"})
+        g.create_node("beat::br1", {"type": "beat", "raw_id": "br1", "summary": "branch beat"})
+        g.add_edge("belongs_to", "beat::b1", "path::canon")
+        g.add_edge("belongs_to", "beat::b1", "path::alt")
+        g.add_edge("belongs_to", "beat::br1", "path::alt")
+        g.add_edge("predecessor", "beat::br1", "beat::b1")
+
+        # Passages
         g.create_node(
             "passage::p1",
-            {"type": "passage", "from_beat": "beat::b1", "prose": "The rain began to fall."},
+            {
+                "type": "passage",
+                "raw_id": "p1",
+                "from_beat": "beat::b1",
+                "prose": "The rain began to fall.",
+            },
         )
         g.create_node(
-            "passage::conv",
-            {"type": "passage", "from_beat": "beat::conv"},
+            "passage::br1",
+            {"type": "passage", "raw_id": "br1", "from_beat": "beat::br1"},
         )
         g.add_edge("passage_from", "passage::p1", "beat::b1")
-        g.add_edge("passage_from", "passage::conv", "beat::conv")
+        g.add_edge("passage_from", "passage::br1", "beat::br1")
+        g.add_edge("grouped_in", "beat::b1", "passage::p1")
+        g.add_edge("grouped_in", "beat::br1", "passage::br1")
 
-        result = format_lookahead_context(g, "passage::conv", "arc::spine")
+        # The branch arc key is "alt" (single non-canonical path)
+        result = format_lookahead_context(g, "passage::br1", "alt")
         assert "Thematic Echo" in result
         assert "The rain began to fall." in result
 
     def test_no_echo_at_normal_passage(self) -> None:
         """Non-juncture passages should not have echo prompts."""
         g = Graph()
+
+        # Dilemma + path for computed arcs
+        g.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
         g.create_node(
-            "arc::spine",
+            "path::canon",
             {
-                "type": "arc",
-                "arc_type": "spine",
-                "sequence": ["beat::b1", "beat::b2"],
+                "type": "path",
+                "raw_id": "canon",
+                "dilemma_id": "dilemma::d1",
+                "is_canonical": True,
             },
         )
-        g.create_node("beat::b1", {"type": "beat"})
-        g.create_node("beat::b2", {"type": "beat"})
+
+        g.create_node("beat::b1", {"type": "beat", "raw_id": "b1"})
+        g.create_node("beat::b2", {"type": "beat", "raw_id": "b2"})
+        g.add_edge("belongs_to", "beat::b1", "path::canon")
+        g.add_edge("belongs_to", "beat::b2", "path::canon")
+        g.add_edge("predecessor", "beat::b2", "beat::b1")
+
         g.create_node(
             "passage::p1",
-            {"type": "passage", "from_beat": "beat::b1", "prose": "Opening."},
+            {"type": "passage", "raw_id": "p1", "from_beat": "beat::b1", "prose": "Opening."},
         )
-        g.create_node("passage::p2", {"type": "passage", "from_beat": "beat::b2"})
+        g.create_node(
+            "passage::p2",
+            {"type": "passage", "raw_id": "p2", "from_beat": "beat::b2"},
+        )
         g.add_edge("passage_from", "passage::p1", "beat::b1")
         g.add_edge("passage_from", "passage::p2", "beat::b2")
+        g.add_edge("grouped_in", "beat::b1", "passage::p1")
+        g.add_edge("grouped_in", "beat::b2", "passage::p2")
 
-        result = format_lookahead_context(g, "passage::p2", "arc::spine")
+        # Spine arc key is "canon"
+        result = format_lookahead_context(g, "passage::p2", "canon")
         assert "Thematic Echo" not in result
 
 

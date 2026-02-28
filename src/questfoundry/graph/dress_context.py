@@ -17,7 +17,7 @@ from questfoundry.graph.context import (
     parse_scoped_id,
     strip_scope_prefix,
 )
-from questfoundry.graph.fill_context import format_dream_vision, get_spine_arc_id
+from questfoundry.graph.fill_context import format_dream_vision, get_spine_arc_key
 
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
@@ -332,7 +332,7 @@ def describe_priority_context(graph: Graph, passage_id: str, base_score: int) ->
     if scene_type:
         parts.append(f"Scene type: {scene_type}")
 
-    spine_id = get_spine_arc_id(graph)
+    spine_id = get_spine_arc_key(graph)
     if spine_id:
         spine = graph.get_node(spine_id)
         if spine and beat_id in spine.get("sequence", []):
