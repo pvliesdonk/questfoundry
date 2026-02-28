@@ -124,7 +124,7 @@ if TYPE_CHECKING:
 log = get_logger(__name__)
 
 
-def get_spine_arc_id(graph: Graph) -> str | None:
+def get_spine_arc_key(graph: Graph) -> str | None:
     """Compute the spine arc key from graph structure.
 
     The spine arc is the path combination where all paths are canonical.
@@ -913,10 +913,12 @@ def format_lookahead_context(
         path_ids and not all(path_nodes.get(pid, {}).get("is_canonical", False) for pid in path_ids)
     )
 
-    if is_branch and _is_first_branch_beat(graph, arc_id, beat_id):
+    is_first_branch = is_branch and _is_first_branch_beat(graph, arc_id, beat_id)
+
+    if is_first_branch:
         # Compute divergence beat: last shared beat in spine before the
         # first branch-specific beat in this arc's sequence.
-        spine_id = get_spine_arc_id(graph)
+        spine_id = get_spine_arc_key(graph)
         spine_beats = set(get_arc_beat_sequence(graph, spine_id)) if spine_id else set()
         branch_seq = get_arc_beat_sequence(graph, arc_id)
         diverge_beat: str | None = None
@@ -938,7 +940,7 @@ def format_lookahead_context(
     # inject the opening sentence from the story's first passage as a
     # thematic callback anchor. The LLM can echo imagery or phrasing
     # to create narrative resonance.
-    if is_branch and _is_first_branch_beat(graph, arc_id, beat_id):
+    if is_first_branch:
         echo = _extract_opening_echo(graph, arc_id)
         if echo:
             lines.append("**Thematic Echo (for callback):**")
@@ -1034,7 +1036,7 @@ def _extract_opening_echo(graph: Graph, arc_id: str) -> str:
     Returns:
         First sentence of the first passage, or empty string.
     """
-    spine_id = get_spine_arc_id(graph)
+    spine_id = get_spine_arc_key(graph)
     target_arc = spine_id or arc_id
     passage_order = get_arc_passage_order(graph, target_arc)
     if not passage_order:
@@ -1083,7 +1085,7 @@ def _is_first_branch_beat(graph: Graph, arc_id: str, beat_id: str) -> bool:
     if is_spine:
         return False
 
-    spine_id = get_spine_arc_id(graph)
+    spine_id = get_spine_arc_key(graph)
     if not spine_id:
         return False
 

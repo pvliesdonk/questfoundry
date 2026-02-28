@@ -141,7 +141,7 @@ def arc_key_for_paths(
 
     Arc keys are sorted path ``raw_id`` values joined by ``"+"``.
     This is the shared formula used by :func:`compute_arc_traversals`,
-    ``_build_arc_key_to_node_map``, ``_find_spine_arc_key``, and
+    :func:`~questfoundry.graph.fill_context.get_spine_arc_key`, and
     ``_resolve_arc_key``.
 
     Args:

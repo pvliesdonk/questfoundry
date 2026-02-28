@@ -68,6 +68,7 @@ from questfoundry.graph.fill_context import (
     format_vocabulary_note,
     format_voice_context,
     get_arc_passage_order,
+    get_spine_arc_key,
 )
 from questfoundry.graph.graph import Graph
 from questfoundry.graph.snapshots import save_snapshot
@@ -207,41 +208,6 @@ def _resolve_entity_id(graph: Graph, raw_id: str) -> str | None:
         return legacy
 
     return None
-
-
-def _find_spine_arc_key(graph: Graph) -> str | None:
-    """Compute the spine arc key from graph structure.
-
-    The spine arc is the path combination where all paths are canonical.
-    Returns the arc key string or None.
-    """
-    from questfoundry.graph.algorithms import arc_key_for_paths
-    from questfoundry.graph.context import normalize_scoped_id
-
-    path_nodes = graph.get_nodes_by_type("path")
-    dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    if not dilemma_nodes or not path_nodes:
-        return None
-
-    dilemma_canonical: dict[str, list[str]] = {}
-    for path_id, path_data in path_nodes.items():
-        if not path_data.get("is_canonical", False):
-            continue
-        dilemma_id = path_data.get("dilemma_id")
-        if dilemma_id:
-            prefixed = normalize_scoped_id(dilemma_id, "dilemma")
-            if prefixed in dilemma_nodes:
-                dilemma_canonical.setdefault(prefixed, []).append(path_id)
-
-    if len(dilemma_canonical) != len(dilemma_nodes):
-        return None
-
-    # Collect all canonical path IDs across dilemmas
-    all_canonical_pids: list[str] = []
-    for _did in sorted(dilemma_canonical):
-        all_canonical_pids.extend(dilemma_canonical[_did])
-
-    return arc_key_for_paths(path_nodes, all_canonical_pids)
 
 
 def _is_spine_arc(graph: Graph, arc_id: str) -> bool:
@@ -941,7 +907,7 @@ class FillStage:
 
         if traversals:
             # Identify spine: arc whose paths are all canonical
-            spine_key = _find_spine_arc_key(graph)
+            spine_key = get_spine_arc_key(graph)
 
             # Spine first
             if spine_key and spine_key in traversals:

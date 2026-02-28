@@ -39,7 +39,7 @@ from questfoundry.graph.fill_context import (
     format_vocabulary_note,
     format_voice_context,
     get_arc_passage_order,
-    get_spine_arc_id,
+    get_spine_arc_key,
     is_merged_passage,
 )
 from questfoundry.graph.graph import Graph
@@ -221,7 +221,7 @@ def fill_graph() -> Graph:
     # On the manipulator path, branch_reveal comes before aftermath
     g.add_edge("predecessor", "beat::aftermath", "beat::branch_reveal")
 
-    # Arcs (kept for fallback path and format_grow_summary / format_lookahead_context)
+    # Arcs (kept for get_arc_passage_order fallback and _resolve_arc_key)
     g.create_node(
         "arc::spine_0_0",
         {
@@ -255,17 +255,17 @@ def fill_graph() -> Graph:
 
 
 # ---------------------------------------------------------------------------
-# get_spine_arc_id
+# get_spine_arc_key
 # ---------------------------------------------------------------------------
 
 
-class TestGetSpineArcId:
+class TestGetSpineArcKey:
     def test_finds_spine(self, fill_graph: Graph) -> None:
-        assert get_spine_arc_id(fill_graph) == "mentor_trust__protector"
+        assert get_spine_arc_key(fill_graph) == "mentor_trust__protector"
 
     def test_no_arcs(self) -> None:
         g = Graph.empty()
-        assert get_spine_arc_id(g) is None
+        assert get_spine_arc_key(g) is None
 
 
 # ---------------------------------------------------------------------------
