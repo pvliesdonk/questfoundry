@@ -2094,11 +2094,13 @@ async def serialize_seed_as_function(
             # Re-merge and continue loop for re-validation
             seed_output = SeedOutput.model_validate(collected)
 
-        # Return with remaining blocking errors (filter non-blocking warnings)
+        # Recompute filter here (not reusing loop-local variable) because the
+        # graph-is-None fast path above skips the loop entirely, leaving
+        # semantic_errors as [] — this guard covers both code paths.
         blocking_errors = [e for e in semantic_errors if e.category != SeedErrorCategory.WARNING]
         warnings = [e for e in semantic_errors if e.category == SeedErrorCategory.WARNING]
         if warnings:
-            log.info(
+            log.debug(
                 "seed_warnings_stripped_from_result",
                 warning_count=len(warnings),
                 warnings=[w.issue for w in warnings],

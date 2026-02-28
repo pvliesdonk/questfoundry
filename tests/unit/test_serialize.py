@@ -703,39 +703,84 @@ class TestSerializeResult:
 
         assert result.success is False
 
-    def test_warnings_do_not_block_success(self) -> None:
-        """WARNING-only semantic errors should not prevent success."""
-        from questfoundry.agents.serialize import SerializeResult
+    @pytest.mark.asyncio
+    async def test_warning_only_errors_produce_success(self) -> None:
+        """serialize_seed_as_function strips WARNINGs before building SerializeResult."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
         from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
-        from questfoundry.models.seed import SeedOutput
 
-        artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
-        warnings = [
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        mock_path = {
+            "path_id": "path::d__a1",
+            "dilemma_id": "dilemma::d",
+            "answer_id": "a1",
+            "name": "P",
+            "description": "D",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
+            "consequence_ids": [],
+        }
+
+        warning_errors = [
             SeedValidationError(
                 field_path="beats.path_1",
                 issue="No beat after commit",
                 category=SeedErrorCategory.WARNING,
-            )
+            ),
         ]
-        # Warnings should NOT be included in semantic_errors that block success.
-        # The fix filters them before constructing SerializeResult.
-        result = SerializeResult(artifact=artifact, tokens_used=100, semantic_errors=[])
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_ser,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 15),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                return_value=([], 20),
+            ),
+        ):
+            mock_ser.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+            ]
+
+            with patch(
+                "questfoundry.agents.serialize.validate_seed_mutations",
+                return_value=warning_errors,
+            ):
+                result = await serialize_seed_as_function(
+                    model=mock_model,
+                    brief="Test brief",
+                    graph=mock_graph,
+                )
 
         assert result.success is True
+        assert len(result.semantic_errors) == 0
 
-        # But if they leak through (pre-fix behavior), success is False:
-        result_leaked = SerializeResult(
-            artifact=artifact, tokens_used=100, semantic_errors=warnings
-        )
-        assert result_leaked.success is False
-
-    def test_mixed_warnings_and_errors_returns_only_blocking(self) -> None:
-        """When both warnings and blocking errors exist, only blocking errors matter."""
-        from questfoundry.agents.serialize import SerializeResult
+    @pytest.mark.asyncio
+    async def test_mixed_warnings_and_errors_strips_warnings(self) -> None:
+        """serialize_seed_as_function keeps blocking errors, strips WARNINGs."""
+        from questfoundry.agents.serialize import serialize_seed_as_function
         from questfoundry.graph.mutations import SeedErrorCategory, SeedValidationError
-        from questfoundry.models.seed import SeedOutput
 
-        artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+        mock_model = MagicMock()
+        mock_graph = MagicMock()
+
+        mock_path = {
+            "path_id": "path::d__a1",
+            "dilemma_id": "dilemma::d",
+            "answer_id": "a1",
+            "name": "P",
+            "description": "D",
+            "unexplored_answer_ids": [],
+            "path_importance": "major",
+            "consequence_ids": [],
+        }
+
         mixed_errors = [
             SeedValidationError(
                 field_path="beats.path_1",
@@ -750,9 +795,37 @@ class TestSerializeResult:
                 category=SeedErrorCategory.SEMANTIC,
             ),
         ]
-        # Filter out warnings, keep only blocking errors
-        blocking_only = [e for e in mixed_errors if e.category != SeedErrorCategory.WARNING]
-        result = SerializeResult(artifact=artifact, tokens_used=100, semantic_errors=blocking_only)
+
+        with (
+            patch("questfoundry.agents.serialize.serialize_to_artifact") as mock_ser,
+            patch(
+                "questfoundry.agents.serialize._serialize_paths_per_dilemma",
+                return_value=([mock_path], 15),
+            ),
+            patch(
+                "questfoundry.agents.serialize._serialize_beats_per_path",
+                return_value=([], 20),
+            ),
+        ):
+            # 3 initial sections + 1 retry for entities (semantic error triggers retry)
+            mock_ser.side_effect = [
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),
+                (MagicMock(model_dump=lambda: {"dilemmas": [_MOCK_DILEMMA]}), 10),
+                (MagicMock(model_dump=lambda: {"consequences": []}), 10),
+                (MagicMock(model_dump=lambda: {"entities": []}), 10),  # retry
+            ]
+
+            # Return same errors on every validation call (errors persist after retry)
+            with patch(
+                "questfoundry.agents.serialize.validate_seed_mutations",
+                return_value=mixed_errors,
+            ):
+                result = await serialize_seed_as_function(
+                    model=mock_model,
+                    brief="Test brief",
+                    graph=mock_graph,
+                    max_semantic_retries=1,
+                )
 
         assert result.success is False
         assert len(result.semantic_errors) == 1
