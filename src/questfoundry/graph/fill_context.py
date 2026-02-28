@@ -1683,17 +1683,17 @@ def format_ending_guidance(
 def format_ending_differentiation(graph: Graph, passage_id: str) -> str:
     """Build family-specific narrative context for a synthetic ending passage.
 
-    Traces the passage's ``family_codewords`` back through graph edges to
+    Traces the passage's ``family_state_flags`` back through graph edges to
     collect the consequence descriptions and path themes that distinguish
     this ending from its siblings.  Returns a prompt block that grounds
     the LLM in the specific consequences the reader experienced.
 
     Edge traversal::
 
-        codeword --tracks--> consequence <--has_consequence-- path
+        state_flag --tracks--> consequence <--has_consequence-- path
 
     Args:
-        graph: Story graph with codeword, consequence, and path nodes.
+        graph: Story graph with state_flag, consequence, and path nodes.
         passage_id: Full node ID (e.g. ``passage::ending_climax_0``).
 
     Returns:
@@ -1705,16 +1705,16 @@ def format_ending_differentiation(graph: Graph, passage_id: str) -> str:
     if not passage:
         return ""
 
-    family_codewords = passage.get("family_codewords")
-    if not family_codewords or not passage.get("is_synthetic"):
+    family_flags = passage.get("family_state_flags")
+    if not family_flags or not passage.get("is_synthetic"):
         return ""
 
-    # codeword → consequence (via tracks edges: codeword tracks consequence)
-    # We only need edges for our family codewords.
+    # state_flag → consequence (via tracks edges: state_flag tracks consequence)
+    # We only need edges for our family state flags.
     bullets: list[str] = []
-    for cw_id in sorted(family_codewords):
-        scoped_cw = cw_id if cw_id.startswith("codeword::") else f"codeword::{cw_id}"
-        tracks = graph.get_edges(from_id=scoped_cw, edge_type="tracks")
+    for sf_id in sorted(family_flags):
+        scoped_sf = sf_id if sf_id.startswith("state_flag::") else f"state_flag::{sf_id}"
+        tracks = graph.get_edges(from_id=scoped_sf, edge_type="tracks")
         if not tracks:
             continue
         consequence_id = sorted(tracks, key=lambda e: e["to"])[0]["to"]

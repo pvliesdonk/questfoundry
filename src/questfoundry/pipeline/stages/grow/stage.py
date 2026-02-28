@@ -3,7 +3,7 @@
 The GROW stage builds the complete branching structure from the SEED
 graph. It runs a mix of deterministic and LLM-powered phases that
 enumerate arcs, assess path-agnostic beats, compute
-divergence/convergence points, create passages and codewords, and
+divergence/convergence points, create passages and state flags, and
 prune unreachable nodes.
 
 GROW manages its own graph: it loads, mutates, and saves the graph
@@ -40,7 +40,6 @@ from questfoundry.pipeline.stages.grow._helpers import (
 )
 from questfoundry.pipeline.stages.grow.deterministic import (  # noqa: F401 - register phases
     phase_apply_routing,
-    phase_codewords,
     phase_collapse_linear_beats,
     phase_collapse_passages,
     phase_convergence,
@@ -49,6 +48,7 @@ from questfoundry.pipeline.stages.grow.deterministic import (  # noqa: F401 - re
     phase_mark_endings,
     phase_passages,
     phase_prune,
+    phase_state_flags,
     phase_validate_dag,
     phase_validation,
 )
@@ -151,7 +151,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         "convergence": "phase_convergence",
         "collapse_linear_beats": "phase_collapse_linear_beats",
         "passages": "phase_passages",
-        "codewords": "phase_codewords",
+        "state_flags": "phase_state_flags",
         "mark_endings": "phase_mark_endings",
         "apply_routing": "phase_apply_routing",
         "collapse_passages": "phase_collapse_passages",
@@ -361,7 +361,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
 
         arcs = enumerate_arcs(graph)
         passage_nodes = graph.get_nodes_by_type("passage")
-        codeword_nodes = graph.get_nodes_by_type("codeword")
+        state_flag_nodes = graph.get_nodes_by_type("state_flag")
         choice_nodes = graph.get_nodes_by_type("choice")
         entity_nodes = graph.get_nodes_by_type("entity")
 
@@ -376,7 +376,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         grow_result = GrowResult(
             arc_count=len(arcs),
             passage_count=len(passage_nodes),
-            codeword_count=len(codeword_nodes),
+            state_flag_count=len(state_flag_nodes),
             choice_count=len(choice_nodes),
             overlay_count=overlay_count,
             phases_completed=phase_results,
@@ -388,7 +388,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
             stage="grow",
             arcs=grow_result.arc_count,
             passages=grow_result.passage_count,
-            codewords=grow_result.codeword_count,
+            state_flags=grow_result.state_flag_count,
         )
 
         # GROW manages its own graph; return summary data for validation

@@ -245,7 +245,7 @@ class TestGlobalRegistry:
             "convergence",
             "collapse_linear_beats",
             "passages",
-            "codewords",
+            "state_flags",
             "residue_beats",
             "overlays",
             "choices",
@@ -272,8 +272,8 @@ class TestGlobalRegistry:
         assert "prune" in table
 
     def test_apply_routing_has_three_dependencies(self) -> None:
-        """apply_routing depends on mark_endings, codewords, and residue_beats (S3, ADR-017)."""
+        """apply_routing depends on mark_endings, state_flags, and residue_beats (S3, ADR-017)."""
         registry = get_registry()
         meta = registry.get_meta("apply_routing")
         assert meta is not None
-        assert set(meta.depends_on) == {"mark_endings", "codewords", "residue_beats"}
+        assert set(meta.depends_on) == {"mark_endings", "state_flags", "residue_beats"}

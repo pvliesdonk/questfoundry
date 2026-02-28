@@ -166,7 +166,7 @@ class TestValidatePhase8cOutput:
         errors = validate_phase8c_output(
             result,
             valid_entity_ids={"entity::e1"},
-            valid_codeword_ids={"cw::c1"},
+            valid_state_flag_ids={"cw::c1"},
         )
         assert errors == []
 
@@ -183,12 +183,12 @@ class TestValidatePhase8cOutput:
         errors = validate_phase8c_output(
             result,
             valid_entity_ids={"entity::e1"},
-            valid_codeword_ids={"cw::c1"},
+            valid_state_flag_ids={"cw::c1"},
         )
         assert len(errors) == 1
         assert "entity::bad" in errors[0].issue
 
-    def test_invalid_codeword_id(self) -> None:
+    def test_invalid_state_flag_id(self) -> None:
         result = Phase8cOutput(
             overlays=[
                 OverlayProposal(
@@ -201,12 +201,12 @@ class TestValidatePhase8cOutput:
         errors = validate_phase8c_output(
             result,
             valid_entity_ids={"entity::e1"},
-            valid_codeword_ids={"cw::c1"},
+            valid_state_flag_ids={"cw::c1"},
         )
         assert len(errors) == 1
         assert "cw::bad" in errors[0].issue
 
-    def test_multiple_invalid_codewords(self) -> None:
+    def test_multiple_invalid_state_flags(self) -> None:
         result = Phase8cOutput(
             overlays=[
                 OverlayProposal(
@@ -219,7 +219,7 @@ class TestValidatePhase8cOutput:
         errors = validate_phase8c_output(
             result,
             valid_entity_ids={"entity::e1"},
-            valid_codeword_ids={"cw::c1"},
+            valid_state_flag_ids={"cw::c1"},
         )
         assert len(errors) == 2
 
@@ -562,41 +562,41 @@ class TestValidatePhase9cGrants:
         return Phase9cOutput(hubs=[hub])
 
     def test_valid_spoke_grants_pass(self) -> None:
-        result = self._make_phase9c_output(grants=["codeword::cw_mural"])
+        result = self._make_phase9c_output(grants=["state_flag::cw_mural"])
         errors = validate_phase9c_output(
             result,
             valid_passage_ids={"passage::market"},
-            valid_codeword_ids={"codeword::cw_mural"},
+            valid_state_flag_ids={"state_flag::cw_mural"},
         )
         assert not errors
 
     def test_invalid_spoke_grants_rejected(self) -> None:
-        result = self._make_phase9c_output(grants=["codeword::nonexistent"])
+        result = self._make_phase9c_output(grants=["state_flag::nonexistent"])
         errors = validate_phase9c_output(
             result,
             valid_passage_ids={"passage::market"},
-            valid_codeword_ids={"codeword::cw_mural"},
+            valid_state_flag_ids={"state_flag::cw_mural"},
         )
         assert len(errors) == 1
         assert "nonexistent" in errors[0].issue
 
-    def test_no_codeword_validation_when_none(self) -> None:
-        """When valid_codeword_ids is None, grants are not validated."""
-        result = self._make_phase9c_output(grants=["codeword::anything"])
+    def test_no_state_flag_validation_when_none(self) -> None:
+        """When valid_state_flag_ids is None, grants are not validated."""
+        result = self._make_phase9c_output(grants=["state_flag::anything"])
         errors = validate_phase9c_output(
             result,
             valid_passage_ids={"passage::market"},
-            valid_codeword_ids=None,
+            valid_state_flag_ids=None,
         )
         assert not errors
 
     def test_unscoped_grant_id_normalized(self) -> None:
-        """Grant IDs without 'codeword::' prefix are normalized."""
+        """Grant IDs without 'state_flag::' prefix are normalized."""
         result = self._make_phase9c_output(grants=["cw_mural"])
         errors = validate_phase9c_output(
             result,
             valid_passage_ids={"passage::market"},
-            valid_codeword_ids={"codeword::cw_mural"},
+            valid_state_flag_ids={"state_flag::cw_mural"},
         )
         assert not errors
 
@@ -608,10 +608,10 @@ class TestValidatePhase8dOutput:
     def _make_output(
         passage_id: str = "passage::aftermath",
         dilemma_id: str = "dilemma::approach",
-        codeword_ids: list[str] | None = None,
+        state_flag_ids: list[str] | None = None,
     ) -> Phase8dOutput:
-        if codeword_ids is None:
-            codeword_ids = ["codeword::fight_committed", "codeword::talk_committed"]
+        if state_flag_ids is None:
+            state_flag_ids = ["state_flag::fight_committed", "state_flag::talk_committed"]
         return Phase8dOutput(
             proposals=[
                 ResidueBeatProposal(
@@ -619,8 +619,8 @@ class TestValidatePhase8dOutput:
                     dilemma_id=dilemma_id,
                     rationale="Test rationale",
                     variants=[
-                        ResidueVariant(codeword_id=cw, hint=f"hint for {cw} variant prose")
-                        for cw in codeword_ids
+                        ResidueVariant(state_flag_id=sf, hint=f"hint for {sf} variant prose")
+                        for sf in state_flag_ids
                     ],
                 ),
             ]
@@ -631,7 +631,7 @@ class TestValidatePhase8dOutput:
         errors = validate_phase8d_output(
             result,
             valid_passage_ids={"passage::aftermath"},
-            valid_codeword_ids={"codeword::fight_committed", "codeword::talk_committed"},
+            valid_state_flag_ids={"state_flag::fight_committed", "state_flag::talk_committed"},
             valid_dilemma_ids={"dilemma::approach"},
         )
         assert not errors
@@ -641,7 +641,7 @@ class TestValidatePhase8dOutput:
         errors = validate_phase8d_output(
             result,
             valid_passage_ids={"passage::aftermath"},
-            valid_codeword_ids={"codeword::fight_committed", "codeword::talk_committed"},
+            valid_state_flag_ids={"state_flag::fight_committed", "state_flag::talk_committed"},
             valid_dilemma_ids={"dilemma::approach"},
         )
         assert len(errors) == 1
@@ -652,29 +652,31 @@ class TestValidatePhase8dOutput:
         errors = validate_phase8d_output(
             result,
             valid_passage_ids={"passage::aftermath"},
-            valid_codeword_ids={"codeword::fight_committed", "codeword::talk_committed"},
+            valid_state_flag_ids={"state_flag::fight_committed", "state_flag::talk_committed"},
             valid_dilemma_ids={"dilemma::approach"},
         )
         assert len(errors) == 1
         assert "dilemma_id" in errors[0].field_path
 
-    def test_invalid_codeword_id(self) -> None:
-        result = self._make_output(codeword_ids=["codeword::fight_committed", "codeword::fake"])
+    def test_invalid_state_flag_id(self) -> None:
+        result = self._make_output(
+            state_flag_ids=["state_flag::fight_committed", "state_flag::fake"]
+        )
         errors = validate_phase8d_output(
             result,
             valid_passage_ids={"passage::aftermath"},
-            valid_codeword_ids={"codeword::fight_committed", "codeword::talk_committed"},
+            valid_state_flag_ids={"state_flag::fight_committed", "state_flag::talk_committed"},
             valid_dilemma_ids={"dilemma::approach"},
         )
         assert len(errors) == 1
-        assert "codeword_id" in errors[0].field_path
+        assert "state_flag_id" in errors[0].field_path
 
     def test_empty_proposals_no_errors(self) -> None:
         result = Phase8dOutput(proposals=[])
         errors = validate_phase8d_output(
             result,
             valid_passage_ids={"passage::aftermath"},
-            valid_codeword_ids={"codeword::fight_committed"},
+            valid_state_flag_ids={"state_flag::fight_committed"},
             valid_dilemma_ids={"dilemma::approach"},
         )
         assert not errors

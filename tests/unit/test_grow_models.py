@@ -10,7 +10,6 @@ from questfoundry.models.grow import (
     AtmosphericDetail,
     Choice,
     ChoiceLabel,
-    Codeword,
     EntityArcDescriptor,
     EntityOverlay,
     GapProposal,
@@ -28,6 +27,7 @@ from questfoundry.models.grow import (
     ResidueVariant,
     SceneTypeTag,
     SpokeProposal,
+    StateFlag,
 )
 
 
@@ -125,30 +125,30 @@ class TestPassage:
             Passage(passage_id="p1", from_beat="b1", summary="")
 
 
-class TestCodeword:
-    def test_valid_codeword(self) -> None:
-        cw = Codeword(
-            codeword_id="codeword::mentor_trust_committed",
+class TestStateFlag:
+    def test_valid_state_flag(self) -> None:
+        sf = StateFlag(
+            flag_id="state_flag::mentor_trust_committed",
             tracks="consequence::mentor_trust",
         )
-        assert cw.codeword_id == "codeword::mentor_trust_committed"
-        assert cw.codeword_type == "granted"
+        assert sf.flag_id == "state_flag::mentor_trust_committed"
+        assert sf.flag_type == "granted"
 
     def test_default_type_is_granted(self) -> None:
-        cw = Codeword(codeword_id="cw1", tracks="c1")
-        assert cw.codeword_type == "granted"
+        sf = StateFlag(flag_id="sf1", tracks="c1")
+        assert sf.flag_type == "granted"
 
-    def test_empty_codeword_id_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="codeword_id"):
-            Codeword(codeword_id="", tracks="c1")
+    def test_empty_flag_id_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="flag_id"):
+            StateFlag(flag_id="", tracks="c1")
 
     def test_empty_tracks_rejected(self) -> None:
         with pytest.raises(ValidationError, match="tracks"):
-            Codeword(codeword_id="cw1", tracks="")
+            StateFlag(flag_id="sf1", tracks="")
 
-    def test_invalid_codeword_type_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="codeword_type"):
-            Codeword(codeword_id="cw1", tracks="c1", codeword_type="revoked")  # type: ignore[arg-type]
+    def test_invalid_flag_type_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="flag_type"):
+            StateFlag(flag_id="sf1", tracks="c1", flag_type="revoked")  # type: ignore[arg-type]
 
 
 class TestChoice:
@@ -157,15 +157,15 @@ class TestChoice:
             from_passage="p1",
             to_passage="p2",
             label="Go left",
-            requires_codewords=["cw1"],
-            grants=["cw2"],
+            requires_state_flags=["sf1"],
+            grants=["sf2"],
         )
         assert choice.from_passage == "p1"
-        assert choice.requires_codewords == ["cw1"]
+        assert choice.requires_state_flags == ["sf1"]
 
     def test_empty_requires_grants_allowed(self) -> None:
         choice = Choice(from_passage="p1", to_passage="p2", label="Continue")
-        assert choice.requires_codewords == []
+        assert choice.requires_state_flags == []
         assert choice.grants == []
 
     def test_empty_label_rejected(self) -> None:
@@ -393,7 +393,7 @@ class TestGrowResult:
         result = GrowResult()
         assert result.arc_count == 0
         assert result.passage_count == 0
-        assert result.codeword_count == 0
+        assert result.state_flag_count == 0
         assert result.phases_completed == []
         assert result.spine_arc_id is None
 
@@ -401,7 +401,7 @@ class TestGrowResult:
         result = GrowResult(
             arc_count=4,
             passage_count=8,
-            codeword_count=2,
+            state_flag_count=2,
             phases_completed=[
                 GrowPhaseResult(phase="validate", status="completed"),
                 GrowPhaseResult(phase="arcs", status="completed"),
@@ -428,7 +428,7 @@ class TestGrowResult:
         data = {
             "arc_count": 3,
             "passage_count": 6,
-            "codeword_count": 1,
+            "state_flag_count": 1,
             "phases_completed": [
                 {"phase": "validate", "status": "completed", "detail": ""},
             ],
@@ -650,23 +650,23 @@ class TestResidueVariant:
 
     def test_valid_variant(self) -> None:
         v = ResidueVariant(
-            codeword_id="codeword::fistfight_committed",
+            state_flag_id="state_flag::fistfight_committed",
             hint="mention the scar from the fight",
         )
-        assert v.codeword_id == "codeword::fistfight_committed"
+        assert v.state_flag_id == "state_flag::fistfight_committed"
         assert "scar" in v.hint
 
-    def test_empty_codeword_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="codeword_id"):
-            ResidueVariant(codeword_id="", hint="a valid hint that is long enough")
+    def test_empty_state_flag_rejected(self) -> None:
+        with pytest.raises(ValidationError, match="state_flag_id"):
+            ResidueVariant(state_flag_id="", hint="a valid hint that is long enough")
 
     def test_short_hint_rejected(self) -> None:
         with pytest.raises(ValidationError, match="hint"):
-            ResidueVariant(codeword_id="codeword::x", hint="too short")
+            ResidueVariant(state_flag_id="state_flag::x", hint="too short")
 
     def test_long_hint_rejected(self) -> None:
         with pytest.raises(ValidationError, match="hint"):
-            ResidueVariant(codeword_id="codeword::x", hint="a" * 201)
+            ResidueVariant(state_flag_id="state_flag::x", hint="a" * 201)
 
 
 class TestResidueBeatProposal:
@@ -679,11 +679,11 @@ class TestResidueBeatProposal:
             rationale="The aftermath should acknowledge whether the hero fought or argued",
             variants=[
                 ResidueVariant(
-                    codeword_id="codeword::fistfight_committed",
+                    state_flag_id="state_flag::fistfight_committed",
                     hint="mention the scar from the fight",
                 ),
                 ResidueVariant(
-                    codeword_id="codeword::argue_committed",
+                    state_flag_id="state_flag::argue_committed",
                     hint="mention the lingering tension from the argument",
                 ),
             ],
@@ -699,25 +699,25 @@ class TestResidueBeatProposal:
                 rationale="some rationale here",
                 variants=[
                     ResidueVariant(
-                        codeword_id="codeword::a",
+                        state_flag_id="state_flag::a",
                         hint="only one variant is not enough",
                     )
                 ],
             )
 
-    def test_duplicate_codewords_rejected(self) -> None:
-        with pytest.raises(ValidationError, match=r"codeword_id.*unique"):
+    def test_duplicate_state_flags_rejected(self) -> None:
+        with pytest.raises(ValidationError, match=r"state_flag_id.*unique"):
             ResidueBeatProposal(
                 passage_id="passage::x",
                 dilemma_id="dilemma::y",
                 rationale="rationale for this residue",
                 variants=[
                     ResidueVariant(
-                        codeword_id="codeword::same",
+                        state_flag_id="state_flag::same",
                         hint="first variant hint text here",
                     ),
                     ResidueVariant(
-                        codeword_id="codeword::same",
+                        state_flag_id="state_flag::same",
                         hint="second variant hint text here",
                     ),
                 ],
@@ -730,8 +730,8 @@ class TestResidueBeatProposal:
                 dilemma_id="dilemma::y",
                 rationale="some rationale here",
                 variants=[
-                    ResidueVariant(codeword_id="codeword::a", hint="hint text a long enough"),
-                    ResidueVariant(codeword_id="codeword::b", hint="hint text b long enough"),
+                    ResidueVariant(state_flag_id="state_flag::a", hint="hint text a long enough"),
+                    ResidueVariant(state_flag_id="state_flag::b", hint="hint text b long enough"),
                 ],
             )
 
@@ -752,11 +752,11 @@ class TestPhase8dOutput:
                     rationale="trust aftermath differs by path",
                     variants=[
                         ResidueVariant(
-                            codeword_id="codeword::trust_committed",
+                            state_flag_id="state_flag::trust_committed",
                             hint="hero recalls the leap of faith",
                         ),
                         ResidueVariant(
-                            codeword_id="codeword::distrust_committed",
+                            state_flag_id="state_flag::distrust_committed",
                             hint="hero recalls the cold suspicion",
                         ),
                     ],

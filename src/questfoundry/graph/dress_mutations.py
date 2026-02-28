@@ -238,11 +238,11 @@ def validate_dress_codex_entries(
     Checks:
     - At least one entry exists
     - Entry with rank=1 exists (base tier, always visible)
-    - Codeword IDs in visible_when exist in graph
+    - State flag IDs in visible_when exist in graph
     - Ranks are unique per entity
 
     Args:
-        graph: Story graph for codeword validation.
+        graph: Story graph for state flag validation.
         entity_id: Entity these entries belong to.
         entries: List of CodexEntry dicts.
 
@@ -268,17 +268,17 @@ def validate_dress_codex_entries(
         if count > 1:
             errors.append(f"Entity {entity_id}: duplicate rank={r} ({count} entries)")
 
-    # Validate codeword references
-    codewords = graph.get_nodes_by_type("codeword")
-    codeword_ids = {strip_scope_prefix(cid) for cid in codewords}
+    # Validate state flag references
+    state_flags = graph.get_nodes_by_type("state_flag")
+    state_flag_ids = {strip_scope_prefix(cid) for cid in state_flags}
 
     for entry in entries:
         for cw in entry.get("visible_when", []):
             raw_cw = strip_scope_prefix(cw)
-            if raw_cw not in codeword_ids:
+            if raw_cw not in state_flag_ids:
                 errors.append(
                     f"Entity {entity_id}: codex rank={entry.get('rank')} "
-                    f"references unknown codeword '{cw}'"
+                    f"references unknown state flag '{cw}'"
                 )
 
     return errors

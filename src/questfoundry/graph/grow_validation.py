@@ -655,7 +655,7 @@ _MOVED_TO_POLISH = {
     "check_all_endings_reachable",
     "check_all_passages_reachable",
     "check_arc_divergence",
-    "check_codeword_gate_coverage",
+    "check_state_flag_gate_coverage",
     "check_commits_timing",
     "check_forward_path_reachability",
     "check_gate_co_satisfiability",

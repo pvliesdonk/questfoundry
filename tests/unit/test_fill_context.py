@@ -73,7 +73,7 @@ def fill_graph() -> Graph:
             "concept": "A young wanderer seeking answers",
             "overlays": [
                 {
-                    "when": ["codeword::betrayal_committed"],
+                    "when": ["state_flag::betrayal_committed"],
                     "details": {"mood": "bitter", "trust": "broken"},
                 }
             ],
@@ -1388,7 +1388,7 @@ class TestEndingDifferentiation:
         )
         assert format_ending_differentiation(g, "passage::finale") == ""
 
-    def test_returns_empty_when_no_family_codewords(self) -> None:
+    def test_returns_empty_when_no_family_state_flags(self) -> None:
         g = Graph.empty()
         g.create_node(
             "passage::ending_climax_0",
@@ -1397,7 +1397,7 @@ class TestEndingDifferentiation:
                 "raw_id": "ending_climax_0",
                 "is_ending": True,
                 "is_synthetic": True,
-                "family_codewords": [],
+                "family_state_flags": [],
             },
         )
         assert format_ending_differentiation(g, "passage::ending_climax_0") == ""
@@ -1407,7 +1407,7 @@ class TestEndingDifferentiation:
         assert format_ending_differentiation(g, "passage::nonexistent") == ""
 
     def test_returns_formatted_consequences(self) -> None:
-        """Synthetic ending with traceable codewords gets narrative context."""
+        """Synthetic ending with traceable state flags gets narrative context."""
         g = Graph.empty()
         # Path node
         g.create_node(
@@ -1428,17 +1428,17 @@ class TestEndingDifferentiation:
                 "description": "The ally stands by the hero in the final battle.",
             },
         )
-        # Codeword node
+        # State flag node
         g.create_node(
-            "codeword::cw_ally",
-            {"type": "codeword", "raw_id": "cw_ally"},
+            "state_flag::sf_ally",
+            {"type": "state_flag", "raw_id": "sf_ally"},
         )
-        # Edges: codeword --tracks--> consequence
-        g.add_edge("tracks", "codeword::cw_ally", "consequence::ally_trusted")
+        # Edges: state_flag --tracks--> consequence
+        g.add_edge("tracks", "state_flag::sf_ally", "consequence::ally_trusted")
         # path --has_consequence--> consequence
         g.add_edge("has_consequence", "path::ally_path", "consequence::ally_trusted")
 
-        # Synthetic ending passage referencing the codeword
+        # Synthetic ending passage referencing the state flag
         g.create_node(
             "passage::ending_climax_0",
             {
@@ -1446,7 +1446,7 @@ class TestEndingDifferentiation:
                 "raw_id": "ending_climax_0",
                 "is_ending": True,
                 "is_synthetic": True,
-                "family_codewords": ["cw_ally"],
+                "family_state_flags": ["sf_ally"],
             },
         )
 
@@ -1472,10 +1472,10 @@ class TestEndingDifferentiation:
             },
         )
         g.create_node(
-            "codeword::cw_shadow",
-            {"type": "codeword", "raw_id": "cw_shadow"},
+            "state_flag::sf_shadow",
+            {"type": "state_flag", "raw_id": "sf_shadow"},
         )
-        g.add_edge("tracks", "codeword::cw_shadow", "consequence::shadow")
+        g.add_edge("tracks", "state_flag::sf_shadow", "consequence::shadow")
         g.add_edge("has_consequence", "path::dark_path", "consequence::shadow")
         g.create_node(
             "passage::ending_0",
@@ -1484,7 +1484,7 @@ class TestEndingDifferentiation:
                 "raw_id": "ending_0",
                 "is_ending": True,
                 "is_synthetic": True,
-                "family_codewords": ["cw_shadow"],
+                "family_state_flags": ["sf_shadow"],
             },
         )
 
@@ -1492,18 +1492,18 @@ class TestEndingDifferentiation:
         assert "dark_path" in result
         assert "Shadows consume" in result
 
-    def test_skips_codewords_without_consequence_description(self) -> None:
-        """Codewords whose consequences lack descriptions are skipped."""
+    def test_skips_state_flags_without_consequence_description(self) -> None:
+        """State flags whose consequences lack descriptions are skipped."""
         g = Graph.empty()
         g.create_node(
             "consequence::empty_cons",
             {"type": "consequence", "raw_id": "empty_cons", "description": ""},
         )
         g.create_node(
-            "codeword::cw_empty",
-            {"type": "codeword", "raw_id": "cw_empty"},
+            "state_flag::sf_empty",
+            {"type": "state_flag", "raw_id": "sf_empty"},
         )
-        g.add_edge("tracks", "codeword::cw_empty", "consequence::empty_cons")
+        g.add_edge("tracks", "state_flag::sf_empty", "consequence::empty_cons")
         g.create_node(
             "passage::ending_1",
             {
@@ -1511,7 +1511,7 @@ class TestEndingDifferentiation:
                 "raw_id": "ending_1",
                 "is_ending": True,
                 "is_synthetic": True,
-                "family_codewords": ["cw_empty"],
+                "family_state_flags": ["sf_empty"],
             },
         )
 

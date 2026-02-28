@@ -712,16 +712,16 @@ def _collect_family_tones(
 def split_ending_families(graph: Graph) -> EndingSplitResult:
     """Split shared terminal passages into per-arc-family ending passages.
 
-    When multiple arcs with different codeword signatures share the same
+    When multiple arcs with different state flag signatures share the same
     terminal passage, this function creates distinct ending passages gated
-    by distinguishing codewords.  Each arc family gets its own ending
+    by distinguishing state flags.  Each arc family gets its own ending
     passage so that FILL can write unique prose per family.
 
-    Must run AFTER mark_terminal_passages (Phase 9c2) and AFTER codewords
+    Must run AFTER mark_terminal_passages (Phase 9c2) and AFTER state flags
     have been created (Phase 8b).
 
     Args:
-        graph: Story graph with passages, arcs, and codewords.
+        graph: Story graph with passages, arcs, and state flags.
 
     Returns:
         EndingSplitResult with counts.
@@ -736,8 +736,8 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
     if not terminal_ids:
         return EndingSplitResult(0, 0, 0)
 
-    # Build arc → codeword signature mapping
-    arc_codewords = _build_arc_codewords(graph, arc_nodes)
+    # Build arc → state flag signature mapping
+    arc_state_flags = _build_arc_state_flags(graph, arc_nodes)
 
     # Build beat → covering arcs mapping
     beat_to_arcs: dict[str, list[str]] = {}
@@ -758,10 +758,10 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
             already_unique += 1
             continue
 
-        # Group arcs by codeword signature
+        # Group arcs by state flag signature
         sig_to_arcs: dict[frozenset[str], list[str]] = {}
         for arc_id in covering_arcs:
-            sig = arc_codewords.get(arc_id, frozenset())
+            sig = arc_state_flags.get(arc_id, frozenset())
             sig_to_arcs.setdefault(sig, []).append(arc_id)
 
         if len(sig_to_arcs) <= 1:
@@ -776,12 +776,12 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
         for i, (sig, family_arcs) in enumerate(
             sorted(sig_to_arcs.items(), key=lambda x: sorted(x[0]))
         ):
-            # Distinguishing codewords: in this family but not in ALL other families
+            # Distinguishing state flags: in this family but not in ALL other families
             other_sigs_intersection = _intersect_all([s for s in all_sigs if s != sig])
             distinguishing = sorted(sig - other_sigs_intersection)
 
             if not distinguishing:
-                # Degenerate: families share all codewords but have different
+                # Degenerate: families share all state flags but have different
                 # signatures — shouldn't occur, indicates upstream issue
                 log.warning(
                     "degenerate_ending_split",
@@ -804,7 +804,7 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
                 "is_ending": True,
                 "is_synthetic": True,
                 "summary": summary,
-                "family_codewords": distinguishing,
+                "family_state_flags": distinguishing,
                 "family_arc_count": len(family_arcs),
                 "residue_for": terminal_id,
             }
@@ -838,26 +838,26 @@ def split_ending_families(graph: Graph) -> EndingSplitResult:
     )
 
 
-def build_arc_codewords(
+def build_arc_state_flags(
     graph: Graph,
     arc_nodes: dict[str, dict[str, Any]],
     scope: Literal["ending", "routing", "all"] = "ending",
 ) -> dict[str, frozenset[str]]:
-    """Build mapping from arc node ID to its codeword signature.
+    """Build mapping from arc node ID to its state flag signature.
 
     Args:
         graph: The story graph.
         arc_nodes: Arc node data from ``graph.get_nodes_by_type("arc")``.
-        scope: Which codewords to include:
+        scope: Which state flags to include:
 
-            - ``"ending"`` — only codewords from ``ending_salience == "high"``
+            - ``"ending"`` — only state flags from ``ending_salience == "high"``
               dilemmas (for ``split_ending_families``).
-            - ``"routing"`` — codewords from dilemmas with any active routing
+            - ``"routing"`` — state flags from dilemmas with any active routing
               need (``ending_salience == "high"`` OR
               ``residue_weight == "heavy"``), for routing validation.
-            - ``"all"`` — all codewords, unfiltered.
+            - ``"all"`` — all state flags, unfiltered.
 
-    Traces: arc → paths → consequences → codewords via graph edges,
+    Traces: arc → paths → consequences → state flags via graph edges,
     filtered by: path → dilemma → ending_salience / residue_weight.
     """
     # Build path → dilemma lookup, filtered by scope
@@ -880,11 +880,11 @@ def build_arc_codewords(
         ):
             included_paths.add(path_id)
 
-    # consequence → codeword (via tracks edges: codeword tracks consequence)
+    # consequence → state flag (via tracks edges: state_flag tracks consequence)
     tracks_edges = graph.get_edges(edge_type="tracks")
-    consequence_to_codeword: dict[str, str] = {}
+    consequence_to_state_flag: dict[str, str] = {}
     for edge in tracks_edges:
-        consequence_to_codeword[edge["to"]] = edge["from"]
+        consequence_to_state_flag[edge["to"]] = edge["from"]
 
     # path → consequences (via has_consequence edges)
     has_consequence_edges = graph.get_edges(edge_type="has_consequence")
@@ -894,21 +894,21 @@ def build_arc_codewords(
 
     result: dict[str, frozenset[str]] = {}
     for arc_id, data in arc_nodes.items():
-        cws: set[str] = set()
+        sfs: set[str] = set()
         for path_raw in data.get("paths", []):
             path_id = normalize_scoped_id(path_raw, "path")
             if path_id not in included_paths:
                 continue
             for cons_id in path_consequences.get(path_id, []):
-                if cw := consequence_to_codeword.get(cons_id):
-                    cws.add(cw)
-        result[arc_id] = frozenset(cws)
+                if sf := consequence_to_state_flag.get(cons_id):
+                    sfs.add(sf)
+        result[arc_id] = frozenset(sfs)
 
     return result
 
 
 # Backward-compatible alias for internal callers
-_build_arc_codewords = build_arc_codewords
+_build_arc_state_flags = build_arc_state_flags
 
 
 def _intersect_all(sets: list[frozenset[str]]) -> frozenset[str]:
@@ -927,11 +927,11 @@ class VariantSpec:
 
     Attributes:
         passage_id: Target variant passage (must already exist in graph).
-        requires_codewords: Codewords gating this variant route.
+        requires_state_flags: State flags gating this variant route.
     """
 
     passage_id: str
-    requires_codewords: list[str]
+    requires_state_flags: list[str]
 
 
 def split_and_reroute(
@@ -955,7 +955,7 @@ def split_and_reroute(
     Args:
         graph: Story graph with passage and choice nodes.
         base_passage_id: The shared passage to replace with variants.
-        variants: List of variant specs (passage + codeword gates).
+        variants: List of variant specs (passage + state flag gates).
         keep_fallback: If True, keep original incoming choices as ungated
             fallback routes to base_passage_id.  If False (default),
             remove original incoming choices.
@@ -1000,7 +1000,7 @@ def split_and_reroute(
                     "type": "choice",
                     "from_passage": source_passage,
                     "to_passage": variant.passage_id,
-                    "requires_codewords": list(variant.requires_codewords),
+                    "requires_state_flags": list(variant.requires_state_flags),
                     "grants": list(original_choice.get("grants", [])),
                     "label": original_choice.get("label"),
                     "is_routing": True,
@@ -1920,7 +1920,7 @@ class ResidueCandidate:
     dilemma_id: str
     dilemma_role: str  # "soft"
     residue_weight: str  # "heavy" or "light" (cosmetic filtered out)
-    codeword_ids: list[str]  # Available codewords for gating variants
+    state_flag_ids: list[str]  # Available state flags for gating variants
     dilemma_question: str  # For LLM context
 
 
@@ -1959,20 +1959,20 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
         if from_beat:
             beat_to_passage[from_beat] = pid
 
-    # Build path → codeword mapping (path's consequence → codeword)
-    path_codewords: dict[str, list[str]] = {}
-    codeword_nodes = graph.get_nodes_by_type("codeword")
+    # Build path → state flag mapping (path's consequence → state flag)
+    path_state_flags: dict[str, list[str]] = {}
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
     has_consequence_edges = graph.get_edges(edge_type="has_consequence")
     # Map consequence → path
     cons_to_path: dict[str, str] = {}
     for edge in has_consequence_edges:
         cons_to_path[edge["to"]] = edge["from"]
-    # Map path → codewords via consequence
-    for cw_id, cw_data in codeword_nodes.items():
-        tracks = cw_data.get("tracks", "")
+    # Map path → state flags via consequence
+    for sf_id, sf_data in state_flag_nodes.items():
+        tracks = sf_data.get("tracks", "")
         path_id = cons_to_path.get(tracks)
         if path_id:
-            path_codewords.setdefault(path_id, []).append(cw_id)
+            path_state_flags.setdefault(path_id, []).append(sf_id)
 
     # Build dilemma → paths mapping
     dilemma_paths_map = build_dilemma_paths(graph)
@@ -2009,13 +2009,13 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
                 continue
             seen.add(key)
 
-            # Collect codewords for this dilemma's paths
+            # Collect state flags for this dilemma's paths
             paths = dilemma_paths_map.get(dc.dilemma_id, [])
-            cw_ids: list[str] = []
+            sf_ids: list[str] = []
             for path_id in paths:
-                cw_ids.extend(path_codewords.get(path_id, []))
+                sf_ids.extend(path_state_flags.get(path_id, []))
 
-            if len(cw_ids) < 2:
+            if len(sf_ids) < 2:
                 continue  # Need at least 2 variants
 
             # Get dilemma question for LLM context
@@ -2027,7 +2027,7 @@ def find_residue_candidates(graph: Graph) -> list[ResidueCandidate]:
                     dilemma_id=dc.dilemma_id,
                     dilemma_role=dc.policy,
                     residue_weight=residue_weight,
-                    codeword_ids=sorted(cw_ids),
+                    state_flag_ids=sorted(sf_ids),
                     dilemma_question=question,
                 )
             )
@@ -2051,24 +2051,24 @@ def create_residue_passages(
     """Create variant passages from accepted residue proposals.
 
     For each proposal:
-    1. Create variant passages (passage::{base}__via_{codeword_suffix})
+    1. Create variant passages (passage::{base}__via_{state_flag_suffix})
     2. Mark variants with is_residue=True and residue metadata
     3. Wire variants via split_and_reroute (incoming-edge rewriting)
 
-    The base passage is kept as fallback for arcs whose codewords don't
+    The base passage is kept as fallback for arcs whose state flags don't
     match any variant (keep_fallback=True).
 
     Args:
-        graph: Story graph with passages and codewords.
+        graph: Story graph with passages and state flags.
         proposals: List of dicts with keys: passage_id, dilemma_id,
-            variants (list of {codeword_id, hint}).
+            variants (list of {state_flag_id, hint}).
 
     Returns:
         ResidueCreationResult with counts.
     """
     passage_nodes = graph.get_nodes_by_type("passage")
-    codeword_nodes = graph.get_nodes_by_type("codeword")
-    valid_codewords = set(codeword_nodes.keys())
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
+    valid_state_flags = set(state_flag_nodes.keys())
 
     variants_created = 0
     applied = 0
@@ -2091,15 +2091,15 @@ def create_residue_passages(
             skipped += 1
             continue
 
-        # Validate all codewords exist
+        # Validate all state flags exist
         all_valid = True
         for variant in variants:
-            cw_id = variant.get("codeword_id", "")
-            if cw_id not in valid_codewords:
+            sf_id = variant.get("state_flag_id", "")
+            if sf_id not in valid_state_flags:
                 log.warning(
-                    "residue_invalid_codeword",
+                    "residue_invalid_state_flag",
                     passage_id=passage_id,
-                    codeword_id=cw_id,
+                    state_flag_id=sf_id,
                 )
                 all_valid = False
                 break
@@ -2110,15 +2110,15 @@ def create_residue_passages(
         # Create variant passages and collect specs for routing
         variant_specs: list[VariantSpec] = []
         for variant in variants:
-            cw_id = variant.get("codeword_id", "")
+            sf_id = variant.get("state_flag_id", "")
             hint = variant.get("hint", "")
-            cw_suffix = strip_scope_prefix(cw_id).removesuffix("_committed")
+            sf_suffix = strip_scope_prefix(sf_id).removesuffix("_committed")
 
-            variant_pid = f"passage::{raw_id}__via_{cw_suffix}"
+            variant_pid = f"passage::{raw_id}__via_{sf_suffix}"
             # Ensure unique ID
             counter = 1
             while graph.get_node(variant_pid):
-                variant_pid = f"passage::{raw_id}__via_{cw_suffix}_{counter}"
+                variant_pid = f"passage::{raw_id}__via_{sf_suffix}_{counter}"
                 counter += 1
 
             graph.create_node(
@@ -2132,16 +2132,16 @@ def create_residue_passages(
                     "is_residue": True,
                     "is_synthetic": True,
                     "residue_for": passage_id,
-                    "residue_codeword": cw_id,
+                    "residue_state_flag": sf_id,
                     "residue_hint": hint,
                     "residue_dilemma": dilemma_id,
                 },
             )
-            variant_specs.append(VariantSpec(variant_pid, [cw_id]))
+            variant_specs.append(VariantSpec(variant_pid, [sf_id]))
             variants_created += 1
 
         # Wire variants via incoming-edge rewriting; base passage is kept
-        # as fallback for arcs whose codewords don't match any variant
+        # as fallback for arcs whose state flags don't match any variant
         split_and_reroute(graph, passage_id, variant_specs, keep_fallback=True)
         applied += 1
 
@@ -2174,7 +2174,7 @@ class HeavyDivergenceTarget:
     dilemma_id: str
     residue_weight: str
     ending_salience: str
-    path_codewords: dict[str, str]  # path_id → codeword_id
+    path_state_flags: dict[str, str]  # path_id → state_flag_id
 
 
 def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
@@ -2197,7 +2197,7 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
     passage_nodes = graph.get_nodes_by_type("passage")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
     path_nodes = graph.get_nodes_by_type("path")
-    codeword_nodes = graph.get_nodes_by_type("codeword")
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
 
     if not arc_nodes or not passage_nodes or not dilemma_nodes:
         return []
@@ -2219,26 +2219,26 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
                 dilemma_id = normalize_scoped_id(raw_did, "dilemma")
                 arc_dilemma_paths.setdefault(arc_id, set()).add((dilemma_id, path_id))
 
-    # Path → codeword mapping (via consequence → codeword.tracks)
-    path_to_codeword: dict[str, str] = {}
+    # Path → state flag mapping (via consequence → state_flag.tracks)
+    path_to_state_flag: dict[str, str] = {}
     has_consequence_edges = graph.get_edges(edge_type="has_consequence")
     cons_to_path: dict[str, str] = {}
     for edge in has_consequence_edges:
         cons_to_path[edge["to"]] = edge["from"]
-    for cw_id, cw_data in codeword_nodes.items():
-        tracks = cw_data.get("tracks", "")
+    for sf_id, sf_data in state_flag_nodes.items():
+        tracks = sf_data.get("tracks", "")
         path_id_for_tracks = cons_to_path.get(tracks)
         if not path_id_for_tracks:
             continue
-        # Invariant: each path should have a single committed codeword.
-        if path_id_for_tracks in path_to_codeword:
+        # Invariant: each path should have a single committed state flag.
+        if path_id_for_tracks in path_to_state_flag:
             log.warning(
-                "path_codeword_duplicate",
+                "path_state_flag_duplicate",
                 path_id=path_id_for_tracks,
-                codeword_id=cw_id,
+                state_flag_id=sf_id,
             )
             continue
-        path_to_codeword[path_id_for_tracks] = cw_id
+        path_to_state_flag[path_id_for_tracks] = sf_id
 
     # Already-routed passages — identified by variant passages that
     # reference them via ``residue_for`` metadata.  We do NOT use
@@ -2301,15 +2301,15 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
             if len(paths_for_dilemma) < 2:
                 continue  # Arcs agree — no divergence
 
-            # Build path → codeword mapping for the diverging paths
-            pcw: dict[str, str] = {}
+            # Build path → state flag mapping for the diverging paths
+            psf: dict[str, str] = {}
             for p_id in sorted(paths_for_dilemma):
-                cw = path_to_codeword.get(p_id)
-                if cw:
-                    pcw[p_id] = cw
+                sf = path_to_state_flag.get(p_id)
+                if sf:
+                    psf[p_id] = sf
 
-            if len(pcw) < 2:
-                continue  # Need at least 2 gatable codewords
+            if len(psf) < 2:
+                continue  # Need at least 2 gatable state flags
 
             # Detect multi-dilemma routing for the same passage.
             existing_dilemmas = [k[1] for k in seen if k[0] == pid]
@@ -2328,7 +2328,7 @@ def find_heavy_divergence_targets(graph: Graph) -> list[HeavyDivergenceTarget]:
                     dilemma_id=dilemma_id,
                     residue_weight=weight,
                     ending_salience=salience,
-                    path_codewords=pcw,
+                    path_state_flags=psf,
                 )
             )
 
@@ -2388,13 +2388,13 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
 
         # Create one variant passage per diverging path
         variant_specs: list[VariantSpec] = []
-        for _path_id, cw_id in sorted(target.path_codewords.items()):
-            cw_suffix = strip_scope_prefix(cw_id).removesuffix("_committed")
-            variant_pid = f"passage::{raw_id}__heavy_{cw_suffix}"
+        for _path_id, sf_id in sorted(target.path_state_flags.items()):
+            sf_suffix = strip_scope_prefix(sf_id).removesuffix("_committed")
+            variant_pid = f"passage::{raw_id}__heavy_{sf_suffix}"
             # Ensure unique ID
             counter = 1
             while graph.get_node(variant_pid):
-                variant_pid = f"passage::{raw_id}__heavy_{cw_suffix}_{counter}"
+                variant_pid = f"passage::{raw_id}__heavy_{sf_suffix}_{counter}"
                 counter += 1
 
             graph.create_node(
@@ -2408,11 +2408,11 @@ def wire_heavy_residue_routing(graph: Graph) -> HeavyRoutingResult:
                     "is_residue": True,
                     "is_synthetic": True,
                     "residue_for": target.passage_id,
-                    "residue_codeword": cw_id,
+                    "residue_state_flag": sf_id,
                     "residue_dilemma": target.dilemma_id,
                 },
             )
-            variant_specs.append(VariantSpec(variant_pid, [cw_id]))
+            variant_specs.append(VariantSpec(variant_pid, [sf_id]))
             variants_created += 1
 
         if not variant_specs:
@@ -2469,20 +2469,20 @@ def compute_all_choice_requires(
     graph: Graph,
     passage_arcs: dict[str, set[str]],
 ) -> dict[str, list[str]]:
-    """Compute codeword ``requires`` for hard-policy branch entry passages.
+    """Compute state flag ``requires`` for hard-policy branch entry passages.
 
     For each passage that appears exclusively in hard-policy branch arcs
-    (not on the spine), collects codewords from **branch-exclusive** paths —
-    paths on the branch arc that are NOT on the spine.  These codewords
+    (not on the spine), collects state flags from **branch-exclusive** paths —
+    paths on the branch arc that are NOT on the spine.  These state flags
     identify the specific off-spine choices the player made, so the gate
     is satisfiable by any player on that arc.
 
     When a passage appears on multiple hard arcs, the requires are the
-    **intersection** of each arc's branch-exclusive codewords — ensuring
+    **intersection** of each arc's branch-exclusive state flags — ensuring
     any player on any qualifying arc can satisfy the gate.
 
     Returns:
-        Mapping of ``passage_id`` → list of required codeword IDs.
+        Mapping of ``passage_id`` → list of required state flag IDs.
         Empty dict if no spine arc exists or no hard-policy branches.
     """
     arcs = enumerate_arcs(graph)
@@ -2512,8 +2512,8 @@ def compute_all_choice_requires(
     for arc_id_raw, conv_info in convergence_map.items():
         arc_dilemma_role[f"arc::{arc_id_raw}"] = conv_info.dilemma_role
 
-    # 2. Build consequence→codeword lookup (reverse of tracks edges)
-    cons_to_codeword = {
+    # 2. Build consequence→state flag lookup (reverse of tracks edges)
+    cons_to_state_flag = {
         edge["to"]: edge["from"]
         for edge in graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
     }
@@ -2525,16 +2525,16 @@ def compute_all_choice_requires(
         path_consequences.setdefault(edge["from"], []).append(edge["to"])
 
     # 4. For each passage exclusive to hard-policy branches, collect
-    #    codewords from branch-exclusive paths (off-spine choices).
+    #    state flags from branch-exclusive paths (off-spine choices).
     requires: dict[str, list[str]] = {}
     for passage_id, arc_ids in passage_arcs.items():
         # Skip passages reachable via the spine — no gating needed
         if any((a := arc_by_id.get(aid)) is not None and a.arc_type == "spine" for aid in arc_ids):
             continue
 
-        # Collect per-arc codeword sets; intersection gives codewords
+        # Collect per-arc state flag sets; intersection gives state flags
         # that ANY player on a qualifying arc will have.
-        arc_codeword_sets: list[set[str]] = []
+        arc_state_flag_sets: list[set[str]] = []
         for aid in sorted(arc_ids):
             arc_obj = arc_by_id.get(aid)
             if arc_obj is None or arc_dilemma_role.get(aid) != "hard":
@@ -2544,20 +2544,20 @@ def compute_all_choice_requires(
             branch_paths = {normalize_scoped_id(p, "path") for p in arc_obj.paths}
             branch_exclusive = branch_paths - spine_paths
 
-            arc_codewords: set[str] = set()
+            arc_state_flags: set[str] = set()
             for path_id in sorted(branch_exclusive):
                 for cons_id in path_consequences.get(path_id, []):
-                    cw = cons_to_codeword.get(cons_id)
-                    if cw:
-                        arc_codewords.add(cw)
+                    sf = cons_to_state_flag.get(cons_id)
+                    if sf:
+                        arc_state_flags.add(sf)
 
-            if arc_codewords:
-                arc_codeword_sets.append(arc_codewords)
+            if arc_state_flags:
+                arc_state_flag_sets.append(arc_state_flags)
 
-        if arc_codeword_sets:
-            codewords = set.intersection(*arc_codeword_sets)
-            if codewords:
-                requires[passage_id] = sorted(codewords)
+        if arc_state_flag_sets:
+            state_flags = set.intersection(*arc_state_flag_sets)
+            if state_flags:
+                requires[passage_id] = sorted(state_flags)
 
     return requires
 
@@ -3633,7 +3633,7 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
         if from_beat:
             beat_to_passage[from_beat] = p_id
 
-    # Collect grants edges: beat → codeword
+    # Collect grants edges: beat → state_flag
     grants_edges = graph.get_edges(from_id=None, to_id=None, edge_type="grants")
     beat_grants: dict[str, list[str]] = {}
     for edge in grants_edges:
@@ -3669,10 +3669,10 @@ def find_passage_successors(graph: Graph) -> dict[str, list[PassageSuccessor]]:
                 continue
             seen_targets[p_id].add(next_p)
 
-            # Grants: codewords from beats between this passage's beat and the
+            # Grants: state flags from beats between this passage's beat and the
             # next passage's beat (inclusive). This reflects state changes that
             # happen when the player takes this choice, without leaking future
-            # arc codewords.
+            # arc state flags.
             arc_grants: list[str] = []
             for beat_id in sequence[beat_idx + 1 : next_beat_idx + 1]:
                 arc_grants.extend(beat_grants.get(beat_id, []))

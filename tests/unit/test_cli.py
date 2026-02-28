@@ -1406,7 +1406,7 @@ def test_grow_with_mock_provider(tmp_path: Path) -> None:
         "arc_count": 3,
         "passage_count": 12,
         "choice_count": 8,
-        "codeword_count": 4,
+        "state_flag_count": 4,
         "overlay_count": 2,
         "spine_arc_id": "arc_main",
         "phases_completed": [

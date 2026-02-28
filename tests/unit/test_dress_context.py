@@ -9,7 +9,7 @@ from questfoundry.graph.graph import Graph
 
 @pytest.fixture()
 def dress_graph() -> Graph:
-    """Graph with entities, passages, and codewords for DRESS testing."""
+    """Graph with entities, passages, and state flags for DRESS testing."""
     g = Graph()
     g.create_node(
         "vision::main",
@@ -70,9 +70,9 @@ def dress_graph() -> Graph:
         },
     )
     g.create_node(
-        "codeword::met_aldric",
+        "state_flag::met_aldric",
         {
-            "type": "codeword",
+            "type": "state_flag",
             "raw_id": "met_aldric",
             "trigger": "Player meets aldric at the bridge",
         },
@@ -150,7 +150,7 @@ class TestFormatEntityForCodex:
         assert "character" in result
         assert "court advisor" in result
 
-    def test_includes_related_codewords(self, dress_graph: Graph) -> None:
+    def test_includes_related_state_flags(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_context import format_entity_for_codex
 
         result = format_entity_for_codex(dress_graph, "character::aldric")

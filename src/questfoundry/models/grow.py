@@ -7,7 +7,7 @@ stage result container.
 Node types created by GROW:
 - Arc: A route through the story (spine or branch)
 - Passage: A rendered scene corresponding to a beat
-- Codeword: A state flag tracking consequence commitment
+- StateFlag: A state flag tracking consequence commitment
 
 See docs/design/00-spec.md for ontology details.
 
@@ -60,16 +60,16 @@ class Passage(BaseModel):
     entities: list[str] = Field(default_factory=list)
 
 
-class Codeword(BaseModel):
+class StateFlag(BaseModel):
     """A state flag tracking consequence commitment.
 
-    Codewords are granted at commits beats and track which
+    State flags are granted at commits beats and track which
     consequences have been locked in by the player's path.
     """
 
-    codeword_id: str = Field(min_length=1)
+    flag_id: str = Field(min_length=1)
     tracks: str = Field(min_length=1)
-    codeword_type: Literal["granted"] = "granted"
+    flag_type: Literal["granted"] = "granted"
 
 
 class Choice(BaseModel):
@@ -78,18 +78,18 @@ class Choice(BaseModel):
     from_passage: str = Field(min_length=1)
     to_passage: str = Field(min_length=1)
     label: str = Field(min_length=1)
-    requires_codewords: list[str] = Field(default_factory=list)
+    requires_state_flags: list[str] = Field(default_factory=list)
     grants: list[str] = Field(default_factory=list)
     is_return: bool = Field(default=False, description="True for spoke→hub return links")
 
 
 class EntityOverlay(BaseModel):
-    """Conditional entity details activated by codewords (future Phase 8c)."""
+    """Conditional entity details activated by state flags (future Phase 8c)."""
 
     entity_id: str = Field(min_length=1)
     when: list[str] = Field(min_length=1)
     details: dict[str, str] = Field(
-        description="Entity state changes when codewords are active (must have at least one key)"
+        description="Entity state changes when state flags are active (must have at least one key)"
     )
 
     @model_validator(mode="after")
@@ -264,7 +264,7 @@ class OverlayDetailItem(BaseModel):
     """
 
     key: str = Field(min_length=1, description="Attribute name being overridden")
-    value: str = Field(min_length=1, description="New value when codewords are active")
+    value: str = Field(min_length=1, description="New value when state flags are active")
 
 
 class OverlayProposal(BaseModel):
@@ -274,7 +274,7 @@ class OverlayProposal(BaseModel):
     when: list[str] = Field(min_length=1)
     details: list[OverlayDetailItem] = Field(
         min_length=1,
-        description="Entity state changes when codewords are active",
+        description="Entity state changes when state flags are active",
     )
 
     @model_validator(mode="after")
@@ -301,11 +301,11 @@ class Phase8cOutput(BaseModel):
 class ResidueVariant(BaseModel):
     """A single path-specific variant for a residue passage.
 
-    Each variant is gated by a codeword and carries a prose hint
+    Each variant is gated by a state flag and carries a prose hint
     telling FILL how to differentiate this variant's prose.
     """
 
-    codeword_id: str = Field(min_length=1, description="Codeword that gates this variant")
+    state_flag_id: str = Field(min_length=1, description="State flag that gates this variant")
     hint: str = Field(
         min_length=10,
         max_length=200,
@@ -327,10 +327,10 @@ class ResidueBeatProposal(BaseModel):
     variants: list[ResidueVariant] = Field(min_length=2, description="One variant per path")
 
     @model_validator(mode="after")
-    def _validate_unique_codewords(self) -> ResidueBeatProposal:
-        cw_ids = [v.codeword_id for v in self.variants]
-        if len(cw_ids) != len(set(cw_ids)):
-            raise ValueError("codeword_id in variants must be unique")
+    def _validate_unique_state_flags(self) -> ResidueBeatProposal:
+        sf_ids = [v.state_flag_id for v in self.variants]
+        if len(sf_ids) != len(set(sf_ids)):
+            raise ValueError("state_flag_id in variants must be unique")
         return self
 
 
@@ -393,7 +393,7 @@ class SpokeProposal(BaseModel):
     )
     grants: list[str] = Field(
         default_factory=list,
-        description="Codewords this spoke grants when visited (wiring deferred to #746)",
+        description="State flags this spoke grants when visited (wiring deferred to #746)",
     )
 
 
@@ -430,7 +430,7 @@ class GrowResult(BaseModel):
 
     arc_count: int = 0
     passage_count: int = 0
-    codeword_count: int = 0
+    state_flag_count: int = 0
     choice_count: int = 0
     overlay_count: int = 0
     phases_completed: list[GrowPhaseResult] = Field(default_factory=list)

@@ -777,24 +777,36 @@ class TestExtractArtifact:
 def scored_graph() -> Graph:
     """Graph with arcs, beats, and passages for priority scoring tests."""
     g = Graph()
-    # Spine arc with 3 beats
+    # Dilemma with two paths: spine_path (canonical) and branch_path (non-canonical)
     g.create_node(
-        "arc::spine",
+        "dilemma::d1",
+        {"type": "dilemma", "raw_id": "d1", "paths": ["spine_path", "branch_path"]},
+    )
+    g.create_node(
+        "path::spine_path",
+        {"type": "path", "raw_id": "spine_path", "dilemma_id": "dilemma::d1", "is_canonical": True},
+    )
+    g.create_node(
+        "path::branch_path",
         {
-            "type": "arc",
-            "arc_type": "spine",
-            "sequence": ["beat::opening", "beat::climax", "beat::ending"],
+            "type": "path",
+            "raw_id": "branch_path",
+            "dilemma_id": "dilemma::d1",
+            "is_canonical": False,
         },
     )
+    # Spine beats (opening, climax, ending) — all belong to spine_path
     g.create_node("beat::opening", {"type": "beat", "scene_type": "establishing"})
     g.create_node("beat::climax", {"type": "beat", "scene_type": "climax"})
     g.create_node("beat::ending", {"type": "beat", "scene_type": "resolution"})
-    # Branch arc
-    g.create_node(
-        "arc::branch1",
-        {"type": "arc", "arc_type": "branch", "sequence": ["beat::side"]},
-    )
+    g.add_edge("belongs_to", "beat::opening", "path::spine_path")
+    g.add_edge("belongs_to", "beat::climax", "path::spine_path")
+    g.add_edge("belongs_to", "beat::ending", "path::spine_path")
+    g.add_edge("predecessor", "beat::climax", "beat::opening")
+    g.add_edge("predecessor", "beat::ending", "beat::climax")
+    # Branch beat (side) — belongs to branch_path only
     g.create_node("beat::side", {"type": "beat", "scene_type": "transition"})
+    g.add_edge("belongs_to", "beat::side", "path::branch_path")
     # Passages
     g.create_node(
         "passage::opening",
@@ -1220,8 +1232,8 @@ class TestPhase2Codex:
             },
         )
         g.create_node(
-            "codeword::met_aldric",
-            {"type": "codeword", "raw_id": "met_aldric", "trigger": "Meets aldric"},
+            "state_flag::met_aldric",
+            {"type": "state_flag", "raw_id": "met_aldric", "trigger": "Meets aldric"},
         )
 
         stage = DressStage()
@@ -1357,7 +1369,7 @@ class TestPhase2Codex:
             "entity::protagonist",
             {"type": "entity", "raw_id": "protagonist", "entity_type": "character"},
         )
-        # No codewords defined — met_aldric in visible_when will trigger warning
+        # No state flags defined — met_aldric in visible_when will trigger warning
 
         stage = DressStage()
         mock_output = _make_codex_output("entity::protagonist")

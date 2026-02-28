@@ -104,13 +104,13 @@ def validate_phase4a_output(
 def validate_phase8c_output(
     result: Phase8cOutput,
     valid_entity_ids: set[str],
-    valid_codeword_ids: set[str],
+    valid_state_flag_ids: set[str],
 ) -> list[GrowValidationError]:
     """Validate Phase 8c entity overlay proposals.
 
     Checks:
     - entity_id exists in graph
-    - codeword IDs in 'when' exist
+    - state flag IDs in 'when' exist
     """
     errors: list[GrowValidationError] = []
     for i, overlay in enumerate(result.overlays):
@@ -124,13 +124,13 @@ def validate_phase8c_output(
                 )
             )
         for cw_id in overlay.when:
-            if cw_id not in valid_codeword_ids:
+            if cw_id not in valid_state_flag_ids:
                 errors.append(
                     GrowValidationError(
                         field_path=f"overlays.{i}.when",
-                        issue=f"Codeword ID not found: {cw_id}",
+                        issue=f"State flag ID not found: {cw_id}",
                         provided=cw_id,
-                        available=sorted(valid_codeword_ids)[:10],
+                        available=sorted(valid_state_flag_ids)[:10],
                     )
                 )
     return errors
@@ -139,7 +139,7 @@ def validate_phase8c_output(
 def validate_phase8d_output(
     result: Phase8dOutput,
     valid_passage_ids: set[str],
-    valid_codeword_ids: set[str],
+    valid_state_flag_ids: set[str],
     valid_dilemma_ids: set[str],
 ) -> list[GrowValidationError]:
     """Validate Phase 8d residue beat proposals.
@@ -147,11 +147,11 @@ def validate_phase8d_output(
     Checks:
     - passage_id exists in graph
     - dilemma_id exists in graph
-    - codeword IDs in variants exist
+    - state flag IDs in variants exist
     """
     errors: list[GrowValidationError] = []
     available_passages = sorted(valid_passage_ids)[:10]
-    available_codewords = sorted(valid_codeword_ids)[:10]
+    available_state_flags = sorted(valid_state_flag_ids)[:10]
     available_dilemmas = sorted(valid_dilemma_ids)[:10]
 
     for i, proposal in enumerate(result.proposals):
@@ -174,13 +174,13 @@ def validate_phase8d_output(
                 )
             )
         for j, variant in enumerate(proposal.variants):
-            if variant.codeword_id not in valid_codeword_ids:
+            if variant.state_flag_id not in valid_state_flag_ids:
                 errors.append(
                     GrowValidationError(
-                        field_path=f"proposals.{i}.variants.{j}.codeword_id",
-                        issue=f"Codeword ID not found: {variant.codeword_id}",
-                        provided=variant.codeword_id,
-                        available=available_codewords,
+                        field_path=f"proposals.{i}.variants.{j}.state_flag_id",
+                        issue=f"State flag ID not found: {variant.state_flag_id}",
+                        provided=variant.state_flag_id,
+                        available=available_state_flags,
                     )
                 )
     return errors
@@ -339,14 +339,14 @@ def validate_phase9b_output(
 def validate_phase9c_output(
     result: Phase9cOutput,
     valid_passage_ids: set[str],
-    valid_codeword_ids: set[str] | None = None,
+    valid_state_flag_ids: set[str] | None = None,
 ) -> list[GrowValidationError]:
     """Validate Phase 9c hub-spoke proposals.
 
     Checks:
     - passage_id exists in valid passage IDs (which excludes ending passages,
       ensuring hubs have outgoing choices)
-    - spoke grant IDs reference existing codeword nodes (when valid_codeword_ids
+    - spoke grant IDs reference existing state flag nodes (when valid_state_flag_ids
       is provided)
     """
     errors: list[GrowValidationError] = []
@@ -360,17 +360,17 @@ def validate_phase9c_output(
                     available=sorted(valid_passage_ids)[:10],
                 )
             )
-        if valid_codeword_ids is not None:
+        if valid_state_flag_ids is not None:
             for j, spoke in enumerate(hub.spokes):
                 for k, grant_id in enumerate(spoke.grants):
-                    scoped = normalize_scoped_id(grant_id, "codeword")
-                    if scoped not in valid_codeword_ids:
+                    scoped = normalize_scoped_id(grant_id, "state_flag")
+                    if scoped not in valid_state_flag_ids:
                         errors.append(
                             GrowValidationError(
                                 field_path=f"hubs.{i}.spokes.{j}.grants.{k}",
-                                issue=f"Codeword ID not found: {grant_id}",
+                                issue=f"State flag ID not found: {grant_id}",
                                 provided=grant_id,
-                                available=sorted(valid_codeword_ids)[:10],
+                                available=sorted(valid_state_flag_ids)[:10],
                             )
                         )
     return errors

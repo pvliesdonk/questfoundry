@@ -564,10 +564,10 @@ def check_all_endings_reachable(graph: Graph) -> ValidationCheck:
 
 
 def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
-    """Verify all choice requires are satisfiable (required codewords exist globally).
+    """Verify all choice requires are satisfiable (required state flags exist globally).
 
-    Collects all grantable codewords (union of all grants lists). For each
-    choice with non-empty requires, verifies every required codeword is in
+    Collects all grantable state flags (union of all grants lists). For each
+    choice with non-empty requires, verifies every required state flag is in
     the global grantable set.
     """
     choice_nodes = graph.get_nodes_by_type("choice")
@@ -578,25 +578,25 @@ def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
             message="No choices to check",
         )
 
-    # Collect all globally grantable codewords
+    # Collect all globally grantable state flags
     grantable: set[str] = set()
     for choice_data in choice_nodes.values():
         grants = choice_data.get("grants", [])
         grantable.update(grants)
 
-    # Check each choice's requires_codewords
+    # Check each choice's requires_state_flags
     unsatisfiable: list[str] = []
     for choice_id, choice_data in sorted(choice_nodes.items()):
-        requires = choice_data.get("requires_codewords", [])
+        requires = choice_data.get("requires_state_flags", [])
         for req in requires:
             if req not in grantable:
-                unsatisfiable.append(f"{choice_id} requires_codewords '{req}'")
+                unsatisfiable.append(f"{choice_id} requires_state_flags '{req}'")
 
     if not unsatisfiable:
         return ValidationCheck(
             name="gate_satisfiability",
             severity="pass",
-            message=f"All gates satisfiable ({len(grantable)} codewords grantable)",
+            message=f"All gates satisfiable ({len(grantable)} state flags grantable)",
         )
     return ValidationCheck(
         name="gate_satisfiability",
@@ -606,10 +606,10 @@ def check_gate_satisfiability(graph: Graph) -> ValidationCheck:
 
 
 def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
-    """Verify all required codewords are co-reachable in a single playthrough.
+    """Verify all required state flags are co-reachable in a single playthrough.
 
     For each choice with non-empty requires, checks that at least one arc
-    provides ALL required codewords.  A gate that requires codewords from
+    provides ALL required state flags.  A gate that requires state flags from
     mutually exclusive paths is paradoxical — the player can never satisfy it.
     """
     choice_nodes = graph.get_nodes_by_type("choice")
@@ -628,8 +628,8 @@ def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
             message="No arcs to check",
         )
 
-    # Build consequence→codeword lookup
-    cons_to_codeword = {
+    # Build consequence→state_flag lookup
+    cons_to_state_flag = {
         edge["to"]: edge["from"]
         for edge in graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
     }
@@ -639,27 +639,27 @@ def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
     for edge in graph.get_edges(from_id=None, to_id=None, edge_type="has_consequence"):
         path_consequences.setdefault(edge["from"], []).append(edge["to"])
 
-    # Build earnable codewords per arc
-    arc_codewords: dict[str, set[str]] = {}
+    # Build earnable state flags per arc
+    arc_state_flags: dict[str, set[str]] = {}
     for arc_id, arc_data in arc_nodes.items():
-        cws: set[str] = set()
+        sfs: set[str] = set()
         for raw_path in arc_data.get("paths", []):
             path_id = normalize_scoped_id(raw_path, "path")
             for cons_id in path_consequences.get(path_id, []):
-                cw = cons_to_codeword.get(cons_id)
-                if cw:
-                    cws.add(cw)
-        arc_codewords[arc_id] = cws
+                sf = cons_to_state_flag.get(cons_id)
+                if sf:
+                    sfs.add(sf)
+        arc_state_flags[arc_id] = sfs
 
     # Check each gated choice
     paradoxical: list[str] = []
     for choice_id, choice_data in sorted(choice_nodes.items()):
-        requires = set(choice_data.get("requires_codewords", []))
+        requires = set(choice_data.get("requires_state_flags", []))
         if not requires:
             continue
 
-        # A gate is satisfiable if ANY arc provides all required codewords
-        satisfiable = any(requires <= cws for cws in arc_codewords.values())
+        # A gate is satisfiable if ANY arc provides all required state flags
+        satisfiable = any(requires <= sfs for sfs in arc_state_flags.values())
         if not satisfiable:
             paradoxical.append(f"{choice_id} requires {sorted(requires)}")
 
@@ -953,48 +953,48 @@ def check_max_consecutive_linear(graph: Graph, max_run: int = 2) -> ValidationCh
     )
 
 
-def check_codeword_gate_coverage(graph: Graph) -> ValidationCheck:
-    """Check that every codeword is consumed by a gate or overlay condition.
+def check_state_flag_gate_coverage(graph: Graph) -> ValidationCheck:
+    """Check that every state flag is consumed by a gate or overlay condition.
 
     Implements the "Residue Must Be Read" invariant: checks that each
-    codeword appears in at least one ``choice.requires_codewords`` gate or
+    state flag appears in at least one ``choice.requires_state_flags`` gate or
     ``overlay.when`` condition.
     """
-    codeword_nodes = graph.get_nodes_by_type("codeword")
-    if not codeword_nodes:
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
+    if not state_flag_nodes:
         return ValidationCheck(
-            name="codeword_gate_coverage",
+            name="state_flag_gate_coverage",
             severity="pass",
-            message="No codewords in graph",
+            message="No state flags in graph",
         )
 
     choice_nodes = graph.get_nodes_by_type("choice")
     consumed: set[str] = set()
     for choice_data in choice_nodes.values():
-        consumed.update(choice_data.get("requires_codewords") or [])
+        consumed.update(choice_data.get("requires_state_flags") or [])
 
     # Overlays are embedded arrays on entity nodes (type="entity"),
     # not separate typed nodes.
     consumed.update(
-        cw
+        sf
         for entity_data in graph.get_nodes_by_type("entity").values()
         for overlay in entity_data.get("overlays") or []
-        for cw in overlay.get("when") or []
+        for sf in overlay.get("when") or []
     )
 
-    unconsumed = sorted(set(codeword_nodes.keys()) - consumed)
+    unconsumed = sorted(set(state_flag_nodes.keys()) - consumed)
     if not unconsumed:
         return ValidationCheck(
-            name="codeword_gate_coverage",
+            name="state_flag_gate_coverage",
             severity="pass",
-            message=f"All {len(codeword_nodes)} codeword(s) consumed by gates or overlays",
+            message=f"All {len(state_flag_nodes)} state flag(s) consumed by gates or overlays",
         )
     return ValidationCheck(
-        name="codeword_gate_coverage",
+        name="state_flag_gate_coverage",
         severity="warn",
         message=(
-            f"{len(unconsumed)} of {len(codeword_nodes)} codeword(s) not consumed "
-            f"by any choice.requires_codewords or overlay.when: {', '.join(unconsumed[:5])}"
+            f"{len(unconsumed)} of {len(state_flag_nodes)} state flag(s) not consumed "
+            f"by any choice.requires_state_flags or overlay.when: {', '.join(unconsumed[:5])}"
             f"{'...' if len(unconsumed) > 5 else ''}"
         ),
     )
@@ -1034,7 +1034,7 @@ def check_forward_path_reachability(graph: Graph) -> ValidationCheck:
         forward = [c for c in choices if not c.get("is_return") and not c.get("is_routing")]
         if not forward:
             continue  # ending passage or routing-only — no forward choices
-        ungated = [c for c in forward if not c.get("requires_codewords")]
+        ungated = [c for c in forward if not c.get("requires_state_flags")]
         if not ungated:
             soft_locked.append(pid)
 
@@ -1062,7 +1062,7 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
     - CE: every arc reaching the source has at least one satisfiable route
     - ME: at most one routing choice is satisfiable per arc (excluding fallback)
 
-    Uses arc codeword signatures from ``build_arc_codewords()`` with scope
+    Uses arc state flag signatures from ``build_arc_state_flags()`` with scope
     matched to how each routing set was produced:
     - ``ending_split`` passages use ``scope="ending"`` — strict CE required
     - All other passages use ``scope="routing"`` — fallback-lenient CE
@@ -1071,7 +1071,7 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
         List of ValidationCheck results (one per routing set with issues,
         or a single pass check if all sets are valid).
     """
-    from questfoundry.graph.grow_algorithms import build_arc_codewords
+    from questfoundry.graph.grow_algorithms import build_arc_state_flags
     from questfoundry.graph.grow_routing import get_routing_applied_metadata
 
     choices = graph.get_nodes_by_type("choice")
@@ -1086,10 +1086,10 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
             )
         ]
 
-    # Build both codeword scopes; select per-passage based on routing metadata
+    # Build both state flag scopes; select per-passage based on routing metadata
     ending_split_passages, _residue_passages = get_routing_applied_metadata(graph)
-    arc_codewords_ending = build_arc_codewords(graph, arc_nodes, scope="ending")
-    arc_codewords_routing = build_arc_codewords(graph, arc_nodes, scope="routing")
+    arc_state_flags_ending = build_arc_state_flags(graph, arc_nodes, scope="ending")
+    arc_state_flags_routing = build_arc_state_flags(graph, arc_nodes, scope="routing")
 
     # Group routing choices by source passage; also detect fallback choices
     routing_sets: dict[str, list[dict[str, object]]] = {}
@@ -1132,13 +1132,13 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
         # Extract requires sets from routing choices
         route_requires: list[set[str]] = []
         for rc in routing_choices:
-            reqs = rc.get("requires_codewords", [])
+            reqs = rc.get("requires_state_flags", [])
             route_requires.append(set(reqs) if isinstance(reqs, list) else set())
 
-        # Select codeword scope: ending splits use "ending" scope (exhaustive),
+        # Select state flag scope: ending splits use "ending" scope (exhaustive),
         # residue routing uses "routing" scope (best-effort, fallback OK).
         is_ending_split = source_pid in ending_split_passages
-        arc_cw = arc_codewords_ending if is_ending_split else arc_codewords_routing
+        arc_sf = arc_state_flags_ending if is_ending_split else arc_state_flags_routing
 
         # CE check: for each covering arc, at least one route is satisfiable.
         # Ending splits must be strictly exhaustive — no fallback exemption.
@@ -1147,9 +1147,9 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
         source_has_fallback = (not is_ending_split) and (source_pid in has_fallback)
         ce_gaps: list[str] = []
         for arc_id in covering_arcs:
-            arc_cws = arc_cw.get(arc_id, frozenset())
+            arc_sfs = arc_sf.get(arc_id, frozenset())
             satisfiable = [
-                i for i, reqs in enumerate(route_requires) if reqs and reqs.issubset(arc_cws)
+                i for i, reqs in enumerate(route_requires) if reqs and reqs.issubset(arc_sfs)
             ]
             if not satisfiable and not source_has_fallback:
                 ce_gaps.append(arc_id)
@@ -1169,9 +1169,9 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
         # ME check: at most one route satisfiable per arc
         me_violations: list[str] = []
         for arc_id in covering_arcs:
-            arc_cws = arc_cw.get(arc_id, frozenset())
+            arc_sfs = arc_sf.get(arc_id, frozenset())
             satisfiable = [
-                i for i, reqs in enumerate(route_requires) if reqs and reqs.issubset(arc_cws)
+                i for i, reqs in enumerate(route_requires) if reqs and reqs.issubset(arc_sfs)
             ]
             if len(satisfiable) > 1:
                 me_violations.append(arc_id)
@@ -1365,7 +1365,7 @@ def run_passage_checks(graph: Graph) -> ValidationReport:
         check_gate_co_satisfiability(graph),
         check_arc_divergence(graph),
         check_max_consecutive_linear(graph, max_run=linear_threshold),
-        check_codeword_gate_coverage(graph),
+        check_state_flag_gate_coverage(graph),
         check_forward_path_reachability(graph),
     ]
     checks.extend(check_commits_timing(graph))
