@@ -60,7 +60,7 @@ class TestGrowStageExecute:
             "arc_count",
             "passage_count",
             "choice_count",
-            "codeword_count",
+            "state_flag_count",
             "overlay_count",
             "spine_arc_id",
             "phases_completed",
@@ -69,7 +69,7 @@ class TestGrowStageExecute:
         assert result_dict["arc_count"] == 0
         assert result_dict["passage_count"] == 0
         assert result_dict["choice_count"] == 0
-        assert result_dict["codeword_count"] == 0
+        assert result_dict["state_flag_count"] == 0
 
     @pytest.mark.asyncio
     async def test_execute_with_project_path_kwarg(
@@ -173,7 +173,7 @@ class TestGrowStageExecute:
             "arc_count",
             "passage_count",
             "choice_count",
-            "codeword_count",
+            "state_flag_count",
             "overlay_count",
             "spine_arc_id",
             "phases_completed",
@@ -205,7 +205,7 @@ class TestGrowStagePhaseOrder:
             "convergence",
             "collapse_linear_beats",
             "passages",
-            "codewords",
+            "state_flags",
             "residue_beats",
             "overlays",
             "choices",
@@ -1358,16 +1358,16 @@ class TestPhase8cOverlays:
             },
         )
         graph.create_node(
-            "codeword::mentor_trusted_committed",
+            "state_flag::mentor_trusted_committed",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "mentor_trusted_committed",
                 "tracks": "consequence::mentor_trusted",
-                "codeword_type": "granted",
+                "flag_type": "granted",
             },
         )
         graph.add_edge(
-            "tracks", "codeword::mentor_trusted_committed", "consequence::mentor_trusted"
+            "tracks", "state_flag::mentor_trusted_committed", "consequence::mentor_trusted"
         )
 
         stage = GrowStage()
@@ -1375,7 +1375,7 @@ class TestPhase8cOverlays:
             overlays=[
                 OverlayProposal(
                     entity_id="entity::mentor",
-                    when=["codeword::mentor_trusted_committed"],
+                    when=["state_flag::mentor_trusted_committed"],
                     details=[
                         {"key": "attitude", "value": "Warm and supportive"},
                         {"key": "access", "value": "Shares secret knowledge"},
@@ -1399,7 +1399,7 @@ class TestPhase8cOverlays:
         entity_data = graph.get_node("entity::mentor")
         assert entity_data is not None
         assert len(entity_data["overlays"]) == 1
-        assert entity_data["overlays"][0]["when"] == ["codeword::mentor_trusted_committed"]
+        assert entity_data["overlays"][0]["when"] == ["state_flag::mentor_trusted_committed"]
         assert entity_data["overlays"][0]["details"]["attitude"] == "Warm and supportive"
 
     @pytest.mark.asyncio
@@ -1419,12 +1419,12 @@ class TestPhase8cOverlays:
             },
         )
         graph.create_node(
-            "codeword::cw1",
+            "state_flag::cw1",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "cw1",
                 "tracks": "consequence::c1",
-                "codeword_type": "granted",
+                "flag_type": "granted",
             },
         )
 
@@ -1433,7 +1433,7 @@ class TestPhase8cOverlays:
             overlays=[
                 OverlayProposal(
                     entity_id="entity::nonexistent",
-                    when=["codeword::cw1"],
+                    when=["state_flag::cw1"],
                     details=[{"key": "attitude", "value": "Changed"}],
                 ),
             ]
@@ -1450,8 +1450,8 @@ class TestPhase8cOverlays:
         assert "0" in result.detail
 
     @pytest.mark.asyncio
-    async def test_phase_8c_skips_invalid_codeword(self) -> None:
-        """Phase 8c skips overlays referencing non-existent codewords."""
+    async def test_phase_8c_skips_invalid_state_flag(self) -> None:
+        """Phase 8c skips overlays referencing non-existent state_flags."""
         from questfoundry.graph.graph import Graph
         from questfoundry.models.grow import OverlayProposal, Phase8cOutput
 
@@ -1466,12 +1466,12 @@ class TestPhase8cOverlays:
             },
         )
         graph.create_node(
-            "codeword::cw1",
+            "state_flag::cw1",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "cw1",
                 "tracks": "consequence::c1",
-                "codeword_type": "granted",
+                "flag_type": "granted",
             },
         )
 
@@ -1480,7 +1480,7 @@ class TestPhase8cOverlays:
             overlays=[
                 OverlayProposal(
                     entity_id="entity::hero",
-                    when=["codeword::nonexistent"],
+                    when=["state_flag::nonexistent"],
                     details=[{"key": "attitude", "value": "Changed"}],
                 ),
             ]
@@ -1502,8 +1502,8 @@ class TestPhase8cOverlays:
     # is no longer reachable since the model won't validate with empty details.
 
     @pytest.mark.asyncio
-    async def test_phase_8c_no_codewords(self) -> None:
-        """Phase 8c returns completed when no codewords exist."""
+    async def test_phase_8c_no_state_flags(self) -> None:
+        """Phase 8c returns completed when no state_flags exist."""
         from questfoundry.graph.graph import Graph
 
         graph = Graph.empty()
@@ -1523,7 +1523,7 @@ class TestPhase8cOverlays:
         result = await stage._phase_8c_overlays(graph, mock_model)
 
         assert result.status == "completed"
-        assert "No codewords or entities" in result.detail
+        assert "No state flags or entities" in result.detail
 
     @pytest.mark.asyncio
     async def test_phase_8c_unprefixed_entity_id(self) -> None:
@@ -1542,12 +1542,12 @@ class TestPhase8cOverlays:
             },
         )
         graph.create_node(
-            "codeword::cw1",
+            "state_flag::cw1",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "cw1",
                 "tracks": "consequence::c1",
-                "codeword_type": "granted",
+                "flag_type": "granted",
             },
         )
 
@@ -1556,7 +1556,7 @@ class TestPhase8cOverlays:
             overlays=[
                 OverlayProposal(
                     entity_id="mentor",  # No prefix
-                    when=["codeword::cw1"],
+                    when=["state_flag::cw1"],
                     details=[{"key": "attitude", "value": "Friendly"}],
                 ),
             ]
@@ -1578,7 +1578,7 @@ class TestPhase8cOverlays:
 
     @pytest.mark.asyncio
     async def test_phase8c_consequence_context_full_chain(self) -> None:
-        """Enriched context traces codeword → consequence → path → dilemma."""
+        """Enriched context traces state_flag → consequence → path → dilemma."""
         from unittest.mock import patch
 
         from questfoundry.graph.graph import Graph
@@ -1636,12 +1636,12 @@ class TestPhase8cOverlays:
             },
         )
         graph.create_node(
-            "codeword::mentor_trusted_committed",
+            "state_flag::mentor_trusted_committed",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "mentor_trusted_committed",
                 "tracks": "consequence::mentor_trusted",
-                "codeword_type": "granted",
+                "flag_type": "granted",
             },
         )
 
@@ -1662,7 +1662,7 @@ class TestPhase8cOverlays:
             await stage._phase_8c_overlays(graph, MagicMock())
 
         ctx = captured_context["consequence_context"]
-        assert "codeword::mentor_trusted_committed" in ctx
+        assert "state_flag::mentor_trusted_committed" in ctx
         assert 'Path: path::trust_or_betray__trust ("The Trusting Path")' in ctx
         assert 'Dilemma: "Do you trust or betray the mentor?"' in ctx
         assert "Central entities: mentor, hero" in ctx
@@ -1693,12 +1693,12 @@ class TestPhase8cOverlays:
             },
         )
         graph.create_node(
-            "codeword::hero_saved_committed",
+            "state_flag::hero_saved_committed",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "hero_saved_committed",
                 "tracks": "consequence::hero_saved",
-                "codeword_type": "granted",
+                "flag_type": "granted",
             },
         )
 
@@ -1719,7 +1719,7 @@ class TestPhase8cOverlays:
             await stage._phase_8c_overlays(graph, MagicMock())
 
         ctx = captured_context["consequence_context"]
-        assert "codeword::hero_saved_committed" in ctx
+        assert "state_flag::hero_saved_committed" in ctx
         assert "Consequence: The hero survives the ordeal" in ctx
         # No path/dilemma lines since path node is missing
         assert "Path:" not in ctx
@@ -1748,12 +1748,12 @@ class TestPhase8cOverlays:
             },
         )
         graph.create_node(
-            "codeword::secret_revealed_committed",
+            "state_flag::secret_revealed_committed",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "secret_revealed_committed",
                 "tracks": "consequence::secret_revealed",
-                "codeword_type": "granted",
+                "flag_type": "granted",
             },
         )
 
@@ -2134,7 +2134,7 @@ class TestPhase9Choices:
         assert labels == {"b", "c"}
 
     @pytest.mark.asyncio
-    async def test_phase_9_grants_codewords_on_choice(self) -> None:
+    async def test_phase_9_grants_state_flags_on_choice(self) -> None:
         """Phase 9 attaches grants from arc beats to choice nodes."""
         from questfoundry.graph.graph import Graph
         from questfoundry.models.grow import ChoiceLabel, Phase9Output
@@ -2144,12 +2144,12 @@ class TestPhase9Choices:
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b", "summary": "Commit"})
         graph.add_edge("predecessor", "beat::b", "beat::a")
 
-        # beat::b grants a codeword
+        # beat::b grants a state_flag
         graph.create_node(
-            "codeword::cw1",
-            {"type": "codeword", "raw_id": "cw1", "tracks": "consequence::c1"},
+            "state_flag::cw1",
+            {"type": "state_flag", "raw_id": "cw1", "tracks": "consequence::c1"},
         )
-        graph.add_edge("grants", "beat::b", "codeword::cw1")
+        graph.add_edge("grants", "beat::b", "state_flag::cw1")
 
         # Computed-arc pattern: dilemma + path + belongs_to
         graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "paths": ["t1"]})
@@ -2185,7 +2185,7 @@ class TestPhase9Choices:
         choice_nodes = graph.get_nodes_by_type("choice")
         assert len(choice_nodes) == 1
         choice_data = next(iter(choice_nodes.values()))
-        assert "codeword::cw1" in choice_data["grants"]
+        assert "state_flag::cw1" in choice_data["grants"]
 
     @pytest.mark.asyncio
     async def test_phase_9_creates_prologue_for_orphan_starts(self) -> None:
@@ -2598,14 +2598,14 @@ class TestPhase8cErrorHandling:
         from tests.fixtures.grow_fixtures import make_single_dilemma_graph
 
         graph = make_single_dilemma_graph()
-        # Add codeword and consequence nodes so we pass the early guard
+        # Add state_flag and consequence nodes so we pass the early guard
         graph.create_node(
             "consequence::trust_gain",
             {"type": "consequence", "description": "Trust is gained"},
         )
         graph.create_node(
-            "codeword::cw_trust",
-            {"type": "codeword", "tracks": "consequence::trust_gain", "codeword_type": "granted"},
+            "state_flag::cw_trust",
+            {"type": "state_flag", "tracks": "consequence::trust_gain", "flag_type": "granted"},
         )
 
         stage = GrowStage()
@@ -3066,7 +3066,7 @@ class TestPhase9bForkBeats:
                     "from_passage": f"passage::{pids[i]}",
                     "to_passage": f"passage::{pids[i + 1]}",
                     "label": "continue",
-                    "requires_codewords": [],
+                    "requires_state_flags": [],
                     "grants": [],
                 },
             )
@@ -3161,7 +3161,7 @@ class TestPhase9bForkBeats:
                     "from_passage": f"passage::{pids[i]}",
                     "to_passage": f"passage::{pids[i + 1]}",
                     "label": "continue",
-                    "requires_codewords": [],
+                    "requires_state_flags": [],
                     "grants": [],
                 },
             )
@@ -3200,7 +3200,7 @@ class TestPhase9bForkBeats:
                 {"type": "passage", "raw_id": pid, "summary": f"Passage {pid}"},
             )
 
-        # p1→p2 grants a codeword (simulates commits beat transition)
+        # p1→p2 grants a state_flag (simulates commits beat transition)
         graph.create_node(
             "choice::p1__p2",
             {
@@ -3208,8 +3208,8 @@ class TestPhase9bForkBeats:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "continue",
-                "requires_codewords": [],
-                "grants": ["codeword::truth_committed"],
+                "requires_state_flags": [],
+                "grants": ["state_flag::truth_committed"],
             },
         )
         graph.add_edge("choice_from", "choice::p1__p2", "passage::p1")
@@ -3222,7 +3222,7 @@ class TestPhase9bForkBeats:
                 "from_passage": "passage::p2",
                 "to_passage": "passage::p3",
                 "label": "continue",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -3256,7 +3256,7 @@ class TestPhase9bForkBeats:
         reconverge_choices = {cid: cdata for cid, cdata in choices.items() if "reconverge" in cid}
         assert len(reconverge_choices) == 2
         for _cid, cdata in reconverge_choices.items():
-            assert cdata["grants"] == ["codeword::truth_committed"]
+            assert cdata["grants"] == ["state_flag::truth_committed"]
 
 
 class TestPhase9cHubSpokes:
@@ -3287,7 +3287,7 @@ class TestPhase9cHubSpokes:
                 "from_passage": "passage::market",
                 "to_passage": "passage::palace",
                 "label": "continue",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -3361,7 +3361,7 @@ class TestPhase9cHubSpokes:
                 "from_passage": "passage::hub",
                 "to_passage": "passage::spoke",
                 "label": "Explore",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -3376,7 +3376,7 @@ class TestPhase9cHubSpokes:
                 "from_passage": "passage::spoke",
                 "to_passage": "passage::hub",
                 "label": "Return",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
                 "is_return": True,
             },
@@ -3408,7 +3408,7 @@ class TestPhase9cHubSpokes:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "continue",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -3431,7 +3431,18 @@ class TestPhase8dResidueBeats:
     """Tests for Phase 8d residue beat insertion."""
 
     def _make_residue_eligible_graph(self) -> Any:
-        """Build a graph with a soft-dilemma convergence eligible for residue variants."""
+        """Build a graph with a soft-dilemma convergence eligible for residue variants.
+
+        Graph structure (computed arcs):
+        - beat::start (shared) -> beat::fight_only (fight) -> beat::aftermath (shared)
+        - beat::start (shared) -> beat::talk_only (talk) -> beat::aftermath (shared)
+
+        enumerate_arcs produces:
+        - spine (fight): [start, fight_only, aftermath]
+        - branch (talk): [start, talk_only, aftermath]
+
+        Convergence: branch diverges at start, converges at aftermath.
+        """
         from questfoundry.graph.graph import Graph
 
         graph = Graph.empty()
@@ -3477,12 +3488,12 @@ class TestPhase8dResidueBeats:
             )
             graph.add_edge("has_consequence", f"path::{suffix}", f"consequence::{suffix}_result")
             graph.create_node(
-                f"codeword::{suffix}_committed",
+                f"state_flag::{suffix}_committed",
                 {
-                    "type": "codeword",
+                    "type": "state_flag",
                     "raw_id": f"{suffix}_committed",
                     "tracks": f"consequence::{suffix}_result",
-                    "codeword_type": "granted",
+                    "flag_type": "granted",
                 },
             )
 
@@ -3548,11 +3559,11 @@ class TestPhase8dResidueBeats:
                     rationale="Prose should acknowledge fight vs negotiation",
                     variants=[
                         ResidueVariant(
-                            codeword_id="codeword::fight_committed",
+                            state_flag_id="state_flag::fight_committed",
                             hint="mention bruises from the fistfight",
                         ),
                         ResidueVariant(
-                            codeword_id="codeword::talk_committed",
+                            state_flag_id="state_flag::talk_committed",
                             hint="reference the fragile truce with the guards",
                         ),
                     ],

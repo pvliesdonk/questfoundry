@@ -1241,8 +1241,8 @@ class TestPhase2Codex:
             },
         )
         g.create_node(
-            "codeword::met_aldric",
-            {"type": "codeword", "raw_id": "met_aldric", "trigger": "Meets aldric"},
+            "state_flag::met_aldric",
+            {"type": "state_flag", "raw_id": "met_aldric", "trigger": "Meets aldric"},
         )
 
         stage = DressStage()
@@ -1378,7 +1378,7 @@ class TestPhase2Codex:
             "entity::protagonist",
             {"type": "entity", "raw_id": "protagonist", "entity_type": "character"},
         )
-        # No codewords defined — met_aldric in visible_when will trigger warning
+        # No state flags defined — met_aldric in visible_when will trigger warning
 
         stage = DressStage()
         mock_output = _make_codex_output("entity::protagonist")

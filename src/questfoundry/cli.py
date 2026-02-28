@@ -88,7 +88,7 @@ DEFAULT_NONINTERACTIVE_SEED_PROMPT = (
 
 DEFAULT_GROW_PROMPT = (
     "Build the complete branching structure from the SEED graph: "
-    "enumerate arcs, create passages, derive choices and codewords."
+    "enumerate arcs, create passages, derive choices and state flags."
 )
 DEFAULT_FILL_PROMPT = (
     "Generate prose for all passages: determine voice document, "
@@ -1116,7 +1116,7 @@ def grow(
     """Run GROW stage - build complete branching structure.
 
     Takes the paths and beats from SEED and builds the full
-    branching story graph: arcs, passages, choices, codewords,
+    branching story graph: arcs, passages, choices, state flags,
     and state overlays.
 
     This stage runs 15 phases (mostly deterministic, some LLM-assisted)

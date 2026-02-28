@@ -51,7 +51,7 @@ def _make_full_graph() -> Graph:
             "from_passage": "passage::p0",
             "to_passage": "passage::p1",
             "label": "Enter the forest",
-            "requires_codewords": [],
+            "requires_state_flags": [],
             "grants": [],
         },
     )
@@ -62,7 +62,7 @@ def _make_full_graph() -> Graph:
             "from_passage": "passage::p0",
             "to_passage": "passage::p1",
             "label": "continue",
-            "requires_codewords": [],
+            "requires_state_flags": [],
             "grants": [],
         },
     )
@@ -200,7 +200,7 @@ class TestBranchingStats:
                 "from_passage": "passage::p0",
                 "to_passage": "passage::p1",
                 "label": "Search the room",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -215,7 +215,7 @@ class TestBranchingStats:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "continue",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -272,7 +272,7 @@ class TestBranchingStats:
                 "from_passage": "passage::p0",
                 "to_passage": "passage::p1",
                 "label": "continue",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -285,7 +285,7 @@ class TestBranchingStats:
                 "from_passage": "passage::p0",
                 "to_passage": "passage::spoke_0",
                 "label": "Look around",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -299,7 +299,7 @@ class TestBranchingStats:
                 "to_passage": "passage::p0",
                 "label": "Return",
                 "is_return": True,
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -530,10 +530,10 @@ class TestBranchingQualityScore:
         assert data["branching_quality"] is not None
 
     def test_ending_variants_per_arc(self) -> None:
-        """Each arc's codeword signature counts as a separate ending variant."""
+        """Each arc's state flag signature counts as a separate ending variant."""
         graph = Graph.empty()
         spine_beats = [f"beat::s{i}" for i in range(3)]
-        # Two arcs sharing the same ending beat but with different codeword paths
+        # Two arcs sharing the same ending beat but with different state flag paths
         graph.create_node(
             "arc::spine",
             {
@@ -583,14 +583,14 @@ class TestBranchingQualityScore:
                 "from_passage": "passage::mid",
                 "to_passage": "passage::ending",
                 "label": "Continue",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
         graph.add_edge("choice_from", "choice::mid__ending", "passage::mid")
         graph.add_edge("choice_to", "choice::mid__ending", "passage::ending")
 
-        # Give each path a different codeword via consequence
+        # Give each path a different state flag via consequence
         graph.create_node(
             "path::canon",
             {"type": "path", "tier": "major", "description": "Canon"},
@@ -608,22 +608,22 @@ class TestBranchingQualityScore:
             {"type": "consequence", "description": "Rebel wins"},
         )
         graph.create_node(
-            "codeword::canon_flag",
-            {"type": "codeword", "label": "canon_flag"},
+            "state_flag::canon_flag",
+            {"type": "state_flag", "label": "canon_flag"},
         )
         graph.create_node(
-            "codeword::rebel_flag",
-            {"type": "codeword", "label": "rebel_flag"},
+            "state_flag::rebel_flag",
+            {"type": "state_flag", "label": "rebel_flag"},
         )
         graph.add_edge("has_consequence", "path::canon", "consequence::c_canon")
         graph.add_edge("has_consequence", "path::rebel", "consequence::c_rebel")
-        graph.add_edge("tracks", "codeword::canon_flag", "consequence::c_canon")
-        graph.add_edge("tracks", "codeword::rebel_flag", "consequence::c_rebel")
+        graph.add_edge("tracks", "state_flag::canon_flag", "consequence::c_canon")
+        graph.add_edge("tracks", "state_flag::rebel_flag", "consequence::c_rebel")
 
         result = _branching_quality_score(graph, None)
         assert result is not None
         assert result.terminal_count == 1
-        # Two arcs with different codewords → 2 ending variants, not 1
+        # Two arcs with different state flags → 2 ending variants, not 1
         assert result.ending_variants == 2
 
     def test_ending_variants_merged_passage(self) -> None:
@@ -667,7 +667,7 @@ class TestBranchingQualityScore:
                 "from_passage": "passage::mid",
                 "to_passage": "passage::ending",
                 "label": "Finish",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -678,11 +678,11 @@ class TestBranchingQualityScore:
         assert result is not None
         # The ending passage should be detected as a terminal (no outgoing choices)
         assert result.terminal_count == 1
-        # Its primary_beat should map to the spine arc, contributing a codeword signature
+        # Its primary_beat should map to the spine arc, contributing a state flag signature
         assert result.ending_variants >= 1
 
     def test_ending_variants_synthetic_endings(self) -> None:
-        """Synthetic endings (from split_ending_families) use family_codewords directly."""
+        """Synthetic endings (from split_ending_families) use family_state_flags directly."""
         graph = Graph.empty()
         # Need at least one arc for the function to return a result
         graph.create_node(
@@ -694,7 +694,7 @@ class TestBranchingQualityScore:
                 "paths": ["path::canon"],
             },
         )
-        # Two synthetic ending passages with different family_codewords, no from_beat
+        # Two synthetic ending passages with different family_state_flags, no from_beat
         graph.create_node(
             "passage::ending_0",
             {
@@ -703,7 +703,7 @@ class TestBranchingQualityScore:
                 "is_ending": True,
                 "is_synthetic": True,
                 "summary": "Ending A",
-                "family_codewords": ["codeword::trust", "codeword::brave"],
+                "family_state_flags": ["state_flag::trust", "state_flag::brave"],
             },
         )
         graph.create_node(
@@ -714,7 +714,7 @@ class TestBranchingQualityScore:
                 "is_ending": True,
                 "is_synthetic": True,
                 "summary": "Ending B",
-                "family_codewords": ["codeword::betray"],
+                "family_state_flags": ["state_flag::betray"],
             },
         )
         # Wire choices so these are the only terminals

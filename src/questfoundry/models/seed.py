@@ -122,7 +122,7 @@ class Consequence(BaseModel):
     """Narrative consequence of a path choice.
 
     Consequences bridge the gap between "what this path represents" (answer)
-    and "how we track it" (codeword). GROW creates codewords to track when
+    and "how we track it" (state flag). GROW creates state flags to track when
     consequences become active.
 
     Attributes:

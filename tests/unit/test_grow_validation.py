@@ -45,7 +45,7 @@ def _make_linear_passage_graph() -> Graph:
             "from_passage": "passage::p1",
             "to_passage": "passage::p2",
             "label": "continue",
-            "requires_codewords": [],
+            "requires_state_flags": [],
             "grants": [],
         },
     )
@@ -56,7 +56,7 @@ def _make_linear_passage_graph() -> Graph:
             "from_passage": "passage::p2",
             "to_passage": "passage::p3",
             "label": "continue",
-            "requires_codewords": [],
+            "requires_state_flags": [],
             "grants": [],
         },
     )
@@ -136,7 +136,7 @@ class TestSingleStart:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "go",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -147,7 +147,7 @@ class TestSingleStart:
                 "from_passage": "passage::p2",
                 "to_passage": "passage::p1",
                 "label": "back",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -178,7 +178,7 @@ class TestSingleStart:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::spoke_0",
                 "label": "Look around",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -193,7 +193,7 @@ class TestSingleStart:
                 "to_passage": "passage::p1",
                 "label": "Return",
                 "is_return": True,
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -273,7 +273,7 @@ class TestPassageDagCycles:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "go",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -284,7 +284,7 @@ class TestPassageDagCycles:
                 "from_passage": "passage::p2",
                 "to_passage": "passage::p1",
                 "label": "back",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )

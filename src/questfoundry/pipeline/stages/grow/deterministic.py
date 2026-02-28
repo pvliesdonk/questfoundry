@@ -336,12 +336,12 @@ async def phase_passages(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
     )
 
 
-# --- Phase 8b: Codewords ---
+# --- Phase 8b: State Flags ---
 
 
-@grow_phase(name="codewords", depends_on=["passages"], is_deterministic=True, priority=14)
-async def phase_codewords(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 8b: Create codeword nodes from consequences.
+@grow_phase(name="state_flags", depends_on=["passages"], is_deterministic=True, priority=14)
+async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
+    """Phase 8b: Create state flag nodes from consequences.
 
     Preconditions:
     - Passage nodes exist (Phase 8a complete).
@@ -349,18 +349,18 @@ async def phase_codewords(graph: Graph, model: BaseChatModel) -> GrowPhaseResult
     - has_consequence edges link paths to consequences.
 
     Postconditions:
-    - One codeword node per consequence (codeword::{raw_id}_committed).
-    - tracks edges link codewords to their consequences.
-    - grants edges link commits beats to codewords they activate.
+    - One state flag node per consequence (state_flag::{raw_id}_committed).
+    - tracks edges link state flags to their consequences.
+    - grants edges link commits beats to state flags they activate.
 
     Invariants:
-    - 1:1 mapping between consequences and codewords.
-    - Codeword grants derived from beat dilemma_impacts with effect="commits".
+    - 1:1 mapping between consequences and state flags.
+    - State flag grants derived from beat dilemma_impacts with effect="commits".
     """
     consequence_nodes = graph.get_nodes_by_type("consequence")
     if not consequence_nodes:
         return GrowPhaseResult(
-            phase="codewords",
+            phase="state_flags",
             status="completed",
             detail="No consequences to process",
         )
@@ -390,21 +390,21 @@ async def phase_codewords(graph: Graph, model: BaseChatModel) -> GrowPhaseResult
         path_id = edge["to"]
         beat_paths.setdefault(beat_id, []).append(path_id)
 
-    codeword_count = 0
+    flag_count = 0
     for cons_id, cons_data in sorted(consequence_nodes.items()):
         cons_raw = cons_data.get("raw_id", strip_scope_prefix(cons_id))
-        codeword_id = f"codeword::{cons_raw}_committed"
+        flag_id = f"state_flag::{cons_raw}_committed"
 
         graph.create_node(
-            codeword_id,
+            flag_id,
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": f"{cons_raw}_committed",
                 "tracks": cons_id,
-                "codeword_type": "granted",
+                "flag_type": "granted",
             },
         )
-        graph.add_edge("tracks", codeword_id, cons_id)
+        graph.add_edge("tracks", flag_id, cons_id)
 
         # Find commits beats for this consequence's path
         cons_path_id = cons_data.get("path_id", "")
@@ -426,15 +426,15 @@ async def phase_codewords(graph: Graph, model: BaseChatModel) -> GrowPhaseResult
                     impact.get("dilemma_id") == path_dilemma_id
                     and impact.get("effect") == "commits"
                 ):
-                    graph.add_edge("grants", beat_id, codeword_id)
+                    graph.add_edge("grants", beat_id, flag_id)
                     break
 
-        codeword_count += 1
+        flag_count += 1
 
     return GrowPhaseResult(
-        phase="codewords",
+        phase="state_flags",
         status="completed",
-        detail=f"Created {codeword_count} codewords",
+        detail=f"Created {flag_count} state flags",
     )
 
 
@@ -475,7 +475,7 @@ async def phase_mark_endings(
 
 @grow_phase(
     name="apply_routing",
-    depends_on=["mark_endings", "codewords", "residue_beats"],
+    depends_on=["mark_endings", "state_flags", "residue_beats"],
     is_deterministic=True,
     priority=21,
 )
@@ -491,7 +491,7 @@ async def phase_apply_routing(
 
     Preconditions:
     - Terminal passages marked with is_ending (mark_endings complete).
-    - Codeword nodes exist (codewords phase complete).
+    - State flag nodes exist (state_flags phase complete).
     - LLM residue proposals stored by Phase 15 (residue_beats complete).
 
     Postconditions:

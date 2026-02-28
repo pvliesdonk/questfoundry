@@ -35,21 +35,21 @@ def _make_routing_graph(
     """Build a graph ready for routing plan computation.
 
     Creates a graph with:
-    - n_dilemmas dilemmas, each with 2 paths and 2 codewords
+    - n_dilemmas dilemmas, each with 2 paths and 2 state_flags
     - 2^n_dilemmas arcs (one per path combination)
     - Shared mid-story passages and optionally shared terminal passages
     - Choices wired between passages
-    - Codewords tracked by paths
+    - State flags tracked by paths
 
     The graph topology for 1 dilemma:
         passage::start -> choice -> passage::mid -> choice -> passage::end
 
     With 2 arcs covering both passages. Dilemma d0 has path_a and path_b,
-    each tracked by a codeword.
+    each tracked by a state_flag.
     """
     g = Graph.empty()
 
-    # --- Dilemmas, paths, codewords ---
+    # --- Dilemmas, paths, state_flags ---
     for di in range(n_dilemmas):
         salience = "high"
         weight = "light"
@@ -89,28 +89,28 @@ def _make_routing_graph(
             )
             g.add_edge("has_answer", f"dilemma::d{di}", path_id)
 
-            # Consequence for path → codeword linkage
+            # Consequence for path → state_flag linkage
             cons_id = f"consequence::d{di}_{label}_cons"
             g.create_node(
                 cons_id,
                 {
                     "type": "consequence",
                     "raw_id": f"d{di}_{label}_cons",
-                    "codeword_id": f"codeword::d{di}_{label}_committed",
+                    "state_flag_id": f"state_flag::d{di}_{label}_committed",
                 },
             )
             g.add_edge("has_consequence", path_id, cons_id)
 
-            cw_id = f"codeword::d{di}_{label}_committed"
+            sf_id = f"state_flag::d{di}_{label}_committed"
             g.create_node(
-                cw_id,
+                sf_id,
                 {
-                    "type": "codeword",
+                    "type": "state_flag",
                     "raw_id": f"d{di}_{label}_committed",
-                    "tracks": cons_id,  # codeword tracks consequence
+                    "tracks": cons_id,  # state_flag tracks consequence
                 },
             )
-            g.add_edge("tracks", cw_id, cons_id)
+            g.add_edge("tracks", sf_id, cons_id)
 
     # --- Passages ---
     g.create_node(
@@ -258,11 +258,11 @@ class TestVariantPassageSpec:
     def test_ending_variant_to_node_data(self):
         spec = VariantPassageSpec(
             variant_id="passage::ending_end_0",
-            requires_codewords=("codeword::d0_a_committed",),
+            requires_state_flags=("state_flag::d0_a_committed",),
             summary="The story concludes.",
             from_beat="beat::end_beat",
             is_ending=True,
-            family_codewords=("codeword::d0_a_committed",),
+            family_state_flags=("state_flag::d0_a_committed",),
             family_arc_count=2,
             ending_tone="hopeful",
         )
@@ -272,7 +272,7 @@ class TestVariantPassageSpec:
         assert data["raw_id"] == "ending_end_0"
         assert data["is_ending"] is True
         assert data["is_synthetic"] is True
-        assert data["family_codewords"] == ["codeword::d0_a_committed"]
+        assert data["family_state_flags"] == ["state_flag::d0_a_committed"]
         assert data["family_arc_count"] == 2
         assert data["ending_tone"] == "hopeful"
         assert data["summary"] == "The story concludes."
@@ -281,10 +281,10 @@ class TestVariantPassageSpec:
     def test_residue_variant_to_node_data(self):
         spec = VariantPassageSpec(
             variant_id="passage::mid__via_d0_a",
-            requires_codewords=("codeword::d0_a_committed",),
+            requires_state_flags=("state_flag::d0_a_committed",),
             summary="The middle.",
             is_residue=True,
-            residue_codeword="codeword::d0_a_committed",
+            residue_state_flag="state_flag::d0_a_committed",
             residue_hint="Show trust aftermath.",
             residue_dilemma="dilemma::d0",
         )
@@ -293,7 +293,7 @@ class TestVariantPassageSpec:
         assert data["type"] == "passage"
         assert data["is_residue"] is True
         assert data["is_synthetic"] is True
-        assert data["residue_codeword"] == "codeword::d0_a_committed"
+        assert data["residue_state_flag"] == "state_flag::d0_a_committed"
         assert data["residue_hint"] == "Show trust aftermath."
         assert data["residue_dilemma"] == "dilemma::d0"
         assert "is_ending" not in data
@@ -301,10 +301,10 @@ class TestVariantPassageSpec:
     def test_heavy_variant_to_node_data_no_hint(self):
         spec = VariantPassageSpec(
             variant_id="passage::mid__heavy_d0_a",
-            requires_codewords=("codeword::d0_a_committed",),
+            requires_state_flags=("state_flag::d0_a_committed",),
             summary="The middle.",
             is_residue=True,
-            residue_codeword="codeword::d0_a_committed",
+            residue_state_flag="state_flag::d0_a_committed",
             residue_dilemma="dilemma::d0",
         )
         data = spec.to_node_data()
@@ -315,7 +315,7 @@ class TestVariantPassageSpec:
     def test_frozen(self):
         spec = VariantPassageSpec(
             variant_id="passage::x",
-            requires_codewords=("cw::1",),
+            requires_state_flags=("cw::1",),
         )
         with pytest.raises(AttributeError):
             spec.variant_id = "passage::y"  # type: ignore[misc]
@@ -354,8 +354,8 @@ class TestRoutingOperation:
         assert op.is_exhaustive is False
 
     def test_variant_count(self):
-        v1 = VariantPassageSpec(variant_id="p::a", requires_codewords=("c::1",))
-        v2 = VariantPassageSpec(variant_id="p::b", requires_codewords=("c::2",))
+        v1 = VariantPassageSpec(variant_id="p::a", requires_state_flags=("c::1",))
+        v2 = VariantPassageSpec(variant_id="p::b", requires_state_flags=("c::2",))
         op = RoutingOperation(
             kind="ending_split",
             base_passage_id="passage::end",
@@ -483,8 +483,8 @@ class TestComputeRoutingPlan:
         assert op.variant_count == 2
         assert op.is_exhaustive is True
 
-        # Each variant should have different codewords
-        cws = [v.requires_codewords for v in op.variants]
+        # Each variant should have different state flags
+        cws = [v.requires_state_flags for v in op.variants]
         assert len(set(cws)) == 2  # Distinct gate sets
 
     def test_no_ending_split_when_already_separate(self):
@@ -530,8 +530,8 @@ class TestComputeRoutingPlan:
                 "passage_id": "passage::mid",
                 "dilemma_id": "dilemma::d1",
                 "variants": [
-                    {"codeword_id": "codeword::d1_a_committed", "hint": "Show path A residue."},
-                    {"codeword_id": "codeword::d1_b_committed", "hint": "Show path B residue."},
+                    {"state_flag_id": "state_flag::d1_a_committed", "hint": "Show path A residue."},
+                    {"state_flag_id": "state_flag::d1_b_committed", "hint": "Show path B residue."},
                 ],
             }
         ]
@@ -554,8 +554,8 @@ class TestComputeRoutingPlan:
                 "passage_id": "passage::end",
                 "dilemma_id": "dilemma::d0",
                 "variants": [
-                    {"codeword_id": "codeword::d0_a_committed", "hint": "A"},
-                    {"codeword_id": "codeword::d0_b_committed", "hint": "B"},
+                    {"state_flag_id": "state_flag::d0_a_committed", "hint": "A"},
+                    {"state_flag_id": "state_flag::d0_b_committed", "hint": "B"},
                 ],
             }
         ]
@@ -566,14 +566,14 @@ class TestComputeRoutingPlan:
         assert len(plan.ending_splits) == 1
         assert len(plan.residue_ops) == 0
 
-    def test_arc_codewords_computed_both_scopes(self):
-        """Plan stores arc codeword signatures for both ending and routing scopes."""
+    def test_arc_state_flags_computed_both_scopes(self):
+        """Plan stores arc state_flag signatures for both ending and routing scopes."""
         g = _make_routing_graph(n_dilemmas=1, shared_terminal=True)
 
         plan = compute_routing_plan(g)
 
-        assert len(plan.arc_codewords_ending) >= 1
-        assert len(plan.arc_codewords_routing) >= 1
+        assert len(plan.arc_state_flags_ending) >= 1
+        assert len(plan.arc_state_flags_routing) >= 1
 
     def test_proposal_for_nonexistent_passage_skipped(self):
         """LLM proposals referencing missing passages are skipped."""
@@ -584,8 +584,8 @@ class TestComputeRoutingPlan:
                 "passage_id": "passage::does_not_exist",
                 "dilemma_id": "dilemma::d0",
                 "variants": [
-                    {"codeword_id": "codeword::d0_a_committed", "hint": "A"},
-                    {"codeword_id": "codeword::d0_b_committed", "hint": "B"},
+                    {"state_flag_id": "state_flag::d0_a_committed", "hint": "A"},
+                    {"state_flag_id": "state_flag::d0_b_committed", "hint": "B"},
                 ],
             }
         ]
@@ -602,7 +602,7 @@ class TestComputeRoutingPlan:
                 "passage_id": "passage::mid",
                 "dilemma_id": "dilemma::d0",
                 "variants": [
-                    {"codeword_id": "codeword::d0_a_committed", "hint": "Only one."},
+                    {"state_flag_id": "state_flag::d0_a_committed", "hint": "Only one."},
                 ],
             }
         ]
@@ -630,7 +630,7 @@ class TestResidueProposalStorage:
             {
                 "passage_id": "passage::p2",
                 "dilemma_id": "dilemma::d2",
-                "variants": [{"codeword_id": "cw::c1", "hint": "test"}],
+                "variants": [{"state_flag_id": "sf::c1", "hint": "test"}],
             },
         ]
         store_residue_proposals(g, proposals)
@@ -796,7 +796,7 @@ class TestApplyRoutingPlan:
                 variants=(
                     VariantPassageSpec(
                         variant_id="passage::orphan_v0",
-                        requires_codewords=("codeword::x",),
+                        requires_state_flags=("state_flag::x",),
                         is_ending=True,
                     ),
                 ),

@@ -1,20 +1,20 @@
 name: grow_phase8c_overlays
-description: Create entity overlays conditioned on codewords
+description: Create entity overlays conditioned on state flags
 
 system: |
   You are creating entity overlays -- conditional details that change
   based on which narrative path the player has taken. Overlays activate
-  when specific codewords are granted.
+  when specific state flags are granted.
 
   ## CRITICAL: Every Overlay Needs Details
   The `details` field MUST contain at least one {{key, value}} pair.
-  WRONG: {{"entity_id": "character::hero", "when": ["codeword::cw_trust"], "details": []}}
-  RIGHT: {{"entity_id": "character::hero", "when": ["codeword::cw_trust"], "details": [{{"key": "attitude", "value": "Wary but relieved the alliance held"}}]}}
+  WRONG: {{"entity_id": "character::hero", "when": ["state_flag::cw_trust"], "details": []}}
+  RIGHT: {{"entity_id": "character::hero", "when": ["state_flag::cw_trust"], "details": [{{"key": "attitude", "value": "Wary but relieved the alliance held"}}]}}
 
   ## What is an Entity Overlay?
   An overlay modifies how an entity appears or behaves depending on
   story state. Overlays are cosmetic entity-level changes — they describe
-  how an entity's presentation shifts based on codewords. (Passage-level
+  how an entity's presentation shifts based on state flags. (Passage-level
   prose variants at convergence points are handled by residue beats.)
 
   Examples:
@@ -22,14 +22,14 @@ system: |
   - A location's description changes after a disaster occurs
   - An object becomes unavailable after it is destroyed
 
-  ## Consequences, Codewords, and Their Context
+  ## Consequences, State Flags, and Their Context
   {consequence_context}
 
   ## Entities Available for Overlays
   {entity_context}
 
   ## When to Create an Overlay
-  For EACH codeword above, check these rules against each entity.
+  For EACH state flag above, check these rules against each entity.
   If ANY rule is satisfied, propose an overlay.
 
   1. **Direct mention**: Consequence names an entity → overlay it
@@ -38,7 +38,7 @@ system: |
   4. **Ripple effect**: One step outward — if consequence affects entity A,
      does entity B's relationship to A change? If yes, overlay B
 
-  Central entities per codeword are the strongest candidates.
+  Central entities per state flag are the strongest candidates.
 
   ## Common Mistakes
   - "Ally stays loyal" seems like no change, but it IS a state — the player
@@ -48,8 +48,8 @@ system: |
   - "Benign secret revealed" — still changes what characters know and how they behave.
 
   ## Overlay Structure
-  - Each overlay targets ONE entity, activates on one or more codewords
-  - "when" lists codeword IDs that must ALL be granted
+  - Each overlay targets ONE entity, activates on one or more state flags
+  - "when" lists state flag IDs that must ALL be granted
   - "details" is an array of {{key, value}} describing changes:
     keys like "attitude", "appearance", "description", "access", "status", "mood"
   - Maximum 3 overlays per entity
@@ -57,25 +57,25 @@ system: |
   ## What NOT to Do
   - Do NOT use IDs not listed in the Valid IDs section
   - Do NOT propose overlays with empty details
-  - Do NOT invent entity or codeword IDs
+  - Do NOT invent entity or state flag IDs
   - Do NOT add prose before or after the JSON output
 
   ## Valid IDs
   Valid entity_ids: {valid_entity_ids}
-  Valid codeword_ids (for "when" field): {valid_codeword_ids}
+  Valid state_flag_ids (for "when" field): {valid_state_flag_ids}
 
   ## Output Format
   Return a JSON object with an "overlays" array. Each overlay has:
   - entity_id: the entity being modified (e.g., "character::hero")
-  - when: list of codeword IDs that activate this overlay
+  - when: list of state flag IDs that activate this overlay
   - details: array of {{key, value}} objects describing changes (MUST NOT be empty)
 
   If no overlays exist after checking all rules, return an empty overlays array.
 
 user: |
-  Propose entity overlays based on the consequences and codewords above.
+  Propose entity overlays based on the consequences and state flags above.
 
-  For each codeword, apply the four rules (direct mention, state change,
+  For each state flag, apply the four rules (direct mention, state change,
   atmosphere shift, ripple effect) to every entity.
 
   REMINDER: Every overlay MUST have a non-empty details array.

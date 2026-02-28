@@ -64,7 +64,6 @@ from questfoundry.models.grow import (
     AtmosphericDetail,
     Choice,
     ChoiceLabel,
-    Codeword,
     EntityArcDescriptor,
     EntityOverlay,
     ForkProposal,
@@ -90,6 +89,7 @@ from questfoundry.models.grow import (
     SceneTypeTag,
     SpokeLabelStyle,
     SpokeProposal,
+    StateFlag,
 )
 from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.polish import (
@@ -170,7 +170,6 @@ __all__ = [
     "ChoiceLabel",
     "ChoiceLabelItem",
     "ChoiceSpec",
-    "Codeword",
     "CodexEntry",
     "Consequence",
     "ContentNotes",
@@ -259,6 +258,7 @@ __all__ = [
     "SpokeLabelStyle",
     "SpokeLabelUpdate",
     "SpokeProposal",
+    "StateFlag",
     "TemporalHint",
     "TemporalPosition",
     "VariantSpec",

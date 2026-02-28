@@ -2,7 +2,7 @@
 
 These checks verify the passage graph's structural integrity: reachability,
 gate satisfiability, routing coverage, prose neutrality, arc divergence,
-linearity, and codeword gate coverage. They were split from
+linearity, and state flag gate coverage. They were split from
 test_grow_validation.py which now covers only beat-DAG checks.
 """
 
@@ -17,7 +17,6 @@ from questfoundry.graph.polish_validation import (
     check_all_endings_reachable,
     check_all_passages_reachable,
     check_arc_divergence,
-    check_codeword_gate_coverage,
     check_commits_timing,
     check_forward_path_reachability,
     check_gate_co_satisfiability,
@@ -25,6 +24,7 @@ from questfoundry.graph.polish_validation import (
     check_max_consecutive_linear,
     check_prose_neutrality,
     check_routing_coverage,
+    check_state_flag_gate_coverage,
 )
 
 # ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ def _make_linear_passage_graph() -> Graph:
             "from_passage": "passage::p1",
             "to_passage": "passage::p2",
             "label": "continue",
-            "requires_codewords": [],
+            "requires_state_flags": [],
             "grants": [],
         },
     )
@@ -60,7 +60,7 @@ def _make_linear_passage_graph() -> Graph:
             "from_passage": "passage::p2",
             "to_passage": "passage::p3",
             "label": "continue",
-            "requires_codewords": [],
+            "requires_state_flags": [],
             "grants": [],
         },
     )
@@ -155,7 +155,7 @@ def _make_chain_graph(passage_ids: list[str], beat_data: dict[str, dict] | None 
                 "from_passage": f"passage::{from_p}",
                 "to_passage": f"passage::{to_p}",
                 "label": "continue",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -170,12 +170,12 @@ def _make_routing_graph(
     route_requires: dict[str, list[str]],
     beat: str = "beat::hub",
 ) -> Graph:
-    """Build a graph with routing choices and arc codeword infrastructure.
+    """Build a graph with routing choices and arc state flag infrastructure.
 
     Args:
         arc_paths: Mapping of arc raw_id to list of path raw_ids.
-            Each path gets a dilemma, consequence, and codeword named after it.
-        route_requires: Mapping of choice raw_id to required codeword raw_ids.
+            Each path gets a dilemma, consequence, and state flag named after it.
+        route_requires: Mapping of choice raw_id to required state flag raw_ids.
         beat: The beat that the source passage belongs to.
     """
     graph = Graph.empty()
@@ -205,13 +205,13 @@ def _make_routing_graph(
         )
         graph.add_edge("explores", pid, "dilemma::d1")
 
-        # consequence + codeword (named after path for simplicity)
+        # consequence + state flag (named after path for simplicity)
         cons_id = f"consequence::{p}"
-        cw_id = f"codeword::{p}"
+        sf_id = f"state_flag::{p}"
         graph.create_node(cons_id, {"type": "consequence", "raw_id": p})
-        graph.create_node(cw_id, {"type": "codeword", "raw_id": p})
+        graph.create_node(sf_id, {"type": "state_flag", "raw_id": p})
         graph.add_edge("has_consequence", pid, cons_id)
-        graph.add_edge("tracks", cw_id, cons_id)
+        graph.add_edge("tracks", sf_id, cons_id)
 
     # Arcs
     for arc_raw, paths in arc_paths.items():
@@ -238,7 +238,7 @@ def _make_routing_graph(
                 "to_passage": target,
                 "label": choice_raw,
                 "is_routing": True,
-                "requires_codewords": [f"codeword::{cw}" for cw in reqs],
+                "requires_state_flags": [f"state_flag::{cw}" for cw in reqs],
                 "grants": [],
             },
         )
@@ -328,7 +328,7 @@ def _make_shared_passage_graph(
                 "to_passage": "passage::v1",
                 "label": "r1",
                 "is_routing": True,
-                "requires_codewords": ["codeword::cw1"],
+                "requires_state_flags": ["state_flag::cw1"],
                 "grants": [],
             },
         )
@@ -378,7 +378,7 @@ class TestReachability:
                 "from_passage": "passage::isolated",
                 "to_passage": "passage::isolated",
                 "label": "self",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -426,7 +426,7 @@ class TestEndingsReachable:
                 "from_passage": "passage::start",
                 "to_passage": "passage::middle",
                 "label": "go",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -440,7 +440,7 @@ class TestEndingsReachable:
                 "from_passage": "passage::middle",
                 "to_passage": "passage::start",
                 "label": "back",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -480,8 +480,8 @@ class TestGateSatisfiability:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "go",
-                "requires_codewords": [],
-                "grants": ["codeword::cw1"],
+                "requires_state_flags": [],
+                "grants": ["state_flag::cw1"],
             },
         )
         # Choice that requires "cw1" (satisfiable because c1 grants it)
@@ -492,7 +492,7 @@ class TestGateSatisfiability:
                 "from_passage": "passage::p2",
                 "to_passage": "passage::p1",
                 "label": "back",
-                "requires_codewords": ["codeword::cw1"],
+                "requires_state_flags": ["state_flag::cw1"],
                 "grants": [],
             },
         )
@@ -509,7 +509,7 @@ class TestGateSatisfiability:
             "passage::p2",
             {"type": "passage", "raw_id": "p2", "from_beat": "beat::b2", "summary": "s"},
         )
-        # Choice that requires ungrantable codeword
+        # Choice that requires ungrantable state flag
         graph.create_node(
             "choice::c1",
             {
@@ -517,7 +517,7 @@ class TestGateSatisfiability:
                 "from_passage": "passage::p1",
                 "to_passage": "passage::p2",
                 "label": "go",
-                "requires_codewords": ["codeword::never_granted"],
+                "requires_state_flags": ["state_flag::never_granted"],
                 "grants": [],
             },
         )
@@ -538,14 +538,14 @@ class TestGateSatisfiability:
 
 class TestGateCoSatisfiability:
     def test_co_satisfiable_gates(self) -> None:
-        """Gates requiring codewords from a single arc pass co-satisfiability."""
+        """Gates requiring state flags from a single arc pass co-satisfiability."""
         graph = Graph.empty()
-        # Path with consequence and codeword
+        # Path with consequence and state flag
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         graph.create_node("consequence::c1", {"type": "consequence", "raw_id": "c1"})
         graph.add_edge("has_consequence", "path::p1", "consequence::c1")
-        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
-        graph.add_edge("tracks", "codeword::cw1", "consequence::c1")
+        graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
+        graph.add_edge("tracks", "state_flag::cw1", "consequence::c1")
         # Arc containing p1
         graph.create_node(
             "arc::a1",
@@ -560,7 +560,7 @@ class TestGateCoSatisfiability:
                 "from_passage": "passage::p",
                 "to_passage": "passage::p",
                 "label": "go",
-                "requires_codewords": ["codeword::cw1"],
+                "requires_state_flags": ["state_flag::cw1"],
                 "grants": [],
             },
         )
@@ -568,17 +568,17 @@ class TestGateCoSatisfiability:
         assert result.severity == "pass"
 
     def test_paradoxical_gate_detected(self) -> None:
-        """Gate requiring codewords from mutually exclusive paths is detected."""
+        """Gate requiring state flags from mutually exclusive paths is detected."""
         graph = Graph.empty()
-        # Two paths on separate arcs, each with own codeword
+        # Two paths on separate arcs, each with own state flag
         for p_id in ("p1", "p2"):
             graph.create_node(f"path::{p_id}", {"type": "path", "raw_id": p_id})
             cons_id = f"consequence::{p_id}_c"
-            cw_id = f"codeword::{p_id}_cw"
+            sf_id = f"state_flag::{p_id}_cw"
             graph.create_node(cons_id, {"type": "consequence", "raw_id": f"{p_id}_c"})
             graph.add_edge("has_consequence", f"path::{p_id}", cons_id)
-            graph.create_node(cw_id, {"type": "codeword", "raw_id": f"{p_id}_cw"})
-            graph.add_edge("tracks", cw_id, cons_id)
+            graph.create_node(sf_id, {"type": "state_flag", "raw_id": f"{p_id}_cw"})
+            graph.add_edge("tracks", sf_id, cons_id)
         # Arc 1 has only p1, Arc 2 has only p2 -- mutually exclusive
         graph.create_node(
             "arc::a1",
@@ -588,7 +588,7 @@ class TestGateCoSatisfiability:
             "arc::a2",
             {"type": "arc", "arc_type": "branch", "paths": ["p2"], "sequence": []},
         )
-        # Choice requiring BOTH codewords -- no single arc provides both
+        # Choice requiring BOTH state flags -- no single arc provides both
         graph.create_node("passage::p", {"type": "passage", "raw_id": "p", "from_beat": "b"})
         graph.create_node(
             "choice::g1",
@@ -597,7 +597,7 @@ class TestGateCoSatisfiability:
                 "from_passage": "passage::p",
                 "to_passage": "passage::p",
                 "label": "go",
-                "requires_codewords": ["codeword::p1_cw", "codeword::p2_cw"],
+                "requires_state_flags": ["state_flag::p1_cw", "state_flag::p2_cw"],
                 "grants": [],
             },
         )
@@ -909,7 +909,7 @@ class TestMaxConsecutiveLinear:
                 "from_passage": "passage::b",
                 "to_passage": "passage::alt",
                 "label": "Take alternative",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -972,7 +972,7 @@ class TestMaxConsecutiveLinear:
                 "from_passage": "passage::x",
                 "to_passage": "passage::c",
                 "label": "go",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -1070,14 +1070,14 @@ class TestCommitsTimingScaling:
 
 
 # ---------------------------------------------------------------------------
-# Codeword gate coverage
+# State flag gate coverage
 # ---------------------------------------------------------------------------
 
 
-class TestCodewordGateCoverage:
+class TestStateFlagGateCoverage:
     def test_all_consumed_passes(self) -> None:
         graph = Graph.empty()
-        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
+        graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
         graph.create_node(
             "choice::a_b",
             {
@@ -1085,17 +1085,17 @@ class TestCodewordGateCoverage:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "go",
-                "requires_codewords": ["codeword::cw1"],
+                "requires_state_flags": ["state_flag::cw1"],
                 "grants": [],
             },
         )
-        result = check_codeword_gate_coverage(graph)
+        result = check_state_flag_gate_coverage(graph)
         assert result.severity == "pass"
 
     def test_unconsumed_warns(self) -> None:
         graph = Graph.empty()
-        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
-        graph.create_node("codeword::cw2", {"type": "codeword", "raw_id": "cw2"})
+        graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
+        graph.create_node("state_flag::cw2", {"type": "state_flag", "raw_id": "cw2"})
         graph.create_node(
             "choice::a_b",
             {
@@ -1103,24 +1103,24 @@ class TestCodewordGateCoverage:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "go",
-                "requires_codewords": ["codeword::cw1"],
+                "requires_state_flags": ["state_flag::cw1"],
                 "grants": [],
             },
         )
-        result = check_codeword_gate_coverage(graph)
+        result = check_state_flag_gate_coverage(graph)
         assert result.severity == "warn"
         assert "1 of 2" in result.message
-        assert "codeword::cw2" in result.message
+        assert "state_flag::cw2" in result.message
 
-    def test_no_codewords_passes(self) -> None:
+    def test_no_state_flags_passes(self) -> None:
         graph = Graph.empty()
-        result = check_codeword_gate_coverage(graph)
+        result = check_state_flag_gate_coverage(graph)
         assert result.severity == "pass"
 
     def test_overlay_when_counts_as_consumed(self) -> None:
-        """Codewords in entity overlay.when are counted as consumed."""
+        """State flags in entity overlay.when are counted as consumed."""
         graph = Graph.empty()
-        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
+        graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
         graph.create_node(
             "character::hero",
             {
@@ -1129,19 +1129,19 @@ class TestCodewordGateCoverage:
                 "name": "Hero",
                 "category": "character",
                 "overlays": [
-                    {"when": ["codeword::cw1"], "details": {"attitude": "weary"}},
+                    {"when": ["state_flag::cw1"], "details": {"attitude": "weary"}},
                 ],
             },
         )
-        result = check_codeword_gate_coverage(graph)
+        result = check_state_flag_gate_coverage(graph)
         assert result.severity == "pass"
         assert "consumed" in result.message
 
     def test_overlay_multiple_entity_categories_consumed(self) -> None:
         """Overlays on different entity categories all contribute to consumption."""
         graph = Graph.empty()
-        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
-        graph.create_node("codeword::cw2", {"type": "codeword", "raw_id": "cw2"})
+        graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
+        graph.create_node("state_flag::cw2", {"type": "state_flag", "raw_id": "cw2"})
         graph.create_node(
             "character::hero",
             {
@@ -1150,7 +1150,7 @@ class TestCodewordGateCoverage:
                 "name": "Hero",
                 "category": "character",
                 "overlays": [
-                    {"when": ["codeword::cw1"], "details": {"attitude": "weary"}},
+                    {"when": ["state_flag::cw1"], "details": {"attitude": "weary"}},
                 ],
             },
         )
@@ -1162,13 +1162,13 @@ class TestCodewordGateCoverage:
                 "name": "Village",
                 "category": "location",
                 "overlays": [
-                    {"when": ["codeword::cw2"], "details": {"mood": "tense"}},
+                    {"when": ["state_flag::cw2"], "details": {"mood": "tense"}},
                 ],
             },
         )
-        result = check_codeword_gate_coverage(graph)
+        result = check_state_flag_gate_coverage(graph)
         assert result.severity == "pass"
-        assert "2 codeword(s) consumed" in result.message
+        assert "2 state flag(s) consumed" in result.message
 
 
 # ---------------------------------------------------------------------------
@@ -1196,7 +1196,7 @@ class TestForwardPathReachability:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "go",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -1213,7 +1213,7 @@ class TestForwardPathReachability:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "go",
-                "requires_codewords": ["codeword::x"],
+                "requires_state_flags": ["state_flag::x"],
                 "grants": [],
             },
         )
@@ -1239,7 +1239,7 @@ class TestForwardPathReachability:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "return",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
                 "is_return": True,
             },
@@ -1252,7 +1252,7 @@ class TestForwardPathReachability:
                 "from_passage": "passage::a",
                 "to_passage": "passage::c",
                 "label": "go",
-                "requires_codewords": ["codeword::x"],
+                "requires_state_flags": ["state_flag::x"],
                 "grants": [],
             },
         )
@@ -1281,7 +1281,7 @@ class TestForwardPathReachability:
                 "from_passage": "passage::hub",
                 "to_passage": "passage::next",
                 "label": "continue",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -1295,7 +1295,7 @@ class TestForwardPathReachability:
                 "to_passage": "passage::end1",
                 "label": "route1",
                 "is_routing": True,
-                "requires_codewords": ["codeword::cw1"],
+                "requires_state_flags": ["state_flag::cw1"],
                 "grants": [],
             },
         )
@@ -1308,7 +1308,7 @@ class TestForwardPathReachability:
                 "to_passage": "passage::end2",
                 "label": "route2",
                 "is_routing": True,
-                "requires_codewords": ["codeword::cw2"],
+                "requires_state_flags": ["state_flag::cw2"],
                 "grants": [],
             },
         )
@@ -1354,8 +1354,8 @@ class TestCheckRoutingCoverage:
 
     def test_valid_ce_me_passes(self) -> None:
         """Two disjoint routes covering all arcs pass CE+ME."""
-        # arc a1 has path p1 (codeword p1), arc a2 has path p2 (codeword p2)
-        # route r1 requires codeword p1, route r2 requires codeword p2
+        # arc a1 has path p1 (state flag p1), arc a2 has path p2 (state flag p2)
+        # route r1 requires state flag p1, route r2 requires state flag p2
         graph = _make_routing_graph(
             arc_paths={"a1": ["p1"], "a2": ["p2"]},
             route_requires={"r1": ["p1"], "r2": ["p2"]},
@@ -1382,7 +1382,7 @@ class TestCheckRoutingCoverage:
 
     def test_me_violation_warns(self) -> None:
         """Arc satisfying multiple routes triggers ME warning."""
-        # arc a1 has BOTH paths p1 and p2 -> codewords {p1, p2}
+        # arc a1 has BOTH paths p1 and p2 -> state flags {p1, p2}
         # Both routes are satisfiable for a1
         graph = _make_routing_graph(
             arc_paths={"a1": ["p1", "p2"], "a2": ["p2"]},
@@ -1414,7 +1414,7 @@ class TestCheckRoutingCoverage:
                 "to_passage": "passage::fallback",
                 "label": "fallback",
                 "is_routing": True,
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -1450,7 +1450,7 @@ class TestCheckRoutingCoverage:
                 "to_passage": "passage::end1",
                 "label": "r1",
                 "is_routing": True,
-                "requires_codewords": ["codeword::cw1"],
+                "requires_state_flags": ["state_flag::cw1"],
                 "grants": [],
             },
         )
@@ -1762,7 +1762,7 @@ class TestCheckProseNeutrality:
 
 
 class TestRoutingCoverageWithPlanMetadata:
-    """S4: check_routing_coverage uses correct codeword scope per routing type."""
+    """S4: check_routing_coverage uses correct state flag scope per routing type."""
 
     def test_routing_applied_meta_used_for_ending_splits(self):
         """After apply_routing_plan, routing coverage check runs without error."""
@@ -1780,7 +1780,7 @@ class TestRoutingCoverageWithPlanMetadata:
         assert checks[0].severity == "pass"
 
     def test_ending_split_passages_use_ending_scope(self):
-        """Passages in ending_split_passages set use scope='ending' codewords."""
+        """Passages in ending_split_passages set use scope='ending' state flags."""
         from questfoundry.graph.grow_routing import ROUTING_APPLIED_NODE_ID
 
         g = _make_minimal_routing_applied_graph()
