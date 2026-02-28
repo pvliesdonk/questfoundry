@@ -222,7 +222,9 @@ def get_passage_beats(graph: Graph, passage_id: str) -> list[str]:
         passage_id: Passage node ID to look up.
 
     Returns:
-        List of beat IDs (typically single-element, multiple for merged passages).
+        Lexicographically sorted list of beat IDs (typically single-element,
+        multiple for merged passages).  Sorted for deterministic ordering;
+        ``get_primary_beat`` returns the first element.
     """
     edges = graph.get_edges(to_id=passage_id, edge_type="grouped_in")
     return sorted(e["from"] for e in edges)

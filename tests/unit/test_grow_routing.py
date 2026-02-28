@@ -131,8 +131,10 @@ def _make_routing_graph(
             "type": "passage",
             "raw_id": "start",
             "summary": "The story begins.",
+            "from_beat": "beat::start",
         },
     )
+    g.add_edge("grouped_in", "beat::start", "passage::start")
     g.create_node(
         "passage::mid",
         {
