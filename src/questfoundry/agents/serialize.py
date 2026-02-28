@@ -40,6 +40,7 @@ from questfoundry.observability.tracing import (
     trace_context,
     traceable,
 )
+from questfoundry.pipeline.size import size_template_vars
 from questfoundry.providers.structured_output import (
     StructuredOutputStrategy,
     unwrap_structured_result,
@@ -1683,10 +1684,8 @@ async def serialize_seed_as_function(
     prompts = dict(_load_seed_section_prompts())  # Copy — cached original is immutable
 
     # Inject size-aware beat count range into beat prompts
-    from questfoundry.pipeline.size import size_template_vars
-
     size_vars = size_template_vars(size_profile)
-    beats_range = size_vars.get("size_beats_per_path", "2-4")
+    beats_range = size_vars["size_beats_per_path"]
     for key in ("beats", "per_path_beats"):
         if key in prompts:
             prompts[key] = prompts[key].replace("{size_beats_per_path}", beats_range)
