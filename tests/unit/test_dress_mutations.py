@@ -13,7 +13,7 @@ from questfoundry.graph.graph import Graph
 
 @pytest.fixture()
 def dress_graph() -> Graph:
-    """Graph with entities, passages, and codewords for DRESS testing."""
+    """Graph with entities, passages, and state flags for DRESS testing."""
     g = Graph()
     g.create_node(
         "entity::protagonist",
@@ -62,17 +62,17 @@ def dress_graph() -> Graph:
         },
     )
     g.create_node(
-        "codeword::met_aldric",
+        "state_flag::met_aldric",
         {
-            "type": "codeword",
+            "type": "state_flag",
             "raw_id": "met_aldric",
             "trigger": "Player meets aldric at the bridge",
         },
     )
     g.create_node(
-        "codeword::found_tome",
+        "state_flag::found_tome",
         {
-            "type": "codeword",
+            "type": "state_flag",
             "raw_id": "found_tome",
             "trigger": "Player discovers the ancient tome",
         },
@@ -511,7 +511,7 @@ class TestValidateDressCodexEntries:
         )
         assert any("duplicate rank=1" in e for e in errors)
 
-    def test_unknown_codeword(self, dress_graph: Graph) -> None:
+    def test_unknown_state_flag(self, dress_graph: Graph) -> None:
         from questfoundry.graph.dress_mutations import validate_dress_codex_entries
 
         errors = validate_dress_codex_entries(
@@ -522,4 +522,4 @@ class TestValidateDressCodexEntries:
                 {"rank": 2, "visible_when": ["nonexistent_cw"], "content": "gated"},
             ],
         )
-        assert any("unknown codeword" in e for e in errors)
+        assert any("unknown state flag" in e for e in errors)

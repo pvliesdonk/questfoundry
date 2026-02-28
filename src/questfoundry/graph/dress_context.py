@@ -184,13 +184,13 @@ def format_passage_for_brief(graph: Graph, passage_id: str) -> str:
 
 
 def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
-    """Format entity details + related codewords for codex generation.
+    """Format entity details + related state flags for codex generation.
 
-    Provides the entity's full profile and any codewords that could
+    Provides the entity's full profile and any state flags that could
     gate codex tiers (e.g., meeting a character unlocks deeper lore).
 
     Args:
-        graph: Graph containing entity and codeword nodes.
+        graph: Graph containing entity and state_flag nodes.
         entity_id: Entity node ID (e.g., ``entity::aldric``).
 
     Returns:
@@ -227,27 +227,27 @@ def format_entity_for_codex(graph: Graph, entity_id: str) -> str:
         if features:
             lines.append(f"**Features:** {', '.join(features)}")
 
-    # Related codewords — uses substring matching as a heuristic:
-    # a codeword is "related" if the entity's raw_id appears in the
-    # codeword's trigger text or raw_id (case-insensitive). This is
+    # Related state flags — uses substring matching as a heuristic:
+    # a state flag is "related" if the entity's raw_id appears in the
+    # state flag's trigger text or raw_id (case-insensitive). This is
     # intentionally broad to surface potential codex gates; the LLM
-    # decides which codewords are actually meaningful for gating.
-    codewords = graph.get_nodes_by_type("codeword")
+    # decides which state flags are actually meaningful for gating.
+    state_flags = graph.get_nodes_by_type("state_flag")
     related: list[tuple[str, str]] = []
-    for cw_id, cw_data in codewords.items():
-        trigger = cw_data.get("trigger", "")
-        cw_raw = cw_data.get("raw_id", strip_scope_prefix(cw_id))
-        if raw_id.lower() in trigger.lower() or raw_id.lower() in cw_raw.lower():
-            related.append((cw_raw, trigger))
+    for sf_id, sf_data in state_flags.items():
+        trigger = sf_data.get("trigger", "")
+        sf_raw = sf_data.get("raw_id", strip_scope_prefix(sf_id))
+        if raw_id.lower() in trigger.lower() or raw_id.lower() in sf_raw.lower():
+            related.append((sf_raw, trigger))
 
     if related:
         lines.append("")
-        lines.append("### Related Codewords (potential codex gates)")
-        for cw_raw, trigger in sorted(related):
+        lines.append("### Related State Flags (potential codex gates)")
+        for sf_raw, trigger in sorted(related):
             if trigger:
-                lines.append(f"- `{cw_raw}`: {trigger}")
+                lines.append(f"- `{sf_raw}`: {trigger}")
             else:
-                lines.append(f"- `{cw_raw}`")
+                lines.append(f"- `{sf_raw}`")
 
     return "\n".join(lines).strip()
 
@@ -412,7 +412,7 @@ def format_entities_batch_for_codex(graph: Graph, entity_ids: list[str]) -> str:
     """Format a batch of entities for codex generation.
 
     Args:
-        graph: Graph containing entity and codeword nodes.
+        graph: Graph containing entity and state_flag nodes.
         entity_ids: Entity node IDs in this batch.
 
     Returns:

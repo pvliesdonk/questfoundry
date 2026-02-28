@@ -1033,16 +1033,16 @@ class _LLMPhaseMixin:
         )
 
     # -------------------------------------------------------------------------
-    # Late LLM phases (codewords → validation)
+    # Late LLM phases (state_flags → validation)
     # -------------------------------------------------------------------------
 
-    @grow_phase(name="residue_beats", depends_on=["codewords"], priority=15)
+    @grow_phase(name="residue_beats", depends_on=["state_flags"], priority=15)
     async def _phase_8d_residue_beats(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 8d: Propose and create residue beat variants at convergence points.
 
         For soft/flavor dilemma convergences, asks the LLM to identify passages
         that should have path-specific prose variants. Each variant is gated by
-        a codeword so FILL generates different prose per path.
+        a state flag so FILL generates different prose per path.
 
         .. note:: Advisory-only mode (ADR-017, #955)
            This phase collects LLM proposals and stores them in graph metadata.
@@ -1051,7 +1051,7 @@ class _LLMPhaseMixin:
            computes a complete RoutingPlan, and applies all routing atomically.
 
         Preconditions:
-        - Codeword nodes exist (Phase 8b complete).
+        - State flag nodes exist (Phase 8b complete).
         - Passage nodes exist with from_beat edges.
         - Arc convergence metadata computed (Phase 7 complete).
 
@@ -1062,7 +1062,7 @@ class _LLMPhaseMixin:
         Invariants:
         - Only soft/flavor dilemma convergences considered.
         - Maximum 3 proposals per LLM call.
-        - Invalid passage/codeword IDs from LLM output silently skipped.
+        - Invalid passage/state flag IDs from LLM output silently skipped.
         - Empty candidates → completed with no LLM call.
         """
         from questfoundry.graph.grow_algorithms import find_residue_candidates
@@ -1082,8 +1082,8 @@ class _LLMPhaseMixin:
         passage_nodes = graph.get_nodes_by_type("passage")
         valid_passage_ids: list[str] = list(dict.fromkeys(c.passage_id for c in candidates))
         valid_dilemma_ids: list[str] = list(dict.fromkeys(c.dilemma_id for c in candidates))
-        valid_codeword_ids: list[str] = list(
-            dict.fromkeys(cw_id for c in candidates for cw_id in c.codeword_ids)
+        valid_state_flag_ids: list[str] = list(
+            dict.fromkeys(sf_id for c in candidates for sf_id in c.state_flag_ids)
         )
 
         for candidate in candidates:
@@ -1096,7 +1096,7 @@ class _LLMPhaseMixin:
             if candidate.dilemma_question:
                 block.append(f'  Question: "{candidate.dilemma_question}"')
             block.append(f"  Policy: {candidate.dilemma_role}")
-            block.append(f"  Available codewords: {', '.join(candidate.codeword_ids)}")
+            block.append(f"  Available state flags: {', '.join(candidate.state_flag_ids)}")
             convergence_lines.append("\n".join(block))
 
         convergence_context = "\n".join(convergence_lines)
@@ -1116,7 +1116,7 @@ class _LLMPhaseMixin:
             "passage_context": passage_context,
             "max_proposals": str(max_proposals),
             "valid_passage_ids": ", ".join(valid_passage_ids),
-            "valid_codeword_ids": ", ".join(valid_codeword_ids),
+            "valid_state_flag_ids": ", ".join(valid_state_flag_ids),
             "valid_dilemma_ids": ", ".join(valid_dilemma_ids),
         }
 
@@ -1125,7 +1125,7 @@ class _LLMPhaseMixin:
         validator = partial(
             validate_phase8d_output,
             valid_passage_ids=set(valid_passage_ids),
-            valid_codeword_ids=set(valid_codeword_ids),
+            valid_state_flag_ids=set(valid_state_flag_ids),
             valid_dilemma_ids=set(valid_dilemma_ids),
         )
 
@@ -1154,7 +1154,9 @@ class _LLMPhaseMixin:
             {
                 "passage_id": p.passage_id,
                 "dilemma_id": p.dilemma_id,
-                "variants": [{"codeword_id": v.codeword_id, "hint": v.hint} for v in p.variants],
+                "variants": [
+                    {"state_flag_id": v.state_flag_id, "hint": v.hint} for v in p.variants
+                ],
             }
             for p in result.proposals
         ]
@@ -1173,10 +1175,10 @@ class _LLMPhaseMixin:
 
     @grow_phase(name="overlays", depends_on=["residue_beats"], priority=16)
     async def _phase_8c_overlays(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 8c: Create cosmetic entity overlays conditioned on codewords.
+        """Phase 8c: Create cosmetic entity overlays conditioned on state flags.
 
-        For each consequence/codeword pair, proposes entity-level presentation
-        changes that activate when those codewords are granted. Overlays are
+        For each consequence/state flag pair, proposes entity-level presentation
+        changes that activate when those state flags are granted. Overlays are
         cosmetic (how entities appear/behave); passage-level prose variants
         are handled by Phase 8d (residue beats).
 
@@ -1186,36 +1188,36 @@ class _LLMPhaseMixin:
         - Consequence nodes linked to paths and dilemmas.
 
         Postconditions:
-        - Entity nodes gain overlays list with {when: [codeword_ids], details: {...}}.
-        - Overlays modify entity presentation when codewords are granted.
-        - Invalid entity/codeword IDs from LLM output silently skipped.
+        - Entity nodes gain overlays list with {when: [state_flag_ids], details: {...}}.
+        - Overlays modify entity presentation when state flags are granted.
+        - Invalid entity/state flag IDs from LLM output silently skipped.
 
         Invariants:
         - Entity IDs resolved through all category prefixes for robustness.
-        - Enriched context traces codeword -> consequence -> path -> dilemma.
+        - Enriched context traces state flag -> consequence -> path -> dilemma.
         - Overlays appended to existing overlays list (not replaced).
         """
         from questfoundry.models.grow import Phase8cOutput
 
-        codeword_nodes = graph.get_nodes_by_type("codeword")
+        state_flag_nodes = graph.get_nodes_by_type("state_flag")
         entity_nodes = graph.get_nodes_by_type("entity")
 
-        if not codeword_nodes or not entity_nodes:
+        if not state_flag_nodes or not entity_nodes:
             return GrowPhaseResult(
                 phase="overlays",
                 status="completed",
-                detail="No codewords or entities to process",
+                detail="No state flags or entities to process",
             )
 
-        # Build enriched consequence context per codeword:
-        # codeword → consequence → path → dilemma (with central entities + effects)
+        # Build enriched consequence context per state flag:
+        # state flag → consequence → path → dilemma (with central entities + effects)
         consequence_nodes = graph.get_nodes_by_type("consequence")
         consequence_lines: list[str] = []
-        valid_codeword_ids: list[str] = []
+        valid_state_flag_ids: list[str] = []
 
-        for cw_id, cw_data in sorted(codeword_nodes.items()):
-            valid_codeword_ids.append(cw_id)
-            tracks_id = cw_data.get("tracks", "")
+        for sf_id, sf_data in sorted(state_flag_nodes.items()):
+            valid_state_flag_ids.append(sf_id)
+            tracks_id = sf_data.get("tracks", "")
             cons_data = consequence_nodes.get(tracks_id, {})
             cons_desc = cons_data.get("description", "unknown consequence")
 
@@ -1229,8 +1231,8 @@ class _LLMPhaseMixin:
 
             narrative_effects = cons_data.get("narrative_effects", [])
 
-            # Build multi-line block per codeword
-            block = [f"- {cw_id}"]
+            # Build multi-line block per state flag
+            block = [f"- {sf_id}"]
             if path_node:
                 path_name = path_node.get("name", path_id)
                 block.append(f'  Path: {path_id} ("{path_name}")')
@@ -1267,7 +1269,7 @@ class _LLMPhaseMixin:
             "consequence_context": consequence_context,
             "entity_context": entity_context,
             "valid_entity_ids": ", ".join(valid_entity_ids),
-            "valid_codeword_ids": ", ".join(valid_codeword_ids),
+            "valid_state_flag_ids": ", ".join(valid_state_flag_ids),
         }
 
         from questfoundry.graph.grow_validators import validate_phase8c_output
@@ -1275,7 +1277,7 @@ class _LLMPhaseMixin:
         validator = partial(
             validate_phase8c_output,
             valid_entity_ids=set(valid_entity_ids),
-            valid_codeword_ids=set(valid_codeword_ids),
+            valid_state_flag_ids=set(valid_state_flag_ids),
         )
         try:
             result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
@@ -1290,7 +1292,7 @@ class _LLMPhaseMixin:
 
         # Validate and apply overlays
         valid_entity_set = set(valid_entity_ids)
-        valid_codeword_set = set(valid_codeword_ids)
+        valid_state_flag_set = set(valid_state_flag_ids)
         overlay_count = 0
 
         for overlay in result.overlays:
@@ -1328,13 +1330,13 @@ class _LLMPhaseMixin:
                 )
                 continue
 
-            # Validate all codeword IDs in 'when' exist
-            invalid_codewords = [cw for cw in overlay.when if cw not in valid_codeword_set]
-            if invalid_codewords:
+            # Validate all state flag IDs in 'when' exist
+            invalid_flags = [cw for cw in overlay.when if cw not in valid_state_flag_set]
+            if invalid_flags:
                 log.warning(
-                    "phase8c_invalid_codewords",
+                    "phase8c_invalid_state_flags",
                     entity_id=overlay.entity_id,
-                    invalid=invalid_codewords,
+                    invalid=invalid_flags,
                 )
                 continue
 
@@ -1380,7 +1382,7 @@ class _LLMPhaseMixin:
         - Single-successor passages get LLM-generated contextual labels.
         - Multi-successor passages get diegetic labels from LLM.
         - Multiple orphan starts get a synthetic prologue passage.
-        - Choice requires derived from arc codeword signatures.
+        - Choice requires derived from arc state flag signatures.
 
         Invariants:
         - Fails if fallback label ratio exceeds 30%.
@@ -1546,7 +1548,7 @@ class _LLMPhaseMixin:
                     "from_passage": p_id,
                     "to_passage": succ.to_passage,
                     "label": label,
-                    "requires_codewords": [],
+                    "requires_state_flags": [],
                     "grants": succ.grants,
                 },
             )
@@ -1635,7 +1637,7 @@ class _LLMPhaseMixin:
                             "from_passage": p_id,
                             "to_passage": succ.to_passage,
                             "label": multi_label,
-                            "requires_codewords": choice_requires.get(succ.to_passage, []),
+                            "requires_state_flags": choice_requires.get(succ.to_passage, []),
                             "grants": succ.grants,
                         },
                     )
@@ -1884,7 +1886,7 @@ class _LLMPhaseMixin:
                         "from_passage": fork_at,
                         "to_passage": opt_id,
                         "label": label,
-                        "requires_codewords": [],
+                        "requires_state_flags": [],
                         "grants": [],
                     },
                 )
@@ -1903,7 +1905,7 @@ class _LLMPhaseMixin:
                         "from_passage": opt_id,
                         "to_passage": next_passage,
                         "label": "continue",
-                        "requires_codewords": [],
+                        "requires_state_flags": [],
                         "grants": old_grants,
                     },
                 )
@@ -1980,14 +1982,14 @@ class _LLMPhaseMixin:
                 detail="No non-ending passages found",
             )
 
-        codeword_nodes = graph.get_nodes_by_type("codeword")
-        valid_codeword_ids = set(codeword_nodes.keys())
+        state_flag_nodes = graph.get_nodes_by_type("state_flag")
+        valid_state_flag_ids = set(state_flag_nodes.keys())
 
         context = {
             "passage_context": compact_items(passage_items, self._compact_config()),  # type: ignore[attr-defined]
             "valid_passage_ids": ", ".join(valid_ids),
-            "valid_codeword_ids": ", ".join(sorted(valid_codeword_ids))
-            if valid_codeword_ids
+            "valid_state_flag_ids": ", ".join(sorted(valid_state_flag_ids))
+            if valid_state_flag_ids
             else "none",
             "output_language_instruction": self._lang_instruction,  # type: ignore[attr-defined]
         }
@@ -1997,7 +1999,7 @@ class _LLMPhaseMixin:
         validator = partial(
             validate_phase9c_output,
             valid_passage_ids=set(valid_ids),
-            valid_codeword_ids=valid_codeword_ids,
+            valid_state_flag_ids=valid_state_flag_ids,
         )
 
         try:
@@ -2061,7 +2063,7 @@ class _LLMPhaseMixin:
                     "type": "choice",
                     "from_passage": hub_id,
                     "to_passage": spoke_pid,
-                    "requires_codewords": [],
+                    "requires_state_flags": [],
                     "grants": spoke.grants,
                     "label_style": spoke.label_style,
                 }
@@ -2080,7 +2082,7 @@ class _LLMPhaseMixin:
                         "from_passage": spoke_pid,
                         "to_passage": hub_id,
                         "label": "Return",
-                        "requires_codewords": [],
+                        "requires_state_flags": [],
                         "grants": [],
                         "is_return": True,
                     },

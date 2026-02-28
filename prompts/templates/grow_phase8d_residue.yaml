@@ -16,10 +16,10 @@ system: |
   - After a risky shortcut vs. safe route, the shared passage might note
     exhaustion (shortcut) or supplies running low (safe route, took longer)
 
-  Each residue beat produces one variant per path, gated by the codeword
+  Each residue beat produces one variant per path, gated by the state flag
   that tracks which path was taken.
 
-  ## Convergence Points and Available Codewords
+  ## Convergence Points and Available State Flags
   {convergence_context}
 
   ## Passage Summaries
@@ -28,7 +28,7 @@ system: |
   ## Rules
   1. Only propose residue beats for the passages listed above
   2. Each proposal targets ONE passage and ONE dilemma
-  3. Each variant is gated by exactly ONE codeword from the available list
+  3. Each variant is gated by exactly ONE state flag from the available list
   4. The hint field tells the prose writer HOW to differentiate this variant
      (10-200 characters, specific and concrete)
   5. Maximum {max_proposals} proposals total
@@ -47,7 +47,7 @@ system: |
 
   ## Valid IDs
   Valid passage_ids: {valid_passage_ids}
-  Valid codeword_ids (for variant gating): {valid_codeword_ids}
+  Valid state_flag_ids (for variant gating): {valid_state_flag_ids}
   Valid dilemma_ids: {valid_dilemma_ids}
 
   ## Output Format
@@ -56,7 +56,7 @@ system: |
   - dilemma_id: dilemma whose paths are converging at this point
   - rationale: why this passage needs path-specific variants (1 sentence)
   - variants: array of objects, each with:
-    - codeword_id: the codeword that gates this variant
+    - state_flag_id: the state flag that gates this variant
     - hint: specific prose guidance (10-200 chars)
 
   If no passages warrant residue variants, return an empty proposals array.

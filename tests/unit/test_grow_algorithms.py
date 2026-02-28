@@ -38,12 +38,12 @@ from questfoundry.models.grow import (
     SceneTypeTag,
 )
 from questfoundry.pipeline.stages.grow.deterministic import (
-    phase_codewords,
     phase_convergence,
     phase_divergence,
     phase_enumerate_arcs,
     phase_passages,
     phase_prune,
+    phase_state_flags,
     phase_validate_dag,
 )
 from tests.fixtures.grow_fixtures import (
@@ -1961,13 +1961,13 @@ class TestComputePassageArcMembership:
 
 
 class TestComputeAllChoiceRequires:
-    """Tests for codeword requires computation."""
+    """Tests for state_flag requires computation."""
 
     @staticmethod
     def _make_requires_graph(
         branch_policy: str = "hard",
     ) -> tuple[Graph, dict[str, set[str]]]:
-        """Build a graph with paths, consequences, codewords, and beat DAG."""
+        """Build a graph with paths, consequences, state_flags, and beat DAG."""
         graph = Graph.empty()
 
         # Dilemma
@@ -2012,17 +2012,17 @@ class TestComputeAllChoiceRequires:
         )
         graph.add_edge("has_consequence", "path::p_alt", "consequence::alt_outcome")
 
-        # Codeword tracking the consequence
+        # State flag tracking the consequence
         graph.create_node(
-            "codeword::alt_outcome_committed",
+            "state_flag::alt_outcome_committed",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "alt_outcome_committed",
                 "tracks": "consequence::alt_outcome",
-                "codeword_type": "granted",
+                "flag_type": "granted",
             },
         )
-        graph.add_edge("tracks", "codeword::alt_outcome_committed", "consequence::alt_outcome")
+        graph.add_edge("tracks", "state_flag::alt_outcome_committed", "consequence::alt_outcome")
 
         # Beat nodes with belongs_to edges
         # a: shared (both paths), b: canon only, end: canon only,
@@ -2083,39 +2083,41 @@ class TestComputeAllChoiceRequires:
         # pb is spine-only → no requires
         assert result.get("passage::pb", []) == []
 
-    def test_hard_branch_gets_branch_exclusive_codewords(self) -> None:
-        """Hard branch passages require codewords from their own off-spine paths."""
+    def test_hard_branch_gets_branch_exclusive_state_flags(self) -> None:
+        """Hard branch passages require state_flags from their own off-spine paths."""
         graph, passage_arcs = self._make_requires_graph("hard")
         result = compute_all_choice_requires(graph, passage_arcs)
 
         # px is branch-only, hard policy. The branch path p_alt has
-        # consequence alt_outcome → codeword alt_outcome_committed.
+        # consequence alt_outcome → state_flag alt_outcome_committed.
         # This is the off-spine choice the player made → requires it.
         assert "passage::px" in result
-        assert "codeword::alt_outcome_committed" in result["passage::px"]
+        assert "state_flag::alt_outcome_committed" in result["passage::px"]
 
-    def test_hard_branch_does_not_require_spine_codewords(self) -> None:
-        """Hard branch passages must NOT require codewords from spine paths."""
+    def test_hard_branch_does_not_require_spine_state_flags(self) -> None:
+        """Hard branch passages must NOT require state_flags from spine paths."""
         graph, passage_arcs = self._make_requires_graph("hard")
 
-        # Add a consequence + codeword on the spine path (p_canon)
+        # Add a consequence + state_flag on the spine path (p_canon)
         graph.create_node(
             "consequence::spine_outcome",
             {"type": "consequence", "raw_id": "spine_outcome", "path_id": "p_canon"},
         )
         graph.add_edge("has_consequence", "path::p_canon", "consequence::spine_outcome")
         graph.create_node(
-            "codeword::spine_outcome_committed",
-            {"type": "codeword", "raw_id": "spine_outcome_committed"},
+            "state_flag::spine_outcome_committed",
+            {"type": "state_flag", "raw_id": "spine_outcome_committed"},
         )
-        graph.add_edge("tracks", "codeword::spine_outcome_committed", "consequence::spine_outcome")
+        graph.add_edge(
+            "tracks", "state_flag::spine_outcome_committed", "consequence::spine_outcome"
+        )
 
         result = compute_all_choice_requires(graph, passage_arcs)
 
-        # px is branch-only → requires branch codeword, NOT spine codeword
+        # px is branch-only → requires branch state_flag, NOT spine state_flag
         assert "passage::px" in result
-        assert "codeword::alt_outcome_committed" in result["passage::px"]
-        assert "codeword::spine_outcome_committed" not in result["passage::px"]
+        assert "state_flag::alt_outcome_committed" in result["passage::px"]
+        assert "state_flag::spine_outcome_committed" not in result["passage::px"]
 
     def test_soft_branch_target_no_requires(self) -> None:
         """Target exclusive to soft-policy branch gets no requires."""
@@ -2125,8 +2127,8 @@ class TestComputeAllChoiceRequires:
         # px is exclusive to branch (soft policy) → no requires
         assert result.get("passage::px", []) == []
 
-    def test_no_codewords_returns_empty(self) -> None:
-        """Branch with hard policy but no consequences/codewords -> empty requires."""
+    def test_no_state_flags_returns_empty(self) -> None:
+        """Branch with hard policy but no consequences/state_flags -> empty requires."""
         graph = Graph.empty()
         graph.create_node(
             "dilemma::d1",
@@ -2173,7 +2175,7 @@ class TestComputeAllChoiceRequires:
         passage_arcs = compute_passage_arc_membership(graph)
         result = compute_all_choice_requires(graph, passage_arcs)
 
-        # No consequences -> no codewords -> empty
+        # No consequences -> no state_flags -> empty
         assert result.get("passage::px", []) == []
 
     def test_no_spine_arc_returns_empty(self) -> None:
@@ -2206,7 +2208,7 @@ class TestComputeAllChoiceRequires:
         assert result == {}
 
     def test_multi_arc_intersection(self) -> None:
-        """Passage on multiple arcs gets intersection of branch-exclusive codewords."""
+        """Passage on multiple arcs gets intersection of branch-exclusive state_flags."""
         graph = Graph.empty()
 
         # Two dilemmas with two paths each
@@ -2254,14 +2256,14 @@ class TestComputeAllChoiceRequires:
             },
         )
 
-        # Consequences + codewords for each non-spine path
+        # Consequences + state_flags for each non-spine path
         for p_id in ("d1_b", "d2_b"):
             cons_id = f"consequence::{p_id}_outcome"
-            cw_id = f"codeword::{p_id}_cw"
+            sf_id = f"state_flag::{p_id}_cw"
             graph.create_node(cons_id, {"type": "consequence", "raw_id": f"{p_id}_outcome"})
             graph.add_edge("has_consequence", f"path::{p_id}", cons_id)
-            graph.create_node(cw_id, {"type": "codeword", "raw_id": f"{p_id}_cw"})
-            graph.add_edge("tracks", cw_id, cons_id)
+            graph.create_node(sf_id, {"type": "state_flag", "raw_id": f"{p_id}_cw"})
+            graph.add_edge("tracks", sf_id, cons_id)
 
         # Beat DAG: shared (all paths), x (d1_b only — appears on arcs
         # d1_b+d2_a and d1_b+d2_b, both requiring d1_b_cw)
@@ -2282,11 +2284,11 @@ class TestComputeAllChoiceRequires:
         # Arc IDs from enumerate_arcs (sorted path raw_ids joined by +):
         #   spine: "d1_a+d2_a", branches: "d1_a+d2_b", "d1_b+d2_a", "d1_b+d2_b"
         # beat::x belongs to d1_b only, so passage::x is on:
-        #   "d1_b+d2_a" (exclusive={d1_b}) → codewords={d1_b_cw}
-        #   "d1_b+d2_b" (exclusive={d1_b, d2_b}) → codewords={d1_b_cw, d2_b_cw}
+        #   "d1_b+d2_a" (exclusive={d1_b}) → state_flags={d1_b_cw}
+        #   "d1_b+d2_b" (exclusive={d1_b, d2_b}) → state_flags={d1_b_cw, d2_b_cw}
         # Intersection: {d1_b_cw}
         assert "passage::x" in result
-        assert set(result["passage::x"]) == {"codeword::d1_b_cw"}
+        assert set(result["passage::x"]) == {"state_flag::d1_b_cw"}
 
 
 # ---------------------------------------------------------------------------
@@ -2508,31 +2510,31 @@ class TestPhase8aIntegration:
 
 class TestPhase8bIntegration:
     @pytest.mark.asyncio
-    async def test_codewords_match_consequences(self) -> None:
+    async def test_state_flags_match_consequences(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
         GrowStage()
         mock_model = MagicMock()
-        result = await phase_codewords(graph, mock_model)
+        result = await phase_state_flags(graph, mock_model)
 
         assert result.status == "completed"
         consequence_nodes = graph.get_nodes_by_type("consequence")
-        codeword_nodes = graph.get_nodes_by_type("codeword")
-        assert len(codeword_nodes) == len(consequence_nodes)
+        state_flag_nodes = graph.get_nodes_by_type("state_flag")
+        assert len(state_flag_nodes) == len(consequence_nodes)
 
     @pytest.mark.asyncio
-    async def test_codeword_tracks_edges(self) -> None:
+    async def test_state_flag_tracks_edges(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
         GrowStage()
         mock_model = MagicMock()
-        await phase_codewords(graph, mock_model)
+        await phase_state_flags(graph, mock_model)
 
         tracks_edges = graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
-        codeword_nodes = graph.get_nodes_by_type("codeword")
-        assert len(tracks_edges) == len(codeword_nodes)
+        state_flag_nodes = graph.get_nodes_by_type("state_flag")
+        assert len(tracks_edges) == len(state_flag_nodes)
 
     @pytest.mark.asyncio
     async def test_grants_edges_assigned_to_commits_beats(self) -> None:
@@ -2541,7 +2543,7 @@ class TestPhase8bIntegration:
         graph = make_single_dilemma_graph()
         GrowStage()
         mock_model = MagicMock()
-        await phase_codewords(graph, mock_model)
+        await phase_state_flags(graph, mock_model)
 
         grants_edges = graph.get_edges(from_id=None, to_id=None, edge_type="grants")
         # Each consequence has a path which has a commits beat
@@ -2551,45 +2553,45 @@ class TestPhase8bIntegration:
         # Verify grants edges come from beats
         for edge in grants_edges:
             assert edge["from"].startswith("beat::")
-            assert edge["to"].startswith("codeword::")
+            assert edge["to"].startswith("state_flag::")
 
     @pytest.mark.asyncio
-    async def test_codeword_id_format(self) -> None:
+    async def test_state_flag_id_format(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_single_dilemma_graph()
         GrowStage()
         mock_model = MagicMock()
-        await phase_codewords(graph, mock_model)
+        await phase_state_flags(graph, mock_model)
 
-        codeword_nodes = graph.get_nodes_by_type("codeword")
-        for cw_id in codeword_nodes:
-            # Format: codeword::{consequence_raw_id}_committed
-            assert cw_id.startswith("codeword::")
-            assert cw_id.endswith("_committed")
+        state_flag_nodes = graph.get_nodes_by_type("state_flag")
+        for sf_id in state_flag_nodes:
+            # Format: state_flag::{consequence_raw_id}_committed
+            assert sf_id.startswith("state_flag::")
+            assert sf_id.endswith("_committed")
 
     @pytest.mark.asyncio
-    async def test_two_dilemma_codewords(self) -> None:
+    async def test_two_dilemma_state_flags(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = make_two_dilemma_graph()
         GrowStage()
         mock_model = MagicMock()
-        result = await phase_codewords(graph, mock_model)
+        result = await phase_state_flags(graph, mock_model)
 
         assert result.status == "completed"
-        codeword_nodes = graph.get_nodes_by_type("codeword")
-        # 4 consequences → 4 codewords
-        assert len(codeword_nodes) == 4
+        state_flag_nodes = graph.get_nodes_by_type("state_flag")
+        # 4 consequences → 4 state_flags
+        assert len(state_flag_nodes) == 4
 
     @pytest.mark.asyncio
-    async def test_empty_graph_no_codewords(self) -> None:
+    async def test_empty_graph_no_state_flags(self) -> None:
         from questfoundry.pipeline.stages.grow import GrowStage
 
         graph = Graph.empty()
         GrowStage()
         mock_model = MagicMock()
-        result = await phase_codewords(graph, mock_model)
+        result = await phase_state_flags(graph, mock_model)
         assert result.status == "completed"
         assert "No consequences" in result.detail
 
@@ -2728,7 +2730,7 @@ class TestPhase11Integration:
                 "from_passage": "passage::a",
                 "to_passage": "passage::b",
                 "label": "continue",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -2837,7 +2839,7 @@ class TestPhase11Integration:
                 "from_passage": "passage::prologue",
                 "to_passage": "passage::spine_1",
                 "label": "Take the spine path",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -2851,7 +2853,7 @@ class TestPhase11Integration:
                 "from_passage": "passage::prologue",
                 "to_passage": "passage::branch_1",
                 "label": "Take the branch path",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -2866,7 +2868,7 @@ class TestPhase11Integration:
                 "from_passage": "passage::spine_1",
                 "to_passage": "passage::spine_2",
                 "label": "Continue",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
             },
         )
@@ -3572,7 +3574,7 @@ class TestPhaseIntegrationEndToEnd:
             "arc_count",
             "passage_count",
             "choice_count",
-            "codeword_count",
+            "state_flag_count",
             "overlay_count",
             "spine_arc_id",
             "phases_completed",
@@ -3587,8 +3589,8 @@ class TestPhaseIntegrationEndToEnd:
         # incoming choice edges exist; mock choices may not produce routing variants)
         assert result_dict["passage_count"] >= 8  # 8 base passages minimum
 
-        # Should have counted codewords
-        assert result_dict["codeword_count"] == 4  # 4 consequences
+        # Should have counted state_flags
+        assert result_dict["state_flag_count"] == 4  # 4 consequences
 
         # Should have counted choices
         assert result_dict["choice_count"] > 0
@@ -3612,7 +3614,7 @@ class TestPhaseIntegrationEndToEnd:
             "arc_count",
             "passage_count",
             "choice_count",
-            "codeword_count",
+            "state_flag_count",
             "overlay_count",
             "spine_arc_id",
             "phases_completed",
@@ -3621,7 +3623,7 @@ class TestPhaseIntegrationEndToEnd:
 
         assert result_dict["arc_count"] == 2  # 1 dilemma x 2 paths = 2 arcs
         assert result_dict["passage_count"] >= 4  # 4 beats plus variants
-        assert result_dict["codeword_count"] == 2  # 2 consequences
+        assert result_dict["state_flag_count"] == 2  # 2 consequences
 
     @pytest.mark.asyncio
     async def test_final_graph_has_expected_nodes(
@@ -3646,7 +3648,7 @@ class TestPhaseIntegrationEndToEnd:
         assert (
             len(saved_graph.get_nodes_by_type("passage")) >= 8
         )  # 8 base passages (variants depend on choice wiring)
-        assert len(saved_graph.get_nodes_by_type("codeword")) == 4
+        assert len(saved_graph.get_nodes_by_type("state_flag")) == 4
         assert len(saved_graph.get_nodes_by_type("beat")) == 8
         assert len(saved_graph.get_nodes_by_type("dilemma")) == 2
         assert len(saved_graph.get_nodes_by_type("path")) == 4
@@ -4364,8 +4366,8 @@ class TestFindPassageSuccessors:
         graph.add_edge("belongs_to", "beat::a", "path::p1")
         graph.add_edge("belongs_to", "beat::b", "path::p1")
         graph.add_edge("predecessor", "beat::b", "beat::a")
-        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
-        graph.add_edge("grants", "beat::b", "codeword::cw1")
+        graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
+        graph.add_edge("grants", "beat::b", "state_flag::cw1")
 
         for bid in ["a", "b"]:
             graph.create_node(
@@ -4376,10 +4378,10 @@ class TestFindPassageSuccessors:
         result = find_passage_successors(graph)
 
         assert "passage::a" in result
-        assert "codeword::cw1" in result["passage::a"][0].grants
+        assert "state_flag::cw1" in result["passage::a"][0].grants
 
     def test_does_not_grant_future_beats(self) -> None:
-        """Choices should not grant codewords from beats beyond the next passage."""
+        """Choices should not grant state_flags from beats beyond the next passage."""
         from questfoundry.graph.grow_algorithms import find_passage_successors
 
         graph = Graph.empty()
@@ -4399,10 +4401,10 @@ class TestFindPassageSuccessors:
         graph.add_edge("predecessor", "beat::b", "beat::a")
         graph.add_edge("predecessor", "beat::c", "beat::b")
 
-        graph.create_node("codeword::cw_b", {"type": "codeword", "raw_id": "cw_b"})
-        graph.add_edge("grants", "beat::b", "codeword::cw_b")
-        graph.create_node("codeword::cw_c", {"type": "codeword", "raw_id": "cw_c"})
-        graph.add_edge("grants", "beat::c", "codeword::cw_c")
+        graph.create_node("state_flag::cw_b", {"type": "state_flag", "raw_id": "cw_b"})
+        graph.add_edge("grants", "beat::b", "state_flag::cw_b")
+        graph.create_node("state_flag::cw_c", {"type": "state_flag", "raw_id": "cw_c"})
+        graph.add_edge("grants", "beat::c", "state_flag::cw_c")
 
         for bid in ["a", "b", "c"]:
             graph.create_node(
@@ -4414,8 +4416,8 @@ class TestFindPassageSuccessors:
 
         assert "passage::a" in result
         grants = result["passage::a"][0].grants
-        assert "codeword::cw_b" in grants
-        assert "codeword::cw_c" not in grants
+        assert "state_flag::cw_b" in grants
+        assert "state_flag::cw_c" not in grants
 
     def test_empty_graph_returns_empty(self) -> None:
         """Empty graph returns empty dict."""
@@ -4477,13 +4479,13 @@ class TestFindPassageSuccessors:
         graph.add_edge("predecessor", "beat::mid", "beat::a")
         graph.add_edge("predecessor", "beat::b", "beat::mid")
 
-        # beat::mid grants a codeword
-        graph.create_node("codeword::mid_cw", {"type": "codeword", "raw_id": "mid_cw"})
-        graph.add_edge("grants", "beat::mid", "codeword::mid_cw")
+        # beat::mid grants a state_flag
+        graph.create_node("state_flag::mid_cw", {"type": "state_flag", "raw_id": "mid_cw"})
+        graph.add_edge("grants", "beat::mid", "state_flag::mid_cw")
 
-        # beat::b also grants a codeword
-        graph.create_node("codeword::b_cw", {"type": "codeword", "raw_id": "b_cw"})
-        graph.add_edge("grants", "beat::b", "codeword::b_cw")
+        # beat::b also grants a state_flag
+        graph.create_node("state_flag::b_cw", {"type": "state_flag", "raw_id": "b_cw"})
+        graph.add_edge("grants", "beat::b", "state_flag::b_cw")
 
         # Only a and b have passages (mid is skipped)
         graph.create_node("passage::a", {"type": "passage", "raw_id": "a", "from_beat": "beat::a"})
@@ -4496,11 +4498,11 @@ class TestFindPassageSuccessors:
         assert len(result["passage::a"]) == 1
         assert result["passage::a"][0].to_passage == "passage::b"
 
-        # Grants should include both beat::mid's and beat::b's codewords
+        # Grants should include both beat::mid's and beat::b's state_flags
         # (beats between beat::a and the next passage beat).
         grants = result["passage::a"][0].grants
-        assert "codeword::mid_cw" in grants
-        assert "codeword::b_cw" in grants
+        assert "state_flag::mid_cw" in grants
+        assert "state_flag::b_cw" in grants
 
 
 class TestCollapseLinearBeats:
@@ -5492,20 +5494,20 @@ class TestSplitEndingFamilies:
 
     @staticmethod
     def _make_shared_ending_graph() -> Graph:
-        """Create a graph where 2 arcs with different codewords share 1 terminal passage.
+        """Create a graph where 2 arcs with different state_flags share 1 terminal passage.
 
         Structure:
             dilemma: d1 with 2 paths (canonical + alt)
             arcs: arc1 (canonical), arc2 (alt)
             beats: opening (shared), commits_c (path1), commits_a (path2), finale (shared)
             passages: opening_p, commits_c_p, commits_a_p, finale_p (terminal)
-            codewords: cw_trust (path1), cw_betrayal (path2)
+            state_flags: cw_trust (path1), cw_betrayal (path2)
 
         finale_p is terminal and shared by both arcs.
         """
         graph = Graph.empty()
 
-        # Dilemma + paths (ending_salience=high so codewords contribute to
+        # Dilemma + paths (ending_salience=high so state_flags contribute to
         # ending family signatures)
         graph.create_node(
             "dilemma::d1",
@@ -5544,7 +5546,7 @@ class TestSplitEndingFamilies:
             for p in paths:
                 graph.add_edge("belongs_to", f"beat::{bid}", f"path::{p}")
 
-        # Consequences + codewords
+        # Consequences + state_flags
         graph.create_node(
             "consequence::trust",
             {"type": "consequence", "raw_id": "trust", "path_id": "d1__yes"},
@@ -5556,15 +5558,15 @@ class TestSplitEndingFamilies:
         graph.add_edge("has_consequence", "path::d1__yes", "consequence::trust")
         graph.add_edge("has_consequence", "path::d1__no", "consequence::betrayal")
         graph.create_node(
-            "codeword::cw_trust",
-            {"type": "codeword", "raw_id": "cw_trust", "tracks": "consequence::trust"},
+            "state_flag::cw_trust",
+            {"type": "state_flag", "raw_id": "cw_trust", "tracks": "consequence::trust"},
         )
         graph.create_node(
-            "codeword::cw_betrayal",
-            {"type": "codeword", "raw_id": "cw_betrayal", "tracks": "consequence::betrayal"},
+            "state_flag::cw_betrayal",
+            {"type": "state_flag", "raw_id": "cw_betrayal", "tracks": "consequence::betrayal"},
         )
-        graph.add_edge("tracks", "codeword::cw_trust", "consequence::trust")
-        graph.add_edge("tracks", "codeword::cw_betrayal", "consequence::betrayal")
+        graph.add_edge("tracks", "state_flag::cw_trust", "consequence::trust")
+        graph.add_edge("tracks", "state_flag::cw_betrayal", "consequence::betrayal")
 
         # Arcs (2 arcs: canonical path, alt path)
         graph.create_node(
@@ -5633,7 +5635,7 @@ class TestSplitEndingFamilies:
         return graph
 
     def test_splits_shared_terminal(self) -> None:
-        """When 2 arcs with different codewords share a terminal, split into 2 endings."""
+        """When 2 arcs with different state_flags share a terminal, split into 2 endings."""
         from questfoundry.graph.grow_algorithms import split_ending_families
 
         graph = self._make_shared_ending_graph()
@@ -5655,19 +5657,19 @@ class TestSplitEndingFamilies:
         }
         assert len(endings) == 2
 
-        # Each ending should be synthetic with family codewords
+        # Each ending should be synthetic with family state_flags
         for _pid, data in endings.items():
             assert data.get("is_synthetic") is True
-            assert data.get("family_codewords")
+            assert data.get("family_state_flags")
             assert data.get("family_arc_count") == 1
 
-        # Codeword gating: one ending requires cw_trust, other requires cw_betrayal
-        ending_codewords = {frozenset(data["family_codewords"]) for data in endings.values()}
-        assert frozenset(["codeword::cw_trust"]) in ending_codewords
-        assert frozenset(["codeword::cw_betrayal"]) in ending_codewords
+        # State flag gating: one ending requires cw_trust, other requires cw_betrayal
+        ending_state_flags = {frozenset(data["family_state_flags"]) for data in endings.values()}
+        assert frozenset(["state_flag::cw_trust"]) in ending_state_flags
+        assert frozenset(["state_flag::cw_betrayal"]) in ending_state_flags
 
     def test_single_family_no_split(self) -> None:
-        """When all arcs share the same codewords, no splitting occurs."""
+        """When all arcs share the same state_flags, no splitting occurs."""
         from questfoundry.graph.grow_algorithms import split_ending_families
 
         graph = Graph.empty()
@@ -5808,7 +5810,7 @@ class TestFindResidueCandidates:
             beats: opening (shared), commits_yes (path1), commits_no (path2),
                    converge (shared = convergence point)
             passages: for each beat
-            codewords: cw_yes_committed (path1), cw_no_committed (path2)
+            state_flags: cw_yes_committed (path1), cw_no_committed (path2)
             convergence: branch converges at beat::converge with given policy
         """
         graph = Graph.empty()
@@ -5841,7 +5843,7 @@ class TestFindResidueCandidates:
             for p in paths:
                 graph.add_edge("belongs_to", f"beat::{bid}", f"path::{p}")
 
-        # Consequences + codewords
+        # Consequences + state_flags
         graph.create_node(
             "consequence::yes_result",
             {"type": "consequence", "raw_id": "yes_result", "path_id": "d1__yes"},
@@ -5853,23 +5855,23 @@ class TestFindResidueCandidates:
         graph.add_edge("has_consequence", "path::d1__yes", "consequence::yes_result")
         graph.add_edge("has_consequence", "path::d1__no", "consequence::no_result")
         graph.create_node(
-            "codeword::yes_result_committed",
+            "state_flag::yes_result_committed",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "yes_result_committed",
                 "tracks": "consequence::yes_result",
             },
         )
         graph.create_node(
-            "codeword::no_result_committed",
+            "state_flag::no_result_committed",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "no_result_committed",
                 "tracks": "consequence::no_result",
             },
         )
-        graph.add_edge("tracks", "codeword::yes_result_committed", "consequence::yes_result")
-        graph.add_edge("tracks", "codeword::no_result_committed", "consequence::no_result")
+        graph.add_edge("tracks", "state_flag::yes_result_committed", "consequence::yes_result")
+        graph.add_edge("tracks", "state_flag::no_result_committed", "consequence::no_result")
 
         # Passages
         for beat_id in ["opening", "commits_yes", "commits_no", "converge"]:
@@ -5906,7 +5908,7 @@ class TestFindResidueCandidates:
         assert candidates[0].passage_id == "passage::converge"
         assert candidates[0].dilemma_id == "dilemma::d1"
         assert candidates[0].dilemma_role == "soft"
-        assert len(candidates[0].codeword_ids) == 2
+        assert len(candidates[0].state_flag_ids) == 2
         assert candidates[0].dilemma_question == "Trust or betray?"
 
     def test_hard_dilemma_excluded(self) -> None:
@@ -5934,12 +5936,12 @@ class TestFindResidueCandidates:
         assert len(candidates) == 1  # Deduped
 
     def test_single_path_dilemma_excluded(self) -> None:
-        """Dilemma with only one codeword produces no candidates."""
+        """Dilemma with only one state_flag produces no candidates."""
         from questfoundry.graph.grow_algorithms import find_residue_candidates
 
         graph = self._make_convergence_graph(policy="soft")
-        # Remove the second consequence and codeword
-        graph.delete_node("codeword::no_result_committed", cascade=True)
+        # Remove the second consequence and state_flag
+        graph.delete_node("state_flag::no_result_committed", cascade=True)
         graph.delete_node("consequence::no_result", cascade=True)
         candidates = find_residue_candidates(graph)
         assert len(candidates) == 0
@@ -5979,7 +5981,7 @@ class TestCreateResiduePassages:
 
     @staticmethod
     def _make_base_graph() -> Graph:
-        """Create a minimal graph with a base passage and codewords."""
+        """Create a minimal graph with a base passage and state_flags."""
         graph = Graph.empty()
         graph.create_node(
             "passage::aftermath",
@@ -5992,12 +5994,12 @@ class TestCreateResiduePassages:
             },
         )
         graph.create_node(
-            "codeword::fight_committed",
-            {"type": "codeword", "raw_id": "fight_committed", "tracks": "consequence::fight"},
+            "state_flag::fight_committed",
+            {"type": "state_flag", "raw_id": "fight_committed", "tracks": "consequence::fight"},
         )
         graph.create_node(
-            "codeword::argue_committed",
-            {"type": "codeword", "raw_id": "argue_committed", "tracks": "consequence::argue"},
+            "state_flag::argue_committed",
+            {"type": "state_flag", "raw_id": "argue_committed", "tracks": "consequence::argue"},
         )
         return graph
 
@@ -6011,11 +6013,11 @@ class TestCreateResiduePassages:
                 "dilemma_id": "dilemma::approach",
                 "variants": [
                     {
-                        "codeword_id": "codeword::fight_committed",
+                        "state_flag_id": "state_flag::fight_committed",
                         "hint": "mention the bruises from the fight",
                     },
                     {
-                        "codeword_id": "codeword::argue_committed",
+                        "state_flag_id": "state_flag::argue_committed",
                         "hint": "mention the strained voices from the argument",
                     },
                 ],
@@ -6036,9 +6038,9 @@ class TestCreateResiduePassages:
             assert data["is_synthetic"] is True
             assert data["residue_for"] == "passage::aftermath"
             assert data["residue_dilemma"] == "dilemma::approach"
-            assert data["residue_codeword"] in {
-                "codeword::fight_committed",
-                "codeword::argue_committed",
+            assert data["residue_state_flag"] in {
+                "state_flag::fight_committed",
+                "state_flag::argue_committed",
             }
             assert data["residue_hint"] != ""
             # Inherited from base
@@ -6055,11 +6057,11 @@ class TestCreateResiduePassages:
                 "dilemma_id": "dilemma::approach",
                 "variants": [
                     {
-                        "codeword_id": "codeword::fight_committed",
+                        "state_flag_id": "state_flag::fight_committed",
                         "hint": "mention the bruises from the fight",
                     },
                     {
-                        "codeword_id": "codeword::argue_committed",
+                        "state_flag_id": "state_flag::argue_committed",
                         "hint": "mention the strained voices from argument",
                     },
                 ],
@@ -6078,8 +6080,8 @@ class TestCreateResiduePassages:
                 "passage_id": "passage::nonexistent",
                 "dilemma_id": "dilemma::x",
                 "variants": [
-                    {"codeword_id": "codeword::fight_committed", "hint": "some hint text"},
-                    {"codeword_id": "codeword::argue_committed", "hint": "another hint"},
+                    {"state_flag_id": "state_flag::fight_committed", "hint": "some hint text"},
+                    {"state_flag_id": "state_flag::argue_committed", "hint": "another hint"},
                 ],
             }
         ]
@@ -6087,7 +6089,7 @@ class TestCreateResiduePassages:
         assert result.proposals_skipped == 1
         assert result.proposals_applied == 0
 
-    def test_invalid_codeword_skipped(self) -> None:
+    def test_invalid_state_flag_skipped(self) -> None:
         from questfoundry.graph.grow_algorithms import create_residue_passages
 
         graph = self._make_base_graph()
@@ -6096,8 +6098,8 @@ class TestCreateResiduePassages:
                 "passage_id": "passage::aftermath",
                 "dilemma_id": "dilemma::x",
                 "variants": [
-                    {"codeword_id": "codeword::fight_committed", "hint": "valid codeword"},
-                    {"codeword_id": "codeword::NONEXISTENT", "hint": "invalid codeword"},
+                    {"state_flag_id": "state_flag::fight_committed", "hint": "valid state_flag"},
+                    {"state_flag_id": "state_flag::NONEXISTENT", "hint": "invalid state_flag"},
                 ],
             }
         ]
@@ -6114,7 +6116,7 @@ class TestCreateResiduePassages:
                 "passage_id": "passage::aftermath",
                 "dilemma_id": "dilemma::x",
                 "variants": [
-                    {"codeword_id": "codeword::fight_committed", "hint": "only one variant"},
+                    {"state_flag_id": "state_flag::fight_committed", "hint": "only one variant"},
                 ],
             }
         ]
@@ -6123,7 +6125,7 @@ class TestCreateResiduePassages:
         assert result.proposals_applied == 0
 
     def test_variant_id_naming(self) -> None:
-        """Variant passage IDs follow the pattern passage::{base}__via_{codeword_suffix}."""
+        """Variant passage IDs follow the pattern passage::{base}__via_{state_flag_suffix}."""
         from questfoundry.graph.grow_algorithms import create_residue_passages
 
         graph = self._make_base_graph()
@@ -6133,11 +6135,11 @@ class TestCreateResiduePassages:
                 "dilemma_id": "dilemma::approach",
                 "variants": [
                     {
-                        "codeword_id": "codeword::fight_committed",
+                        "state_flag_id": "state_flag::fight_committed",
                         "hint": "mention the bruises from the fight",
                     },
                     {
-                        "codeword_id": "codeword::argue_committed",
+                        "state_flag_id": "state_flag::argue_committed",
                         "hint": "mention the voices from the argument",
                     },
                 ],
@@ -6160,15 +6162,15 @@ class TestCreateResiduePassages:
         assert result.proposals_skipped == 0
 
 
-class TestBuildArcCodewords:
-    """Tests for _build_arc_codewords() ending_salience filtering."""
+class TestBuildArcStateFlags:
+    """Tests for _build_arc_state_flags() ending_salience filtering."""
 
     @staticmethod
     def _make_two_dilemma_graph(
         d1_salience: str = "high",
         d2_salience: str = "low",
     ) -> Graph:
-        """Graph with 2 dilemmas, each with 1 path + consequence + codeword.
+        """Graph with 2 dilemmas, each with 1 path + consequence + state_flag.
 
         Single arc covers both paths.
         """
@@ -6206,17 +6208,17 @@ class TestBuildArcCodewords:
         graph.add_edge("has_consequence", "path::d1__yes", "consequence::c1")
         graph.add_edge("has_consequence", "path::d2__yes", "consequence::c2")
 
-        # Codewords + tracks edges
+        # State flags + tracks edges
         graph.create_node(
-            "codeword::cw1",
-            {"type": "codeword", "raw_id": "cw1"},
+            "state_flag::cw1",
+            {"type": "state_flag", "raw_id": "cw1"},
         )
         graph.create_node(
-            "codeword::cw2",
-            {"type": "codeword", "raw_id": "cw2"},
+            "state_flag::cw2",
+            {"type": "state_flag", "raw_id": "cw2"},
         )
-        graph.add_edge("tracks", "codeword::cw1", "consequence::c1")
-        graph.add_edge("tracks", "codeword::cw2", "consequence::c2")
+        graph.add_edge("tracks", "state_flag::cw1", "consequence::c1")
+        graph.add_edge("tracks", "state_flag::cw2", "consequence::c2")
 
         # Single arc covering both paths
         graph.create_node(
@@ -6232,39 +6234,39 @@ class TestBuildArcCodewords:
 
         return graph
 
-    def test_only_high_salience_codewords_included(self) -> None:
-        """Arc codewords include only codewords from high-salience dilemmas."""
-        from questfoundry.graph.grow_algorithms import _build_arc_codewords
+    def test_only_high_salience_state_flags_included(self) -> None:
+        """Arc state_flags include only state_flags from high-salience dilemmas."""
+        from questfoundry.graph.grow_algorithms import _build_arc_state_flags
 
         graph = self._make_two_dilemma_graph(d1_salience="high", d2_salience="low")
         arc_nodes = graph.get_nodes_by_type("arc")
 
-        result = _build_arc_codewords(graph, arc_nodes)
-        assert result["arc::main"] == frozenset({"codeword::cw1"})
+        result = _build_arc_state_flags(graph, arc_nodes)
+        assert result["arc::main"] == frozenset({"state_flag::cw1"})
 
     def test_both_high_salience_included(self) -> None:
-        """When both dilemmas are high, both codewords appear."""
-        from questfoundry.graph.grow_algorithms import _build_arc_codewords
+        """When both dilemmas are high, both state_flags appear."""
+        from questfoundry.graph.grow_algorithms import _build_arc_state_flags
 
         graph = self._make_two_dilemma_graph(d1_salience="high", d2_salience="high")
         arc_nodes = graph.get_nodes_by_type("arc")
 
-        result = _build_arc_codewords(graph, arc_nodes)
-        assert result["arc::main"] == frozenset({"codeword::cw1", "codeword::cw2"})
+        result = _build_arc_state_flags(graph, arc_nodes)
+        assert result["arc::main"] == frozenset({"state_flag::cw1", "state_flag::cw2"})
 
     def test_no_high_salience_yields_empty(self) -> None:
-        """When no dilemma is high-salience, arc gets empty codeword set."""
-        from questfoundry.graph.grow_algorithms import _build_arc_codewords
+        """When no dilemma is high-salience, arc gets empty state_flag set."""
+        from questfoundry.graph.grow_algorithms import _build_arc_state_flags
 
         graph = self._make_two_dilemma_graph(d1_salience="low", d2_salience="none")
         arc_nodes = graph.get_nodes_by_type("arc")
 
-        result = _build_arc_codewords(graph, arc_nodes)
+        result = _build_arc_state_flags(graph, arc_nodes)
         assert result["arc::main"] == frozenset()
 
     def test_missing_ending_salience_defaults_to_low(self) -> None:
         """Dilemma without ending_salience attribute is treated as low (excluded)."""
-        from questfoundry.graph.grow_algorithms import _build_arc_codewords
+        from questfoundry.graph.grow_algorithms import _build_arc_state_flags
 
         graph = Graph.empty()
         # d1 has ending_salience=high, d2 has NO ending_salience property
@@ -6288,10 +6290,10 @@ class TestBuildArcCodewords:
         graph.create_node("consequence::c2", {"type": "consequence", "raw_id": "c2"})
         graph.add_edge("has_consequence", "path::d1__yes", "consequence::c1")
         graph.add_edge("has_consequence", "path::d2__yes", "consequence::c2")
-        graph.create_node("codeword::cw1", {"type": "codeword", "raw_id": "cw1"})
-        graph.create_node("codeword::cw2", {"type": "codeword", "raw_id": "cw2"})
-        graph.add_edge("tracks", "codeword::cw1", "consequence::c1")
-        graph.add_edge("tracks", "codeword::cw2", "consequence::c2")
+        graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
+        graph.create_node("state_flag::cw2", {"type": "state_flag", "raw_id": "cw2"})
+        graph.add_edge("tracks", "state_flag::cw1", "consequence::c1")
+        graph.add_edge("tracks", "state_flag::cw2", "consequence::c2")
         graph.create_node(
             "arc::main",
             {
@@ -6304,15 +6306,15 @@ class TestBuildArcCodewords:
         )
 
         arc_nodes = graph.get_nodes_by_type("arc")
-        result = _build_arc_codewords(graph, arc_nodes)
-        assert result["arc::main"] == frozenset({"codeword::cw1"})
+        result = _build_arc_state_flags(graph, arc_nodes)
+        assert result["arc::main"] == frozenset({"state_flag::cw1"})
 
     def test_empty_arc_nodes(self) -> None:
         """Empty arc_nodes dict returns empty result."""
-        from questfoundry.graph.grow_algorithms import _build_arc_codewords
+        from questfoundry.graph.grow_algorithms import _build_arc_state_flags
 
         graph = Graph.empty()
-        result = _build_arc_codewords(graph, {})
+        result = _build_arc_state_flags(graph, {})
         assert result == {}
 
 
@@ -6344,7 +6346,7 @@ class TestHeavyResidueRouting:
             {"type": "path", "raw_id": "d1__no", "dilemma_id": "d1"},
         )
 
-        # Consequences + codewords
+        # Consequences + state_flags
         graph.create_node(
             "consequence::yes_result",
             {"type": "consequence", "raw_id": "yes_result", "path_id": "d1__yes"},
@@ -6356,23 +6358,23 @@ class TestHeavyResidueRouting:
         graph.add_edge("has_consequence", "path::d1__yes", "consequence::yes_result")
         graph.add_edge("has_consequence", "path::d1__no", "consequence::no_result")
         graph.create_node(
-            "codeword::yes_result_committed",
+            "state_flag::yes_result_committed",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "yes_result_committed",
                 "tracks": "consequence::yes_result",
             },
         )
         graph.create_node(
-            "codeword::no_result_committed",
+            "state_flag::no_result_committed",
             {
-                "type": "codeword",
+                "type": "state_flag",
                 "raw_id": "no_result_committed",
                 "tracks": "consequence::no_result",
             },
         )
-        graph.add_edge("tracks", "codeword::yes_result_committed", "consequence::yes_result")
-        graph.add_edge("tracks", "codeword::no_result_committed", "consequence::no_result")
+        graph.add_edge("tracks", "state_flag::yes_result_committed", "consequence::yes_result")
+        graph.add_edge("tracks", "state_flag::no_result_committed", "consequence::no_result")
 
         # Shared beat + passage
         graph.create_node(
@@ -6450,7 +6452,7 @@ class TestHeavyResidueRouting:
                     "from_passage": "passage::shared",
                     "to_passage": "passage::variant",
                     "is_routing": True,
-                    "requires_codewords": ["codeword::yes_result_committed"],
+                    "requires_state_flags": ["state_flag::yes_result_committed"],
                 },
             )
             graph.add_edge("choice_from", "choice::routed", "passage::shared")
@@ -6479,7 +6481,7 @@ class TestHeavyResidueRouting:
         choices = graph.get_nodes_by_type("choice")
         routing = [data for _cid, data in choices.items() if data.get("is_routing")]
         assert len(routing) == 2
-        assert all(choice.get("requires_codewords") for choice in routing)
+        assert all(choice.get("requires_state_flags") for choice in routing)
 
         # Original choice remains as fallback
         assert graph.get_node("choice::to_shared") is not None
@@ -6540,7 +6542,7 @@ class TestSplitAndReroute:
                 "type": "choice",
                 "from_passage": source_passage,
                 "to_passage": base_passage,
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": ["cw_existing"],
                 "label": "Go forward",
             },
@@ -6593,7 +6595,7 @@ class TestSplitAndReroute:
                 "type": "choice",
                 "from_passage": "passage::other",
                 "to_passage": "passage::shared",
-                "requires_codewords": [],
+                "requires_state_flags": [],
                 "grants": [],
                 "label": None,
             },

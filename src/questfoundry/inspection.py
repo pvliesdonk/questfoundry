@@ -347,19 +347,19 @@ def _branching_quality_score(
     passages = graph.get_nodes_by_type("passage")
     ending_ids = [pid for pid in passages if pid not in has_outgoing]
 
-    # Ending variants: distinct codeword signatures per ending
-    # For each ending, find which arcs cover its from_beat, then collect codewords
+    # Ending variants: distinct state flag signatures per ending
+    # For each ending, find which arcs cover its from_beat, then collect state flags
     beat_to_arcs: dict[str, list[str]] = {}
     for arc_id, data in arc_nodes.items():
         for beat_id in data.get("sequence", []):
             beat_to_arcs.setdefault(beat_id, []).append(arc_id)
 
-    # Build arc → codewords: arc paths → consequences → codewords via tracks edges
-    arc_codewords: dict[str, frozenset[str]] = {}
+    # Build arc → state flags: arc paths → consequences → state flags via tracks edges
+    arc_state_flags: dict[str, frozenset[str]] = {}
     tracks_edges = graph.get_edges(edge_type="tracks")
-    consequence_to_codeword: dict[str, str] = {}
+    consequence_to_state_flag: dict[str, str] = {}
     for edge in tracks_edges:
-        consequence_to_codeword[edge["to"]] = edge["from"]
+        consequence_to_state_flag[edge["to"]] = edge["from"]
 
     has_consequence_edges = graph.get_edges(edge_type="has_consequence")
     path_consequences: dict[str, list[str]] = {}
@@ -367,27 +367,27 @@ def _branching_quality_score(
         path_consequences.setdefault(edge["from"], []).append(edge["to"])
 
     for arc_id, data in arc_nodes.items():
-        cws: set[str] = set()
+        sfs: set[str] = set()
         for path_raw in data.get("paths", []):
             path_id = normalize_scoped_id(path_raw, "path")
             for cons_id in path_consequences.get(path_id, []):
-                if cw := consequence_to_codeword.get(cons_id):
-                    cws.add(cw)
-        arc_codewords[arc_id] = frozenset(cws)
+                if sf := consequence_to_state_flag.get(cons_id):
+                    sfs.add(sf)
+        arc_state_flags[arc_id] = frozenset(sfs)
 
     variant_signatures: set[frozenset[str]] = set()
     for pid in ending_ids:
         pdata = passages[pid]
-        # Synthetic endings (from split_ending_families) carry family_codewords
-        # directly; non-synthetic endings need beat→arc→codeword lookup.
-        family_cws = pdata.get("family_codewords")
-        if family_cws is not None:
-            variant_signatures.add(frozenset(family_cws))
+        # Synthetic endings (from split_ending_families) carry family_state_flags
+        # directly; non-synthetic endings need beat→arc→state flag lookup.
+        family_sfs = pdata.get("family_state_flags")
+        if family_sfs is not None:
+            variant_signatures.add(frozenset(family_sfs))
         else:
             from_beat = get_primary_beat(graph, pid) or ""
             covering_arcs = beat_to_arcs.get(from_beat, [])
             for arc_id in covering_arcs:
-                variant_signatures.add(arc_codewords.get(arc_id, frozenset()))
+                variant_signatures.add(arc_state_flags.get(arc_id, frozenset()))
 
     # Meaningful choice ratio
     ratio = 0.0

@@ -83,7 +83,7 @@ def _extract_choices(graph: Graph) -> list[ExportChoice]:
             from_passage=data["from_passage"],
             to_passage=data["to_passage"],
             label=data.get("label", "continue"),
-            requires_codewords=data.get("requires_codewords", []),
+            requires_codewords=data.get("requires_state_flags", data.get("requires_codewords", [])),
             grants=data.get("grants", []),
             is_return=data.get("is_return", False),
         )
@@ -161,7 +161,7 @@ def _project_state_flags_to_codewords(graph: Graph) -> list[ExportCodeword]:
             result.append(
                 ExportCodeword(
                     id=flag_id,
-                    codeword_type=flag_data.get("codeword_type", "granted"),
+                    codeword_type=flag_data.get("flag_type", "granted"),
                     tracks=flag_data.get("tracks"),
                 )
             )

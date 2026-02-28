@@ -431,7 +431,7 @@ def _make_overlay_graph() -> Graph:
             "type": "entity",
             "entity_type": "character",
             "name": "Alice",
-            "overlays": [{"codeword": "saw_truth", "field": "mood", "value": "angry"}],
+            "overlays": [{"state_flag": "saw_truth", "field": "mood", "value": "angry"}],
         },
     )
 
@@ -442,10 +442,10 @@ def _make_overlay_graph() -> Graph:
 
 
 def _make_grants_graph() -> Graph:
-    """Build a graph with a choice that grants codewords."""
+    """Build a graph with a choice that grants state flags."""
     graph = _make_simple_graph()
 
-    # Update existing choice to grant a codeword
+    # Update existing choice to grant a state flag
     graph.update_node("choice::intro_middle", grants=["saw_truth"])
 
     return graph
@@ -494,7 +494,7 @@ class TestOverlayPassages:
                 "type": "entity",
                 "entity_type": "character",
                 "name": "Bob",
-                "overlays": [{"codeword": "met_bob", "field": "mood", "value": "happy"}],
+                "overlays": [{"state_flag": "met_bob", "field": "mood", "value": "happy"}],
             },
         )
         # Passage references entity by raw ID "bob" (not "character::bob")
@@ -567,7 +567,7 @@ class TestGrantsEdges:
         graph = _make_simple_graph()
         graph.update_node(
             "choice::intro_middle",
-            requires_codewords=["has_key"],
+            requires_state_flags=["has_key"],
             grants=["saw_truth"],
         )
         sg = build_story_graph(graph)

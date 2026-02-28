@@ -40,35 +40,35 @@ class VariantPassageSpec:
 
     Args:
         variant_id: Desired passage node ID.
-        requires_codewords: Codeword IDs gating this variant route.
+        requires_state_flags: State flag IDs gating this variant route.
         summary: Copied from the base passage.
         from_beat: Copied from the base passage.
         entities: Copied from the base passage.
         is_ending: True only for ending-split variants.
-        family_codewords: Distinguishing codewords (ending-split only).
+        family_state_flags: Distinguishing state flags (ending-split only).
         family_arc_count: Number of arcs in this ending family.
         ending_tone: Merged ending tones (ending-split only).
         is_residue: True for LLM-proposed and heavy residue variants.
-        residue_codeword: Single gating codeword (residue/heavy only).
+        residue_state_flag: Single gating state flag (residue/heavy only).
         residue_hint: LLM prose guidance (LLM-proposed residue only).
         residue_dilemma: Scoped dilemma ID (residue/heavy only).
     """
 
     variant_id: str
-    requires_codewords: tuple[str, ...]
+    requires_state_flags: tuple[str, ...]
     summary: str = ""
     from_beat: str | None = None
     entities: tuple[str, ...] = ()
 
     # Ending-split fields
     is_ending: bool = False
-    family_codewords: tuple[str, ...] = ()
+    family_state_flags: tuple[str, ...] = ()
     family_arc_count: int = 0
     ending_tone: str | None = None
 
     # Residue fields (LLM-proposed and heavy)
     is_residue: bool = False
-    residue_codeword: str | None = None
+    residue_state_flag: str | None = None
     residue_hint: str | None = None
     residue_dilemma: str | None = None
 
@@ -92,15 +92,15 @@ class VariantPassageSpec:
 
         if self.is_ending:
             data["is_ending"] = True
-            data["family_codewords"] = list(self.family_codewords)
+            data["family_state_flags"] = list(self.family_state_flags)
             data["family_arc_count"] = self.family_arc_count
             if self.ending_tone:
                 data["ending_tone"] = self.ending_tone
 
         if self.is_residue:
             data["is_residue"] = True
-            if self.residue_codeword:
-                data["residue_codeword"] = self.residue_codeword
+            if self.residue_state_flag:
+                data["residue_state_flag"] = self.residue_state_flag
             if self.residue_hint:
                 data["residue_hint"] = self.residue_hint
             if self.residue_dilemma:
@@ -175,7 +175,7 @@ class RoutingPlan:
     Operations can be validated, previewed, and applied atomically.
 
     The plan is built in priority order:
-    1. Ending splits (deterministic, from arc codeword signatures)
+    1. Ending splits (deterministic, from arc state flag signatures)
     2. Heavy residue (deterministic, from heavy/high dilemma divergences)
     3. LLM-proposed residue (advisory, from convergence analysis)
 
@@ -185,14 +185,14 @@ class RoutingPlan:
     Args:
         operations: Ordered list of routing operations to apply.
         conflicts: Any conflicts detected and how they were resolved.
-        arc_codewords_ending: Arc→codeword mapping for ending scope.
-        arc_codewords_routing: Arc→codeword mapping for routing scope.
+        arc_state_flags_ending: Arc->state flag mapping for ending scope.
+        arc_state_flags_routing: Arc->state flag mapping for routing scope.
     """
 
     operations: list[RoutingOperation] = field(default_factory=list)
     conflicts: list[RoutingConflict] = field(default_factory=list)
-    arc_codewords_ending: dict[str, frozenset[str]] = field(default_factory=dict)
-    arc_codewords_routing: dict[str, frozenset[str]] = field(default_factory=dict)
+    arc_state_flags_ending: dict[str, frozenset[str]] = field(default_factory=dict)
+    arc_state_flags_routing: dict[str, frozenset[str]] = field(default_factory=dict)
 
     @property
     def ending_splits(self) -> list[RoutingOperation]:
@@ -310,7 +310,7 @@ def _intersect_all(sets: list[frozenset[str]]) -> frozenset[str]:
 
 
 def _build_passage_arcs(graph: Graph) -> dict[str, list[str]]:
-    """Build passage → covering arcs mapping via from_beat.
+    """Build passage -> covering arcs mapping via from_beat.
 
     Returns a dict mapping passage IDs to the list of arc IDs that cover
     the passage's from_beat. Passages without from_beat are not included.
@@ -318,13 +318,13 @@ def _build_passage_arcs(graph: Graph) -> dict[str, list[str]]:
     passage_nodes = graph.get_nodes_by_type("passage")
     arc_nodes = graph.get_nodes_by_type("arc")
 
-    # Build beat → covering arcs
+    # Build beat -> covering arcs
     beat_arcs: dict[str, list[str]] = {}
     for arc_id, arc_data in arc_nodes.items():
         for beat_id in arc_data.get("sequence", []):
             beat_arcs.setdefault(beat_id, []).append(arc_id)
 
-    # Build passage → covering arcs via from_beat
+    # Build passage -> covering arcs via from_beat
     passage_arcs: dict[str, list[str]] = {}
     for pid in passage_nodes:
         from_beat = get_primary_beat(graph, pid)
@@ -336,11 +336,11 @@ def _build_passage_arcs(graph: Graph) -> dict[str, list[str]]:
 
 def _compute_ending_splits(
     graph: Graph,
-    arc_codewords: dict[str, frozenset[str]],
+    arc_state_flags: dict[str, frozenset[str]],
 ) -> list[RoutingOperation]:
-    """Compute ending-split operations from arc codeword signatures.
+    """Compute ending-split operations from arc state flag signatures.
 
-    For each terminal passage covered by 2+ distinct codeword signatures,
+    For each terminal passage covered by 2+ distinct state flag signatures,
     creates a RoutingOperation with one variant per signature family.
 
     This replicates the logic of ``split_ending_families()`` but produces
@@ -359,16 +359,16 @@ def _compute_ending_splits(
         if not covering:
             continue
 
-        # Group arcs by codeword signature
+        # Group arcs by state flag signature
         sig_to_arcs: dict[frozenset[str], list[str]] = {}
         for arc_id in covering:
-            sig = arc_codewords.get(arc_id, frozenset())
+            sig = arc_state_flags.get(arc_id, frozenset())
             sig_to_arcs.setdefault(sig, []).append(arc_id)
 
         if len(sig_to_arcs) < 2:
             continue  # Only 1 family — no split needed
 
-        # Compute distinguishing codewords for each family
+        # Compute distinguishing state flags for each family
         all_sigs = list(sig_to_arcs.keys())
         variants: list[VariantPassageSpec] = []
 
@@ -389,12 +389,12 @@ def _compute_ending_splits(
             variants.append(
                 VariantPassageSpec(
                     variant_id=variant_id,
-                    requires_codewords=tuple(distinguishing),
+                    requires_state_flags=tuple(distinguishing),
                     summary=t_data.get("summary", ""),
                     from_beat=get_primary_beat(graph, terminal_id),
                     entities=tuple(t_data.get("entities", [])),
                     is_ending=True,
-                    family_codewords=tuple(distinguishing),
+                    family_state_flags=tuple(distinguishing),
                     family_arc_count=len(family_arcs),
                     ending_tone="; ".join(tones) if tones else None,
                 )
@@ -425,7 +425,7 @@ def _compute_ending_splits(
             log.warning(
                 "no_ending_splits_despite_shared_endings",
                 shared_endings=len(shared_endings),
-                arc_count=len(arc_codewords),
+                arc_count=len(arc_state_flags),
                 message="This indicates a bug in routing plan computation. "
                 "Expected to find ending splits for shared endings but found none.",
             )
@@ -435,7 +435,7 @@ def _compute_ending_splits(
 
 def _compute_heavy_residue(
     graph: Graph,
-    arc_codewords: dict[str, frozenset[str]],  # noqa: ARG001 — reserved for future scope-aware filtering
+    arc_state_flags: dict[str, frozenset[str]],  # noqa: ARG001 — reserved for future scope-aware filtering
     already_routed: set[str],
 ) -> list[RoutingOperation]:
     """Compute heavy-residue routing operations.
@@ -451,34 +451,34 @@ def _compute_heavy_residue(
     arc_nodes = graph.get_nodes_by_type("arc")
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
     path_nodes = graph.get_nodes_by_type("path")
-    codeword_nodes = graph.get_nodes_by_type("codeword")
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
 
     passage_arcs = _build_passage_arcs(graph)
 
-    # Build arc → paths (raw IDs on arc data, normalize to scoped)
+    # Build arc -> paths (raw IDs on arc data, normalize to scoped)
     arc_paths: dict[str, list[str]] = {}
     for arc_id, arc_data in arc_nodes.items():
         raw_paths = arc_data.get("paths", [])
         arc_paths[arc_id] = [p if p.startswith("path::") else f"path::{p}" for p in raw_paths]
 
-    # Build path → dilemma
+    # Build path -> dilemma
     path_to_dilemma: dict[str, str] = {}
     for path_id, path_data in path_nodes.items():
         did = path_data.get("dilemma_id")
         if did:
             path_to_dilemma[path_id] = did
 
-    # Build path → codeword (via consequence chain)
-    # Production chain: path -[has_consequence]-> consequence <-[tracks field]- codeword
+    # Build path -> state flag (via consequence chain)
+    # Production chain: path -[has_consequence]-> consequence <-[tracks field]- state_flag
     cons_to_path: dict[str, str] = {}
     for edge in graph.get_edges(edge_type="has_consequence"):
         cons_to_path[edge["to"]] = edge["from"]
 
-    path_to_codeword: dict[str, str] = {}
-    for cw_id, cw_data in codeword_nodes.items():
-        tracked_cons = cw_data.get("tracks")
+    path_to_state_flag: dict[str, str] = {}
+    for sf_id, sf_data in state_flag_nodes.items():
+        tracked_cons = sf_data.get("tracks")
         if tracked_cons and tracked_cons in cons_to_path:
-            path_to_codeword[cons_to_path[tracked_cons]] = cw_id
+            path_to_state_flag[cons_to_path[tracked_cons]] = sf_id
 
     operations: list[RoutingOperation] = []
     seen: set[tuple[str, str]] = set()  # (passage_id, dilemma_id)
@@ -516,14 +516,14 @@ def _compute_heavy_residue(
             if weight != "heavy" and salience != "high":
                 continue
 
-            # Build path → codeword mapping, need 2+ gatable codewords
-            path_codewords: dict[str, str] = {}
+            # Build path -> state flag mapping, need 2+ gatable state flags
+            path_state_flags: dict[str, str] = {}
             for path_id in path_arcs_map:
-                maybe_cw = path_to_codeword.get(path_id)
-                if maybe_cw is not None and maybe_cw in codeword_nodes:
-                    path_codewords[path_id] = maybe_cw
+                maybe_sf = path_to_state_flag.get(path_id)
+                if maybe_sf is not None and maybe_sf in state_flag_nodes:
+                    path_state_flags[path_id] = maybe_sf
 
-            if len(path_codewords) < 2:
+            if len(path_state_flags) < 2:
                 continue
 
             seen.add((pid, did))
@@ -542,21 +542,21 @@ def _compute_heavy_residue(
             raw_id = pid.removeprefix("passage::")
             variants: list[VariantPassageSpec] = []
 
-            for _path_id, cw_id in path_codewords.items():
-                cw_suffix = (
-                    cw_id.removeprefix("codeword::").split("::")[-1].removesuffix("_committed")
+            for _path_id, sf_id in path_state_flags.items():
+                sf_suffix = (
+                    sf_id.removeprefix("state_flag::").split("::")[-1].removesuffix("_committed")
                 )
-                variant_id = f"passage::{raw_id}__heavy_{cw_suffix}"
+                variant_id = f"passage::{raw_id}__heavy_{sf_suffix}"
 
                 variants.append(
                     VariantPassageSpec(
                         variant_id=variant_id,
-                        requires_codewords=(cw_id,),
+                        requires_state_flags=(sf_id,),
                         summary=p_data.get("summary", ""),
                         from_beat=get_primary_beat(graph, pid),
                         entities=tuple(p_data.get("entities", [])),
                         is_residue=True,
-                        residue_codeword=cw_id,
+                        residue_state_flag=sf_id,
                         residue_dilemma=did,
                     )
                 )
@@ -620,7 +620,7 @@ def store_residue_proposals(
         proposals: List of proposal dicts, each with keys:
             - passage_id: Target passage for routing
             - dilemma_id: Dilemma whose paths determine variants
-            - variants: List of {codeword_id, hint} dicts
+            - variants: List of {state_flag_id, hint} dicts
 
     Note:
         If proposals already exist (re-run), they are replaced.
@@ -704,10 +704,10 @@ def compute_routing_plan(
     atomically.
 
     Args:
-        graph: The GROW graph after codewords and choices are wired.
+        graph: The GROW graph after state flags and choices are wired.
         residue_proposals: Optional LLM-proposed residue variants (from
             Phase 15). Each dict has keys: passage_id, dilemma_id, variants
-            (list of {codeword_id, hint}).
+            (list of {state_flag_id, hint}).
 
     Returns:
         A RoutingPlan containing all operations to apply.
@@ -718,28 +718,28 @@ def compute_routing_plan(
         ...       f"{len(plan.passages_affected)} passages")
         >>> apply_routing_plan(graph, plan)  # S3 will implement this
     """
-    from questfoundry.graph.grow_algorithms import build_arc_codewords
+    from questfoundry.graph.grow_algorithms import build_arc_state_flags
 
     arc_nodes = graph.get_nodes_by_type("arc")
     passage_nodes = graph.get_nodes_by_type("passage")
 
-    # Step 1: Compute arc codeword signatures (both scopes, once)
-    arc_codewords_ending = build_arc_codewords(graph, arc_nodes, scope="ending")
-    arc_codewords_routing = build_arc_codewords(graph, arc_nodes, scope="routing")
+    # Step 1: Compute arc state flag signatures (both scopes, once)
+    arc_state_flags_ending = build_arc_state_flags(graph, arc_nodes, scope="ending")
+    arc_state_flags_routing = build_arc_state_flags(graph, arc_nodes, scope="routing")
 
     plan = RoutingPlan(
-        arc_codewords_ending=arc_codewords_ending,
-        arc_codewords_routing=arc_codewords_routing,
+        arc_state_flags_ending=arc_state_flags_ending,
+        arc_state_flags_routing=arc_state_flags_routing,
     )
 
     # Step 2: Ending splits (highest priority)
-    ending_ops = _compute_ending_splits(graph, arc_codewords_ending)
+    ending_ops = _compute_ending_splits(graph, arc_state_flags_ending)
     for op in ending_ops:
         plan.add_operation(op)
 
     # Step 3: Heavy residue routing (second priority)
     already_routed = _collect_already_routed(passage_nodes)
-    heavy_ops = _compute_heavy_residue(graph, arc_codewords_routing, already_routed)
+    heavy_ops = _compute_heavy_residue(graph, arc_state_flags_routing, already_routed)
     for op in heavy_ops:
         plan.add_operation(op)
 
@@ -792,7 +792,7 @@ def _compute_llm_residue(
     proposals that target already-routed passages.
     """
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    codeword_nodes = graph.get_nodes_by_type("codeword")
+    state_flag_nodes = graph.get_nodes_by_type("state_flag")
     operations: list[RoutingOperation] = []
 
     for proposal in proposals:
@@ -822,25 +822,29 @@ def _compute_llm_residue(
 
         variants: list[VariantPassageSpec] = []
         for vdef in variant_defs:
-            cw_id = vdef.get("codeword_id", "")
+            sf_id = vdef.get("state_flag_id", "")
             hint = vdef.get("hint", "")
 
-            if not cw_id or cw_id not in codeword_nodes:
-                log.warning("residue_proposal_invalid_codeword", cw_id=cw_id, passage_id=passage_id)
+            if not sf_id or sf_id not in state_flag_nodes:
+                log.warning(
+                    "residue_proposal_invalid_state_flag", sf_id=sf_id, passage_id=passage_id
+                )
                 continue
 
-            cw_suffix = cw_id.removeprefix("codeword::").split("::")[-1].removesuffix("_committed")
-            variant_id = f"passage::{raw_id}__via_{cw_suffix}"
+            sf_suffix = (
+                sf_id.removeprefix("state_flag::").split("::")[-1].removesuffix("_committed")
+            )
+            variant_id = f"passage::{raw_id}__via_{sf_suffix}"
 
             variants.append(
                 VariantPassageSpec(
                     variant_id=variant_id,
-                    requires_codewords=(cw_id,),
+                    requires_state_flags=(sf_id,),
                     summary=p_data.get("summary", ""),
                     from_beat=get_primary_beat(graph, passage_id),
                     entities=tuple(p_data.get("entities", [])),
                     is_residue=True,
-                    residue_codeword=cw_id,
+                    residue_state_flag=sf_id,
                     residue_hint=hint,
                     residue_dilemma=dilemma_id,
                 )
@@ -903,7 +907,7 @@ def apply_routing_plan(graph: Graph, plan: RoutingPlan) -> ApplyRoutingResult:
     """Apply a routing plan to the graph atomically.
 
     Executes every :class:`RoutingOperation` in the plan in priority order
-    (ending splits → heavy residue → LLM-proposed residue). For each
+    (ending splits -> heavy residue -> LLM-proposed residue). For each
     operation:
 
     1. Creates all variant passage nodes using :meth:`VariantPassageSpec.to_node_data`.
@@ -979,7 +983,7 @@ def apply_routing_plan(graph: Graph, plan: RoutingPlan) -> ApplyRoutingResult:
         variant_specs = [
             VariantSpec(
                 passage_id=spec.variant_id,
-                requires_codewords=list(spec.requires_codewords),
+                requires_state_flags=list(spec.requires_state_flags),
             )
             for spec in op.variants
         ]

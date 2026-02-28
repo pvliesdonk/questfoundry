@@ -53,6 +53,7 @@ from questfoundry.graph.dress_mutations import (
 )
 from questfoundry.graph.fill_context import format_dream_vision
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.grow_algorithms import enumerate_arcs
 from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.dress import (
     BatchedBriefOutput,
@@ -827,7 +828,7 @@ class DressStage:
         """Phase 2: Generate codex entries for entities.
 
         Batches entities (default 4 per LLM call) to reduce repeated
-        context injection. Shared vision and codewords go in the system
+        context injection. Shared vision and state flags go in the system
         message; per-batch entity details in the user message.
         """
         if self._skip_codex:
@@ -839,10 +840,10 @@ class DressStage:
             return DressPhaseResult(phase="codex", status="completed", detail="no entities")
 
         vision_ctx = format_dream_vision(graph)
-        codewords = graph.get_nodes_by_type("codeword")
-        codeword_list = "\n".join(
-            f"- `{cw_data.get('raw_id', cw_id)}`: {cw_data.get('trigger', '')}"
-            for cw_id, cw_data in codewords.items()
+        state_flags = graph.get_nodes_by_type("state_flag")
+        state_flag_list = "\n".join(
+            f"- `{sf_data.get('raw_id', sf_id)}`: {sf_data.get('trigger', '')}"
+            for sf_id, sf_data in state_flags.items()
         )
 
         codex_created = 0
@@ -863,7 +864,7 @@ class DressStage:
                 "vision_context": vision_ctx or "No creative vision available.",
                 "entities_batch": entities_batch,
                 "entity_count": str(len(chunk)),
-                "codewords": codeword_list or "No codewords defined.",
+                "codewords": state_flag_list or "No codewords defined.",
                 "output_language_instruction": self._lang_instruction,
             }
             output, llm_calls, tokens = await self._dress_llm_call(
@@ -1564,8 +1565,6 @@ def compute_structural_score(graph: Graph, passage_id: str) -> int:
         score -= 1
 
     # Check arc position using computed arcs
-    from questfoundry.graph.grow_algorithms import enumerate_arcs
-
     arcs = enumerate_arcs(graph)
 
     for arc in arcs:
