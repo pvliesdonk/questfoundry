@@ -381,120 +381,12 @@ async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     )
 
 
-# --- Phase 9c2: Mark Endings ---
-
-
-@grow_phase(name="mark_endings", depends_on=["hub_spokes"], is_deterministic=True, priority=20)
-async def phase_mark_endings(
-    graph: Graph,
-    model: BaseChatModel,  # noqa: ARG001
-) -> GrowPhaseResult:
-    """Phase 9c2: Mark terminal passages with is_ending flag.
-
-    Preconditions:
-    - Hub-spoke nodes created (Phase 9c complete).
-    - Passage and choice nodes exist with choice_from edges.
-
-    Postconditions:
-    - Terminal passages (no outgoing choice_from edges) have is_ending=True.
-    - Non-terminal passages are not modified.
-
-    Invariants:
-    - Deterministic: ending status derived purely from graph structure.
-    - Must run before collapse so endings are exempt from merging.
-    """
-    from questfoundry.graph.grow_algorithms import mark_terminal_passages
-
-    count = mark_terminal_passages(graph)
-    return GrowPhaseResult(
-        phase="mark_endings",
-        status="completed",
-        detail=f"Marked {count} terminal passage(s) as endings",
-    )
-
-
-# --- Phase 9c3: Apply Routing Plan ---
-
-
-@grow_phase(
-    name="apply_routing",
-    depends_on=["mark_endings", "state_flags", "residue_beats"],
-    is_deterministic=True,
-    priority=21,
-)
-async def phase_apply_routing(
-    graph: Graph,
-    model: BaseChatModel,  # noqa: ARG001
-) -> GrowPhaseResult:
-    """Phase 9c3: Compute and apply the unified routing plan.
-
-    Replaces the former separate ``split_endings`` (Phase 21) and
-    ``heavy_residue_routing`` (Phase 23) phases with a single plan-then-execute
-    pass per ADR-017.
-
-    Preconditions:
-    - Terminal passages marked with is_ending (mark_endings complete).
-    - State flag nodes exist (state_flags phase complete).
-    - LLM residue proposals stored by Phase 15 (residue_beats complete).
-
-    Postconditions:
-    - Ending-split variant passages created and wired.
-    - Heavy-residue variant passages created and wired.
-    - LLM-proposed residue variants created and wired.
-    - Residue proposals metadata node removed from graph.
-
-    Invariants:
-    - Deterministic: plan derived from graph structure plus stored proposals.
-    - No LLM calls.
-    - No-op when no routing operations are needed.
-
-    Note:
-        Per ADR-017, heavy residue routing runs pre-collapse (as part of
-        apply_routing, before collapse_passages). This is intentional: residue
-        variants must be created before passage collapsing so the collapsed
-        graph contains the correct variant structure.
-    """
-    from questfoundry.graph.grow_routing import (
-        apply_routing_plan,
-        compute_routing_plan,
-        get_residue_proposals,
-    )
-
-    proposals = get_residue_proposals(graph)
-    plan = compute_routing_plan(graph, proposals)
-
-    if not plan.operations:
-        return GrowPhaseResult(
-            phase="apply_routing",
-            status="completed",
-            detail="No routing operations needed",
-        )
-
-    result = apply_routing_plan(graph, plan)
-
-    parts: list[str] = []
-    if result.ending_splits_applied:
-        parts.append(f"{result.ending_splits_applied} ending split(s)")
-    if result.heavy_residue_applied:
-        parts.append(f"{result.heavy_residue_applied} heavy-residue split(s)")
-    if result.llm_residue_applied:
-        parts.append(f"{result.llm_residue_applied} LLM-residue split(s)")
-    if result.skipped_no_incoming:
-        parts.append(f"{result.skipped_no_incoming} skipped (no incoming)")
-
-    return GrowPhaseResult(
-        phase="apply_routing",
-        status="completed",
-        detail=(f"Applied {', '.join(parts)}; {result.total_variants_created} variant(s) created"),
-    )
-
-
 # --- Phase 10: Validation ---
 
 
 @grow_phase(
     name="validation",
-    depends_on=["apply_routing"],
+    depends_on=["hub_spokes"],
     is_deterministic=True,
     priority=24,
 )

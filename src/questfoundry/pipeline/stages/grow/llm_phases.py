@@ -1066,7 +1066,6 @@ class _LLMPhaseMixin:
         - Empty candidates → completed with no LLM call.
         """
         from questfoundry.graph.grow_algorithms import find_residue_candidates
-        from questfoundry.graph.grow_routing import store_residue_proposals
         from questfoundry.models.grow import Phase8dOutput
 
         candidates = find_residue_candidates(graph)
@@ -1161,9 +1160,16 @@ class _LLMPhaseMixin:
             for p in result.proposals
         ]
 
-        # Store proposals for later processing by compute_routing_plan (Phase 21)
-        # Advisory only — no graph mutations here
-        store_residue_proposals(graph, proposal_dicts)
+        # Store proposals in graph metadata for downstream consumption
+        _RESIDUE_PROPOSALS_NODE_ID = "meta::residue_proposals"
+        graph.upsert_node(
+            _RESIDUE_PROPOSALS_NODE_ID,
+            {
+                "type": "meta",
+                "raw_id": "residue_proposals",
+                "proposals": proposal_dicts,
+            },
+        )
 
         return GrowPhaseResult(
             phase="residue_beats",
