@@ -28,6 +28,7 @@ from questfoundry.graph.validation_types import ValidationCheck, ValidationRepor
 if TYPE_CHECKING:
     from questfoundry.graph.graph import Graph
 
+_ROUTING_APPLIED_NODE_ID = "meta::routing_applied"
 
 # ---------------------------------------------------------------------------
 # Entry contract validation (POLISH input — checks GROW output)
@@ -1086,7 +1087,7 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
         ]
 
     # Read routing metadata inline (was grow_routing.get_routing_applied_metadata)
-    _routing_node = graph.get_node("meta::routing_applied")
+    _routing_node = graph.get_node(_ROUTING_APPLIED_NODE_ID)
     if _routing_node is None:
         ending_split_passages: set[str] = set()
     else:
@@ -1238,10 +1239,8 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
     path_nodes = graph.get_nodes_by_type("path")
 
     # Build set of passages that have variant routing applied.
-    # Primary source: the routing_applied metadata node written by
-    # apply_routing_plan (S3).  Fall back to scanning residue_for on
-    # variant passages for graphs that pre-date S3.
-    _ROUTING_APPLIED_NODE_ID = "meta::routing_applied"
+    # Primary source: the routing_applied metadata node.  Fall back to
+    # scanning residue_for on variant passages for older graphs.
     routing_node = graph.get_node(_ROUTING_APPLIED_NODE_ID)
     if routing_node is None:
         ending_split_pids: set[str] = set()
