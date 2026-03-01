@@ -198,14 +198,16 @@ def format_entity_arc_context(
         beat_text = "\n".join(item.text for item in beat_items)
 
     # Overlay data (how entity changes based on state flags)
-    overlay_nodes = graph.get_nodes_by_type("entity_overlay")
+    # Overlays are embedded on the entity node as {when: [state_flag_ids], details: {k: v}}
+    entity_node = graph.get_node(entity_id) or {}
     overlay_lines: list[str] = []
-    for _oid, odata in overlay_nodes.items():
-        if odata.get("entity_id") == entity_id:
-            flag = odata.get("activation_flag", "")
-            desc = odata.get("description", "")
-            if flag and desc:
-                overlay_lines.append(f"  - When {flag}: {truncate_summary(desc, 80)}")
+    for overlay in entity_node.get("overlays") or []:
+        flags = overlay.get("when") or []
+        details = overlay.get("details") or {}
+        if flags and details:
+            flag_str = ", ".join(flags)
+            detail_str = "; ".join(f"{k}: {v}" for k, v in details.items())
+            overlay_lines.append(f"  - When {flag_str}: {truncate_summary(detail_str, 80)}")
 
     overlay_text = "\n".join(overlay_lines) if overlay_lines else "  (no overlays)"
 

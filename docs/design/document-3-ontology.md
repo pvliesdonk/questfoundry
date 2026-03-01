@@ -412,6 +412,8 @@ Every entity has a **base state**: the facts true regardless of player choices. 
 
 The entity remains one node. Overlays modify it conditionally — they do not create a second entity. This is essential: every reference to `character::mentor` throughout the graph points to the same node. The overlay determines which version of the mentor appears in context.
 
+**Implementation note:** Overlays are stored as an embedded list on the entity node, not as separate graph nodes. Each overlay is a dict with `when` (list of state flag IDs) and `details` (key-value property changes). This keeps the entity and all its conditional states as one atomic unit — consistent with the principle that the entity remains one node. A query like "which entities does state flag X affect?" requires scanning entity nodes, but at the scale this pipeline operates (a handful of overlays per story) this is not a performance concern.
+
 ### When Overlays Are Needed
 
 Overlays are implied from BRAINSTORM onward — the dilemma's two answers inherently imply two states for the central entity. They become concrete in SEED, where path consequences describe how the entity changes. They are activated in GROW, where state flags are derived from consequences. And they are used by FILL, where the writer needs to know which version of the entity they are portraying.
@@ -633,7 +635,6 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | Beat | SEED, POLISH | No | Story moment. Regular, micro-beat, or residue beat. |
 | Intersection Group | GROW | No | Declaration that beats from different paths co-occur |
 | State Flag | GROW | Yes | Boolean world-state marker derived from consequence |
-| Entity Overlay | GROW | Yes | Conditional entity state activated by state flags |
 | Character Arc Metadata | POLISH | No | Per-entity trajectory summary for FILL context (start → pivot → end per path) |
 | Passage | POLISH | Yes (partial) | Prose container holding 1+ beats |
 | Scene Blueprint | FILL | No | Per-passage writing plan (sensory palette, opening move) |
@@ -659,7 +660,6 @@ The danger: creating separate entity nodes for each state combination (`mentor_t
 | `predecessor` | Beat → Beat | GROW | Ordering in the beat DAG (B comes after A) |
 | `intersection` | Beat → Intersection Group | GROW | This beat participates in this co-occurrence group |
 | `derived_from` | State Flag → Consequence | GROW | Which consequence this flag represents |
-| `activates` | State Flag → Entity Overlay | GROW | Which overlay this flag turns on |
 | `grouped_in` | Beat → Passage | POLISH | This beat is part of this passage |
 | `choice` | Passage → Passage | POLISH | Player navigation with label, requires, grants |
 | `variant_of` | Passage → Passage | POLISH | This passage is a variant of the base passage |
@@ -811,6 +811,16 @@ This section documents where the current implementation (`docs/design/00-spec.md
 **This document:** Dilemma pairwise relationships (wraps, serial, concurrent, shared_entity) are first-class declarations by SEED. `causal_chain` is subsumed by serial. `resource_conflict` is removed.
 
 **Impact:** New model and edge types for dilemma pairwise relationships. `InteractionConstraint` is redesigned.
+
+### Entity Overlay — Embedded, Not a Separate Node Type
+
+**Early design:** Entity Overlay was specified as a separate node type with `activates` edges (state_flag → entity_overlay), allowing overlays to be independently queried by graph traversal.
+
+**Current design (deliberate):** Overlays are stored as an embedded list on the entity node. Each overlay is `{when: [state_flag_ids], details: {key: value}}`. There is no `entity_overlay` node type and no `activates` edge.
+
+**Rationale:** The spec's own principle is "the entity remains one node." Embedding makes the entity and all its conditional states one atomic read — no join required for the common case (reading an entity in FILL or POLISH context). At the scale this pipeline operates (a few overlays per story), the queryability benefit of separate nodes does not justify the join cost or the node ID management overhead.
+
+**Deferred concern:** If a future stage (e.g., DRESS) needs to reference a specific overlay state by stable ID (e.g., "this illustration depicts the hostile-mentor state"), separate nodes would be preferable. Revisit then.
 
 ### Missing: Temporal Hints
 
