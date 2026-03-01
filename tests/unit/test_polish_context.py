@@ -150,15 +150,18 @@ class TestFormatEntityArcContext:
     def test_entity_with_overlays(self) -> None:
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
-        graph.create_node("entity::npc", {"type": "entity", "raw_id": "npc", "name": "NPC"})
         graph.create_node(
-            "overlay::npc_angry",
+            "entity::npc",
             {
-                "type": "entity_overlay",
-                "raw_id": "npc_angry",
-                "entity_id": "entity::npc",
-                "activation_flag": "dilemma::d1:path::p1",
-                "description": "The NPC becomes hostile",
+                "type": "entity",
+                "raw_id": "npc",
+                "name": "NPC",
+                "overlays": [
+                    {
+                        "when": ["dilemma::d1:path::p1"],
+                        "details": {"demeanor": "hostile"},
+                    }
+                ],
             },
         )
 

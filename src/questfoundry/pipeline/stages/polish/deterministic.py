@@ -271,13 +271,12 @@ def compute_prose_feasibility(
     warnings: list[str] = []
 
     # Build overlay data: flag → affected entities
-    overlay_nodes = graph.get_nodes_by_type("entity_overlay")
+    # Overlays are embedded on entity nodes as {when: [state_flag_ids], details: {k: v}}
     flag_entities: dict[str, set[str]] = {}
-    for _oid, odata in overlay_nodes.items():
-        flag = odata.get("activation_flag", "")
-        entity_id = odata.get("entity_id", "")
-        if flag and entity_id:
-            flag_entities.setdefault(flag, set()).add(entity_id)
+    for entity_id, edata in graph.get_nodes_by_type("entity").items():
+        for overlay in edata.get("overlays") or []:
+            for flag in overlay.get("when") or []:
+                flag_entities.setdefault(flag, set()).add(entity_id)
 
     # Build dilemma residue weights
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
