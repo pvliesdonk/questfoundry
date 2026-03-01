@@ -168,18 +168,17 @@ class TestGrowFullPipeline:
         assert result_dict["arc_count"] == 4
         assert result_dict["spine_arc_id"] is not None
 
-    def test_passages_created(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify passages are created (S3: apply_routing creates variants only when
-        choice edges exist; base passage count after consolidation is the minimum)."""
-        assert pipeline_result["result_dict"]["passage_count"] >= 7
+    def test_passages_not_created_by_grow(self, pipeline_result: dict[str, Any]) -> None:
+        """Verify GROW does not create passages (moved to POLISH in epic #1057)."""
+        assert pipeline_result["result_dict"]["passage_count"] == 0
 
     def test_state_flags_derived(self, pipeline_result: dict[str, Any]) -> None:
         """Verify state flags are created from consequences (4 consequences)."""
         assert pipeline_result["result_dict"]["state_flag_count"] == 4
 
-    def test_choices_created(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify choices are created at divergence points."""
-        assert pipeline_result["result_dict"]["choice_count"] > 0
+    def test_choices_not_created_by_grow(self, pipeline_result: dict[str, Any]) -> None:
+        """Verify GROW does not create choices (moved to POLISH in epic #1057)."""
+        assert pipeline_result["result_dict"]["choice_count"] == 0
 
     def test_validation_phase_passes(self, pipeline_result: dict[str, Any]) -> None:
         """Verify the resulting graph is structurally valid."""
