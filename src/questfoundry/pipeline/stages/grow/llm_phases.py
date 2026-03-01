@@ -1161,9 +1161,8 @@ class _LLMPhaseMixin:
         ]
 
         # Store proposals in graph metadata for downstream consumption
-        _RESIDUE_PROPOSALS_NODE_ID = "meta::residue_proposals"
         graph.upsert_node(
-            _RESIDUE_PROPOSALS_NODE_ID,
+            "meta::residue_proposals",
             {
                 "type": "meta",
                 "raw_id": "residue_proposals",
