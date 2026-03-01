@@ -9,7 +9,6 @@ from questfoundry.models.grow import (
     Arc,
     AtmosphericDetail,
     Choice,
-    ChoiceLabel,
     EntityArcDescriptor,
     EntityOverlay,
     GapProposal,
@@ -22,11 +21,7 @@ from questfoundry.models.grow import (
     Phase4dOutput,
     Phase4eOutput,
     Phase4fOutput,
-    Phase8dOutput,
-    ResidueBeatProposal,
-    ResidueVariant,
     SceneTypeTag,
-    SpokeProposal,
     StateFlag,
 )
 
@@ -352,16 +347,6 @@ class TestOverlayProposal:
             )
 
 
-class TestChoiceLabel:
-    def test_valid_label(self) -> None:
-        cl = ChoiceLabel(from_passage="p1", to_passage="p2", label="Fight")
-        assert cl.label == "Fight"
-
-    def test_empty_label_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="label"):
-            ChoiceLabel(from_passage="p1", to_passage="p2", label="")
-
-
 class TestGrowPhaseResult:
     @pytest.mark.parametrize(
         "status",
@@ -625,143 +610,3 @@ class TestPhase4fOutput:
                     ),
                 ],
             )
-
-
-class TestSpokeProposal:
-    """SpokeProposal.grants field added for branching contract (#741)."""
-
-    def test_grants_default_empty(self) -> None:
-        spoke = SpokeProposal(summary="A dusty corner of the library.")
-        assert spoke.grants == []
-        assert spoke.label is None
-        assert spoke.label_style == "functional"
-
-    def test_with_grants(self) -> None:
-        spoke = SpokeProposal(
-            summary="The hidden alcove behind the bookshelf.",
-            grants=["cw_library_secret", "cw_dust_allergy"],
-        )
-        assert spoke.grants == ["cw_library_secret", "cw_dust_allergy"]
-        assert len(spoke.grants) == 2
-
-
-class TestResidueVariant:
-    """Tests for ResidueVariant model."""
-
-    def test_valid_variant(self) -> None:
-        v = ResidueVariant(
-            state_flag_id="state_flag::fistfight_committed",
-            hint="mention the scar from the fight",
-        )
-        assert v.state_flag_id == "state_flag::fistfight_committed"
-        assert "scar" in v.hint
-
-    def test_empty_state_flag_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="state_flag_id"):
-            ResidueVariant(state_flag_id="", hint="a valid hint that is long enough")
-
-    def test_short_hint_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="hint"):
-            ResidueVariant(state_flag_id="state_flag::x", hint="too short")
-
-    def test_long_hint_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="hint"):
-            ResidueVariant(state_flag_id="state_flag::x", hint="a" * 201)
-
-
-class TestResidueBeatProposal:
-    """Tests for ResidueBeatProposal model."""
-
-    def test_valid_proposal(self) -> None:
-        proposal = ResidueBeatProposal(
-            passage_id="passage::shared_aftermath",
-            dilemma_id="dilemma::trust_choice",
-            rationale="The aftermath should acknowledge whether the hero fought or argued",
-            variants=[
-                ResidueVariant(
-                    state_flag_id="state_flag::fistfight_committed",
-                    hint="mention the scar from the fight",
-                ),
-                ResidueVariant(
-                    state_flag_id="state_flag::argue_committed",
-                    hint="mention the lingering tension from the argument",
-                ),
-            ],
-        )
-        assert proposal.passage_id == "passage::shared_aftermath"
-        assert len(proposal.variants) == 2
-
-    def test_single_variant_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="variants"):
-            ResidueBeatProposal(
-                passage_id="passage::x",
-                dilemma_id="dilemma::y",
-                rationale="some rationale here",
-                variants=[
-                    ResidueVariant(
-                        state_flag_id="state_flag::a",
-                        hint="only one variant is not enough",
-                    )
-                ],
-            )
-
-    def test_duplicate_state_flags_rejected(self) -> None:
-        with pytest.raises(ValidationError, match=r"state_flag_id.*unique"):
-            ResidueBeatProposal(
-                passage_id="passage::x",
-                dilemma_id="dilemma::y",
-                rationale="rationale for this residue",
-                variants=[
-                    ResidueVariant(
-                        state_flag_id="state_flag::same",
-                        hint="first variant hint text here",
-                    ),
-                    ResidueVariant(
-                        state_flag_id="state_flag::same",
-                        hint="second variant hint text here",
-                    ),
-                ],
-            )
-
-    def test_empty_passage_id_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="passage_id"):
-            ResidueBeatProposal(
-                passage_id="",
-                dilemma_id="dilemma::y",
-                rationale="some rationale here",
-                variants=[
-                    ResidueVariant(state_flag_id="state_flag::a", hint="hint text a long enough"),
-                    ResidueVariant(state_flag_id="state_flag::b", hint="hint text b long enough"),
-                ],
-            )
-
-
-class TestPhase8dOutput:
-    """Tests for Phase8dOutput wrapper."""
-
-    def test_empty_proposals(self) -> None:
-        output = Phase8dOutput(proposals=[])
-        assert output.proposals == []
-
-    def test_with_proposals(self) -> None:
-        output = Phase8dOutput(
-            proposals=[
-                ResidueBeatProposal(
-                    passage_id="passage::shared_c",
-                    dilemma_id="dilemma::trust",
-                    rationale="trust aftermath differs by path",
-                    variants=[
-                        ResidueVariant(
-                            state_flag_id="state_flag::trust_committed",
-                            hint="hero recalls the leap of faith",
-                        ),
-                        ResidueVariant(
-                            state_flag_id="state_flag::distrust_committed",
-                            hint="hero recalls the cold suspicion",
-                        ),
-                    ],
-                )
-            ]
-        )
-        assert len(output.proposals) == 1
-        assert len(output.proposals[0].variants) == 2
