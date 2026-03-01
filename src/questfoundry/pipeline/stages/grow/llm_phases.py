@@ -62,7 +62,7 @@ class _LLMPhaseMixin:
         then asks the LLM to evaluate which groups form natural scenes.
         Intersections are purely structural (multi-dilemma scene merging);
         prose differentiation for same-dilemma convergences is handled
-        by Phase 8d (residue beats).
+        by the POLISH stage.
 
         Preconditions:
         - Path arcs computed (Phase 4e complete).
