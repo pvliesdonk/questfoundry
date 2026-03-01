@@ -9,8 +9,7 @@ All graph mutations happen in-place on the graph argument.
 
 from __future__ import annotations
 
-from collections import deque
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.graph import Graph  # noqa: TC001 - used at runtime
@@ -22,8 +21,6 @@ if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
     from questfoundry.pipeline.size import SizeProfile
-
-PROLOGUE_ID = "passage::prologue"
 
 
 # --- Phase 1: Validate DAG ---
@@ -280,71 +277,17 @@ async def phase_collapse_linear_beats(
     )
 
 
-# --- Phase 8a: Passages ---
-
-
-@grow_phase(
-    name="passages", depends_on=["collapse_linear_beats"], is_deterministic=True, priority=13
-)
-async def phase_passages(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 8a: Create passage nodes from beats.
-
-    Preconditions:
-    - Beat collapse complete (Phase 7b).
-    - Each beat has a raw_id, summary, and entities.
-
-    Postconditions:
-    - Each beat has exactly one passage node (passage::{raw_id}).
-    - passage_from edges link each passage to its source beat.
-    - Passage nodes carry summary, entities, and prose=None.
-
-    Invariants:
-    - 1:1 mapping between beats and passages (before collapse/split).
-    - Deterministic: passage IDs derived from beat raw_ids.
-    """
-    beat_nodes = graph.get_nodes_by_type("beat")
-    if not beat_nodes:
-        return GrowPhaseResult(
-            phase="passages",
-            status="completed",
-            detail="No beats to process",
-        )
-
-    passage_count = 0
-    for beat_id, beat_data in sorted(beat_nodes.items()):
-        raw_id = beat_data.get("raw_id", strip_scope_prefix(beat_id))
-        passage_id = f"passage::{raw_id}"
-
-        graph.create_node(
-            passage_id,
-            {
-                "type": "passage",
-                "raw_id": raw_id,
-                "from_beat": beat_id,
-                "summary": beat_data.get("summary", ""),
-                "entities": beat_data.get("entities", []),
-                "prose": None,
-            },
-        )
-        graph.add_edge("passage_from", passage_id, beat_id)
-        passage_count += 1
-
-    return GrowPhaseResult(
-        phase="passages",
-        status="completed",
-        detail=f"Created {passage_count} passages",
-    )
-
-
 # --- Phase 8b: State Flags ---
 
 
-@grow_phase(name="state_flags", depends_on=["passages"], is_deterministic=True, priority=14)
+@grow_phase(
+    name="state_flags", depends_on=["collapse_linear_beats"], is_deterministic=True, priority=14
+)
 async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 8b: Create state flag nodes from consequences.
 
     Preconditions:
-    - Passage nodes exist (Phase 8a complete).
+    - Beat collapse complete (Phase 7b).
     - Consequence nodes exist with path_id associations.
     - has_consequence edges link paths to consequences.
 
@@ -546,59 +489,12 @@ async def phase_apply_routing(
     )
 
 
-# --- Phase 9d: Collapse Passages ---
-
-
-@grow_phase(
-    name="collapse_passages", depends_on=["apply_routing"], is_deterministic=True, priority=22
-)
-async def phase_collapse_passages(
-    graph: Graph,
-    model: BaseChatModel,  # noqa: ARG001
-) -> GrowPhaseResult:
-    """Phase 9d: Collapse linear passage chains into merged passages.
-
-    Preconditions:
-    - Endings split (Phase 9c3 complete).
-    - Choice edges define passage-to-passage navigation.
-
-    Postconditions:
-    - Linear chains of 3-5 consecutive single-outgoing passages merged.
-    - Surviving passage absorbs source_beats from removed passages.
-    - Choice edges rewired to skip removed passages.
-    - Endings and hub spokes exempt from collapsing.
-
-    Invariants:
-    - min_chain_length=3, max_chain_length=5.
-    - Deterministic: chain detection via outgoing choice count.
-    """
-    from questfoundry.graph.grow_algorithms import collapse_linear_passages
-
-    result = collapse_linear_passages(graph, min_chain_length=3, max_chain_length=5)
-
-    if result.chains_collapsed == 0:
-        return GrowPhaseResult(
-            phase="collapse_passages",
-            status="completed",
-            detail="No linear passage chains to collapse",
-        )
-
-    return GrowPhaseResult(
-        phase="collapse_passages",
-        status="completed",
-        detail=(
-            f"Collapsed {result.chains_collapsed} chain(s), "
-            f"removed {result.passages_removed} passages"
-        ),
-    )
-
-
 # --- Phase 10: Validation ---
 
 
 @grow_phase(
     name="validation",
-    depends_on=["collapse_passages"],
+    depends_on=["apply_routing"],
     is_deterministic=True,
     priority=24,
 )
@@ -606,8 +502,8 @@ async def phase_validation(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
     """Phase 10: Graph validation.
 
     Preconditions:
-    - Passage collapse complete (Phase 9d).
-    - Full story graph assembled with passages, choices, arcs.
+    - Routing applied (apply_routing complete).
+    - Full story graph assembled with beats, arcs, and state flags.
 
     Postconditions:
     - All structural and timing checks evaluated.
@@ -667,135 +563,3 @@ async def phase_validation(graph: Graph, model: BaseChatModel) -> GrowPhaseResul
         detail = report.summary
 
     return GrowPhaseResult(phase="validation", status="completed", detail=detail)
-
-
-# --- Phase 11: Prune ---
-
-
-@grow_phase(name="prune", depends_on=["validation"], is_deterministic=True, priority=25)
-async def phase_prune(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
-    """Phase 11: Prune unreachable passages.
-
-    Preconditions:
-    - Validation complete (Phase 10).
-    - Choice edges define the reachability graph.
-
-    Postconditions:
-    - Passages unreachable from the story start are deleted (cascade).
-    - When choices exist: BFS via choice_to from prologue or spine start.
-    - When no choices: fallback to computed arc traversal membership.
-
-    Invariants:
-    - Prologue passage (if synthetic) is always the BFS start.
-    - All reachable passages preserved; only orphans removed.
-    """
-    passage_nodes = graph.get_nodes_by_type("passage")
-    if not passage_nodes:
-        return GrowPhaseResult(
-            phase="prune",
-            status="completed",
-            detail="No passages to prune",
-        )
-
-    choice_nodes = graph.get_nodes_by_type("choice")
-
-    if choice_nodes:
-        # Use choice edge BFS for reachability
-        reachable_passages = _reachable_via_choices(graph, passage_nodes)
-    else:
-        # Fallback: arc_contains membership
-        reachable_passages = _reachable_via_arcs(graph, passage_nodes)
-
-    # Prune unreachable passages
-    unreachable = set(passage_nodes.keys()) - reachable_passages
-    for passage_id in sorted(unreachable):
-        graph.delete_node(passage_id, cascade=True)
-
-    if unreachable:
-        return GrowPhaseResult(
-            phase="prune",
-            status="completed",
-            detail=f"Pruned {len(unreachable)} unreachable passages",
-        )
-
-    return GrowPhaseResult(
-        phase="prune",
-        status="completed",
-        detail="All passages reachable",
-    )
-
-
-def _reachable_via_choices(graph: Graph, passage_nodes: dict[str, dict[str, Any]]) -> set[str]:
-    """BFS from story start via choice_to edges.
-
-    If a synthetic prologue exists, it is the real story start and BFS
-    starts from there. Otherwise, falls back to the first spine passage.
-    """
-    # If synthetic prologue exists, it is the real start
-    if PROLOGUE_ID in passage_nodes:
-        start_passage = PROLOGUE_ID
-        log.debug("prune_start_from_prologue", start=PROLOGUE_ID)
-    else:
-        from questfoundry.graph.grow_algorithms import enumerate_arcs
-
-        arcs = enumerate_arcs(graph)
-        start_passage = None
-
-        # Find first beat in spine arc's sequence
-        spine_sequence: list[str] | None = None
-        for arc in arcs:
-            if arc.arc_type == "spine" and arc.sequence:
-                spine_sequence = arc.sequence
-                break
-
-        if spine_sequence:
-            first_beat = spine_sequence[0]
-            for p_id, p_data in passage_nodes.items():
-                if p_data.get("from_beat") == first_beat:
-                    start_passage = p_id
-                    break
-
-    if not start_passage:
-        log.warning("phase9_no_spine_arc", detail="Cannot BFS without spine; all passages kept")
-        return set(passage_nodes.keys())
-
-    # BFS via choice edges
-    reachable: set[str] = {start_passage}
-    queue: deque[str] = deque([start_passage])
-
-    # Build passage -> successors mapping directly from choice node data
-    choice_nodes = graph.get_nodes_by_type("choice")
-    choice_successors: dict[str, list[str]] = {}
-    for choice_data in choice_nodes.values():
-        from_passage = choice_data.get("from_passage")
-        to_passage = choice_data.get("to_passage")
-        if from_passage and to_passage:
-            choice_successors.setdefault(from_passage, []).append(to_passage)
-
-    while queue:
-        current = queue.popleft()
-        for next_p in choice_successors.get(current, []):
-            if next_p not in reachable:
-                reachable.add(next_p)
-                queue.append(next_p)
-
-    return reachable
-
-
-def _reachable_via_arcs(graph: Graph, passage_nodes: dict[str, dict[str, Any]]) -> set[str]:
-    """Fallback: passages whose beats are in any arc traversal."""
-    from questfoundry.graph.algorithms import compute_arc_traversals
-
-    traversals = compute_arc_traversals(graph)
-    beats_in_arcs: set[str] = set()
-
-    if traversals:
-        beats_in_arcs.update(*traversals.values())
-
-    reachable: set[str] = set()
-    for passage_id, passage_data in passage_nodes.items():
-        from_beat = passage_data.get("from_beat", "")
-        if from_beat in beats_in_arcs:
-            reachable.add(passage_id)
-
-    return reachable

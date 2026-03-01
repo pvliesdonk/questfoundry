@@ -182,11 +182,11 @@ class TestGrowStageExecute:
 
 
 class TestGrowStagePhaseOrder:
-    def test_phase_order_returns_twenty_five_phases(self) -> None:
-        """S3 collapsed split_endings + heavy_residue_routing into apply_routing; 24 phases remain."""
+    def test_phase_order_returns_correct_count(self) -> None:
+        """21 phases after removing passages, collapse_passages, prune."""
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 24
+        assert len(phases) == 21
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -204,7 +204,6 @@ class TestGrowStagePhaseOrder:
             "divergence",
             "convergence",
             "collapse_linear_beats",
-            "passages",
             "state_flags",
             "residue_beats",
             "overlays",
@@ -213,9 +212,7 @@ class TestGrowStagePhaseOrder:
             "hub_spokes",
             "mark_endings",
             "apply_routing",
-            "collapse_passages",
             "validation",
-            "prune",
         ]
 
 

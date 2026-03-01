@@ -3,8 +3,7 @@
 The GROW stage builds the complete branching structure from the SEED
 graph. It runs a mix of deterministic and LLM-powered phases that
 enumerate arcs, assess path-agnostic beats, compute
-divergence/convergence points, create passages and state flags, and
-prune unreachable nodes.
+divergence/convergence points, and create state flags.
 
 GROW manages its own graph: it loads, mutates, and saves the graph
 within execute(). The orchestrator should skip post-execute
@@ -41,13 +40,10 @@ from questfoundry.pipeline.stages.grow._helpers import (
 from questfoundry.pipeline.stages.grow.deterministic import (  # noqa: F401 - register phases
     phase_apply_routing,
     phase_collapse_linear_beats,
-    phase_collapse_passages,
     phase_convergence,
     phase_divergence,
     phase_enumerate_arcs,
     phase_mark_endings,
-    phase_passages,
-    phase_prune,
     phase_state_flags,
     phase_validate_dag,
     phase_validation,
@@ -150,13 +146,10 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         "divergence": "phase_divergence",
         "convergence": "phase_convergence",
         "collapse_linear_beats": "phase_collapse_linear_beats",
-        "passages": "phase_passages",
         "state_flags": "phase_state_flags",
         "mark_endings": "phase_mark_endings",
         "apply_routing": "phase_apply_routing",
-        "collapse_passages": "phase_collapse_passages",
         "validation": "phase_validation",
-        "prune": "phase_prune",
     }
 
     def _phase_order(self) -> list[tuple[PhaseFunc, str]]:
