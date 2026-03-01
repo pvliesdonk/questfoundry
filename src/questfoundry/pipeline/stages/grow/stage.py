@@ -130,7 +130,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         "entity_arcs": "_phase_4f_entity_arcs",
         "residue_beats": "_phase_8d_residue_beats",
         "overlays": "_phase_8c_overlays",
-        "choices": "_phase_9_choices",
     }
 
     # Map from registry phase name → module-level free function.
