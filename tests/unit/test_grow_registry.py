@@ -216,11 +216,11 @@ class TestGrowPhaseDecorator:
 class TestGlobalRegistry:
     """Tests for the global registry populated by actual GROW phases."""
 
-    def test_global_registry_has_25_phases(self) -> None:
-        """All GROW phases are registered (24 after S3 collapsed split_endings+heavy_residue into apply_routing)."""
+    def test_global_registry_has_15_phases(self) -> None:
+        """All GROW phases are registered (15 after epic #1057 removed passage-layer phases)."""
         registry = get_registry()
-        assert len(registry) >= 24, (
-            f"Expected at least 24 phases, got {len(registry)}: {registry.phase_names}"
+        assert len(registry) == 15, (
+            f"Expected 15 phases, got {len(registry)}: {registry.phase_names}"
         )
 
     def test_global_registry_validates(self) -> None:
@@ -230,7 +230,7 @@ class TestGlobalRegistry:
         assert errors == [], f"Registry validation errors: {errors}"
 
     def test_global_registry_execution_order_matches_expected(self) -> None:
-        """Execution order matches the S3 phase structure (split_endings + heavy_residue_routing collapsed into apply_routing)."""
+        """Execution order matches the post-epic-#1057 phase structure (15 phases)."""
         expected = [
             "validate_dag",
             "scene_types",
@@ -244,18 +244,9 @@ class TestGlobalRegistry:
             "divergence",
             "convergence",
             "collapse_linear_beats",
-            "passages",
             "state_flags",
-            "residue_beats",
             "overlays",
-            "choices",
-            "fork_beats",
-            "hub_spokes",
-            "mark_endings",
-            "apply_routing",
-            "collapse_passages",
             "validation",
-            "prune",
         ]
         registry = get_registry()
         actual = registry.execution_order()
@@ -269,11 +260,4 @@ class TestGlobalRegistry:
         table = registry.phase_table()
         assert "| Priority |" in table
         assert "validate_dag" in table
-        assert "prune" in table
-
-    def test_apply_routing_has_three_dependencies(self) -> None:
-        """apply_routing depends on mark_endings, state_flags, and residue_beats (S3, ADR-017)."""
-        registry = get_registry()
-        meta = registry.get_meta("apply_routing")
-        assert meta is not None
-        assert set(meta.depends_on) == {"mark_endings", "state_flags", "residue_beats"}
+        assert "validation" in table
