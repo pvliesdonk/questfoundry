@@ -131,8 +131,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         "residue_beats": "_phase_8d_residue_beats",
         "overlays": "_phase_8c_overlays",
         "choices": "_phase_9_choices",
-        "fork_beats": "_phase_9b_fork_beats",
-        "hub_spokes": "_phase_9c_hub_spokes",
     }
 
     # Map from registry phase name → module-level free function.
