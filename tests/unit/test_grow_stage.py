@@ -183,10 +183,10 @@ class TestGrowStageExecute:
 
 class TestGrowStagePhaseOrder:
     def test_phase_order_returns_correct_count(self) -> None:
-        """21 phases after removing passages, collapse_passages, prune."""
+        """19 phases after removing passages, collapse_passages, prune, mark_endings, apply_routing."""
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 21
+        assert len(phases) == 19
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -210,8 +210,6 @@ class TestGrowStagePhaseOrder:
             "choices",
             "fork_beats",
             "hub_spokes",
-            "mark_endings",
-            "apply_routing",
             "validation",
         ]
 
@@ -3583,9 +3581,9 @@ class TestPhase8dResidueBeats:
         assert "Stored 1 residue proposals" in result.detail
 
         # Verify proposals are stored in graph metadata
-        from questfoundry.graph.grow_routing import get_residue_proposals
-
-        proposals = get_residue_proposals(graph)
+        proposals_node = graph.get_node("meta::residue_proposals")
+        assert proposals_node is not None
+        proposals = proposals_node.get("proposals", [])
         assert len(proposals) == 1
         assert proposals[0]["passage_id"] == "passage::aftermath"
         assert proposals[0]["dilemma_id"] == "dilemma::approach"

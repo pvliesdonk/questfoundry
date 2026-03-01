@@ -1072,7 +1072,6 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
         or a single pass check if all sets are valid).
     """
     from questfoundry.graph.grow_algorithms import build_arc_state_flags
-    from questfoundry.graph.grow_routing import get_routing_applied_metadata
 
     choices = graph.get_nodes_by_type("choice")
     arc_nodes = graph.get_nodes_by_type("arc")
@@ -1086,8 +1085,12 @@ def check_routing_coverage(graph: Graph) -> list[ValidationCheck]:
             )
         ]
 
-    # Build both state flag scopes; select per-passage based on routing metadata
-    ending_split_passages, _residue_passages = get_routing_applied_metadata(graph)
+    # Read routing metadata inline (was grow_routing.get_routing_applied_metadata)
+    _routing_node = graph.get_node("meta::routing_applied")
+    if _routing_node is None:
+        ending_split_passages: set[str] = set()
+    else:
+        ending_split_passages = set(_routing_node.get("ending_split_passages", []))
     arc_state_flags_ending = build_arc_state_flags(graph, arc_nodes, scope="ending")
     arc_state_flags_routing = build_arc_state_flags(graph, arc_nodes, scope="routing")
 
@@ -1238,13 +1241,14 @@ def check_prose_neutrality(graph: Graph) -> list[ValidationCheck]:
     # Primary source: the routing_applied metadata node written by
     # apply_routing_plan (S3).  Fall back to scanning residue_for on
     # variant passages for graphs that pre-date S3.
-    from questfoundry.graph.grow_routing import (
-        ROUTING_APPLIED_NODE_ID,
-        get_routing_applied_metadata,
-    )
-
-    routing_node = graph.get_node(ROUTING_APPLIED_NODE_ID)
-    ending_split_pids, residue_pids = get_routing_applied_metadata(graph)
+    _ROUTING_APPLIED_NODE_ID = "meta::routing_applied"
+    routing_node = graph.get_node(_ROUTING_APPLIED_NODE_ID)
+    if routing_node is None:
+        ending_split_pids: set[str] = set()
+        residue_pids: set[str] = set()
+    else:
+        ending_split_pids = set(routing_node.get("ending_split_passages", []))
+        residue_pids = set(routing_node.get("residue_passages", []))
     routed_passages: set[str] = ending_split_pids | residue_pids
 
     if routing_node is None:
