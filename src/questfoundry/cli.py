@@ -670,6 +670,11 @@ def _run_stage_command(
     if _log_enabled:
         console.print(f"  Logs: [dim]{project_path / 'logs'}[/dim]")
 
+    if result.summary_lines:
+        console.print("  Summary:")
+        for line in result.summary_lines:
+            console.print(f"   - {line}")
+
     console.print()
     if next_step_hint:
         console.print(f"Run: [cyan]{next_step_hint}[/cyan]")
