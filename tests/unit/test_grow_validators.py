@@ -9,28 +9,17 @@ from questfoundry.graph.grow_validators import (
     validate_phase4a_output,
     validate_phase4f_output,
     validate_phase8c_output,
-    validate_phase8d_output,
-    validate_phase9_output,
-    validate_phase9c_output,
 )
 from questfoundry.graph.mutations import GrowValidationError
 from questfoundry.models.grow import (
-    ChoiceLabel,
     EntityArcDescriptor,
-    HubProposal,
     IntersectionProposal,
     OverlayProposal,
     Phase3Output,
     Phase4aOutput,
     Phase4fOutput,
     Phase8cOutput,
-    Phase8dOutput,
-    Phase9cOutput,
-    Phase9Output,
-    ResidueBeatProposal,
-    ResidueVariant,
     SceneTypeTag,
-    SpokeProposal,
 )
 
 
@@ -222,74 +211,6 @@ class TestValidatePhase8cOutput:
             valid_state_flag_ids={"cw::c1"},
         )
         assert len(errors) == 2
-
-
-class TestValidatePhase9Output:
-    def test_valid_output_no_errors(self) -> None:
-        result = Phase9Output(
-            labels=[
-                ChoiceLabel(from_passage="passage::a", to_passage="passage::b", label="go left"),
-            ]
-        )
-        errors = validate_phase9_output(
-            result,
-            valid_passage_ids={"passage::a", "passage::b"},
-        )
-        assert errors == []
-
-    def test_invalid_from_passage(self) -> None:
-        result = Phase9Output(
-            labels=[
-                ChoiceLabel(from_passage="passage::bad", to_passage="passage::b", label="go"),
-            ]
-        )
-        errors = validate_phase9_output(
-            result,
-            valid_passage_ids={"passage::a", "passage::b"},
-        )
-        assert len(errors) == 1
-        assert errors[0].field_path == "labels.0.from_passage"
-        assert "passage::bad" in errors[0].issue
-
-    def test_invalid_to_passage(self) -> None:
-        result = Phase9Output(
-            labels=[
-                ChoiceLabel(from_passage="passage::a", to_passage="passage::bad", label="go"),
-            ]
-        )
-        errors = validate_phase9_output(
-            result,
-            valid_passage_ids={"passage::a", "passage::b"},
-        )
-        assert len(errors) == 1
-        assert errors[0].field_path == "labels.0.to_passage"
-
-    def test_both_invalid(self) -> None:
-        result = Phase9Output(
-            labels=[
-                ChoiceLabel(from_passage="passage::bad1", to_passage="passage::bad2", label="go"),
-            ]
-        )
-        errors = validate_phase9_output(
-            result,
-            valid_passage_ids={"passage::a", "passage::b"},
-        )
-        assert len(errors) == 2
-
-    def test_available_ids_in_error(self) -> None:
-        result = Phase9Output(
-            labels=[
-                ChoiceLabel(from_passage="passage::bad", to_passage="passage::a", label="go"),
-            ]
-        )
-        errors = validate_phase9_output(
-            result,
-            valid_passage_ids={"passage::a", "passage::b", "passage::c"},
-        )
-        assert len(errors) == 1
-        assert "passage::a" in errors[0].available
-        assert "passage::b" in errors[0].available
-        assert "passage::c" in errors[0].available
 
 
 class TestValidatePhase4fOutput:
@@ -515,10 +436,6 @@ class TestCountEntries:
         result = Phase8cOutput(overlays=[])
         assert count_entries(result) == 0
 
-    def test_counts_labels(self) -> None:
-        result = Phase9Output(labels=[ChoiceLabel(from_passage="a", to_passage="b", label="go")])
-        assert count_entries(result) == 1
-
     def test_counts_arcs(self) -> None:
         result = Phase4fOutput(
             arcs=[
@@ -538,145 +455,3 @@ class TestCountEntries:
 
     def test_fallback_for_unknown_object(self) -> None:
         assert count_entries(object()) == 1
-
-
-# ---------------------------------------------------------------------------
-# Phase 9c: Hub-spoke spoke grants validation
-# ---------------------------------------------------------------------------
-
-
-class TestValidatePhase9cGrants:
-    """Tests for spoke grant ID validation in Phase 9c."""
-
-    def _make_phase9c_output(self, grants: list[str] | None = None) -> Phase9cOutput:
-        spoke_with_grants = SpokeProposal(
-            summary="Examine the ancient mural.",
-            grants=grants or [],
-        )
-        spoke_plain = SpokeProposal(summary="Listen to the crowd.")
-        hub = HubProposal(
-            passage_id="passage::market",
-            spokes=[spoke_with_grants, spoke_plain],
-            forward_label="Continue onward",
-        )
-        return Phase9cOutput(hubs=[hub])
-
-    def test_valid_spoke_grants_pass(self) -> None:
-        result = self._make_phase9c_output(grants=["state_flag::cw_mural"])
-        errors = validate_phase9c_output(
-            result,
-            valid_passage_ids={"passage::market"},
-            valid_state_flag_ids={"state_flag::cw_mural"},
-        )
-        assert not errors
-
-    def test_invalid_spoke_grants_rejected(self) -> None:
-        result = self._make_phase9c_output(grants=["state_flag::nonexistent"])
-        errors = validate_phase9c_output(
-            result,
-            valid_passage_ids={"passage::market"},
-            valid_state_flag_ids={"state_flag::cw_mural"},
-        )
-        assert len(errors) == 1
-        assert "nonexistent" in errors[0].issue
-
-    def test_no_state_flag_validation_when_none(self) -> None:
-        """When valid_state_flag_ids is None, grants are not validated."""
-        result = self._make_phase9c_output(grants=["state_flag::anything"])
-        errors = validate_phase9c_output(
-            result,
-            valid_passage_ids={"passage::market"},
-            valid_state_flag_ids=None,
-        )
-        assert not errors
-
-    def test_unscoped_grant_id_normalized(self) -> None:
-        """Grant IDs without 'state_flag::' prefix are normalized."""
-        result = self._make_phase9c_output(grants=["cw_mural"])
-        errors = validate_phase9c_output(
-            result,
-            valid_passage_ids={"passage::market"},
-            valid_state_flag_ids={"state_flag::cw_mural"},
-        )
-        assert not errors
-
-
-class TestValidatePhase8dOutput:
-    """Tests for Phase 8d residue beat proposal validation."""
-
-    @staticmethod
-    def _make_output(
-        passage_id: str = "passage::aftermath",
-        dilemma_id: str = "dilemma::approach",
-        state_flag_ids: list[str] | None = None,
-    ) -> Phase8dOutput:
-        if state_flag_ids is None:
-            state_flag_ids = ["state_flag::fight_committed", "state_flag::talk_committed"]
-        return Phase8dOutput(
-            proposals=[
-                ResidueBeatProposal(
-                    passage_id=passage_id,
-                    dilemma_id=dilemma_id,
-                    rationale="Test rationale",
-                    variants=[
-                        ResidueVariant(state_flag_id=sf, hint=f"hint for {sf} variant prose")
-                        for sf in state_flag_ids
-                    ],
-                ),
-            ]
-        )
-
-    def test_valid_output_no_errors(self) -> None:
-        result = self._make_output()
-        errors = validate_phase8d_output(
-            result,
-            valid_passage_ids={"passage::aftermath"},
-            valid_state_flag_ids={"state_flag::fight_committed", "state_flag::talk_committed"},
-            valid_dilemma_ids={"dilemma::approach"},
-        )
-        assert not errors
-
-    def test_invalid_passage_id(self) -> None:
-        result = self._make_output(passage_id="passage::nonexistent")
-        errors = validate_phase8d_output(
-            result,
-            valid_passage_ids={"passage::aftermath"},
-            valid_state_flag_ids={"state_flag::fight_committed", "state_flag::talk_committed"},
-            valid_dilemma_ids={"dilemma::approach"},
-        )
-        assert len(errors) == 1
-        assert "passage_id" in errors[0].field_path
-
-    def test_invalid_dilemma_id(self) -> None:
-        result = self._make_output(dilemma_id="dilemma::nonexistent")
-        errors = validate_phase8d_output(
-            result,
-            valid_passage_ids={"passage::aftermath"},
-            valid_state_flag_ids={"state_flag::fight_committed", "state_flag::talk_committed"},
-            valid_dilemma_ids={"dilemma::approach"},
-        )
-        assert len(errors) == 1
-        assert "dilemma_id" in errors[0].field_path
-
-    def test_invalid_state_flag_id(self) -> None:
-        result = self._make_output(
-            state_flag_ids=["state_flag::fight_committed", "state_flag::fake"]
-        )
-        errors = validate_phase8d_output(
-            result,
-            valid_passage_ids={"passage::aftermath"},
-            valid_state_flag_ids={"state_flag::fight_committed", "state_flag::talk_committed"},
-            valid_dilemma_ids={"dilemma::approach"},
-        )
-        assert len(errors) == 1
-        assert "state_flag_id" in errors[0].field_path
-
-    def test_empty_proposals_no_errors(self) -> None:
-        result = Phase8dOutput(proposals=[])
-        errors = validate_phase8d_output(
-            result,
-            valid_passage_ids={"passage::aftermath"},
-            valid_state_flag_ids={"state_flag::fight_committed"},
-            valid_dilemma_ids={"dilemma::approach"},
-        )
-        assert not errors
