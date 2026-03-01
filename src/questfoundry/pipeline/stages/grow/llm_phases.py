@@ -1,7 +1,7 @@
 """LLM-powered phase implementations for the GROW stage.
 
 Contains _LLMPhaseMixin with all phases that require LLM calls:
-phases 3, 4a-4f, 8c, 8d, 9.
+phases 3, 4a-4f, 8c.
 
 GrowStage inherits this mixin so ``execute()`` can delegate to
 ``self._phase_3_intersections()``, etc.
@@ -40,7 +40,7 @@ if TYPE_CHECKING:
 
 
 class _LLMPhaseMixin:
-    """Mixin providing LLM-powered GROW phases (3, 4a-4f, 8c, 8d, 9).
+    """Mixin providing LLM-powered GROW phases (3, 4a-4f, 8c).
 
     Expects the host class to provide (via ``_LLMHelperMixin`` or directly):
 
@@ -1036,159 +1036,16 @@ class _LLMPhaseMixin:
     # Late LLM phases (state_flags → validation)
     # -------------------------------------------------------------------------
 
-    @grow_phase(name="residue_beats", depends_on=["state_flags"], priority=15)
-    async def _phase_8d_residue_beats(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
-        """Phase 8d: Propose and create residue beat variants at convergence points.
-
-        For soft/flavor dilemma convergences, asks the LLM to identify passages
-        that should have path-specific prose variants. Each variant is gated by
-        a state flag so FILL generates different prose per path.
-
-        .. note:: Advisory-only mode (ADR-017, #955)
-           This phase collects LLM proposals and stores them in graph metadata.
-           It does NOT create variant passages or wire routing — that is handled
-           by the unified routing phase (Phase 21) which reads the stored proposals,
-           computes a complete RoutingPlan, and applies all routing atomically.
-
-        Preconditions:
-        - State flag nodes exist (Phase 8b complete).
-        - Passage nodes exist with from_beat edges.
-        - Arc convergence metadata computed (Phase 7 complete).
-
-        Postconditions:
-        - LLM proposals stored in ``meta::residue_proposals`` graph node.
-        - No passage mutations performed; routing applied atomically by Phase 21 (``apply_routing_plan``).
-
-        Invariants:
-        - Only soft/flavor dilemma convergences considered.
-        - Maximum 3 proposals per LLM call.
-        - Invalid passage/state flag IDs from LLM output silently skipped.
-        - Empty candidates → completed with no LLM call.
-        """
-        from questfoundry.graph.grow_algorithms import find_residue_candidates
-        from questfoundry.models.grow import Phase8dOutput
-
-        candidates = find_residue_candidates(graph)
-        if not candidates:
-            return GrowPhaseResult(
-                phase="residue_beats",
-                status="completed",
-                detail="No convergence points eligible for residue variants",
-            )
-
-        # Build convergence context for LLM — rich narrative per candidate
-        convergence_lines: list[str] = []
-        passage_nodes = graph.get_nodes_by_type("passage")
-        valid_passage_ids: list[str] = list(dict.fromkeys(c.passage_id for c in candidates))
-        valid_dilemma_ids: list[str] = list(dict.fromkeys(c.dilemma_id for c in candidates))
-        valid_state_flag_ids: list[str] = list(
-            dict.fromkeys(sf_id for c in candidates for sf_id in c.state_flag_ids)
-        )
-
-        for candidate in candidates:
-            passage_data = passage_nodes.get(candidate.passage_id, {})
-            summary = truncate_summary(str(passage_data.get("summary", "")), 120)
-
-            block = [f"- Passage: {candidate.passage_id}"]
-            block.append(f"  Summary: {summary}")
-            block.append(f"  Dilemma: {candidate.dilemma_id}")
-            if candidate.dilemma_question:
-                block.append(f'  Question: "{candidate.dilemma_question}"')
-            block.append(f"  Policy: {candidate.dilemma_role}")
-            block.append(f"  Available state flags: {', '.join(candidate.state_flag_ids)}")
-            convergence_lines.append("\n".join(block))
-
-        convergence_context = "\n".join(convergence_lines)
-
-        # Build passage summaries for context
-        passage_lines: list[str] = []
-        for pid in valid_passage_ids:
-            pdata = passage_nodes.get(pid, {})
-            summary = truncate_summary(str(pdata.get("summary", "")), 120)
-            passage_lines.append(f"- {pid}: {summary}")
-        passage_context = "\n".join(passage_lines)
-
-        max_proposals = min(len(candidates), 3)
-
-        context = {
-            "convergence_context": convergence_context,
-            "passage_context": passage_context,
-            "max_proposals": str(max_proposals),
-            "valid_passage_ids": ", ".join(valid_passage_ids),
-            "valid_state_flag_ids": ", ".join(valid_state_flag_ids),
-            "valid_dilemma_ids": ", ".join(valid_dilemma_ids),
-        }
-
-        from questfoundry.graph.grow_validators import validate_phase8d_output
-
-        validator = partial(
-            validate_phase8d_output,
-            valid_passage_ids=set(valid_passage_ids),
-            valid_state_flag_ids=set(valid_state_flag_ids),
-            valid_dilemma_ids=set(valid_dilemma_ids),
-        )
-
-        try:
-            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
-                model,
-                "grow_phase8d_residue",
-                context,
-                Phase8dOutput,
-                semantic_validator=validator,
-            )
-        except GrowStageError as e:
-            return GrowPhaseResult(phase="residue_beats", status="failed", detail=str(e))
-
-        if not result.proposals:
-            return GrowPhaseResult(
-                phase="residue_beats",
-                status="completed",
-                detail="LLM proposed no residue beats",
-                llm_calls=llm_calls,
-                tokens_used=tokens,
-            )
-
-        # Convert Pydantic proposals to dicts for storage
-        proposal_dicts = [
-            {
-                "passage_id": p.passage_id,
-                "dilemma_id": p.dilemma_id,
-                "variants": [
-                    {"state_flag_id": v.state_flag_id, "hint": v.hint} for v in p.variants
-                ],
-            }
-            for p in result.proposals
-        ]
-
-        # Store proposals in graph metadata for downstream consumption
-        graph.upsert_node(
-            "meta::residue_proposals",
-            {
-                "type": "meta",
-                "raw_id": "residue_proposals",
-                "proposals": proposal_dicts,
-            },
-        )
-
-        return GrowPhaseResult(
-            phase="residue_beats",
-            status="completed",
-            detail=f"Stored {len(proposal_dicts)} residue proposals for unified routing",
-            llm_calls=llm_calls,
-            tokens_used=tokens,
-        )
-
-    @grow_phase(name="overlays", depends_on=["residue_beats"], priority=16)
+    @grow_phase(name="overlays", depends_on=["state_flags"], priority=16)
     async def _phase_8c_overlays(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 8c: Create cosmetic entity overlays conditioned on state flags.
 
         For each consequence/state flag pair, proposes entity-level presentation
         changes that activate when those state flags are granted. Overlays are
-        cosmetic (how entities appear/behave); passage-level prose variants
-        are handled by Phase 8d (residue beats).
+        cosmetic (how entities appear/behave).
 
         Preconditions:
-        - Residue beats created (Phase 8d complete).
+        - State flags created (state_flags phase complete).
         - Entity nodes exist with concept, entity_type.
         - Consequence nodes linked to paths and dilemmas.
 
