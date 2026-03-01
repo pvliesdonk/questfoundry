@@ -194,15 +194,18 @@ class TestComputeProseFeasibility:
         _add_belongs_to(graph, "beat::target", "path::brave")
         _add_predecessor(graph, "beat::target", "beat::commit")
 
-        # Overlay for a DIFFERENT entity than the passage's entity
+        # Overlay for a DIFFERENT entity than the passage's entity (embedded on entity node)
         graph.create_node(
-            "overlay::npc_change",
+            "entity::npc",
             {
-                "type": "entity_overlay",
-                "raw_id": "npc_change",
-                "entity_id": "entity::npc",
-                "activation_flag": "dilemma::d1:path::brave",
-                "description": "NPC changes",
+                "type": "entity",
+                "raw_id": "npc",
+                "overlays": [
+                    {
+                        "when": ["dilemma::d1:path::brave"],
+                        "details": {"description": "NPC changes"},
+                    }
+                ],
             },
         )
 
