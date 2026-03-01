@@ -1,6 +1,6 @@
 """End-to-end integration tests for the GROW stage.
 
-Runs all 16 GROW phases on the E2E fixture graph with a mocked LLM,
+Runs all 15 GROW phases on the E2E fixture graph with a mocked LLM,
 verifying that phases execute correctly and produce valid output
 structure. Also tests context formatting stays within token budgets.
 """
@@ -22,20 +22,15 @@ from questfoundry.models.grow import (
     Phase4dOutput,
     Phase4fOutput,
     Phase8cOutput,
-    Phase9bOutput,
-    Phase9cOutput,
-    Phase9Output,
     SceneTypeTag,
 )
 from tests.fixtures.grow_fixtures import make_e2e_fixture_graph
-from tests.fixtures.grow_mock_llm import build_phase9_output
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
-    from pathlib import Path
 
 
-def _make_e2e_mock_model(graph: Graph, project_path: Path | None = None) -> MagicMock:
+def _make_e2e_mock_model(graph: Graph) -> MagicMock:
     """Create a mock model that returns valid structured output for all LLM phases.
 
     Returns empty/minimal results for each phase for simplicity.
@@ -82,11 +77,6 @@ def _make_e2e_mock_model(graph: Graph, project_path: Path | None = None) -> Magi
     )
 
     phase8c_output = Phase8cOutput(overlays=[])
-    phase9b_output = Phase9bOutput(proposals=[])
-    phase9c_output = Phase9cOutput(hubs=[])
-
-    def _build_phase9_output(messages: list[Any]) -> Phase9Output:
-        return build_phase9_output(messages, project_path=project_path)
 
     # Map schema title -> output (schema is now a dict with "title" field)
     output_by_title: dict[str, object] = {
@@ -97,22 +87,13 @@ def _make_e2e_mock_model(graph: Graph, project_path: Path | None = None) -> Magi
         "Phase4fOutput": phase4f_output,
         "PathMiniArc": phase4e_output,
         "Phase8cOutput": phase8c_output,
-        "Phase9Output": Phase9Output(labels=[]),
-        "Phase9bOutput": phase9b_output,
-        "Phase9cOutput": phase9c_output,
     }
 
     def _with_structured_output(schema: dict[str, Any], **_kwargs: object) -> AsyncMock:
         title = schema.get("title", "") if isinstance(schema, dict) else ""
         output = output_by_title.get(title, phase3_output)
         mock_structured = AsyncMock()
-
-        async def _ainvoke(messages: list[Any], **_config: object) -> object:
-            if title == "Phase9Output":
-                return _build_phase9_output(messages)
-            return output
-
-        mock_structured.ainvoke = AsyncMock(side_effect=_ainvoke)
+        mock_structured.ainvoke = AsyncMock(return_value=output)
         return mock_structured
 
     mock_model = MagicMock()
@@ -150,7 +131,7 @@ def pipeline_result(
     mp.setattr(grow_validation, "run_all_checks", _mock_run_all_checks)
 
     stage = GrowStage(project_path=tmp_path)
-    mock_model = _make_e2e_mock_model(graph, project_path=tmp_path)
+    mock_model = _make_e2e_mock_model(graph)
 
     result_dict, llm_calls, tokens = asyncio.run(stage.execute(model=mock_model, user_prompt=""))
 
@@ -165,7 +146,7 @@ def pipeline_result(
 
 
 class TestGrowFullPipeline:
-    """E2E tests running all 21 GROW phases on the fixture graph."""
+    """E2E tests running all 15 GROW phases on the fixture graph."""
 
     def test_all_phases_complete(self, pipeline_result: dict[str, Any]) -> None:
         """Verify the stage completes and returns the GrowResult summary."""
@@ -187,18 +168,17 @@ class TestGrowFullPipeline:
         assert result_dict["arc_count"] == 4
         assert result_dict["spine_arc_id"] is not None
 
-    def test_passages_created(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify passages are created (S3: apply_routing creates variants only when
-        choice edges exist; base passage count after consolidation is the minimum)."""
-        assert pipeline_result["result_dict"]["passage_count"] >= 7
+    def test_passages_not_created_by_grow(self, pipeline_result: dict[str, Any]) -> None:
+        """Verify GROW does not create passages (moved to POLISH in epic #1057)."""
+        assert pipeline_result["result_dict"]["passage_count"] == 0
 
     def test_state_flags_derived(self, pipeline_result: dict[str, Any]) -> None:
         """Verify state flags are created from consequences (4 consequences)."""
         assert pipeline_result["result_dict"]["state_flag_count"] == 4
 
-    def test_choices_created(self, pipeline_result: dict[str, Any]) -> None:
-        """Verify choices are created at divergence points."""
-        assert pipeline_result["result_dict"]["choice_count"] > 0
+    def test_choices_not_created_by_grow(self, pipeline_result: dict[str, Any]) -> None:
+        """Verify GROW does not create choices (moved to POLISH in epic #1057)."""
+        assert pipeline_result["result_dict"]["choice_count"] == 0
 
     def test_validation_phase_passes(self, pipeline_result: dict[str, Any]) -> None:
         """Verify the resulting graph is structurally valid."""
