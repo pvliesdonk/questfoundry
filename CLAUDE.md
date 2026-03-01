@@ -309,6 +309,61 @@ qf inspect -p <project> --json # Machine-readable JSON output
 - Closing removal issues by adding code alongside the thing to be removed
 - Using "tests pass" as sole evidence that a removal/refactoring issue is complete
 - Epics larger than 10 issues (split into sequential milestones)
+- Claiming "SEED/GROW/POLISH ran successfully" based on exit code without verifying output against design docs
+
+## Design Conformance Review (CRITICAL)
+
+**Every PR that touches pipeline stages (SEED, GROW, POLISH, FILL) MUST include an architect-reviewer conformance report.** This is non-negotiable. "Tests pass" is not evidence of design conformance.
+
+### Why This Exists
+
+The codebase has a history of implementations that run without errors but are missing entire features specified in the design documents. Test fixtures mask these gaps by hand-constructing graph state that the real pipeline never produces. The only reliable check is comparing the implementation against the authoritative design documents.
+
+### The Process
+
+Before creating a PR or closing an issue that touches pipeline stages:
+
+1. **Launch the `architect-reviewer` subagent** with:
+   - The relevant design document sections (Doc 1, Doc 3, procedure docs)
+   - The implementation files being changed
+   - The issue acceptance criteria (if applicable)
+
+2. **The subagent produces a conformance report** with:
+   - Numbered requirements extracted from the design docs
+   - Status per requirement: CONFORMANT / PARTIAL / MISSING / DEAD
+   - Data flow verification (producer → consumer chains)
+   - Fixture divergence check (does the test fixture create state the pipeline doesn't?)
+
+3. **Include the report summary in the PR description** under a `## Design Conformance` section. At minimum:
+   - Number of requirements checked
+   - Any MISSING or DEAD findings (must be addressed or explicitly deferred with linked issues)
+   - Fixture divergence findings
+
+4. **DEAD = MISSING.** A model that exists but the LLM never populates, or a consumer that exists but never receives input, is not an implementation. It is dead code.
+
+### What the Reviewer Checks
+
+The `architect-reviewer` agent (defined in `.claude/agents/architect-reviewer.md`) is specifically designed to:
+- Start from the design document, never from the code
+- Ignore test results entirely
+- Trace data flow end-to-end (schema exists AND producer populates AND consumer reads)
+- Compare test fixtures against real pipeline output
+- Flag requirements with no corresponding implementation
+
+### When to Skip
+
+- Pure refactoring with no behavioral change (rename, move, extract)
+- Documentation-only changes
+- Test-only changes that don't touch pipeline code
+- CLI/UI changes that don't affect the pipeline
+
+### Issue Acceptance Criteria
+
+Every issue that implements pipeline functionality MUST include this acceptance criterion:
+
+> **Design conformance**: `architect-reviewer` sign-off with 0 MISSING/DEAD findings against [relevant design doc sections].
+
+Issues without this criterion for pipeline work are incomplete.
 
 ## Testing Strategy
 

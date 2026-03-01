@@ -42,6 +42,14 @@ jobs:
                - Convention violations (from CLAUDE.md)
                - Missing tests for new code
                - Type safety issues
+            4. **Design conformance check** (for PRs touching pipeline stages):
+               - Check if the PR description includes a "## Design Conformance" section
+               - If the PR modifies files under `src/questfoundry/pipeline/stages/` or
+                 `src/questfoundry/graph/`, this section is REQUIRED per CLAUDE.md
+               - If the section is missing, flag it as a blocking issue
+               - If the section is present, verify the claims are plausible:
+                 do the referenced design doc sections exist? Are MISSING/DEAD
+                 findings addressed or deferred with linked issues?
 
             Use `mcp__github_inline_comment__create_inline_comment` for specific line feedback.
             Use `gh pr comment` for summary feedback.
