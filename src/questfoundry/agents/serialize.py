@@ -172,7 +172,10 @@ def _run_semantic_validation(
         error_obj = error_class(semantic_errors)
         feedback = error_obj.to_feedback()
     else:
-        feedback = f"Semantic validation errors: {semantic_errors}"
+        feedback = "Semantic validation errors:\n" + "\n".join(
+            f"  - {e}" if isinstance(e, str) else f"  - {getattr(e, 'issue', str(e))}"
+            for e in semantic_errors
+        )
 
     log.debug(
         "semantic_validation_failed",
@@ -579,12 +582,15 @@ def _build_per_dilemma_path_context(
 
     prefixed_dilemma_id = normalize_scoped_id(dilemma_id, SCOPE_DILEMMA)
 
+    explored_str = ", ".join(f"`{a}`" for a in explored) if explored else "(none)"
+    unexplored_str = ", ".join(f"`{a}`" for a in unexplored) if unexplored else "(none)"
+
     lines = [
         "## Dilemma Context",
         f"You are generating paths for dilemma: `{prefixed_dilemma_id}`",
         f"- Question: {question}",
-        f"- Explored answers: {explored}",
-        f"- Unexplored answers: {unexplored}",
+        f"- Explored answers (generate a path for EACH): {explored_str}",
+        f"- Unexplored answers (do NOT generate paths for these): {unexplored_str}",
         "",
         entity_context,
     ]
@@ -2105,6 +2111,13 @@ async def serialize_seed_as_function(
 
             # Re-merge and continue loop for re-validation
             seed_output = SeedOutput.model_validate(collected)
+
+        # Final re-validation after the last retry iteration.
+        # Without this, semantic_errors holds stale errors from BEFORE the
+        # last retry fixed the data, causing false positives in the outer loop.
+        # See #1088 for the full failure chain this caused.
+        if graph is not None:
+            semantic_errors = validate_seed_mutations(graph, seed_output.model_dump())
 
         # Recompute filter here (not reusing loop-local variable) because the
         # graph-is-None fast path above skips the loop entirely, leaving

@@ -924,7 +924,8 @@ class _LLMPhaseMixin:
                     continue
                 summary = bdata.get("summary", "")
                 entities = bdata.get("entities", [])
-                beat_lines.append(f"{i}. {bid}: {summary} [entities={entities}]")
+                entities_str = ", ".join(entities) if entities else "none"
+                beat_lines.append(f"{i}. {bid}: {summary} [entities: {entities_str}]")
 
             # Build entity list with concept for context
             entity_lines: list[str] = []

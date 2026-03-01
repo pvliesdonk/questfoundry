@@ -534,10 +534,11 @@ BAD: `host_motivation` (ambiguous, could be confused with path name)
 These patterns help chat-optimized models (like GPT-4o) avoid over-helpful behaviors
 that hurt structured output quality.
 
-### 8. Context Enrichment Principle
+### 8. Context Enrichment Principle (Ontology-Driven)
 
-> **Every LLM call MUST receive all relevant graph data available at call time.
-> Never strip narrative context down to bare IDs and labels.**
+> **Every LLM call MUST receive all ontologically relevant graph data available at
+> call time. The ontology (`docs/design/00-spec.md`) is the authoritative source for
+> what fields exist on each node type — consult it, don't guess.**
 
 Small models (4B parameters) cannot infer narrative meaning from identifiers alone.
 When a `format_*_context()` function builds context for an LLM call, it MUST include
@@ -546,25 +547,75 @@ all fields from the graph that would inform the model's decision. Bare ID listin
 `question`, `why_it_matters`, `consequence.description`, `narrative_effects`,
 `path_theme`, and `central_entity_ids`.
 
-**Recurring pattern to avoid** (see #772, #783):
+**The ontology defines what the LLM should know.** Each node type in the spec has
+defined fields and relationships. A context builder that only passes an ID and a
+label is ignoring the ontological richness that the spec provides. For example, a
+`dilemma` node has `question`, `why_it_matters`, `answers[]` with `label`,
+`consequence`, `narrative_effects`, and `(default)` markers — all of which inform
+the LLM's decision about how to handle that dilemma.
+
+**Recurring pattern to avoid** (see #772, #783, #784, #1088):
 - A context builder strips a rich graph node down to just its ID and one field
 - The LLM lacks information to make a meaningful classification
 - Output quality is poor; the model defaults to the safest/vaguest option
 - Someone eventually notices and enriches the context
 
 **When writing or modifying any `format_*_context()` function:**
-1. List every field available on the relevant graph nodes
-2. Include all fields that would help the LLM make an informed decision
-3. Keep it compact (5-8 lines per item) but never strip to bare IDs
-4. Use the `prompt-engineer` subagent for advice on context design and prompt structure
+1. **Read the ontology** (`docs/design/00-spec.md`) for the relevant node type(s)
+2. List every field defined in the spec for those node types
+3. Include all fields that would help the LLM make an informed decision
+4. Keep it compact (5-8 lines per item) but never strip to bare IDs
+5. Use the `prompt-engineer` subagent for advice on context design and prompt structure
 
 **When writing or modifying any LLM prompt template:**
 1. Use the `prompt-engineer` subagent to review prompt design before implementation
-2. Verify the injected context actually contains the data the prompt references
-3. Test with `logs/llm_calls.jsonl` — inspect the `messages` array to confirm
+2. Cross-reference the ontology to verify the context includes all relevant fields
+3. Verify the injected context actually contains the data the prompt references
+4. Test with `logs/llm_calls.jsonl` — inspect the `messages` array to confirm
    the model receives rich context, not bare listings
 
-### 9. Small Model Prompt Bias (CRITICAL)
+### 9. Prompt Context Formatting (CRITICAL)
+
+> **NEVER interpolate Python objects into LLM-facing text.** Every variable injected
+> into a prompt, context block, or error feedback MUST be explicitly formatted as
+> human-readable text. See #784, #1088.
+
+**The anti-pattern (recurring — see #784, #1088):**
+```python
+# BAD: Python repr leaks into prompt
+explored = ["protector", "manipulator"]
+f"Explored answers: {explored}"
+# LLM sees: "Explored answers: ['protector', 'manipulator']"
+
+# BAD: Enum repr leaks into prompt
+f"Category: {error.category}"
+# LLM sees: "Category: <SeedErrorCategory.CROSS_REFERENCE: 5>"
+```
+
+**The fix:**
+```python
+# GOOD: Explicit formatting with semantic labels
+f"Explored answers (generate a path for EACH): `protector`, `manipulator`"
+
+# GOOD: Join lists, backtick-wrap IDs
+f"Explored answers: {', '.join(f'`{a}`' for a in explored)}"
+
+# GOOD: Use .value or .name, not raw enum
+f"Category: {error.category.name.lower()}"
+```
+
+**Rules for ALL code that builds LLM-facing text:**
+
+1. **NEVER use f-string interpolation of `list`, `dict`, `set`, `Enum`, or dataclass objects.** Always use explicit `', '.join()` or bullet-point formatting.
+2. **Every context block MUST have a header explaining WHAT the data is and WHY it's provided.** Raw ID dumps with no explanation are insufficient.
+3. **Constraints MUST be stated explicitly with good/bad examples.** Don't assume the model will infer rules from data patterns (e.g., `(default)` markers).
+4. **Error feedback sent to LLMs MUST describe the specific problem and the fix.** Generic messages like "Missing items" don't help the model self-correct.
+5. **Use the `prompt-engineer` subagent to review** any new or modified prompt text, context builder, or error feedback function before merging.
+6. **Verify with `logs/llm_calls.jsonl`** — read the actual `messages` array sent to the model. If you see square brackets, angle brackets, or Python class names, the formatting is broken.
+
+**When reviewing existing code:** If you encounter a `format_*()` function or f-string that interpolates a variable into LLM-facing text, check whether it could be a list, enum, or complex object. If so, fix it.
+
+### 10. Small Model Prompt Bias (CRITICAL)
 
 **You have a systematic bias toward writing prompts optimized for large LLMs (70B+).
 Do NOT blame small models when output quality is poor — fix the prompt first.**

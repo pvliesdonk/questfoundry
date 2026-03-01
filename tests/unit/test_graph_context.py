@@ -1259,7 +1259,7 @@ class TestFormatAnswerIdsByDilemma:
         assert format_answer_ids_by_dilemma([]) == ""
 
     def test_single_dilemma_with_explored_and_unexplored(self) -> None:
-        """Single dilemma formats explored and unexplored lists."""
+        """Single dilemma formats explored and unexplored as human-readable text."""
         dilemmas = [
             {
                 "dilemma_id": "dilemma::host_benevolent_or_selfish",
@@ -1270,8 +1270,11 @@ class TestFormatAnswerIdsByDilemma:
         result = format_answer_ids_by_dilemma(dilemmas)
         assert "Valid Answer IDs per Dilemma" in result
         assert "dilemma::host_benevolent_or_selfish" in result
-        assert "['protector', 'manipulator']" in result
-        assert "['neutral']" in result
+        # Must use human-readable formatting, not Python list repr (#1088)
+        assert "`protector`, `manipulator`" in result
+        assert "`neutral`" in result
+        # Must NOT contain Python list syntax
+        assert "['" not in result
 
     def test_multiple_dilemmas_all_listed(self) -> None:
         """Multiple dilemmas are all included in output."""

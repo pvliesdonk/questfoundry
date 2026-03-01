@@ -1460,7 +1460,8 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                             field_path=f"paths.{i}.answer_id",
                             issue=(
                                 f"Path answer '{raw_answer_id}' is not in dilemma "
-                                f"'{normalized_did}' explored list: {explored}"
+                                f"'{normalized_did}' explored list: "
+                                f"{', '.join(f'`{a}`' for a in explored)}"
                             ),
                             available=explored,
                             provided=raw_answer_id,
@@ -1967,18 +1968,21 @@ def format_semantic_errors_as_content(errors: list[SeedValidationError]) -> str:
     by_category = categorize_errors(errors)
     lines: list[str] = ["I found some issues with the summary that need correction:"]
 
-    # Completeness errors (missing decisions and missing paths)
+    # Completeness errors: missing decisions, missing paths, and path-count mismatches
     completeness_errors = by_category.get(SeedErrorCategory.COMPLETENESS, [])
     if completeness_errors:
-        # Note: Issue text now uses "has no path" (updated terminology)
-        decision_errors = [e for e in completeness_errors if "has no path" not in e.issue]
         path_errors = [e for e in completeness_errors if "has no path" in e.issue]
+        path_count_errors = [
+            e for e in completeness_errors if "explored answers but only" in e.issue
+        ]
+        decision_errors = [
+            e for e in completeness_errors if e not in path_errors and e not in path_count_errors
+        ]
 
         if decision_errors:
             lines.append("")
             lines.append("**Missing items** - these need decisions:")
             for e in decision_errors[:_MAX_ERRORS_DISPLAY]:
-                # Extract item ID from issue message (e.g., "Missing decision for entity 'X'")
                 match = re.search(r"'([^']+)'", e.issue)
                 if match:
                     lines.append(f"  - {match.group(1)}")
@@ -1998,6 +2002,14 @@ def format_semantic_errors_as_content(errors: list[SeedValidationError]) -> str:
                     lines.append(f"  - {e.field_path}: {e.issue}")
             if len(path_errors) > _MAX_ERRORS_DISPLAY:
                 lines.append(f"  ... and {len(path_errors) - _MAX_ERRORS_DISPLAY} more")
+
+        if path_count_errors:
+            lines.append("")
+            lines.append("**Path count mismatch** - each explored answer needs its own path:")
+            for e in path_count_errors[:_MAX_ERRORS_DISPLAY]:
+                lines.append(f"  - {e.issue}")
+            if len(path_count_errors) > _MAX_ERRORS_DISPLAY:
+                lines.append(f"  ... and {len(path_count_errors) - _MAX_ERRORS_DISPLAY} more")
 
     # Semantic errors (invalid references)
     semantic_errors = by_category.get(SeedErrorCategory.SEMANTIC, [])

@@ -97,10 +97,20 @@ dilemmas_prompt: |
   Note: `explored` and `unexplored` contain raw answer IDs (no prefix) since
   they are local to each dilemma.
 
+  ## DEFAULT ANSWER RULE (MOST IMPORTANT RULE)
+  In the manifest, one answer per dilemma is marked `(default)`.
+  `(default)` = the canonical story spine. It MUST ALWAYS be in `explored`.
+  You may NEVER put the `(default)` answer in `unexplored`.
+
+  EXAMPLE: answers are [`reliable` (default), `falsified`]
+  - CORRECT: `"explored": ["reliable", "falsified"], "unexplored": []`
+  - CORRECT: `"explored": ["reliable"], "unexplored": ["falsified"]`
+  - WRONG:   `"explored": ["falsified"], "unexplored": ["reliable"]`  <-- default NOT in explored!
+
   ## Rules
   - dilemma_id must include the `dilemma::` prefix and match EXACTLY an ID from the manifest
-  - explored: Answer IDs to explore as paths (MUST include the default path)
-  - unexplored: Answer IDs NOT explored (become shadows)
+  - explored: Answer IDs to explore as paths (the `(default)` answer MUST be here)
+  - unexplored: Answer IDs NOT explored (become shadows, NEVER the default)
   - Generate a decision for EVERY dilemma in the manifest
 
   ## CRITICAL INVARIANT: explored ↔ paths linkage
@@ -143,6 +153,7 @@ dilemmas_prompt: |
   - Do NOT partially complete the list
   - Do NOT leave `explored` empty if you plan to create paths for that dilemma
   - Do NOT omit the `dilemma::` prefix from dilemma_id
+  - Do NOT put the `(default)` answer in `unexplored` — it MUST be in `explored`
 
   ## Output
   Return ONLY valid JSON with the "dilemmas" array.

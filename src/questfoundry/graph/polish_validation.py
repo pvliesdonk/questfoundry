@@ -78,7 +78,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
             errors.append(f"Beat {beat_id} has no belongs_to edge (no path assignment)")
         elif len(paths) > 1:
             errors.append(
-                f"Beat {beat_id} has {len(paths)} belongs_to edges (must have exactly 1): {paths}"
+                f"Beat {beat_id} has {len(paths)} belongs_to edges (must have exactly 1): {', '.join(paths)}"
             )
 
     # 4. State flag nodes exist for explored dilemmas

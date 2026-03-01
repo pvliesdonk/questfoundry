@@ -415,7 +415,11 @@ def format_answer_ids_by_dilemma(dilemmas: list[dict[str, Any]]) -> str:
         scoped = normalize_scoped_id(strip_scope_prefix(dilemma_id), SCOPE_DILEMMA)
         explored = d.get("explored", [])
         unexplored = d.get("unexplored", [])
-        dilemma_lines.append(f"- `{scoped}` -> explored: {explored}, unexplored: {unexplored}")
+        explored_str = ", ".join(f"`{a}`" for a in explored) if explored else "(none)"
+        unexplored_str = ", ".join(f"`{a}`" for a in unexplored) if unexplored else "(none)"
+        dilemma_lines.append(
+            f"- `{scoped}` -> explored: {explored_str}; unexplored: {unexplored_str}"
+        )
 
     if not dilemma_lines:
         return ""
@@ -996,7 +1000,7 @@ def format_dilemma_analysis_context(
 
         if not dilemma_paths:
             explored = ", ".join(d.explored) if d.explored else "(none)"
-            block_lines.append(f"  (no paths yet — explored: [{explored}])")
+            block_lines.append(f"  (no paths yet — explored: {explored})")
 
         dilemma_blocks.append("\n".join(block_lines))
 

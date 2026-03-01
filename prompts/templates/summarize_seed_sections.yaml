@@ -48,6 +48,20 @@ dilemmas_system: |
   Use dilemma IDs and answer IDs EXACTLY as listed below. Copy-paste them.
   Do NOT reconstruct IDs from dilemma names or descriptions.
 
+  ## DEFAULT ANSWER RULE (MOST IMPORTANT RULE)
+  In the answer list below, one answer per dilemma is marked `(default)`.
+  The `(default)` answer is the canonical story spine. It MUST ALWAYS go in `explored`.
+  You may NEVER put the `(default)` answer in `unexplored`.
+
+  EXAMPLE: answers are [`reliable` (default), `falsified`]
+  - CORRECT: explored=[reliable, falsified], unexplored=[]
+  - CORRECT: explored=[reliable], unexplored=[falsified]
+  - WRONG:   explored=[falsified], unexplored=[reliable]  <-- default in unexplored!
+
+  COMMON MISTAKE: The discussion may say "explore canonical only (X as shadow)".
+  "X as shadow" means X goes in `unexplored`. The CANONICAL answer (the one marked
+  `(default)` below) goes in `explored`. Do NOT put the shadow answer in explored.
+
   ## Required Dilemma IDs ({dilemma_count} total)
   {dilemma_manifest}
 
@@ -57,7 +71,7 @@ dilemmas_system: |
   ## Your Task
   For EACH dilemma listed above, extract from the discussion:
   - dilemma_id: the exact dilemma ID from the manifest
-  - explored: list of answer IDs that become paths (copy from Valid Answer IDs above)
+  - explored: list of answer IDs that become paths (the `(default)` answer MUST be here)
   - unexplored: remaining answer IDs not explored
 
   CRITICAL: The answer IDs in `explored` and `unexplored` MUST come from the
@@ -72,6 +86,7 @@ dilemmas_system: |
   ```
   VERIFY: Your list MUST have exactly {dilemma_count} items.
   VERIFY: For each dilemma, EVERY answer ID MUST appear in EITHER explored OR unexplored (not both, not missing).
+  VERIFY: The `(default)` answer for each dilemma is in `explored`, NEVER in `unexplored`.
   {output_language_instruction}
 
 paths_system: |
