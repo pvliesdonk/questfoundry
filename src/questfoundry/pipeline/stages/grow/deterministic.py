@@ -386,7 +386,7 @@ async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
 
 @grow_phase(
     name="validation",
-    depends_on=["hub_spokes"],
+    depends_on=["choices"],
     is_deterministic=True,
     priority=24,
 )
