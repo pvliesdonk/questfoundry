@@ -51,7 +51,7 @@ DREAM → BRAINSTORM → SEED → GROW → FILL → SHIP
 - **FILL**: Generate prose for scenes
 - **SHIP**: Export to playable formats (Twee, HTML, JSON)
 
-DRESS stage (art direction, illustrations, codex) is specified in Slice 5. See `docs/design/procedures/dress.md` and ADR-012.
+DRESS stage (art direction, illustrations, codex) runs between FILL and SHIP. See `docs/design/procedures/dress.md` and ADR-012.
 
 ### Key Design Principles
 
@@ -137,20 +137,20 @@ log.error("provider_error", provider="ollama", message=str(e))
 
 ### Model Workflow (Ontology → Pydantic → Graph)
 
-**The design specification (`docs/design/00-spec.md`) defines the ontology.** Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.db`) is the runtime source of truth for story state.
+**Document 3 (`docs/design/document-3-ontology.md`) defines the graph ontology.** If Document 3 and `00-spec.md` conflict, Document 3 wins (see issue #977). Pydantic models in `src/questfoundry/models/` are hand-written implementations of that ontology. The graph (`graph.db`) is the runtime source of truth for story state.
 
 ```
-docs/design/00-spec.md        ← Ontology definition (node types, relationships)
+docs/design/document-3-ontology.md  ← Ontology definition (node types, relationships)
         ↓
-src/questfoundry/models/*.py  ← Hand-written Pydantic models (validate LLM output)
+src/questfoundry/models/*.py        ← Hand-written Pydantic models (validate LLM output)
         ↓
-graph/mutations.py            ← Semantic validation against graph state
+graph/mutations.py                  ← Semantic validation against graph state
         ↓
-graph.db                      ← Runtime source of truth (SQLite, nodes + edges)
+graph.db                            ← Runtime source of truth (SQLite, nodes + edges)
 ```
 
 **When adding new stage models:**
-1. Check the ontology in `docs/design/00-spec.md` for the node types and fields
+1. Check the ontology in `docs/design/document-3-ontology.md` for the node types and fields
 2. Create/update Pydantic models in `src/questfoundry/models/`
 3. Add semantic validation in `graph/mutations.py` if needed
 4. Export from `models/__init__.py`
@@ -243,32 +243,6 @@ questfoundry/
     └── architecture/          # Implementation architecture
 ```
 
-## Implementation Roadmap
-
-### Slice 1: DREAM Only
-- Pipeline orchestrator skeleton
-- DREAM stage implementation
-- Basic prompt compiler
-- Artifact schemas and validation
-- CLI with `qf dream` command
-
-### Slice 2: DREAM → SEED
-- Multi-stage execution
-- Context injection between stages
-- Human gate hooks (UI separate concern)
-- BRAINSTORM and SEED stages
-
-### Slice 3: Full GROW
-- 11-phase GROW algorithm
-- Path-agnostic assessment, intersection detection
-- Arc enumeration and validation
-- State derivation (codewords, overlays)
-
-### Slice 4: FILL and SHIP
-- Prose generation
-- Export formats (Twee, HTML, JSON)
-- Full validation and quality bars
-
 ## Commands
 
 ```bash
@@ -292,10 +266,11 @@ qf inspect -p <project> --json # Machine-readable JSON output
 
 ## Key Files to Reference
 
-- `docs/design/00-spec.md` - Unified v5 specification (vision, pipeline, schemas)
+- `docs/design/document-3-ontology.md` - Graph ontology (authoritative, supersedes 00-spec.md)
+- `docs/design/how-branching-stories-work.md` - Narrative intent (authoritative)
+- `docs/design/00-spec.md` - Original v5 specification (reference only; Documents 1 and 3 take precedence)
 - `docs/design/procedures/` - Stage algorithm specifications
 - `docs/design/01-prompt-compiler.md` - Prompt assembly system
-- `docs/design/07-getting-started.md` - Implementation slices
 
 ## Anti-Patterns to Avoid
 
