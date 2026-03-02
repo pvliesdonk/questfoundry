@@ -632,7 +632,7 @@ def check_gate_co_satisfiability(graph: Graph) -> ValidationCheck:
     # Build consequence→state_flag lookup
     cons_to_state_flag = {
         edge["to"]: edge["from"]
-        for edge in graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
+        for edge in graph.get_edges(from_id=None, to_id=None, edge_type="derived_from")
     }
 
     # Build path→consequences lookup

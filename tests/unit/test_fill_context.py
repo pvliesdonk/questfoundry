@@ -1497,7 +1497,7 @@ class TestEndingDifferentiation:
             {"type": "state_flag", "raw_id": "sf_ally"},
         )
         # Edges: state_flag --tracks--> consequence
-        g.add_edge("tracks", "state_flag::sf_ally", "consequence::ally_trusted")
+        g.add_edge("derived_from", "state_flag::sf_ally", "consequence::ally_trusted")
         # path --has_consequence--> consequence
         g.add_edge("has_consequence", "path::ally_path", "consequence::ally_trusted")
 
@@ -1538,7 +1538,7 @@ class TestEndingDifferentiation:
             "state_flag::sf_shadow",
             {"type": "state_flag", "raw_id": "sf_shadow"},
         )
-        g.add_edge("tracks", "state_flag::sf_shadow", "consequence::shadow")
+        g.add_edge("derived_from", "state_flag::sf_shadow", "consequence::shadow")
         g.add_edge("has_consequence", "path::dark_path", "consequence::shadow")
         g.create_node(
             "passage::ending_0",
@@ -1566,7 +1566,7 @@ class TestEndingDifferentiation:
             "state_flag::sf_empty",
             {"type": "state_flag", "raw_id": "sf_empty"},
         )
-        g.add_edge("tracks", "state_flag::sf_empty", "consequence::empty_cons")
+        g.add_edge("derived_from", "state_flag::sf_empty", "consequence::empty_cons")
         g.create_node(
             "passage::ending_1",
             {

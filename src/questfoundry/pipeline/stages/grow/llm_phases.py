@@ -1080,7 +1080,7 @@ class _LLMPhaseMixin:
 
         for sf_id, sf_data in sorted(state_flag_nodes.items()):
             valid_state_flag_ids.append(sf_id)
-            tracks_id = sf_data.get("tracks", "")
+            tracks_id = sf_data.get("derived_from", "")
             cons_data = consequence_nodes.get(tracks_id, {})
             cons_desc = cons_data.get("description", "unknown consequence")
 

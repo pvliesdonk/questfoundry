@@ -124,26 +124,26 @@ class TestStateFlag:
     def test_valid_state_flag(self) -> None:
         sf = StateFlag(
             flag_id="state_flag::mentor_trust_committed",
-            tracks="consequence::mentor_trust",
+            derived_from="consequence::mentor_trust",
         )
         assert sf.flag_id == "state_flag::mentor_trust_committed"
         assert sf.flag_type == "granted"
 
     def test_default_type_is_granted(self) -> None:
-        sf = StateFlag(flag_id="sf1", tracks="c1")
+        sf = StateFlag(flag_id="sf1", derived_from="c1")
         assert sf.flag_type == "granted"
 
     def test_empty_flag_id_rejected(self) -> None:
         with pytest.raises(ValidationError, match="flag_id"):
-            StateFlag(flag_id="", tracks="c1")
+            StateFlag(flag_id="", derived_from="c1")
 
     def test_empty_tracks_rejected(self) -> None:
-        with pytest.raises(ValidationError, match="tracks"):
-            StateFlag(flag_id="sf1", tracks="")
+        with pytest.raises(ValidationError, match="derived_from"):
+            StateFlag(flag_id="sf1", derived_from="")
 
     def test_invalid_flag_type_rejected(self) -> None:
         with pytest.raises(ValidationError, match="flag_type"):
-            StateFlag(flag_id="sf1", tracks="c1", flag_type="revoked")  # type: ignore[arg-type]
+            StateFlag(flag_id="sf1", derived_from="c1", flag_type="revoked")  # type: ignore[arg-type]
 
 
 class TestChoice:

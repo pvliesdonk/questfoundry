@@ -51,7 +51,7 @@ class ExportCodeword:
 
     id: str
     codeword_type: str
-    tracks: str | None = None
+    derived_from: str | None = None
 
 
 @dataclass

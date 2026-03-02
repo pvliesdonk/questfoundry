@@ -566,8 +566,8 @@ def build_arc_state_flags(
         ):
             included_paths.add(path_id)
 
-    # consequence → state flag (via tracks edges: state_flag tracks consequence)
-    tracks_edges = graph.get_edges(edge_type="tracks")
+    # consequence → state flag (via derived_from edges: state_flag derived_from consequence)
+    tracks_edges = graph.get_edges(edge_type="derived_from")
     consequence_to_state_flag: dict[str, str] = {}
     for edge in tracks_edges:
         consequence_to_state_flag[edge["to"]] = edge["from"]

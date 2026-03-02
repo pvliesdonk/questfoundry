@@ -83,7 +83,7 @@ def _graph_with_entities(g: Graph) -> Graph:
             "type": "codeword",
             "raw_id": "entered_castle",
             "codeword_type": "granted",
-            "tracks": "consequence::entered",
+            "derived_from": "consequence::entered",
         },
     )
     return g
@@ -221,7 +221,7 @@ class TestBuildExportContext:
 
         assert len(ctx.codewords) == 1
         assert ctx.codewords[0].id == "codeword::entered_castle"
-        assert ctx.codewords[0].tracks == "consequence::entered"
+        assert ctx.codewords[0].derived_from == "consequence::entered"
 
     def test_dress_nodes_present(self) -> None:
         g = _graph_with_dress(_minimal_graph())
@@ -304,7 +304,7 @@ class TestBuildExportContext:
                 "raw_id": "trusted_mentor",
                 "dilemma_id": "dilemma::trust",
                 "codeword_type": "granted",
-                "tracks": "consequence::trust_given",
+                "derived_from": "consequence::trust_given",
             },
         )
         g.create_node(
@@ -314,14 +314,14 @@ class TestBuildExportContext:
                 "raw_id": "loyal_to_crown",
                 "dilemma_id": "dilemma::loyalty",
                 "codeword_type": "granted",
-                "tracks": "consequence::loyalty",
+                "derived_from": "consequence::loyalty",
             },
         )
         ctx = build_export_context(g, "test")
         # Only soft dilemma flag should be exported
         assert len(ctx.codewords) == 1
         assert ctx.codewords[0].id == "state_flag::trusted_mentor"
-        assert ctx.codewords[0].tracks == "consequence::trust_given"
+        assert ctx.codewords[0].derived_from == "consequence::trust_given"
 
     def test_hard_only_state_flags_yield_no_codewords(self) -> None:
         """Hard-only state flags produce empty codewords, not a legacy fallback."""

@@ -1715,10 +1715,10 @@ def format_ending_differentiation(graph: Graph, passage_id: str) -> str:
     bullets: list[str] = []
     for sf_id in sorted(family_flags):
         scoped_sf = sf_id if sf_id.startswith("state_flag::") else f"state_flag::{sf_id}"
-        tracks = graph.get_edges(from_id=scoped_sf, edge_type="tracks")
-        if not tracks:
+        derived_from = graph.get_edges(from_id=scoped_sf, edge_type="derived_from")
+        if not derived_from:
             continue
-        consequence_id = sorted(tracks, key=lambda e: e["to"])[0]["to"]
+        consequence_id = sorted(derived_from, key=lambda e: e["to"])[0]["to"]
         cons_node = graph.get_node(consequence_id)
         if not cons_node:
             continue
