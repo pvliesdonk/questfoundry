@@ -408,8 +408,6 @@ class TestPolishCollapseLinearBeats:
 
     def test_phase_collapses_linear_run(self) -> None:
         """phase_collapse_linear_beats merges a linear 2-beat run."""
-        import pytest
-
         from questfoundry.pipeline.stages.polish.deterministic import phase_collapse_linear_beats
 
         graph = Graph.empty()
@@ -431,12 +429,10 @@ class TestPolishCollapseLinearBeats:
         graph.add_edge("predecessor", "beat::b3", "beat::b2")
 
         # Run the phase (model param is unused for deterministic phases)
-        result = (
-            pytest.importorskip("asyncio")
-            .get_event_loop()
-            .run_until_complete(
-                phase_collapse_linear_beats(graph, None)  # type: ignore[arg-type]
-            )
+        import asyncio
+
+        result = asyncio.run(
+            phase_collapse_linear_beats(graph, None)  # type: ignore[arg-type]
         )
         assert result.status == "completed"
         assert "Collapsed" in result.detail or "No linear" in result.detail
@@ -448,7 +444,7 @@ class TestPolishCollapseLinearBeats:
         from questfoundry.pipeline.stages.polish.deterministic import phase_collapse_linear_beats
 
         graph = Graph.empty()
-        result = asyncio.get_event_loop().run_until_complete(
+        result = asyncio.run(
             phase_collapse_linear_beats(graph, None)  # type: ignore[arg-type]
         )
         assert result.status == "completed"
