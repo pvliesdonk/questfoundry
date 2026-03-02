@@ -816,6 +816,36 @@ def _build_per_path_beat_context(
     if description:
         lines.append(f"- Description: {description}")
 
+    # Inject sibling path summaries to support location_alternatives decisions.
+    # The LLM uses these to identify locations that appear in other paths and
+    # list them as location_alternatives on beats that could plausibly move there.
+    if all_paths:
+        current_path_id = normalize_scoped_id(path_data.get("path_id", ""), SCOPE_PATH)
+        siblings = [
+            p
+            for p in all_paths
+            if normalize_scoped_id(p.get("path_id", ""), SCOPE_PATH) != current_path_id
+        ]
+        if siblings:
+            lines.append("")
+            lines.append(
+                "### Sibling paths (for location intersection reasoning)\n"
+                "These paths will also place beats in the story world. Their beats\n"
+                "have not been generated yet, so no explicit location IDs are available.\n"
+                "Read each sibling's name and description to infer where its beats are\n"
+                "likely to be set, then add those inferred locations to\n"
+                "`location_alternatives` on beats that could plausibly share that space."
+            )
+            for sib in siblings:
+                sib_pid = normalize_scoped_id(sib.get("path_id", ""), SCOPE_PATH)
+                sib_name = sib.get("name", "")
+                sib_desc = sib.get("description", "")
+                sib_dilemma = normalize_scoped_id(sib.get("dilemma_id", ""), SCOPE_DILEMMA)
+                label = f"- `{sib_pid}` ({sib_name}, dilemma: `{sib_dilemma}`)"
+                if sib_desc:
+                    label += f": {sib_desc}"
+                lines.append(label)
+
     lines.append("")
     lines.append(entity_context)
 
