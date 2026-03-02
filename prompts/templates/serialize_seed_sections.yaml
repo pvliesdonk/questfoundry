@@ -470,9 +470,10 @@ beats_prompt: |
   "location_alternatives": ["location::council_chamber", "location::private_study"]
   ```
 
-  The brief includes a "### Sibling path locations" section listing which
-  locations OTHER paths use. Prefer listing those as alternatives when they
-  fit — that is exactly where GROW will look for intersection opportunities.
+  The brief includes a "### Sibling paths (for location intersection reasoning)"
+  section with sibling path descriptions. Use those descriptions to infer where
+  their beats are likely set, then list those inferred locations as alternatives
+  when the narrative allows — that is exactly where GROW looks for intersections.
 
   ## Rules
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
@@ -645,25 +646,29 @@ per_path_beats_prompt: |
   ## Schema
   Return a JSON object with an "initial_beats" array of {size_beats_per_path} beats:
   ```json
-  {{
+  {
     "initial_beats": [
-      {{
+      {
         "beat_id": "{path_name}_beat_01",
         "summary": "What happens in this beat",
         "path_id": "{path_id}",
         "dilemma_impacts": [
-          {{
+          {
             "dilemma_id": "{dilemma_id}",
             "effect": "advances",
             "note": "Explanation"
-          }}
+          }
         ],
         "entities": ["character::character_id"],
         "location": "location::location_id",
-        "location_alternatives": ["location::other_location_if_scene_could_move_there"]
-      }}
+        "location_alternatives": ["location::other_location_if_scene_could_move_there"],
+        "temporal_hint": {
+          "relative_to": "dilemma::[other_dilemma_id]",
+          "position": "before_commit"
+        }
+      }
     ]
-  }}
+  }
   ```
 
   ## location_alternatives — GROW intersection hint (IMPORTANT)
@@ -674,9 +679,10 @@ per_path_beats_prompt: |
   could co-occur with a path-B beat already set at the market. Think: "Where else
   could this scene happen without breaking its logic?"
 
-  The brief includes a "### Sibling path locations" section listing which
-  locations OTHER paths tend to use. Prefer those as alternatives when the
-  narrative allows — that is exactly where GROW looks for intersection points.
+  The brief includes a "### Sibling paths (for location intersection reasoning)"
+  section with sibling path descriptions. Use those descriptions to infer where
+  their beats are likely set, then prefer those inferred locations as alternatives
+  when the narrative allows — that is exactly where GROW looks for intersections.
 
   Leave `location_alternatives` empty ONLY when the beat is physically inseparable
   from its primary location (e.g., a beat that literally requires a specific cliff).
@@ -687,8 +693,8 @@ per_path_beats_prompt: |
       player must see this beat BEFORE that dilemma's decision.
   (b) This beat's emotional impact lands better because of where another dilemma's
       key moment falls (e.g., relief hits harder AFTER the other dilemma resolves).
-  EXAMPLE: beat on path `trust_the_stranger__reveal` where the stranger confesses a
-  past crime → `{{"temporal_hint": {{"relative_to": "dilemma::protect_secret", "position": "before_commit"}}}}`
+  EXAMPLE: beat on path `path::trust_the_stranger__reveal` where the stranger confesses a
+  past crime → `"temporal_hint": {"relative_to": "dilemma::protect_secret", "position": "before_commit"}`
   because the player must know this BEFORE deciding whether to protect the secret.
   Omit temporal_hint only when the beat's placement is genuinely independent of all
   other dilemmas. Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
