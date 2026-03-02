@@ -2325,7 +2325,7 @@ def _would_create_cycle(
 
     In our DAG: ``predecessor`` edge (X, Y) means X requires Y, i.e. Y comes before X.
     Adding predecessor(new_from, new_to) means new_to → new_from in topological order.
-    A cycle would exist if new_from is already reachable from new_to via existing edges.
+    A cycle would exist if new_to is already reachable from new_from via existing edges.
 
     Args:
         new_from: The beat that would require new_to.
@@ -2336,15 +2336,17 @@ def _would_create_cycle(
     Returns:
         True if adding this edge would create a cycle.
     """
-    # If new_from is reachable forward from new_to, adding new_to as prerequisite
-    # of new_from creates a cycle (new_from → new_to → ... → new_from)
+    # A cycle exists if new_to is already reachable from new_from via successors.
+    # Adding predecessor(new_from, new_to) means new_to executes before new_from.
+    # If new_to is already reachable from new_from (new_from → ... → new_to),
+    # then adding new_to → new_from closes a cycle.
     if new_from not in beat_set or new_to not in beat_set:
         return False
     visited: set[str] = set()
-    queue = [new_to]
+    queue = [new_from]
     while queue:
         node = queue.pop()
-        if node == new_from:
+        if node == new_to:
             return True
         if node in visited:
             continue
@@ -2409,7 +2411,7 @@ def interleave_cross_path_beats(graph: Graph) -> int:
         for edge in graph.get_edges(from_id=None, to_id=None, edge_type=ordering):
             a = edge["from"]
             b = edge["to"]
-            if a in dilemma_paths or b in dilemma_paths:
+            if a in dilemma_paths and b in dilemma_paths:
                 relationship_edges.append((a, b, ordering))
 
     if not relationship_edges:
@@ -2506,12 +2508,10 @@ def interleave_cross_path_beats(graph: Graph) -> int:
 
                 # Collect commit/intro beats for the referenced dilemma
                 if relative_to == dilemma_a:
-                    ref_beats_a = all_beats_a
-                    ref_commits = _commits_beats_for_dilemma(ref_beats_a, dilemma_a, beat_nodes)
+                    ref_commits = _commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes)
                     ref_first = [seq[0] for seq in ordered_a if seq]
                 elif relative_to == dilemma_b:
-                    ref_beats_b = all_beats_b
-                    ref_commits = _commits_beats_for_dilemma(ref_beats_b, dilemma_b, beat_nodes)
+                    ref_commits = _commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes)
                     ref_first = [seq[0] for seq in ordered_b if seq]
                 else:
                     continue
