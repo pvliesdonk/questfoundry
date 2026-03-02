@@ -837,11 +837,12 @@ def _build_per_path_beat_context(
         if siblings:
             lines.append("")
             lines.append(
-                "### Sibling path locations\n"
-                "These paths will also place beats in the story world. When you set\n"
-                "a beat's location, check whether the scene could also happen in a\n"
-                "location that one of these paths is likely to use — if so, add that\n"
-                "location to `location_alternatives` so GROW can create intersections."
+                "### Sibling paths (for location intersection reasoning)\n"
+                "These paths will also place beats in the story world. Their beats\n"
+                "have not been generated yet, so no explicit location IDs are available.\n"
+                "Read each sibling's name and description to infer where its beats are\n"
+                "likely to be set, then add those inferred locations to\n"
+                "`location_alternatives` on beats that could plausibly share that space."
             )
             for sib in siblings:
                 sib_pid = normalize_scoped_id(sib.get("path_id", ""), SCOPE_PATH)

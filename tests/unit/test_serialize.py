@@ -2061,3 +2061,80 @@ class TestSizeProfileInjectedIntoBeatPrompts:
 
         size_vars = size_template_vars(None)
         assert size_vars["size_beats_per_path"] == "2-4"
+
+
+class TestBuildPerPathBeatContext:
+    """Tests for _build_per_path_beat_context sibling path injection."""
+
+    def _make_path(
+        self,
+        path_id: str = "path::dilemma_a__answer_x",
+        name: str = "Path X",
+        dilemma_id: str = "dilemma::dilemma_a",
+        description: str = "",
+    ) -> dict:
+        return {
+            "path_id": path_id,
+            "name": name,
+            "dilemma_id": dilemma_id,
+            "description": description,
+        }
+
+    def test_no_all_paths_no_sibling_section(self) -> None:
+        """When all_paths is None, no sibling section is injected."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path()
+        result = _build_per_path_beat_context(path, "entity_ctx", all_paths=None)
+
+        assert "Sibling" not in result
+        assert "intersection" not in result.lower()
+
+    def test_single_path_no_sibling_section(self) -> None:
+        """When all_paths contains only the current path, no sibling section appears."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        path = self._make_path()
+        result = _build_per_path_beat_context(path, "entity_ctx", all_paths=[path])
+
+        assert "Sibling" not in result
+
+    def test_multiple_paths_sibling_section_excludes_current(self) -> None:
+        """With multiple paths, the sibling section lists others but not the current path."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        current = self._make_path(
+            path_id="path::dilemma_a__answer_x",
+            name="Path X",
+        )
+        sibling = self._make_path(
+            path_id="path::dilemma_a__answer_y",
+            name="Path Y",
+            description="A path through the forest",
+        )
+
+        result = _build_per_path_beat_context(current, "entity_ctx", all_paths=[current, sibling])
+
+        assert "Sibling paths" in result
+        assert "path::dilemma_a__answer_y" in result
+        assert "Path Y" in result
+        assert "A path through the forest" in result
+        # Current path must NOT appear as a sibling
+        assert result.count("path::dilemma_a__answer_x") == 1  # only in the header
+
+    def test_sibling_with_empty_optional_fields_no_error(self) -> None:
+        """Sibling with missing description and name fields is handled without KeyError."""
+        from questfoundry.agents.serialize import _build_per_path_beat_context
+
+        current = self._make_path(path_id="path::dilemma_a__answer_x")
+        sibling: dict = {
+            "path_id": "path::dilemma_a__answer_y",
+            # name and description intentionally absent
+            "dilemma_id": "dilemma::dilemma_a",
+        }
+
+        # Should not raise
+        result = _build_per_path_beat_context(current, "entity_ctx", all_paths=[current, sibling])
+
+        assert "Sibling paths" in result
+        assert "path::dilemma_a__answer_y" in result
