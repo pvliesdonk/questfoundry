@@ -451,12 +451,22 @@ beats_prompt: |
   - location can be null; location_alternatives can be empty array
   - Generate {size_beats_per_path} beats for EACH path in the VALID PATH IDs list
   - dilemma_impacts MUST use dilemma IDs from the Dilemma IDs list — NOT entity names
-  - temporal_hint is OPTIONAL — only include it when a beat's placement relative to
-    ANOTHER dilemma matters. Most beats don't need one. When used:
+  - temporal_hint: for EACH beat, ask: "Does this beat's pacing depend on where another
+    dilemma stands?" Add a temporal_hint whenever EITHER condition is true:
+    (a) This beat reveals information that another dilemma's commit point depends on —
+        the player must see this beat BEFORE they face that dilemma's decision.
+    (b) This beat's emotional impact (grief, triumph, dread) lands better because of
+        where another dilemma's key moment falls — e.g., the relief hits harder
+        AFTER the other dilemma's tension resolves.
+    EXAMPLE: Story has dilemma::protect_secret and dilemma::trust_the_stranger.
+    A beat on path::trust_the_stranger__reveal where the stranger confesses a past
+    crime should carry:
+      `"temporal_hint": {"relative_to": "dilemma::protect_secret", "position": "before_commit"}`
+    because the player needs to know about the stranger's past BEFORE they decide
+    whether to protect the secret on the other dilemma.
     - `relative_to` must be a dilemma ID different from the beat's own parent dilemma
     - `position` must be: `before_commit`, `after_commit`, `before_introduce`, or `after_introduce`
-    - Example: a beat that sets up context needed before another dilemma's commit point
-      would use `"position": "before_commit"` with that dilemma's ID
+    - Omit only when the beat's placement is genuinely independent of all other dilemmas
 
   ## DILEMMA IMPACT CONSTRAINT (MOST IMPORTANT RULE)
 
@@ -625,11 +635,17 @@ per_path_beats_prompt: |
   }}
   ```
 
-  NOTE: `temporal_hint` is optional — omit the field entirely for most beats.
-  Only include it when this beat must be placed relative to ANOTHER dilemma's
-  key moment. When used:
-  `{{"temporal_hint": {{"relative_to": "dilemma::other_dilemma_id", "position": "before_commit"}}}}`
-  Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
+  NOTE: For EACH beat, check — does this beat's pacing depend on where another dilemma
+  stands? Add a temporal_hint whenever EITHER condition is true:
+  (a) This beat reveals information another dilemma's commit point depends on — the
+      player must see this beat BEFORE that dilemma's decision.
+  (b) This beat's emotional impact lands better because of where another dilemma's
+      key moment falls (e.g., relief hits harder AFTER the other dilemma resolves).
+  EXAMPLE: beat on path `trust_the_stranger__reveal` where the stranger confesses a
+  past crime → `{{"temporal_hint": {{"relative_to": "dilemma::protect_secret", "position": "before_commit"}}}}`
+  because the player must know this BEFORE deciding whether to protect the secret.
+  Omit temporal_hint only when the beat's placement is genuinely independent of all
+  other dilemmas. Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
 
   ## Rules
   - Generate exactly {size_beats_per_path} beats for path `{path_id}`
