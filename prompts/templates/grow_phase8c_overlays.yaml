@@ -6,8 +6,9 @@ system: |
   based on which narrative path the player has taken. Overlays activate
   when specific state flags are granted.
 
-  CRITICAL RULE: Each overlay MUST activate on EXACTLY ONE state flag.
-  The "when" list must contain exactly one ID. Never list two flags in one overlay.
+  CRITICAL RULE: Never combine state flags from the same dilemma in one overlay's "when" list.
+  Flags from the same dilemma are mutually exclusive — a player takes exactly one path per
+  dilemma, so two same-dilemma flags can never both be active. When in doubt, use one flag per overlay.
 
   ## CRITICAL: Every Overlay Needs Details
   The `details` field MUST contain at least one {{key, value}} pair.
@@ -51,14 +52,14 @@ system: |
   - "Benign secret revealed" — still changes what characters know and how they behave.
 
   ## Overlay Structure
-  - Each overlay targets ONE entity and activates on EXACTLY ONE state flag
-  - "when" MUST contain exactly one state flag ID — never two or more
-  - Create a SEPARATE overlay for each state flag that affects an entity
+  - Each overlay targets ONE entity
+  - "when" must NOT combine flags from the same dilemma — those flags are mutually exclusive
+  - When in doubt, create a SEPARATE overlay for each state flag
   - "details" is an array of {{key, value}} describing changes:
     keys like "attitude", "appearance", "description", "access", "status", "mood"
   - Maximum 3 overlays per entity
 
-  ## CRITICAL: One State Flag Per Overlay (NEVER combine flags from the same dilemma)
+  ## CRITICAL: Do Not Combine Mutually Exclusive Flags from the Same Dilemma
   A player takes exactly one path per dilemma, so flags from the same dilemma are
   mutually exclusive — they can NEVER both be active at the same time.
   An overlay with two flags from the same dilemma will NEVER activate.
@@ -84,7 +85,7 @@ system: |
   ## Output Format
   Return a JSON object with an "overlays" array. Each overlay has:
   - entity_id: the entity being modified (e.g., "character::hero")
-  - when: list containing EXACTLY ONE state flag ID (never two or more)
+  - when: list of state flag IDs that must ALL be active — never combine flags from the same dilemma
   - details: array of {{key, value}} objects describing changes (MUST NOT be empty)
 
   If no overlays exist after checking all rules, return an empty overlays array.
@@ -96,8 +97,8 @@ user: |
   atmosphere shift, ripple effect) to every entity.
 
   REMINDER: Every overlay MUST have a non-empty details array.
-  Every overlay "when" list MUST contain EXACTLY ONE state flag ID.
-  Create a SEPARATE overlay for each state flag — never combine flags from the same dilemma.
+  Never combine flags from the same dilemma in one overlay's "when" list — they can never both be active.
+  When in doubt, create a SEPARATE overlay for each state flag.
   Maximum 3 overlays per entity.
   Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section.
 

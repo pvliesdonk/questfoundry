@@ -154,8 +154,8 @@ def validate_phase8c_output(
                             field_path=f"overlays.{i}.when",
                             issue=(
                                 f"Overlay 'when' contains mutually exclusive flags "
-                                f"`{first_flag}` and `{sf_id}` — both derive from "
-                                f"dilemma `{dilemma_id}`. A player takes exactly one "
+                                f"`{first_flag.replace('`', '')}` and `{sf_id.replace('`', '')}` — both derive from "
+                                f"dilemma `{dilemma_id.replace('`', '')}`. A player takes exactly one "
                                 f"path per dilemma; this overlay will never activate. "
                                 f"Create one overlay per flag instead."
                             ),
