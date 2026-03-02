@@ -1047,61 +1047,94 @@ def format_interaction_candidates_context(
     seed_output: SeedOutput,
     graph: Graph,
 ) -> str:
-    """Format pre-filtered candidate pairs for interaction analysis (Section 8).
+    """Format all dilemma pairs for ordering classification (Section 8).
 
-    Reads ``anchored_to`` edges from brainstorm dilemma nodes in the graph,
-    filters to surviving dilemmas, and computes candidate pairs that share
-    at least one central entity.
+    Builds rich per-dilemma context (question, stakes, answers, convergence
+    point) and enumerates ALL pairs of surviving dilemmas.  Pairs that share
+    central entities are flagged so the LLM has extra signal, but every pair
+    is included because small stories (2-4 dilemmas = 3-6 pairs max) rarely
+    have enough shared-entity pairs to trigger any classification at all.
 
     Args:
         seed_output: Pruned SEED output with surviving dilemmas.
-        graph: Graph containing brainstorm dilemma nodes with anchored_to edges.
+        graph: Graph containing brainstorm dilemma nodes.
 
     Returns:
-        Formatted markdown context with candidate pairs, or a message
-        indicating no candidates if fewer than 2 dilemmas or no shared entities.
+        Formatted markdown context with all pairs and per-dilemma details,
+        or a short message if fewer than 2 dilemmas survive.
     """
     surviving_ids = {strip_scope_prefix(d.dilemma_id) for d in seed_output.dilemmas}
 
     if len(surviving_ids) < 2:
         return "No candidate pairs — fewer than 2 surviving dilemmas. Return an empty list."
 
-    # Read anchored_to edges from graph dilemma nodes
+    sorted_ids = sorted(surviving_ids)
+
+    # Collect per-dilemma data from graph
+    dilemma_data: dict[str, dict[str, Any]] = {}
     dilemma_entities: dict[str, set[str]] = {}
-    for raw_id in sorted(surviving_ids):
+    for raw_id in sorted_ids:
         node_id = f"{SCOPE_DILEMMA}::{raw_id}"
-        if graph.get_node(node_id) is None:
-            continue
+        node = graph.get_node(node_id)
+        dilemma_data[raw_id] = node if node is not None else {}
         edges = graph.get_edges(from_id=node_id, edge_type="anchored_to")
-        # Strip scope prefixes for readability
         dilemma_entities[raw_id] = {strip_scope_prefix(e["to"]) for e in edges}
 
-    # Compute candidate pairs (shared central entities)
-    candidate_pairs: list[tuple[str, str, list[str]]] = []
-    sorted_ids = sorted(dilemma_entities.keys())
+    # Build per-dilemma detail blocks
+    dilemma_blocks: list[str] = []
+    for raw_id in sorted_ids:
+        data = dilemma_data[raw_id]
+        block: list[str] = [f"### `dilemma::{raw_id}`"]
+        question = data.get("question", "")
+        if question:
+            block.append(f"**Question:** {question}")
+        why = data.get("why_it_matters", "")
+        if why:
+            block.append(f"**Stakes:** {why}")
+        # Answers from the dilemma node
+        answers = data.get("answers", [])
+        if answers:
+            answer_lines = []
+            for ans in answers:
+                label = ans.get("label", ans.get("answer_id", "?"))
+                consequence = ans.get("consequence", {})
+                desc = consequence.get("description", "") if isinstance(consequence, dict) else ""
+                marker = " (default)" if ans.get("default") else ""
+                answer_lines.append(f"  - `{label}`{marker}" + (f": {desc}" if desc else ""))
+            block.append("**Answers:**\n" + "\n".join(answer_lines))
+        conv = data.get("convergence_point", "")
+        if conv:
+            block.append(f"**Convergence point:** {conv}")
+        entities = dilemma_entities.get(raw_id, set())
+        if entities:
+            block.append("**Central entities:** " + ", ".join(f"`{e}`" for e in sorted(entities)))
+        dilemma_blocks.append("\n".join(block))
+
+    # Enumerate ALL pairs; flag shared-entity pairs for extra signal
+    pair_lines: list[str] = []
     for i, id_a in enumerate(sorted_ids):
         for id_b in sorted_ids[i + 1 :]:
             shared = dilemma_entities[id_a] & dilemma_entities[id_b]
-            if shared:
-                candidate_pairs.append((id_a, id_b, sorted(shared)))
+            shared_note = (
+                f" — shared entities: {', '.join(f'`{e}`' for e in sorted(shared))}"
+                if shared
+                else ""
+            )
+            pair_lines.append(f"- `dilemma::{id_a}` + `dilemma::{id_b}`{shared_note}")
 
-    if not candidate_pairs:
-        return "No candidate pairs — no dilemmas share central entities. Return an empty list."
-
-    pair_lines = [
-        f"- `dilemma::{a}` + `dilemma::{b}` (shared: {', '.join(entities)})"
-        for a, b, entities in candidate_pairs
-    ]
-
-    valid_ids = [f"`dilemma::{rid}`" for rid in sorted(surviving_ids)]
+    valid_ids = [f"`dilemma::{rid}`" for rid in sorted_ids]
 
     lines = [
-        "## Interaction Candidates",
+        "## Dilemma Details",
         "",
-        "Only consider these pre-filtered pairs (they share central entities).",
-        "Do NOT invent pairs outside this list.",
+        *[line for block in dilemma_blocks for line in block.split("\n")],
         "",
-        "### Candidate Pairs",
+        "## All Dilemma Pairs (classify EVERY pair)",
+        "",
+        "You MUST classify ALL pairs below. `concurrent` is the default when no",
+        "structural ordering exists, but do NOT skip any pair — an empty list means",
+        "NOTHING was classified, which is only correct if there is exactly one pair",
+        "and it is truly concurrent.",
         "",
         *pair_lines,
         "",

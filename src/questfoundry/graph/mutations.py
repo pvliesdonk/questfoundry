@@ -1927,11 +1927,11 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
                 reason="node_missing",
             )
             continue
+        edge_type = relationship.get("ordering", "concurrent")
         graph.add_edge(
-            "dilemma_ordering",
+            edge_type,
             a_node,
             b_node,
-            ordering=relationship.get("ordering", "concurrent"),
             description=relationship.get("description", ""),
         )
 
