@@ -646,29 +646,29 @@ per_path_beats_prompt: |
   ## Schema
   Return a JSON object with an "initial_beats" array of {size_beats_per_path} beats:
   ```json
-  {
+  {{
     "initial_beats": [
-      {
+      {{
         "beat_id": "{path_name}_beat_01",
         "summary": "What happens in this beat",
         "path_id": "{path_id}",
         "dilemma_impacts": [
-          {
+          {{
             "dilemma_id": "{dilemma_id}",
             "effect": "advances",
             "note": "Explanation"
-          }
+          }}
         ],
         "entities": ["character::character_id"],
         "location": "location::location_id",
         "location_alternatives": ["location::other_location_if_scene_could_move_there"],
-        "temporal_hint": {
+        "temporal_hint": {{
           "relative_to": "dilemma::[other_dilemma_id]",
           "position": "before_commit"
-        }
-      }
+        }}
+      }}
     ]
-  }
+  }}
   ```
 
   ## location_alternatives — GROW intersection hint (IMPORTANT)
@@ -694,7 +694,7 @@ per_path_beats_prompt: |
   (b) This beat's emotional impact lands better because of where another dilemma's
       key moment falls (e.g., relief hits harder AFTER the other dilemma resolves).
   EXAMPLE: beat on path `path::trust_the_stranger__reveal` where the stranger confesses a
-  past crime → `"temporal_hint": {"relative_to": "dilemma::protect_secret", "position": "before_commit"}`
+  past crime → `"temporal_hint": {{"relative_to": "dilemma::protect_secret", "position": "before_commit"}}`
   because the player must know this BEFORE deciding whether to protect the secret.
   Omit temporal_hint only when the beat's placement is genuinely independent of all
   other dilemmas. Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
