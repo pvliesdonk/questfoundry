@@ -784,16 +784,20 @@ async def _serialize_paths_per_dilemma(
 def _build_per_path_beat_context(
     path_data: dict[str, Any],
     entity_context: str,
+    all_paths: list[dict[str, Any]] | None = None,
 ) -> str:
     """Build a brief for generating beats for a single path.
 
     Creates a minimal context containing only:
     - The path's ID and parent dilemma
     - Entity IDs for character/location references
+    - Sibling path summaries (when all_paths is provided) for location inference
 
     Args:
         path_data: Path dict with path_id and dilemma_id.
         entity_context: Entity IDs section from the full brief.
+        all_paths: All paths in the serialization run; used to inject sibling
+            summaries that help the LLM populate location_alternatives.
 
     Returns:
         Per-path brief for beat generation.
@@ -860,6 +864,7 @@ async def _serialize_path_beats(
     provider_name: str | None,
     max_retries: int,
     callbacks: list[BaseCallbackHandler] | None,
+    all_paths: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Serialize beats for a single path.
 
@@ -873,6 +878,7 @@ async def _serialize_path_beats(
         provider_name: Provider name for strategy selection.
         max_retries: Maximum Pydantic validation retries.
         callbacks: LangChain callback handlers.
+        all_paths: All paths for sibling context injection.
 
     Returns:
         Tuple of (list of beat dicts, tokens used).
@@ -896,7 +902,7 @@ async def _serialize_path_beats(
     )
 
     # Build per-path brief
-    brief = _build_per_path_beat_context(path_data, entity_context)
+    brief = _build_per_path_beat_context(path_data, entity_context, all_paths=all_paths)
 
     log.debug(
         "serialize_path_beats_started",
@@ -978,6 +984,7 @@ async def _serialize_beats_per_path(
                 provider_name=provider_name,
                 max_retries=max_retries,
                 callbacks=callbacks,
+                all_paths=paths,
             )
 
     # Create tasks for all paths (semaphore limits actual concurrency)
