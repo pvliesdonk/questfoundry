@@ -6,6 +6,9 @@ system: |
   based on which narrative path the player has taken. Overlays activate
   when specific state flags are granted.
 
+  CRITICAL RULE: Each overlay MUST activate on EXACTLY ONE state flag.
+  The "when" list must contain exactly one ID. Never list two flags in one overlay.
+
   ## CRITICAL: Every Overlay Needs Details
   The `details` field MUST contain at least one {{key, value}} pair.
   WRONG: {{"entity_id": "character::hero", "when": ["state_flag::cw_trust"], "details": []}}
@@ -60,14 +63,13 @@ system: |
   mutually exclusive — they can NEVER both be active at the same time.
   An overlay with two flags from the same dilemma will NEVER activate.
 
+  (Example IDs are illustrative — use IDs from the Valid IDs section below)
   GOOD (one flag per overlay, two overlays for the same entity):
     {{"entity_id": "character::mentor", "when": ["state_flag::mentor_hostile_committed"], "details": [{{"key": "attitude", "value": "Cold and dismissive"}}]}}
     {{"entity_id": "character::mentor", "when": ["state_flag::mentor_friendly_committed"], "details": [{{"key": "attitude", "value": "Warm and encouraging"}}]}}
 
   BAD (two flags from the same dilemma — this overlay will NEVER activate):
     {{"entity_id": "character::mentor", "when": ["state_flag::mentor_hostile_committed", "state_flag::mentor_friendly_committed"], "details": [{{"key": "attitude", "value": "Changed"}}]}}
-
-  Maximum 3 overlays per entity
 
   ## What NOT to Do
   - Do NOT use IDs not listed in the Valid IDs section
@@ -82,7 +84,7 @@ system: |
   ## Output Format
   Return a JSON object with an "overlays" array. Each overlay has:
   - entity_id: the entity being modified (e.g., "character::hero")
-  - when: list of state flag IDs that activate this overlay
+  - when: list containing EXACTLY ONE state flag ID (never two or more)
   - details: array of {{key, value}} objects describing changes (MUST NOT be empty)
 
   If no overlays exist after checking all rules, return an empty overlays array.
