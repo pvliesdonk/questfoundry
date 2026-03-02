@@ -4337,3 +4337,60 @@ class TestInterleavecrossPathBeats:
         result = asyncio.run(phase_interleave_beats(graph, mock_model))
         assert result.status == "completed"
         assert "predecessor edges" in result.detail
+
+    def test_temporal_hints_stripped_after_interleaving(self) -> None:
+        """After interleaving, temporal_hint is removed from all beat nodes (#1106)."""
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+
+        # Add temporal hints to both beats
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={"relative_to": "dilemma::artifact_quest", "position": "before_commit"},
+        )
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={"relative_to": "dilemma::mentor_trust", "position": "after_introduce"},
+        )
+
+        # Both hints present before interleaving
+        assert graph.get_node("beat::mt_intro").get("temporal_hint") is not None
+        assert graph.get_node("beat::aq_intro").get("temporal_hint") is not None
+
+        interleave_cross_path_beats(graph)
+
+        # All hints stripped after interleaving
+        for beat_id in ["beat::mt_intro", "beat::mt_commit", "beat::aq_intro", "beat::aq_commit"]:
+            node = graph.get_node(beat_id)
+            assert node.get("temporal_hint") is None, (
+                f"{beat_id} still has temporal_hint after interleaving: {node.get('temporal_hint')}"
+            )
+
+    def test_temporal_hints_influence_beat_ordering(self) -> None:
+        """Temporal hints produce predecessor edges that reflect the declared position (#1106).
+
+        beat::aq_intro declares temporal_hint before_commit of dilemma::mentor_trust.
+        This means aq_intro must come before mt_commit.
+        Expected: predecessor(mt_commit, aq_intro) = aq_intro before mt_commit.
+        """
+        from questfoundry.graph.grow_algorithms import validate_beat_dag
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+
+        # aq_intro wants to appear before mt_commit
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={"relative_to": "dilemma::mentor_trust", "position": "before_commit"},
+        )
+
+        created = interleave_cross_path_beats(graph)
+        assert created > 0, "Expected at least one cross-path predecessor edge"
+
+        # Verify predecessor(mt_commit, aq_intro) was created
+        pred_edges = graph.get_edges(from_id="beat::mt_commit", edge_type="predecessor")
+        prereqs = {e["to"] for e in pred_edges}
+        assert "beat::aq_intro" in prereqs, (
+            f"Expected aq_intro as prerequisite of mt_commit, got prereqs={prereqs}"
+        )
+
+        # DAG must remain valid
+        assert validate_beat_dag(graph) == []

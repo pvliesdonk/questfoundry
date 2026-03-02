@@ -2555,5 +2555,18 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                         for ca in sorted(commits_a):
                             _add_predecessor(ca, cb)
 
-    log.info("interleave_cross_path_beats_complete", edges_created=created)
+    # Strip temporal_hint from all beat nodes — hints have served their purpose
+    # once the DAG encodes the ordering. Setting to None makes json_extract return
+    # SQL NULL, satisfying the spec's "not carried forward" requirement.
+    stripped = 0
+    for beat_id in beat_nodes:
+        if beat_nodes[beat_id].get("temporal_hint") is not None:
+            graph.update_node(beat_id, temporal_hint=None)
+            stripped += 1
+
+    log.info(
+        "interleave_cross_path_beats_complete",
+        edges_created=created,
+        temporal_hints_stripped=stripped,
+    )
     return created
