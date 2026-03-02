@@ -1048,11 +1048,11 @@ def format_interaction_candidates_context(
 ) -> str:
     """Format all dilemma pairs for ordering classification (Section 8).
 
-    Builds rich per-dilemma context (question, stakes, answers, convergence
-    point) and enumerates ALL pairs of surviving dilemmas.  Pairs that share
-    central entities are flagged so the LLM has extra signal, but every pair
-    is included because small stories (2-4 dilemmas = 3-6 pairs max) rarely
-    have enough shared-entity pairs to trigger any classification at all.
+    Builds rich per-dilemma context (question, stakes, answers via has_answer
+    edges, convergence point) and enumerates ALL pairs of surviving dilemmas.
+    Pairs that share central entities are flagged so the LLM has extra signal,
+    but every pair is included because small stories (2-4 dilemmas = 3-6 pairs
+    max) rarely have enough shared-entity pairs to trigger any classification.
 
     Args:
         seed_output: Pruned SEED output with surviving dilemmas.
@@ -1069,15 +1069,15 @@ def format_interaction_candidates_context(
 
     sorted_ids = sorted(surviving_ids)
 
-    # Collect per-dilemma data from graph
+    # Collect per-dilemma data and central entities from graph
     dilemma_data: dict[str, dict[str, Any]] = {}
     dilemma_entities: dict[str, set[str]] = {}
     for raw_id in sorted_ids:
         node_id = f"{SCOPE_DILEMMA}::{raw_id}"
         node = graph.get_node(node_id)
         dilemma_data[raw_id] = node if node is not None else {}
-        edges = graph.get_edges(from_id=node_id, edge_type="anchored_to")
-        dilemma_entities[raw_id] = {strip_scope_prefix(e["to"]) for e in edges}
+        anchor_edges = graph.get_edges(from_id=node_id, edge_type="anchored_to")
+        dilemma_entities[raw_id] = {strip_scope_prefix(e["to"]) for e in anchor_edges}
 
     # Build per-dilemma detail blocks
     dilemma_blocks: list[str] = []
@@ -1090,17 +1090,23 @@ def format_interaction_candidates_context(
         why = data.get("why_it_matters", "")
         if why:
             block.append(f"**Stakes:** {why}")
-        # Answers from the dilemma node
-        answers = data.get("answers", [])
-        if answers:
+        # Answers from has_answer edges (not node data — answers are separate nodes)
+        node_id = f"{SCOPE_DILEMMA}::{raw_id}"
+        answer_edges = graph.get_edges(from_id=node_id, edge_type="has_answer")
+        if answer_edges:
             answer_lines = []
-            for ans in answers:
-                label = ans.get("label", ans.get("answer_id", "?"))
+            for ae in answer_edges:
+                ans_node = graph.get_node(ae["to"])
+                if ans_node is None:
+                    continue
+                ans = ans_node
+                label = ans.get("label", ans.get("answer_id", strip_scope_prefix(ae["to"])))
                 consequence = ans.get("consequence", {})
                 desc = consequence.get("description", "") if isinstance(consequence, dict) else ""
                 marker = " (default)" if ans.get("default") else ""
                 answer_lines.append(f"  - `{label}`{marker}" + (f": {desc}" if desc else ""))
-            block.append("**Answers:**\n" + "\n".join(answer_lines))
+            if answer_lines:
+                block.append("**Answers:**\n" + "\n".join(answer_lines))
         conv = data.get("convergence_point", "")
         if conv:
             block.append(f"**Convergence point:** {conv}")
@@ -1132,8 +1138,8 @@ def format_interaction_candidates_context(
         "",
         "You MUST classify ALL pairs below. `concurrent` is the default when no",
         "structural ordering exists, but do NOT skip any pair — an empty list means",
-        "NOTHING was classified, which is only correct if there is exactly one pair",
-        "and it is truly concurrent.",
+        "NOTHING was classified, which is only correct when fewer than 2 surviving",
+        "dilemmas exist.",
         "",
         *pair_lines,
         "",

@@ -1596,7 +1596,7 @@ class TestFormatInteractionCandidatesContext:
         return graph
 
     def test_shared_entity_pair_found(self) -> None:
-        """Two dilemmas sharing an entity produce a candidate pair."""
+        """Two dilemmas sharing an entity produce a pair with shared-entity note."""
         graph = self._graph_with_dilemmas(
             {
                 "alpha": ["entity::hero", "entity::castle"],
@@ -1605,13 +1605,13 @@ class TestFormatInteractionCandidatesContext:
         )
         seed = _seed_output(dilemmas=[_dilemma("alpha"), _dilemma("beta")])
         result = format_interaction_candidates_context(seed, graph)
-        assert "### Candidate Pairs" in result
+        assert "## All Dilemma Pairs" in result
         assert "dilemma::alpha" in result
         assert "dilemma::beta" in result
-        assert "hero" in result
+        assert "hero" in result  # shared entity flagged in pair line
 
-    def test_no_shared_entities_returns_no_candidates(self) -> None:
-        """Disjoint entities produce no-candidates message."""
+    def test_no_shared_entities_still_shows_all_pairs(self) -> None:
+        """Disjoint entities still produce a pair listing — all pairs are always shown."""
         graph = self._graph_with_dilemmas(
             {
                 "alpha": ["entity::hero"],
@@ -1620,7 +1620,9 @@ class TestFormatInteractionCandidatesContext:
         )
         seed = _seed_output(dilemmas=[_dilemma("alpha"), _dilemma("beta")])
         result = format_interaction_candidates_context(seed, graph)
-        assert "No candidate pairs" in result
+        assert "## All Dilemma Pairs" in result
+        assert "dilemma::alpha" in result
+        assert "dilemma::beta" in result
 
     def test_single_dilemma_returns_no_candidates(self) -> None:
         """Fewer than 2 dilemmas cannot have pairs."""
