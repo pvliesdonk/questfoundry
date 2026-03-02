@@ -354,9 +354,9 @@ def _branching_quality_score(
         for beat_id in data.get("sequence", []):
             beat_to_arcs.setdefault(beat_id, []).append(arc_id)
 
-    # Build arc → state flags: arc paths → consequences → state flags via tracks edges
+    # Build arc → state flags: arc paths → consequences → state flags via derived_from edges
     arc_state_flags: dict[str, frozenset[str]] = {}
-    tracks_edges = graph.get_edges(edge_type="tracks")
+    tracks_edges = graph.get_edges(edge_type="derived_from")
     consequence_to_state_flag: dict[str, str] = {}
     for edge in tracks_edges:
         consequence_to_state_flag[edge["to"]] = edge["from"]

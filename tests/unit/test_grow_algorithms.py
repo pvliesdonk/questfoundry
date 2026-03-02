@@ -1942,7 +1942,7 @@ class TestPhase8bIntegration:
         mock_model = MagicMock()
         await phase_state_flags(graph, mock_model)
 
-        tracks_edges = graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
+        tracks_edges = graph.get_edges(from_id=None, to_id=None, edge_type="derived_from")
         state_flag_nodes = graph.get_nodes_by_type("state_flag")
         assert len(tracks_edges) == len(state_flag_nodes)
 
@@ -2771,7 +2771,7 @@ class TestPhaseIntegrationEndToEnd:
         passage_from = saved_graph.get_edges(from_id=None, to_id=None, edge_type="passage_from")
         assert len(passage_from) == 0
 
-        tracks = saved_graph.get_edges(from_id=None, to_id=None, edge_type="tracks")
+        tracks = saved_graph.get_edges(from_id=None, to_id=None, edge_type="derived_from")
         assert len(tracks) == 4
 
         grants = saved_graph.get_edges(from_id=None, to_id=None, edge_type="grants")
@@ -3960,8 +3960,8 @@ class TestBuildArcStateFlags:
             "state_flag::cw2",
             {"type": "state_flag", "raw_id": "cw2"},
         )
-        graph.add_edge("tracks", "state_flag::cw1", "consequence::c1")
-        graph.add_edge("tracks", "state_flag::cw2", "consequence::c2")
+        graph.add_edge("derived_from", "state_flag::cw1", "consequence::c1")
+        graph.add_edge("derived_from", "state_flag::cw2", "consequence::c2")
 
         # Single arc covering both paths
         graph.create_node(
@@ -4035,8 +4035,8 @@ class TestBuildArcStateFlags:
         graph.add_edge("has_consequence", "path::d2__yes", "consequence::c2")
         graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
         graph.create_node("state_flag::cw2", {"type": "state_flag", "raw_id": "cw2"})
-        graph.add_edge("tracks", "state_flag::cw1", "consequence::c1")
-        graph.add_edge("tracks", "state_flag::cw2", "consequence::c2")
+        graph.add_edge("derived_from", "state_flag::cw1", "consequence::c1")
+        graph.add_edge("derived_from", "state_flag::cw2", "consequence::c2")
         graph.create_node(
             "arc::main",
             {

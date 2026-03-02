@@ -162,7 +162,7 @@ def _project_state_flags_to_codewords(graph: Graph) -> list[ExportCodeword]:
                 ExportCodeword(
                     id=flag_id,
                     codeword_type=flag_data.get("flag_type", "granted"),
-                    tracks=flag_data.get("tracks"),
+                    derived_from=flag_data.get("derived_from"),
                 )
             )
         elif not role:
@@ -194,7 +194,7 @@ def _extract_codewords(graph: Graph) -> list[ExportCodeword]:
         ExportCodeword(
             id=node_id,
             codeword_type=data.get("codeword_type", "granted"),
-            tracks=data.get("tracks"),
+            derived_from=data.get("derived_from"),
         )
         for node_id, data in sorted(nodes.items())
     ]

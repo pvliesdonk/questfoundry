@@ -626,8 +626,8 @@ class TestBranchingQualityScore:
         )
         graph.add_edge("has_consequence", "path::canon", "consequence::c_canon")
         graph.add_edge("has_consequence", "path::rebel", "consequence::c_rebel")
-        graph.add_edge("tracks", "state_flag::canon_flag", "consequence::c_canon")
-        graph.add_edge("tracks", "state_flag::rebel_flag", "consequence::c_rebel")
+        graph.add_edge("derived_from", "state_flag::canon_flag", "consequence::c_canon")
+        graph.add_edge("derived_from", "state_flag::rebel_flag", "consequence::c_rebel")
 
         result = _branching_quality_score(graph, None)
         assert result is not None
