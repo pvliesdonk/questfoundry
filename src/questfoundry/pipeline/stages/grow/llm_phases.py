@@ -1080,8 +1080,8 @@ class _LLMPhaseMixin:
 
         for sf_id, sf_data in sorted(state_flag_nodes.items()):
             valid_state_flag_ids.append(sf_id)
-            tracks_id = sf_data.get("tracks", "")
-            cons_data = consequence_nodes.get(tracks_id, {})
+            derived_from_id = sf_data.get("tracks", "")
+            cons_data = consequence_nodes.get(derived_from_id, {})
             cons_desc = cons_data.get("description", "unknown consequence")
 
             # Trace: consequence → path → dilemma for rich context

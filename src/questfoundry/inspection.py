@@ -356,9 +356,9 @@ def _branching_quality_score(
 
     # Build arc → state flags: arc paths → consequences → state flags via tracks edges
     arc_state_flags: dict[str, frozenset[str]] = {}
-    tracks_edges = graph.get_edges(edge_type="tracks")
+    derived_from_edges = graph.get_edges(edge_type="tracks")
     consequence_to_state_flag: dict[str, str] = {}
-    for edge in tracks_edges:
+    for edge in derived_from_edges:
         consequence_to_state_flag[edge["to"]] = edge["from"]
 
     has_consequence_edges = graph.get_edges(edge_type="has_consequence")
