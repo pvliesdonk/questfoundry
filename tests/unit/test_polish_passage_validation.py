@@ -216,7 +216,7 @@ def _make_routing_graph(
         graph.create_node(cons_id, {"type": "consequence", "raw_id": p})
         graph.create_node(sf_id, {"type": "state_flag", "raw_id": p})
         graph.add_edge("has_consequence", pid, cons_id)
-        graph.add_edge("tracks", sf_id, cons_id)
+        graph.add_edge("derived_from", sf_id, cons_id)
 
     # Arcs
     for arc_raw, paths in arc_paths.items():
@@ -538,7 +538,7 @@ class TestGateCoSatisfiability:
         graph.create_node("consequence::c1", {"type": "consequence", "raw_id": "c1"})
         graph.add_edge("has_consequence", "path::p1", "consequence::c1")
         graph.create_node("state_flag::cw1", {"type": "state_flag", "raw_id": "cw1"})
-        graph.add_edge("tracks", "state_flag::cw1", "consequence::c1")
+        graph.add_edge("derived_from", "state_flag::cw1", "consequence::c1")
         # Arc containing p1
         graph.create_node(
             "arc::a1",
@@ -571,7 +571,7 @@ class TestGateCoSatisfiability:
             graph.create_node(cons_id, {"type": "consequence", "raw_id": f"{p_id}_c"})
             graph.add_edge("has_consequence", f"path::{p_id}", cons_id)
             graph.create_node(sf_id, {"type": "state_flag", "raw_id": f"{p_id}_cw"})
-            graph.add_edge("tracks", sf_id, cons_id)
+            graph.add_edge("derived_from", sf_id, cons_id)
         # Arc 1 has only p1, Arc 2 has only p2 -- mutually exclusive
         graph.create_node(
             "arc::a1",

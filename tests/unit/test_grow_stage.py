@@ -1353,12 +1353,12 @@ class TestPhase8cOverlays:
             {
                 "type": "state_flag",
                 "raw_id": "mentor_trusted_committed",
-                "tracks": "consequence::mentor_trusted",
+                "derived_from": "consequence::mentor_trusted",
                 "flag_type": "granted",
             },
         )
         graph.add_edge(
-            "tracks", "state_flag::mentor_trusted_committed", "consequence::mentor_trusted"
+            "derived_from", "state_flag::mentor_trusted_committed", "consequence::mentor_trusted"
         )
 
         stage = GrowStage()
@@ -1414,7 +1414,7 @@ class TestPhase8cOverlays:
             {
                 "type": "state_flag",
                 "raw_id": "cw1",
-                "tracks": "consequence::c1",
+                "derived_from": "consequence::c1",
                 "flag_type": "granted",
             },
         )
@@ -1461,7 +1461,7 @@ class TestPhase8cOverlays:
             {
                 "type": "state_flag",
                 "raw_id": "cw1",
-                "tracks": "consequence::c1",
+                "derived_from": "consequence::c1",
                 "flag_type": "granted",
             },
         )
@@ -1537,7 +1537,7 @@ class TestPhase8cOverlays:
             {
                 "type": "state_flag",
                 "raw_id": "cw1",
-                "tracks": "consequence::c1",
+                "derived_from": "consequence::c1",
                 "flag_type": "granted",
             },
         )
@@ -1631,7 +1631,7 @@ class TestPhase8cOverlays:
             {
                 "type": "state_flag",
                 "raw_id": "mentor_trusted_committed",
-                "tracks": "consequence::mentor_trusted",
+                "derived_from": "consequence::mentor_trusted",
                 "flag_type": "granted",
             },
         )
@@ -1688,7 +1688,7 @@ class TestPhase8cOverlays:
             {
                 "type": "state_flag",
                 "raw_id": "hero_saved_committed",
-                "tracks": "consequence::hero_saved",
+                "derived_from": "consequence::hero_saved",
                 "flag_type": "granted",
             },
         )
@@ -1743,7 +1743,7 @@ class TestPhase8cOverlays:
             {
                 "type": "state_flag",
                 "raw_id": "secret_revealed_committed",
-                "tracks": "consequence::secret_revealed",
+                "derived_from": "consequence::secret_revealed",
                 "flag_type": "granted",
             },
         )
@@ -2053,7 +2053,11 @@ class TestPhase8cErrorHandling:
         )
         graph.create_node(
             "state_flag::cw_trust",
-            {"type": "state_flag", "tracks": "consequence::trust_gain", "flag_type": "granted"},
+            {
+                "type": "state_flag",
+                "derived_from": "consequence::trust_gain",
+                "flag_type": "granted",
+            },
         )
 
         stage = GrowStage()

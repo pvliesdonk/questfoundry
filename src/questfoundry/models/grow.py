@@ -68,7 +68,7 @@ class StateFlag(BaseModel):
     """
 
     flag_id: str = Field(min_length=1)
-    tracks: str = Field(min_length=1)
+    derived_from: str = Field(min_length=1)
     flag_type: Literal["granted"] = "granted"
 
 

@@ -343,11 +343,11 @@ async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
             {
                 "type": "state_flag",
                 "raw_id": f"{cons_raw}_committed",
-                "tracks": cons_id,
+                "derived_from": cons_id,
                 "flag_type": "granted",
             },
         )
-        graph.add_edge("tracks", flag_id, cons_id)
+        graph.add_edge("derived_from", flag_id, cons_id)
 
         # Find commits beats for this consequence's path
         cons_path_id = cons_data.get("path_id", "")
