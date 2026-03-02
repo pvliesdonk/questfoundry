@@ -2285,9 +2285,15 @@ def _get_path_beats_ordered(
     beats = path_beats_map.get(path_id, [])
     if not beats:
         return []
-    with contextlib.suppress(ValueError):
+    try:
         return topological_sort_beats(graph, beats)
-    return sorted(beats)  # Fallback to alphabetical on cycle (should not happen)
+    except ValueError:
+        log.warning(
+            "interleave_path_cycle_fallback",
+            path_id=path_id,
+            beats=beats,
+        )
+        return sorted(beats)  # Fallback to alphabetical on cycle (should not happen)
 
 
 def _commits_beats_for_dilemma(
@@ -2508,34 +2514,21 @@ def interleave_cross_path_beats(graph: Graph) -> int:
 
                 # Collect commit/intro beats for the referenced dilemma
                 if relative_to == dilemma_a:
-                    ref_commits = _commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes)
-                    ref_first = [seq[0] for seq in ordered_a if seq]
+                    ref_all, ref_ordered, ref_dil = all_beats_a, ordered_a, dilemma_a
                 elif relative_to == dilemma_b:
-                    ref_commits = _commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes)
-                    ref_first = [seq[0] for seq in ordered_b if seq]
+                    ref_all, ref_ordered, ref_dil = all_beats_b, ordered_b, dilemma_b
                 else:
                     continue
 
-                if position == "before_commit":
-                    # beat_id must come before each commit beat of relative_to
-                    for commit in sorted(ref_commits):
-                        if _add_predecessor(commit, beat_id):
-                            hints_applied += 1
-                elif position == "after_commit":
-                    # beat_id must come after each commit beat of relative_to
-                    for commit in sorted(ref_commits):
-                        if _add_predecessor(beat_id, commit):
-                            hints_applied += 1
-                elif position == "before_introduce":
-                    # beat_id must come before first beats of relative_to
-                    for intro in sorted(ref_first):
-                        if _add_predecessor(intro, beat_id):
-                            hints_applied += 1
-                elif position == "after_introduce":
-                    # beat_id must come after first beats of relative_to
-                    for intro in sorted(ref_first):
-                        if _add_predecessor(beat_id, intro):
-                            hints_applied += 1
+                ref_commits = _commits_beats_for_dilemma(ref_all, ref_dil, beat_nodes)
+                ref_first = [seq[0] for seq in ref_ordered if seq]
+
+                is_before = position.startswith("before_")
+                target_beats = ref_commits if "commit" in position else ref_first
+                for target in sorted(target_beats):
+                    from_b, to_b = (target, beat_id) if is_before else (beat_id, target)
+                    if _add_predecessor(from_b, to_b):
+                        hints_applied += 1
 
             if hints_applied:
                 log.debug(

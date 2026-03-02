@@ -4302,28 +4302,27 @@ class TestInterleavecrossPathBeats:
     def test_cycle_inducing_edge_skipped(self) -> None:
         """Edges that would create a cycle are skipped and DAG stays valid.
 
-        Setup: A concurrent relationship between mentor_trust and artifact_quest.
-        We pre-add predecessor(aq_intro, mt_commit) which means mt_commit must
-        come after aq_intro. The heuristic would want to add predecessor(aq_commit,
-        mt_commit) as well — but since dilemma::artifact_quest > dilemma::mentor_trust
-        alphabetically, heuristic adds predecessor(aq_commit, mt_commit) — aq_commit
-        requires mt_commit. Since mt_commit already requires aq_intro (pre-added),
-        and aq_commit requires aq_intro (within-path), no cycle there.
+        Alphabetically "dilemma::artifact_quest" < "dilemma::mentor_trust" ('a' < 'm'),
+        so dilemma_a=mentor_trust, dilemma_b=artifact_quest. The heuristic 'else' branch
+        runs: artifact_quest (B) commits before mentor_trust (A).
+        It calls _add_predecessor(mt_commit, aq_commit) = aq_commit before mt_commit in topo.
 
-        Instead, we manually force the cycle-inducing situation by pre-adding
-        predecessor(mt_intro, aq_commit) — mt_intro requires aq_commit, and then
-        concurrent would try to add predecessor(aq_commit, mt_commit). Since
-        mt_commit requires mt_intro (within-path) requires aq_commit (pre-added),
-        adding aq_commit requires mt_commit would cycle. This edge should be skipped.
+        We pre-add predecessor(aq_intro, mt_commit) so that mt_commit executes before
+        aq_intro in topo. Via the within-path edge aq_intro → aq_commit, the topo chain
+        becomes: mt_commit → aq_intro → aq_commit.
+        Now aq_commit IS reachable from mt_commit in the successor graph.
+        _would_create_cycle(mt_commit, aq_commit) correctly detects the cycle and skips
+        the edge, leaving the DAG valid.
         """
         from questfoundry.graph.grow_algorithms import validate_beat_dag
 
         graph = _make_two_dilemma_graph_with_relationship("concurrent")
 
-        # Pre-add: mt_intro requires aq_commit
-        # Chain: mt_commit → mt_intro → aq_commit → aq_intro (existing within-path)
-        # If we now try to add: aq_commit requires mt_commit → CYCLE
-        graph.add_edge("predecessor", "beat::mt_intro", "beat::aq_commit")
+        # Pre-add: aq_intro requires mt_commit (mt_commit before aq_intro in topo).
+        # Creates topo chain: mt_commit → aq_intro → aq_commit (via within-path edge).
+        # Heuristic tries _add_predecessor(mt_commit, aq_commit) = aq_commit before mt_commit.
+        # _would_create_cycle: BFS from mt_commit reaches aq_commit → CYCLE → skipped.
+        graph.add_edge("predecessor", "beat::aq_intro", "beat::mt_commit")
 
         interleave_cross_path_beats(graph)
         errors = validate_beat_dag(graph)
