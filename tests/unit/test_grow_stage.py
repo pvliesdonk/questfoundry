@@ -183,10 +183,10 @@ class TestGrowStageExecute:
 
 class TestGrowStagePhaseOrder:
     def test_phase_order_returns_correct_count(self) -> None:
-        """15 phases after removing residue_beats."""
+        """14 phases after moving collapse_linear_beats to POLISH (#1109)."""
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 15
+        assert len(phases) == 14
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -203,7 +203,6 @@ class TestGrowStagePhaseOrder:
             "enumerate_arcs",
             "divergence",
             "convergence",
-            "collapse_linear_beats",
             "state_flags",
             "overlays",
             "validation",
