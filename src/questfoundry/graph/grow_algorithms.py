@@ -2361,6 +2361,24 @@ def _would_create_cycle(
     return False
 
 
+def _strip_temporal_hints(graph: Graph, beat_nodes: dict[str, Any]) -> int:
+    """Remove temporal_hint from all beat nodes.
+
+    Hints have served their purpose once the beat DAG encodes the ordering.
+    Sets temporal_hint to None (JSON null) which satisfies the spec's
+    "not carried forward" requirement and the SQL verification query.
+
+    Returns:
+        Count of beats that had a hint stripped.
+    """
+    stripped = 0
+    for beat_id, data in beat_nodes.items():
+        if data.get("temporal_hint") is not None:
+            graph.update_node(beat_id, temporal_hint=None)
+            stripped += 1
+    return stripped
+
+
 def interleave_cross_path_beats(graph: Graph) -> int:
     """Create predecessor edges between beats from different dilemma paths.
 
@@ -2390,6 +2408,7 @@ def interleave_cross_path_beats(graph: Graph) -> int:
 
     dilemma_paths = build_dilemma_paths(graph)
     if len(dilemma_paths) < 2:
+        _strip_temporal_hints(graph, beat_nodes)
         return 0
 
     # path_id → ordered list of beat IDs
@@ -2421,6 +2440,7 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                 relationship_edges.append((a, b, ordering))
 
     if not relationship_edges:
+        _strip_temporal_hints(graph, beat_nodes)
         return 0
 
     created = 0
@@ -2555,18 +2575,9 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                         for ca in sorted(commits_a):
                             _add_predecessor(ca, cb)
 
-    # Strip temporal_hint from all beat nodes — hints have served their purpose
-    # once the DAG encodes the ordering. Setting to None makes json_extract return
-    # SQL NULL, satisfying the spec's "not carried forward" requirement.
-    stripped = 0
-    for beat_id in beat_nodes:
-        if beat_nodes[beat_id].get("temporal_hint") is not None:
-            graph.update_node(beat_id, temporal_hint=None)
-            stripped += 1
-
     log.info(
         "interleave_cross_path_beats_complete",
         edges_created=created,
-        temporal_hints_stripped=stripped,
+        temporal_hints_stripped=_strip_temporal_hints(graph, beat_nodes),
     )
     return created

@@ -4365,6 +4365,56 @@ class TestInterleavecrossPathBeats:
                 f"{beat_id} still has temporal_hint after interleaving: {node.get('temporal_hint')}"
             )
 
+    def test_hints_stripped_on_single_dilemma_early_return(self) -> None:
+        """Hints are stripped even when early-returning due to single-dilemma graph (#1106)."""
+        graph = Graph.empty()
+        graph.create_node("dilemma::solo", {"type": "dilemma", "raw_id": "solo"})
+        graph.create_node(
+            "path::solo_path",
+            {"type": "path", "raw_id": "solo_path", "dilemma_id": "dilemma::solo"},
+        )
+        graph.create_node(
+            "beat::solo_beat",
+            {
+                "type": "beat",
+                "raw_id": "solo_beat",
+                "temporal_hint": {"relative_to": "dilemma::solo", "position": "before_commit"},
+            },
+        )
+        graph.add_edge("belongs_to", "beat::solo_beat", "path::solo_path")
+
+        result = interleave_cross_path_beats(graph)
+        assert result == 0  # No cross-path edges in single-dilemma graph
+        assert graph.get_node("beat::solo_beat").get("temporal_hint") is None
+
+    def test_hints_stripped_on_no_relationship_early_return(self) -> None:
+        """Hints are stripped even when early-returning due to no dilemma relationships (#1106)."""
+        # Two dilemmas but no relationship edges between them
+        graph = Graph.empty()
+        graph.create_node("dilemma::a", {"type": "dilemma", "raw_id": "a"})
+        graph.create_node("dilemma::b", {"type": "dilemma", "raw_id": "b"})
+        graph.create_node(
+            "path::pa",
+            {"type": "path", "raw_id": "pa", "dilemma_id": "dilemma::a", "is_canonical": True},
+        )
+        graph.create_node(
+            "path::pb",
+            {"type": "path", "raw_id": "pb", "dilemma_id": "dilemma::b", "is_canonical": True},
+        )
+        graph.create_node(
+            "beat::beat_a",
+            {
+                "type": "beat",
+                "raw_id": "beat_a",
+                "temporal_hint": {"relative_to": "dilemma::b", "position": "after_introduce"},
+            },
+        )
+        graph.add_edge("belongs_to", "beat::beat_a", "path::pa")
+
+        result = interleave_cross_path_beats(graph)
+        assert result == 0  # No relationship edges
+        assert graph.get_node("beat::beat_a").get("temporal_hint") is None
+
     def test_beat_with_explicit_null_hint_unaffected(self) -> None:
         """A beat with temporal_hint=None before interleaving stays None after (#1106)."""
         graph = _make_two_dilemma_graph_with_relationship("concurrent")
