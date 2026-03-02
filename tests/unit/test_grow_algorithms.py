@@ -14,6 +14,7 @@ from questfoundry.graph.grow_algorithms import (
     compute_shared_beats,
     enumerate_arcs,
     find_convergence_points,
+    interleave_cross_path_beats,
     topological_sort_beats,
     validate_beat_dag,
     validate_commits_beats,
@@ -35,6 +36,7 @@ from questfoundry.pipeline.stages.grow.deterministic import (
     phase_convergence,
     phase_divergence,
     phase_enumerate_arcs,
+    phase_interleave_beats,
     phase_state_flags,
     phase_validate_dag,
 )
@@ -4059,3 +4061,280 @@ class TestBuildArcStateFlags:
         graph = Graph.empty()
         result = build_arc_state_flags(graph, {})
         assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# interleave_cross_path_beats
+# ---------------------------------------------------------------------------
+
+
+def _make_two_dilemma_graph_with_relationship(ordering: str) -> Graph:
+    """Build a two-dilemma graph with a dilemma relationship edge.
+
+    Dilemma A (mentor_trust) and Dilemma B (artifact_quest) are linked by
+    the given ordering edge type. Each dilemma has one canonical path with
+    two beats: an intro beat and a commit beat.
+
+    Beat structure:
+        mt_intro → mt_commit  (mentor_trust path)
+        aq_intro → aq_commit  (artifact_quest path)
+
+    The relationship ordering is applied FROM mentor_trust TO artifact_quest.
+    """
+    graph = Graph.empty()
+
+    # Dilemmas
+    graph.create_node("dilemma::mentor_trust", {"type": "dilemma", "raw_id": "mentor_trust"})
+    graph.create_node("dilemma::artifact_quest", {"type": "dilemma", "raw_id": "artifact_quest"})
+
+    # Paths
+    graph.create_node(
+        "path::mt_path",
+        {
+            "type": "path",
+            "raw_id": "mt_path",
+            "dilemma_id": "dilemma::mentor_trust",
+            "is_canonical": True,
+        },
+    )
+    graph.create_node(
+        "path::aq_path",
+        {
+            "type": "path",
+            "raw_id": "aq_path",
+            "dilemma_id": "dilemma::artifact_quest",
+            "is_canonical": True,
+        },
+    )
+
+    # Beats for mentor_trust path
+    graph.create_node(
+        "beat::mt_intro",
+        {
+            "type": "beat",
+            "raw_id": "mt_intro",
+            "summary": "Mentor path intro.",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::mentor_trust", "effect": "advances"}],
+        },
+    )
+    graph.create_node(
+        "beat::mt_commit",
+        {
+            "type": "beat",
+            "raw_id": "mt_commit",
+            "summary": "Mentor path commit.",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::mentor_trust", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::mt_intro", "path::mt_path")
+    graph.add_edge("belongs_to", "beat::mt_commit", "path::mt_path")
+    graph.add_edge("predecessor", "beat::mt_commit", "beat::mt_intro")
+
+    # Beats for artifact_quest path
+    graph.create_node(
+        "beat::aq_intro",
+        {
+            "type": "beat",
+            "raw_id": "aq_intro",
+            "summary": "Artifact path intro.",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::artifact_quest", "effect": "advances"}],
+        },
+    )
+    graph.create_node(
+        "beat::aq_commit",
+        {
+            "type": "beat",
+            "raw_id": "aq_commit",
+            "summary": "Artifact path commit.",
+            "dilemma_impacts": [{"dilemma_id": "dilemma::artifact_quest", "effect": "commits"}],
+        },
+    )
+    graph.add_edge("belongs_to", "beat::aq_intro", "path::aq_path")
+    graph.add_edge("belongs_to", "beat::aq_commit", "path::aq_path")
+    graph.add_edge("predecessor", "beat::aq_commit", "beat::aq_intro")
+
+    # Dilemma relationship edge: mentor_trust → artifact_quest
+    graph.add_edge(ordering, "dilemma::mentor_trust", "dilemma::artifact_quest")
+
+    return graph
+
+
+class TestInterleavecrossPathBeats:
+    """Tests for interleave_cross_path_beats."""
+
+    def test_empty_graph_returns_zero(self) -> None:
+        """Returns 0 for a graph with no beats."""
+
+        graph = Graph.empty()
+        assert interleave_cross_path_beats(graph) == 0
+
+    def test_single_dilemma_returns_zero(self) -> None:
+        """Returns 0 when there is only one dilemma (no cross-path edges possible)."""
+
+        graph = make_single_dilemma_graph()
+        result = interleave_cross_path_beats(graph)
+        assert result == 0
+
+    def test_no_relationship_edges_returns_zero(self) -> None:
+        """Returns 0 when two dilemmas exist but have no relationship edges."""
+
+        graph = make_two_dilemma_graph()
+        # No concurrent/wraps/serial edges added — no cross-path edges
+        result = interleave_cross_path_beats(graph)
+        assert result == 0
+
+    def test_serial_creates_last_to_first_edges(self) -> None:
+        """Serial ordering: last A beat → first B beat predecessor edges added."""
+
+        graph = _make_two_dilemma_graph_with_relationship("serial")
+        count = interleave_cross_path_beats(graph)
+
+        assert count > 0
+        # aq_intro must require mt_commit: predecessor(aq_intro, mt_commit)
+        edges = graph.get_edges(edge_type="predecessor")
+        pairs = {(e["from"], e["to"]) for e in edges}
+        assert ("beat::aq_intro", "beat::mt_commit") in pairs
+
+    def test_serial_result_is_acyclic(self) -> None:
+        """After serial interleaving, the beat DAG remains acyclic."""
+        from questfoundry.graph.grow_algorithms import validate_beat_dag
+
+        graph = _make_two_dilemma_graph_with_relationship("serial")
+        interleave_cross_path_beats(graph)
+        errors = validate_beat_dag(graph)
+        assert errors == []
+
+    def test_wraps_creates_intro_and_commit_edges(self) -> None:
+        """Wraps ordering: A's intro before B's intro; B's last before A's commit."""
+
+        graph = _make_two_dilemma_graph_with_relationship("wraps")
+        count = interleave_cross_path_beats(graph)
+
+        assert count > 0
+        edges = graph.get_edges(edge_type="predecessor")
+        pairs = {(e["from"], e["to"]) for e in edges}
+        # A's intro (mt_intro) must come before B's intro (aq_intro)
+        # → predecessor(aq_intro, mt_intro) means aq_intro requires mt_intro
+        assert ("beat::aq_intro", "beat::mt_intro") in pairs
+        # B's last (aq_commit) must come before A's commit (mt_commit)
+        # → predecessor(mt_commit, aq_commit) means mt_commit requires aq_commit
+        assert ("beat::mt_commit", "beat::aq_commit") in pairs
+
+    def test_wraps_result_is_acyclic(self) -> None:
+        """After wraps interleaving, the beat DAG remains acyclic."""
+        from questfoundry.graph.grow_algorithms import validate_beat_dag
+
+        graph = _make_two_dilemma_graph_with_relationship("wraps")
+        interleave_cross_path_beats(graph)
+        errors = validate_beat_dag(graph)
+        assert errors == []
+
+    def test_concurrent_commit_ordering_applied(self) -> None:
+        """Concurrent ordering: commit beats from one dilemma ordered before the other."""
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        count = interleave_cross_path_beats(graph)
+
+        # Should create at least one commit ordering edge
+        assert count > 0
+
+    def test_concurrent_result_is_acyclic(self) -> None:
+        """After concurrent interleaving, the beat DAG remains acyclic."""
+        from questfoundry.graph.grow_algorithms import validate_beat_dag
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        interleave_cross_path_beats(graph)
+        errors = validate_beat_dag(graph)
+        assert errors == []
+
+    def test_temporal_hint_before_commit_applied(self) -> None:
+        """Temporal hint 'before_commit' creates edge from beat to commit beat."""
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+
+        # Add temporal hint to aq_intro: should come before mentor_trust's commit
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "before_commit",
+            },
+        )
+
+        count = interleave_cross_path_beats(graph)
+        assert count > 0
+        edges = graph.get_edges(edge_type="predecessor")
+        pairs = {(e["from"], e["to"]) for e in edges}
+        # mt_commit requires aq_intro (aq_intro must precede mt_commit)
+        assert ("beat::mt_commit", "beat::aq_intro") in pairs
+
+    def test_temporal_hint_after_introduce_applied(self) -> None:
+        """Temporal hint 'after_introduce' creates edge from intro beat to this beat."""
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+
+        # aq_commit should come after mentor_trust's first (intro) beat
+        graph.update_node(
+            "beat::aq_commit",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_introduce",
+            },
+        )
+
+        count = interleave_cross_path_beats(graph)
+        assert count > 0
+        edges = graph.get_edges(edge_type="predecessor")
+        pairs = {(e["from"], e["to"]) for e in edges}
+        # aq_commit requires mt_intro
+        assert ("beat::aq_commit", "beat::mt_intro") in pairs
+
+    def test_no_duplicate_edges_created(self) -> None:
+        """Running interleave twice does not create duplicate predecessor edges."""
+
+        graph = _make_two_dilemma_graph_with_relationship("serial")
+        count1 = interleave_cross_path_beats(graph)
+        count2 = interleave_cross_path_beats(graph)
+
+        assert count1 > 0
+        assert count2 == 0  # No new edges on second run
+
+    def test_cycle_inducing_edge_skipped(self) -> None:
+        """Edges that would create a cycle are skipped and DAG stays valid.
+
+        Setup: A concurrent relationship between mentor_trust and artifact_quest.
+        We pre-add predecessor(aq_intro, mt_commit) which means mt_commit must
+        come after aq_intro. The heuristic would want to add predecessor(aq_commit,
+        mt_commit) as well — but since dilemma::artifact_quest > dilemma::mentor_trust
+        alphabetically, heuristic adds predecessor(aq_commit, mt_commit) — aq_commit
+        requires mt_commit. Since mt_commit already requires aq_intro (pre-added),
+        and aq_commit requires aq_intro (within-path), no cycle there.
+
+        Instead, we manually force the cycle-inducing situation by pre-adding
+        predecessor(mt_intro, aq_commit) — mt_intro requires aq_commit, and then
+        concurrent would try to add predecessor(aq_commit, mt_commit). Since
+        mt_commit requires mt_intro (within-path) requires aq_commit (pre-added),
+        adding aq_commit requires mt_commit would cycle. This edge should be skipped.
+        """
+        from questfoundry.graph.grow_algorithms import validate_beat_dag
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+
+        # Pre-add: mt_intro requires aq_commit
+        # Chain: mt_commit → mt_intro → aq_commit → aq_intro (existing within-path)
+        # If we now try to add: aq_commit requires mt_commit → CYCLE
+        graph.add_edge("predecessor", "beat::mt_intro", "beat::aq_commit")
+
+        interleave_cross_path_beats(graph)
+        errors = validate_beat_dag(graph)
+        assert errors == []
+
+    def test_phase_interleave_beats_completes(self) -> None:
+        """phase_interleave_beats returns completed status."""
+        import asyncio
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        mock_model = MagicMock()
+        result = asyncio.run(phase_interleave_beats(graph, mock_model))
+        assert result.status == "completed"
+        assert "predecessor edges" in result.detail

@@ -61,10 +61,59 @@ async def phase_validate_dag(graph: Graph, model: BaseChatModel) -> GrowPhaseRes
     return GrowPhaseResult(phase="validate_dag", status="completed")
 
 
+# --- Phase 1b: Interleave Cross-Path Beats ---
+
+
+@grow_phase(
+    name="interleave_beats",
+    depends_on=["validate_dag"],
+    is_deterministic=True,
+    priority=1,
+)
+async def phase_interleave_beats(
+    graph: Graph,
+    model: BaseChatModel,  # noqa: ARG001
+) -> GrowPhaseResult:
+    """Phase 1b: Create predecessor edges between beats from different paths.
+
+    Reads dilemma relationship edges (concurrent/wraps/serial) and applies
+    cross-path ordering rules to create ``predecessor`` edges between beats
+    that belong to different dilemmas' paths.
+
+    Preconditions:
+    - Beat DAG validated (Phase 1 passed).
+    - Dilemma relationship edges exist (concurrent/wraps/serial between dilemmas).
+    - Beats are linked to paths via ``belongs_to`` edges.
+
+    Postconditions:
+    - Cross-path ``predecessor`` edges created according to relationship type.
+    - DAG remains acyclic (cycle-inducing edges are skipped with warnings).
+
+    Invariants:
+    - Deterministic: same graph always produces same edges.
+    - Edges are only added, never removed.
+    - Skips if fewer than 2 dilemmas have paths.
+    """
+    from questfoundry.graph.grow_algorithms import interleave_cross_path_beats
+
+    edges_created = interleave_cross_path_beats(graph)
+
+    return GrowPhaseResult(
+        phase="interleave_beats",
+        status="completed",
+        detail=f"Created {edges_created} cross-path predecessor edges",
+    )
+
+
 # --- Phase 5: Enumerate Arcs ---
 
 
-@grow_phase(name="enumerate_arcs", depends_on=["entity_arcs"], is_deterministic=True, priority=9)
+@grow_phase(
+    name="enumerate_arcs",
+    depends_on=["entity_arcs", "interleave_beats"],
+    is_deterministic=True,
+    priority=9,
+)
 async def phase_enumerate_arcs(
     graph: Graph,
     model: BaseChatModel,  # noqa: ARG001
