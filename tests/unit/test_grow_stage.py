@@ -183,16 +183,17 @@ class TestGrowStageExecute:
 
 class TestGrowStagePhaseOrder:
     def test_phase_order_returns_correct_count(self) -> None:
-        """14 phases after moving collapse_linear_beats to POLISH (#1109)."""
+        """15 phases after adding interleave_beats (#1105)."""
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 14
+        assert len(phases) == 15
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
         names = [name for _, name in stage._phase_order()]
         assert names == [
             "validate_dag",
+            "interleave_beats",
             "scene_types",
             "narrative_gaps",
             "pacing_gaps",
