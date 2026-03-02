@@ -137,7 +137,7 @@ class TestStateFlag:
         with pytest.raises(ValidationError, match="flag_id"):
             StateFlag(flag_id="", derived_from="c1")
 
-    def test_empty_tracks_rejected(self) -> None:
+    def test_empty_derived_from_rejected(self) -> None:
         with pytest.raises(ValidationError, match="derived_from"):
             StateFlag(flag_id="sf1", derived_from="")
 

@@ -1942,9 +1942,9 @@ class TestPhase8bIntegration:
         mock_model = MagicMock()
         await phase_state_flags(graph, mock_model)
 
-        tracks_edges = graph.get_edges(from_id=None, to_id=None, edge_type="derived_from")
+        derived_from_edges = graph.get_edges(from_id=None, to_id=None, edge_type="derived_from")
         state_flag_nodes = graph.get_nodes_by_type("state_flag")
-        assert len(tracks_edges) == len(state_flag_nodes)
+        assert len(derived_from_edges) == len(state_flag_nodes)
 
     @pytest.mark.asyncio
     async def test_grants_edges_assigned_to_commits_beats(self) -> None:
