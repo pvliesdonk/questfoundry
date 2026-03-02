@@ -784,16 +784,20 @@ async def _serialize_paths_per_dilemma(
 def _build_per_path_beat_context(
     path_data: dict[str, Any],
     entity_context: str,
+    all_paths: list[dict[str, Any]] | None = None,
 ) -> str:
     """Build a brief for generating beats for a single path.
 
     Creates a minimal context containing only:
     - The path's ID and parent dilemma
     - Entity IDs for character/location references
+    - Sibling path summaries (when all_paths is provided) for location inference
 
     Args:
         path_data: Path dict with path_id and dilemma_id.
         entity_context: Entity IDs section from the full brief.
+        all_paths: All paths in the serialization run; used to inject sibling
+            summaries that help the LLM populate location_alternatives.
 
     Returns:
         Per-path brief for beat generation.
@@ -816,6 +820,36 @@ def _build_per_path_beat_context(
     if description:
         lines.append(f"- Description: {description}")
 
+    # Inject sibling path summaries to support location_alternatives decisions.
+    # The LLM uses these to identify locations that appear in other paths and
+    # list them as location_alternatives on beats that could plausibly move there.
+    if all_paths:
+        current_path_id = normalize_scoped_id(path_data.get("path_id", ""), SCOPE_PATH)
+        siblings = [
+            p
+            for p in all_paths
+            if normalize_scoped_id(p.get("path_id", ""), SCOPE_PATH) != current_path_id
+        ]
+        if siblings:
+            lines.append("")
+            lines.append(
+                "### Sibling paths (for location intersection reasoning)\n"
+                "These paths will also place beats in the story world. Their beats\n"
+                "have not been generated yet, so no explicit location IDs are available.\n"
+                "Read each sibling's name and description to infer where its beats are\n"
+                "likely to be set, then add those inferred locations to\n"
+                "`location_alternatives` on beats that could plausibly share that space."
+            )
+            for sib in siblings:
+                sib_pid = normalize_scoped_id(sib.get("path_id", ""), SCOPE_PATH)
+                sib_name = sib.get("name", "")
+                sib_desc = sib.get("description", "")
+                sib_dilemma = normalize_scoped_id(sib.get("dilemma_id", ""), SCOPE_DILEMMA)
+                label = f"- `{sib_pid}` ({sib_name}, dilemma: `{sib_dilemma}`)"
+                if sib_desc:
+                    label += f": {sib_desc}"
+                lines.append(label)
+
     lines.append("")
     lines.append(entity_context)
 
@@ -830,6 +864,7 @@ async def _serialize_path_beats(
     provider_name: str | None,
     max_retries: int,
     callbacks: list[BaseCallbackHandler] | None,
+    all_paths: list[dict[str, Any]] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Serialize beats for a single path.
 
@@ -843,6 +878,7 @@ async def _serialize_path_beats(
         provider_name: Provider name for strategy selection.
         max_retries: Maximum Pydantic validation retries.
         callbacks: LangChain callback handlers.
+        all_paths: All paths for sibling context injection.
 
     Returns:
         Tuple of (list of beat dicts, tokens used).
@@ -866,7 +902,7 @@ async def _serialize_path_beats(
     )
 
     # Build per-path brief
-    brief = _build_per_path_beat_context(path_data, entity_context)
+    brief = _build_per_path_beat_context(path_data, entity_context, all_paths=all_paths)
 
     log.debug(
         "serialize_path_beats_started",
@@ -948,6 +984,7 @@ async def _serialize_beats_per_path(
                 provider_name=provider_name,
                 max_retries=max_retries,
                 callbacks=callbacks,
+                all_paths=paths,
             )
 
     # Create tasks for all paths (semaphore limits actual concurrency)
