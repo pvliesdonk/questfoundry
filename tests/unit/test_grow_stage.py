@@ -1654,9 +1654,12 @@ class TestPhase8cOverlays:
 
         ctx = captured_context["consequence_context"]
         assert "state_flag::mentor_trusted_committed" in ctx
-        assert 'Path: path::trust_or_betray__trust ("The Trusting Path")' in ctx
-        assert 'Dilemma: "Do you trust or betray the mentor?"' in ctx
-        assert "Central entities: mentor, hero" in ctx
+        # New grouped format: dilemma question and central entities appear in the group header
+        assert 'DILEMMA GROUP "Do you trust or betray the mentor?"' in ctx
+        assert "central entities: mentor, hero" in ctx
+        assert "mutually exclusive" in ctx
+        # Flag entry shows path name inline
+        assert '→  Path "The Trusting Path"' in ctx
         assert "Consequence: Mentor becomes your ally" in ctx
         assert "Trust grows between you" in ctx
         assert "Mentor reveals hidden knowledge" in ctx

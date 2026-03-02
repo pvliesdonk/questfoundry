@@ -1075,46 +1075,74 @@ class _LLMPhaseMixin:
         # Build enriched consequence context per state flag:
         # state flag → consequence → path → dilemma (with central entities + effects)
         consequence_nodes = graph.get_nodes_by_type("consequence")
-        consequence_lines: list[str] = []
         valid_state_flag_ids: list[str] = []
+        # Maps state_flag_id → dilemma_id for mutual-exclusion validation.
+        # Two flags sharing the same dilemma can never both be active.
+        flag_to_dilemma: dict[str, str] = {}
+
+        # Collect per-flag data then group by dilemma so the context makes
+        # mutual exclusivity explicit to the model.
+        # Structure: dilemma_id → list of (sf_id, path_name, cons_desc, effects)
+        # Flags with no dilemma are placed in a sentinel group "".
+        from collections import defaultdict
+
+        FlagEntry = tuple[str, str, str, list[str]]  # (sf_id, path_name, cons_desc, effects)
+        dilemma_groups: dict[str, list[FlagEntry]] = defaultdict(list)
+        dilemma_questions: dict[str, str] = {}
+        dilemma_central_entities: dict[str, list[str]] = {}
 
         for sf_id, sf_data in sorted(state_flag_nodes.items()):
             valid_state_flag_ids.append(sf_id)
             derived_from_id = sf_data.get("derived_from", "")
             cons_data = consequence_nodes.get(derived_from_id, {})
             cons_desc = cons_data.get("description", "unknown consequence")
+            narrative_effects: list[str] = cons_data.get("narrative_effects", [])
 
             # Trace: consequence → path → dilemma for rich context
             path_id = cons_data.get("path_id", "")
             path_node = graph.get_node(path_id) if path_id else None
-            dilemma_node = None
-            if path_node:
-                dilemma_id = path_node.get("dilemma_id", "")
-                dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
-
-            narrative_effects = cons_data.get("narrative_effects", [])
-
-            # Build multi-line block per state flag
-            block = [f"- {sf_id}"]
+            dilemma_id = ""
+            path_name = path_id
             if path_node:
                 path_name = path_node.get("name", path_id)
-                block.append(f'  Path: {path_id} ("{path_name}")')
-            if dilemma_node:
-                question = dilemma_node.get("question", "")
-                block.append(f'  Dilemma: "{question}"')
-                anchored = graph.get_edges(from_id=dilemma_id, edge_type="anchored_to")
-                if anchored:
-                    entity_ids = [strip_scope_prefix(e["to"]) for e in anchored]
-                    block.append(f"  Central entities: {', '.join(entity_ids)}")
-            block.append(f"  Consequence: {cons_desc}")
-            if narrative_effects:
-                block.append("  Effects:")
-                for effect in narrative_effects:
-                    block.append(f"    - {effect}")
+                dilemma_id = path_node.get("dilemma_id", "")
+                if dilemma_id:
+                    flag_to_dilemma[sf_id] = dilemma_id
+                    if dilemma_id not in dilemma_questions:
+                        dilemma_node = graph.get_node(dilemma_id)
+                        if dilemma_node:
+                            dilemma_questions[dilemma_id] = dilemma_node.get("question", "")
+                            anchored = graph.get_edges(from_id=dilemma_id, edge_type="anchored_to")
+                            dilemma_central_entities[dilemma_id] = (
+                                [strip_scope_prefix(e["to"]) for e in anchored] if anchored else []
+                            )
 
-            consequence_lines.append("\n".join(block))
+            dilemma_groups[dilemma_id].append((sf_id, path_name, cons_desc, narrative_effects))
 
-        consequence_context = "\n".join(consequence_lines)
+        # Emit grouped context: one block per dilemma, flags listed inside
+        consequence_lines: list[str] = []
+        for dilemma_id, entries in sorted(dilemma_groups.items()):
+            if dilemma_id:
+                question = dilemma_questions.get(dilemma_id, dilemma_id)
+                central = dilemma_central_entities.get(dilemma_id, [])
+                central_str = f" — central entities: {', '.join(central)}" if central else ""
+                consequence_lines.append(
+                    f'DILEMMA GROUP "{question}"{central_str}'
+                    f" (flags are mutually exclusive — use only ONE per overlay):"
+                )
+            else:
+                consequence_lines.append("UNGROUPED FLAGS (no dilemma):")
+
+            for sf_id, path_name, cons_desc, effects in entries:
+                consequence_lines.append(f'  - {sf_id}  →  Path "{path_name}"')
+                consequence_lines.append(f"    Consequence: {cons_desc}")
+                if effects:
+                    for effect in effects:
+                        consequence_lines.append(f"    Effect: {effect}")
+
+            consequence_lines.append("")  # blank line between groups
+
+        consequence_context = "\n".join(consequence_lines).rstrip()
 
         # Build entity context: entity details for overlay candidates
         entity_lines: list[str] = []
@@ -1141,6 +1169,7 @@ class _LLMPhaseMixin:
             validate_phase8c_output,
             valid_entity_ids=set(valid_entity_ids),
             valid_state_flag_ids=set(valid_state_flag_ids),
+            flag_to_dilemma=flag_to_dilemma,
         )
         try:
             result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
