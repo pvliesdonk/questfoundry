@@ -720,7 +720,6 @@ class TestSerializeResult:
             "description": "D",
             "unexplored_answer_ids": [],
             "path_importance": "major",
-            "consequence_ids": [],
         }
 
         warning_errors = [
@@ -778,7 +777,6 @@ class TestSerializeResult:
             "description": "D",
             "unexplored_answer_ids": [],
             "path_importance": "major",
-            "consequence_ids": [],
         }
 
         mixed_errors = [
@@ -870,7 +868,6 @@ class TestSerializeSeedAsFunction:
             "description": "A test path",
             "unexplored_answer_ids": [],
             "path_importance": "major",
-            "consequence_ids": [],
         }
 
         with (
@@ -1342,7 +1339,6 @@ class TestBeatRetryAndContextRefresh:
             "unexplored_answer_ids": [],
             "path_importance": "major",
             "description": "desc",
-            "consequence_ids": [],
         }
 
         with (
@@ -1396,7 +1392,6 @@ class TestBeatRetryAndContextRefresh:
             "unexplored_answer_ids": [],
             "path_importance": "major",
             "description": "desc",
-            "consequence_ids": [],
         }
 
         # Path serialization error (semantic)
@@ -1513,7 +1508,6 @@ class TestBeatRetryAndContextRefresh:
             "unexplored_answer_ids": [],
             "path_importance": "major",
             "description": "desc",
-            "consequence_ids": [],
         }
 
         validation_call_count = [0]
