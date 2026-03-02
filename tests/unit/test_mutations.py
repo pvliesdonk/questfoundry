@@ -4890,13 +4890,15 @@ class TestApplySeedConvergenceAnalysis:
         ]
         apply_seed_mutations(graph, output)
 
+        # Edge type IS the ordering value (semantic edge, not generic dilemma_ordering)
         edges = graph.get_edges(
             from_id="dilemma::stay_or_go",
-            edge_type="dilemma_ordering",
+            edge_type="wraps",
         )
         assert len(edges) == 1
         assert edges[0]["to"] == "dilemma::trust_or_not"
-        assert edges[0]["ordering"] == "wraps"
+        # ordering is encoded in the edge type, not stored as a separate attribute
+        assert "ordering" not in edges[0]
         assert edges[0]["description"] == "Stay/go wraps trust subplot"
 
     def test_ordering_edge_skipped_if_node_missing(self) -> None:

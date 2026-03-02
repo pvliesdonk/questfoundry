@@ -994,11 +994,14 @@ dilemma_analyses_prompt: |
 
 # Section 8: Dilemma Ordering Relationships (post-prune, Doc 3)
 dilemma_relationships_prompt: |
-  You are classifying the temporal ordering between dilemma pairs for a SEED stage.
+  You are classifying the temporal ordering between ALL dilemma pairs for a SEED stage.
 
   Each dilemma pair has a structural relationship that affects how GROW
-  interleaves their beats. MOST pairs are "concurrent" (the default).
-  It is normal and expected to return few or no relationships.
+  interleaves their beats. You MUST classify EVERY pair listed in the Context.
+  `concurrent` is the default when no structural nesting or sequencing exists,
+  but you must still include the pair with `ordering: "concurrent"` — do NOT
+  skip it. An empty list means NOTHING was classified and is only correct when
+  the Context says "fewer than 2 surviving dilemmas."
 
   ## Ordering Types
 
@@ -1007,8 +1010,9 @@ dilemma_relationships_prompt: |
     wraps the mentor's betrayal subplot (B) — the mystery is present from the
     start and resolves at the climax, while the betrayal plays out in the middle."
   - **concurrent**: Neither wraps the other. Both are active simultaneously,
-    interleaving but without nesting. This is the DEFAULT for most pairs.
-    Example: "both the romance and the political intrigue develop in parallel."
+    interleaving but without nesting. Use this when no clear nesting or
+    sequencing exists. Example: "both the romance and the political intrigue
+    develop in parallel."
   - **serial**: A resolves (commits and converges) before B introduces. The
     dilemmas never structurally interact. Example: "the escape subplot resolves
     in Act 1 before the revenge plot begins in Act 2."
@@ -1017,10 +1021,10 @@ dilemma_relationships_prompt: |
   from entity anchoring in the graph. Do NOT classify pairs as shared_entity.
 
   ## What NOT to Do
-  - Do NOT invent relationships for pairs not in the Candidate Pairs list
-  - Do NOT force relationships where none exist — empty list is fine
+  - Do NOT skip any pair — every pair in "All Dilemma Pairs" must appear in output
   - Do NOT use ordering values other than wraps, concurrent, serial
   - Do NOT classify shared characters/locations as ordering — that is derived
+  - Do NOT return an empty array unless the Context says fewer than 2 dilemmas
 
   GOOD: "The central mystery wraps the betrayal subplot — it introduces first
   and resolves last."
@@ -1032,7 +1036,7 @@ dilemma_relationships_prompt: |
   {candidate_pairs_context}
 
   ## Schema
-  Return a JSON object with a "dilemma_relationships" array:
+  Return a JSON object with a "dilemma_relationships" array — one entry per pair:
   ```json
   {{
     "dilemma_relationships": [
@@ -1047,25 +1051,25 @@ dilemma_relationships_prompt: |
   }}
   ```
 
-  If no non-concurrent relationships exist (common), return an empty array:
+  If the Context says "No candidate pairs — fewer than 2 surviving dilemmas", return:
   ```json
   {{
     "dilemma_relationships": []
   }}
   ```
 
-  If the Context says "No candidate pairs", return the empty array above immediately.
-
   ## Rules
-  - ONLY consider pairs from the ### Candidate Pairs list in the Context
+  - Classify EVERY pair from the "All Dilemma Pairs" list in the Context
   - Use canonical ordering: dilemma_a < dilemma_b (alphabetically)
-  - Most stories have 0-2 non-concurrent relationships. Empty list is expected.
+  - `ordering` must be exactly one of: `wraps`, `concurrent`, `serial`
   - `reasoning` must explain the temporal (not thematic) relationship
+  - Output must contain one entry per pair — no pairs may be omitted
 
-  ## REMINDER
-  ONLY use pairs from the Candidate Pairs list. Empty list is normal. Do NOT invent relationships.
+  ## FINAL CHECK
+  Count the pairs listed under "All Dilemma Pairs" in the Context.
+  Your output MUST contain that exact number of entries.
 
   ## Output
-  Return ONLY valid JSON with the "dilemma_relationships" array. An empty array is expected.
+  Return ONLY valid JSON with the "dilemma_relationships" array.
 
 components: []
