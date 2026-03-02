@@ -1776,7 +1776,6 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             "unexplored_answer_ids": prefixed_unexplored,
             "path_importance": path.get("path_importance"),
             "description": path.get("description"),
-            "consequence_ids": path.get("consequence_ids", []),
             "is_canonical": is_canonical,  # True if exploring default answer (for spine arc)
         }
         path_data = _clean_dict(path_data)

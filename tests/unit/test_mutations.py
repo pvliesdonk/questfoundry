@@ -1018,7 +1018,6 @@ class TestSeedMutations:
                     "dilemma_id": "mentor_trust",  # Raw dilemma ID from LLM
                     "answer_id": "protector",  # Local alt ID, not full path
                     "description": "Exploring mentor relationship",
-                    "consequence_ids": ["consequence_trust"],
                 }
             ],
             "initial_beats": [
@@ -1096,7 +1095,6 @@ class TestSeedMutations:
                     "dilemma_id": "mentor_trust",
                     "answer_id": "protector",  # Canonical
                     "description": "The mentor genuinely protects",
-                    "consequence_ids": [],
                 },
                 {
                     "path_id": "mentor_manipulates",
@@ -1104,7 +1102,6 @@ class TestSeedMutations:
                     "dilemma_id": "mentor_trust",
                     "answer_id": "manipulator",  # Non-canonical
                     "description": "The mentor is manipulating",
-                    "consequence_ids": [],
                 },
             ],
             "initial_beats": [

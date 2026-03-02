@@ -1352,7 +1352,6 @@ def _path(
     dilemma_id: str,
     answer_id: str,
     description: str | None = None,
-    consequence_ids: list[str] | None = None,
 ) -> Path:
     return Path(
         path_id=path_id,
@@ -1361,7 +1360,6 @@ def _path(
         answer_id=answer_id,
         path_importance="major",
         description=description or f"Explores {answer_id}",
-        consequence_ids=consequence_ids or [],
     )
 
 
@@ -1496,13 +1494,11 @@ class TestFormatDilemmaAnalysisContext:
                     "path::key_destroy_or_keep__destroy",
                     "key_destroy_or_keep",
                     "destroy",
-                    consequence_ids=["cons::destroy_result"],
                 ),
                 _path(
                     "path::key_destroy_or_keep__keep",
                     "key_destroy_or_keep",
                     "keep",
-                    consequence_ids=["cons::keep_result"],
                 ),
             ],
             consequences=[
@@ -1534,7 +1530,6 @@ class TestFormatDilemmaAnalysisContext:
                     "path::d1__a",
                     "d1",
                     "a",
-                    consequence_ids=["cons::empty_fx"],
                 ),
             ],
             consequences=[

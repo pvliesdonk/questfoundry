@@ -954,10 +954,11 @@ def format_dilemma_analysis_context(
         d_raw = strip_scope_prefix(p.dilemma_id)
         paths_by_dilemma.setdefault(d_raw, []).append(p)
 
-    # Build consequence lookup: normalized raw_id → Consequence
-    cons_by_id: dict[str, Consequence] = {}
+    # Build consequence lookup: normalized path raw_id → list of Consequences
+    cons_by_path: dict[str, list[Consequence]] = {}
     for c in seed_output.consequences:
-        cons_by_id[strip_scope_prefix(c.consequence_id)] = c
+        p_raw = strip_scope_prefix(c.path_id)
+        cons_by_path.setdefault(p_raw, []).append(c)
 
     dilemma_blocks: list[str] = []
     for d in sorted(seed_output.dilemmas, key=lambda x: x.dilemma_id):
@@ -983,14 +984,12 @@ def format_dilemma_analysis_context(
         block_lines.append(f"**Paths ({path_count}):**")
         for p in sorted(dilemma_paths, key=lambda x: x.answer_id):
             block_lines.append(f"  - `{p.answer_id}` [{p.path_importance}]: {p.description}")
-            # Collect consequence effects for this path
+            # Collect consequence effects for this path via path_id lookup
             effects: list[str] = []
-            for cid in p.consequence_ids:
-                cons = cons_by_id.get(strip_scope_prefix(cid))
-                if cons is not None:
-                    for eff in cons.narrative_effects:
-                        if eff:
-                            effects.append(eff)
+            for cons in cons_by_path.get(strip_scope_prefix(p.path_id), []):
+                for eff in cons.narrative_effects:
+                    if eff:
+                        effects.append(eff)
             if effects:
                 block_lines.append(f"    Effects: {' | '.join(effects)}")
 

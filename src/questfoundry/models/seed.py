@@ -159,7 +159,6 @@ class Path(BaseModel):
         unexplored_answer_ids: IDs of unexplored answers (context for FILL).
         path_importance: Major paths interweave; minor paths support.
         description: What this path is about.
-        consequence_ids: IDs of consequences for this path.
     """
 
     path_id: str = Field(
@@ -178,10 +177,6 @@ class Path(BaseModel):
         description="Path importance: major (interweaves) or minor (supports)"
     )
     description: str = Field(min_length=1, description="What this path is about")
-    consequence_ids: list[str] = Field(
-        default_factory=list,
-        description="Consequence IDs for this path (references consequence_id)",
-    )
     pov_character: str | None = Field(
         default=None,
         description="Entity ID of the POV character for this path (overrides global protagonist)",
