@@ -4898,6 +4898,7 @@ class TestApplySeedConvergenceAnalysis:
         assert edges[0]["to"] == "dilemma::trust_or_not"
         assert edges[0]["ordering"] == "wraps"
         assert edges[0]["description"] == "Stay/go wraps trust subplot"
+        assert edges[0]["reasoning"] == "test"
 
     def test_ordering_edge_skipped_if_node_missing(self) -> None:
         """Ordering edge is not created when a dilemma node is missing."""
@@ -4913,9 +4914,12 @@ class TestApplySeedConvergenceAnalysis:
         ]
         apply_seed_mutations(graph, output)
 
+        # Query by the edge type that WOULD be created if the skip logic failed
+        # ("serial" is the ordering value in the fixture).  A vacuous query on a
+        # non-existent edge type like "dilemma_ordering" would always return 0.
         edges = graph.get_edges(
             from_id="dilemma::trust_or_not",
-            edge_type="dilemma_ordering",
+            edge_type="serial",
         )
         assert len(edges) == 0
 

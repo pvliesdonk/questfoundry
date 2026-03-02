@@ -1933,6 +1933,7 @@ def apply_seed_mutations(graph: Graph, output: dict[str, Any]) -> None:
             b_node,
             ordering=relationship.get("ordering", "concurrent"),
             description=relationship.get("description", ""),
+            reasoning=relationship.get("reasoning", ""),
         )
 
 
