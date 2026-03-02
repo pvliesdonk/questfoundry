@@ -4289,6 +4289,48 @@ class TestInterleavecrossPathBeats:
         # aq_commit requires mt_intro
         assert ("beat::aq_commit", "beat::mt_intro") in pairs
 
+    def test_temporal_hint_after_commit_applied(self) -> None:
+        """Temporal hint 'after_commit' creates edge from this beat to commit beat (#1114)."""
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+
+        # aq_intro should come after mentor_trust's commit beat
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_commit",
+            },
+        )
+
+        count = interleave_cross_path_beats(graph)
+        assert count > 0
+        edges = graph.get_edges(edge_type="predecessor")
+        pairs = {(e["from"], e["to"]) for e in edges}
+        # aq_intro requires mt_commit (aq_intro comes after mt_commit)
+        assert ("beat::aq_intro", "beat::mt_commit") in pairs
+
+    def test_temporal_hint_before_introduce_applied(self) -> None:
+        """Temporal hint 'before_introduce' creates edge from intro beat to this beat (#1114)."""
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+
+        # aq_commit should come before mentor_trust's first (intro) beat
+        graph.update_node(
+            "beat::aq_commit",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "before_introduce",
+            },
+        )
+
+        count = interleave_cross_path_beats(graph)
+        assert count > 0
+        edges = graph.get_edges(edge_type="predecessor")
+        pairs = {(e["from"], e["to"]) for e in edges}
+        # mt_intro requires aq_commit (aq_commit must precede mt_intro)
+        assert ("beat::mt_intro", "beat::aq_commit") in pairs
+
     def test_no_duplicate_edges_created(self) -> None:
         """Running interleave twice does not create duplicate predecessor edges."""
 
