@@ -4358,12 +4358,24 @@ class TestInterleavecrossPathBeats:
 
         interleave_cross_path_beats(graph)
 
-        # All hints stripped after interleaving
-        for beat_id in ["beat::mt_intro", "beat::mt_commit", "beat::aq_intro", "beat::aq_commit"]:
-            node = graph.get_node(beat_id)
+        # All hints stripped after interleaving (check all beats in graph)
+        all_beats = graph.get_nodes_by_type("beat")
+        for beat_id, node in all_beats.items():
             assert node.get("temporal_hint") is None, (
                 f"{beat_id} still has temporal_hint after interleaving: {node.get('temporal_hint')}"
             )
+
+    def test_beat_with_explicit_null_hint_unaffected(self) -> None:
+        """A beat with temporal_hint=None before interleaving stays None after (#1106)."""
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+
+        # Explicitly set temporal_hint to None on one beat before interleaving
+        graph.update_node("beat::mt_intro", temporal_hint=None)
+
+        interleave_cross_path_beats(graph)
+
+        # Should still be None (not double-stripped or raised)
+        assert graph.get_node("beat::mt_intro").get("temporal_hint") is None
 
     def test_temporal_hints_influence_beat_ordering(self) -> None:
         """Temporal hints produce predecessor edges that reflect the declared position (#1106).
