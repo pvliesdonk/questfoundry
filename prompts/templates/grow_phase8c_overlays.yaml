@@ -48,11 +48,26 @@ system: |
   - "Benign secret revealed" — still changes what characters know and how they behave.
 
   ## Overlay Structure
-  - Each overlay targets ONE entity, activates on one or more state flags
-  - "when" lists state flag IDs that must ALL be granted
+  - Each overlay targets ONE entity and activates on EXACTLY ONE state flag
+  - "when" MUST contain exactly one state flag ID — never two or more
+  - Create a SEPARATE overlay for each state flag that affects an entity
   - "details" is an array of {{key, value}} describing changes:
     keys like "attitude", "appearance", "description", "access", "status", "mood"
   - Maximum 3 overlays per entity
+
+  ## CRITICAL: One State Flag Per Overlay (NEVER combine flags from the same dilemma)
+  A player takes exactly one path per dilemma, so flags from the same dilemma are
+  mutually exclusive — they can NEVER both be active at the same time.
+  An overlay with two flags from the same dilemma will NEVER activate.
+
+  GOOD (one flag per overlay, two overlays for the same entity):
+    {{"entity_id": "character::mentor", "when": ["state_flag::mentor_hostile_committed"], "details": [{{"key": "attitude", "value": "Cold and dismissive"}}]}}
+    {{"entity_id": "character::mentor", "when": ["state_flag::mentor_friendly_committed"], "details": [{{"key": "attitude", "value": "Warm and encouraging"}}]}}
+
+  BAD (two flags from the same dilemma — this overlay will NEVER activate):
+    {{"entity_id": "character::mentor", "when": ["state_flag::mentor_hostile_committed", "state_flag::mentor_friendly_committed"], "details": [{{"key": "attitude", "value": "Changed"}}]}}
+
+  Maximum 3 overlays per entity
 
   ## What NOT to Do
   - Do NOT use IDs not listed in the Valid IDs section
@@ -79,6 +94,8 @@ user: |
   atmosphere shift, ripple effect) to every entity.
 
   REMINDER: Every overlay MUST have a non-empty details array.
+  Every overlay "when" list MUST contain EXACTLY ONE state flag ID.
+  Create a SEPARATE overlay for each state flag — never combine flags from the same dilemma.
   Maximum 3 overlays per entity.
   Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section.
 

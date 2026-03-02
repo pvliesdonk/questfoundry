@@ -100,12 +100,22 @@ def validate_phase8c_output(
     result: Phase8cOutput,
     valid_entity_ids: set[str],
     valid_state_flag_ids: set[str],
+    flag_to_dilemma: dict[str, str] | None = None,
 ) -> list[GrowValidationError]:
     """Validate Phase 8c entity overlay proposals.
 
     Checks:
     - entity_id exists in graph
     - state flag IDs in 'when' exist
+    - no overlay's 'when' list combines flags from the same dilemma (mutually exclusive)
+
+    Args:
+        result: The Phase8cOutput from the LLM.
+        valid_entity_ids: Set of known entity IDs.
+        valid_state_flag_ids: Set of known state flag IDs.
+        flag_to_dilemma: Optional mapping of state_flag_id → dilemma_id.
+            When provided, overlays whose 'when' list contains two or more flags
+            that share the same dilemma are rejected (they can never co-activate).
     """
     errors: list[GrowValidationError] = []
     for i, overlay in enumerate(result.overlays):
@@ -128,6 +138,33 @@ def validate_phase8c_output(
                         available=sorted(valid_state_flag_ids)[:10],
                     )
                 )
+
+        # Check for mutually exclusive flags: two flags from the same dilemma
+        # can never both be active — such an overlay will never activate.
+        if flag_to_dilemma and len(overlay.when) > 1:
+            seen_dilemmas: dict[str, str] = {}  # dilemma_id → first flag that claimed it
+            for sf_id in overlay.when:
+                dilemma_id = flag_to_dilemma.get(sf_id)
+                if dilemma_id is None:
+                    continue
+                if dilemma_id in seen_dilemmas:
+                    first_flag = seen_dilemmas[dilemma_id]
+                    errors.append(
+                        GrowValidationError(
+                            field_path=f"overlays.{i}.when",
+                            issue=(
+                                f"Overlay 'when' contains mutually exclusive flags "
+                                f"`{first_flag}` and `{sf_id}` — both derive from "
+                                f"dilemma `{dilemma_id}`. A player takes exactly one "
+                                f"path per dilemma; this overlay will never activate. "
+                                f"Create one overlay per flag instead."
+                            ),
+                            provided=sf_id,
+                        )
+                    )
+                else:
+                    seen_dilemmas[dilemma_id] = sf_id
+
     return errors
 
 

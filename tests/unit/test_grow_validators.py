@@ -212,6 +212,138 @@ class TestValidatePhase8cOutput:
         )
         assert len(errors) == 2
 
+    def test_single_flag_overlay_always_valid(self) -> None:
+        """Single-flag overlays are always accepted regardless of dilemma mapping."""
+        result = Phase8cOutput(
+            overlays=[
+                OverlayProposal(
+                    entity_id="entity::e1",
+                    when=["state_flag::mentor_hostile_committed"],
+                    details=[{"key": "attitude", "value": "Cold and dismissive"}],
+                ),
+            ]
+        )
+        errors = validate_phase8c_output(
+            result,
+            valid_entity_ids={"entity::e1"},
+            valid_state_flag_ids={"state_flag::mentor_hostile_committed"},
+            flag_to_dilemma={
+                "state_flag::mentor_hostile_committed": "dilemma::mentor_alliance",
+            },
+        )
+        assert errors == []
+
+    def test_rejects_overlay_with_flags_from_same_dilemma(self) -> None:
+        """Two flags from the same dilemma are mutually exclusive — overlay never activates."""
+        result = Phase8cOutput(
+            overlays=[
+                OverlayProposal(
+                    entity_id="entity::e1",
+                    when=[
+                        "state_flag::mentor_hostile_committed",
+                        "state_flag::mentor_friendly_committed",
+                    ],
+                    details=[{"key": "attitude", "value": "Changed"}],
+                ),
+            ]
+        )
+        errors = validate_phase8c_output(
+            result,
+            valid_entity_ids={"entity::e1"},
+            valid_state_flag_ids={
+                "state_flag::mentor_hostile_committed",
+                "state_flag::mentor_friendly_committed",
+            },
+            flag_to_dilemma={
+                "state_flag::mentor_hostile_committed": "dilemma::mentor_alliance",
+                "state_flag::mentor_friendly_committed": "dilemma::mentor_alliance",
+            },
+        )
+        assert len(errors) == 1
+        assert "mutually exclusive" in errors[0].issue
+        assert "dilemma::mentor_alliance" in errors[0].issue
+        assert errors[0].field_path == "overlays.0.when"
+
+    def test_accepts_overlay_with_flags_from_different_dilemmas(self) -> None:
+        """Flags from different dilemmas can legitimately co-activate."""
+        result = Phase8cOutput(
+            overlays=[
+                OverlayProposal(
+                    entity_id="entity::e1",
+                    when=[
+                        "state_flag::mentor_hostile_committed",
+                        "state_flag::artifact_destroyed_committed",
+                    ],
+                    details=[{"key": "status", "value": "Doubly threatened"}],
+                ),
+            ]
+        )
+        errors = validate_phase8c_output(
+            result,
+            valid_entity_ids={"entity::e1"},
+            valid_state_flag_ids={
+                "state_flag::mentor_hostile_committed",
+                "state_flag::artifact_destroyed_committed",
+            },
+            flag_to_dilemma={
+                "state_flag::mentor_hostile_committed": "dilemma::mentor_alliance",
+                "state_flag::artifact_destroyed_committed": "dilemma::artifact_fate",
+            },
+        )
+        assert errors == []
+
+    def test_no_flag_to_dilemma_skips_mutual_exclusion_check(self) -> None:
+        """When flag_to_dilemma is not provided, mutual-exclusion check is skipped."""
+        result = Phase8cOutput(
+            overlays=[
+                OverlayProposal(
+                    entity_id="entity::e1",
+                    when=["state_flag::sf1", "state_flag::sf2"],
+                    details=[{"key": "status", "value": "Changed"}],
+                ),
+            ]
+        )
+        errors = validate_phase8c_output(
+            result,
+            valid_entity_ids={"entity::e1"},
+            valid_state_flag_ids={"state_flag::sf1", "state_flag::sf2"},
+            # No flag_to_dilemma — check is skipped
+        )
+        assert errors == []
+
+    def test_three_flags_two_from_same_dilemma(self) -> None:
+        """When three flags in 'when', reports only the mutually-exclusive pair."""
+        result = Phase8cOutput(
+            overlays=[
+                OverlayProposal(
+                    entity_id="entity::e1",
+                    when=[
+                        "state_flag::path_a_committed",
+                        "state_flag::path_b_committed",
+                        "state_flag::other_dilemma_committed",
+                    ],
+                    details=[{"key": "status", "value": "Complex state"}],
+                ),
+            ]
+        )
+        errors = validate_phase8c_output(
+            result,
+            valid_entity_ids={"entity::e1"},
+            valid_state_flag_ids={
+                "state_flag::path_a_committed",
+                "state_flag::path_b_committed",
+                "state_flag::other_dilemma_committed",
+            },
+            flag_to_dilemma={
+                "state_flag::path_a_committed": "dilemma::choice_x",
+                "state_flag::path_b_committed": "dilemma::choice_x",
+                "state_flag::other_dilemma_committed": "dilemma::choice_y",
+            },
+        )
+        # Only the pair from dilemma::choice_x generates an error
+        assert len(errors) == 1
+        assert "dilemma::choice_x" in errors[0].issue
+
 
 class TestValidatePhase4fOutput:
     def test_valid_output_no_errors(self) -> None:

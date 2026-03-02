@@ -1077,6 +1077,9 @@ class _LLMPhaseMixin:
         consequence_nodes = graph.get_nodes_by_type("consequence")
         consequence_lines: list[str] = []
         valid_state_flag_ids: list[str] = []
+        # Maps state_flag_id → dilemma_id for mutual-exclusion validation.
+        # Two flags sharing the same dilemma can never both be active.
+        flag_to_dilemma: dict[str, str] = {}
 
         for sf_id, sf_data in sorted(state_flag_nodes.items()):
             valid_state_flag_ids.append(sf_id)
@@ -1091,6 +1094,8 @@ class _LLMPhaseMixin:
             if path_node:
                 dilemma_id = path_node.get("dilemma_id", "")
                 dilemma_node = graph.get_node(dilemma_id) if dilemma_id else None
+                if dilemma_id:
+                    flag_to_dilemma[sf_id] = dilemma_id
 
             narrative_effects = cons_data.get("narrative_effects", [])
 
@@ -1141,6 +1146,7 @@ class _LLMPhaseMixin:
             validate_phase8c_output,
             valid_entity_ids=set(valid_entity_ids),
             valid_state_flag_ids=set(valid_state_flag_ids),
+            flag_to_dilemma=flag_to_dilemma,
         )
         try:
             result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
