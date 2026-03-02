@@ -2260,3 +2260,300 @@ def select_entities_for_arc(
             eligible.add(eid)
 
     return sorted(eligible)
+
+
+# ---------------------------------------------------------------------------
+# Cross-Path Beat Interleaving
+# ---------------------------------------------------------------------------
+
+
+def _get_path_beats_ordered(
+    graph: Graph,
+    path_id: str,
+    path_beats_map: dict[str, list[str]],
+) -> list[str]:
+    """Return beats for a path in topological order.
+
+    Args:
+        graph: The story graph.
+        path_id: Scoped path node ID.
+        path_beats_map: Pre-computed mapping of path_id → list of beat IDs.
+
+    Returns:
+        Beat IDs in topological order (prerequisites first). Empty list if no beats.
+    """
+    beats = path_beats_map.get(path_id, [])
+    if not beats:
+        return []
+    try:
+        return topological_sort_beats(graph, beats)
+    except ValueError:
+        log.warning(
+            "interleave_path_cycle_fallback",
+            path_id=path_id,
+            beats=beats,
+        )
+        return sorted(beats)  # Fallback to alphabetical on cycle (should not happen)
+
+
+def _commits_beats_for_dilemma(
+    beats: list[str],
+    dilemma_id: str,
+    beat_nodes: dict[str, Any],
+) -> list[str]:
+    """Return beat IDs that have effect='commits' for the given dilemma.
+
+    Args:
+        beats: Beat IDs to search within.
+        dilemma_id: Scoped dilemma ID to match against impact records.
+        beat_nodes: Pre-fetched beat node data.
+
+    Returns:
+        List of beat IDs with the commits effect for this dilemma.
+    """
+    result = []
+    for bid in beats:
+        data = beat_nodes.get(bid, {})
+        for impact in data.get("dilemma_impacts", []):
+            if impact.get("dilemma_id") == dilemma_id and impact.get("effect") == "commits":
+                result.append(bid)
+                break
+    return result
+
+
+def _would_create_cycle(
+    new_from: str,
+    new_to: str,
+    successors: dict[str, set[str]],
+    beat_set: set[str],
+) -> bool:
+    """Check if adding a predecessor edge (new_from requires new_to) creates a cycle.
+
+    In our DAG: ``predecessor`` edge (X, Y) means X requires Y, i.e. Y comes before X.
+    Adding predecessor(new_from, new_to) means new_to → new_from in topological order.
+    A cycle would exist if new_to is already reachable from new_from via existing edges.
+
+    Args:
+        new_from: The beat that would require new_to.
+        new_to: The beat that would become a prerequisite.
+        successors: Current forward adjacency (prerequisite → dependents).
+        beat_set: All beat IDs in the graph.
+
+    Returns:
+        True if adding this edge would create a cycle.
+    """
+    # A cycle exists if new_to is already reachable from new_from via successors.
+    # Adding predecessor(new_from, new_to) means new_to executes before new_from.
+    # If new_to is already reachable from new_from (new_from → ... → new_to),
+    # then adding new_to → new_from closes a cycle.
+    if new_from not in beat_set or new_to not in beat_set:
+        return False
+    visited: set[str] = set()
+    queue = [new_from]
+    while queue:
+        node = queue.pop()
+        if node == new_to:
+            return True
+        if node in visited:
+            continue
+        visited.add(node)
+        queue.extend(successors.get(node, set()))
+    return False
+
+
+def interleave_cross_path_beats(graph: Graph) -> int:
+    """Create predecessor edges between beats from different dilemma paths.
+
+    Reads dilemma relationship edges (concurrent/wraps/serial) and applies
+    cross-path ordering rules:
+
+    - ``serial`` (A before B): Last beats of every A path must precede first
+      beats of every B path.
+    - ``wraps`` (A wraps B): A's intro beats precede B's intro beats; B's
+      last beats precede A's commit beats.
+    - ``concurrent``: Temporal hints on beats drive specific orderings; without
+      hints, commit beats of one dilemma are ordered before commit beats of the
+      other to ensure pacing.
+
+    Edges that would create a cycle are silently skipped with a warning.
+
+    Args:
+        graph: Graph containing beat, path, and dilemma nodes with relationship edges.
+
+    Returns:
+        Count of new ``predecessor`` edges created.
+    """
+    # --- Build indexes ---
+    beat_nodes = graph.get_nodes_by_type("beat")
+    if not beat_nodes:
+        return 0
+
+    dilemma_paths = build_dilemma_paths(graph)
+    if len(dilemma_paths) < 2:
+        return 0
+
+    # path_id → ordered list of beat IDs
+    path_beats_map: dict[str, list[str]] = defaultdict(list)
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to"):
+        path_beats_map[edge["to"]].append(edge["from"])
+
+    # Collect existing predecessor edges to avoid duplicates
+    existing_predecessors: set[tuple[str, str]] = set()
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor"):
+        existing_predecessors.add((edge["from"], edge["to"]))
+
+    # Build forward adjacency (prerequisite → dependents) for cycle detection
+    # predecessor(X, Y): Y is prerequisite of X → Y → X in topo order
+    successors: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
+    for from_id, to_id in existing_predecessors:
+        if from_id in successors and to_id in successors:
+            successors[to_id].add(from_id)
+
+    beat_set = set(beat_nodes.keys())
+
+    # --- Collect dilemma relationship edges ---
+    relationship_edges: list[tuple[str, str, str]] = []  # (dilemma_a, dilemma_b, ordering)
+    for ordering in ("concurrent", "wraps", "serial"):
+        for edge in graph.get_edges(from_id=None, to_id=None, edge_type=ordering):
+            a = edge["from"]
+            b = edge["to"]
+            if a in dilemma_paths and b in dilemma_paths:
+                relationship_edges.append((a, b, ordering))
+
+    if not relationship_edges:
+        return 0
+
+    created = 0
+
+    def _add_predecessor(from_beat: str, to_beat: str) -> bool:
+        """Add predecessor(from_beat, to_beat) if valid and not duplicate.
+
+        Returns True if edge was added.
+        """
+        nonlocal created
+        if from_beat == to_beat:
+            return False
+        if (from_beat, to_beat) in existing_predecessors:
+            return False
+        if from_beat not in beat_set or to_beat not in beat_set:
+            return False
+        if _would_create_cycle(from_beat, to_beat, successors, beat_set):
+            log.warning(
+                "interleave_cycle_skipped",
+                from_beat=from_beat,
+                to_beat=to_beat,
+            )
+            return False
+        graph.add_edge("predecessor", from_beat, to_beat)
+        existing_predecessors.add((from_beat, to_beat))
+        successors[to_beat].add(from_beat)
+        created += 1
+        return True
+
+    # --- Process each relationship ---
+    for dilemma_a, dilemma_b, ordering in relationship_edges:
+        paths_a = dilemma_paths.get(dilemma_a, [])
+        paths_b = dilemma_paths.get(dilemma_b, [])
+        if not paths_a or not paths_b:
+            continue
+
+        # Ordered beats per path for both dilemmas
+        ordered_a: list[list[str]] = [
+            _get_path_beats_ordered(graph, p, path_beats_map) for p in paths_a
+        ]
+        ordered_b: list[list[str]] = [
+            _get_path_beats_ordered(graph, p, path_beats_map) for p in paths_b
+        ]
+
+        # Collect all beats belonging exclusively to each dilemma's paths
+        all_beats_a = [b for seq in ordered_a for b in seq]
+        all_beats_b = [b for seq in ordered_b for b in seq]
+
+        if not all_beats_a or not all_beats_b:
+            continue
+
+        if ordering == "serial":
+            # All A beats before all B beats: last A beats → first B beats
+            # "Last" per path is the final element in the ordered sequence
+            last_beats_a = {seq[-1] for seq in ordered_a if seq}
+            first_beats_b = {seq[0] for seq in ordered_b if seq}
+            for last_a in sorted(last_beats_a):
+                for first_b in sorted(first_beats_b):
+                    _add_predecessor(first_b, last_a)
+
+        elif ordering == "wraps":
+            # A wraps B: A's first beats before B's first beats;
+            #            B's last beats before A's commit beats
+            first_beats_a = {seq[0] for seq in ordered_a if seq}
+            first_beats_b = {seq[0] for seq in ordered_b if seq}
+            last_beats_b = {seq[-1] for seq in ordered_b if seq}
+            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
+
+            # A's first intro before B's first intro
+            for first_a in sorted(first_beats_a):
+                for first_b in sorted(first_beats_b):
+                    _add_predecessor(first_b, first_a)
+
+            # B's last beat before A's commit beats
+            for last_b in sorted(last_beats_b):
+                for commit_a in sorted(commits_a):
+                    _add_predecessor(commit_a, last_b)
+
+        elif ordering == "concurrent":
+            # Apply temporal hints first
+            hints_applied = 0
+            for beat_id in all_beats_a + all_beats_b:
+                data = beat_nodes.get(beat_id, {})
+                hint = data.get("temporal_hint")
+                if not isinstance(hint, dict):
+                    continue
+                relative_to = hint.get("relative_to", "")
+                position = hint.get("position", "")
+                if not relative_to or not position:
+                    continue
+
+                # Collect commit/intro beats for the referenced dilemma
+                if relative_to == dilemma_a:
+                    ref_all, ref_ordered, ref_dil = all_beats_a, ordered_a, dilemma_a
+                elif relative_to == dilemma_b:
+                    ref_all, ref_ordered, ref_dil = all_beats_b, ordered_b, dilemma_b
+                else:
+                    continue
+
+                ref_commits = _commits_beats_for_dilemma(ref_all, ref_dil, beat_nodes)
+                ref_first = [seq[0] for seq in ref_ordered if seq]
+
+                is_before = position.startswith("before_")
+                target_beats = ref_commits if "commit" in position else ref_first
+                for target in sorted(target_beats):
+                    from_b, to_b = (target, beat_id) if is_before else (beat_id, target)
+                    if _add_predecessor(from_b, to_b):
+                        hints_applied += 1
+
+            if hints_applied:
+                log.debug(
+                    "interleave_hints_applied",
+                    dilemma_a=dilemma_a,
+                    dilemma_b=dilemma_b,
+                    count=hints_applied,
+                )
+
+            # Heuristic fallback for concurrent: commits of A before commits of B
+            # (deterministic: use alphabetical dilemma ordering to pick direction)
+            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
+            commits_b = set(_commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes))
+            if commits_a and commits_b:
+                # Alphabetically earlier dilemma's commits go first as a stable heuristic
+                if dilemma_a < dilemma_b:
+                    # A commits before B commits
+                    for ca in sorted(commits_a):
+                        for cb in sorted(commits_b):
+                            _add_predecessor(cb, ca)
+                else:
+                    # B commits before A commits
+                    for cb in sorted(commits_b):
+                        for ca in sorted(commits_a):
+                            _add_predecessor(ca, cb)
+
+    log.info("interleave_cross_path_beats_complete", edges_created=created)
+    return created

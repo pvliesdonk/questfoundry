@@ -216,11 +216,11 @@ class TestGrowPhaseDecorator:
 class TestGlobalRegistry:
     """Tests for the global registry populated by actual GROW phases."""
 
-    def test_global_registry_has_14_phases(self) -> None:
-        """All GROW phases are registered (14 after #1109 moved collapse_linear_beats to POLISH)."""
+    def test_global_registry_has_15_phases(self) -> None:
+        """All GROW phases are registered (15 after #1105 added interleave_beats)."""
         registry = get_registry()
-        assert len(registry) == 14, (
-            f"Expected 14 phases, got {len(registry)}: {registry.phase_names}"
+        assert len(registry) == 15, (
+            f"Expected 15 phases, got {len(registry)}: {registry.phase_names}"
         )
 
     def test_global_registry_validates(self) -> None:
@@ -230,12 +230,13 @@ class TestGlobalRegistry:
         assert errors == [], f"Registry validation errors: {errors}"
 
     def test_global_registry_execution_order_matches_expected(self) -> None:
-        """Execution order matches the post-#1109 phase structure (14 phases).
+        """Execution order matches the post-#1105 phase structure (15 phases).
 
-        collapse_linear_beats was moved to POLISH in #1109.
+        interleave_beats added in #1105; collapse_linear_beats moved to POLISH in #1109.
         """
         expected = [
             "validate_dag",
+            "interleave_beats",
             "scene_types",
             "narrative_gaps",
             "pacing_gaps",
