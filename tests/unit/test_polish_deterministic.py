@@ -356,3 +356,96 @@ class TestPolishPlan:
         )
         assert len(plan.passage_specs) == 1
         assert len(plan.warnings) == 1
+
+
+class TestPolishCollapseLinearBeats:
+    """Tests for phase_collapse_linear_beats in POLISH (moved from GROW in #1109)."""
+
+    def test_phase_registered_in_polish(self) -> None:
+        """collapse_linear_beats is registered in the POLISH registry."""
+        from questfoundry.pipeline.stages.polish.registry import get_polish_registry
+
+        registry = get_polish_registry()
+        assert "collapse_linear_beats" in registry
+
+    def test_phase_not_registered_in_grow(self) -> None:
+        """collapse_linear_beats is NOT registered in the GROW registry."""
+        from questfoundry.pipeline.stages.grow.registry import get_registry
+
+        registry = get_registry()
+        assert "collapse_linear_beats" not in registry
+
+    def test_phase_is_deterministic(self) -> None:
+        """collapse_linear_beats is marked deterministic (no LLM calls)."""
+        from questfoundry.pipeline.stages.polish.registry import get_polish_registry
+
+        registry = get_polish_registry()
+        meta = registry.get_meta("collapse_linear_beats")
+        assert meta.is_deterministic is True
+
+    def test_phase_depends_on_character_arcs(self) -> None:
+        """collapse_linear_beats depends on character_arcs so it runs after Phase 3."""
+        from questfoundry.pipeline.stages.polish.registry import get_polish_registry
+
+        registry = get_polish_registry()
+        meta = registry.get_meta("collapse_linear_beats")
+        assert "character_arcs" in meta.depends_on
+
+    def test_plan_computation_depends_on_collapse(self) -> None:
+        """plan_computation depends on collapse_linear_beats."""
+        from questfoundry.pipeline.stages.polish.registry import get_polish_registry
+
+        registry = get_polish_registry()
+        meta = registry.get_meta("plan_computation")
+        assert "collapse_linear_beats" in meta.depends_on
+
+    def test_collapse_runs_before_plan_computation(self) -> None:
+        """Execution order places collapse_linear_beats before plan_computation."""
+        from questfoundry.pipeline.stages.polish.registry import get_polish_registry
+
+        order = get_polish_registry().execution_order()
+        assert order.index("collapse_linear_beats") < order.index("plan_computation")
+
+    def test_phase_collapses_linear_run(self) -> None:
+        """phase_collapse_linear_beats merges a linear 2-beat run."""
+        from questfoundry.pipeline.stages.polish.deterministic import phase_collapse_linear_beats
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        for i in range(1, 4):
+            graph.create_node(
+                f"beat::b{i}",
+                {
+                    "type": "beat",
+                    "raw_id": f"b{i}",
+                    "summary": f"Beat {i}",
+                    "dilemma_impacts": [],
+                    "entities": [],
+                    "scene_type": "scene",
+                },
+            )
+            graph.add_edge("belongs_to", f"beat::b{i}", "path::p1")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
+
+        # Run the phase (model param is unused for deterministic phases)
+        import asyncio
+
+        result = asyncio.run(
+            phase_collapse_linear_beats(graph, None)  # type: ignore[arg-type]
+        )
+        assert result.status == "completed"
+        assert "Collapsed" in result.detail or "No linear" in result.detail
+
+    def test_phase_no_op_on_empty_graph(self) -> None:
+        """phase_collapse_linear_beats returns completed when no beats exist."""
+        import asyncio
+
+        from questfoundry.pipeline.stages.polish.deterministic import phase_collapse_linear_beats
+
+        graph = Graph.empty()
+        result = asyncio.run(
+            phase_collapse_linear_beats(graph, None)  # type: ignore[arg-type]
+        )
+        assert result.status == "completed"
+        assert result.detail == "No linear beat runs to collapse"

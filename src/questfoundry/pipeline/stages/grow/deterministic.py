@@ -234,55 +234,10 @@ async def phase_convergence(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     )
 
 
-# --- Phase 7b: Collapse Linear Beats ---
-
-
-@grow_phase(
-    name="collapse_linear_beats", depends_on=["convergence"], is_deterministic=True, priority=12
-)
-async def phase_collapse_linear_beats(
-    graph: Graph,
-    model: BaseChatModel,  # noqa: ARG001
-) -> GrowPhaseResult:
-    """Phase 7b: Collapse mandatory linear beat runs before passage creation.
-
-    Preconditions:
-    - Convergence computed (Phase 7 complete).
-    - Beat nodes have requires edges defining ordering.
-
-    Postconditions:
-    - Linear runs of 2+ consecutive single-path beats are merged.
-    - Surviving beat absorbs summaries and entities from removed beats.
-    - requires edges updated to preserve ordering.
-    - Beat count reduced; arc sequences updated accordingly.
-
-    Invariants:
-    - Deterministic: min_run_length=2 always applied.
-    - Only mandatory (single-path) beats collapsed; shared beats preserved.
-    """
-    from questfoundry.graph.grow_algorithms import collapse_linear_beats
-
-    result = collapse_linear_beats(graph, min_run_length=2)
-    if result.beats_removed == 0:
-        return GrowPhaseResult(
-            phase="collapse_linear_beats",
-            status="completed",
-            detail="No linear beat runs to collapse",
-        )
-
-    return GrowPhaseResult(
-        phase="collapse_linear_beats",
-        status="completed",
-        detail=(f"Collapsed {result.beats_removed} beats across {result.runs_collapsed} run(s)"),
-    )
-
-
 # --- Phase 8b: State Flags ---
 
 
-@grow_phase(
-    name="state_flags", depends_on=["collapse_linear_beats"], is_deterministic=True, priority=14
-)
+@grow_phase(name="state_flags", depends_on=["convergence"], is_deterministic=True, priority=14)
 async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResult:  # noqa: ARG001
     """Phase 8b: Create state flag nodes from consequences.
 

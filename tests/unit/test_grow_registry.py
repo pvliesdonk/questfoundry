@@ -216,11 +216,11 @@ class TestGrowPhaseDecorator:
 class TestGlobalRegistry:
     """Tests for the global registry populated by actual GROW phases."""
 
-    def test_global_registry_has_15_phases(self) -> None:
-        """All GROW phases are registered (15 after epic #1057 removed passage-layer phases)."""
+    def test_global_registry_has_14_phases(self) -> None:
+        """All GROW phases are registered (14 after #1109 moved collapse_linear_beats to POLISH)."""
         registry = get_registry()
-        assert len(registry) == 15, (
-            f"Expected 15 phases, got {len(registry)}: {registry.phase_names}"
+        assert len(registry) == 14, (
+            f"Expected 14 phases, got {len(registry)}: {registry.phase_names}"
         )
 
     def test_global_registry_validates(self) -> None:
@@ -230,7 +230,10 @@ class TestGlobalRegistry:
         assert errors == [], f"Registry validation errors: {errors}"
 
     def test_global_registry_execution_order_matches_expected(self) -> None:
-        """Execution order matches the post-epic-#1057 phase structure (15 phases)."""
+        """Execution order matches the post-#1109 phase structure (14 phases).
+
+        collapse_linear_beats was moved to POLISH in #1109.
+        """
         expected = [
             "validate_dag",
             "scene_types",
@@ -243,7 +246,6 @@ class TestGlobalRegistry:
             "enumerate_arcs",
             "divergence",
             "convergence",
-            "collapse_linear_beats",
             "state_flags",
             "overlays",
             "validation",

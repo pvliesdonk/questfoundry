@@ -38,7 +38,6 @@ from questfoundry.pipeline.stages.grow._helpers import (
     log,
 )
 from questfoundry.pipeline.stages.grow.deterministic import (  # noqa: F401 - register phases
-    phase_collapse_linear_beats,
     phase_convergence,
     phase_divergence,
     phase_enumerate_arcs,
@@ -139,7 +138,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         "enumerate_arcs": "phase_enumerate_arcs",
         "divergence": "phase_divergence",
         "convergence": "phase_convergence",
-        "collapse_linear_beats": "phase_collapse_linear_beats",
         "state_flags": "phase_state_flags",
         "validation": "phase_validation",
     }

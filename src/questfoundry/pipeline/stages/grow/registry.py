@@ -9,8 +9,8 @@ Usage::
     async def phase_validate_dag(graph, model):
         ...
 
-    @grow_phase(name="passages", depends_on=["collapse_linear_beats"], is_deterministic=True)
-    async def phase_passages(graph, model):
+    @grow_phase(name="state_flags", depends_on=["convergence"], is_deterministic=True)
+    async def phase_state_flags(graph, model):
         ...
 
 The execution order is produced by ``get_registry().execution_order()``.
