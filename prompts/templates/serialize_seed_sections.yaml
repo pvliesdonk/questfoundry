@@ -445,10 +445,41 @@ beats_prompt: |
 
   **Use IDs from YOUR story's manifest** - the examples above show the FORMAT only.
 
+  ## location_alternatives — GROW intersection hint (IMPORTANT)
+
+  GROW uses `location_alternatives` to find beats from DIFFERENT paths that could
+  share a scene at the same physical location. If your beat at `location::harbor`
+  lists `location_alternatives: ["location::market_district"]`, GROW knows this
+  beat could be relocated to the market district and thus co-occur with a path-B
+  beat that is already set there.
+
+  Think of it as: "Where ELSE could this scene plausibly take place without
+  breaking its logic?" List every location from the Entity IDs that would make
+  narrative sense as an alternative setting. Leave it empty ONLY when the beat
+  is so specific to its primary location that no other setting could work.
+
+  EXAMPLE (format — use your story's actual location IDs):
+  A beat where two characters argue about a stolen document is set at
+  `location::archive_hall`. It could equally happen at `location::council_chamber`
+  or `location::private_study` — so list those as alternatives. A beat where a
+  character jumps from a specific cliff has no viable alternative location, so
+  leave `location_alternatives` empty.
+
+  ```json
+  "location": "location::archive_hall",
+  "location_alternatives": ["location::council_chamber", "location::private_study"]
+  ```
+
+  The brief includes a "### Sibling path locations" section listing which
+  locations OTHER paths use. Prefer listing those as alternatives when they
+  fit — that is exactly where GROW will look for intersection opportunities.
+
   ## Rules
   - effect must be exactly "advances", "reveals", "commits", or "complicates"
   - All ID fields must use the correct type (see FIELD → ID TYPE MAPPING below)
-  - location can be null; location_alternatives can be empty array
+  - location can be null
+  - location_alternatives: list every plausible alternative location; empty ONLY
+    when the beat is physically inseparable from its primary location
   - Generate {size_beats_per_path} beats for EACH path in the VALID PATH IDs list
   - dilemma_impacts MUST use dilemma IDs from the Dilemma IDs list — NOT entity names
   - temporal_hint: for EACH beat, ask: "Does this beat's pacing depend on where another
@@ -629,11 +660,26 @@ per_path_beats_prompt: |
         ],
         "entities": ["character::character_id"],
         "location": "location::location_id",
-        "location_alternatives": []
+        "location_alternatives": ["location::other_location_if_scene_could_move_there"]
       }}
     ]
   }}
   ```
+
+  ## location_alternatives — GROW intersection hint (IMPORTANT)
+
+  GROW uses `location_alternatives` to find beats from DIFFERENT paths that could
+  share a scene. If your beat is at `location::harbor`, listing
+  `location_alternatives: ["location::market_district"]` tells GROW this beat
+  could co-occur with a path-B beat already set at the market. Think: "Where else
+  could this scene happen without breaking its logic?"
+
+  The brief includes a "### Sibling path locations" section listing which
+  locations OTHER paths tend to use. Prefer those as alternatives when the
+  narrative allows — that is exactly where GROW looks for intersection points.
+
+  Leave `location_alternatives` empty ONLY when the beat is physically inseparable
+  from its primary location (e.g., a beat that literally requires a specific cliff).
 
   NOTE: For EACH beat, check — does this beat's pacing depend on where another dilemma
   stands? Add a temporal_hint whenever EITHER condition is true:
@@ -656,6 +702,9 @@ per_path_beats_prompt: |
   - effect must be "advances", "reveals", "commits", or "complicates"
   - Use entity IDs from the Entity IDs list only
   - Use location IDs from the Entity IDs list (location category only)
+  - location_alternatives: list plausible alternative locations (especially sibling
+    path locations from the brief); empty ONLY when the beat is inseparable from
+    its primary location
 
   ## ARC STRUCTURE (CRITICAL — determines beat ordering)
   Beats must follow this arc pattern for a complete path scaffold:
