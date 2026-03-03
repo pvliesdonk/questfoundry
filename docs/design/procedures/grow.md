@@ -243,7 +243,7 @@ causes `passage_dag_cycles` failures in validation.
 
 **Purpose:** Find missing beats needed for narrative continuity AND assign scene types for pacing.
 
-**Input:** Beat graph (before intersections — see execution order note above)
+**Input:** Beat graph with intersections applied and predecessor edges from interleave (see execution order note above)
 
 **Operations:**
 
