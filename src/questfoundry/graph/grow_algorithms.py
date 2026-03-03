@@ -2522,13 +2522,14 @@ def interleave_cross_path_beats(graph: Graph) -> int:
         # Skip edges between beats in the same intersection group —
         # such beats co-occur in a single scene and have no ordering (#1124).
         from_groups = beat_intersection_groups.get(from_beat, set())
-        if from_groups and not from_groups.isdisjoint(beat_intersection_groups.get(to_beat, set())):
-            shared = from_groups & beat_intersection_groups.get(to_beat, set())
+        to_groups = beat_intersection_groups.get(to_beat, set())
+        shared_groups = from_groups.intersection(to_groups)
+        if shared_groups:
             log.debug(
                 "interleave_skipped_same_intersection",
                 from_beat=from_beat,
                 to_beat=to_beat,
-                groups=sorted(shared),
+                groups=sorted(shared_groups),
             )
             return False
         if _would_create_cycle(from_beat, to_beat, successors, beat_set):
