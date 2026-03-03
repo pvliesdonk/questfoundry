@@ -4560,3 +4560,37 @@ class TestInterleavecrossPathBeats:
 
         # DAG must remain valid
         assert validate_beat_dag(graph) == []
+
+    def test_temporal_hint_same_dilemma_skipped(self) -> None:
+        """Temporal hint where relative_to == beat's own dilemma is silently skipped.
+
+        This guards against the same-dilemma violation: a beat that references
+        its own dilemma in a temporal hint would create a within-dilemma predecessor
+        edge, which is illegal for intersections (conditional prerequisite invariant).
+        The hint must be discarded and no predecessor edge created.
+        """
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+
+        # aq_intro has a temporal hint relative_to its OWN dilemma (artifact_quest)
+        # instead of the cross-dilemma one (mentor_trust). This must be skipped.
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "before_commit",
+            },
+        )
+
+        edges_before = {(e["from"], e["to"]) for e in graph.get_edges(edge_type="predecessor")}
+        interleave_cross_path_beats(graph)
+        edges_after = {(e["from"], e["to"]) for e in graph.get_edges(edge_type="predecessor")}
+
+        # No new predecessor edges should reference aq_intro as a node added due
+        # to the same-dilemma hint (the hint must be dropped entirely)
+        new_edges = edges_after - edges_before
+        edges_from_aq_intro = {
+            (f, t) for f, t in new_edges if f == "beat::aq_intro" or t == "beat::aq_intro"
+        }
+        assert edges_from_aq_intro == set(), (
+            f"Expected no predecessor edges created from same-dilemma hint, got {edges_from_aq_intro}"
+        )

@@ -835,6 +835,50 @@ async def test_outer_loop_success_on_first_try() -> None:
         mock_format.assert_not_called()
 
 
+@pytest.mark.asyncio
+async def test_low_arc_count_raises_seed_stage_error() -> None:
+    """Execute raises SeedStageError when serialization produces fewer arcs than required.
+
+    The arc count check fires before Phase 6 (serialize_dilemma_relationships) to
+    avoid a wasted LLM call. This test verifies that compute_arc_count returning 1
+    (a linear story) triggers SeedStageError with a message mentioning 'arc'.
+    """
+    stage = SeedStage()
+
+    mock_model = MagicMock()
+    mock_graph = MagicMock()
+    mock_graph.get_nodes_by_type.side_effect = lambda t: (
+        {"entity1": {"type": "entity"}} if t == "entity" else {}
+    )
+    mock_graph.get_edges.return_value = []
+
+    mock_artifact = SeedOutput(entities=[], dilemmas=[], paths=[], initial_beats=[])
+
+    with (
+        patch("questfoundry.pipeline.stages.seed.Graph") as MockGraph,
+        patch("questfoundry.pipeline.stages.seed.run_discuss_phase") as mock_discuss,
+        patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
+        patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
+        patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        # Return 1 arc — below any reasonable minimum (max(2, max_arcs // 4))
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=1),
+    ):
+        MockGraph.load.return_value = mock_graph
+        mock_tools.return_value = []
+        mock_discuss.return_value = ([], 1, 100)
+        mock_summarize.return_value = (_MOCK_SECTION_BRIEFS, 50)
+        mock_serialize.return_value = SerializeResult(
+            artifact=mock_artifact, tokens_used=100, semantic_errors=[]
+        )
+
+        with pytest.raises(SeedStageError, match="arc"):
+            await stage.execute(
+                model=mock_model,
+                user_prompt="test",
+                project_path=Path("/test/project"),
+            )
+
+
 # --- PathBeatsSection Validation Tests ---
 
 

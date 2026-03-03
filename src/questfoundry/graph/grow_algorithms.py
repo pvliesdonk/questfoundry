@@ -1394,6 +1394,36 @@ def _get_hard_policy_beats(
     return hard_beats
 
 
+def _limit_one_beat_per_dilemma(
+    beats: list[str],
+    beat_dilemmas: dict[str, set[str]],
+) -> list[str]:
+    """Return at most one beat per dilemma from `beats`.
+
+    Iterates beats in sorted order (prefers earlier-numbered beats like _beat_01).
+    A beat is included only if none of its dilemmas overlap with dilemmas already
+    claimed by previously included beats. All of the beat's dilemmas are marked
+    as seen on inclusion, preventing later beats from sharing any of them.
+
+    Args:
+        beats: Candidate beat IDs (need not be sorted; sorted internally).
+        beat_dilemmas: Mapping from beat_id to the set of dilemma IDs it belongs to.
+
+    Returns:
+        Subset of `beats` with at most one beat per dilemma, in sorted order.
+    """
+    seen_dilemmas: set[str] = set()
+    limited: list[str] = []
+    for bid in sorted(beats):
+        dilemmas = beat_dilemmas.get(bid, set())
+        if not dilemmas:
+            continue
+        if dilemmas.isdisjoint(seen_dilemmas):
+            seen_dilemmas.update(dilemmas)
+            limited.append(bid)
+    return limited
+
+
 def _group_by_location(
     graph: Graph,
     beat_nodes: dict[str, Any],
@@ -1426,17 +1456,7 @@ def _group_by_location(
         # Filter to beats from different dilemmas
         multi_dilemma = _filter_different_dilemmas(beats, beat_dilemmas)
         if len(multi_dilemma) >= 2:
-            # Limit to 1 beat per dilemma (prefer beat_01, i.e. first alphabetically).
-            # Without this limit, the LLM sees a giant group with multiple beats per
-            # dilemma and can accidentally pick 2 from the same dilemma.
-            seen_dilemmas: set[str] = set()
-            limited: list[str] = []
-            for bid in sorted(multi_dilemma):
-                dilemmas = beat_dilemmas.get(bid, set())
-                dil = next(iter(dilemmas)) if dilemmas else ""
-                if dil and dil not in seen_dilemmas:
-                    seen_dilemmas.add(dil)
-                    limited.append(bid)
+            limited = _limit_one_beat_per_dilemma(multi_dilemma, beat_dilemmas)
             if len(limited) >= 2:
                 candidates.append(
                     IntersectionCandidate(
@@ -1485,12 +1505,15 @@ def _group_by_entity(
             continue
         multi_dilemma = _filter_different_dilemmas(unique_beats, beat_dilemmas)
         if len(multi_dilemma) >= 2:
-            key = tuple(multi_dilemma)
+            limited = _limit_one_beat_per_dilemma(multi_dilemma, beat_dilemmas)
+            if len(limited) < 2:
+                continue
+            key = tuple(limited)
             if key not in seen_pairs:
                 seen_pairs.add(key)
                 candidates.append(
                     IntersectionCandidate(
-                        beat_ids=multi_dilemma,
+                        beat_ids=limited,
                         signal_type="entity",
                         shared_value=entity_id,
                     )

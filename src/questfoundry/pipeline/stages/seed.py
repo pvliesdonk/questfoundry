@@ -484,6 +484,23 @@ class SeedStage:
                 final_paths=len(pruned_artifact.paths),
             )
 
+        # Fail fast if arc count is too low — before Phase 6 to avoid a wasted LLM call.
+        min_arcs_required = max(2, max_arcs // 4)
+        if final_arc_count < min_arcs_required:
+            dilemmas_fully_explored = sum(
+                1
+                for d in pruned_artifact.model_dump().get("dilemmas", [])
+                if len(d.get("explored", [])) >= 2
+            )
+            raise SeedStageError(
+                f"SEED produced only {final_arc_count} arc(s) "
+                f"({'a linear story' if final_arc_count == 1 else 'minimal branching'}) — "
+                f"minimum required is {min_arcs_required}. "
+                f"Only {dilemmas_fully_explored} dilemma(s) have both answers explored. "
+                f"For interactive fiction, explore BOTH answers for at least 2 dilemmas "
+                f"to produce {min_arcs_required}+ arcs."
+            )
+
         # Phase 6: Dilemma ordering relationships (Section 8) — runs AFTER pruning
         # since it only needs to analyze surviving dilemma pairs.
         log.debug("seed_phase", phase="dilemma_relationships")
@@ -525,21 +542,6 @@ class SeedStage:
                         f"Some models under-produce beats due to brevity optimization."
                     ),
                 )
-
-        # Fail if arc count is too low — a linear story cannot proceed to GROW
-        min_arcs_required = max(2, max_arcs // 4)
-        if final_arc_count < min_arcs_required:
-            dilemmas_fully_explored = sum(
-                1 for d in artifact_data.get("dilemmas", []) if len(d.get("explored", [])) >= 2
-            )
-            raise SeedStageError(
-                f"SEED produced only {final_arc_count} arc(s) "
-                f"({'a linear story' if final_arc_count == 1 else 'minimal branching'}) — "
-                f"minimum required is {min_arcs_required}. "
-                f"Only {dilemmas_fully_explored} dilemma(s) have both answers explored. "
-                f"For interactive fiction, explore BOTH answers for at least 2 dilemmas "
-                f"to produce {min_arcs_required}+ arcs."
-            )
 
         log.info(
             "seed_stage_completed",
