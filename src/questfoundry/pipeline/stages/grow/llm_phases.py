@@ -399,7 +399,7 @@ class _LLMPhaseMixin:
                 f"`{c.hint_position} {c.hint_relative_to}` — "
                 f"this would create edge `{c.from_beat}` → `{c.to_beat}`, "
                 f"which cycles with existing ordering constraints.\n"
-                f"    Beat summary: {c.beat_summary or '(no summary)'}"
+                f"    <summary>{c.beat_summary or '(no summary)'}</summary>"
             )
         conflict_list_text = "\n".join(conflict_lines)
 
@@ -449,7 +449,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
-    @grow_phase(name="scene_types", depends_on=["interleave_beats"], priority=3)
+    @grow_phase(name="scene_types", depends_on=["interleave_beats"], priority=4)
     async def _phase_4a_scene_types(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4a: Tag beats with scene type classification.
 

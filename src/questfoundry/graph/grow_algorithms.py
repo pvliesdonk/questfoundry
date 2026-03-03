@@ -2468,9 +2468,10 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
             for bid in path_beats_map.get(path_id, []):
                 beat_id_to_dilemmas[bid].add(dil_id)
 
-    # Start with existing requires edges only (no predecessor edges yet at this phase)
+    # Start with existing predecessor edges (intra-path ordering already in the DAG).
+    # Must use "predecessor" — "requires" edges do not exist in the beat DAG.
     existing: set[tuple[str, str]] = set()
-    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="requires"):
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor"):
         existing.add((edge["from"], edge["to"]))
 
     beat_set = set(beat_nodes.keys())
@@ -2481,6 +2482,7 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
 
     conflicts: list[TemporalHintConflict] = []
 
+    # Single-element tuple: future ordering types (e.g. "wraps") will be added here.
     for ordering in ("concurrent",):
         for edge in graph.get_edges(from_id=None, to_id=None, edge_type=ordering):
             dil_a = edge["from"]

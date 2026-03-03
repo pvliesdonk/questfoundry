@@ -19,7 +19,7 @@ system: |
   ## Conflicts to Resolve
   {conflict_list}
 
-  ## Valid Beat IDs
+  ## Conflicting Beat IDs
   Only drop hints for beats listed in this set: {valid_beat_ids}
 
   ## How to Choose

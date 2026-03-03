@@ -4692,7 +4692,6 @@ class TestDetectTemporalHintConflicts:
         # Combined with: aq_commit → mt_intro (mt after aq commit)
         # and: mt_intro → mt_commit (within mt path)
         # → cycle: aq_commit → mt_intro → mt_commit → [heuristic] ... potential cycle
-        # For a CLEAR direct cycle, set aq_commit to also want after mt_commit:
         graph.update_node(
             "beat::aq_intro",
             temporal_hint={
@@ -4700,22 +4699,15 @@ class TestDetectTemporalHintConflicts:
                 "position": "after_commit",
             },
         )
-        # Now heuristic adds: mt_commit → aq_commit (mt alphabetically before aq... wait)
-        # mt_intro after aq_commit: aq_commit → mt_intro (succeeds)
-        # aq_intro after mt_commit: mt_commit → aq_intro (check: aq_commit is after mt_intro
-        #   which is after mt_intro → but we need to check if mt_commit is BEFORE aq_commit)
-        # Actually aq_commit is a successor of aq_intro, so if mt_commit → aq_intro,
-        # and aq_commit → mt_intro, do we get a cycle? Only if mt_intro is after mt_commit
-        # via some edge. Let's just check we get some conflict or none — what matters is
-        # that the function runs without error and is stable.
+        # Cycle: mt_intro after aq_commit → aq_commit ≺ mt_intro.
+        #        aq_intro after mt_commit → mt_commit ≺ aq_intro.
+        #        Within-path: mt_intro ≺ mt_commit and aq_intro ≺ aq_commit.
+        # Simulation applies first hint (aq_commit → mt_intro) successfully.
+        # Second hint (mt_commit → aq_intro) would complete the cycle:
+        #   mt_commit → aq_intro → aq_commit → mt_intro → mt_commit.
+        # The function must detect this and report at least one conflict.
         conflicts = detect_temporal_hint_conflicts(graph)
-        # The cycle: aq_commit → mt_intro (applied first) then mt_commit → aq_intro.
-        # aq_intro → aq_commit (within aq path). So: mt_commit → aq_intro → aq_commit → mt_intro.
-        # Is there a path mt_intro → mt_commit? Only via requires if it exists.
-        # Our test graph has no requires edges between mt_intro and mt_commit.
-        # So no cycle here — both hints succeed. That's fine for this test.
-        # The key invariant: no exception, returns a list.
-        assert isinstance(conflicts, list)
+        assert len(conflicts) >= 1
 
     def test_strip_temporal_hints_by_id(self) -> None:
         """strip_temporal_hints_by_id clears hints for the specified beats."""
