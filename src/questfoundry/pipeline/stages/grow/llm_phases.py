@@ -1015,18 +1015,19 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
-    @grow_phase(name="entity_arcs", depends_on=["intersections"], priority=8)
+    @grow_phase(name="entity_arcs", depends_on=["interleave_beats"], priority=8)
     async def _phase_4f_entity_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4f: Per-entity arc trajectories on each path.
 
-        Runs post-intersection so beat topology is final. For each path,
-        selects eligible entities (deterministic), then asks the LLM to
-        generate arc_line and pivot_beat per entity.
+        Runs post-interleave so beat topology (including cross-path predecessor
+        edges) is final. For each path, selects eligible entities
+        (deterministic), then asks the LLM to generate arc_line and pivot_beat
+        per entity.
 
         Preconditions:
-        - Intersections computed (Phase 3 complete), beat topology final.
+        - Interleave complete, predecessor edges exist for path sequencing.
         - Entity nodes have entity_type and concept fields.
-        - Path nodes have beat sequences via belongs_to + requires.
+        - Path nodes have beat sequences via belongs_to + predecessor.
 
         Postconditions:
         - Each path annotated with entity_arcs list.
