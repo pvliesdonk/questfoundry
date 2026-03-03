@@ -308,7 +308,7 @@ async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     for routing (present = path A taken, absent = path B). This phase creates one
     flag per consequence, which yields two flags per dilemma. This is intentional:
     explicit positive flags for each path outcome make overlay conditions clearer
-    (e.g., "hostile_path_committed" rather than "friendly_flag absent") and avoid
+    (e.g., "hostile_committed" rather than "friendly_committed absent") and avoid
     absence-of-flag logic in overlay definitions. SHIP selects which flags become
     player-facing codewords; not every state flag is exported.
     """
