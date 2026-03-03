@@ -146,6 +146,23 @@ dilemmas_prompt: |
   ideal. For a full story, 3-4 paths provide rich branching without
   overwhelming the GROW stage.
 
+  ## MINIMUM BRANCHING REQUIREMENT (HARD CONSTRAINT)
+
+  At least 2 dilemmas MUST have BOTH answers in `explored`. A story where fewer
+  than 2 dilemmas are fully explored produces a linear story with no real player
+  choices and WILL BE REJECTED.
+
+  BAD (rejected): only 1 dilemma has both answers explored → 1 arc → pipeline fails
+  ```json
+  {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector"], "unexplored": ["manipulator"]},
+  {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe"], "unexplored": ["dangerous"]}
+  ```
+  GOOD (valid): 2 dilemmas fully explored → 4 arcs → passes
+  ```json
+  {"dilemma_id": "dilemma::host_benevolent_or_selfish", "explored": ["protector", "manipulator"], "unexplored": []},
+  {"dilemma_id": "dilemma::artifact_safe_or_dangerous", "explored": ["safe", "dangerous"], "unexplored": []}
+  ```
+
   ## What NOT to Do
   - Do NOT include the same dilemma_id more than once — each dilemma must appear EXACTLY once
   - Do NOT skip dilemmas because they aren't mentioned in the brief
@@ -496,7 +513,12 @@ beats_prompt: |
       `"temporal_hint": {"relative_to": "dilemma::protect_secret", "position": "before_commit"}`
     because the player needs to know about the stranger's past BEFORE they decide
     whether to protect the secret on the other dilemma.
-    - `relative_to` must be a dilemma ID different from the beat's own parent dilemma
+    - `relative_to` MUST be a dilemma ID that is DIFFERENT from the beat's own parent dilemma.
+      BAD: beat belongs to `dilemma::memory_vial_viewed_or_disowned` and sets
+           `relative_to: "dilemma::memory_vial_viewed_or_disowned"` ← SAME dilemma, FORBIDDEN.
+      GOOD: beat belongs to `dilemma::memory_vial_viewed_or_disowned` and sets
+            `relative_to: "dilemma::shattered_compass_points_or_fails"` ← different dilemma, correct.
+      If you cannot think of a DIFFERENT dilemma to relate this beat to, omit temporal_hint entirely.
     - `position` must be: `before_commit`, `after_commit`, `before_introduce`, or `after_introduce`
     - Omit only when the beat's placement is genuinely independent of all other dilemmas
 
@@ -532,6 +554,18 @@ beats_prompt: |
   - Path `path::keeper_faithful_or_corrupt__faithful` → commits beat uses `dilemma::keeper_faithful_or_corrupt`
   - Path `path::artifact_natural_or_crafted__natural` → commits beat uses `dilemma::artifact_natural_or_crafted`
   - Each path resolves ITS OWN dilemma, not someone else's.
+
+  ## CONSEQUENCE BEAT REQUIREMENT (HARD CONSTRAINT)
+
+  Every path MUST have at least one beat AFTER the commits beat — a consequence
+  beat showing what the choice led to. A path that ends at commits has no payoff
+  and WILL BE REJECTED.
+
+  BAD (rejected): path ends at commits — no consequence shown
+  `[{effect: "advances"}, {effect: "commits"}]` ← pipeline fails
+
+  GOOD (valid): aftermath beat follows the decision
+  `[{effect: "advances"}, {effect: "commits"}, {effect: "advances"}]` ← passes
 
   ## FIELD → ID TYPE MAPPING (prevents all ID confusion)
 
@@ -696,8 +730,12 @@ per_path_beats_prompt: |
   EXAMPLE: beat on path `path::trust_the_stranger__reveal` where the stranger confesses a
   past crime → `"temporal_hint": {{"relative_to": "dilemma::protect_secret", "position": "before_commit"}}`
   because the player must know this BEFORE deciding whether to protect the secret.
-  Omit temporal_hint only when the beat's placement is genuinely independent of all
-  other dilemmas. Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
+  CRITICAL: `relative_to` MUST name a DIFFERENT dilemma than the beat's own parent.
+  BAD: beat is on path `path::memory_vial__viewed` (parent: `dilemma::memory_vial_viewed_or_disowned`)
+       → `relative_to: "dilemma::memory_vial_viewed_or_disowned"` ← SAME dilemma, WRONG.
+  GOOD: same beat → `relative_to: "dilemma::shattered_compass_points_or_fails"` ← CORRECT.
+  If no other dilemma is relevant, omit temporal_hint entirely.
+  Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
 
   ## Rules
   - Generate exactly {size_beats_per_path} beats for path `{path_id}`
@@ -721,18 +759,23 @@ per_path_beats_prompt: |
   WRONG: [advances, reveals, commits] — commits is last, no aftermath
   RIGHT: [advances, commits, reveals] — aftermath beat follows the turning point
 
-  ## COMMITS BEAT REQUIREMENT
+  ## COMMITS BEAT REQUIREMENT (HARD CONSTRAINT)
   You MUST include exactly one beat with `effect: "commits"` for `{dilemma_id}`.
   This beat represents the moment where this path's dilemma is locked in.
+  The commits beat MUST NOT be the last beat — at least one consequence beat MUST follow it.
 
-  WRONG: Generating only "advances" and "reveals" beats.
-  RIGHT: Including one beat with `effect: "commits"`.
+  WRONG (rejected): commits is the last beat — no consequence
+  `[advances, commits]` or `[advances, reveals, commits]` ← pipeline fails
+
+  RIGHT (valid): aftermath beat follows the decision
+  `[advances, commits, advances]` or `[reveals, commits, complicates]` ← passes
 
   ## What NOT to Do
   - Do NOT use generic beat IDs like `beat_001` (must include path name prefix)
   - Do NOT generate beats for other paths
   - Do NOT reference other dilemma_ids in your first dilemma_impact
   - Do NOT skip the commits beat
+  - Do NOT make commits the last beat — a consequence beat MUST follow it
   - Do NOT use IDs not in the manifest
   - Do NOT put the dilemma ID in the `path_id` field (see COMMON MISTAKE above)
 

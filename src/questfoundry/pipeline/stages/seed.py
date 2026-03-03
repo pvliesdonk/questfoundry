@@ -526,21 +526,19 @@ class SeedStage:
                     ),
                 )
 
-        # Warn if arc count is too low (linear story instead of IF)
-        # This indicates the LLM didn't generate enough branching content
-        min_arcs_warning = max(2, max_arcs // 4)
-        if final_arc_count < min_arcs_warning:
+        # Fail if arc count is too low — a linear story cannot proceed to GROW
+        min_arcs_required = max(2, max_arcs // 4)
+        if final_arc_count < min_arcs_required:
             dilemmas_fully_explored = sum(
                 1 for d in artifact_data.get("dilemmas", []) if len(d.get("explored", [])) >= 2
             )
-            log.warning(
-                "seed_low_arc_count",
-                arc_count=final_arc_count,
-                dilemmas_fully_explored=dilemmas_fully_explored,
-                message=(
-                    f"Only {final_arc_count} arc(s) - this is {'a linear story' if final_arc_count == 1 else 'minimal branching'}. "
-                    f"For real IF, explore BOTH answers for at least 2 dilemmas (4+ arcs)."
-                ),
+            raise SeedStageError(
+                f"SEED produced only {final_arc_count} arc(s) "
+                f"({'a linear story' if final_arc_count == 1 else 'minimal branching'}) — "
+                f"minimum required is {min_arcs_required}. "
+                f"Only {dilemmas_fully_explored} dilemma(s) have both answers explored. "
+                f"For interactive fiction, explore BOTH answers for at least 2 dilemmas "
+                f"to produce {min_arcs_required}+ arcs."
             )
 
         log.info(
