@@ -2488,9 +2488,9 @@ def interleave_cross_path_beats(graph: Graph) -> int:
     # Such edges would create circular prerequisites on shared beats (#1124).
     # A beat can theoretically belong to multiple intersection groups (e.g., grouped
     # by both location and entity), so we track all groups per beat.
-    beat_intersection_groups: dict[str, set[str]] = {}
+    beat_intersection_groups: defaultdict[str, set[str]] = defaultdict(set)
     for edge in graph.get_edges(from_id=None, to_id=None, edge_type="intersection"):
-        beat_intersection_groups.setdefault(edge["from"], set()).add(edge["to"])
+        beat_intersection_groups[edge["from"]].add(edge["to"])
 
     # --- Collect dilemma relationship edges ---
     relationship_edges: list[tuple[str, str, str]] = []  # (dilemma_a, dilemma_b, ordering)
