@@ -104,6 +104,7 @@ async def test_execute_calls_all_three_phases() -> None:
             "questfoundry.pipeline.stages.seed.serialize_dilemma_relationships"
         ) as mock_constraints,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
@@ -187,6 +188,7 @@ async def test_execute_emits_phase_progress() -> None:
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
@@ -237,6 +239,7 @@ async def test_execute_passes_brainstorm_context_to_discuss() -> None:
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.get_seed_discuss_prompt") as mock_prompt,
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
@@ -280,6 +283,7 @@ async def test_execute_uses_iterative_serialization() -> None:
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
@@ -319,6 +323,7 @@ async def test_execute_passes_graph_to_chunked_summarize() -> None:
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
@@ -360,6 +365,7 @@ async def test_execute_returns_artifact_as_dict() -> None:
         patch("questfoundry.pipeline.stages.seed.summarize_seed_chunked") as mock_summarize,
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
@@ -576,6 +582,7 @@ async def test_outer_loop_retries_on_semantic_errors() -> None:
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.format_semantic_errors_as_content") as mock_format,
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
@@ -643,6 +650,7 @@ async def test_outer_loop_appends_feedback_to_messages() -> None:
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.format_semantic_errors_as_content") as mock_format,
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
@@ -804,6 +812,7 @@ async def test_outer_loop_success_on_first_try() -> None:
         patch("questfoundry.pipeline.stages.seed.serialize_seed_as_function") as mock_serialize,
         patch("questfoundry.pipeline.stages.seed.get_all_research_tools") as mock_tools,
         patch("questfoundry.pipeline.stages.seed.format_semantic_errors_as_content") as mock_format,
+        patch("questfoundry.pipeline.stages.seed.compute_arc_count", return_value=4),
     ):
         MockGraph.load.return_value = mock_graph
         mock_tools.return_value = []
