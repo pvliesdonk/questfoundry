@@ -23,6 +23,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 from questfoundry.models.pipeline import PhaseResult
+from questfoundry.models.seed import DilemmaImpact  # noqa: TC001
 
 # ---------------------------------------------------------------------------
 # Graph node types
@@ -248,6 +249,7 @@ class GapProposal(BaseModel):
     )
     summary: str = Field(min_length=1)
     scene_type: Literal["scene", "sequel", "micro_beat"] = "sequel"
+    dilemma_impacts: list[DilemmaImpact] = Field(default_factory=list)
 
 
 class Phase4bOutput(BaseModel):

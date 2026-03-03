@@ -2057,6 +2057,7 @@ def insert_gap_beat(
     before_beat: str | None,
     summary: str,
     scene_type: str,
+    dilemma_impacts: list[dict[str, Any]] | None = None,
 ) -> str:
     """Insert a new gap beat into the graph between existing beats.
 
@@ -2074,6 +2075,7 @@ def insert_gap_beat(
         before_beat: Beat that should come after the new beat (or None for end).
         summary: Summary text for the new beat.
         scene_type: Scene type tag for the new beat.
+        dilemma_impacts: List of dilemma impact dicts (dilemma_id, effect, note).
 
     Returns:
         The new beat's node ID.
@@ -2130,6 +2132,7 @@ def insert_gap_beat(
             "transition_style": transition_style,
             "bridges_from": after_beat,
             "bridges_to": before_beat,
+            "dilemma_impacts": dilemma_impacts or [],
         },
     )
 

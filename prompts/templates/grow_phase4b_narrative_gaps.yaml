@@ -30,6 +30,12 @@ system: |
   4. Gap beats should be concise transitions, not major story events
   5. Maximum 2 gap beats per path
 
+  ## Path → Dilemma mapping (use these dilemma_id values)
+  {path_dilemma_map}
+
+  ## Valid dilemma IDs
+  {valid_dilemma_ids}
+
   ## Path Sequences (in execution order)
   {path_sequences}
 
@@ -51,6 +57,13 @@ system: |
   - before_beat: the LATER beat (or null for end of path)
   - summary: concise description of the gap beat (1 sentence)
   - scene_type: scene | sequel | micro_beat (default: sequel)
+  - dilemma_impacts: list of how this beat affects dilemmas (may be empty)
+    Each item: {{"dilemma_id": "<id>", "effect": "<advances|reveals|commits|complicates>", "note": "<explanation>"}}
+    Effect values:
+      advances    = moves the dilemma closer to resolution (tension builds)
+      reveals     = discloses new information about the dilemma
+      commits     = a character makes an irreversible choice about the dilemma
+      complicates = adds a new obstacle or contradiction to the dilemma
 
   If no gaps are needed, return an empty gaps array.
 
@@ -62,7 +75,10 @@ system: |
         "after_beat": "beat::setup_01",
         "before_beat": "beat::climax_01",
         "summary": "Hero reflects on the stakes before the confrontation",
-        "scene_type": "sequel"
+        "scene_type": "sequel",
+        "dilemma_impacts": [
+          {{"dilemma_id": "dilemma::trust_or_betray", "effect": "advances", "note": "Hero weighs loyalty against self-interest before the confrontation forces a choice"}}
+        ]
       }}
     ]
   }}
@@ -72,6 +88,7 @@ user: |
 
   REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section.
   REMINDER: after_beat is the EARLIER beat, before_beat is the LATER beat. Do NOT reverse them.
+  REMINDER: Include dilemma_impacts for each gap beat using ONLY valid dilemma_ids listed above. Valid effect values: advances, reveals, commits, complicates.
   Maximum 2 gap beats per path.
 
 components: []

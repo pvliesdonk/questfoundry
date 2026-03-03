@@ -441,10 +441,26 @@ class _LLMPhaseMixin:
                 detail="No paths with 2+ beats to check",
             )
 
+        dilemma_nodes = graph.get_nodes_by_type("dilemma")
+        valid_dilemma_ids = sorted(dilemma_nodes.keys())
+        path_dilemma_lines = []
+        for pid in sorted(path_nodes.keys()):
+            pdata = path_nodes[pid]
+            dilemma_id = pdata.get("dilemma_id", "")
+            if dilemma_id and not dilemma_id.startswith("dilemma::"):
+                dilemma_id = f"dilemma::{dilemma_id}"
+            question = ""
+            if dilemma_id and dilemma_id in dilemma_nodes:
+                question = dilemma_nodes[dilemma_id].get("question", "")
+            suffix = f' ("{question}")' if question else ""
+            path_dilemma_lines.append(f"  {pid} → {dilemma_id or '(none)'}{suffix}")
+
         context = {
             "path_sequences": "\n\n".join(path_sequences),
             "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
             "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
+            "path_dilemma_map": "\n".join(path_dilemma_lines) or "(no paths with dilemmas)",
+            "valid_dilemma_ids": ", ".join(valid_dilemma_ids) or "(none)",
         }
 
         from questfoundry.graph.grow_validators import validate_phase4_output
@@ -566,12 +582,28 @@ class _LLMPhaseMixin:
                 f"'{issue.scene_type}' beats:\n" + "\n".join(issue_beats)
             )
 
+        dilemma_nodes_4c = graph.get_nodes_by_type("dilemma")
+        valid_dilemma_ids_4c = sorted(dilemma_nodes_4c.keys())
+        path_dilemma_lines_4c = []
+        for pid in sorted(path_nodes.keys()):
+            pdata = path_nodes[pid]
+            dilemma_id = pdata.get("dilemma_id", "")
+            if dilemma_id and not dilemma_id.startswith("dilemma::"):
+                dilemma_id = f"dilemma::{dilemma_id}"
+            question = ""
+            if dilemma_id and dilemma_id in dilemma_nodes_4c:
+                question = dilemma_nodes_4c[dilemma_id].get("question", "")
+            suffix = f' ("{question}")' if question else ""
+            path_dilemma_lines_4c.append(f"  {pid} → {dilemma_id or '(none)'}{suffix}")
+
         context = {
             "path_sequences": "\n\n".join(path_sequences),
             "pacing_issues": "\n\n".join(issue_descriptions),
             "valid_path_ids": ", ".join(sorted(path_nodes.keys())),
             "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
             "issue_count": str(len(issues)),
+            "path_dilemma_map": "\n".join(path_dilemma_lines_4c) or "(no paths with dilemmas)",
+            "valid_dilemma_ids": ", ".join(valid_dilemma_ids_4c) or "(none)",
         }
 
         from questfoundry.graph.grow_validators import validate_phase4_output
