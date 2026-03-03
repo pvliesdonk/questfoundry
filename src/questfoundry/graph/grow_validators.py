@@ -15,6 +15,7 @@ from typing import TYPE_CHECKING
 from questfoundry.graph.mutations import GrowValidationError
 
 if TYPE_CHECKING:
+    from questfoundry.graph.graph import Graph
     from questfoundry.models.grow import (
         Phase3Output,
         Phase4aOutput,
@@ -172,11 +173,14 @@ def validate_phase4_output(
     result: Phase4bOutput,
     valid_path_ids: set[str],
     valid_beat_ids: set[str],
+    graph: Graph | None = None,
 ) -> list[GrowValidationError]:
     """Validate Phase 4b/4c gap proposals.
 
     Accepts unprefixed IDs if the prefixed version exists in valid IDs.
     """
+    valid_dilemma_ids: set[str] = set(graph.get_nodes_by_type("dilemma").keys()) if graph else set()
+
     errors: list[GrowValidationError] = []
     for i, gap in enumerate(result.gaps):
         path_id = gap.path_id
@@ -206,6 +210,23 @@ def validate_phase4_output(
                             issue=f"Beat ID not found: {beat_id}",
                             provided=beat_id,
                             available=sorted(valid_beat_ids)[:10],
+                        )
+                    )
+        for j, impact in enumerate(gap.dilemma_impacts or []):
+            dilemma_id = impact.dilemma_id
+            if dilemma_id not in valid_dilemma_ids:
+                prefixed = (
+                    f"dilemma::{dilemma_id}"
+                    if not dilemma_id.startswith("dilemma::")
+                    else dilemma_id
+                )
+                if prefixed not in valid_dilemma_ids:
+                    errors.append(
+                        GrowValidationError(
+                            field_path=f"gaps.{i}.dilemma_impacts.{j}.dilemma_id",
+                            issue=f"Dilemma ID not found: {dilemma_id}",
+                            provided=dilemma_id,
+                            available=sorted(valid_dilemma_ids)[:10],
                         )
                     )
     return errors
