@@ -126,14 +126,19 @@ If the non-canonical answer is not promoted to a path in SEED, that dilemma has 
 
 ## Algorithm Phases
 
-> **Execution order note (#1124):** Phase 3 (intersection detection) executes
-> **before** Phase 1b (interleave) and before Phase 4a/4b/4c (gap detection).
-> Running intersections on a clean beat DAG (no predecessor edges yet) ensures
-> the No-Conditional-Prerequisites Invariant always passes — interleave-created
-> edges cannot invalidate intersection proposals. Phase numbering is preserved
-> for historical continuity; execution order is defined in `_phase_order()`.
-> Actual order: `validate_dag → intersections → interleave_beats → scene_types
-> → narrative_gaps → pacing_gaps → atmospheric → path_arcs → entity_arcs → …`
+> **Execution order note (#1123, #1124):** Phase 3 (intersection detection)
+> executes **before** Phase 1b (interleave) and before Phase 4a/4b/4c (gap
+> detection). Running intersections on a clean beat DAG (no predecessor edges
+> yet) ensures the No-Conditional-Prerequisites Invariant always passes (#1124).
+> A new **`resolve_temporal_hints`** phase runs between intersections and
+> interleave: it detects cycles in temporal hint proposals and calls the LLM to
+> choose which hints to relax before interleave creates any edges. This
+> eliminates silent `interleave_cycle_skipped` drops in valid runs (#1123).
+> Phase numbering is preserved for historical continuity; execution order is
+> defined in `_phase_order()`.
+> Actual order: `validate_dag → intersections → resolve_temporal_hints →
+> interleave_beats → scene_types → narrative_gaps → pacing_gaps → atmospheric →
+> path_arcs → entity_arcs → …`
 > See also: **No-Conditional-Prerequisites Invariant** under Phase 3.
 
 ### Phase 1: Beat Graph Import

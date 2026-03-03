@@ -2423,6 +2423,155 @@ def _strip_temporal_hints(graph: Graph, beat_nodes: dict[str, Any]) -> int:
     return stripped
 
 
+@dataclass
+class TemporalHintConflict:
+    """A temporal hint that would create a cycle in the beat ordering DAG.
+
+    Produced by ``detect_temporal_hint_conflicts`` and consumed by the
+    ``resolve_temporal_hints`` phase to ask the LLM which hints to drop.
+    """
+
+    beat_id: str
+    hint_relative_to: str  # dilemma the hint references
+    hint_position: str  # before_commit | after_commit | before_introduce | after_introduce
+    from_beat: str  # proposed predecessor in the rejected edge
+    to_beat: str  # proposed dependent in the rejected edge
+    beat_summary: str  # beat summary for LLM context
+
+
+def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
+    """Simulate temporal hint edge application and return hints that would create cycles.
+
+    Replicates the concurrent-ordering logic of ``interleave_cross_path_beats``
+    (hint application only) without committing any edges.  Hints that would be
+    skipped as cycle-creating are returned as ``TemporalHintConflict`` objects
+    for LLM resolution before interleave runs.
+
+    Returns:
+        List of conflicting hints.  Empty if all hints are consistent.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    if not beat_nodes:
+        return []
+
+    dilemma_paths = build_dilemma_paths(graph)
+    if len(dilemma_paths) < 2:
+        return []
+
+    path_beats_map: dict[str, list[str]] = defaultdict(list)
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to"):
+        path_beats_map[edge["to"]].append(edge["from"])
+
+    beat_id_to_dilemmas: dict[str, set[str]] = defaultdict(set)
+    for dil_id, paths in dilemma_paths.items():
+        for path_id in paths:
+            for bid in path_beats_map.get(path_id, []):
+                beat_id_to_dilemmas[bid].add(dil_id)
+
+    # Start with existing requires edges only (no predecessor edges yet at this phase)
+    existing: set[tuple[str, str]] = set()
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="requires"):
+        existing.add((edge["from"], edge["to"]))
+
+    beat_set = set(beat_nodes.keys())
+    successors: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
+    for from_id, to_id in existing:
+        if from_id in successors and to_id in successors:
+            successors[to_id].add(from_id)
+
+    conflicts: list[TemporalHintConflict] = []
+
+    for ordering in ("concurrent",):
+        for edge in graph.get_edges(from_id=None, to_id=None, edge_type=ordering):
+            dil_a = edge["from"]
+            dil_b = edge["to"]
+            if dil_a not in dilemma_paths or dil_b not in dilemma_paths:
+                continue
+
+            ordered_a = [
+                _get_path_beats_ordered(graph, p, path_beats_map) for p in dilemma_paths[dil_a]
+            ]
+            ordered_b = [
+                _get_path_beats_ordered(graph, p, path_beats_map) for p in dilemma_paths[dil_b]
+            ]
+            all_beats_a = [b for seq in ordered_a for b in seq]
+            all_beats_b = [b for seq in ordered_b for b in seq]
+
+            for beat_id in all_beats_a + all_beats_b:
+                data = beat_nodes.get(beat_id, {})
+                hint = data.get("temporal_hint")
+                if not isinstance(hint, dict):
+                    continue
+                relative_to = hint.get("relative_to", "")
+                position = hint.get("position", "")
+                if not relative_to or not position:
+                    continue
+
+                beat_own_dilemmas = beat_id_to_dilemmas.get(beat_id, set())
+                if relative_to in beat_own_dilemmas:
+                    continue  # same-dilemma guard (already handled in interleave)
+
+                if relative_to == dil_a:
+                    ref_all, ref_ordered, ref_dil = all_beats_a, ordered_a, dil_a
+                elif relative_to == dil_b:
+                    ref_all, ref_ordered, ref_dil = all_beats_b, ordered_b, dil_b
+                else:
+                    continue
+
+                ref_commits = _commits_beats_for_dilemma(ref_all, ref_dil, beat_nodes)
+                ref_first = [seq[0] for seq in ref_ordered if seq]
+                is_before = position.startswith("before_")
+                target_beats = ref_commits if "commit" in position else ref_first
+
+                for target in sorted(target_beats):
+                    from_b, to_b = (target, beat_id) if is_before else (beat_id, target)
+                    if from_b == to_b:
+                        continue
+                    if (from_b, to_b) in existing:
+                        continue
+                    if from_b not in beat_set or to_b not in beat_set:
+                        continue
+                    if _would_create_cycle(from_b, to_b, successors, beat_set):
+                        conflicts.append(
+                            TemporalHintConflict(
+                                beat_id=beat_id,
+                                hint_relative_to=relative_to,
+                                hint_position=position,
+                                from_beat=from_b,
+                                to_beat=to_b,
+                                beat_summary=beat_nodes.get(beat_id, {}).get("summary", ""),
+                            )
+                        )
+                    else:
+                        # Simulate applying the edge so later hints see it
+                        existing.add((from_b, to_b))
+                        successors[to_b].add(from_b)
+
+    return conflicts
+
+
+def strip_temporal_hints_by_id(graph: Graph, beat_ids: set[str]) -> int:
+    """Set temporal_hint to None for the specified beat IDs.
+
+    Used by ``resolve_temporal_hints`` phase to remove conflicting hints
+    before ``interleave_beats`` processes the surviving set.
+
+    Args:
+        graph: Graph to mutate.
+        beat_ids: Set of beat IDs whose temporal hints should be cleared.
+
+    Returns:
+        Count of beats that had a hint stripped.
+    """
+    stripped = 0
+    for bid in sorted(beat_ids):
+        node = graph.get_node(bid)
+        if node and node.get("temporal_hint") is not None:
+            graph.update_node(bid, temporal_hint=None)
+            stripped += 1
+    return stripped
+
+
 def interleave_cross_path_beats(graph: Graph) -> int:
     """Create predecessor edges between beats from different dilemma paths.
 

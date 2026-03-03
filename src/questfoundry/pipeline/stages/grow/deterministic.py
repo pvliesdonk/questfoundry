@@ -66,9 +66,9 @@ async def phase_validate_dag(graph: Graph, model: BaseChatModel) -> GrowPhaseRes
 
 @grow_phase(
     name="interleave_beats",
-    depends_on=["intersections"],
+    depends_on=["resolve_temporal_hints"],
     is_deterministic=True,
-    priority=2,
+    priority=3,
 )
 async def phase_interleave_beats(
     graph: Graph,

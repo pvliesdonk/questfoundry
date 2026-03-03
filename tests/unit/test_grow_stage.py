@@ -183,10 +183,10 @@ class TestGrowStageExecute:
 
 class TestGrowStagePhaseOrder:
     def test_phase_order_returns_correct_count(self) -> None:
-        """15 phases; intersections moved before interleave_beats in #1124."""
+        """16 phases; resolve_temporal_hints added in #1123, intersections moved in #1124."""
         stage = GrowStage()
         phases = stage._phase_order()
-        assert len(phases) == 15
+        assert len(phases) == 16
 
     def test_phase_order_names(self) -> None:
         stage = GrowStage()
@@ -194,6 +194,7 @@ class TestGrowStagePhaseOrder:
         assert names == [
             "validate_dag",
             "intersections",
+            "resolve_temporal_hints",
             "interleave_beats",
             "scene_types",
             "narrative_gaps",

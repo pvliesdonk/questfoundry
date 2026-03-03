@@ -1,0 +1,1022 @@
+name: serialize_seed_sections
+description: Section-specific prompts for iterative SEED serialization
+
+# Section 1: Entity Decisions
+entities_prompt: |
+  You are generating ENTITY DECISIONS for a SEED stage.
+
+  ## Generation Requirements (CRITICAL)
+  You MUST generate a decision for EVERY entity ID in the manifest below.
+  Missing items WILL cause validation failure. This is NOT extraction - you must
+  generate decisions for ALL entities, even if the brief doesn't mention them explicitly.
+
+  ## Scoped ID Format (CRITICAL)
+  All IDs use type prefixes for disambiguation. Copy IDs EXACTLY as shown in the manifest,
+  including the CATEGORY prefix (`character::`, `location::`, `object::`, or `faction::`).
+
+  ## Entity Names (CRITICAL)
+  The manifest shows which entities need names (marked with "(needs name)").
+  For each RETAINED entity that needs a name, you MUST provide a `name` field.
+
+  Good names are memorable and fit the story's tone:
+  - Characters: "Lady Beatrice Ashford", "Marcus the Groundskeeper", "Dr. Chen"
+  - Locations: "The Gilded Compass Inn", "Thornwood Manor", "The Eastern Archives"
+  - Objects: "The Obsidian Key", "Captain's Logbook", "The Crimson Pendant"
+  - Factions: "The Night Watch", "House of Whispers", "The Merchant Guild"
+
+  Do NOT just title-case the entity_id - create a proper name that fits the concept.
+  WRONG: "Lady_Beatrice" or "The Butler" for entity_id "character::butler"
+  RIGHT: "Edmund Graves" or "Old Whitmore" for a butler character
+
+  ## Schema
+  Return a JSON object with an "entities" array. Each item is an EntityDecision:
+  ```json
+  {
+    "entities": [
+      {
+        "entity_id": "character::butler",
+        "disposition": "retained",
+        "name": "Edmund Graves"
+      },
+      {
+        "entity_id": "location::manor",
+        "disposition": "cut"
+      }
+    ]
+  }
+  ```
+
+  Note: `name` is only needed for RETAINED entities marked "(needs name)" in the manifest.
+  Omit `name` for cut entities or entities that already have names.
+
+  ## Rules
+  - disposition must be exactly "retained" or "cut" (lowercase)
+  - entity_id must include the category prefix and match EXACTLY an ID from the manifest
+  - Generate a decision for EVERY entity in the manifest
+  - For RETAINED entities marked "(needs name)", provide a fitting `name`
+
+  ## What NOT to Do
+  - Do NOT include the same entity_id more than once — each entity must appear EXACTLY once
+  - Do NOT skip entities because they aren't mentioned in the brief
+  - Do NOT invent entities not in the manifest
+  - Do NOT partially complete the list
+  - Do NOT omit the category prefix from IDs
+  - Do NOT provide names for cut entities (waste of effort)
+  - Do NOT just title-case the entity_id as the name
+
+  ## Output
+  Return ONLY valid JSON with the "entities" array.
+
+# Section 2: Dilemma Decisions
+dilemmas_prompt: |
+  You are generating DILEMMA DECISIONS for a SEED stage.
+
+  ## Generation Requirements (CRITICAL)
+  You MUST generate a decision for EVERY dilemma ID in the manifest below.
+  Missing items WILL cause validation failure. This is NOT extraction - you must
+  generate decisions for ALL dilemmas, even if the brief doesn't mention them explicitly.
+
+  ## Scoped ID Format (CRITICAL)
+  All IDs use type prefixes for disambiguation. Copy dilemma IDs EXACTLY as shown in
+  the manifest, including the `dilemma::` prefix.
+
+  ## Schema
+  Return a JSON object with a "dilemmas" array. Each item is a DilemmaDecision:
+  ```json
+  {
+    "dilemmas": [
+      {
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
+        "explored": ["protector", "manipulator"],
+        "unexplored": []
+      }
+    ]
+  }
+  ```
+
+  Note: `explored` and `unexplored` contain raw answer IDs (no prefix) since
+  they are local to each dilemma.
+
+  ## DEFAULT ANSWER RULE (MOST IMPORTANT RULE)
+  In the manifest, one answer per dilemma is marked `(default)`.
+  `(default)` = the canonical story spine. It MUST ALWAYS be in `explored`.
+  You may NEVER put the `(default)` answer in `unexplored`.
+
+  EXAMPLE: answers are [`reliable` (default), `falsified`]
+  - CORRECT: `"explored": ["reliable", "falsified"], "unexplored": []`
+  - CORRECT: `"explored": ["reliable"], "unexplored": ["falsified"]`
+  - WRONG:   `"explored": ["falsified"], "unexplored": ["reliable"]`  <-- default NOT in explored!
+
+  ## Rules
+  - dilemma_id must include the `dilemma::` prefix and match EXACTLY an ID from the manifest
+  - explored: Answer IDs to explore as paths (the `(default)` answer MUST be here)
+  - unexplored: Answer IDs NOT explored (become shadows, NEVER the default)
+  - Generate a decision for EVERY dilemma in the manifest
+
+  ## CRITICAL INVARIANT: explored ↔ paths linkage
+  The `explored` array defines which answers will have paths created.
+  For EACH answer_id in `explored`, you MUST create a path later.
+  The path's `answer_id` field MUST match an entry in `explored`.
+
+  WRONG: `explored: []` with paths that have `answer_id` values
+  WRONG: `explored: ["opt_a"]` but path uses `answer_id: "opt_b"`
+  RIGHT: `explored: ["opt_a", "opt_b"]` and paths use those exact IDs
+
+  ## Tension Balance: How Many Answers to Explore
+
+  Exploring more answers creates more paths, more branching, and a larger story.
+  Leaving answers unexplored creates dramatic shadows — tensions that are felt
+  but never resolved, adding subtext and replayability.
+
+  GOOD tension balance:
+  - Dilemma with 2 answers: explore BOTH (2 paths). This is the default —
+    binary dilemmas are designed to create two-path branching.
+  - Dilemma with 3+ answers: explore 2, leave 1 unexplored. The unexplored
+    answer becomes an intriguing "road not taken" that enriches the narrative.
+
+  BAD tension balance:
+  - Exploring ALL answers of every dilemma: creates too many paths, dilutes
+    each path's narrative weight. The story becomes wide but shallow.
+  - Exploring only 1 answer per dilemma: eliminates meaningful branching.
+    Players have no real choice, defeating the purpose of the dilemma.
+  - Leaving ALL answers unexplored: no paths are created. The dilemma has
+    no gameplay impact.
+
+  GUIDELINE: Aim for 2-4 total paths. For a vignette scope, 2 paths is
+  ideal. For a full story, 3-4 paths provide rich branching without
+  overwhelming the GROW stage.
+
+  ## What NOT to Do
+  - Do NOT include the same dilemma_id more than once — each dilemma must appear EXACTLY once
+  - Do NOT skip dilemmas because they aren't mentioned in the brief
+  - Do NOT invent dilemmas not in the manifest
+  - Do NOT partially complete the list
+  - Do NOT leave `explored` empty if you plan to create paths for that dilemma
+  - Do NOT omit the `dilemma::` prefix from dilemma_id
+  - Do NOT put the `(default)` answer in `unexplored` — it MUST be in `explored`
+
+  ## Output
+  Return ONLY valid JSON with the "dilemmas" array.
+
+# Section 3: Paths
+paths_prompt: |
+  You are generating PATHS for a SEED stage based on dilemma decisions.
+
+  ## Generation Requirements (CRITICAL)
+  For each "explored" answer in the dilemma decisions, you MUST generate a path.
+  Each path represents one storyline that will be developed in the story.
+
+  ## Scoped ID Format (CRITICAL)
+  All IDs use type prefixes for disambiguation:
+  - path_id: Use hierarchical `path::` prefix (e.g., `path::host_benevolent_or_selfish__protector`)
+  - dilemma_id: Use `dilemma::` prefix (e.g., `dilemma::host_benevolent_or_selfish`)
+
+  Path IDs embed their parent dilemma: `path::[dilemma_name]__[answer_id]`
+
+  Copy IDs EXACTLY as shown in the manifest, including the prefixes.
+
+  ## CRITICAL INVARIANT: answer_id MUST match explored
+  Each path's `answer_id` MUST be one of the IDs listed in the dilemma's
+  `explored` array. This is a hard constraint enforced by validation.
+
+  WRONG: Path with `answer_id: "option_b"` when dilemma has `explored: ["option_a"]`
+  RIGHT: Path with `answer_id: "option_a"` when dilemma has `explored: ["option_a", "option_b"]`
+
+  ## Schema
+  Return a JSON object with a "paths" array. Each item is a Path:
+  ```json
+  {
+    "paths": [
+      {
+        "path_id": "path::host_benevolent_or_selfish__protector",
+        "name": "The Host's Hidden Motive",
+        "dilemma_id": "dilemma::host_benevolent_or_selfish",
+        "answer_id": "protector",
+        "unexplored_answer_ids": ["manipulator"],
+        "path_importance": "major",
+        "description": "What this path is about",
+        "consequence_ids": ["host_revealed"]
+      }
+    ]
+  }
+  ```
+
+  Note: `answer_id`, `unexplored_answer_ids`, and `consequence_ids` are raw
+  IDs without prefixes since they are local identifiers.
+
+  ## Path ID Naming (CRITICAL)
+
+  Path IDs use hierarchical format that embeds the parent dilemma:
+  `path::[dilemma_name]__[answer_id]`
+
+  This prevents misreferences since the parent dilemma is embedded in the ID.
+
+  Pattern examples (generate YOUR OWN based on your story):
+  - Dilemma `dilemma::mentor_trust_or_betray` with answer `trust` → Path: `path::mentor_trust_or_betray__trust`
+  - Dilemma `dilemma::artifact_blessed_or_cursed` with answer `blessed` → Path: `path::artifact_blessed_or_cursed__blessed`
+
+  BAD patterns (will cause validation failures):
+  - Using the SAME ID for both dilemma and path
+  - Missing the `__` separator
+  - Omitting the `path::` prefix
+
+  **DO NOT copy example IDs** - generate IDs specific to YOUR story.
+
+  ## Rules
+  - path_importance must be exactly "major" or "minor" (lowercase)
+  - unexplored_answer_ids: IDs of answers NOT explored (unexplored ones)
+  - consequence_ids: References to consequences for this path
+  - Generate a path for EACH explored answer from dilemma decisions
+  - answer_id MUST be one of the IDs from the dilemma's `explored` array
+  - path_id MUST include the `path::` prefix and use hierarchical format
+  - dilemma_id MUST include the `dilemma::` prefix
+
+  ## What NOT to Do
+  - Do NOT include the same path_id more than once — each path must appear EXACTLY once
+  - Do NOT reuse dilemma IDs as path IDs
+  - Do NOT skip answers marked as "explored"
+  - Do NOT create paths for "unexplored" answers (they become shadows, not paths)
+  - Do NOT use an answer_id that isn't in the dilemma's `explored` list
+  - Do NOT omit the `path::` or `dilemma::` prefixes
+
+  ## Output
+  Return ONLY valid JSON with the "paths" array.
+
+# Section 3b: Per-Dilemma Paths (used by per-dilemma path serialization)
+# This prompt generates paths for a single dilemma with a fixed dilemma_id.
+# The dilemma_id, explored answers, and expected path IDs are injected at runtime.
+per_dilemma_paths_prompt: |
+  You are generating PATHS for ONE SPECIFIC DILEMMA.
+
+  ## YOUR DILEMMA (MEMORIZE THIS)
+
+  Dilemma ID: `{dilemma_id}`
+  Question: {dilemma_question}
+
+  ## EXPLORED ANSWERS (generate a path for EACH)
+
+  {explored_answers}
+
+  ## UNEXPLORED ANSWERS (do NOT generate paths for these)
+
+  {unexplored_answers}
+
+  ## EXPECTED PATH IDs (use EXACTLY these)
+
+  You MUST generate exactly {path_count} path(s) with these IDs:
+  {expected_path_ids}
+
+  ## Scoped ID Format (CRITICAL)
+  All IDs use type prefixes for disambiguation:
+  - path_id: Use `path::` prefix (e.g., `path::host_benevolent_or_selfish__protector`)
+  - dilemma_id: Use `dilemma::` prefix (e.g., `dilemma::host_benevolent_or_selfish`)
+
+  Path IDs embed their parent dilemma: `path::[dilemma_name]__[answer_id]`
+
+  ## CRITICAL INVARIANT: answer_id MUST match explored
+  Each path's `answer_id` MUST be one of the explored answer IDs listed above.
+
+  ## Schema
+  Return a JSON object with a "paths" array. Each item is a Path:
+  ```json
+  {{
+    "paths": [
+      {{
+        "path_id": "path::{dilemma_name}__{answer_id_example}",
+        "name": "Human-readable path name",
+        "dilemma_id": "{dilemma_id}",
+        "answer_id": "the_explored_answer_id",
+        "unexplored_answer_ids": ["other_answer_ids"],
+        "path_importance": "major",
+        "description": "What this path is about",
+        "consequence_ids": []
+      }}
+    ]
+  }}
+  ```
+
+  Note: `answer_id`, `unexplored_answer_ids`, and `consequence_ids` are raw
+  IDs without prefixes since they are local identifiers.
+
+  ## Rules
+  - Generate exactly {path_count} path(s) — one per explored answer
+  - path_importance must be exactly "major" or "minor" (lowercase)
+  - answer_id MUST be one of the explored answers listed above
+  - unexplored_answer_ids: IDs of answers NOT explored
+  - consequence_ids: Leave empty (will be populated by consequences section)
+  - path_id MUST include the `path::` prefix
+  - dilemma_id MUST be exactly `{dilemma_id}`
+
+  ## What NOT to Do
+  - Do NOT generate paths for unexplored answers
+  - Do NOT generate paths for other dilemmas
+  - Do NOT use answer_ids that aren't in the explored list
+  - Do NOT change the dilemma_id
+  - Do NOT omit the `path::` or `dilemma::` prefixes
+
+  ## FINAL CHECK (verify before output)
+  1. You generated exactly {path_count} path(s)
+  2. Each path's dilemma_id is `{dilemma_id}`
+  3. Each path's answer_id is in the explored list
+  4. Each path_id matches the expected IDs listed above
+
+  ## Output
+  Return ONLY valid JSON with the "paths" array.
+
+# Section 4: Consequences
+consequences_prompt: |
+  You are generating CONSEQUENCES for a SEED stage based on paths.
+
+  ## Generation Requirements (CRITICAL)
+  Every path MUST have at least one consequence. Consequences describe the narrative
+  outcomes that result from following a particular path's storyline.
+
+  ## Scoped ID Format (CRITICAL)
+  Path IDs use the `path::` prefix for disambiguation.
+  Copy path IDs EXACTLY as shown in the VALID PATH IDs list.
+
+  ## Schema
+  Return a JSON object with a "consequences" array. Each item is a Consequence:
+  ```json
+  {
+    "consequences": [
+      {
+        "consequence_id": "host_revealed",
+        "path_id": "path::host_benevolent_or_selfish__protector",
+        "description": "What happens narratively",
+        "narrative_effects": ["story effect 1", "story effect 2"]
+      }
+    ]
+  }
+  ```
+
+  Note: `consequence_id` is a raw ID without prefix (local identifier).
+  `path_id` MUST include the `path::` prefix.
+
+  ## Consequence ID Naming Convention
+
+  Use descriptive names that capture the narrative outcome:
+  - FORMAT: `[subject]_[outcome]` (e.g., `host_revealed`, `trust_broken`, `secret_exposed`)
+  - Keep IDs short and descriptive (2-4 words joined by underscores)
+  - Avoid generic names like `consequence_1` or `result_a`
+
+  EXAMPLES:
+  - `vault_sealed` - The vault is permanently sealed
+  - `alliance_formed` - Characters form an alliance
+  - `identity_exposed` - A hidden identity is revealed
+
+  ## Rules
+  - consequence_id must be unique (raw ID, no prefix, following naming convention above)
+  - path_id must include the `path::` prefix and reference a path from the VALID PATH IDs list
+  - narrative_effects: Array of story effects this consequence implies
+  - Generate at least one consequence for EACH path
+
+  ## What NOT to Do
+  - Do NOT reference path IDs that don't exist
+  - Do NOT leave any path without consequences
+  - Do NOT use generic consequence IDs like `consequence_1` (use descriptive names)
+  - Do NOT omit the `path::` prefix from path_id
+
+  ## Output
+  Return ONLY valid JSON with the "consequences" array.
+
+# Section 5: Initial Beats
+beats_prompt: |
+  You are generating INITIAL BEATS for a SEED stage.
+
+  ## Generation Requirements (CRITICAL)
+  Generate {size_beats_per_path} initial beats PER PATH.
+  Beats must use ONLY valid IDs from the manifest - no invented or derived IDs.
+
+  ## CRITICAL: ID CONSTRAINTS (read first!)
+
+  The brief contains valid ID lists. You MUST copy IDs exactly from these lists:
+  - `## VALID PATH IDs` - use ONLY these in `path_id` field
+  - `### Entity IDs` - use ONLY these in `entities` and `location` fields
+
+  ## PATH ID vs DILEMMA ID: THE CRITICAL DISTINCTION
+
+  SHAPE RECOGNITION (memorize this):
+  - **Path IDs** are HIERARCHICAL: `path::dilemma_name__answer` (contains `__` double underscore)
+  - **Dilemma IDs** are BINARY questions: `dilemma::subject_optionA_or_optionB` (contains `_or_`)
+  - **Entity IDs** have CATEGORY prefix: `character::name`, `location::place`, `object::item`
+
+  WRONG: Using `dilemma::...` in the `path_id` field
+  RIGHT: Using `path::...` in the `path_id` field
+
+  WRONG: Using `path::...` in the `dilemma_impacts.dilemma_id` field
+  RIGHT: Using `dilemma::...` in the `dilemma_impacts.dilemma_id` field
+
+  If you see `__` (double underscore), it's a PATH. If you see `_or_`, it's a DILEMMA.
+
+  WRONG examples that WILL FAIL:
+  - `"clock_distortion"` - NOT a valid path (derived from concept)
+  - `"the_garden"` - WRONG, use `"garden"` (no prefix)
+  - `"murder_intent"` - This is a dilemma ID, not a path ID
+  - `"seed_of_stillness"` as dilemma_id - WRONG, this is an entity (no `_or_` = not a dilemma)
+
+  ## Schema
+  Return a JSON object with an "initial_beats" array:
+  ```json
+  {
+    "initial_beats": [
+      {
+        "beat_id": "unique_beat_id",
+        "summary": "What happens in this beat",
+        "path_id": "path::[your_path_id]",
+        "dilemma_impacts": [
+          {
+            "dilemma_id": "dilemma::[your_dilemma_id]",
+            "effect": "advances",
+            "note": "Explanation of the impact"
+          }
+        ],
+        "entities": ["character::[character_id]", "location::[location_id]"],
+        "location": "location::[location_id]",
+        "location_alternatives": ["location::[other_location]"],
+        "temporal_hint": {
+          "relative_to": "dilemma::[other_dilemma_id]",
+          "position": "before_commit"
+        }
+      }
+    ]
+  }
+  ```
+
+  **Use IDs from YOUR story's manifest** - the examples above show the FORMAT only.
+
+  ## Rules
+  - effect must be exactly "advances", "reveals", "commits", or "complicates"
+  - All ID fields must use the correct type (see FIELD → ID TYPE MAPPING below)
+  - location can be null; location_alternatives can be empty array
+  - Generate {size_beats_per_path} beats for EACH path in the VALID PATH IDs list
+  - dilemma_impacts MUST use dilemma IDs from the Dilemma IDs list — NOT entity names
+  - temporal_hint: for EACH beat, ask: "Does this beat's pacing depend on where another
+    dilemma stands?" Add a temporal_hint whenever EITHER condition is true:
+    (a) This beat reveals information that another dilemma's commit point depends on —
+        the player must see this beat BEFORE they face that dilemma's decision.
+    (b) This beat's emotional impact (grief, triumph, dread) lands better because of
+        where another dilemma's key moment falls — e.g., the relief hits harder
+        AFTER the other dilemma's tension resolves.
+    EXAMPLE: Story has dilemma::protect_secret and dilemma::trust_the_stranger.
+    A beat on path::trust_the_stranger__reveal where the stranger confesses a past
+    crime should carry:
+      `"temporal_hint": {"relative_to": "dilemma::protect_secret", "position": "before_commit"}`
+    because the player needs to know about the stranger's past BEFORE they decide
+    whether to protect the secret on the other dilemma.
+    - `relative_to` must be a dilemma ID different from the beat's own parent dilemma
+    - `position` must be: `before_commit`, `after_commit`, `before_introduce`, or `after_introduce`
+    - Omit only when the beat's placement is genuinely independent of all other dilemmas
+
+  ## DILEMMA IMPACT CONSTRAINT (MOST IMPORTANT RULE)
+
+  Every beat belongs to a path. Every path has a PARENT DILEMMA (shown in the
+  PATH → DILEMMA MAPPING in your brief). The beat's dilemma_impacts MUST include
+  the parent dilemma of the beat's path.
+
+  RULE: Look up the beat's path in PATH → DILEMMA MAPPING. Use THAT dilemma_id.
+
+  EXAMPLE (format only - use YOUR story's IDs):
+  - If path `path::keeper_faithful_or_corrupt__faithful` maps to `dilemma::keeper_faithful_or_corrupt`
+  - Then ALL beats in that path MUST have a dilemma_impact with
+    `dilemma_id: "dilemma::keeper_faithful_or_corrupt"`
+
+  WRONG: Picking a dilemma because it "feels related" to the beat's content.
+  WRONG: Using the same dilemma for all beats regardless of path.
+  RIGHT: Using the PATH → DILEMMA MAPPING to find the correct dilemma.
+
+  A beat MAY have additional dilemma_impacts for other dilemmas, but the FIRST
+  dilemma_impact MUST be the path's parent dilemma.
+
+  ## COMMITS BEATS REQUIREMENT (CRITICAL)
+
+  Each path MUST have at least one beat with `effect: "commits"` — and that
+  commits beat MUST reference the path's OWN parent dilemma (from the mapping).
+
+  WRONG: All commits beats using the same dilemma_id.
+  RIGHT: Each path's commits beat uses that path's own parent dilemma.
+
+  EXAMPLE (format only):
+  - Path `path::keeper_faithful_or_corrupt__faithful` → commits beat uses `dilemma::keeper_faithful_or_corrupt`
+  - Path `path::artifact_natural_or_crafted__natural` → commits beat uses `dilemma::artifact_natural_or_crafted`
+  - Each path resolves ITS OWN dilemma, not someone else's.
+
+  ## FIELD → ID TYPE MAPPING (prevents all ID confusion)
+
+  Each field accepts ONLY one type of ID. Copy from the correct manifest section:
+
+  | Field | Prefix | Source List | Shape |
+  |-------|--------|-------------|-------|
+  | `path_id` | `path::` | VALID PATH IDs | hierarchical: `dilemma__answer` |
+  | `dilemma_impacts.dilemma_id` | `dilemma::` | Dilemma IDs | long: `subject_X_or_Y` |
+  | `entities[]` | `character::`, `object::`, `faction::` | Entity IDs (non-locations) | varies |
+  | `location` | `location::` | Entity IDs (locations only) | varies |
+
+  Path IDs are hierarchical (dilemma__answer). Dilemma IDs are binary questions.
+
+  ## HOW TO TELL DILEMMA IDs FROM ENTITY IDs (CRITICAL)
+
+  Dilemma IDs ALWAYS contain `_or_` in their name (e.g., `host_benevolent_or_selfish`).
+  Entity IDs NEVER contain `_or_`.
+
+  If an ID does NOT have `_or_` in it, it is an ENTITY — not a dilemma.
+  Do NOT use entity IDs like `seed_of_stillness` as dilemma_ids — `_of_` is NOT `_or_`.
+
+  Do NOT put a path ID in dilemma_impacts or a dilemma ID in paths.
+  Do NOT put a location in entities or a non-location in location.
+  Do NOT invent IDs - copy exactly from the manifest.
+
+  ## BEAT COUNT PRESERVATION (CRITICAL)
+
+  If you receive validation feedback about invalid IDs, DO NOT reduce your beat count.
+  Fix ONLY the invalid ID references using the table above.
+  Your beat count should stay at {size_beats_per_path} beats per path.
+
+  ## What NOT to Do
+  - Do NOT use entity IDs as dilemma_ids (entity IDs lack `_or_`)
+  - Do NOT derive path IDs from dilemma names or concepts
+  - Do NOT add prefixes like "the_" to entity IDs
+  - Do NOT generate fewer than 2 beats per path
+  - Do NOT reference IDs not in the manifest lists
+
+  ## FINAL CHECK (verify before output)
+  Before returning JSON, check each beat one by one:
+  1. Every `path_id` appears in VALID PATH IDs (hierarchical format)
+  2. Every `dilemma_impacts.dilemma_id` appears in Dilemma IDs (long binary questions)
+  3. Every `dilemma_impacts.dilemma_id` contains `_or_` — if it doesn't, you used an entity ID by mistake
+  4. For EACH beat: look up the beat's `path_id` in PATH → DILEMMA MAPPING.
+     Does the beat's dilemma_impacts include that mapped dilemma? If NO, fix it.
+  5. For EACH path: does at least one of its beats have `effect: "commits"`
+     with that path's parent dilemma? If NO, add or fix one.
+  6. Every `entities` item appears in Entity IDs (characters, objects, factions)
+  7. `location` is a location-category entity from Entity IDs
+  8. No invented IDs - copy-paste from the manifest, don't retype
+
+  ## Output
+  Return ONLY valid JSON with the "initial_beats" array.
+
+# Section 5b: Per-Path Initial Beats (used by per-path serialization)
+# This prompt generates beats for a single path with a fixed dilemma_id.
+# The path_id, dilemma_id, and entity context are injected at runtime.
+per_path_beats_prompt: |
+  You are generating INITIAL BEATS for ONE SPECIFIC PATH.
+
+  ## YOUR PATH ID (MEMORIZE THIS)
+
+  You are generating beats for path: `{path_id}`
+
+  The `path_id` field in EVERY beat MUST be EXACTLY: `"{path_id}"`
+
+  ## COMMON MISTAKE - DO NOT MAKE THIS ERROR
+
+  Path IDs are hierarchical (e.g., `path::ai_benevolent_or_hostile__hostile`).
+  Dilemma IDs are just the question (e.g., `dilemma::ai_benevolent_or_hostile`).
+
+  WRONG OUTPUT (will fail validation):
+  ```json
+  "path_id": "{dilemma_id}"  // WRONG! This is a DILEMMA ID
+  ```
+
+  CORRECT OUTPUT:
+  ```json
+  "path_id": "{path_id}"  // RIGHT! This is the PATH ID
+  ```
+
+  RULE: Dilemma IDs go in `dilemma_impacts[].dilemma_id`, never in `path_id`.
+
+  ## YOUR DILEMMA ID (for dilemma_impacts only)
+
+  Parent dilemma: `{dilemma_id}`
+
+  This goes in `dilemma_impacts[].dilemma_id`, NOT in `path_id`.
+
+  ## BEAT ID NAMING (CRITICAL - ensures uniqueness)
+
+  Beat IDs MUST be derived from your path name to ensure global uniqueness.
+
+  FORMAT: `{path_name}_beat_[number]`
+
+  Your path name is `{path_name}`. Use it as prefix with `_beat_01`, `_beat_02`, etc.
+
+  EXAMPLES (for illustration only - use YOUR path name):
+  - Path `keeper_loyal` → beat IDs: `keeper_loyal_beat_01`, `keeper_loyal_beat_02`
+  - Path `artifact_natural` → beat IDs: `artifact_natural_beat_01`, `artifact_natural_beat_02`
+
+  WRONG: `beat_001`, `beat_01`, `initial_beat_1` (no path prefix = collision)
+  RIGHT: `{path_name}_beat_01` (path prefix = globally unique)
+
+  ALL beats you generate MUST:
+  1. Have beat_id starting with `{path_name}_beat_` (see BEAT ID NAMING above)
+  2. Have `path_id: "{path_id}"` (exactly this path ID)
+  3. Have at least one dilemma_impact with `dilemma_id: "{dilemma_id}"`
+  4. Include at least one beat with `effect: "commits"` for `{dilemma_id}`
+
+  ## Schema
+  Return a JSON object with an "initial_beats" array of {size_beats_per_path} beats:
+  ```json
+  {{
+    "initial_beats": [
+      {{
+        "beat_id": "{path_name}_beat_01",
+        "summary": "What happens in this beat",
+        "path_id": "{path_id}",
+        "dilemma_impacts": [
+          {{
+            "dilemma_id": "{dilemma_id}",
+            "effect": "advances",
+            "note": "Explanation"
+          }}
+        ],
+        "entities": ["character::character_id"],
+        "location": "location::location_id",
+        "location_alternatives": []
+      }}
+    ]
+  }}
+  ```
+
+  NOTE: For EACH beat, check — does this beat's pacing depend on where another dilemma
+  stands? Add a temporal_hint whenever EITHER condition is true:
+  (a) This beat reveals information another dilemma's commit point depends on — the
+      player must see this beat BEFORE that dilemma's decision.
+  (b) This beat's emotional impact lands better because of where another dilemma's
+      key moment falls (e.g., relief hits harder AFTER the other dilemma resolves).
+  EXAMPLE: beat on path `trust_the_stranger__reveal` where the stranger confesses a
+  past crime → `{{"temporal_hint": {{"relative_to": "dilemma::protect_secret", "position": "before_commit"}}}}`
+  because the player must know this BEFORE deciding whether to protect the secret.
+  Omit temporal_hint only when the beat's placement is genuinely independent of all
+  other dilemmas. Valid positions: `before_commit`, `after_commit`, `before_introduce`, `after_introduce`
+
+  ## Rules
+  - Generate exactly {size_beats_per_path} beats for path `{path_id}`
+  - Beat IDs MUST start with `{path_name}_beat_` (e.g., `{path_name}_beat_01`)
+  - EVERY beat must have `path_id: "{path_id}"`
+  - EVERY beat must have at least one dilemma_impact for `{dilemma_id}`
+  - At least ONE beat must have `effect: "commits"` for `{dilemma_id}`
+  - effect must be "advances", "reveals", "commits", or "complicates"
+  - Use entity IDs from the Entity IDs list only
+  - Use location IDs from the Entity IDs list (location category only)
+
+  ## ARC STRUCTURE (CRITICAL — determines beat ordering)
+  Beats must follow this arc pattern for a complete path scaffold:
+  1. **Setup** (advances/reveals): Introduce tensions, reveal information
+  2. **Turning point** (commits): The moment the dilemma locks in — NOT the last beat
+  3. **Aftermath**: At least one beat AFTER commits showing consequences
+
+  WRONG: [advances, reveals, commits] — commits is last, no aftermath
+  RIGHT: [advances, commits, reveals] — aftermath beat follows the turning point
+
+  ## COMMITS BEAT REQUIREMENT
+  You MUST include exactly one beat with `effect: "commits"` for `{dilemma_id}`.
+  This beat represents the moment where this path's dilemma is locked in.
+
+  WRONG: Generating only "advances" and "reveals" beats.
+  RIGHT: Including one beat with `effect: "commits"`.
+
+  ## What NOT to Do
+  - Do NOT use generic beat IDs like `beat_001` (must include path name prefix)
+  - Do NOT generate beats for other paths
+  - Do NOT reference other dilemma_ids in your first dilemma_impact
+  - Do NOT skip the commits beat
+  - Do NOT use IDs not in the manifest
+  - Do NOT put the dilemma ID in the `path_id` field (see COMMON MISTAKE above)
+
+  ## FINAL VERIFICATION (check before outputting)
+
+  For EACH beat you generate, verify:
+  1. `path_id` is `{path_id}`
+  2. `dilemma_impacts[0].dilemma_id` is `{dilemma_id}`
+
+  If you see a dilemma ID in your `path_id` value, YOU MADE A MISTAKE. Fix it.
+
+  ## Output
+  Return ONLY valid JSON with the "initial_beats" array ({size_beats_per_path} beats).
+
+# Section 7: Dilemma Convergence Analysis (post-prune)
+dilemma_analyses_prompt: |
+  You are classifying dilemma convergence policies for a SEED stage.
+
+  Classify EVERY dilemma listed below based on its QUESTION and STAKES, not
+  on how many paths it currently has. A dilemma with 1 surviving path can
+  still be `hard` if the question involves incompatible world states.
+
+  ## Why This Matters
+
+  Only `hard` dilemmas multiply story endings. `soft` dilemmas
+  add mid-story variety but converge back, so they do not increase arc count.
+
+  ## Expected Distribution
+
+  Most dilemmas should be `soft` (different middles, same ending). Target
+  1-3 `hard` dilemmas per story — every story benefits from at least one
+  structural branch point. Use `soft` with `residue_weight: "cosmetic"`
+  for cosmetic-only differences.
+  Each `hard` dilemma DOUBLES the ending count: 2 hard = 4 endings,
+  3 hard = 8 endings (unmanageable beyond 3).
+
+  ## Decision Process
+
+  Classify dilemmas in TWO passes:
+
+  ### Pass 1: Find the hardest dilemma
+  Read ALL dilemmas. Pick the ONE whose answers create the MOST incompatible
+  world states (someone lives vs dies, identity irrevocably changed, key
+  entity permanently destroyed). Classify it as `hard`.
+
+  ### Pass 2: Classify the rest
+  For each remaining dilemma, ask: "Could the SAME scene plausibly follow BOTH answers?"
+  - YES, with meaningful or cosmetic differences -> `soft` (most common)
+  - NO, world states are incompatible -> `hard` (max 3 total including Pass 1)
+
+  ## Convergence Policies
+
+  **soft** (most common) -- Different middles. Paths have meaningfully
+  different beats but converge after `payoff_budget` exclusive beats. The
+  ending is the same; the journey differs.
+  Examples: trust vs suspicion (same ally, different relationship tone),
+  stealth vs confrontation (different approach, same destination),
+  investigate alone vs recruit help, reveal information vs keep it secret
+  (when both paths eventually reach the same confrontation).
+
+  **soft with cosmetic residue** -- Different tone. Paths converge and differ only
+  in dialogue style, description color, or cosmetic details. Set `residue_weight: "cosmetic"`.
+  Examples: polite vs blunt greeting, left door vs right door (same room),
+  diplomatic vs forceful persuasion with identical outcome.
+
+  **hard** (1-3 per story) -- Different endings. Paths create
+  incompatible world states that NEVER converge. Use `hard` ONLY when ALL
+  of these conditions are met:
+  - The answers produce a mutually exclusive world state caused by at
+    least one of: someone lives vs dies, a key entity is permanently
+    destroyed vs intact, or the protagonist's core identity/allegiance
+    is irrevocably changed
+  - No plausible scene could follow both answers
+  - The story REQUIRES separate endings for this dilemma
+
+  ## What NOT to classify as `hard`
+  - Different activities or approaches (that is `soft`)
+  - Revealed vs hidden information (usually `soft` — both paths can reach
+    the same conclusion, UNLESS the revelation irrevocably changes identity
+    or allegiance, in which case the triggers above apply)
+  - Different emotional tones (that is `soft`)
+  - Choosing different allies or methods (usually `soft` — the destination is the same)
+
+  ## payoff_budget
+
+  Minimum exclusive beats before convergence (2-6).
+  - `soft` with cosmetic residue: always 2
+  - `soft`: 3-4 (standard), 5 (deep divergence)
+  - `hard`: 5-6 (paths stay separate through distinct endings)
+
+  ## Convergence Point
+
+  For `soft`: a **location-based, concrete** description of
+  where paths physically merge.
+  GOOD: "paths converge at archive_vault where evidence is revealed"
+  BAD: "paths merge emotionally in the final act" (abstract)
+
+  For `hard`: set convergence_point to null (paths never merge).
+
+  The residue_note describes differences persisting AFTER convergence.
+  Set to null for `hard` dilemmas or when no differences persist.
+
+  ## Ending Salience
+
+  How much should story ENDINGS differ based on this dilemma?
+  This is SEPARATE from dilemma_role. A `soft` dilemma CAN have
+  `high` ending salience (paths converge mid-story but endings still
+  differ). A `hard` dilemma CAN have `low` ending salience (paths stay
+  separate but share the same ending tone/feeling).
+
+  **high** (rare, 1-2 per story max) -- Endings MUST differ based on
+  this choice. This dilemma drives ending family signatures.
+  Examples: save vs sacrifice (different epilogue), betray vs stay loyal
+  (different final scene mood and outcome).
+
+  **low** (default, most common) -- Endings MAY mention this choice but
+  MUST work without it. A reader who forgot this choice should still
+  find the ending satisfying.
+  Examples: stealth vs force (ending might note approach style but does
+  not depend on it), trust vs suspicion (ending works either way).
+
+  **none** -- Ending prose MUST NOT reference this choice at all.
+  Examples: left door vs right door, polite vs blunt greeting.
+
+  Most dilemmas should be `low`. Only 1-2 should be `high`.
+  If more than 2 are `high`, re-evaluate.
+
+  ## Residue Weight
+
+  How much should MID-STORY prose vary based on this dilemma's outcome?
+  This controls shared passages AFTER convergence (if paths converge).
+  This is SEPARATE from ending_salience. A dilemma can have `high`
+  ending_salience but `cosmetic` residue_weight (ending differs, but
+  mid-story shared passages ignore the choice).
+
+  **heavy** (rare, 1-2 per story max) -- Shared passages MUST show
+  state-specific differences. NPCs remember, world state reflects choice.
+  Examples: betrayed ally now distrusts you (NPC behavior changes in
+  shared scenes), stole artifact vs declined (guards react differently).
+
+  **light** (default, most common) -- Shared passages MAY acknowledge
+  the choice but MUST work without it. A reader should understand the
+  scene even if they forgot this choice.
+  Examples: stealth vs force (NPCs might comment but scene works either
+  way), trust vs suspicion (dialogue hints differ but plot proceeds).
+
+  **cosmetic** -- Shared passages MUST NOT reference this choice at all.
+  Examples: polite vs blunt greeting, chose left vs right door.
+
+  Most dilemmas should be `light`. Only 1-2 should be `heavy`.
+  If more than 2 are `heavy`, re-evaluate.
+
+  ## Ending Tone
+
+  Only meaningful when `ending_salience` is `high`. When `ending_salience`
+  is `low` or `none`, set `ending_tone` to null regardless of
+  `dilemma_role`.
+
+  For dilemmas with `ending_salience: "high"`: provide a 2-5 word
+  emotional descriptor for how endings shaped by this dilemma should feel.
+  This guides the FILL stage when generating prose for endings on each arc.
+  GOOD: "cold justice", "bittersweet triumph", "quiet dread"
+  BAD: "the ending is sad" (too vague)
+
+  For dilemmas with `ending_salience: "low"` or `"none"`: set
+  ending_tone to null (endings do not depend on this choice).
+
+  ## Story Tone Signal
+
+  If the story's genre/tone includes words like "dark", "gritty", "cascading
+  disaster", "hard choices", "consequences", "horror", "thriller" — lean toward
+  MORE hard dilemmas (2-3). If the tone includes "light", "cozy", "whimsical",
+  "comedy", "adventure" — lean toward FEWER hard dilemmas (1). The story tone
+  is provided in the Context section below.
+
+  ## Context
+
+  {dilemma_context}
+
+  ## Schema
+  Return a JSON object with a "dilemma_analyses" array:
+  ```json
+  {{
+    "dilemma_analyses": [
+      {{
+        "dilemma_id": "dilemma::example_soft",
+        "dilemma_role": "soft",
+        "payoff_budget": 3,
+        "reasoning": "Trust vs suspicion changes the relationship tone but both paths lead to the same confrontation.",
+        "convergence_point": "paths converge at council_chamber for the final confrontation",
+        "residue_note": "suspicious-path characters remain wary of the host",
+        "ending_salience": "low",
+        "residue_weight": "light",
+        "ending_tone": null
+      }},
+      {{
+        "dilemma_id": "dilemma::example_cosmetic",
+        "dilemma_role": "soft",
+        "payoff_budget": 2,
+        "reasoning": "Polite vs blunt greeting changes dialogue tone but leads to the same meeting outcome.",
+        "convergence_point": "paths converge at the tavern entrance after introductions",
+        "residue_note": null,
+        "ending_salience": "none",
+        "residue_weight": "cosmetic",
+        "ending_tone": null
+      }},
+      {{
+        "dilemma_id": "dilemma::example_hard",
+        "dilemma_role": "hard",
+        "payoff_budget": 5,
+        "reasoning": "Murder vs accident produces incompatible crime scenes, suspect lists, and endings — no shared scene can follow both.",
+        "convergence_point": null,
+        "residue_note": null,
+        "ending_salience": "high",
+        "residue_weight": "light",
+        "ending_tone": "cold justice"
+      }}
+    ]
+  }}
+  ```
+
+  ## Rules
+  - Classify EVERY dilemma from the ### Valid Dilemma IDs list
+  - Classify based on the dilemma's QUESTION and STAKES, not path count
+  - Follow the two-pass procedure above (find hardest first, then classify the rest)
+  - Do NOT classify as `hard` just because paths have different activities or approaches
+  - Do NOT classify as `hard` unless convergence is IMPOSSIBLE (not just difficult)
+  - If in doubt between `soft` and `hard`, check: does one answer involve death, destruction, or irrevocable identity change? If YES -> `hard`. If NO -> `soft`
+  - `reasoning` must be 1-2 sentences explaining WHY (reference the question/stakes)
+  - GOOD reasoning: "Homicide vs accident creates incompatible suspect lists and requires different endings."
+  - BAD reasoning: "It is soft." / "Only one path."
+  - `convergence_point`: null for `hard`; location-based description for `soft`
+  - `residue_note`: null for `hard` or if no differences persist; short description otherwise
+  - `ending_salience`: "low" for most dilemmas (default); "high" for 1-2 dilemmas whose choice should shape endings; "none" for cosmetic-only choices
+  - `ending_salience` is INDEPENDENT of `dilemma_role` — a `soft` dilemma can be `high`, a `hard` dilemma can be `low`
+  - `ending_tone`: required when `ending_salience` is "high", null otherwise
+  - `residue_weight`: "light" for most dilemmas (default); "heavy" for 1-2 dilemmas whose outcome must persist in shared mid-story prose; "cosmetic" for choices with no lasting trace
+  - `residue_weight` is INDEPENDENT of `dilemma_role` and `ending_salience` — a `soft` dilemma with `high` ending_salience can have `cosmetic` residue_weight
+
+  ## Self-Check
+  Count your classifications and verify ALL of these:
+  1. HARD count is 1-3. If 0 are hard: you skipped Pass 1 — go back and
+     classify the strongest dilemma as hard. If more than 3 are hard:
+     demote the weakest to soft.
+  2. SOFT count is the majority.
+  3. FLAVOR count is 0-2.
+  4. At most 2 have `ending_salience: "high"`.
+  5. Every dilemma with `ending_tone` set also has `ending_salience: "high"`.
+  6. At most 2 have `residue_weight: "heavy"`.
+
+  ## REMINDER
+  Classify ALL dilemmas. Follow this procedure:
+  STEP 1: Find your STRONGEST dilemma — the one where answers create the MOST
+  incompatible world states. Classify it as `hard`.
+  STEP 2: For each remaining dilemma, ask: "Could the SAME scene follow both answers?"
+    YES with differences -> soft. YES nearly identical -> soft with residue_weight: cosmetic.
+    NO (incompatible world states) -> hard (max 3 total).
+  STEP 3: Count. You should have 1-3 hard, majority soft.
+  If you have 0 hard, go back to STEP 1.
+  Set `ending_salience` and `residue_weight` for EVERY dilemma (required fields).
+  Set `ending_tone` ONLY when `ending_salience` is "high", null otherwise.
+
+  ## Output
+  Return ONLY valid JSON with the "dilemma_analyses" array. Classify ALL dilemmas.
+
+# Section 8: Dilemma Ordering Relationships (post-prune, Doc 3)
+dilemma_relationships_prompt: |
+  You are classifying the temporal ordering between dilemma pairs for a SEED stage.
+
+  Each dilemma pair has a structural relationship that affects how GROW
+  interleaves their beats. MOST pairs are "concurrent" (the default).
+  It is normal and expected to return few or no relationships.
+
+  ## Ordering Types
+
+  - **wraps**: Dilemma A introduces before B and B resolves before A. A is the
+    outer dilemma containing B as a subplot. Example: "the central mystery (A)
+    wraps the mentor's betrayal subplot (B) — the mystery is present from the
+    start and resolves at the climax, while the betrayal plays out in the middle."
+  - **concurrent**: Neither wraps the other. Both are active simultaneously,
+    interleaving but without nesting. This is the DEFAULT for most pairs.
+    Example: "both the romance and the political intrigue develop in parallel."
+  - **serial**: A resolves (commits and converges) before B introduces. The
+    dilemmas never structurally interact. Example: "the escape subplot resolves
+    in Act 1 before the revenge plot begins in Act 2."
+
+  NOTE: shared_entity is NOT an ordering type — it is derived automatically
+  from entity anchoring in the graph. Do NOT classify pairs as shared_entity.
+
+  ## What NOT to Do
+  - Do NOT invent relationships for pairs not in the Candidate Pairs list
+  - Do NOT force relationships where none exist — empty list is fine
+  - Do NOT use ordering values other than wraps, concurrent, serial
+  - Do NOT classify shared characters/locations as ordering — that is derived
+
+  GOOD: "The central mystery wraps the betrayal subplot — it introduces first
+  and resolves last."
+  BAD: "Both dilemmas involve the mentor" (that is shared_entity, derived from
+  anchored_to edges, not an ordering relationship).
+
+  ## Context
+
+  {candidate_pairs_context}
+
+  ## Schema
+  Return a JSON object with a "dilemma_relationships" array:
+  ```json
+  {{
+    "dilemma_relationships": [
+      {{
+        "dilemma_a": "dilemma::first_id",
+        "dilemma_b": "dilemma::second_id",
+        "ordering": "wraps",
+        "description": "The observable structural relationship (1-3 sentences, max ~500 chars).",
+        "reasoning": "Why this ordering matters for beat interleaving (1-2 sentences)."
+      }}
+    ]
+  }}
+  ```
+
+  If no non-concurrent relationships exist (common), return an empty array:
+  ```json
+  {{
+    "dilemma_relationships": []
+  }}
+  ```
+
+  If the Context says "No candidate pairs", return the empty array above immediately.
+
+  ## Rules
+  - ONLY consider pairs from the ### Candidate Pairs list in the Context
+  - Use canonical ordering: dilemma_a < dilemma_b (alphabetically)
+  - Most stories have 0-2 non-concurrent relationships. Empty list is expected.
+  - `reasoning` must explain the temporal (not thematic) relationship
+
+  ## REMINDER
+  ONLY use pairs from the Candidate Pairs list. Empty list is normal. Do NOT invent relationships.
+
+  ## Output
+  Return ONLY valid JSON with the "dilemma_relationships" array. An empty array is expected.
+
+components: []

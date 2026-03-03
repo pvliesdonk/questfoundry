@@ -120,12 +120,13 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
     # Map from registry phase name → self method name.
     # Mixin methods need binding to ``self`` at call time.
     _METHOD_PHASES: ClassVar[dict[str, str]] = {
+        "intersections": "_phase_3_intersections",
+        "resolve_temporal_hints": "_phase_resolve_temporal_hints",
         "scene_types": "_phase_4a_scene_types",
         "narrative_gaps": "_phase_4b_narrative_gaps",
         "pacing_gaps": "_phase_4c_pacing_gaps",
         "atmospheric": "_phase_4d_atmospheric",
         "path_arcs": "_phase_4e_path_arcs",
-        "intersections": "_phase_3_intersections",
         "entity_arcs": "_phase_4f_entity_arcs",
         "overlays": "_phase_8c_overlays",
     }
@@ -150,13 +151,12 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         level import for deterministic free functions (preserving test
         patchability).
 
-        The registry's declared dependencies encode the invariant (#1124)
-        that intersections (3) runs BEFORE interleave_beats (1b), which
-        runs BEFORE gap-detection phases 4a-4d.  Intersection detection on
-        a clean beat DAG (no predecessor edges yet) guarantees the
-        No-Conditional-Prerequisites Invariant always passes — no
-        interleave-created edges can invalidate intersection proposals.
-        See: check_intersection_compatibility() invariant, #1124.
+        The registry's declared dependencies encode the phase invariants:
+        - intersections (3) runs before interleave_beats (#1124): clean beat
+          DAG ensures the conditional-prerequisites check always passes.
+        - resolve_temporal_hints runs between intersections and interleave
+          (#1123): detects hint cycles before interleave creates any edges.
+        See: check_intersection_compatibility() invariant, #1123, #1124.
         """
         import questfoundry.pipeline.stages.grow.stage as _this_module
 

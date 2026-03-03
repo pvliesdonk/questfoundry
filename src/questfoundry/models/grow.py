@@ -122,6 +122,22 @@ class Phase3Output(BaseModel):
     intersections: list[IntersectionProposal] = Field(default_factory=list)
 
 
+class TemporalResolutionOutput(BaseModel):
+    """Structured output for the resolve_temporal_hints phase (#1123).
+
+    The LLM returns the beat IDs whose temporal hints should be cleared
+    to resolve ordering conflicts in the beat DAG.
+    """
+
+    hints_to_drop: list[str] = Field(
+        default_factory=list,
+        description=(
+            "Beat IDs whose temporal hints should be dropped to resolve "
+            "ordering conflicts. May be empty if conflicts are already resolved."
+        ),
+    )
+
+
 class SceneTypeTag(BaseModel):
     """Phase 4a: Tags beats with scene type, narrative function, and exit mood."""
 

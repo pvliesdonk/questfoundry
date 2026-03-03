@@ -342,6 +342,113 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
+    @grow_phase(name="resolve_temporal_hints", depends_on=["intersections"], priority=2)
+    async def _phase_resolve_temporal_hints(
+        self, graph: Graph, model: BaseChatModel
+    ) -> GrowPhaseResult:
+        """Detect and resolve temporal hint ordering conflicts before interleave (#1123).
+
+        Temporal hints on beats request placement relative to another dilemma's
+        key moment (e.g. "after dilemma X's commit point"). When serialized
+        independently, two beats may request mutually exclusive orderings. This
+        phase detects those cycles deterministically and, if any exist, calls the
+        LLM to choose which hints to relax.
+
+        Preconditions:
+        - Beat DAG validated (Phase 1 passed).
+        - Intersections applied (Phase 3 complete).
+        - Beats carry ``temporal_hint`` values from SEED serialization.
+
+        Postconditions:
+        - No hint cycles remain: ``interleave_beats`` can apply all surviving
+          hints without silently dropping any as cycle-creating.
+        - Dropped hints are nulled out on beat nodes.
+        - ``interleave_cycle_skipped`` warnings no longer appear in valid runs.
+
+        Invariants:
+        - No-op if no conflicts detected (no LLM call).
+        - LLM call only made when cycles exist.
+        - Does not create any graph edges — only strips hints from nodes.
+        """
+        from questfoundry.graph.grow_algorithms import (
+            detect_temporal_hint_conflicts,
+            strip_temporal_hints_by_id,
+        )
+        from questfoundry.models.grow import TemporalResolutionOutput
+
+        conflicts = detect_temporal_hint_conflicts(graph)
+        if not conflicts:
+            log.info("resolve_temporal_hints_no_conflicts")
+            return GrowPhaseResult(
+                phase="resolve_temporal_hints",
+                status="completed",
+                detail="No temporal hint conflicts detected",
+            )
+
+        log.info(
+            "resolve_temporal_hints_conflicts_found",
+            count=len(conflicts),
+            beat_ids=[c.beat_id for c in conflicts],
+        )
+
+        # Build conflict description for the LLM
+        conflict_lines: list[str] = []
+        for i, c in enumerate(conflicts, 1):
+            conflict_lines.append(
+                f"  Conflict {i}: beat `{c.beat_id}` has hint "
+                f"`{c.hint_position} {c.hint_relative_to}` — "
+                f"this would create edge `{c.from_beat}` → `{c.to_beat}`, "
+                f"which cycles with existing ordering constraints.\n"
+                f"    Beat summary: {c.beat_summary or '(no summary)'}"
+            )
+        conflict_list_text = "\n".join(conflict_lines)
+
+        valid_beat_ids = sorted({c.beat_id for c in conflicts})
+        context: dict[str, str] = {
+            "conflict_list": conflict_list_text,
+            "valid_beat_ids": ", ".join(f"`{b}`" for b in valid_beat_ids),
+        }
+
+        try:
+            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
+                model=model,
+                template_name="grow_phase_temporal_resolution",
+                context=context,
+                output_schema=TemporalResolutionOutput,
+                semantic_validator=None,
+            )
+        except GrowStageError as e:
+            return GrowPhaseResult(
+                phase="resolve_temporal_hints",
+                status="failed",
+                detail=str(e),
+            )
+
+        beats_to_drop: set[str] = set(result.hints_to_drop)
+        # Validate IDs — only drop hints for beats that have conflicts
+        valid_set = set(valid_beat_ids)
+        beats_to_drop = {b for b in beats_to_drop if b in valid_set}
+
+        stripped = strip_temporal_hints_by_id(graph, beats_to_drop)
+
+        log.info(
+            "temporal_hint_conflict_resolved",
+            conflicts=len(conflicts),
+            hints_dropped=stripped,
+            dropped_beats=sorted(beats_to_drop),
+        )
+
+        return GrowPhaseResult(
+            phase="resolve_temporal_hints",
+            status="completed",
+            detail=(
+                f"Resolved {len(conflicts)} temporal hint conflict(s): "
+                f"dropped {stripped} hint(s) from {sorted(beats_to_drop)}"
+            ),
+            llm_calls=llm_calls,
+            tokens_used=tokens,
+        )
+
     @grow_phase(name="scene_types", depends_on=["interleave_beats"], priority=3)
     async def _phase_4a_scene_types(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4a: Tag beats with scene type classification.
