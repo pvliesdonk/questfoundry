@@ -310,6 +310,7 @@ qf inspect -p <project> --json # Machine-readable JSON output
 - Using "tests pass" as sole evidence that a removal/refactoring issue is complete
 - Epics larger than 10 issues (split into sequential milestones)
 - Claiming "SEED/GROW/POLISH ran successfully" based on exit code without verifying output against design docs
+- **Silent degradation of story structure constraints** — if the pipeline cannot satisfy a structural requirement (cross-dilemma ordering, intersection formation, DAG consistency), it MUST fail loudly. Silently skipping constraints and producing a weaker story is not acceptable. `interleave_cycle_skipped` warnings, all-intersections-rejected, and similar "we tried but gave up" outcomes are pipeline failures, not warnings.
 
 ## Design Conformance Review (CRITICAL)
 

@@ -166,11 +166,17 @@ class TestApplyMutations:
                 {"path_id": "path_3", "dilemma_id": "t1", "answer_id": "b"},
             ],
             "initial_beats": [
-                # Minimal beats with commits for each path
+                # Each path needs a commits beat AND at least one post-commit
+                # consequence beat (enforced by COMPLETENESS validation).
                 {
                     "beat_id": "b0",
                     "paths": ["path_0"],
                     "dilemma_impacts": [{"dilemma_id": "t0", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b0c",
+                    "paths": ["path_0"],
+                    "dilemma_impacts": [{"dilemma_id": "t0", "effect": "advances"}],
                 },
                 {
                     "beat_id": "b1",
@@ -178,14 +184,29 @@ class TestApplyMutations:
                     "dilemma_impacts": [{"dilemma_id": "t0", "effect": "commits"}],
                 },
                 {
+                    "beat_id": "b1c",
+                    "paths": ["path_1"],
+                    "dilemma_impacts": [{"dilemma_id": "t0", "effect": "advances"}],
+                },
+                {
                     "beat_id": "b2",
                     "paths": ["path_2"],
                     "dilemma_impacts": [{"dilemma_id": "t1", "effect": "commits"}],
                 },
                 {
+                    "beat_id": "b2c",
+                    "paths": ["path_2"],
+                    "dilemma_impacts": [{"dilemma_id": "t1", "effect": "advances"}],
+                },
+                {
                     "beat_id": "b3",
                     "paths": ["path_3"],
                     "dilemma_impacts": [{"dilemma_id": "t1", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b3c",
+                    "paths": ["path_3"],
+                    "dilemma_impacts": [{"dilemma_id": "t1", "effect": "advances"}],
                 },
             ],
         }
@@ -1028,7 +1049,15 @@ class TestSeedMutations:
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
                     ],
-                }
+                },
+                {
+                    "beat_id": "resolution_post",
+                    "summary": "Consequences of the revelation",
+                    "paths": ["path_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
             ],
         }
 
@@ -1114,11 +1143,27 @@ class TestSeedMutations:
                     ],
                 },
                 {
+                    "beat_id": "protects_beat_02",
+                    "summary": "Protection confirmed",
+                    "paths": ["mentor_protects"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
+                {
                     "beat_id": "manipulates_beat_01",
                     "summary": "Mentor reveals manipulation",
                     "paths": ["mentor_manipulates"],
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
+                    ],
+                },
+                {
+                    "beat_id": "manipulates_beat_02",
+                    "summary": "Manipulation confirmed",
+                    "paths": ["mentor_manipulates"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
                     ],
                 },
             ],
@@ -1205,6 +1250,14 @@ class TestSeedMutations:
                     ],
                     "entities": ["kay", "mentor"],
                     "location": "archive",
+                },
+                {
+                    "beat_id": "aftermath_001",
+                    "summary": "Trust shapes the journey ahead",
+                    "paths": ["path_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
+                    ],
                 },
             ],
         }
@@ -1299,6 +1352,22 @@ class TestSeedMutations:
                     ],
                     "entities": ["kay"],
                 },
+                {
+                    "beat_id": "opening_001_post",
+                    "summary": "Trust consequences unfold",
+                    "paths": ["path_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
+                {
+                    "beat_id": "fight_001_post",
+                    "summary": "Battle aftermath",
+                    "paths": ["path_fight"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "fight_or_flee", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
             ],
         }
 
@@ -1351,6 +1420,14 @@ class TestSeedMutations:
                         {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked"}
                     ],
                     "entities": ["kay"],
+                },
+                {
+                    "beat_id": "opening_001_post",
+                    "summary": "Trust consequences",
+                    "paths": ["path_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
+                    ],
                 },
             ],
         }
@@ -1406,6 +1483,14 @@ class TestSeedMutations:
                         "relative_to": "fight_or_flee",
                         "position": None,
                     },
+                },
+                {
+                    "beat_id": "opening_001_post",
+                    "summary": "Trust consequences",
+                    "paths": ["path_mentor_trust"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
+                    ],
                 },
             ],
         }
@@ -2062,11 +2147,27 @@ class TestBeatDilemmaAlignment:
                 ],
             },
             {
+                "beat_id": "opening_post",
+                "summary": "Trust aftermath",
+                "paths": ["trust_arc"],
+                "dilemma_impacts": [
+                    {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"},
+                ],
+            },
+            {
                 "beat_id": "loyalty_commit",
                 "summary": "Loyalty locked",
                 "paths": ["loyalty_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "loyalty", "effect": "commits", "note": "Locked"}
+                ],
+            },
+            {
+                "beat_id": "loyalty_commit_post",
+                "summary": "Loyalty aftermath",
+                "paths": ["loyalty_arc"],
+                "dilemma_impacts": [
+                    {"dilemma_id": "loyalty", "effect": "advances", "note": "Fallout"}
                 ],
             },
         ]
@@ -2132,11 +2233,27 @@ class TestBeatDilemmaAlignment:
                 "dilemma_impacts": [{"dilemma_id": "trust", "effect": "commits", "note": "Locked"}],
             },
             {
+                "beat_id": "trust_commit_post",
+                "summary": "Trust aftermath",
+                "paths": ["trust_arc"],
+                "dilemma_impacts": [
+                    {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
+                ],
+            },
+            {
                 "beat_id": "loyalty_commit",
                 "summary": "Loyalty locked",
                 "paths": ["loyalty_arc"],
                 "dilemma_impacts": [
                     {"dilemma_id": "loyalty", "effect": "commits", "note": "Locked"}
+                ],
+            },
+            {
+                "beat_id": "loyalty_commit_post",
+                "summary": "Loyalty aftermath",
+                "paths": ["loyalty_arc"],
+                "dilemma_impacts": [
+                    {"dilemma_id": "loyalty", "effect": "advances", "note": "Fallout"}
                 ],
             },
         ]
@@ -2292,7 +2409,7 @@ class TestSeedArcStructureValidation:
         assert warnings[0].field_path == "paths.trust_arc.arc_structure"
 
     def test_missing_post_commit_beat_warns(self) -> None:
-        """Commit without any following beat produces a warning."""
+        """Commit without any following beat produces a COMPLETENESS error."""
         graph = self._make_graph()
         output = self._make_output(
             [
@@ -2317,16 +2434,17 @@ class TestSeedArcStructureValidation:
 
         errors = validate_seed_mutations(graph, output)
 
-        warnings = [e for e in errors if e.category == SeedErrorCategory.WARNING]
         blocking = _blocking_errors(errors)
-        assert blocking == []
-        assert len(warnings) == 1
-        assert "after" in warnings[0].issue
-        assert "consequence" in warnings[0].issue
-        assert warnings[0].field_path == "paths.trust_arc.arc_structure"
+        warnings = [e for e in errors if e.category == SeedErrorCategory.WARNING]
+        assert len(blocking) == 1
+        assert blocking[0].category == SeedErrorCategory.COMPLETENESS
+        assert "after" in blocking[0].issue
+        assert "consequence" in blocking[0].issue
+        assert blocking[0].field_path == "paths.trust_arc.arc_structure"
+        assert warnings == []
 
     def test_single_commit_beat_produces_both_warnings(self) -> None:
-        """A path with only a commit beat gets both pre and post warnings."""
+        """A path with only a commit beat gets a pre-commit warning and a post-commit COMPLETENESS error."""
         graph = self._make_graph()
         output = self._make_output(
             [
@@ -2345,12 +2463,12 @@ class TestSeedArcStructureValidation:
 
         warnings = [e for e in errors if e.category == SeedErrorCategory.WARNING]
         blocking = _blocking_errors(errors)
-        assert blocking == []
-        assert len(warnings) == 2
-        pre_warn = [w for w in warnings if "before" in w.issue]
-        post_warn = [w for w in warnings if "after" in w.issue]
-        assert len(pre_warn) == 1
-        assert len(post_warn) == 1
+        # Post-commit missing is now COMPLETENESS (blocking); pre-commit missing stays WARNING
+        assert len(blocking) == 1
+        assert blocking[0].category == SeedErrorCategory.COMPLETENESS
+        assert "after" in blocking[0].issue
+        assert len(warnings) == 1
+        assert "before" in warnings[0].issue
 
     def test_complicates_before_commit_does_not_satisfy_check_14(self) -> None:
         """'complicates' is not advances/reveals, so doesn't satisfy the pre-commit check."""
@@ -2392,7 +2510,13 @@ class TestSeedArcStructureValidation:
         assert "advances" in warnings[0].issue
 
     def test_warnings_do_not_block_apply_seed_mutations(self) -> None:
-        """apply_seed_mutations succeeds with warnings (logs them, doesn't raise)."""
+        """apply_seed_mutations succeeds when only WARNING-category issues are present.
+
+        The pre-commit development check (check 14) is still a WARNING.
+        A complete arc with advances→commits→consequence produces no errors.
+        A commits-only beat now raises COMPLETENESS (blocking), so this test
+        uses a fixture that has the post-commit beat but lacks pre-commit development.
+        """
         graph = self._make_graph()
         output = self._make_output(
             [
@@ -2404,15 +2528,25 @@ class TestSeedArcStructureValidation:
                         {"dilemma_id": "trust", "effect": "commits", "note": "Locked in"}
                     ],
                 },
+                {
+                    "beat_id": "aftermath",
+                    "summary": "Trust consequences",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
             ]
         )
 
-        # Should not raise despite both arc structure warnings
+        # Should not raise: pre-commit development check (check 14) is WARNING only
         apply_seed_mutations(graph, output)
 
-        # Verify mutation was applied (beat node exists)
+        # Verify mutation was applied (beat nodes exist)
         beat_node = graph.get_node("beat::commit")
         assert beat_node is not None
+        aftermath_node = graph.get_node("beat::aftermath")
+        assert aftermath_node is not None
 
     def test_path_without_commits_skips_arc_checks(self) -> None:
         """Paths missing a commit beat get an error for check 13, not arc warnings."""
@@ -2618,7 +2752,15 @@ class TestMutationIntegration:
                     "dilemma_impacts": [
                         {"dilemma_id": "mentor_trust", "effect": "commits", "note": "Locked in"}
                     ],
-                }
+                },
+                {
+                    "beat_id": "opening_post",
+                    "summary": "The mentor's nature becomes clear",
+                    "paths": ["path_mentor"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "mentor_trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
             ],
         }
         apply_mutations(graph, "seed", seed_output)
@@ -2640,7 +2782,7 @@ class TestMutationIntegration:
         # Check edges
         assert len(graph.get_edges(edge_type="has_answer")) == 2
         assert len(graph.get_edges(edge_type="explores")) == 1
-        assert len(graph.get_edges(edge_type="belongs_to")) == 1
+        assert len(graph.get_edges(edge_type="belongs_to")) == 2
 
         # Check node counts by type
         assert len(graph.get_nodes_by_type("vision")) == 1
@@ -2648,7 +2790,7 @@ class TestMutationIntegration:
         assert len(graph.get_nodes_by_type("dilemma")) == 1
         assert len(graph.get_nodes_by_type("answer")) == 2
         assert len(graph.get_nodes_by_type("path")) == 1
-        assert len(graph.get_nodes_by_type("beat")) == 1
+        assert len(graph.get_nodes_by_type("beat")) == 2
 
 
 class TestSeedErrorCategory:
@@ -2965,7 +3107,15 @@ class TestScopedIdValidation:
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
-                }
+                },
+                {
+                    "beat_id": "resolution_post",
+                    "summary": "Trust aftermath",
+                    "paths": ["trust_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
             ],
         }
 
@@ -3002,7 +3152,15 @@ class TestScopedIdValidation:
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
-                }
+                },
+                {
+                    "beat_id": "opening_post",
+                    "summary": "Trust aftermath",
+                    "paths": ["path::mentor"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
             ],
         }
 
@@ -3185,7 +3343,15 @@ class TestScopedIdValidation:
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
-                }
+                },
+                {
+                    "beat_id": "opening_post",
+                    "summary": "Trust aftermath",
+                    "paths": ["path::mentor_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
             ],
         }
 
@@ -3228,6 +3394,12 @@ class TestScopedIdValidation:
                     "paths": ["path::mentor_arc"],
                     "dilemma_impacts": [{"dilemma_id": "dilemma::trust", "effect": "commits"}],
                 },
+                {
+                    "beat_id": "resolution_post",
+                    "summary": "Trust aftermath",
+                    "paths": ["path::mentor_arc"],
+                    "dilemma_impacts": [{"dilemma_id": "dilemma::trust", "effect": "advances"}],
+                },
             ],
         }
 
@@ -3269,7 +3441,15 @@ class TestScopedIdValidation:
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
-                }
+                },
+                {
+                    "beat_id": "resolution_post",
+                    "summary": "Trust aftermath",
+                    "paths": ["mentor_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
             ],
         }
 
@@ -3316,7 +3496,15 @@ class TestScopedIdValidation:
                     "dilemma_impacts": [
                         {"dilemma_id": "dilemma::trust", "effect": "commits", "note": "Locked in"}
                     ],
-                }
+                },
+                {
+                    "beat_id": "resolution_post",
+                    "summary": "Trust aftermath",
+                    "paths": ["path::mentor_arc"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "dilemma::trust", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
             ],
         }
 
@@ -4490,11 +4678,27 @@ class TestBackfillIntegrationWithApplySeedMutations:
                     ],
                 },
                 {
+                    "beat_id": "b1_post",
+                    "summary": "Path one aftermath",
+                    "paths": ["path1"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "choice_a_or_b", "effect": "advances", "note": "Fallout"}
+                    ],
+                },
+                {
                     "beat_id": "b2",
                     "summary": "Test",
                     "paths": ["path2"],
                     "dilemma_impacts": [
                         {"dilemma_id": "choice_a_or_b", "effect": "commits", "note": "Commits"}
+                    ],
+                },
+                {
+                    "beat_id": "b2_post",
+                    "summary": "Path two aftermath",
+                    "paths": ["path2"],
+                    "dilemma_impacts": [
+                        {"dilemma_id": "choice_a_or_b", "effect": "advances", "note": "Fallout"}
                     ],
                 },
             ],
@@ -4753,10 +4957,22 @@ class TestApplySeedConvergenceAnalysis:
                     "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "commits"}],
                 },
                 {
+                    "beat_id": "b_trust_post",
+                    "summary": "Trust aftermath",
+                    "paths": ["trust_or_not__trust"],
+                    "dilemma_impacts": [{"dilemma_id": "trust_or_not", "effect": "advances"}],
+                },
+                {
                     "beat_id": "b_stay",
                     "summary": "Commit stay",
                     "paths": ["stay_or_go__stay"],
                     "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "commits"}],
+                },
+                {
+                    "beat_id": "b_stay_post",
+                    "summary": "Stay aftermath",
+                    "paths": ["stay_or_go__stay"],
+                    "dilemma_impacts": [{"dilemma_id": "stay_or_go", "effect": "advances"}],
                 },
             ],
         }

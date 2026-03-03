@@ -1652,12 +1652,15 @@ def validate_seed_mutations(graph: Graph, output: dict[str, Any]) -> list[SeedVa
                     field_path=f"paths.{path_id}.arc_structure",
                     issue=(
                         f"Path '{path_id}' has no beat after its commit beat "
-                        f"for dilemma '{expected_dilemma}'. A complete arc "
-                        f"should include consequence beats after the commit."
+                        f"for dilemma '{expected_dilemma}'. Every path MUST have "
+                        f"at least one consequence beat after the commit beat — "
+                        f"the beat that shows the player what their choice led to. "
+                        f"Add a beat with effect 'advances' or 'complicates' after "
+                        f"the commit beat."
                     ),
                     available=[],
                     provided="",
-                    category=SeedErrorCategory.WARNING,
+                    category=SeedErrorCategory.COMPLETENESS,
                 )
             )
 
