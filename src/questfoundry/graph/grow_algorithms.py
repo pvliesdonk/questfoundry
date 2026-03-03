@@ -2568,7 +2568,7 @@ def strip_temporal_hints_by_id(graph: Graph, beat_ids: set[str]) -> int:
     stripped = 0
     for bid in sorted(beat_ids):
         node = graph.get_node(bid)
-        if node and node.get("temporal_hint") is not None:
+        if node is not None and node.get("temporal_hint") is not None:
             graph.update_node(bid, temporal_hint=None)
             stripped += 1
     return stripped
