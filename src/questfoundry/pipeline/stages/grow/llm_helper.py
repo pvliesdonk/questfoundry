@@ -339,6 +339,7 @@ class _LLMHelperMixin:
                 before_beat=before_beat,
                 summary=gap.summary,
                 scene_type=gap.scene_type,
+                dilemma_impacts=[i.model_dump() for i in gap.dilemma_impacts],
             )
             report.inserted += 1
         return report

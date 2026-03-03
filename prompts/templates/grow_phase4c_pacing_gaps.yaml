@@ -30,6 +30,12 @@ system: |
   5. Place where it makes the most narrative sense
   6. One correction beat per issue is usually sufficient
 
+  ## Path → Dilemma mapping (use these dilemma_id values)
+  {path_dilemma_map}
+
+  ## Valid dilemma IDs
+  {valid_dilemma_ids}
+
   ## Full Path Sequences (numbered in story order)
   {path_sequences}
 
@@ -55,13 +61,37 @@ system: |
   - before_beat: the LATER beat
   - summary: concise description of the correction beat (1 sentence)
   - scene_type: scene | sequel | micro_beat (must differ from issue type)
+  - dilemma_impacts: list of how this beat affects dilemmas (may be empty)
+    Each item: {{"dilemma_id": "<id>", "effect": "<advances|reveals|commits|complicates>", "note": "<explanation>"}}
+    Effect values:
+      advances    = moves the dilemma closer to resolution (tension builds)
+      reveals     = discloses new information about the dilemma
+      commits     = a character makes an irreversible choice about the dilemma
+      complicates = adds a new obstacle or contradiction to the dilemma
 
   If the issues are acceptable, return an empty gaps array.
+
+  Example (do not copy these IDs):
+  {{
+    "gaps": [
+      {{
+        "path_id": "path::dilemma__answer",
+        "after_beat": "beat::scene_01",
+        "before_beat": "beat::scene_02",
+        "summary": "A moment of doubt interrupts the relentless forward march",
+        "scene_type": "sequel",
+        "dilemma_impacts": [
+          {{"dilemma_id": "dilemma::trust_or_betray", "effect": "complicates", "note": "New evidence emerges that makes the protagonist's choice harder"}}
+        ]
+      }}
+    ]
+  }}
 
 user: |
   Propose correction beats to fix the pacing issues described above.
 
   REMINDER: Return ONLY a valid JSON object. Use ONLY IDs from the Valid IDs section.
   REMINDER: after_beat is the EARLIER beat, before_beat is the LATER beat. Do NOT reverse them.
+  REMINDER: Include dilemma_impacts for each gap beat using ONLY valid dilemma_ids listed above. Valid effect values: advances, reveals, commits, complicates.
 
 components: []

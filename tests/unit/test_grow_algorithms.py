@@ -3306,6 +3306,31 @@ class TestInsertGapBeat:
         assert node["bridges_to"] == "beat::b"
         assert node["transition_style"] == "smooth"  # Default when context missing
 
+    def test_stores_dilemma_impacts(self) -> None:
+        """Gap beat stores dilemma_impacts list on the node."""
+        from questfoundry.graph.grow_algorithms import insert_gap_beat
+
+        graph = Graph.empty()
+        graph.create_node("path::t1", {"type": "path", "raw_id": "t1"})
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a", "summary": "A"})
+        graph.add_edge("belongs_to", "beat::a", "path::t1")
+
+        dilemma_impacts = [
+            {"dilemma_id": "dilemma::rescue", "effect": "advances", "note": "moves plot"}
+        ]
+        beat_id = insert_gap_beat(
+            graph,
+            path_id="path::t1",
+            after_beat="beat::a",
+            before_beat=None,
+            summary="Gap with dilemma impact",
+            scene_type="scene",
+            dilemma_impacts=dilemma_impacts,
+        )
+
+        node = graph.get_node(beat_id)
+        assert node["dilemma_impacts"] == dilemma_impacts
+
 
 class TestCollapseLinearBeats:
     def test_collapse_linear_chain(self) -> None:
