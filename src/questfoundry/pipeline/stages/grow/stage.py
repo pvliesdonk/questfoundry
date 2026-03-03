@@ -150,15 +150,13 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
         level import for deterministic free functions (preserving test
         patchability).
 
-        The registry's declared dependencies encode the invariant that
-        phases 4a-4d run BEFORE intersections (3) so that each path is
-        fully elaborated before cross-path weaving.  Gap detection
-        (4a/4b/4c) prevents "conditional prerequisites" — a shared beat
-        depending on a path-specific gap beat — which would cause silent
-        ``requires`` edge drops during arc enumeration and passage DAG
-        cycles.  Phase 4d (atmospheric) annotates beats with sensory
-        detail and entry states that intersections need for shared beats.
-        See: check_intersection_compatibility() invariant, #357/#358/#359.
+        The registry's declared dependencies encode the invariant (#1124)
+        that intersections (3) runs BEFORE interleave_beats (1b), which
+        runs BEFORE gap-detection phases 4a-4d.  Intersection detection on
+        a clean beat DAG (no predecessor edges yet) guarantees the
+        No-Conditional-Prerequisites Invariant always passes — no
+        interleave-created edges can invalidate intersection proposals.
+        See: check_intersection_compatibility() invariant, #1124.
         """
         import questfoundry.pipeline.stages.grow.stage as _this_module
 

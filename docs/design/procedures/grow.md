@@ -126,12 +126,14 @@ If the non-canonical answer is not promoted to a path in SEED, that dilemma has 
 
 ## Algorithm Phases
 
-> **Execution order note:** Phases 4a/4b/4c (gap detection & scene-type
-> tagging) execute **before** Phase 3 (intersection detection).  This
-> ensures each path is fully elaborated with gap beats before cross-path
-> weaving, preventing "conditional prerequisites" where a shared beat
-> depends on a path-specific gap beat.  Phase numbering is preserved for
-> historical continuity; execution order is defined in `_phase_order()`.
+> **Execution order note (#1124):** Phase 3 (intersection detection) executes
+> **before** Phase 1b (interleave) and before Phase 4a/4b/4c (gap detection).
+> Running intersections on a clean beat DAG (no predecessor edges yet) ensures
+> the No-Conditional-Prerequisites Invariant always passes — interleave-created
+> edges cannot invalidate intersection proposals. Phase numbering is preserved
+> for historical continuity; execution order is defined in `_phase_order()`.
+> Actual order: `validate_dag → intersections → interleave_beats → scene_types
+> → narrative_gaps → pacing_gaps → atmospheric → path_arcs → entity_arcs → …`
 > See also: **No-Conditional-Prerequisites Invariant** under Phase 3.
 
 ### Phase 1: Beat Graph Import
@@ -171,7 +173,7 @@ If the non-canonical answer is not promoted to a path in SEED, that dilemma has 
 
 **Purpose:** Find beats from different paths (different dilemmas) that should be one scene.
 
-**Input:** Beat graph with validated DAG, location flexibility from SEED
+**Input:** Beat graph with validated DAG and location flexibility from SEED. No predecessor edges exist yet (interleave has not run).
 
 **Operations:**
 1. Build candidate pool:
@@ -241,7 +243,7 @@ causes `passage_dag_cycles` failures in validation.
 
 **Purpose:** Find missing beats needed for narrative continuity AND assign scene types for pacing.
 
-**Input:** Beat graph (before intersections — see execution order note above)
+**Input:** Beat graph with intersections applied and predecessor edges from interleave (see execution order note above)
 
 **Operations:**
 

@@ -66,9 +66,9 @@ async def phase_validate_dag(graph: Graph, model: BaseChatModel) -> GrowPhaseRes
 
 @grow_phase(
     name="interleave_beats",
-    depends_on=["validate_dag"],
+    depends_on=["intersections"],
     is_deterministic=True,
-    priority=1,
+    priority=2,
 )
 async def phase_interleave_beats(
     graph: Graph,
@@ -80,14 +80,20 @@ async def phase_interleave_beats(
     cross-path ordering rules to create ``predecessor`` edges between beats
     that belong to different dilemmas' paths.
 
+    **Runs after intersections** so it can skip predecessor edges between
+    beats that are already co-grouped in an intersection (#1124). This
+    prevents circular prerequisites on shared beats.
+
     Preconditions:
     - Beat DAG validated (Phase 1 passed).
+    - Intersections applied (Phase 3 complete) — intersection groups exist.
     - Dilemma relationship edges exist (concurrent/wraps/serial between dilemmas).
     - Beats are linked to paths via ``belongs_to`` edges.
 
     Postconditions:
     - Cross-path ``predecessor`` edges created according to relationship type.
     - DAG remains acyclic (cycle-inducing edges are skipped with warnings).
+    - No predecessor edges created between beats in the same intersection group.
 
     Invariants:
     - Deterministic: same graph always produces same edges.

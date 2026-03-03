@@ -230,19 +230,20 @@ class TestGlobalRegistry:
         assert errors == [], f"Registry validation errors: {errors}"
 
     def test_global_registry_execution_order_matches_expected(self) -> None:
-        """Execution order matches the post-#1105 phase structure (15 phases).
+        """Execution order matches the post-#1124 phase structure (15 phases).
 
-        interleave_beats added in #1105; collapse_linear_beats moved to POLISH in #1109.
+        intersections moved before interleave_beats in #1124 so the beat DAG
+        is clean (no predecessor edges) when intersection compatibility runs.
         """
         expected = [
             "validate_dag",
+            "intersections",
             "interleave_beats",
             "scene_types",
             "narrative_gaps",
             "pacing_gaps",
             "atmospheric",
             "path_arcs",
-            "intersections",
             "entity_arcs",
             "enumerate_arcs",
             "divergence",
