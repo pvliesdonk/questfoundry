@@ -303,6 +303,14 @@ async def phase_state_flags(graph: Graph, model: BaseChatModel) -> GrowPhaseResu
     Invariants:
     - 1:1 mapping between consequences and state flags.
     - State flag grants derived from beat dilemma_impacts with effect="commits".
+
+    Note on 2-flags-per-dilemma: Doc3 states one flag per soft dilemma suffices
+    for routing (present = path A taken, absent = path B). This phase creates one
+    flag per consequence, which yields two flags per dilemma. This is intentional:
+    explicit positive flags for each path outcome make overlay conditions clearer
+    (e.g., "hostile_path_committed" rather than "friendly_flag absent") and avoid
+    absence-of-flag logic in overlay definitions. SHIP selects which flags become
+    player-facing codewords; not every state flag is exported.
     """
     consequence_nodes = graph.get_nodes_by_type("consequence")
     if not consequence_nodes:
