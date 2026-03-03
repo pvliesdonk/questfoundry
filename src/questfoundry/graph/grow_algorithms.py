@@ -2588,7 +2588,8 @@ def interleave_cross_path_beats(graph: Graph) -> int:
       hints, commit beats of one dilemma are ordered before commit beats of the
       other to ensure pacing.
 
-    Edges that would create a cycle are silently skipped with a warning.
+    Hint-induced edges that would create a cycle raise RuntimeError (resolve_temporal_hints
+    must prevent this).  Heuristic-induced cycles are soft-skipped (benign tiebreak conflicts).
 
     Args:
         graph: Graph containing beat, path, and dilemma nodes with relationship edges.
@@ -2658,10 +2659,21 @@ def interleave_cross_path_beats(graph: Graph) -> int:
 
     created = 0
 
-    def _add_predecessor(from_beat: str, to_beat: str) -> bool:
+    def _add_predecessor(from_beat: str, to_beat: str, *, from_hint: bool = False) -> bool:
         """Add predecessor(from_beat, to_beat) if valid and not duplicate.
 
-        Returns True if edge was added.
+        Args:
+            from_beat: Beat that requires to_beat.
+            to_beat: Beat that becomes a prerequisite.
+            from_hint: True when the edge is requested by a temporal hint (LLM
+                output validated by resolve_temporal_hints).  Hint-induced cycles
+                are hard errors — resolve_temporal_hints should have cleared them.
+                Heuristic-induced cycles are soft-skipped (the heuristic is an
+                arbitrary tiebreak, so a conflict with an existing hint edge is
+                expected and benign).
+
+        Returns:
+            True if edge was added.
         """
         nonlocal created
         if from_beat == to_beat:
@@ -2684,8 +2696,18 @@ def interleave_cross_path_beats(graph: Graph) -> int:
             )
             return False
         if _would_create_cycle(from_beat, to_beat, successors, beat_set):
-            log.warning(
-                "interleave_cycle_skipped",
+            if from_hint:
+                # Hint-induced cycles must have been cleared by resolve_temporal_hints.
+                # Reaching here means that phase failed its invariant.
+                raise RuntimeError(
+                    f"interleave_cross_path_beats: temporal hint on {from_beat!r} "
+                    f"requests edge {from_beat!r} → {to_beat!r} which would create "
+                    f"a cycle. resolve_temporal_hints should have prevented this."
+                )
+            # Heuristic-induced cycles are benign: the heuristic is an arbitrary
+            # tiebreak and may conflict with existing hint-established ordering.
+            log.debug(
+                "interleave_heuristic_cycle_skipped",
                 from_beat=from_beat,
                 to_beat=to_beat,
             )
@@ -2787,7 +2809,7 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                 target_beats = ref_commits if "commit" in position else ref_first
                 for target in sorted(target_beats):
                     from_b, to_b = (target, beat_id) if is_before else (beat_id, target)
-                    if _add_predecessor(from_b, to_b):
+                    if _add_predecessor(from_b, to_b, from_hint=True):
                         hints_applied += 1
 
             if hints_applied:

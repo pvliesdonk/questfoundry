@@ -3567,7 +3567,7 @@ class TestConditionalPrerequisiteInvariant:
         - intersections runs on a clean beat DAG (no predecessor edges) so the
           conditional-prerequisites check always passes (#1124).
         - resolve_temporal_hints detects and resolves hint cycles before interleave
-          creates any edges, eliminating interleave_cycle_skipped warnings (#1123).
+          creates any edges; interleave hard-fails if a cycle slips through (#1123).
         """
         from questfoundry.pipeline.stages.grow import GrowStage
 
@@ -4642,6 +4642,32 @@ class TestInterleavecrossPathBeats:
             f"Expected no predecessor edges between co-intersected beats, "
             f"got {same_intersection_edges}"
         )
+
+    def test_cycle_raises_runtime_error(self) -> None:
+        """A temporal hint that creates a cycle raises RuntimeError (#1129).
+
+        resolve_temporal_hints must clear conflicting hints before interleave
+        runs.  If a cycle slips through, interleave_cross_path_beats must raise
+        rather than silently skip so the pipeline fails loudly.
+        """
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Force an existing cross-path edge that will conflict with the hint:
+        # aq_commit → mt_intro already in graph (mt_intro after aq_commit).
+        graph.add_edge("predecessor", "beat::mt_intro", "beat::aq_commit")
+        # Now add a hint that tries to put aq_intro after mt_commit, which would
+        # close the cycle: aq_commit → mt_intro → mt_commit → aq_intro → aq_commit.
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_commit",
+            },
+        )
+
+        import pytest
+
+        with pytest.raises(RuntimeError, match="would create a cycle"):
+            interleave_cross_path_beats(graph)
 
 
 class TestDetectTemporalHintConflicts:
