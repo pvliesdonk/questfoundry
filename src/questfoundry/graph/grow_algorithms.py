@@ -1426,13 +1426,25 @@ def _group_by_location(
         # Filter to beats from different dilemmas
         multi_dilemma = _filter_different_dilemmas(beats, beat_dilemmas)
         if len(multi_dilemma) >= 2:
-            candidates.append(
-                IntersectionCandidate(
-                    beat_ids=sorted(multi_dilemma),
-                    signal_type="location",
-                    shared_value=location,
+            # Limit to 1 beat per dilemma (prefer beat_01, i.e. first alphabetically).
+            # Without this limit, the LLM sees a giant group with multiple beats per
+            # dilemma and can accidentally pick 2 from the same dilemma.
+            seen_dilemmas: set[str] = set()
+            limited: list[str] = []
+            for bid in sorted(multi_dilemma):
+                dilemmas = beat_dilemmas.get(bid, set())
+                dil = next(iter(dilemmas)) if dilemmas else ""
+                if dil and dil not in seen_dilemmas:
+                    seen_dilemmas.add(dil)
+                    limited.append(bid)
+            if len(limited) >= 2:
+                candidates.append(
+                    IntersectionCandidate(
+                        beat_ids=limited,
+                        signal_type="location",
+                        shared_value=location,
+                    )
                 )
-            )
 
     return candidates
 
@@ -2425,6 +2437,13 @@ def interleave_cross_path_beats(graph: Graph) -> int:
     for edge in graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to"):
         path_beats_map[edge["to"]].append(edge["from"])
 
+    # beat_id → dilemma_id (for same-dilemma temporal hint guard)
+    beat_id_to_dilemma: dict[str, str] = {}
+    for dil_id, paths in dilemma_paths.items():
+        for path_id in paths:
+            for bid in path_beats_map.get(path_id, []):
+                beat_id_to_dilemma[bid] = dil_id
+
     # Collect existing predecessor edges to avoid duplicates
     existing_predecessors: set[tuple[str, str]] = set()
     for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor"):
@@ -2539,6 +2558,20 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                 relative_to = hint.get("relative_to", "")
                 position = hint.get("position", "")
                 if not relative_to or not position:
+                    continue
+
+                # Guard: skip temporal hints that reference the beat's own
+                # parent dilemma. relative_to must reference a DIFFERENT dilemma.
+                # Same-dilemma hints create intra-dilemma cross-path predecessor
+                # edges (e.g. viewed_beat_04 → disowned_beat_03) that violate the
+                # intersection conditional-prerequisite invariant.
+                beat_own_dilemma = beat_id_to_dilemma.get(beat_id)
+                if beat_own_dilemma and beat_own_dilemma == relative_to:
+                    log.debug(
+                        "interleave_hint_skipped_same_dilemma",
+                        beat_id=beat_id,
+                        relative_to=relative_to,
+                    )
                     continue
 
                 # Collect commit/intro beats for the referenced dilemma

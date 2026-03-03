@@ -39,19 +39,33 @@ def _format_structural_feedback(errors: list[GrowValidationError]) -> str:
     tells the LLM exactly what went wrong, enabling targeted repair.
     """
     dilemma_substrings = ("same dilemma", "span only", "at most 1 beat per dilemma")
-    same_dilemma_count = sum(
-        1 for e in errors if any(sub in e.issue.lower() for sub in dilemma_substrings)
-    )
+    predecessor_substrings = ("predecessor", "ordering", "prerequisite", "temporal")
+
+    same_dilemma_errors = [
+        e for e in errors if any(sub in e.issue.lower() for sub in dilemma_substrings)
+    ]
+    predecessor_errors = [
+        e for e in errors if any(sub in e.issue.lower() for sub in predecessor_substrings)
+    ]
 
     lines = ["\n\n## CORRECTION REQUIRED"]
     lines.append(f"Your previous {len(errors)} error(s) caused ALL intersections to be REJECTED.")
 
-    if same_dilemma_count > 0:
+    if same_dilemma_errors:
         lines.append(
             "PROBLEM: You grouped beats from the SAME dilemma together. "
             "Each intersection MUST combine beats from DIFFERENT dilemmas. "
             "Each candidate group already contains beats from different dilemmas -- "
             "select beats from WITHIN a group, not across groups."
+        )
+
+    if predecessor_errors:
+        lines.append(
+            "PROBLEM: Some beats you selected have ordering dependencies on beats "
+            "from other paths (predecessor edges). A beat can only be in an intersection "
+            "if all beats it depends on are ALSO in that intersection. "
+            "FIX: Choose earlier beats (_beat_01 or _beat_02) from each dilemma -- "
+            "they rarely have predecessor dependencies. Avoid _beat_03 and _beat_04."
         )
 
     # Show up to 3 specific errors for clarity
@@ -62,6 +76,7 @@ def _format_structural_feedback(errors: list[GrowValidationError]) -> str:
         lines.append(f"  ... and {len(errors) - max_shown} more error(s)")
 
     lines.append(
-        "Try again. Use the beat IDs from WITHIN each candidate group to form intersections."
+        "Try again. Use the beat IDs from WITHIN each candidate group to form intersections. "
+        "Prefer _beat_01 and _beat_02 from each dilemma."
     )
     return "\n".join(lines)

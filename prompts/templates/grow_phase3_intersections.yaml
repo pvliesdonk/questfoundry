@@ -28,8 +28,19 @@ system: |
      multiple candidate groups, choose the group where it fits most naturally
      and skip the others that use that beat.
   4. Do NOT force intersections. Rejecting a weak group is better than
-     accepting a forced one.
+     accepting a forced one. If no candidate group forms a natural scene,
+     return `{"intersections": []}`.
   5. Use ONLY beat IDs from the Valid IDs section. Do not invent or modify IDs.
+  6. CRITICAL: Each intersection MUST combine beats from DIFFERENT dilemmas.
+     The dilemma tag shown as [dilemma::X] after each beat ID tells you which
+     dilemma the beat belongs to. NEVER put two beats with the same dilemma
+     tag in the same intersection.
+     BAD: beat A [dilemma::trust] + beat B [dilemma::trust] + beat C [dilemma::flee]
+     GOOD: beat A [dilemma::trust] + beat B [dilemma::flee] + beat C [dilemma::search]
+  7. PREFER early beats (_beat_01, _beat_02). Avoid late beats (_beat_03, _beat_04)
+     because they often carry ordering dependencies on beats from other paths and
+     will fail validation. When in doubt, pick the earlier-numbered beat from each
+     dilemma in the candidate group.
 
   ## Candidate Groups
   {candidate_groups}
