@@ -4601,12 +4601,12 @@ class TestInterleavecrossPathBeats:
     def test_skips_predecessor_between_same_intersection_beats(self) -> None:
         """Beats co-grouped in an intersection must not get predecessor edges (#1124).
 
-        When two beats are in the same intersection group they co-occur in a
-        single scene — ordering them relative to each other is meaningless and
-        would create circular prerequisites if they also have cross-dilemma
-        relationship edges.
+        Uses "wraps" relationship so interleave_cross_path_beats would normally
+        create a predecessor(aq_intro → mt_intro) edge between the intro beats
+        of the two dilemmas. With the intersection group in place that edge must
+        be skipped — the skip logic is actually exercised.
         """
-        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        graph = _make_two_dilemma_graph_with_relationship("wraps")
 
         # Place mt_intro and aq_intro into the same intersection group
         graph.create_node(
