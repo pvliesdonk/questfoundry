@@ -2460,12 +2460,14 @@ def interleave_cross_path_beats(graph: Graph) -> int:
     for edge in graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to"):
         path_beats_map[edge["to"]].append(edge["from"])
 
-    # beat_id → dilemma_id (for same-dilemma temporal hint guard)
-    beat_id_to_dilemma: dict[str, str] = {}
+    # beat_id → set of dilemma_ids (for same-dilemma temporal hint guard).
+    # A beat may belong to multiple dilemmas (e.g. intersection beats that
+    # live on paths from different dilemmas), so we must track the full set.
+    beat_id_to_dilemmas: dict[str, set[str]] = defaultdict(set)
     for dil_id, paths in dilemma_paths.items():
         for path_id in paths:
             for bid in path_beats_map.get(path_id, []):
-                beat_id_to_dilemma[bid] = dil_id
+                beat_id_to_dilemmas[bid].add(dil_id)
 
     # Collect existing predecessor edges to avoid duplicates
     existing_predecessors: set[tuple[str, str]] = set()
@@ -2588,8 +2590,8 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                 # Same-dilemma hints create intra-dilemma cross-path predecessor
                 # edges (e.g. viewed_beat_04 → disowned_beat_03) that violate the
                 # intersection conditional-prerequisite invariant.
-                beat_own_dilemma = beat_id_to_dilemma.get(beat_id)
-                if beat_own_dilemma and beat_own_dilemma == relative_to:
+                beat_own_dilemmas = beat_id_to_dilemmas.get(beat_id, set())
+                if relative_to in beat_own_dilemmas:
                     log.debug(
                         "interleave_hint_skipped_same_dilemma",
                         beat_id=beat_id,
