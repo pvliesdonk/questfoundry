@@ -215,7 +215,7 @@ class _LLMPhaseMixin:
             applied_count = 0
             skipped_count = 0
             pre_intersection_graph = Graph.from_dict(graph.to_dict())
-            accepted: list[tuple[list[str], str | None]] = []
+            accepted: list[tuple[list[str], str | None, list[str], str]] = []
             structural_errors: list[GrowValidationError] = []
 
             for proposal in result.intersections:
@@ -243,9 +243,14 @@ class _LLMPhaseMixin:
                     continue
 
                 # Resolve location (prefer LLM proposal, fallback to algorithm)
+                # Guard against qwen3:4b returning the literal string "null".
+                raw_loc = proposal.resolved_location
+                llm_location: str | None = (
+                    None if raw_loc in (None, "null", "NULL", "") else raw_loc
+                )
                 location: str | None
-                if proposal.resolved_location:
-                    location = proposal.resolved_location
+                if llm_location:
+                    location = llm_location
                 else:
                     location = resolve_intersection_location(pre_intersection_graph, valid_ids)
                     log.debug(
@@ -254,7 +259,7 @@ class _LLMPhaseMixin:
                         resolved=location,
                     )
 
-                accepted.append((valid_ids, location))
+                accepted.append((valid_ids, location, proposal.shared_entities, proposal.rationale))
                 log.debug(
                     "phase3_intersection_accepted",
                     beat_ids=valid_ids,
@@ -298,8 +303,10 @@ class _LLMPhaseMixin:
                 )
 
         # Apply accepted intersections in a batch to avoid cascade effects.
-        for beat_ids, location in accepted:
-            apply_intersection_mark(graph, beat_ids, location)
+        for beat_ids, location, shared_entities, rationale in accepted:
+            apply_intersection_mark(
+                graph, beat_ids, location, shared_entities=shared_entities, rationale=rationale
+            )
             applied_count += 1
             log.debug(
                 "phase3_intersection_applied",

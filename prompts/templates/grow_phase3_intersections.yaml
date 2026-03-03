@@ -41,7 +41,8 @@ system: |
   ## Output Format
   Return a JSON object with an "intersections" array. Each element has:
   - beat_ids: list of 2-3 beat IDs that form the intersection (from DIFFERENT dilemmas)
-  - resolved_location: where this combined scene takes place (string or null)
+  - resolved_location: always a specific location string — NEVER null, never the string "null"
+  - shared_entities: entity IDs shared between the intersecting beats (may be empty)
   - rationale: one sentence explaining why these beats form a natural scene
 
   Example (do not copy these IDs -- use the real IDs from the candidate groups):
@@ -50,6 +51,7 @@ system: |
       {{
         "beat_ids": ["beat::market_encounter", "beat::artifact_reveal"],
         "resolved_location": "the central market",
+        "shared_entities": ["entity::merchant", "entity::artifact"],
         "rationale": "The mentor introduction and artifact discovery both occur at the market."
       }}
     ]
@@ -60,7 +62,7 @@ system: |
 user: |
   Select which candidate groups form natural intersection scenes.
 
-  REMINDER: Return ONLY a valid JSON object. Use ONLY beat IDs from the Valid IDs section. Each beat in at most ONE intersection. Do NOT add prose before or after the JSON.
+  REMINDER: Return ONLY a valid JSON object. Use ONLY beat IDs from the Valid IDs section. Each beat in at most ONE intersection. Do NOT add prose before or after the JSON. resolved_location MUST be a real location string — NEVER null, never the string "null".
   {structural_feedback}
 
 components: []
