@@ -176,7 +176,6 @@ class _LLMPhaseMixin:
         context: dict[str, str] = {
             "candidate_groups": candidate_groups_text,
             "valid_beat_ids": ", ".join(sorted(valid_beat_ids)),
-            "candidate_count": str(len(candidates)),
             "structural_feedback": "",
         }
 
