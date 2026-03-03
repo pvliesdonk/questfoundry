@@ -30,6 +30,8 @@ from questfoundry.observability.logging import get_logger
 log = get_logger(__name__)
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     from questfoundry.graph.graph import Graph
 
 # Maximum number of arcs before triggering COMBINATORIAL error.
@@ -2439,6 +2441,85 @@ class TemporalHintConflict:
     beat_summary: str  # beat summary for LLM context
 
 
+@dataclass
+class _HintEdge:
+    from_beat: str
+    to_beat: str
+    beat_id: str
+    relative_to: str
+    position: str
+
+
+def _iter_temporal_hint_edges(
+    all_beats: list[str],
+    beat_nodes: dict[str, dict[str, Any]],
+    dilemma_a: str,
+    dilemma_b: str,
+    all_beats_a: list[str],
+    ordered_a: list[list[str]],
+    all_beats_b: list[str],
+    ordered_b: list[list[str]],
+    beat_id_to_dilemmas: dict[str, set[str]],
+) -> Iterator[_HintEdge]:
+    """Yield candidate hint edges for a concurrent dilemma pair.
+
+    Shared iteration logic used by both ``detect_temporal_hint_conflicts``
+    (simulation, no edge creation) and ``interleave_cross_path_beats``
+    (actual edge application).  Does not perform cycle detection or
+    duplicate checks — those are the caller's responsibility.
+
+    Args:
+        all_beats: Combined beat list for the dilemma pair (a + b).
+        beat_nodes: All beat node data keyed by beat ID.
+        dilemma_a: ID of the first dilemma.
+        dilemma_b: ID of the second dilemma.
+        all_beats_a: Flat beat list for dilemma_a.
+        ordered_a: Per-path ordered beat sequences for dilemma_a.
+        all_beats_b: Flat beat list for dilemma_b.
+        ordered_b: Per-path ordered beat sequences for dilemma_b.
+        beat_id_to_dilemmas: Mapping of beat ID → set of owning dilemma IDs.
+
+    Yields:
+        ``_HintEdge`` for each candidate (from_beat, to_beat) pair derived
+        from temporal hints, before cycle or duplicate filtering.
+    """
+    for beat_id in all_beats:
+        data = beat_nodes.get(beat_id, {})
+        hint = data.get("temporal_hint")
+        if not isinstance(hint, dict):
+            continue
+        relative_to = hint.get("relative_to", "")
+        position = hint.get("position", "")
+        if not relative_to or not position:
+            continue
+
+        beat_own_dilemmas = beat_id_to_dilemmas.get(beat_id, set())
+        if relative_to in beat_own_dilemmas:
+            continue  # same-dilemma guard
+
+        if relative_to == dilemma_a:
+            ref_all, ref_ordered, ref_dil = all_beats_a, ordered_a, dilemma_a
+        elif relative_to == dilemma_b:
+            ref_all, ref_ordered, ref_dil = all_beats_b, ordered_b, dilemma_b
+        else:
+            continue
+
+        ref_commits = _commits_beats_for_dilemma(ref_all, ref_dil, beat_nodes)
+        ref_first = [seq[0] for seq in ref_ordered if seq]
+        is_before = position.startswith("before_")
+        target_beats = ref_commits if "commit" in position else ref_first
+
+        for target in sorted(target_beats):
+            from_b, to_b = (target, beat_id) if is_before else (beat_id, target)
+            yield _HintEdge(
+                from_beat=from_b,
+                to_beat=to_b,
+                beat_id=beat_id,
+                relative_to=relative_to,
+                position=position,
+            )
+
+
 def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
     """Simulate temporal hint edge application and return hints that would create cycles.
 
@@ -2499,55 +2580,39 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
             all_beats_a = [b for seq in ordered_a for b in seq]
             all_beats_b = [b for seq in ordered_b for b in seq]
 
-            for beat_id in all_beats_a + all_beats_b:
-                data = beat_nodes.get(beat_id, {})
-                hint = data.get("temporal_hint")
-                if not isinstance(hint, dict):
+            for hint_edge in _iter_temporal_hint_edges(
+                all_beats_a + all_beats_b,
+                beat_nodes,
+                dil_a,
+                dil_b,
+                all_beats_a,
+                ordered_a,
+                all_beats_b,
+                ordered_b,
+                beat_id_to_dilemmas,
+            ):
+                from_b, to_b = hint_edge.from_beat, hint_edge.to_beat
+                if from_b == to_b:
                     continue
-                relative_to = hint.get("relative_to", "")
-                position = hint.get("position", "")
-                if not relative_to or not position:
+                if (from_b, to_b) in existing:
                     continue
-
-                beat_own_dilemmas = beat_id_to_dilemmas.get(beat_id, set())
-                if relative_to in beat_own_dilemmas:
-                    continue  # same-dilemma guard (already handled in interleave)
-
-                if relative_to == dil_a:
-                    ref_all, ref_ordered, ref_dil = all_beats_a, ordered_a, dil_a
-                elif relative_to == dil_b:
-                    ref_all, ref_ordered, ref_dil = all_beats_b, ordered_b, dil_b
-                else:
+                if from_b not in beat_set or to_b not in beat_set:
                     continue
-
-                ref_commits = _commits_beats_for_dilemma(ref_all, ref_dil, beat_nodes)
-                ref_first = [seq[0] for seq in ref_ordered if seq]
-                is_before = position.startswith("before_")
-                target_beats = ref_commits if "commit" in position else ref_first
-
-                for target in sorted(target_beats):
-                    from_b, to_b = (target, beat_id) if is_before else (beat_id, target)
-                    if from_b == to_b:
-                        continue
-                    if (from_b, to_b) in existing:
-                        continue
-                    if from_b not in beat_set or to_b not in beat_set:
-                        continue
-                    if _would_create_cycle(from_b, to_b, successors, beat_set):
-                        conflicts.append(
-                            TemporalHintConflict(
-                                beat_id=beat_id,
-                                hint_relative_to=relative_to,
-                                hint_position=position,
-                                from_beat=from_b,
-                                to_beat=to_b,
-                                beat_summary=beat_nodes.get(beat_id, {}).get("summary", ""),
-                            )
+                if _would_create_cycle(from_b, to_b, successors, beat_set):
+                    conflicts.append(
+                        TemporalHintConflict(
+                            beat_id=hint_edge.beat_id,
+                            hint_relative_to=hint_edge.relative_to,
+                            hint_position=hint_edge.position,
+                            from_beat=from_b,
+                            to_beat=to_b,
+                            beat_summary=beat_nodes.get(hint_edge.beat_id, {}).get("summary", ""),
                         )
-                    else:
-                        # Simulate applying the edge so later hints see it
-                        existing.add((from_b, to_b))
-                        successors[to_b].add(from_b)
+                    )
+                else:
+                    # Simulate applying the edge so later hints see it
+                    existing.add((from_b, to_b))
+                    successors[to_b].add(from_b)
 
     return conflicts
 
@@ -2770,47 +2835,19 @@ def interleave_cross_path_beats(graph: Graph) -> int:
         elif ordering == "concurrent":
             # Apply temporal hints first
             hints_applied = 0
-            for beat_id in all_beats_a + all_beats_b:
-                data = beat_nodes.get(beat_id, {})
-                hint = data.get("temporal_hint")
-                if not isinstance(hint, dict):
-                    continue
-                relative_to = hint.get("relative_to", "")
-                position = hint.get("position", "")
-                if not relative_to or not position:
-                    continue
-
-                # Guard: skip temporal hints that reference the beat's own
-                # parent dilemma. relative_to must reference a DIFFERENT dilemma.
-                # Same-dilemma hints create intra-dilemma cross-path predecessor
-                # edges (e.g. viewed_beat_04 → disowned_beat_03) that violate the
-                # intersection conditional-prerequisite invariant.
-                beat_own_dilemmas = beat_id_to_dilemmas.get(beat_id, set())
-                if relative_to in beat_own_dilemmas:
-                    log.debug(
-                        "interleave_hint_skipped_same_dilemma",
-                        beat_id=beat_id,
-                        relative_to=relative_to,
-                    )
-                    continue
-
-                # Collect commit/intro beats for the referenced dilemma
-                if relative_to == dilemma_a:
-                    ref_all, ref_ordered, ref_dil = all_beats_a, ordered_a, dilemma_a
-                elif relative_to == dilemma_b:
-                    ref_all, ref_ordered, ref_dil = all_beats_b, ordered_b, dilemma_b
-                else:
-                    continue
-
-                ref_commits = _commits_beats_for_dilemma(ref_all, ref_dil, beat_nodes)
-                ref_first = [seq[0] for seq in ref_ordered if seq]
-
-                is_before = position.startswith("before_")
-                target_beats = ref_commits if "commit" in position else ref_first
-                for target in sorted(target_beats):
-                    from_b, to_b = (target, beat_id) if is_before else (beat_id, target)
-                    if _add_predecessor(from_b, to_b, from_hint=True):
-                        hints_applied += 1
+            for hint_edge in _iter_temporal_hint_edges(
+                all_beats_a + all_beats_b,
+                beat_nodes,
+                dilemma_a,
+                dilemma_b,
+                all_beats_a,
+                ordered_a,
+                all_beats_b,
+                ordered_b,
+                beat_id_to_dilemmas,
+            ):
+                if _add_predecessor(hint_edge.from_beat, hint_edge.to_beat, from_hint=True):
+                    hints_applied += 1
 
             if hints_applied:
                 log.debug(
