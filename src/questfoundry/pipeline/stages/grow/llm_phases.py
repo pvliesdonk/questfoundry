@@ -342,7 +342,7 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
-    @grow_phase(name="scene_types", depends_on=["validate_dag"], priority=3)
+    @grow_phase(name="scene_types", depends_on=["interleave_beats"], priority=3)
     async def _phase_4a_scene_types(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4a: Tag beats with scene type classification.
 
