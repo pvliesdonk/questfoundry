@@ -3561,22 +3561,25 @@ class TestConditionalPrerequisiteInvariant:
         )
         assert errors == []
 
-    def test_phase_order_gaps_before_intersections(self, tmp_path: Path) -> None:
-        """Gap-detection phases must execute before the intersections phase."""
+    def test_phase_order_intersections_before_interleave(self, tmp_path: Path) -> None:
+        """Intersections must execute before interleave_beats (#1124).
+
+        Running intersections on a clean beat DAG (no predecessor edges)
+        ensures the conditional-prerequisites check always passes — no
+        interleave-created edges can invalidate intersection proposals.
+        """
         from questfoundry.pipeline.stages.grow import GrowStage
 
         stage = GrowStage(project_path=tmp_path)
         phase_names = [name for _, name in stage._phase_order()]
 
-        gap_phases = ["scene_types", "narrative_gaps", "pacing_gaps"]
         intersection_idx = phase_names.index("intersections")
+        interleave_idx = phase_names.index("interleave_beats")
 
-        for gap_phase in gap_phases:
-            gap_idx = phase_names.index(gap_phase)
-            assert gap_idx < intersection_idx, (
-                f"Phase '{gap_phase}' (index {gap_idx}) must come before "
-                f"'intersections' (index {intersection_idx})"
-            )
+        assert intersection_idx < interleave_idx, (
+            f"'intersections' (index {intersection_idx}) must come before "
+            f"'interleave_beats' (index {interleave_idx})"
+        )
 
     def test_lifts_orphan_prerequisite(self) -> None:
         """Prerequisite with no belongs_to edges is lifted to all paths."""
@@ -4593,4 +4596,43 @@ class TestInterleavecrossPathBeats:
         }
         assert edges_from_aq_intro == set(), (
             f"Expected no predecessor edges created from same-dilemma hint, got {edges_from_aq_intro}"
+        )
+
+    def test_skips_predecessor_between_same_intersection_beats(self) -> None:
+        """Beats co-grouped in an intersection must not get predecessor edges (#1124).
+
+        When two beats are in the same intersection group they co-occur in a
+        single scene — ordering them relative to each other is meaningless and
+        would create circular prerequisites if they also have cross-dilemma
+        relationship edges.
+        """
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+
+        # Place mt_intro and aq_intro into the same intersection group
+        graph.create_node(
+            "intersection_group::mt_intro--aq_intro",
+            {
+                "type": "intersection_group",
+                "raw_id": "mt_intro--aq_intro",
+                "beat_ids": ["beat::mt_intro", "beat::aq_intro"],
+                "shared_entities": [],
+                "rationale": "Both beats open at the same market square.",
+                "resolved_location": "market square",
+            },
+        )
+        graph.add_edge("intersection", "beat::mt_intro", "intersection_group::mt_intro--aq_intro")
+        graph.add_edge("intersection", "beat::aq_intro", "intersection_group::mt_intro--aq_intro")
+
+        edges_before = {(e["from"], e["to"]) for e in graph.get_edges(edge_type="predecessor")}
+        interleave_cross_path_beats(graph)
+        edges_after = {(e["from"], e["to"]) for e in graph.get_edges(edge_type="predecessor")}
+
+        new_edges = edges_after - edges_before
+        # Neither intersection beat should be ordered relative to the other
+        same_intersection_edges = {
+            (f, t) for f, t in new_edges if {f, t} <= {"beat::mt_intro", "beat::aq_intro"}
+        }
+        assert same_intersection_edges == set(), (
+            f"Expected no predecessor edges between co-intersected beats, "
+            f"got {same_intersection_edges}"
         )

@@ -85,7 +85,7 @@ class _LLMPhaseMixin:
     - ``PROLOGUE_ID``
     """
 
-    @grow_phase(name="intersections", depends_on=["path_arcs"], priority=7)
+    @grow_phase(name="intersections", depends_on=["validate_dag"], priority=1)
     async def _phase_3_intersections(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 3: Intersection detection (structural, multi-dilemma).
 
@@ -96,10 +96,16 @@ class _LLMPhaseMixin:
         prose differentiation for same-dilemma convergences is handled
         by Phase 8d (residue beats).
 
+        **Runs before interleave_beats** so that the beat DAG is clean (no
+        predecessor edges yet) when intersection compatibility is checked.
+        This eliminates the conditional-prerequisite rejection problem that
+        occurred when interleave ran first (#1124).
+
         Preconditions:
-        - Path arcs computed (Phase 4e complete).
+        - Beat DAG validated (Phase 1 passed).
         - Beats have belongs_to edges with single-dilemma mapping.
         - Beat nodes have locations, entities for candidate clustering.
+        - No predecessor edges exist yet (interleave has not run).
 
         Postconditions:
         - Accepted intersections marked on beat nodes via apply_intersection_mark.
@@ -336,7 +342,7 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
-    @grow_phase(name="scene_types", depends_on=["validate_dag"], priority=2)
+    @grow_phase(name="scene_types", depends_on=["validate_dag"], priority=3)
     async def _phase_4a_scene_types(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4a: Tag beats with scene type classification.
 
@@ -422,7 +428,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
-    @grow_phase(name="narrative_gaps", depends_on=["scene_types"], priority=3)
+    @grow_phase(name="narrative_gaps", depends_on=["scene_types"], priority=4)
     async def _phase_4b_narrative_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4b: Detect narrative gaps in path beat sequences.
 
@@ -527,7 +533,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
-    @grow_phase(name="pacing_gaps", depends_on=["narrative_gaps"], priority=4)
+    @grow_phase(name="pacing_gaps", depends_on=["narrative_gaps"], priority=5)
     async def _phase_4c_pacing_gaps(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4c: Detect and fix pacing issues (3+ same scene_type in a row).
 
@@ -673,7 +679,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
-    @grow_phase(name="atmospheric", depends_on=["pacing_gaps"], priority=5)
+    @grow_phase(name="atmospheric", depends_on=["pacing_gaps"], priority=6)
     async def _phase_4d_atmospheric(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4d: Atmospheric detail for beats.
 
@@ -753,7 +759,7 @@ class _LLMPhaseMixin:
             tokens_used=tokens,
         )
 
-    @grow_phase(name="path_arcs", depends_on=["atmospheric"], priority=6)
+    @grow_phase(name="path_arcs", depends_on=["atmospheric"], priority=7)
     async def _phase_4e_path_arcs(self, graph: Graph, model: BaseChatModel) -> GrowPhaseResult:
         """Phase 4e: Per-path thematic mini-arcs.
 

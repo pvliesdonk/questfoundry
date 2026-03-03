@@ -2483,6 +2483,13 @@ def interleave_cross_path_beats(graph: Graph) -> int:
 
     beat_set = set(beat_nodes.keys())
 
+    # Build intersection-group index (beat → group_id) to avoid creating
+    # predecessor edges between beats that are co-grouped in an intersection.
+    # Such edges would create circular prerequisites on shared beats (#1124).
+    beat_intersection_group: dict[str, str] = {}
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="intersection"):
+        beat_intersection_group[edge["from"]] = edge["to"]
+
     # --- Collect dilemma relationship edges ---
     relationship_edges: list[tuple[str, str, str]] = []  # (dilemma_a, dilemma_b, ordering)
     for ordering in ("concurrent", "wraps", "serial"):
@@ -2509,6 +2516,17 @@ def interleave_cross_path_beats(graph: Graph) -> int:
         if (from_beat, to_beat) in existing_predecessors:
             return False
         if from_beat not in beat_set or to_beat not in beat_set:
+            return False
+        # Skip edges between beats in the same intersection group —
+        # such beats co-occur in a single scene and have no ordering (#1124).
+        from_group = beat_intersection_group.get(from_beat)
+        if from_group is not None and from_group == beat_intersection_group.get(to_beat):
+            log.debug(
+                "interleave_skipped_same_intersection",
+                from_beat=from_beat,
+                to_beat=to_beat,
+                group=from_group,
+            )
             return False
         if _would_create_cycle(from_beat, to_beat, successors, beat_set):
             log.warning(
