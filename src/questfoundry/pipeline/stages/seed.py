@@ -488,9 +488,7 @@ class SeedStage:
         min_arcs_required = max(2, max_arcs // 4)
         if final_arc_count < min_arcs_required:
             dilemmas_fully_explored = sum(
-                1
-                for d in pruned_artifact.model_dump().get("dilemmas", [])
-                if len(d.get("explored", [])) >= 2
+                1 for d in pruned_artifact.dilemmas if len(d.explored) >= 2
             )
             raise SeedStageError(
                 f"SEED produced only {final_arc_count} arc(s) "
