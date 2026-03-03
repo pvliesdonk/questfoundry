@@ -112,6 +112,7 @@ class IntersectionProposal(BaseModel):
 
     beat_ids: list[str] = Field(min_length=2)
     resolved_location: str | None = None
+    shared_entities: list[str] = Field(default_factory=list)
     rationale: str = Field(min_length=1)
 
 

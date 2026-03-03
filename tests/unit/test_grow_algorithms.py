@@ -2364,6 +2364,43 @@ class TestApplyKnotMark:
         group = next(iter(group_nodes.values()))
         assert "resolved_location" not in group
 
+    def test_shared_entities_and_rationale_stored_on_group(self) -> None:
+        """shared_entities and rationale are stored on the intersection_group node."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        apply_intersection_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            "market",
+            shared_entities=["entity::merchant"],
+            rationale="Both beats involve the merchant at the market.",
+        )
+
+        group_nodes = graph.get_nodes_by_type("intersection_group")
+        assert len(group_nodes) == 1
+        group = next(iter(group_nodes.values()))
+        assert group["shared_entities"] == ["entity::merchant"]
+        assert group["rationale"] == "Both beats involve the merchant at the market."
+
+    def test_shared_entities_defaults_to_empty_list(self) -> None:
+        """When shared_entities is omitted, group stores an empty list."""
+        from questfoundry.graph.grow_algorithms import apply_intersection_mark
+        from tests.fixtures.grow_fixtures import make_intersection_candidate_graph
+
+        graph = make_intersection_candidate_graph()
+        apply_intersection_mark(
+            graph,
+            ["beat::mentor_meet", "beat::artifact_discover"],
+            "market",
+        )
+
+        group_nodes = graph.get_nodes_by_type("intersection_group")
+        group = next(iter(group_nodes.values()))
+        assert group["shared_entities"] == []
+        assert group["rationale"] == ""
+
 
 class TestFormatIntersectionCandidates:
     """Tests for format_intersection_candidates()."""

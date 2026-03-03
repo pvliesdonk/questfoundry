@@ -1917,6 +1917,8 @@ def apply_intersection_mark(
     graph: Graph,
     beat_ids: list[str],
     resolved_location: str | None,
+    shared_entities: list[str] | None = None,
+    rationale: str | None = None,
 ) -> None:
     """Mark beats as co-occurring in an intersection group (Doc 3, Part 4).
 
@@ -1928,6 +1930,8 @@ def apply_intersection_mark(
         graph: Graph to mutate.
         beat_ids: Beat IDs to group into intersection.
         resolved_location: Resolved location, or None.
+        shared_entities: Entity IDs shared between the intersecting beats.
+        rationale: One-sentence explanation of why these beats form a natural scene.
     """
     # Derive a stable group ID from the sorted beat IDs
     sorted_ids = sorted(beat_ids)
@@ -1943,6 +1947,8 @@ def apply_intersection_mark(
         "type": "intersection_group",
         "raw_id": raw_group_id,
         "beat_ids": sorted_ids,
+        "shared_entities": shared_entities or [],
+        "rationale": rationale or "",
     }
     if resolved_location:
         group_data["resolved_location"] = resolved_location
