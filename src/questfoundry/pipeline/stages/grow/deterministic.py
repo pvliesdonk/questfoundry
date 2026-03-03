@@ -66,9 +66,9 @@ async def phase_validate_dag(graph: Graph, model: BaseChatModel) -> GrowPhaseRes
 
 @grow_phase(
     name="interleave_beats",
-    depends_on=["intersections"],
+    depends_on=["resolve_temporal_hints"],
     is_deterministic=True,
-    priority=2,
+    priority=3,
 )
 async def phase_interleave_beats(
     graph: Graph,
@@ -92,7 +92,8 @@ async def phase_interleave_beats(
 
     Postconditions:
     - Cross-path ``predecessor`` edges created according to relationship type.
-    - DAG remains acyclic (cycle-inducing edges are skipped with warnings).
+    - DAG remains acyclic (raises RuntimeError if a cycle is detected — this
+      indicates resolve_temporal_hints failed to clear a conflicting hint).
     - No predecessor edges created between beats in the same intersection group.
 
     Invariants:
@@ -102,7 +103,14 @@ async def phase_interleave_beats(
     """
     from questfoundry.graph.grow_algorithms import interleave_cross_path_beats
 
-    edges_created = interleave_cross_path_beats(graph)
+    try:
+        edges_created = interleave_cross_path_beats(graph)
+    except RuntimeError as e:
+        return GrowPhaseResult(
+            phase="interleave_beats",
+            status="failed",
+            detail=str(e),
+        )
 
     return GrowPhaseResult(
         phase="interleave_beats",

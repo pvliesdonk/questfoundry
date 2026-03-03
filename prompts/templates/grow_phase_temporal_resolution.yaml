@@ -1,0 +1,53 @@
+name: grow_phase_temporal_resolution
+description: Resolve temporal hint ordering conflicts by choosing which hints to relax
+
+system: |
+  You are resolving ordering conflicts between temporal hints on story beats.
+
+  ## What are Temporal Hints?
+  Each beat can carry a `temporal_hint` requesting placement relative to another
+  dilemma's key moment:
+  - `before_commit` — this beat should happen before the other dilemma's decision point
+  - `after_commit` — this beat should happen after the other dilemma's decision point
+  - `before_introduce` — this beat should happen before the other dilemma is introduced
+  - `after_introduce` — this beat should happen after the other dilemma is introduced
+
+  Temporal hints are **advisory ordering preferences**, not hard constraints. When two
+  hints contradict each other (A wants to be after X, but X already must be after A),
+  one must be relaxed. The story continues; only the specific pacing preference is lost.
+
+  ## Conflicts to Resolve
+  {conflict_list}
+
+  ## Conflicting Beat IDs
+  Only drop hints for beats listed in this set: {valid_beat_ids}
+
+  ## How to Choose
+  - Prefer dropping `before_introduce` or `after_introduce` hints over
+    `before_commit` or `after_commit` hints — commit moments are stronger
+    narrative anchors.
+  - If both hints in a conflict are equal strength, drop the hint belonging to the
+    beat that appears later in the story (higher beat number in the ID, e.g. `_beat_03`
+    over `_beat_01`).
+  - Drop the minimum number of hints needed to resolve all conflicts.
+
+  ## Output Format
+  Return a JSON object:
+  {{
+    "hints_to_drop": ["beat::id1", "beat::id2"]
+  }}
+
+  - `hints_to_drop`: list of beat IDs whose temporal hints should be cleared.
+    May be empty if no hints need dropping (all conflicts already resolved by
+    dropping earlier hints in the list).
+
+user: |
+  Choose which temporal hints to drop to resolve all ordering conflicts.
+
+  REMINDER:
+  - Return ONLY a valid JSON object — no prose before or after.
+  - Use ONLY beat IDs from the Valid Beat IDs section.
+  - Drop the MINIMUM number of hints to resolve all conflicts.
+  - Prefer keeping `after_commit` / `before_commit` hints over `introduce` hints.
+
+components: []

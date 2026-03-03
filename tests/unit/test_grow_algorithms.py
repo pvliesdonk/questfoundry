@@ -3562,11 +3562,12 @@ class TestConditionalPrerequisiteInvariant:
         assert errors == []
 
     def test_phase_order_intersections_before_interleave(self, tmp_path: Path) -> None:
-        """Intersections must execute before interleave_beats (#1124).
+        """Phase order: intersections → resolve_temporal_hints → interleave_beats (#1123/#1124).
 
-        Running intersections on a clean beat DAG (no predecessor edges)
-        ensures the conditional-prerequisites check always passes — no
-        interleave-created edges can invalidate intersection proposals.
+        - intersections runs on a clean beat DAG (no predecessor edges) so the
+          conditional-prerequisites check always passes (#1124).
+        - resolve_temporal_hints detects and resolves hint cycles before interleave
+          creates any edges; interleave hard-fails if a cycle slips through (#1123).
         """
         from questfoundry.pipeline.stages.grow import GrowStage
 
@@ -3574,10 +3575,15 @@ class TestConditionalPrerequisiteInvariant:
         phase_names = [name for _, name in stage._phase_order()]
 
         intersection_idx = phase_names.index("intersections")
+        resolve_idx = phase_names.index("resolve_temporal_hints")
         interleave_idx = phase_names.index("interleave_beats")
 
-        assert intersection_idx < interleave_idx, (
+        assert intersection_idx < resolve_idx, (
             f"'intersections' (index {intersection_idx}) must come before "
+            f"'resolve_temporal_hints' (index {resolve_idx})"
+        )
+        assert resolve_idx < interleave_idx, (
+            f"'resolve_temporal_hints' (index {resolve_idx}) must come before "
             f"'interleave_beats' (index {interleave_idx})"
         )
 
@@ -4636,3 +4642,118 @@ class TestInterleavecrossPathBeats:
             f"Expected no predecessor edges between co-intersected beats, "
             f"got {same_intersection_edges}"
         )
+
+    def test_cycle_raises_runtime_error(self) -> None:
+        """A temporal hint that creates a cycle raises RuntimeError (#1129).
+
+        resolve_temporal_hints must clear conflicting hints before interleave
+        runs.  If a cycle slips through, interleave_cross_path_beats must raise
+        rather than silently skip so the pipeline fails loudly.
+        """
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Force an existing cross-path edge that will conflict with the hint:
+        # aq_commit → mt_intro already in graph (mt_intro after aq_commit).
+        graph.add_edge("predecessor", "beat::mt_intro", "beat::aq_commit")
+        # Now add a hint that tries to put aq_intro after mt_commit, which would
+        # close the cycle: aq_commit → mt_intro → mt_commit → aq_intro → aq_commit.
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_commit",
+            },
+        )
+
+        import pytest
+
+        with pytest.raises(RuntimeError, match="would create a cycle"):
+            interleave_cross_path_beats(graph)
+
+
+class TestDetectTemporalHintConflicts:
+    """Tests for detect_temporal_hint_conflicts (#1123)."""
+
+    def test_no_conflicts_when_no_hints(self) -> None:
+        """Returns empty list when no beats have temporal hints."""
+        from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        conflicts = detect_temporal_hint_conflicts(graph)
+        assert conflicts == []
+
+    def test_no_conflicts_when_hints_are_consistent(self) -> None:
+        """Returns empty list when hints do not create cycles."""
+        from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # mt_intro wants to come after artifact_quest's commit — no cycle possible
+        # since aq_commit has no hint that puts it after mt_intro
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        conflicts = detect_temporal_hint_conflicts(graph)
+        assert conflicts == []
+
+    def test_detects_direct_cycle(self) -> None:
+        """Detects a direct cycle: A after B's commit, B's commit after A."""
+        from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # mt_intro wants to come after aq_commit
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        # aq_intro wants to come after mt_commit — AND mt_commit is the only
+        # mt commit, so effectively aq_commit (which comes after aq_intro) must
+        # precede mt_intro, which must precede mt_commit.
+        # This creates: mt_commit → aq_intro (aq after mt commit)
+        # Combined with: aq_commit → mt_intro (mt after aq commit)
+        # and: mt_intro → mt_commit (within mt path)
+        # → cycle: aq_commit → mt_intro → mt_commit → [heuristic] ... potential cycle
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_commit",
+            },
+        )
+        # Cycle: mt_intro after aq_commit → aq_commit ≺ mt_intro.
+        #        aq_intro after mt_commit → mt_commit ≺ aq_intro.
+        #        Within-path: mt_intro ≺ mt_commit and aq_intro ≺ aq_commit.
+        # Simulation applies first hint (aq_commit → mt_intro) successfully.
+        # Second hint (mt_commit → aq_intro) would complete the cycle:
+        #   mt_commit → aq_intro → aq_commit → mt_intro → mt_commit.
+        # The function must detect this and report at least one conflict.
+        conflicts = detect_temporal_hint_conflicts(graph)
+        assert len(conflicts) >= 1
+
+    def test_strip_temporal_hints_by_id(self) -> None:
+        """strip_temporal_hints_by_id clears hints for the specified beats."""
+        from questfoundry.graph.grow_algorithms import strip_temporal_hints_by_id
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={"relative_to": "dilemma::artifact_quest", "position": "after_commit"},
+        )
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={"relative_to": "dilemma::mentor_trust", "position": "before_commit"},
+        )
+
+        stripped = strip_temporal_hints_by_id(graph, {"beat::mt_intro"})
+        assert stripped == 1
+
+        # mt_intro hint cleared, aq_intro hint preserved
+        mt_data = graph.get_node("beat::mt_intro") or {}
+        aq_data = graph.get_node("beat::aq_intro") or {}
+        assert mt_data.get("temporal_hint") is None
+        assert aq_data.get("temporal_hint") is not None

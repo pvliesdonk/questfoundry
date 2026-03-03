@@ -82,6 +82,7 @@ from questfoundry.models.grow import (
     Phase8cOutput,
     SceneTypeTag,
     StateFlag,
+    TemporalResolutionOutput,
 )
 from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.polish import (
@@ -245,6 +246,7 @@ __all__ = [
     "StateFlag",
     "TemporalHint",
     "TemporalPosition",
+    "TemporalResolutionOutput",
     "VariantSpec",
     "VariantSummaryItem",
     "VoiceDocument",
