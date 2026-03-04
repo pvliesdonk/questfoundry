@@ -4834,11 +4834,11 @@ class TestDetectTemporalHintConflicts:
         )
 
     def test_serial_edges_are_simulated(self) -> None:
-        """Serial relationship edges are simulated so concurrent hints see their state.
+        """Serial relationship edges are simulated (exercises the serial branch, no conflicts).
 
         If A serial B, the simulation adds predecessor(first_b, last_a), meaning
-        last_a must precede first_b. A concurrent hint that would cycle against
-        this serial edge must be detected.
+        last_a must precede first_b. Verifies that the serial branch runs without
+        crashing and produces no false-positive conflicts for a compatible hint.
         """
         from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
 
@@ -4906,12 +4906,13 @@ class TestDetectTemporalHintConflicts:
         assert detect_temporal_hint_conflicts(graph) == []
 
     def test_wraps_edges_are_simulated(self) -> None:
-        """Wraps relationship edges are simulated so concurrent hints see their state.
+        """Wraps relationship edges are simulated (exercises the wraps branch, no conflicts).
 
         If A wraps B, the simulation adds:
           - first_b after first_a (A's intro before B's intro)
           - commit_a after last_b (B finishes before A commits)
-        A concurrent hint that would cycle against these wraps edges must be detected.
+        Verifies that the wraps branch runs without crashing and produces no false-positive
+        conflicts for a compatible hint.
         """
         from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
 
