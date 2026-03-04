@@ -346,13 +346,17 @@ class _LLMPhaseMixin:
     async def _phase_resolve_temporal_hints(
         self, graph: Graph, model: BaseChatModel
     ) -> GrowPhaseResult:
-        """Detect and resolve temporal hint ordering conflicts before interleave (#1123).
+        """Detect and resolve temporal hint ordering conflicts before interleave (#1123, #1140).
 
-        Temporal hints on beats request placement relative to another dilemma's
-        key moment (e.g. "after dilemma X's commit point"). When serialized
-        independently, two beats may request mutually exclusive orderings. This
-        phase detects those cycles deterministically and, if any exist, calls the
-        LLM to choose which hints to relax.
+        Uses ``build_hint_conflict_graph`` to perform a complete conflict analysis:
+
+        1. Builds a base DAG from all non-hint edges.
+        2. Tests each hint alone — mandatory solo drops are applied immediately
+           without an LLM call.
+        3. Tests surviving hints pairwise for mutual exclusion — swap pairs are
+           presented to the LLM for narrative resolution.
+        4. Verifies all survivors are acyclic (postcondition) before returning.
+           Raises ``TemporalHintResolutionInvariantError`` if the check fails.
 
         Preconditions:
         - Beat DAG validated (Phase 1 passed).
@@ -363,21 +367,23 @@ class _LLMPhaseMixin:
         - No hint cycles remain: ``interleave_beats`` can apply all surviving
           hints without silently dropping any as cycle-creating.
         - Dropped hints are nulled out on beat nodes.
-        - ``interleave_cycle_skipped`` warnings no longer appear in valid runs.
 
         Invariants:
         - No-op if no conflicts detected (no LLM call).
-        - LLM call only made when cycles exist.
+        - LLM call only made when swap pairs exist.
         - Does not create any graph edges — only strips hints from nodes.
         """
+        from questfoundry.graph.errors import TemporalHintResolutionInvariantError
         from questfoundry.graph.grow_algorithms import (
-            detect_temporal_hint_conflicts,
+            build_hint_conflict_graph,
             strip_temporal_hints_by_id,
+            verify_hints_acyclic,
         )
         from questfoundry.models.grow import TemporalResolutionOutput
 
-        conflicts = detect_temporal_hint_conflicts(graph)
-        if not conflicts:
+        result = build_hint_conflict_graph(graph)
+
+        if not result.conflicts:
             log.info("resolve_temporal_hints_no_conflicts")
             return GrowPhaseResult(
                 phase="resolve_temporal_hints",
@@ -387,66 +393,165 @@ class _LLMPhaseMixin:
 
         log.info(
             "resolve_temporal_hints_conflicts_found",
-            count=len(conflicts),
-            beat_ids=[c.beat_id for c in conflicts],
+            mandatory_drops=len(result.mandatory_drops),
+            swap_pairs=len(result.swap_pairs),
+            mandatory_beat_ids=sorted(result.mandatory_drops),
         )
 
-        # Build conflict description for the LLM
-        conflict_lines: list[str] = []
-        for i, c in enumerate(conflicts, 1):
-            conflict_lines.append(
-                f"  Conflict {i}: beat `{c.beat_id}` has hint "
-                f"`{c.hint_position} {c.hint_relative_to}` — "
-                f"this would create edge `{c.from_beat}` → `{c.to_beat}`, "
-                f"which cycles with existing ordering constraints.\n"
-                f"    <summary>{c.beat_summary or '(no summary)'}</summary>"
-            )
-        conflict_list_text = "\n".join(conflict_lines)
+        # Apply mandatory drops immediately — no LLM needed
+        beats_to_drop: set[str] = set(result.mandatory_drops)
 
-        valid_beat_ids = sorted({c.beat_id for c in conflicts})
-        context: dict[str, str] = {
-            "conflict_list": conflict_list_text,
-            "valid_beat_ids": ", ".join(f"`{b}`" for b in valid_beat_ids),
-        }
+        total_llm_calls = 0
+        total_tokens = 0
 
-        try:
-            result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
-                model=model,
-                template_name="grow_phase_temporal_resolution",
-                context=context,
-                output_schema=TemporalResolutionOutput,
-                semantic_validator=None,
-            )
-        except GrowStageError as e:
-            return GrowPhaseResult(
-                phase="resolve_temporal_hints",
-                status="failed",
-                detail=str(e),
-            )
+        # If there are swap pairs, ask the LLM to choose
+        if result.swap_pairs:
+            # Build context for each swap pair
+            beat_nodes = graph.get_nodes_by_type("beat")
+            swap_pairs_lines: list[str] = []
+            for idx, (beat_a_id, beat_b_id) in enumerate(result.swap_pairs, 1):
+                group_id = f"P{idx}"
+                data_a = beat_nodes.get(beat_a_id, {})
+                data_b = beat_nodes.get(beat_b_id, {})
+                hint_a = data_a.get("temporal_hint") or {}
+                hint_b = data_b.get("temporal_hint") or {}
+                pos_a = hint_a.get("position", "unknown")
+                rel_a = hint_a.get("relative_to", "unknown")
+                pos_b = hint_b.get("position", "unknown")
+                rel_b = hint_b.get("relative_to", "unknown")
+                strength_a = (
+                    "STRONG: after/before_commit"
+                    if "commit" in pos_a
+                    else "WEAK: after/before_introduce"
+                )
+                strength_b = (
+                    "STRONG: after/before_commit"
+                    if "commit" in pos_b
+                    else "WEAK: after/before_introduce"
+                )
+                summary_a = (data_a.get("summary") or "(no summary)")[:100]
+                summary_b = (data_b.get("summary") or "(no summary)")[:100]
 
-        beats_to_drop: set[str] = set(result.hints_to_drop)
-        # Validate IDs — only drop hints for beats that have conflicts
-        valid_set = set(valid_beat_ids)
-        beats_to_drop = {b for b in beats_to_drop if b in valid_set}
+                # Find the default drop from the conflict list
+                default_drop = beat_a_id  # fallback
+                for c in result.conflicts:
+                    if not c.mandatory and {c.beat_a, c.beat_b} == {beat_a_id, beat_b_id}:
+                        default_drop = c.default_drop
+                        break
 
+                swap_pairs_lines.append(
+                    f"### Swap Pair {group_id} — DROP EXACTLY ONE:\n"
+                    f"  Option A: `{beat_a_id}` | hint: `{pos_a} {rel_a}` [{strength_a}]\n"
+                    f"            Summary: {summary_a}\n"
+                    f"  Option B: `{beat_b_id}` | hint: `{pos_b} {rel_b}` [{strength_b}]\n"
+                    f"            Summary: {summary_b}\n"
+                    f"  Mechanical default: drop Option {'A' if default_drop == beat_a_id else 'B'} "
+                    f"(based on hint strength + beat role heuristic)"
+                )
+
+            swap_pairs_context = "\n\n".join(swap_pairs_lines)
+            context: dict[str, str] = {"swap_pairs_context": swap_pairs_context}
+
+            try:
+                llm_result, llm_calls, tokens = await self._grow_llm_call(  # type: ignore[attr-defined]
+                    model=model,
+                    template_name="grow_phase_temporal_resolution",
+                    context=context,
+                    output_schema=TemporalResolutionOutput,
+                    semantic_validator=None,
+                )
+                total_llm_calls += llm_calls
+                total_tokens += tokens
+            except GrowStageError as e:
+                log.warning(
+                    "resolve_temporal_hints_llm_failed_using_defaults",
+                    error=str(e),
+                    swap_pairs=len(result.swap_pairs),
+                )
+                # Fall back to mechanical defaults
+                for beat_a_id, beat_b_id in result.swap_pairs:
+                    for c in result.conflicts:
+                        if not c.mandatory and {c.beat_a, c.beat_b} == {beat_a_id, beat_b_id}:
+                            beats_to_drop.add(c.default_drop)
+                            break
+            else:
+                # Validate and apply LLM resolutions
+                valid_swap_beats: dict[str, tuple[str, str]] = {
+                    f"P{idx}": (a, b) for idx, (a, b) in enumerate(result.swap_pairs, 1)
+                }
+                for resolution in llm_result.resolutions:
+                    pair = valid_swap_beats.get(resolution.group_id)
+                    if pair is None:
+                        log.warning(
+                            "resolve_temporal_hints_invalid_group_id",
+                            group_id=resolution.group_id,
+                        )
+                        continue
+                    beat_a_id, beat_b_id = pair
+                    if resolution.drop_beat_id in (beat_a_id, beat_b_id):
+                        beats_to_drop.add(resolution.drop_beat_id)
+                    else:
+                        log.warning(
+                            "resolve_temporal_hints_invalid_drop_beat",
+                            group_id=resolution.group_id,
+                            drop_beat_id=resolution.drop_beat_id,
+                            valid_options=f"`{beat_a_id}` or `{beat_b_id}`",
+                        )
+                        # Fall back to mechanical default
+                        for c in result.conflicts:
+                            if not c.mandatory and {c.beat_a, c.beat_b} == {beat_a_id, beat_b_id}:
+                                beats_to_drop.add(c.default_drop)
+                                break
+
+                # Fill in any missing resolutions with mechanical defaults
+                resolved_groups = {r.group_id for r in llm_result.resolutions}
+                for idx, (beat_a_id, beat_b_id) in enumerate(result.swap_pairs, 1):
+                    group_id = f"P{idx}"
+                    if group_id not in resolved_groups:
+                        log.warning(
+                            "resolve_temporal_hints_missing_resolution",
+                            group_id=group_id,
+                            using_default=True,
+                        )
+                        for c in result.conflicts:
+                            if not c.mandatory and {c.beat_a, c.beat_b} == {beat_a_id, beat_b_id}:
+                                beats_to_drop.add(c.default_drop)
+                                break
+
+        # Strip the resolved hints
         stripped = strip_temporal_hints_by_id(graph, beats_to_drop)
 
         log.info(
             "temporal_hint_conflict_resolved",
-            conflicts=len(conflicts),
-            hints_dropped=stripped,
+            mandatory_drops=len(result.mandatory_drops),
+            swap_pairs=len(result.swap_pairs),
+            total_hints_dropped=stripped,
             dropped_beats=sorted(beats_to_drop),
         )
+
+        # Postcondition: verify no surviving hints still cycle
+        all_beat_ids_with_hints: set[str] = set()
+        for bid, data in graph.get_nodes_by_type("beat").items():
+            if data.get("temporal_hint") is not None:
+                all_beat_ids_with_hints.add(bid)
+
+        surviving = all_beat_ids_with_hints - beats_to_drop
+        still_cyclic = verify_hints_acyclic(graph, surviving)
+        if still_cyclic:
+            raise TemporalHintResolutionInvariantError(
+                still_cyclic=still_cyclic,
+                dropped=beats_to_drop,
+            )
 
         return GrowPhaseResult(
             phase="resolve_temporal_hints",
             status="completed",
             detail=(
-                f"Resolved {len(conflicts)} temporal hint conflict(s): "
+                f"Resolved {len(result.conflicts)} temporal hint conflict(s): "
                 f"dropped {stripped} hint(s) from {sorted(beats_to_drop)}"
             ),
-            llm_calls=llm_calls,
-            tokens_used=tokens,
+            llm_calls=total_llm_calls,
+            tokens_used=total_tokens,
         )
 
     @grow_phase(name="scene_types", depends_on=["interleave_beats"], priority=4)

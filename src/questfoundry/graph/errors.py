@@ -269,6 +269,32 @@ class EdgeEndpointError(GraphIntegrityError):
         return "\n".join(lines)
 
 
+class TemporalHintResolutionInvariantError(Exception):
+    """Raised when temporal hint resolution fails its postcondition.
+
+    After ``resolve_temporal_hints`` applies mandatory drops and LLM-chosen
+    swaps, ``verify_hints_acyclic`` must confirm no surviving hints still
+    create cycles.  If that check fails, the pipeline cannot continue — silent
+    degradation (dropping surviving hints without LLM consent) would violate
+    the story-structure contract.
+
+    Attributes:
+        still_cyclic: Beat IDs whose hints still cycle after resolution.
+        dropped: Beat IDs whose hints were dropped during resolution.
+    """
+
+    def __init__(self, still_cyclic: list[str], dropped: set[str]) -> None:
+        self.still_cyclic = still_cyclic
+        self.dropped = dropped
+        ids = ", ".join(f"`{b}`" for b in sorted(still_cyclic))
+        super().__init__(
+            f"Temporal hint resolution invariant violated: {len(still_cyclic)} hint(s) "
+            f"still cycle after resolution — {ids}. "
+            f"Dropped: {sorted(dropped)}. "
+            "This is a pipeline bug; please report with graph state."
+        )
+
+
 @dataclass
 class GraphCorruptionError(Exception):
     """Raised when post-mutation invariant checks detect graph corruption.
