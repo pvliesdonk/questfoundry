@@ -483,10 +483,9 @@ class _LLMPhaseMixin:
                 )
                 # Fall back to mechanical defaults
                 for beat_a_id, beat_b_id in result.swap_pairs:
-                    for c in result.conflicts:
-                        if not c.mandatory and {c.beat_a, c.beat_b} == {beat_a_id, beat_b_id}:
-                            beats_to_drop.add(c.default_drop)
-                            break
+                    default_drop = swap_conflict_by_pair.get(frozenset({beat_a_id, beat_b_id}))
+                    if default_drop is not None:
+                        beats_to_drop.add(default_drop)
             else:
                 # Validate and apply LLM resolutions
                 valid_swap_beats: dict[str, tuple[str, str]] = {
@@ -511,10 +510,9 @@ class _LLMPhaseMixin:
                             valid_options=f"`{beat_a_id}` or `{beat_b_id}`",
                         )
                         # Fall back to mechanical default
-                        for c in result.conflicts:
-                            if not c.mandatory and {c.beat_a, c.beat_b} == {beat_a_id, beat_b_id}:
-                                beats_to_drop.add(c.default_drop)
-                                break
+                        default_drop = swap_conflict_by_pair.get(frozenset({beat_a_id, beat_b_id}))
+                        if default_drop is not None:
+                            beats_to_drop.add(default_drop)
 
                 # Fill in any missing resolutions with mechanical defaults
                 resolved_groups = {r.group_id for r in llm_result.resolutions}
@@ -526,10 +524,9 @@ class _LLMPhaseMixin:
                             group_id=group_id,
                             using_default=True,
                         )
-                        for c in result.conflicts:
-                            if not c.mandatory and {c.beat_a, c.beat_b} == {beat_a_id, beat_b_id}:
-                                beats_to_drop.add(c.default_drop)
-                                break
+                        default_drop = swap_conflict_by_pair.get(frozenset({beat_a_id, beat_b_id}))
+                        if default_drop is not None:
+                            beats_to_drop.add(default_drop)
 
         # Strip the resolved hints
         stripped = strip_temporal_hints_by_id(graph, beats_to_drop)

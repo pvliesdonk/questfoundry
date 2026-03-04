@@ -3105,7 +3105,9 @@ def verify_hints_acyclic(
     means all surviving hints are consistent.
 
     Args:
-        graph: The story graph (temporal_hint values not yet stripped).
+        graph: The story graph.  Dropped beats may already have
+            ``temporal_hint=None`` (already stripped) or may still carry their
+            hint value; either way only ``surviving_beat_ids`` are simulated.
         surviving_beat_ids: Beat IDs whose hints have NOT been dropped.
 
     Returns:
