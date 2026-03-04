@@ -2837,7 +2837,7 @@ def _simulate_hints_sequential(
 
     for hint in hint_edges:
         from_b, to_b = hint.from_beat, hint.to_beat
-        # Validity checks (mirror _build_base_dag._valid logic)
+        # Validity checks (mirror _build_hint_base_dag._valid logic)
         if from_b == to_b or from_b not in beat_set or to_b not in beat_set:
             continue
         if (from_b, to_b) in working_existing:
@@ -2889,8 +2889,7 @@ def _build_hint_base_dag(
         existing.add((edge["from"], edge["to"]))
     succ: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
     for from_id, to_id in existing:
-        if from_id in succ and to_id in succ:
-            succ[to_id].add(from_id)
+        succ[to_id].add(from_id)
 
     def _valid(from_b: str, to_b: str) -> bool:
         if from_b == to_b or (from_b, to_b) in existing:
