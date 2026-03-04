@@ -122,18 +122,33 @@ class Phase3Output(BaseModel):
     intersections: list[IntersectionProposal] = Field(default_factory=list)
 
 
-class TemporalResolutionOutput(BaseModel):
-    """Structured output for the resolve_temporal_hints phase (#1123).
+class ConflictGroupResolution(BaseModel):
+    """LLM decision for a single swap pair in the resolve_temporal_hints phase.
 
-    The LLM returns the beat IDs whose temporal hints should be cleared
-    to resolve ordering conflicts in the beat DAG.
+    The LLM receives a group ID (e.g. 'P1') and must choose which of the two
+    beats in the swap pair to drop.
     """
 
-    hints_to_drop: list[str] = Field(
+    group_id: str = Field(description="The group ID from the conflict list (e.g. 'P1', 'P2')")
+    drop_beat_id: str = Field(description="The beat ID whose temporal hint should be dropped")
+    reason: str = Field(
+        min_length=1,
+        description="One-sentence narrative justification for the choice",
+    )
+
+
+class TemporalResolutionOutput(BaseModel):
+    """Structured output for the resolve_temporal_hints phase (#1123, #1140).
+
+    Mandatory drops are applied before the LLM call and are not listed here.
+    The LLM only resolves swap pairs — beats where either hint can survive
+    but not both.
+    """
+
+    resolutions: list[ConflictGroupResolution] = Field(
         default_factory=list,
         description=(
-            "Beat IDs whose temporal hints should be dropped to resolve "
-            "ordering conflicts. May be empty if conflicts are already resolved."
+            "One resolution per swap pair. Mandatory drops are pre-applied and not listed here."
         ),
     )
 

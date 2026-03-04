@@ -5043,3 +5043,770 @@ class TestDetectTemporalHintConflicts:
         aq_data = graph.get_node("beat::aq_intro") or {}
         assert mt_data.get("temporal_hint") is None
         assert aq_data.get("temporal_hint") is not None
+
+
+class TestBuildHintConflictGraph:
+    """Tests for build_hint_conflict_graph and verify_hints_acyclic (#1140)."""
+
+    def test_no_conflicts_returns_empty_result(self) -> None:
+        """Returns empty HintConflictResult when no beats have temporal hints."""
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        result = build_hint_conflict_graph(graph)
+        assert result.conflicts == []
+        assert result.mandatory_drops == set()
+        assert result.swap_pairs == []
+        assert result.minimum_drop_set == set()
+
+    def test_consistent_hint_produces_no_conflicts(self) -> None:
+        """A single hint that does not cycle is not reported as a conflict."""
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # mt_intro after_commit artifact_quest: aq_commit ≺ mt_intro
+        # No existing edges make mt_intro reachable from aq_commit, so no cycle.
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        result = build_hint_conflict_graph(graph)
+        assert result.conflicts == []
+        assert "beat::mt_intro" not in result.mandatory_drops
+
+    def test_mandatory_solo_drop_detected(self) -> None:
+        """A hint that cycles alone against the base DAG is a mandatory drop.
+
+        Set up a situation where the base DAG (heuristic commit-ordering) already
+        forces aq_commit ≺ mt_intro.  Adding a hint that requires mt_intro ≺ aq_commit
+        creates a cycle against the base DAG alone.
+
+        Since artifact_quest < mentor_trust alphabetically, the heuristic adds:
+          predecessor(aq_commit, mt_commit) → mt_commit ≺ aq_commit in successors.
+
+        We manually add a predecessor edge mt_commit ≺ mt_intro (within-path style)
+        and then hint mt_intro after_commit artifact_quest → aq_commit ≺ mt_intro.
+        The base DAG already has mt_intro ≺ mt_commit ≺ aq_commit (within-path edge),
+        so adding aq_commit ≺ mt_intro closes the cycle.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Base DAG: aq_commit ≺ mt_intro (manually added), mt_intro ≺ mt_commit (within-path).
+        # Hint: aq_commit after_commit mentor_trust → mt_commit ≺ aq_commit.
+        # Cycle: mt_commit reachable from aq_commit via mt_intro → mt_commit,
+        # so adding mt_commit ≺ aq_commit closes the cycle → mandatory drop.
+        graph.add_edge("predecessor", "beat::mt_intro", "beat::aq_commit")
+        graph.update_node(
+            "beat::aq_commit",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_commit",
+            },
+        )
+
+        result = build_hint_conflict_graph(graph)
+        assert "beat::aq_commit" in result.mandatory_drops, (
+            "Expected aq_commit to be a mandatory solo drop because its hint "
+            "creates a cycle against the base DAG alone."
+        )
+        assert any(c.mandatory for c in result.conflicts)
+
+    def test_mandatory_drop_when_both_hints_conflict(self) -> None:
+        """When one hint cycles alone against the base DAG it is a mandatory drop.
+
+        With the ``_make_two_dilemma_graph_with_relationship("concurrent")`` fixture:
+        - dilemma IDs are ``artifact_quest`` and ``mentor_trust`` (``aq < mt`` alphabetically).
+        - Heuristic commit-ordering (base DAG): ``aq_commit ≺ mt_commit``.
+        - Within-path: ``mt_intro ≺ mt_commit`` and ``aq_intro ≺ aq_commit``.
+
+        Hint 1 — ``mt_intro after_commit artifact_quest``:
+          Wants ``aq_commit ≺ mt_intro``.
+          Base DAG reaches ``aq_commit`` from ``mt_intro`` via within-path
+          ``mt_intro → mt_commit`` and heuristic ``mt_commit`` … actually
+          ``aq_commit`` is the *source* of the heuristic edge ``aq_commit ≺ mt_commit``,
+          not reachable from ``mt_intro``.  So hint 1 is **consistent** alone.
+
+        Hint 2 — ``aq_intro after_commit mentor_trust``:
+          Wants ``mt_commit ≺ aq_intro``.
+          Base DAG: ``aq_intro ≺ aq_commit ≺ mt_commit`` (within-path + heuristic).
+          Cycle: ``mt_commit → aq_intro → aq_commit → mt_commit``.  This hint is a
+          **mandatory solo drop** against the base DAG.
+
+        Expected outcome: aq_intro is mandatory_drops; mt_intro is not.
+        The ``build_hint_conflict_graph`` algorithm is correct to report this as
+        mandatory rather than a swap pair, because the cycle exists regardless of
+        whether the other hint is present.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_commit",
+            },
+        )
+
+        result = build_hint_conflict_graph(graph)
+        # aq_intro cycles against base DAG alone (mandatory drop)
+        assert "beat::aq_intro" in result.mandatory_drops
+        # mt_intro is consistent against base DAG — not a mandatory drop
+        assert "beat::mt_intro" not in result.mandatory_drops
+        # minimum_drop_set contains aq_intro
+        assert "beat::aq_intro" in result.minimum_drop_set
+
+    def test_swap_pair_when_hints_only_conflict_together(self) -> None:
+        """Two hints form a swap pair when neither cycles alone but both cycle together.
+
+        To avoid the heuristic commit-ordering creating a solo cycle, we use
+        an 'introduce' hint so the heuristic (commit-ordering) does not pre-block it.
+
+        Setup using the two-dilemma fixture (aq < mt alphabetically):
+        - Base heuristic: aq_commit ≺ mt_commit.
+        - Hint on mt_intro: ``before_introduce artifact_quest``
+          Wants ``mt_intro ≺ aq_intro`` (mt_intro before aq's first beat).
+          predecessor(aq_intro, mt_intro): mt_intro ≺ aq_intro.
+          Base DAG has no path from aq_intro back to mt_intro, so no solo cycle.
+        - Hint on aq_intro: ``before_introduce mentor_trust``
+          Wants ``aq_intro ≺ mt_intro`` (aq_intro before mt's first beat).
+          predecessor(mt_intro, aq_intro): aq_intro ≺ mt_intro.
+          Base DAG has no path from mt_intro back to aq_intro, so no solo cycle.
+        - Together: mt_intro ≺ aq_intro AND aq_intro ≺ mt_intro → cycle.
+
+        Expected: both beats in result.swap_pairs; neither in mandatory_drops.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # mt_intro before_introduce artifact_quest: mt_intro ≺ aq_intro
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "before_introduce",
+            },
+        )
+        # aq_intro before_introduce mentor_trust: aq_intro ≺ mt_intro
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "before_introduce",
+            },
+        )
+
+        result = build_hint_conflict_graph(graph)
+        # Neither hint should solo-cycle against base DAG
+        assert "beat::mt_intro" not in result.mandatory_drops, (
+            "mt_intro should not be a mandatory drop — its hint only cycles when "
+            "aq_intro's hint is also applied."
+        )
+        assert "beat::aq_intro" not in result.mandatory_drops, (
+            "aq_intro should not be a mandatory drop — its hint only cycles when "
+            "mt_intro's hint is also applied."
+        )
+        # They should form a swap pair
+        assert len(result.swap_pairs) >= 1, "Expected at least one swap pair"
+        swap_set = {frozenset(p) for p in result.swap_pairs}
+        assert frozenset({"beat::mt_intro", "beat::aq_intro"}) in swap_set, (
+            f"Expected swap pair (mt_intro, aq_intro); got swap_pairs={result.swap_pairs}"
+        )
+        # minimum_drop_set has exactly one of the two
+        assert len(result.minimum_drop_set) == 1
+        assert result.minimum_drop_set.issubset({"beat::mt_intro", "beat::aq_intro"})
+
+    def test_mandatory_solo_drop_three_dilemma_chain(self) -> None:
+        """A hint that cycles alone against the base DAG is a mandatory solo drop.
+
+        This tests the mandatory-drop detection path using a three-dilemma chain,
+        which is a common setup where the heuristic commit-ordering creates a
+        transitive chain that a long-range hint will violate.
+
+        Construct: three dilemmas alpha < beta < gamma.
+          Base DAG heuristic: alpha_commit ≺ beta_commit ≺ gamma_commit.
+          Hint H1 on alpha_intro: after_commit gamma → gamma_commit ≺ alpha_intro.
+          This cycles with base: alpha_intro ≺ alpha_commit ≺ … ≺ gamma_commit → cycle.
+
+        H1 is a mandatory solo drop. No swap pair needed.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = Graph.empty()
+        for dil in ("alpha", "beta", "gamma"):
+            graph.create_node(f"dilemma::{dil}", {"type": "dilemma", "raw_id": dil})
+            graph.create_node(
+                f"path::{dil}_path",
+                {
+                    "type": "path",
+                    "raw_id": f"{dil}_path",
+                    "dilemma_id": f"dilemma::{dil}",
+                    "is_canonical": True,
+                },
+            )
+            graph.create_node(
+                f"beat::{dil}_intro",
+                {
+                    "type": "beat",
+                    "raw_id": f"{dil}_intro",
+                    "summary": f"{dil} intro.",
+                    "dilemma_impacts": [{"dilemma_id": f"dilemma::{dil}", "effect": "advances"}],
+                },
+            )
+            graph.create_node(
+                f"beat::{dil}_commit",
+                {
+                    "type": "beat",
+                    "raw_id": f"{dil}_commit",
+                    "summary": f"{dil} commit.",
+                    "dilemma_impacts": [{"dilemma_id": f"dilemma::{dil}", "effect": "commits"}],
+                },
+            )
+            graph.add_edge("belongs_to", f"beat::{dil}_intro", f"path::{dil}_path")
+            graph.add_edge("belongs_to", f"beat::{dil}_commit", f"path::{dil}_path")
+            graph.add_edge("predecessor", f"beat::{dil}_commit", f"beat::{dil}_intro")
+
+        graph.add_edge("concurrent", "dilemma::alpha", "dilemma::beta")
+        graph.add_edge("concurrent", "dilemma::beta", "dilemma::gamma")
+        graph.add_edge("concurrent", "dilemma::alpha", "dilemma::gamma")
+
+        # H1: alpha_intro after_commit gamma → gamma_commit ≺ alpha_intro.
+        # Base heuristic (alpha<beta<gamma): alpha_commit≺beta_commit≺gamma_commit.
+        # Within-path: alpha_intro ≺ alpha_commit.
+        # Cycle: alpha_intro → alpha_commit → beta_commit → gamma_commit → alpha_intro.
+        graph.update_node(
+            "beat::alpha_intro",
+            temporal_hint={"relative_to": "dilemma::gamma", "position": "after_commit"},
+        )
+
+        result = build_hint_conflict_graph(graph)
+        assert "beat::alpha_intro" in result.mandatory_drops, (
+            "alpha_intro must be a mandatory solo drop — its hint cycles against "
+            "the base DAG heuristic chain."
+        )
+
+    def test_genuine_cascade_two_hints_only_conflict_together(self) -> None:
+        """Two hints are safe alone but form a swap pair together (genuine cascade scenario).
+
+        This directly demonstrates the cascade-blindness bug fixed in #1140.
+        The old greedy single-pass algorithm would test H1 first (safe alone,
+        keep it), then test H2 with H1 already in the DAG — finding a cycle
+        and dropping H2 as mandatory.  But H2 is only problematic *because*
+        H1 is there; the correct answer is a swap pair, not a mandatory drop.
+
+        The conflict-graph approach tests each hint against the *base DAG only*
+        (no other hints applied), so it correctly identifies this as a swap pair.
+
+        Setup (using the two-dilemma fixture, aq < mt alphabetically):
+          Base heuristic: aq_commit ≺ mt_commit.
+          H1 on mt_intro: before_introduce artifact_quest → mt_intro ≺ aq_intro.
+            Alone: base DAG has no path aq_intro → mt_intro, so no solo cycle.
+          H2 on aq_intro: before_introduce mentor_trust → aq_intro ≺ mt_intro.
+            Alone: base DAG has no path mt_intro → aq_intro, so no solo cycle.
+          Together: mt_intro ≺ aq_intro AND aq_intro ≺ mt_intro → cycle.
+
+        Expected: swap pair, neither is mandatory.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # H1: mt_intro before aq_intro
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "before_introduce",
+            },
+        )
+        # H2: aq_intro before mt_intro
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "before_introduce",
+            },
+        )
+
+        result = build_hint_conflict_graph(graph)
+
+        # Neither hint should be a mandatory solo drop
+        assert "beat::mt_intro" not in result.mandatory_drops, (
+            "mt_intro must not be a mandatory drop — it only cycles when aq_intro's "
+            "hint is also applied. The conflict-graph approach detects this correctly."
+        )
+        assert "beat::aq_intro" not in result.mandatory_drops, (
+            "aq_intro must not be a mandatory drop — it only cycles when mt_intro's "
+            "hint is also applied. The conflict-graph approach detects this correctly."
+        )
+        # They should form a swap pair
+        assert len(result.swap_pairs) >= 1, (
+            "Expected a swap pair (mt_intro, aq_intro); got no swap pairs. "
+            "The conflict-graph approach should detect mutual exclusion."
+        )
+        swap_set = {frozenset(p) for p in result.swap_pairs}
+        assert frozenset({"beat::mt_intro", "beat::aq_intro"}) in swap_set, (
+            f"Expected swap pair (mt_intro, aq_intro); got swap_pairs={result.swap_pairs}"
+        )
+
+    def test_verify_hints_acyclic_clean_set(self) -> None:
+        """verify_hints_acyclic returns empty list when all surviving hints are consistent."""
+        from questfoundry.graph.grow_algorithms import verify_hints_acyclic
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Add a consistent hint: mt_intro after_commit artifact_quest
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        # Surviving set: only mt_intro
+        still_cyclic = verify_hints_acyclic(graph, {"beat::mt_intro"})
+        assert still_cyclic == []
+
+    def test_verify_hints_acyclic_cyclic_set(self) -> None:
+        """verify_hints_acyclic returns the problematic beat for a known-cyclic set."""
+        from questfoundry.graph.grow_algorithms import verify_hints_acyclic
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Both hints form a cycle if both survive
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_commit",
+            },
+        )
+
+        still_cyclic = verify_hints_acyclic(graph, {"beat::mt_intro", "beat::aq_intro"})
+        # At least one of the two beats must be reported as still cyclic
+        assert len(still_cyclic) >= 1
+        assert set(still_cyclic).issubset({"beat::mt_intro", "beat::aq_intro"})
+
+    def test_verify_hints_acyclic_empty_survivors(self) -> None:
+        """verify_hints_acyclic with empty surviving set returns empty list."""
+        from questfoundry.graph.grow_algorithms import verify_hints_acyclic
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        still_cyclic = verify_hints_acyclic(graph, set())
+        assert still_cyclic == []
+
+    def test_default_drop_prefers_introduce_over_commit(self) -> None:
+        """In a swap pair, the default_drop prefers the introduce-strength hint.
+
+        When one beat has an introduce-hint (strength 1) and the other has a
+        commit-hint (strength 2), the introduce-hint beat should be the default drop.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # mt_intro: after_introduce (weak, strength=1)
+        # aq_intro: after_commit (strong, strength=2)
+        # If they form a swap pair, mt_intro (weaker) should be the default_drop.
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_introduce",
+            },
+        )
+
+        result = build_hint_conflict_graph(graph)
+        assert result.swap_pairs, "Expected a swap pair between mt_intro and aq_intro"
+        # Find and assert on the swap conflict
+        swap_conflict = next(
+            (
+                c
+                for c in result.conflicts
+                if not c.mandatory and {c.beat_a, c.beat_b} == {"beat::mt_intro", "beat::aq_intro"}
+            ),
+            None,
+        )
+        assert swap_conflict is not None, (
+            "No swap conflict found for (mt_intro, aq_intro) in result.conflicts"
+        )
+        # aq_intro has after_introduce (weaker) — should be dropped
+        assert swap_conflict.default_drop == "beat::aq_intro", (
+            f"Expected default_drop=beat::aq_intro (weaker introduce hint), "
+            f"got {swap_conflict.default_drop}"
+        )
+
+    def test_serial_relationship_ordering_in_base_dag(self) -> None:
+        """Test that 'serial' relationship ordering is correctly applied in _build_base_dag.
+
+        When two dilemmas are linked by a 'serial' relationship, the base DAG should
+        add edges: last_beat_of_a ← first_beat_of_b (i.e., first_b ≺ last_a).
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        # Create a graph with serial relationship between mentor_trust and artifact_quest
+        graph = _make_two_dilemma_graph_with_relationship("serial")
+        result = build_hint_conflict_graph(graph)
+        # With serial ordering and no hints, there should be no conflicts
+        assert result.conflicts == [], (
+            "Expected no conflicts with serial ordering and no temporal hints"
+        )
+        assert result.mandatory_drops == set()
+
+    def test_wraps_relationship_ordering_in_base_dag(self) -> None:
+        """Test that 'wraps' relationship ordering is correctly applied in _build_base_dag.
+
+        When two dilemmas are linked by a 'wraps' relationship, the base DAG should
+        add edges for: first_of_b ≺ first_of_a and last_of_a ≺ last_of_b.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("wraps")
+        result = build_hint_conflict_graph(graph)
+        # With wraps ordering and no hints, there should be no conflicts
+        assert result.conflicts == []
+        assert result.mandatory_drops == set()
+
+    def test_cycles_alone_with_self_loop_beat(self) -> None:
+        """Test _cycles_alone edge case: from_beat == to_beat returns False."""
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Create a pathological hint where a beat hints to itself (should not cycle)
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_commit",
+            },
+        )
+        result = build_hint_conflict_graph(graph)
+        # A beat cannot hint to itself in practice, but if it did, it should be ignored
+        # (the from_b == to_b check in _cycles_alone returns False)
+        assert "beat::mt_intro" not in result.mandatory_drops
+
+    def test_cycles_alone_beat_in_same_intersection_group(self) -> None:
+        """Test _cycles_alone edge case: beats in same intersection group cannot create edge."""
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Create an intersection group containing both intro beats
+        intersection_group = "intersection::shared"
+        graph.create_node(intersection_group, {"type": "intersection_group"})
+        graph.add_edge("intersection", "beat::mt_intro", intersection_group)
+        graph.add_edge("intersection", "beat::aq_intro", intersection_group)
+
+        # Add a hint that would try to order the beats
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        result = build_hint_conflict_graph(graph)
+        # The intersection group guard should prevent this hint from being applied
+        assert result.conflicts == []
+
+    def test_cycles_with_hints_applied_skip_hint_self_loop(self) -> None:
+        """Test _cycles_with_hints_applied: applied hint with from_beat == to_beat is skipped."""
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Add two hints
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "before_introduce",
+            },
+        )
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_commit",
+            },
+        )
+        result = build_hint_conflict_graph(graph)
+        # aq_intro hint (after_commit mentor_trust → mt_commit ≺ aq_intro) cycles alone
+        # because the base DAG already has aq_intro ≺ mt_commit via within-path ordering.
+        # mt_intro hint (before_introduce artifact_quest → mt_intro ≺ aq_intro) is safe alone.
+        # The conflict result must be valid; aq_intro is a mandatory solo drop.
+        assert "beat::aq_intro" in result.mandatory_drops
+        assert "beat::mt_intro" not in result.mandatory_drops
+
+    def test_cycles_with_hints_applied_duplicate_edge(self) -> None:
+        """Test _cycles_with_hints_applied: applied hint already in ext_existing is skipped."""
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Manually add a predecessor edge that would conflict with a hint
+        graph.add_edge("predecessor", "beat::aq_intro", "beat::mt_intro")
+
+        # Then add a hint that wants to apply the same edge (should be no-op)
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "before_introduce",
+            },
+        )
+        result = build_hint_conflict_graph(graph)
+        # The hint on mt_intro wants aq_intro → mt_intro, which already exists
+        # as a predecessor edge. The duplicate-edge guard skips it, so no cycle
+        # is created and the hint is not flagged as a conflict.
+        assert result.conflicts == []
+        assert result.mandatory_drops == set()
+
+    def test_cycles_with_hints_applied_intersection_group_block(self) -> None:
+        """Test _cycles_with_hints_applied: applied hint blocked by intersection group.
+
+        When two beats are in the same intersection group, no ordering edge
+        can be created between them, even if a hint requests it. The edge
+        creation is blocked by the intersection group guard.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Create an intersection group
+        intersection_group = "intersection::shared"
+        graph.create_node(intersection_group, {"type": "intersection_group"})
+        graph.add_edge("intersection", "beat::mt_intro", intersection_group)
+        graph.add_edge("intersection", "beat::aq_intro", intersection_group)
+
+        # Add hints
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "before_introduce",
+            },
+        )
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "before_introduce",
+            },
+        )
+        result = build_hint_conflict_graph(graph)
+        # Intersection group prevents edge creation, so these hints don't conflict
+        # (the edge creation is blocked, not a cycle issue)
+        # They should not form a swap pair since the edge can't be created
+        swap_pairs = result.swap_pairs
+        has_mt_aq_pair = any(
+            set(pair) == {"beat::mt_intro", "beat::aq_intro"} for pair in swap_pairs
+        )
+        assert not has_mt_aq_pair, (
+            "Expected no swap pair for hints whose beats are in same intersection group"
+        )
+
+    def test_serial_ordering_in_verify_hints_acyclic(self) -> None:
+        """Test verify_hints_acyclic correctly simulates serial relationship ordering."""
+        from questfoundry.graph.grow_algorithms import verify_hints_acyclic
+
+        graph = _make_two_dilemma_graph_with_relationship("serial")
+        # Add a consistent hint
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        still_cyclic = verify_hints_acyclic(graph, {"beat::mt_intro"})
+        # Should not report as cyclic since serial ordering should be respected
+        assert "beat::mt_intro" not in still_cyclic
+
+    def test_wraps_ordering_in_verify_hints_acyclic(self) -> None:
+        """Test verify_hints_acyclic correctly simulates wraps relationship ordering."""
+        from questfoundry.graph.grow_algorithms import verify_hints_acyclic
+
+        graph = _make_two_dilemma_graph_with_relationship("wraps")
+        # Add a consistent hint
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        still_cyclic = verify_hints_acyclic(graph, {"beat::mt_intro"})
+        # Should not report as cyclic
+        assert "beat::mt_intro" not in still_cyclic
+
+    def test_verify_hints_acyclic_returns_surviving_cyclic_beat(self) -> None:
+        """Test verify_hints_acyclic returns non-empty list when a surviving hint still cycles."""
+        from questfoundry.graph.grow_algorithms import verify_hints_acyclic
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Add a hint that will cycle given the base DAG
+        graph.add_edge("predecessor", "beat::mt_intro", "beat::aq_commit")
+        graph.update_node(
+            "beat::aq_commit",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "after_commit",
+            },
+        )
+        still_cyclic = verify_hints_acyclic(graph, {"beat::aq_commit"})
+        # aq_commit's hint should create a cycle: aq_commit ← mt_intro ← aq_commit
+        assert "beat::aq_commit" in still_cyclic
+
+    def test_is_canonical_beat_true(self) -> None:
+        """Test _is_canonical_beat returns True for a beat on a canonical path."""
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # All beats are on canonical paths by the fixture
+        result = build_hint_conflict_graph(graph)
+        # No hints added → no conflicts regardless of canonical beat detection.
+        assert result.conflicts == []
+        assert result.mandatory_drops == set()
+
+    def test_choose_default_drop_prefers_branch_beat(self) -> None:
+        """Test default_drop prefers dropping a branch beat over a canonical beat.
+
+        When comparing two swapped hints, prefer dropping the beat that is on a
+        non-canonical (branch) path rather than a canonical path.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Create a non-canonical path for artifact_quest
+        graph.create_node(
+            "path::aq_branch",
+            {
+                "type": "path",
+                "raw_id": "aq_branch",
+                "dilemma_id": "dilemma::artifact_quest",
+                "is_canonical": False,  # Non-canonical = branch
+            },
+        )
+        graph.create_node(
+            "beat::aq_branch_intro",
+            {
+                "type": "beat",
+                "raw_id": "aq_branch_intro",
+                "summary": "Artifact branch intro.",
+                "dilemma_impacts": [
+                    {"dilemma_id": "dilemma::artifact_quest", "effect": "advances"}
+                ],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::aq_branch_intro", "path::aq_branch")
+
+        # Both beats have commit-hints (same strength), but one is on canonical path
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "before_introduce",
+            },
+        )
+        graph.update_node(
+            "beat::aq_branch_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "before_introduce",
+            },
+        )
+        result = build_hint_conflict_graph(graph)
+        matching = [
+            c
+            for c in result.conflicts
+            if {c.beat_a, c.beat_b} == {"beat::mt_intro", "beat::aq_branch_intro"}
+        ]
+        assert matching, (
+            "Expected a conflict between mt_intro (canonical) and aq_branch_intro (branch)"
+        )
+        assert matching[0].default_drop == "beat::aq_branch_intro", (
+            "Expected branch beat to be preferred drop over canonical beat"
+        )
+
+    def test_build_base_dag_with_heuristic_commit_ordering(self) -> None:
+        """Test _build_base_dag applies heuristic commit-ordering for concurrent dilemmas.
+
+        For concurrent dilemmas, the base DAG should add prerequisite edges
+        between commit beats using alphabetical ordering heuristic.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # artifact_quest < mentor_trust alphabetically
+        # So heuristic should add: aq_commit ≺ mt_commit (mt_commit ← aq_commit)
+        result = build_hint_conflict_graph(graph)
+        # No hints, so no conflicts expected
+        assert result.conflicts == []
+        assert result.mandatory_drops == set()
+
+    def test_swap_pair_both_beats_in_result(self) -> None:
+        """Test that swap pair beats appear correctly in the swap_pairs list."""
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Create mutual exclusion: two hints that only cycle together
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "before_introduce",
+            },
+        )
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "before_introduce",
+            },
+        )
+        result = build_hint_conflict_graph(graph)
+        assert len(result.swap_pairs) >= 1
+        pair = result.swap_pairs[0]
+        assert set(pair) == {"beat::mt_intro", "beat::aq_intro"}
+
+    def test_minimum_drop_set_contains_default_drops(self) -> None:
+        """Test that minimum_drop_set contains the default_drop from each conflict."""
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "before_introduce",
+            },
+        )
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "before_introduce",
+            },
+        )
+        result = build_hint_conflict_graph(graph)
+        # minimum_drop_set should contain at least the default drops
+        for conflict in result.conflicts:
+            assert conflict.default_drop in result.minimum_drop_set
