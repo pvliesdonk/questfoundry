@@ -5550,8 +5550,12 @@ class TestBuildHintConflictGraph:
             },
         )
         result = build_hint_conflict_graph(graph)
-        # Should handle the hints without error (the self-loop guard skips broken hints)
-        assert isinstance(result.conflicts, list)
+        # aq_intro hint (after_commit mentor_trust → mt_commit ≺ aq_intro) cycles alone
+        # because the base DAG already has aq_intro ≺ mt_commit via within-path ordering.
+        # mt_intro hint (before_introduce artifact_quest → mt_intro ≺ aq_intro) is safe alone.
+        # The conflict result must be valid; aq_intro is a mandatory solo drop.
+        assert "beat::aq_intro" in result.mandatory_drops
+        assert "beat::mt_intro" not in result.mandatory_drops
 
     def test_cycles_with_hints_applied_duplicate_edge(self) -> None:
         """Test _cycles_with_hints_applied: applied hint already in ext_existing is skipped."""
@@ -5570,8 +5574,11 @@ class TestBuildHintConflictGraph:
             },
         )
         result = build_hint_conflict_graph(graph)
-        # The duplicate-edge check should skip re-adding the edge
-        assert isinstance(result.conflicts, list)
+        # The hint on mt_intro wants aq_intro → mt_intro, which already exists
+        # as a predecessor edge. The duplicate-edge guard skips it, so no cycle
+        # is created and the hint is not flagged as a conflict.
+        assert result.conflicts == []
+        assert result.mandatory_drops == set()
 
     def test_cycles_with_hints_applied_intersection_group_block(self) -> None:
         """Test _cycles_with_hints_applied: applied hint blocked by intersection group.
@@ -5675,10 +5682,9 @@ class TestBuildHintConflictGraph:
         graph = _make_two_dilemma_graph_with_relationship("concurrent")
         # All beats are on canonical paths by the fixture
         result = build_hint_conflict_graph(graph)
-        # This test verifies the function doesn't crash and can identify canonical beats
-        # used in scoring. If we add a non-canonical beat and compare scores, we're
-        # testing the canonical detection.
-        assert isinstance(result, type(result))
+        # No hints added → no conflicts regardless of canonical beat detection.
+        assert result.conflicts == []
+        assert result.mandatory_drops == set()
 
     def test_choose_default_drop_prefers_branch_beat(self) -> None:
         """Test default_drop prefers dropping a branch beat over a canonical beat.
@@ -5728,47 +5734,17 @@ class TestBuildHintConflictGraph:
             },
         )
         result = build_hint_conflict_graph(graph)
-        # Find the swap pair if one exists
-        for conflict in result.conflicts:
-            if conflict.beat_a == "beat::mt_intro" and conflict.beat_b == "beat::aq_branch_intro":
-                # The branch beat should be preferred for dropping (lower canonical score)
-                assert conflict.default_drop == "beat::aq_branch_intro"
-                break
-
-    def test_hint_strength_with_commit_position(self) -> None:
-        """Test _hint_strength returns 2 (strong) for a 'commit' position hint."""
-        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
-
-        graph = _make_two_dilemma_graph_with_relationship("concurrent")
-        # Add a commit-strength hint
-        graph.update_node(
-            "beat::mt_intro",
-            temporal_hint={
-                "relative_to": "dilemma::artifact_quest",
-                "position": "after_commit",
-            },
+        matching = [
+            c
+            for c in result.conflicts
+            if {c.beat_a, c.beat_b} == {"beat::mt_intro", "beat::aq_branch_intro"}
+        ]
+        assert matching, (
+            "Expected a conflict between mt_intro (canonical) and aq_branch_intro (branch)"
         )
-        result = build_hint_conflict_graph(graph)
-        # The hint is processed; if it's safe, it won't be in mandatory_drops
-        # This test verifies that the _hint_strength function is called during scoring
-        assert isinstance(result.mandatory_drops, set)
-
-    def test_hint_strength_with_introduce_position(self) -> None:
-        """Test _hint_strength returns 1 (weak) for an 'introduce' position hint."""
-        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
-
-        graph = _make_two_dilemma_graph_with_relationship("concurrent")
-        # Add an introduce-strength hint
-        graph.update_node(
-            "beat::mt_intro",
-            temporal_hint={
-                "relative_to": "dilemma::artifact_quest",
-                "position": "before_introduce",
-            },
+        assert matching[0].default_drop == "beat::aq_branch_intro", (
+            "Expected branch beat to be preferred drop over canonical beat"
         )
-        result = build_hint_conflict_graph(graph)
-        # Verify the function runs without error
-        assert isinstance(result.mandatory_drops, set)
 
     def test_build_base_dag_with_heuristic_commit_ordering(self) -> None:
         """Test _build_base_dag applies heuristic commit-ordering for concurrent dilemmas.
