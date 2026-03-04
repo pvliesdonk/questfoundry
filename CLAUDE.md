@@ -799,6 +799,51 @@ The error format tells LLM exactly what's wrong and what to fix, enabling recove
 
 ---
 
+## Python Patterns for This Project
+
+These patterns are established in the codebase. Follow them — don't introduce new ones without flagging it.
+
+- `TypedDict` for message structures (e.g., `Message`, `LLMResponse`)
+- `Protocol` for duck typing (`LLMProvider`, `Stage`, `Tool`)
+- `dataclass` for simple internal data; Pydantic for validated artifacts
+- `from __future__ import annotations` for forward refs in model files
+- Mock LLM providers in unit tests — **never** call real providers in unit tests
+
+### Code Organization
+
+```
+src/questfoundry/
+├── cli.py                 # typer CLI
+├── pipeline/
+│   ├── orchestrator.py    # Stage execution
+│   └── stages/            # Stage implementations
+├── prompts/               # Prompt compiler + loader
+├── models/                # Pydantic artifact models
+├── providers/             # LLM provider clients
+├── conversation/          # Multi-turn conversation runner
+├── graph/                 # Graph mutations + context builders
+└── tools/                 # Tool definitions for stages
+```
+
+### Test Coverage
+
+- Coverage target: **70%** overall, **85%** for new code
+- `uv run pytest tests/unit/ -x -q` — unit tests (safe, no LLM calls)
+- `uv run pytest --cov=questfoundry --cov-report=term-missing` — with coverage
+
+### Global Agents Available
+
+Use these global agents rather than project-local ones:
+- `@python-dev` — general Python implementation (features, bugfixes, refactoring)
+- `@llm-engineer` — LLM pipeline, LangChain, providers, structured output
+- `@test-engineer` — test strategy, coverage analysis, pytest patterns
+- `@frontend-dev` — CLI (typer/rich) development
+- `@prompt-engineer` — prompt design and optimization (read-only/advisory)
+- `@architect-reviewer` — design conformance review (always run before PR)
+- `@investigator` — deep failure root cause analysis
+
+---
+
 ## Related Resources
 
 - Original vision: https://gist.github.com/pvliesdonk/35b36897a42c41b371c8898bfec55882
