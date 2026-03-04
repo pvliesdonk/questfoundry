@@ -4735,6 +4735,292 @@ class TestDetectTemporalHintConflicts:
         conflicts = detect_temporal_hint_conflicts(graph)
         assert len(conflicts) >= 1
 
+    def test_heuristic_edges_from_prior_pair_expose_conflict_in_later_pair(self) -> None:
+        """Heuristic commit-ordering from earlier pairs exposes a cycle in a later pair.
+
+        Regression test for the bug where detect_temporal_hint_conflicts only simulated
+        concurrent hint edges, missing heuristic commit-ordering edges added after each
+        concurrent pair. The heuristic edges accumulate across pairs and can make a
+        hint in a later pair create a cycle that the old simulation would not detect.
+
+        Graph: three dilemmas alpha < beta < gamma, three concurrent pairs processed
+        in insertion order: (alpha, beta), (beta, gamma), (alpha, gamma).
+
+        Heuristic edges added by the NEW simulation (alphabetical ordering):
+            Pair 1 (alpha, beta): alpha_commit ≺ beta_commit
+            Pair 2 (beta, gamma): beta_commit ≺ gamma_commit
+
+        Chain after pairs 1 & 2: alpha_commit → beta_commit → gamma_commit.
+
+        Hint in pair 3 (alpha, gamma):
+            alpha_intro after_commit of gamma → predecessor(alpha_intro, gamma_commit)
+            i.e., gamma_commit must precede alpha_intro.
+
+        NEW code sees the cycle:
+            alpha_intro → alpha_commit → beta_commit → gamma_commit → alpha_intro
+
+        OLD code (no heuristic edges simulated) misses it:
+            BFS from alpha_intro reaches only alpha_commit (within-path),
+            then nothing — gamma_commit is unreachable, no cycle reported.
+        """
+        from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
+
+        graph = Graph.empty()
+
+        # Three dilemmas
+        for dil in ("alpha", "beta", "gamma"):
+            graph.create_node(f"dilemma::{dil}", {"type": "dilemma", "raw_id": dil})
+
+        # Canonical paths and beats for each dilemma
+        for dil in ("alpha", "beta", "gamma"):
+            graph.create_node(
+                f"path::{dil}_path",
+                {
+                    "type": "path",
+                    "raw_id": f"{dil}_path",
+                    "dilemma_id": f"dilemma::{dil}",
+                    "is_canonical": True,
+                },
+            )
+            graph.create_node(
+                f"beat::{dil}_intro",
+                {
+                    "type": "beat",
+                    "raw_id": f"{dil}_intro",
+                    "summary": f"{dil} intro.",
+                    "dilemma_impacts": [{"dilemma_id": f"dilemma::{dil}", "effect": "advances"}],
+                },
+            )
+            graph.create_node(
+                f"beat::{dil}_commit",
+                {
+                    "type": "beat",
+                    "raw_id": f"{dil}_commit",
+                    "summary": f"{dil} commit.",
+                    "dilemma_impacts": [{"dilemma_id": f"dilemma::{dil}", "effect": "commits"}],
+                },
+            )
+            graph.add_edge("belongs_to", f"beat::{dil}_intro", f"path::{dil}_path")
+            graph.add_edge("belongs_to", f"beat::{dil}_commit", f"path::{dil}_path")
+            graph.add_edge("predecessor", f"beat::{dil}_commit", f"beat::{dil}_intro")
+
+        # Three concurrent pairs — insertion order determines processing order.
+        # Pairs 1 & 2 have no hints; their heuristics build the chain
+        # alpha_commit → beta_commit → gamma_commit.
+        # Pair 3 is where the hint lives.
+        graph.add_edge("concurrent", "dilemma::alpha", "dilemma::beta")
+        graph.add_edge("concurrent", "dilemma::beta", "dilemma::gamma")
+        graph.add_edge("concurrent", "dilemma::alpha", "dilemma::gamma")
+
+        # No hints anywhere → no conflicts
+        assert detect_temporal_hint_conflicts(graph) == []
+
+        # Hint on alpha_intro: must come after gamma's commit.
+        # predecessor(alpha_intro, gamma_commit): gamma_commit ≺ alpha_intro ≺ alpha_commit.
+        # This completes the cycle via the heuristic chain:
+        #   alpha_commit → beta_commit → gamma_commit → alpha_intro → alpha_commit
+        graph.update_node(
+            "beat::alpha_intro",
+            temporal_hint={"relative_to": "dilemma::gamma", "position": "after_commit"},
+        )
+
+        # With the fix: heuristic edges from pairs 1 & 2 are simulated before pair 3,
+        # so detect_temporal_hint_conflicts catches this cycle.
+        conflicts = detect_temporal_hint_conflicts(graph)
+        assert len(conflicts) >= 1, (
+            "Expected detect_temporal_hint_conflicts to catch the cycle "
+            "alpha_commit→beta_commit→gamma_commit→alpha_intro→alpha_commit, "
+            "which is only visible when heuristic edges from prior pairs are simulated."
+        )
+
+    def test_serial_edges_are_simulated(self) -> None:
+        """Serial relationship edges are simulated (exercises the serial branch, no conflicts).
+
+        If A serial B, the simulation adds predecessor(first_b, last_a), meaning
+        last_a must precede first_b. Verifies that the serial branch runs without
+        crashing and produces no false-positive conflicts for a compatible hint.
+        """
+        from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
+
+        graph = _make_two_dilemma_graph_with_relationship("serial")
+        # After serial simulation: last beat of mentor_trust ≺ first beat of artifact_quest.
+        # mentor_trust: mt_intro → mt_commit (mt_commit is last)
+        # artifact_quest: aq_intro → aq_commit (aq_intro is first)
+        # Serial edge: predecessor(aq_intro, mt_commit) → mt_commit ≺ aq_intro.
+
+        # Now add a concurrent pair that includes a hint relying on serial state.
+        # Create a third dilemma concurrent with artifact_quest whose hint would
+        # cycle against the serial-established order.
+        graph.create_node(
+            "dilemma::extra",
+            {"type": "dilemma", "raw_id": "extra"},
+        )
+        graph.create_node(
+            "path::extra_path",
+            {
+                "type": "path",
+                "raw_id": "extra_path",
+                "dilemma_id": "dilemma::extra",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "beat::extra_intro",
+            {
+                "type": "beat",
+                "raw_id": "extra_intro",
+                "summary": "Extra intro.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::extra", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            "beat::extra_commit",
+            {
+                "type": "beat",
+                "raw_id": "extra_commit",
+                "summary": "Extra commit.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::extra", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::extra_intro", "path::extra_path")
+        graph.add_edge("belongs_to", "beat::extra_commit", "path::extra_path")
+        graph.add_edge("predecessor", "beat::extra_commit", "beat::extra_intro")
+        graph.add_edge("concurrent", "dilemma::artifact_quest", "dilemma::extra")
+
+        # No hints → no conflicts
+        assert detect_temporal_hint_conflicts(graph) == []
+
+        # Hint: extra_intro after_commit mentor_trust → mt_commit ≺ extra_intro.
+        # Serial already establishes mt_commit ≺ aq_intro. Concurrent heuristic
+        # (artifact_quest < extra): aq_commit ≺ extra_commit.
+        # This is consistent; no cycle expected.
+        graph.update_node(
+            "beat::extra_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+        # aq_commit ≺ extra_intro — and within extra: extra_intro ≺ extra_commit.
+        # No path back from extra_intro to aq_commit without a second hint.
+        assert detect_temporal_hint_conflicts(graph) == []
+
+    def test_wraps_edges_are_simulated(self) -> None:
+        """Wraps relationship edges are simulated (exercises the wraps branch, no conflicts).
+
+        If A wraps B, the simulation adds:
+          - first_b after first_a (A's intro before B's intro)
+          - commit_a after last_b (B finishes before A commits)
+        Verifies that the wraps branch runs without crashing and produces no false-positive
+        conflicts for a compatible hint.
+        """
+        from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
+
+        graph = _make_two_dilemma_graph_with_relationship("wraps")
+        # wraps(mentor_trust, artifact_quest):
+        #   mt_intro ≺ aq_intro (first_b after first_a)
+        #   aq_commit ≺ mt_commit (commit_a after last_b)
+
+        # No hints → no conflicts
+        assert detect_temporal_hint_conflicts(graph) == []
+
+        # Hint: aq_intro before_commit of mentor_trust → aq_intro ≺ mt_commit.
+        # Wraps already has aq_commit ≺ mt_commit (not involving aq_intro directly),
+        # and mt_intro ≺ aq_intro. Check: no cycle.
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "before_commit",
+            },
+        )
+        # predecessor(mt_commit, aq_intro): aq_intro ≺ mt_commit.
+        # No path from aq_intro back to mt_commit without existing wraps edges.
+        assert detect_temporal_hint_conflicts(graph) == []
+
+    def test_intersection_group_skip_in_simulation(self) -> None:
+        """Intersection-group guard prevents edges between co-grouped beats.
+
+        If two beats share an intersection group, _sim_add skips the edge
+        (they co-occur in a scene and have no ordering). Exercises the
+        intersection-group index building and the guard path in _is_valid_edge_candidate.
+        """
+        from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Put mt_commit and aq_commit in the same intersection group so the
+        # heuristic _sim_add(aq_commit, mt_commit) is skipped.
+        graph.create_node("intersection_group::shared", {"type": "intersection_group"})
+        graph.add_edge("intersection", "beat::mt_commit", "intersection_group::shared")
+        graph.add_edge("intersection", "beat::aq_commit", "intersection_group::shared")
+
+        # No hints — no conflicts; the heuristic edge is skipped but that's fine.
+        conflicts = detect_temporal_hint_conflicts(graph)
+        assert conflicts == []
+
+    def test_hint_skipped_when_edge_already_exists(self) -> None:
+        """_is_valid_edge_candidate returns False for hints that duplicate existing edges.
+
+        If the hint edge is already in the predecessor set, it is skipped
+        (not recorded as a conflict). Exercises the duplicate-edge guard.
+        """
+        from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # Manually pre-add the edge that the hint would produce:
+        # mt_intro after_commit artifact_quest → predecessor(mt_intro, aq_commit).
+        graph.add_edge("predecessor", "beat::mt_intro", "beat::aq_commit")
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "after_commit",
+            },
+        )
+
+        # The hint produces the same edge that already exists — _is_valid_edge_candidate
+        # returns False for the duplicate, so no conflict is recorded.
+        conflicts = detect_temporal_hint_conflicts(graph)
+        assert conflicts == []
+
+    def test_no_conflicts_when_dilemma_has_no_commit_beats(self) -> None:
+        """Heuristic is skipped when a dilemma has no commit-effect beats.
+
+        Exercises the `if commits_a and commits_b` False branch in the
+        concurrent heuristic section.
+        """
+        from questfoundry.graph.grow_algorithms import detect_temporal_hint_conflicts
+
+        graph = Graph.empty()
+        for dil in ("mentor_trust", "artifact_quest"):
+            graph.create_node(f"dilemma::{dil}", {"type": "dilemma", "raw_id": dil})
+            graph.create_node(
+                f"path::{dil}_path",
+                {
+                    "type": "path",
+                    "raw_id": f"{dil}_path",
+                    "dilemma_id": f"dilemma::{dil}",
+                    "is_canonical": True,
+                },
+            )
+            # Only "advances" beats — no "commits" beats.
+            graph.create_node(
+                f"beat::{dil}_intro",
+                {
+                    "type": "beat",
+                    "raw_id": f"{dil}_intro",
+                    "summary": f"{dil} intro.",
+                    "dilemma_impacts": [{"dilemma_id": f"dilemma::{dil}", "effect": "advances"}],
+                },
+            )
+            graph.add_edge("belongs_to", f"beat::{dil}_intro", f"path::{dil}_path")
+
+        graph.add_edge("concurrent", "dilemma::mentor_trust", "dilemma::artifact_quest")
+
+        # Neither dilemma has commit beats → heuristic is skipped entirely.
+        conflicts = detect_temporal_hint_conflicts(graph)
+        assert conflicts == []
+
     def test_strip_temporal_hints_by_id(self) -> None:
         """strip_temporal_hints_by_id clears hints for the specified beats."""
         from questfoundry.graph.grow_algorithms import strip_temporal_hints_by_id
