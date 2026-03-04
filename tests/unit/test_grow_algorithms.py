@@ -4361,15 +4361,88 @@ class TestInterleavecrossPathBeats:
         assert ("beat::aq_commit", "beat::mt_intro") in pairs
 
     def test_temporal_hint_after_commit_applied(self) -> None:
-        """Temporal hint 'after_commit' creates edge from this beat to commit beat (#1114)."""
+        """Temporal hint 'after_commit' creates edge from this beat to commit beat (#1114).
 
-        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        Dilemma names are chosen so that the heuristic commit-ordering goes in the
+        SAME direction as the hint, avoiding a pre-loaded cycle in the base DAG
+        (which detection would drop the hint for).
 
-        # aq_intro should come after mentor_trust's commit beat
+        Dilemmas: a_mentor < b_artifact alphabetically.
+        Concurrent edge (a_mentor → b_artifact): A commits before B →
+          predecessor(b_commit, a_commit) = a_commit before b_commit.
+        Hint on b_intro: after_commit of a_mentor →
+          predecessor(b_intro, a_commit) = a_commit before b_intro.
+        Chain: a_commit → b_intro → b_commit.  No cycle with heuristic.
+        """
+        graph = Graph.empty()
+        # Use alphabetically ordered names so a_mentor < b_artifact
+        for _dil, dil_id in (("a_mentor", "a_mentor"), ("b_artifact", "b_artifact")):
+            graph.create_node(f"dilemma::{dil_id}", {"type": "dilemma", "raw_id": dil_id})
+        for dil, path_id in (("a_mentor", "am_path"), ("b_artifact", "ba_path")):
+            graph.create_node(
+                f"path::{path_id}",
+                {
+                    "type": "path",
+                    "raw_id": path_id,
+                    "dilemma_id": f"dilemma::{dil}",
+                    "is_canonical": True,
+                },
+            )
+
+        # a_mentor beats
+        graph.create_node(
+            "beat::am_intro",
+            {
+                "type": "beat",
+                "raw_id": "am_intro",
+                "summary": "a_mentor intro.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::a_mentor", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            "beat::am_commit",
+            {
+                "type": "beat",
+                "raw_id": "am_commit",
+                "summary": "a_mentor commit.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::a_mentor", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::am_intro", "path::am_path")
+        graph.add_edge("belongs_to", "beat::am_commit", "path::am_path")
+        graph.add_edge("predecessor", "beat::am_commit", "beat::am_intro")
+
+        # b_artifact beats
+        graph.create_node(
+            "beat::ba_intro",
+            {
+                "type": "beat",
+                "raw_id": "ba_intro",
+                "summary": "b_artifact intro.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::b_artifact", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            "beat::ba_commit",
+            {
+                "type": "beat",
+                "raw_id": "ba_commit",
+                "summary": "b_artifact commit.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::b_artifact", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::ba_intro", "path::ba_path")
+        graph.add_edge("belongs_to", "beat::ba_commit", "path::ba_path")
+        graph.add_edge("predecessor", "beat::ba_commit", "beat::ba_intro")
+
+        # a_mentor concurrent with b_artifact (a < b → a commits before b)
+        graph.add_edge("concurrent", "dilemma::a_mentor", "dilemma::b_artifact")
+
+        # ba_intro should come after a_mentor's commit beat
         graph.update_node(
-            "beat::aq_intro",
+            "beat::ba_intro",
             temporal_hint={
-                "relative_to": "dilemma::mentor_trust",
+                "relative_to": "dilemma::a_mentor",
                 "position": "after_commit",
             },
         )
@@ -4378,8 +4451,8 @@ class TestInterleavecrossPathBeats:
         assert count > 0
         edges = graph.get_edges(edge_type="predecessor")
         pairs = {(e["from"], e["to"]) for e in edges}
-        # aq_intro requires mt_commit (aq_intro comes after mt_commit)
-        assert ("beat::aq_intro", "beat::mt_commit") in pairs
+        # ba_intro requires am_commit (ba_intro comes after am_commit)
+        assert ("beat::ba_intro", "beat::am_commit") in pairs
 
     def test_temporal_hint_before_introduce_applied(self) -> None:
         """Temporal hint 'before_introduce' creates edge from intro beat to this beat (#1114)."""
@@ -4668,6 +4741,94 @@ class TestInterleavecrossPathBeats:
 
         with pytest.raises(RuntimeError, match="would create a cycle"):
             interleave_cross_path_beats(graph)
+
+    def test_hint_accepted_by_detection_does_not_raise_at_apply_time(self) -> None:
+        """Regression for #1147: interleave uses same base DAG as detection.
+
+        Three-dilemma graph:
+          - Dilemma A (alpha) serial-before Dilemma B (beta)
+          - Dilemma B (beta) concurrent with Dilemma C (gamma)
+          - Beat b_intro has temporal hint "before_commit" of gamma
+
+        relationship_edges order is concurrent first, then serial.  In the OLD
+        incremental approach, when the concurrent pair (beta, gamma) was processed
+        the serial-pair heuristic edges (alpha→beta) were not yet in the DAG.
+        This could produce a working DAG inconsistent with the one used by
+        detection, potentially causing a hint accepted by detection to raise a
+        RuntimeError at apply time.
+
+        After the fix, interleave initialises its working DAG from
+        _build_hint_base_dag (same as detection), so both sites agree and no
+        RuntimeError is raised.
+        """
+        from questfoundry.graph.grow_algorithms import validate_beat_dag
+
+        graph = Graph.empty()
+
+        # Three dilemmas: alpha < beta < gamma (alphabetical order)
+        for dil in ("alpha", "beta", "gamma"):
+            graph.create_node(f"dilemma::{dil}", {"type": "dilemma", "raw_id": dil})
+
+        # One canonical path per dilemma with two beats each
+        for dil in ("alpha", "beta", "gamma"):
+            graph.create_node(
+                f"path::{dil}_path",
+                {
+                    "type": "path",
+                    "raw_id": f"{dil}_path",
+                    "dilemma_id": f"dilemma::{dil}",
+                    "is_canonical": True,
+                },
+            )
+            intro_id = f"beat::{dil}_intro"
+            commit_id = f"beat::{dil}_commit"
+            graph.create_node(
+                intro_id,
+                {
+                    "type": "beat",
+                    "raw_id": f"{dil}_intro",
+                    "summary": f"{dil} intro.",
+                    "dilemma_impacts": [{"dilemma_id": f"dilemma::{dil}", "effect": "advances"}],
+                },
+            )
+            graph.create_node(
+                commit_id,
+                {
+                    "type": "beat",
+                    "raw_id": f"{dil}_commit",
+                    "summary": f"{dil} commit.",
+                    "dilemma_impacts": [{"dilemma_id": f"dilemma::{dil}", "effect": "commits"}],
+                },
+            )
+            graph.add_edge("belongs_to", intro_id, f"path::{dil}_path")
+            graph.add_edge("belongs_to", commit_id, f"path::{dil}_path")
+            # Within-path ordering: commit requires intro
+            graph.add_edge("predecessor", commit_id, intro_id)
+
+        # alpha serial-before beta: alpha's commit must precede beta's intro
+        graph.add_edge("serial", "dilemma::alpha", "dilemma::beta")
+
+        # beta concurrent with gamma
+        graph.add_edge("concurrent", "dilemma::beta", "dilemma::gamma")
+
+        # Temporal hint on beta_intro: should come before gamma's commit.
+        # This hint is accepted by detection (full base includes alpha→beta serial
+        # heuristic edges).  With the old incremental code the base DAG at
+        # concurrent-pair processing time lacked the serial edges, potentially
+        # producing a cycle check result inconsistent with detection.
+        graph.update_node(
+            "beat::beta_intro",
+            temporal_hint={
+                "relative_to": "dilemma::gamma",
+                "position": "before_commit",
+            },
+        )
+
+        # Must not raise RuntimeError; hint was accepted by detection
+        count = interleave_cross_path_beats(graph)
+
+        assert count > 0, "Expected at least one cross-path predecessor edge"
+        assert validate_beat_dag(graph) == [], "DAG must remain acyclic after interleave"
 
 
 class TestDetectTemporalHintConflicts:
