@@ -3412,18 +3412,6 @@ def interleave_cross_path_beats(graph: Graph) -> int:
             for bid in path_beats_map.get(path_id, []):
                 beat_id_to_dilemmas[bid].add(dil_id)
 
-    # Collect existing predecessor edges to avoid duplicates
-    existing_predecessors: set[tuple[str, str]] = set()
-    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor"):
-        existing_predecessors.add((edge["from"], edge["to"]))
-
-    # Build forward adjacency (prerequisite → dependents) for cycle detection
-    # predecessor(X, Y): Y is prerequisite of X → Y → X in topo order
-    successors: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
-    for from_id, to_id in existing_predecessors:
-        if from_id in successors and to_id in successors:
-            successors[to_id].add(from_id)
-
     beat_set = set(beat_nodes.keys())
 
     # Build intersection-group index (beat → set of group_ids) to avoid creating
@@ -3447,6 +3435,31 @@ def interleave_cross_path_beats(graph: Graph) -> int:
     if not relationship_edges:
         _strip_temporal_hints(graph, beat_nodes)
         return 0
+
+    # Initialise the cycle-detection DAG from the same base as detection/postcondition.
+    # _build_hint_base_dag pre-loads ALL non-hint heuristic edges from ALL pairs so
+    # that a hint accepted by build_hint_conflict_graph cannot create a cycle here
+    # due to a narrower incremental DAG (#1147).
+    #
+    # ``_base_edges`` contains real graph edges + simulated heuristic edges.
+    # ``successors`` is derived from the full base and is used for cycle detection.
+    # ``existing_predecessors`` tracks only edges actually written to the graph —
+    # initialised from real graph edges so that simulated edges are still written
+    # by _add_predecessor (avoiding silent drops of valid edges).
+    _, successors = _build_hint_base_dag(
+        graph,
+        beat_nodes,
+        beat_set,
+        beat_intersection_groups,
+        relationship_edges,
+        dilemma_paths,
+        path_beats_map,
+    )
+    # Seed existing_predecessors from real graph edges only (not simulated ones).
+    existing_predecessors: set[tuple[str, str]] = {
+        (edge["from"], edge["to"])
+        for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor")
+    }
 
     created = 0
 
