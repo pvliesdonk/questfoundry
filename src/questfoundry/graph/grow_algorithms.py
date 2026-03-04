@@ -2855,6 +2855,99 @@ def _simulate_hints_sequential(
     return rejected
 
 
+def _build_hint_base_dag(
+    graph: Graph,
+    beat_nodes: dict[str, dict[str, object]],
+    beat_set: set[str],
+    beat_intersection_groups: defaultdict[str, set[str]],
+    relationship_edges: list[tuple[str, str, str]],
+    dilemma_paths: dict[str, list[str]],
+    path_beats_map: dict[str, list[str]],
+) -> tuple[set[tuple[str, str]], dict[str, set[str]]]:
+    """Build the base DAG for hint conflict detection/postcondition checking.
+
+    Pre-loads ALL non-hint edges (predecessor + serial + wraps + concurrent
+    commit-ordering) from ALL relationship pairs into the base DAG.  Hints are
+    NOT included.  This is the shared DAG construction used by both
+    ``build_hint_conflict_graph`` (detection) and ``verify_hints_acyclic``
+    (postcondition), ensuring they produce consistent results.
+
+    Args:
+        graph: The story graph.
+        beat_nodes: Mapping of beat_id → node data.
+        beat_set: Set of all beat IDs.
+        beat_intersection_groups: Mapping of beat_id → set of intersection group IDs.
+        relationship_edges: List of (dilemma_a, dilemma_b, ordering) triples.
+        dilemma_paths: Mapping of dilemma_id → list of path IDs.
+        path_beats_map: Mapping of path_id → list of beat IDs.
+
+    Returns:
+        Tuple of (existing_edges set, successors adjacency dict).
+    """
+    existing: set[tuple[str, str]] = set()
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor"):
+        existing.add((edge["from"], edge["to"]))
+    succ: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
+    for from_id, to_id in existing:
+        if from_id in succ and to_id in succ:
+            succ[to_id].add(from_id)
+
+    def _valid(from_b: str, to_b: str) -> bool:
+        if from_b == to_b or (from_b, to_b) in existing:
+            return False
+        if from_b not in beat_set or to_b not in beat_set:
+            return False
+        return not beat_intersection_groups.get(from_b, set()).intersection(
+            beat_intersection_groups.get(to_b, set())
+        )
+
+    def _sim(from_b: str, to_b: str) -> None:
+        if not _valid(from_b, to_b):
+            return
+        if _would_create_cycle(from_b, to_b, succ, beat_set):
+            return
+        existing.add((from_b, to_b))
+        succ[to_b].add(from_b)
+
+    for dilemma_a, dilemma_b, ordering in relationship_edges:
+        paths_a = dilemma_paths.get(dilemma_a, [])
+        paths_b = dilemma_paths.get(dilemma_b, [])
+        if not paths_a or not paths_b:
+            continue
+        ordered_a = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_a]
+        ordered_b = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_b]
+        all_beats_a = [b for seq in ordered_a for b in seq]
+        all_beats_b = [b for seq in ordered_b for b in seq]
+        if not all_beats_a or not all_beats_b:
+            continue
+
+        if ordering == "serial":
+            for last_a in sorted({seq[-1] for seq in ordered_a if seq}):
+                for first_b in sorted({seq[0] for seq in ordered_b if seq}):
+                    _sim(first_b, last_a)
+        elif ordering == "wraps":
+            for first_a in sorted({seq[0] for seq in ordered_a if seq}):
+                for first_b in sorted({seq[0] for seq in ordered_b if seq}):
+                    _sim(first_b, first_a)
+            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
+            for last_b in sorted({seq[-1] for seq in ordered_b if seq}):
+                for commit_a in sorted(commits_a):
+                    _sim(commit_a, last_b)
+        elif ordering == "concurrent":
+            # Heuristic commit-ordering only (no hints applied here)
+            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
+            commits_b = set(_commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes))
+            if commits_a and commits_b:
+                if dilemma_a < dilemma_b:
+                    prereq_commits, dependent_commits = commits_a, commits_b
+                else:
+                    prereq_commits, dependent_commits = commits_b, commits_a
+                for prereq in sorted(prereq_commits):
+                    for dependent in sorted(dependent_commits):
+                        _sim(dependent, prereq)
+    return existing, succ
+
+
 def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
     """Build a conflict graph for temporal hints and compute the minimum drop set.
 
@@ -2915,70 +3008,18 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
 
     beat_set = set(beat_nodes.keys())
 
-    # Helper: build a fresh base DAG (all non-hint edges, no hints applied)
-    def _build_base_dag() -> tuple[set[tuple[str, str]], dict[str, set[str]]]:
-        existing: set[tuple[str, str]] = set()
-        for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor"):
-            existing.add((edge["from"], edge["to"]))
-        succ: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
-        for from_id, to_id in existing:
-            if from_id in succ and to_id in succ:
-                succ[to_id].add(from_id)
-
-        def _valid(from_b: str, to_b: str) -> bool:
-            if from_b == to_b or (from_b, to_b) in existing:
-                return False
-            if from_b not in beat_set or to_b not in beat_set:
-                return False
-            return not beat_intersection_groups.get(from_b, set()).intersection(
-                beat_intersection_groups.get(to_b, set())
-            )
-
-        def _sim(from_b: str, to_b: str) -> None:
-            if not _valid(from_b, to_b):
-                return
-            if _would_create_cycle(from_b, to_b, succ, beat_set):
-                return
-            existing.add((from_b, to_b))
-            succ[to_b].add(from_b)
-
-        for dilemma_a, dilemma_b, ordering in relationship_edges:
-            paths_a = dilemma_paths.get(dilemma_a, [])
-            paths_b = dilemma_paths.get(dilemma_b, [])
-            if not paths_a or not paths_b:
-                continue
-            ordered_a = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_a]
-            ordered_b = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_b]
-            all_beats_a = [b for seq in ordered_a for b in seq]
-            all_beats_b = [b for seq in ordered_b for b in seq]
-            if not all_beats_a or not all_beats_b:
-                continue
-
-            if ordering == "serial":
-                for last_a in sorted({seq[-1] for seq in ordered_a if seq}):
-                    for first_b in sorted({seq[0] for seq in ordered_b if seq}):
-                        _sim(first_b, last_a)
-            elif ordering == "wraps":
-                for first_a in sorted({seq[0] for seq in ordered_a if seq}):
-                    for first_b in sorted({seq[0] for seq in ordered_b if seq}):
-                        _sim(first_b, first_a)
-                commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
-                for last_b in sorted({seq[-1] for seq in ordered_b if seq}):
-                    for commit_a in sorted(commits_a):
-                        _sim(commit_a, last_b)
-            elif ordering == "concurrent":
-                # Heuristic commit-ordering only (no hints)
-                commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
-                commits_b = set(_commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes))
-                if commits_a and commits_b:
-                    if dilemma_a < dilemma_b:
-                        prereq_commits, dependent_commits = commits_a, commits_b
-                    else:
-                        prereq_commits, dependent_commits = commits_b, commits_a
-                    for prereq in sorted(prereq_commits):
-                        for dependent in sorted(dependent_commits):
-                            _sim(dependent, prereq)
-        return existing, succ
+    # Build the full base DAG (all non-hint edges, no hints applied).
+    # This is the same base DAG used by verify_hints_acyclic, ensuring
+    # detection and postcondition share identical DAG construction.
+    base_existing, base_succ = _build_hint_base_dag(
+        graph,
+        beat_nodes,
+        beat_set,
+        beat_intersection_groups,
+        relationship_edges,
+        dilemma_paths,
+        path_beats_map,
+    )
 
     # Collect all candidate hint edges across all concurrent pairs
     all_hint_edges: list[_HintEdge] = []
@@ -3021,8 +3062,7 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
             seen_beat_ids.add(he.beat_id)
             unique_hints.append(he)
 
-    # Base DAG (no hints)
-    base_existing, base_succ = _build_base_dag()
+    # base_existing and base_succ are already built above via _build_hint_base_dag()
 
     def _cycles_alone(hint: _HintEdge) -> bool:
         """Test whether a single hint cycles against the base DAG."""
@@ -3051,8 +3091,8 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
     # The old pairwise scan missed cycles that only appear when three or more
     # hints interact transitively (A→B, B→C, C→A: no two alone conflict, but
     # all three together cycle).  The sequential simulation in
-    # _simulate_hints_sequential matches the model used by verify_hints_acyclic,
-    # so detection and postcondition check are consistent.
+    # _simulate_hints_sequential uses the same base DAG as _build_base_dag(),
+    # so detection and postcondition check (verify_hints_acyclic) are consistent.
     hint_by_beat: dict[str, _HintEdge] = {h.beat_id: h for h in unique_hints}
 
     # Scoring heuristic — prefer dropping: introduce over commit; branch over canonical
@@ -3248,36 +3288,25 @@ def verify_hints_acyclic(
 
     beat_set = set(beat_nodes.keys())
 
-    existing: set[tuple[str, str]] = set()
-    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor"):
-        existing.add((edge["from"], edge["to"]))
+    # Build the full base DAG (all non-hint edges) using the same function as
+    # build_hint_conflict_graph.  This ensures detection and postcondition share
+    # an identical DAG construction strategy.
+    base_existing, base_succ = _build_hint_base_dag(
+        graph,
+        beat_nodes,
+        beat_set,
+        beat_intersection_groups,
+        relationship_edges,
+        dilemma_paths,
+        path_beats_map,
+    )
 
-    successors: dict[str, set[str]] = {bid: set() for bid in beat_nodes}
-    for from_id, to_id in existing:
-        if from_id in successors and to_id in successors:
-            successors[to_id].add(from_id)
-
-    def _is_valid(from_b: str, to_b: str) -> bool:
-        if from_b == to_b or (from_b, to_b) in existing:
-            return False
-        if from_b not in beat_set or to_b not in beat_set:
-            return False
-        return not beat_intersection_groups.get(from_b, set()).intersection(
-            beat_intersection_groups.get(to_b, set())
-        )
-
-    def _sim_add(from_b: str, to_b: str) -> bool:
-        if not _is_valid(from_b, to_b):
-            return False
-        if _would_create_cycle(from_b, to_b, successors, beat_set):
-            return False
-        existing.add((from_b, to_b))
-        successors[to_b].add(from_b)
-        return True
-
-    still_cyclic: list[str] = []
-
+    # Collect all surviving hint edges across all concurrent pairs
+    surviving_hint_edges: list[_HintEdge] = []
+    seen_beat_ids: set[str] = set()
     for dilemma_a, dilemma_b, ordering in relationship_edges:
+        if ordering != "concurrent":
+            continue
         paths_a = dilemma_paths.get(dilemma_a, [])
         paths_b = dilemma_paths.get(dilemma_b, [])
         if not paths_a or not paths_b:
@@ -3288,57 +3317,30 @@ def verify_hints_acyclic(
         all_beats_b = [b for seq in ordered_b for b in seq]
         if not all_beats_a or not all_beats_b:
             continue
+        for hint_edge in _iter_temporal_hint_edges(
+            all_beats_a + all_beats_b,
+            beat_nodes,
+            dilemma_a,
+            dilemma_b,
+            all_beats_a,
+            ordered_a,
+            all_beats_b,
+            ordered_b,
+            beat_id_to_dilemmas,
+        ):
+            if hint_edge.beat_id not in surviving_beat_ids:
+                continue
+            # Deduplicate by beat_id (keep first occurrence, matching build_hint_conflict_graph)
+            if hint_edge.beat_id not in seen_beat_ids:
+                seen_beat_ids.add(hint_edge.beat_id)
+                surviving_hint_edges.append(hint_edge)
 
-        if ordering == "serial":
-            for last_a in sorted({seq[-1] for seq in ordered_a if seq}):
-                for first_b in sorted({seq[0] for seq in ordered_b if seq}):
-                    _sim_add(first_b, last_a)
-        elif ordering == "wraps":
-            for first_a in sorted({seq[0] for seq in ordered_a if seq}):
-                for first_b in sorted({seq[0] for seq in ordered_b if seq}):
-                    _sim_add(first_b, first_a)
-            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
-            for last_b in sorted({seq[-1] for seq in ordered_b if seq}):
-                for commit_a in sorted(commits_a):
-                    _sim_add(commit_a, last_b)
-        elif ordering == "concurrent":
-            for hint_edge in _iter_temporal_hint_edges(
-                all_beats_a + all_beats_b,
-                beat_nodes,
-                dilemma_a,
-                dilemma_b,
-                all_beats_a,
-                ordered_a,
-                all_beats_b,
-                ordered_b,
-                beat_id_to_dilemmas,
-            ):
-                # Only test surviving hints
-                if hint_edge.beat_id not in surviving_beat_ids:
-                    continue
-                from_b, to_b = hint_edge.from_beat, hint_edge.to_beat
-                if not _is_valid(from_b, to_b):
-                    continue
-                if _would_create_cycle(from_b, to_b, successors, beat_set):
-                    if hint_edge.beat_id not in still_cyclic:
-                        still_cyclic.append(hint_edge.beat_id)
-                else:
-                    existing.add((from_b, to_b))
-                    successors[to_b].add(from_b)
-
-            # Heuristic commit-ordering
-            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
-            commits_b = set(_commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes))
-            if commits_a and commits_b:
-                if dilemma_a < dilemma_b:
-                    prereq_commits, dependent_commits = commits_a, commits_b
-                else:
-                    prereq_commits, dependent_commits = commits_b, commits_a
-                for prereq in sorted(prereq_commits):
-                    for dependent in sorted(dependent_commits):
-                        _sim_add(dependent, prereq)
-
-    return still_cyclic
+    # Run the same sequential simulation as build_hint_conflict_graph uses.
+    # Rejected hints are still-cyclic.
+    rejected = _simulate_hints_sequential(
+        surviving_hint_edges, base_existing, base_succ, beat_set, beat_intersection_groups
+    )
+    return [h.beat_id for h in rejected]
 
 
 def strip_temporal_hints_by_id(graph: Graph, beat_ids: set[str]) -> int:
