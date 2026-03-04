@@ -4389,14 +4389,6 @@ class TestInterleavecrossPathBeats:
                 },
             )
 
-        for _prefix, _dil, _effect in (
-            ("am", "a_mentor", "advances"),
-            ("am", "a_mentor", "commits"),
-            ("ba", "b_artifact", "advances"),
-            ("ba", "b_artifact", "commits"),
-        ):
-            pass  # built below explicitly
-
         # a_mentor beats
         graph.create_node(
             "beat::am_intro",
