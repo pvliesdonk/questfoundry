@@ -2523,8 +2523,9 @@ def _iter_temporal_hint_edges(
 def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
     """Simulate temporal hint edge application and return hints that would create cycles.
 
-    Replicates the concurrent-ordering logic of ``interleave_cross_path_beats``
-    (hint application only) without committing any edges.  Hints that would be
+    Replicates the full edge-building logic of ``interleave_cross_path_beats``
+    (serial, wraps, and concurrent including heuristic commit-ordering edges)
+    without committing any edges to the graph.  Hints that would be
     skipped as cycle-creating are returned as ``TemporalHintConflict`` objects
     for LLM resolution before interleave runs.
 
@@ -2669,13 +2670,12 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
             commits_b = set(_commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes))
             if commits_a and commits_b:
                 if dilemma_a < dilemma_b:
-                    for ca in sorted(commits_a):
-                        for cb in sorted(commits_b):
-                            _sim_add(cb, ca)
+                    prereq_commits, dependent_commits = commits_a, commits_b
                 else:
-                    for cb in sorted(commits_b):
-                        for ca in sorted(commits_a):
-                            _sim_add(ca, cb)
+                    prereq_commits, dependent_commits = commits_b, commits_a
+                for prereq in sorted(prereq_commits):
+                    for dependent in sorted(dependent_commits):
+                        _sim_add(dependent, prereq)
 
     return conflicts
 
