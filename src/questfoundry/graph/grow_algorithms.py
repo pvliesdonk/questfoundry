@@ -2608,8 +2608,8 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
 
         ordered_a = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_a]
         ordered_b = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_b]
-        all_beats_a = [b for seq in ordered_a for b in seq]
-        all_beats_b = [b for seq in ordered_b for b in seq]
+        all_beats_a = list(dict.fromkeys(b for seq in ordered_a for b in seq))
+        all_beats_b = list(dict.fromkeys(b for seq in ordered_b for b in seq))
 
         if not all_beats_a or not all_beats_b:
             continue
