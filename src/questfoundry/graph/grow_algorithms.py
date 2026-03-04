@@ -3134,6 +3134,10 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
         elif len(new_conflict_set) == 2:
             # Binary residual: check if they are mutually exclusive (swap pair).
             h_a, h_b = new_conflict_set[0], new_conflict_set[1]
+            # We only test dropping h_a (not h_b) because both hints passed
+            # Phase 1 (solo-cycle check), meaning they only conflict as a pair.
+            # By symmetry: if dropping h_a resolves the set, dropping h_b would
+            # too — both are mutual excluders, so one test suffices.
             after_drop_a = _sim_survivors(greedy_excluded | {candidate_id, h_a.beat_id})
             if not after_drop_a:
                 # Dropping either h_a or h_b resolves → true swap pair
@@ -3141,11 +3145,19 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
                 mandatory_drop_ids.add(candidate_id)
                 greedy_excluded.add(candidate_id)
                 conflict_set = []
+                accepted_ids = set()
             else:
                 mandatory_drop_ids.add(candidate_id)
                 greedy_excluded.add(candidate_id)
                 conflict_set = new_conflict_set
-            accepted_ids = set()
+                # Recompute accepted_ids so the next iteration can find swap partners
+                # among the surviving non-conflicting hints (mirrors the elif len<len branch).
+                new_conflict_ids = {h.beat_id for h in new_conflict_set}
+                accepted_ids = {
+                    h.beat_id
+                    for h in survivors
+                    if h.beat_id not in greedy_excluded and h.beat_id not in new_conflict_ids
+                }
         elif len(new_conflict_set) < len(conflict_set):
             # Progress made but not fully resolved → mandatory drop, iterate
             mandatory_drop_ids.add(candidate_id)
