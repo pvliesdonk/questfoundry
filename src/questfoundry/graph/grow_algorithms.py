@@ -2798,6 +2798,63 @@ def _build_hint_resolution_context(graph: Graph) -> _HintResolutionContext | Non
     )
 
 
+def _simulate_hints_sequential(
+    hint_edges: list[_HintEdge],
+    base_existing: set[tuple[str, str]],
+    base_succ: dict[str, set[str]],
+    beat_set: set[str],
+    beat_intersection_groups: defaultdict[str, set[str]],
+) -> list[_HintEdge]:
+    """Simulate applying hint edges sequentially and return those that are rejected.
+
+    Iterates ``hint_edges`` in order.  For each hint, if the edge is valid and
+    would create a cycle against the accumulated DAG, the hint is added to the
+    rejected list and NOT accumulated.  Otherwise, the edge is added to the
+    working DAG so subsequent hints see its effect.
+
+    This matches the sequential model used by ``verify_hints_acyclic``: the
+    order of iteration matters because an earlier accepted hint may block a
+    later one.
+
+    Args:
+        hint_edges: Ordered list of candidate hint edges to simulate.
+        base_existing: Set of already-present (from_beat, to_beat) pairs
+            (predecessor edges + any edges from non-hint simulation).
+        base_succ: Adjacency map (prerequisite → set of dependents) for
+            the base DAG.  Copied internally so the caller's map is unmodified.
+        beat_set: All beat IDs present in the graph.
+        beat_intersection_groups: Mapping of beat_id → set of intersection
+            group IDs the beat belongs to.
+
+    Returns:
+        List of ``_HintEdge`` objects that would be rejected (would create a
+        cycle when tested against the accumulated DAG at the point they are
+        processed).
+    """
+    working_existing = set(base_existing)
+    working_succ: dict[str, set[str]] = {bid: set(s) for bid, s in base_succ.items()}
+    rejected: list[_HintEdge] = []
+
+    for hint in hint_edges:
+        from_b, to_b = hint.from_beat, hint.to_beat
+        # Validity checks (mirror _build_base_dag._valid logic)
+        if from_b == to_b or from_b not in beat_set or to_b not in beat_set:
+            continue
+        if (from_b, to_b) in working_existing:
+            continue
+        if beat_intersection_groups.get(from_b, set()).intersection(
+            beat_intersection_groups.get(to_b, set())
+        ):
+            continue
+        if _would_create_cycle(from_b, to_b, working_succ, beat_set):
+            rejected.append(hint)
+        else:
+            working_existing.add((from_b, to_b))
+            working_succ[to_b].add(from_b)
+
+    return rejected
+
+
 def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
     """Build a conflict graph for temporal hints and compute the minimum drop set.
 
@@ -2808,8 +2865,17 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
        heuristic commit-ordering) without any hints.
     2. Tests each hint alone against the base DAG — hints that cycle alone
        are mandatory drops.
-    3. Tests each pair of surviving hints for mutual exclusion — if A cycles
-       when B is present and B cycles when A is present, they form a swap pair.
+    3. Runs a greedy minimum-drop-set (MDS) loop using
+       ``_simulate_hints_sequential`` to detect transitive multi-hint cycles
+       that pairwise scanning misses:
+       - Simulate all survivors sequentially; hints rejected by the simulation
+         form the initial ``conflict_set``.
+       - If non-empty: score each hint in ``conflict_set`` via ``_drop_score``,
+         pick the weakest, re-simulate survivors minus that hint.  If the new
+         conflict_set is empty → mandatory drop, done.  If it has exactly two
+         hints that are mutually exclusive (binary irreducible) → swap pair.
+         If it is smaller → mandatory drop, iterate.  Otherwise → all are
+         mandatory drops (warn and stop).
     4. Applies a greedy heuristic to choose ``default_drop`` for each swap pair:
        prefer dropping introduce-hints over commit-hints, and branch beats over
        spine/canonical beats.
@@ -2971,37 +3037,6 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
             return False
         return _would_create_cycle(from_b, to_b, base_succ, beat_set)
 
-    # Helper: test hint against base DAG + a set of additional edges from other hints
-    def _cycles_with_hints_applied(hint: _HintEdge, applied_hints: list[_HintEdge]) -> bool:
-        """Test whether hint cycles when applied_hints are also in the DAG."""
-        # Build extended DAG: base + applied_hints edges
-        ext_existing = set(base_existing)
-        ext_succ: dict[str, set[str]] = {bid: set(s) for bid, s in base_succ.items()}
-        for h in applied_hints:
-            fb, tb = h.from_beat, h.to_beat
-            if fb == tb or fb not in beat_set or tb not in beat_set:
-                continue
-            if (fb, tb) in ext_existing:
-                continue
-            if beat_intersection_groups.get(fb, set()).intersection(
-                beat_intersection_groups.get(tb, set())
-            ):
-                continue
-            if not _would_create_cycle(fb, tb, ext_succ, beat_set):
-                ext_existing.add((fb, tb))
-                ext_succ[tb].add(fb)
-        # Now test hint against extended DAG
-        from_b, to_b = hint.from_beat, hint.to_beat
-        if from_b == to_b or from_b not in beat_set or to_b not in beat_set:
-            return False
-        if (from_b, to_b) in ext_existing:
-            return False
-        if beat_intersection_groups.get(from_b, set()).intersection(
-            beat_intersection_groups.get(to_b, set())
-        ):
-            return False
-        return _would_create_cycle(from_b, to_b, ext_succ, beat_set)
-
     # Phase 1: identify mandatory solo drops
     mandatory_drop_ids: set[str] = set()
     survivors: list[_HintEdge] = []
@@ -3011,46 +3046,22 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
         else:
             survivors.append(hint)
 
-    # Phase 2: find mutual exclusion pairs among survivors
-    # Two hints A and B are mutual exclusion if A cycles given B AND B cycles given A.
-    # For simplicity and correctness we test all pairs in O(n^2).
+    # Phase 2: greedy MDS loop — detect transitive multi-hint cycles.
     #
-    # Note: This scan is pairwise (O(n²)). With three or more hints that are
-    # mutually exclusive (any two together cycle), the algorithm pairs only
-    # the first conflicting pair it finds, leaving later hints unpaired.
-    # After one of the pair is dropped, the survivor may still conflict with
-    # the unpaired hint. verify_hints_acyclic will then raise
-    # TemporalHintResolutionInvariantError — this is the expected loud-failure
-    # behaviour, not silent degradation.
-    swap_pairs_result: list[tuple[str, str]] = []
-    # Track which beats are already in a swap pair (to avoid duplicates)
-    in_swap_pair: set[str] = set()
+    # The old pairwise scan missed cycles that only appear when three or more
+    # hints interact transitively (A→B, B→C, C→A: no two alone conflict, but
+    # all three together cycle).  The sequential simulation in
+    # _simulate_hints_sequential matches the model used by verify_hints_acyclic,
+    # so detection and postcondition check are consistent.
+    hint_by_beat: dict[str, _HintEdge] = {h.beat_id: h for h in unique_hints}
 
-    for i, hint_a in enumerate(survivors):
-        if hint_a.beat_id in in_swap_pair:
-            continue
-        for hint_b in survivors[i + 1 :]:
-            if hint_b.beat_id in in_swap_pair:
-                continue
-            # Mutual exclusion: A cycles when B is applied, B cycles when A is applied
-            a_cycles_with_b = _cycles_with_hints_applied(hint_a, [hint_b])
-            b_cycles_with_a = _cycles_with_hints_applied(hint_b, [hint_a])
-            if a_cycles_with_b and b_cycles_with_a:
-                swap_pairs_result.append((hint_a.beat_id, hint_b.beat_id))
-                in_swap_pair.add(hint_a.beat_id)
-                in_swap_pair.add(hint_b.beat_id)
-                break
-
-    # Phase 3: compute default_drop per swap pair using heuristics
-    # Prefer dropping: introduce > commit; branch-only > canonical
+    # Scoring heuristic — prefer dropping: introduce over commit; branch over canonical
     def _drop_score(beat_id: str, hint: _HintEdge) -> tuple[int, int, str]:
         """Lower score = preferred to drop (higher priority for dropping)."""
         strength = _hint_strength(hint.position)  # 2=commit, 1=introduce; lower = prefer drop
         is_canonical = _is_canonical_beat(beat_id, path_beats_map, canonical_paths)
         canonical_score = 1 if is_canonical else 0  # 0=branch (prefer drop), 1=canonical (keep)
         return (strength, canonical_score, beat_id)
-
-    hint_by_beat: dict[str, _HintEdge] = {h.beat_id: h for h in unique_hints}
 
     def _choose_default_drop(beat_a_id: str, beat_b_id: str) -> str:
         ha = hint_by_beat.get(beat_a_id)
@@ -3065,13 +3076,120 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
         # Lower score → prefer to drop
         return beat_a_id if score_a <= score_b else beat_b_id
 
+    # Run the greedy MDS loop.  conflict_set starts as the hints rejected by
+    # the sequential simulation of all survivors (those not already in
+    # mandatory_drop_ids from Phase 1).
+    swap_pairs_result: list[tuple[str, str]] = []
+
+    def _sim_survivors(excluded_beat_ids: set[str]) -> list[_HintEdge]:
+        """Simulate survivors minus the excluded beats; return rejected hints."""
+        active = [h for h in survivors if h.beat_id not in excluded_beat_ids]
+        return _simulate_hints_sequential(
+            active, base_existing, base_succ, beat_set, beat_intersection_groups
+        )
+
+    greedy_excluded: set[str] = set()
+    conflict_set = _sim_survivors(greedy_excluded)
+    # Track accepted hint IDs from the last simulation (those not rejected).
+    # Used to find swap-pair partners for rejected hints.
+    conflict_beat_ids: set[str] = {h.beat_id for h in conflict_set}
+    accepted_ids: set[str] = {
+        h.beat_id
+        for h in survivors
+        if h.beat_id not in greedy_excluded and h.beat_id not in conflict_beat_ids
+    }
+
+    while conflict_set:
+        # Score each conflicting hint; pick the weakest (lowest score = preferred drop)
+        best_hint = min(conflict_set, key=lambda h: _drop_score(h.beat_id, hint_by_beat[h.beat_id]))
+        candidate_id = best_hint.beat_id
+
+        # Re-simulate without the candidate to see if the conflict set clears
+        new_conflict_set = _sim_survivors(greedy_excluded | {candidate_id})
+
+        if not new_conflict_set:
+            # Dropping candidate resolves all conflicts.
+            # Check if any accepted hint is mutually exclusive with the candidate:
+            # if dropping the accepted hint instead also resolves all conflicts,
+            # this is a swap pair (either can be dropped, not just the candidate).
+            swap_partner: str | None = None
+            for acc_id in sorted(accepted_ids):
+                alt_conflict = _sim_survivors(greedy_excluded | {acc_id})
+                if not alt_conflict:
+                    swap_partner = acc_id
+                    break
+            if swap_partner is not None:
+                swap_pairs_result.append((candidate_id, swap_partner))
+                # Exclude the default_drop from the swap pair as resolved
+                default = _choose_default_drop(candidate_id, swap_partner)
+                greedy_excluded.add(default)
+                conflict_set = []
+                accepted_ids = set()
+            else:
+                # No alternative resolution → candidate is a true mandatory drop
+                mandatory_drop_ids.add(candidate_id)
+                greedy_excluded.add(candidate_id)
+                conflict_set = new_conflict_set
+                accepted_ids = set()
+        elif len(new_conflict_set) == 2:
+            # Binary residual: check if they are mutually exclusive (swap pair).
+            h_a, h_b = new_conflict_set[0], new_conflict_set[1]
+            # We only test dropping h_a (not h_b) because both hints passed
+            # Phase 1 (solo-cycle check), meaning they only conflict as a pair.
+            # By symmetry: if dropping h_a resolves the set, dropping h_b would
+            # too — both are mutual excluders, so one test suffices.
+            after_drop_a = _sim_survivors(greedy_excluded | {candidate_id, h_a.beat_id})
+            if not after_drop_a:
+                # Dropping either h_a or h_b resolves → true swap pair
+                swap_pairs_result.append((h_a.beat_id, h_b.beat_id))
+                mandatory_drop_ids.add(candidate_id)
+                greedy_excluded.add(candidate_id)
+                conflict_set = []
+                accepted_ids = set()
+            else:
+                mandatory_drop_ids.add(candidate_id)
+                greedy_excluded.add(candidate_id)
+                conflict_set = new_conflict_set
+                # Recompute accepted_ids so the next iteration can find swap partners
+                # among the surviving non-conflicting hints (mirrors the elif len<len branch).
+                new_conflict_ids = {h.beat_id for h in new_conflict_set}
+                accepted_ids = {
+                    h.beat_id
+                    for h in survivors
+                    if h.beat_id not in greedy_excluded and h.beat_id not in new_conflict_ids
+                }
+        elif len(new_conflict_set) < len(conflict_set):
+            # Progress made but not fully resolved → mandatory drop, iterate
+            mandatory_drop_ids.add(candidate_id)
+            greedy_excluded.add(candidate_id)
+            new_conflict_ids = {h.beat_id for h in new_conflict_set}
+            accepted_ids = {
+                h.beat_id
+                for h in survivors
+                if h.beat_id not in greedy_excluded and h.beat_id not in new_conflict_ids
+            }
+            conflict_set = new_conflict_set
+        else:
+            # Dropping the candidate made no progress; treat all as mandatory drops
+            log.warning(
+                "hint_conflict_greedy_irreducible",
+                conflict_beat_ids=[h.beat_id for h in conflict_set],
+                message=(
+                    "Greedy MDS found an irreducible conflict set larger than 2; "
+                    "marking all as mandatory drops."
+                ),
+            )
+            for h in conflict_set:
+                mandatory_drop_ids.add(h.beat_id)
+            conflict_set = []
+            accepted_ids = set()
+
     # Build final conflict list
     conflicts: list[HintConflict] = []
     mds: set[str] = set(mandatory_drop_ids)
 
     for bid in sorted(mandatory_drop_ids):
         conflicts.append(HintConflict(beat_a=bid, beat_b=None, mandatory=True, default_drop=bid))
-        mds.add(bid)
 
     for beat_a_id, beat_b_id in swap_pairs_result:
         default = _choose_default_drop(beat_a_id, beat_b_id)
