@@ -2523,9 +2523,9 @@ def _iter_temporal_hint_edges(
 def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
     """Simulate temporal hint edge application and return hints that would create cycles.
 
-    Replicates the full edge-building logic of ``interleave_cross_path_beats``
-    (all ordering types + heuristic commit edges) without committing any edges.
-    Hints that would create a cycle are returned as ``TemporalHintConflict`` objects
+    Replicates the concurrent-ordering logic of ``interleave_cross_path_beats``
+    (hint application only) without committing any edges.  Hints that would be
+    skipped as cycle-creating are returned as ``TemporalHintConflict`` objects
     for LLM resolution before interleave runs.
 
     Returns:
@@ -2550,6 +2550,7 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
                 beat_id_to_dilemmas[bid].add(dil_id)
 
     # Start with existing predecessor edges (intra-path ordering already in the DAG).
+    # Must use "predecessor" — "requires" edges do not exist in the beat DAG.
     existing: set[tuple[str, str]] = set()
     for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor"):
         existing.add((edge["from"], edge["to"]))
@@ -2560,80 +2561,30 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
         if from_id in successors and to_id in successors:
             successors[to_id].add(from_id)
 
-    # Build intersection-group index to match interleave's skip logic.
-    beat_intersection_groups: defaultdict[str, set[str]] = defaultdict(set)
-    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="intersection"):
-        beat_intersection_groups[edge["from"]].add(edge["to"])
-
-    def _sim_add(from_b: str, to_b: str) -> bool:
-        """Simulate adding a non-hint edge (serial/wraps/heuristic), updating state."""
-        if from_b == to_b:
-            return False
-        if (from_b, to_b) in existing:
-            return False
-        if from_b not in beat_set or to_b not in beat_set:
-            return False
-        from_groups = beat_intersection_groups.get(from_b, set())
-        to_groups = beat_intersection_groups.get(to_b, set())
-        if from_groups.intersection(to_groups):
-            return False
-        if _would_create_cycle(from_b, to_b, successors, beat_set):
-            return False
-        existing.add((from_b, to_b))
-        successors[to_b].add(from_b)
-        return True
-
     conflicts: list[TemporalHintConflict] = []
 
-    # Collect ALL relationship edges in the same order as interleave_cross_path_beats.
-    relationship_edges: list[tuple[str, str, str]] = []
-    for ordering in ("concurrent", "wraps", "serial"):
+    # Single-element tuple: future ordering types (e.g. "wraps") will be added here.
+    for ordering in ("concurrent",):
         for edge in graph.get_edges(from_id=None, to_id=None, edge_type=ordering):
-            a = edge["from"]
-            b = edge["to"]
-            if a in dilemma_paths and b in dilemma_paths:
-                relationship_edges.append((a, b, ordering))
+            dil_a = edge["from"]
+            dil_b = edge["to"]
+            if dil_a not in dilemma_paths or dil_b not in dilemma_paths:
+                continue
 
-    for dilemma_a, dilemma_b, ordering in relationship_edges:
-        paths_a = dilemma_paths.get(dilemma_a, [])
-        paths_b = dilemma_paths.get(dilemma_b, [])
-        if not paths_a or not paths_b:
-            continue
+            ordered_a = [
+                _get_path_beats_ordered(graph, p, path_beats_map) for p in dilemma_paths[dil_a]
+            ]
+            ordered_b = [
+                _get_path_beats_ordered(graph, p, path_beats_map) for p in dilemma_paths[dil_b]
+            ]
+            all_beats_a = [b for seq in ordered_a for b in seq]
+            all_beats_b = [b for seq in ordered_b for b in seq]
 
-        ordered_a = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_a]
-        ordered_b = [_get_path_beats_ordered(graph, p, path_beats_map) for p in paths_b]
-        all_beats_a = [b for seq in ordered_a for b in seq]
-        all_beats_b = [b for seq in ordered_b for b in seq]
-
-        if not all_beats_a or not all_beats_b:
-            continue
-
-        if ordering == "serial":
-            last_beats_a = {seq[-1] for seq in ordered_a if seq}
-            first_beats_b = {seq[0] for seq in ordered_b if seq}
-            for last_a in sorted(last_beats_a):
-                for first_b in sorted(first_beats_b):
-                    _sim_add(first_b, last_a)
-
-        elif ordering == "wraps":
-            first_beats_a = {seq[0] for seq in ordered_a if seq}
-            first_beats_b = {seq[0] for seq in ordered_b if seq}
-            last_beats_b = {seq[-1] for seq in ordered_b if seq}
-            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
-            for first_a in sorted(first_beats_a):
-                for first_b in sorted(first_beats_b):
-                    _sim_add(first_b, first_a)
-            for last_b in sorted(last_beats_b):
-                for commit_a in sorted(commits_a):
-                    _sim_add(commit_a, last_b)
-
-        elif ordering == "concurrent":
-            # Temporal hints first (same order as interleave_cross_path_beats)
             for hint_edge in _iter_temporal_hint_edges(
                 all_beats_a + all_beats_b,
                 beat_nodes,
-                dilemma_a,
-                dilemma_b,
+                dil_a,
+                dil_b,
                 all_beats_a,
                 ordered_a,
                 all_beats_b,
@@ -2647,10 +2598,6 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
                     continue
                 if from_b not in beat_set or to_b not in beat_set:
                     continue
-                from_groups = beat_intersection_groups.get(from_b, set())
-                to_groups = beat_intersection_groups.get(to_b, set())
-                if from_groups.intersection(to_groups):
-                    continue
                 if _would_create_cycle(from_b, to_b, successors, beat_set):
                     conflicts.append(
                         TemporalHintConflict(
@@ -2663,22 +2610,9 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
                         )
                     )
                 else:
+                    # Simulate applying the edge so later hints see it
                     existing.add((from_b, to_b))
                     successors[to_b].add(from_b)
-
-            # Heuristic commit-ordering edges — MUST match interleave_cross_path_beats
-            # so later concurrent pairs see the same graph state.
-            commits_a = set(_commits_beats_for_dilemma(all_beats_a, dilemma_a, beat_nodes))
-            commits_b = set(_commits_beats_for_dilemma(all_beats_b, dilemma_b, beat_nodes))
-            if commits_a and commits_b:
-                if dilemma_a < dilemma_b:
-                    for ca in sorted(commits_a):
-                        for cb in sorted(commits_b):
-                            _sim_add(cb, ca)
-                else:
-                    for cb in sorted(commits_b):
-                        for ca in sorted(commits_a):
-                            _sim_add(ca, cb)
 
     return conflicts
 
