@@ -5095,36 +5095,10 @@ class TestBuildHintConflictGraph:
         from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
 
         graph = _make_two_dilemma_graph_with_relationship("concurrent")
-        # Within-path: mt_intro ≺ mt_commit already exists from the fixture.
-        # Heuristic (artifact_quest < mentor_trust): aq_commit ≺ mt_commit.
-        # Manually add aq_commit ≺ mt_intro so the base DAG has
-        # mt_intro ≺ mt_commit and aq_commit ≺ mt_intro both, i.e.
-        # aq_commit → mt_intro → mt_commit.
-        # Hint: mt_intro after_commit artifact_quest → predecessor(mt_intro, aq_commit)
-        # = aq_commit ≺ mt_intro.  But aq_commit is already reachable from mt_intro
-        # (mt_intro → mt_commit → ... no, let's just force it directly).
-        # Simpler: add predecessor(aq_intro, mt_commit) so base has
-        # mt_commit ≺ aq_intro ≺ aq_commit.
-        # Then hint aq_intro after_commit mentor_trust → mt_commit ≺ aq_intro.
-        # That edge already exists, so it's not a cycle.
-        # Even simpler: add aq_commit already in successors[mt_commit] via a
-        # pre-existing predecessor edge, then hint tries aq_commit ≺ mt_intro
-        # but mt_intro → mt_commit and mt_commit already has aq_commit as successor.
-
-        # The cleanest approach: give mt_commit a predecessor of aq_commit
-        # (aq_commit ≺ mt_commit), then add a hint for mt_commit after_commit
-        # artifact_quest → aq_commit ≺ mt_commit.  But that edge already exists
-        # (from the predecessor we just added), so it's skipped as duplicate.
-
-        # Best approach: Use direct cycle setup:
-        # Base DAG has aq_intro ≺ aq_commit (within path).
-        # Manually add predecessor edge: aq_commit → mt_commit (i.e. mt_commit ≺ aq_commit
-        # in successor meaning). Wait, predecessor(A, B) means B ≺ A.
-        # Let's just force the cycle via a pre-existing predecessor + hint:
-        # Add predecessor(mt_intro, aq_commit) manually → aq_commit ≺ mt_intro in base.
+        # Base DAG: aq_commit ≺ mt_intro (manually added), mt_intro ≺ mt_commit (within-path).
         # Hint: aq_commit after_commit mentor_trust → mt_commit ≺ aq_commit.
-        # Base has mt_intro ≺ mt_commit (within-path fixture).
-        # So: aq_commit ≺ mt_intro ≺ mt_commit, and hint wants mt_commit ≺ aq_commit → cycle.
+        # Cycle: mt_commit reachable from aq_commit via mt_intro → mt_commit,
+        # so adding mt_commit ≺ aq_commit closes the cycle → mandatory drop.
         graph.add_edge("predecessor", "beat::mt_intro", "beat::aq_commit")
         graph.update_node(
             "beat::aq_commit",
