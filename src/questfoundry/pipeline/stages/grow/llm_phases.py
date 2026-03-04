@@ -33,6 +33,10 @@ from questfoundry.pipeline.stages.grow._helpers import (
 )
 from questfoundry.pipeline.stages.grow.registry import grow_phase
 
+# Maximum characters to show from a beat summary when building LLM context for
+# temporal hint resolution prompts.
+_TEMPORAL_HINT_SUMMARY_TRUNCATION = 100
+
 if TYPE_CHECKING:
     from langchain_core.language_models import BaseChatModel
 
@@ -408,6 +412,13 @@ class _LLMPhaseMixin:
         if result.swap_pairs:
             # Build context for each swap pair
             beat_nodes = graph.get_nodes_by_type("beat")
+            # Pre-build O(1) lookup for swap conflict by beat pair.
+            # Non-mandatory conflicts always have beat_b set (swap pairs).
+            swap_conflict_by_pair: dict[frozenset[str], str] = {
+                frozenset({c.beat_a, c.beat_b}): c.default_drop
+                for c in result.conflicts
+                if not c.mandatory and c.beat_b is not None
+            }
             swap_pairs_lines: list[str] = []
             for idx, (beat_a_id, beat_b_id) in enumerate(result.swap_pairs, 1):
                 group_id = f"P{idx}"
@@ -429,15 +440,17 @@ class _LLMPhaseMixin:
                     if "commit" in pos_b
                     else "WEAK: after/before_introduce"
                 )
-                summary_a = (data_a.get("summary") or "(no summary)")[:100]
-                summary_b = (data_b.get("summary") or "(no summary)")[:100]
+                summary_a = (data_a.get("summary") or "(no summary)")[
+                    :_TEMPORAL_HINT_SUMMARY_TRUNCATION
+                ]
+                summary_b = (data_b.get("summary") or "(no summary)")[
+                    :_TEMPORAL_HINT_SUMMARY_TRUNCATION
+                ]
 
-                # Find the default drop from the conflict list
-                default_drop = beat_a_id  # fallback
-                for c in result.conflicts:
-                    if not c.mandatory and {c.beat_a, c.beat_b} == {beat_a_id, beat_b_id}:
-                        default_drop = c.default_drop
-                        break
+                # O(1) lookup for default_drop
+                default_drop = swap_conflict_by_pair.get(
+                    frozenset({beat_a_id, beat_b_id}), beat_a_id
+                )
 
                 swap_pairs_lines.append(
                     f"### Swap Pair {group_id} — DROP EXACTLY ONE:\n"
@@ -529,7 +542,10 @@ class _LLMPhaseMixin:
             dropped_beats=sorted(beats_to_drop),
         )
 
-        # Postcondition: verify no surviving hints still cycle
+        # Postcondition: verify no surviving hints still cycle.
+        # NOTE: strip_temporal_hints_by_id has already run at this point.
+        # _iter_temporal_hint_edges skips beats with temporal_hint=None, so
+        # surviving_beat_ids acts as a cross-check rather than a filter here.
         all_beat_ids_with_hints: set[str] = set()
         for bid, data in graph.get_nodes_by_type("beat").items():
             if data.get("temporal_hint") is not None:

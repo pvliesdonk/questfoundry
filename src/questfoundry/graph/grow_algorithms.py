@@ -20,7 +20,7 @@ import contextlib
 from collections import defaultdict, deque
 from dataclasses import dataclass, field
 from itertools import product
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Any, Literal, NamedTuple
 
 from questfoundry.graph.context import normalize_scoped_id, strip_scope_prefix
 from questfoundry.graph.mutations import GrowErrorCategory, GrowValidationError
@@ -2695,10 +2695,10 @@ class HintConflict:
     swap pair: either beat_a or beat_b may survive, but not both.
 
     Attributes:
-        beat_a: First beat in the conflict (the mechanically-preferred drop).
-        beat_b: Second beat in the conflict (None for mandatory solo drops).
+        beat_a: First beat in the conflict pair.
+        beat_b: Second beat (None for mandatory solo drops).
         mandatory: True if beat_a MUST be dropped (no swap available).
-        default_drop: beat_a or beat_b — the heuristically-preferred drop.
+        default_drop: Heuristically-preferred drop (beat_a or beat_b).
     """
 
     beat_a: str
@@ -2740,6 +2740,64 @@ def _is_canonical_beat(
     return False
 
 
+class _HintResolutionContext(NamedTuple):
+    """Pre-built indexes shared by build_hint_conflict_graph and verify_hints_acyclic."""
+
+    dilemma_paths: dict[str, list[str]]
+    path_beats_map: dict[str, list[str]]
+    beat_id_to_dilemmas: dict[str, set[str]]
+    beat_intersection_groups: defaultdict[str, set[str]]
+    relationship_edges: list[tuple[str, str, str]]
+
+
+def _build_hint_resolution_context(graph: Graph) -> _HintResolutionContext | None:
+    """Build shared indexes needed for temporal-hint resolution.
+
+    Returns ``None`` if the graph has fewer than two dilemmas (no cross-path
+    ordering is possible and all hint functions should be no-ops).
+
+    Args:
+        graph: The story graph.
+
+    Returns:
+        A ``_HintResolutionContext`` with pre-built indexes, or ``None`` when
+        there are fewer than two dilemmas.
+    """
+    dilemma_paths = build_dilemma_paths(graph)
+    if len(dilemma_paths) < 2:
+        return None
+
+    path_beats_map: dict[str, list[str]] = defaultdict(list)
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to"):
+        path_beats_map[edge["to"]].append(edge["from"])
+
+    beat_id_to_dilemmas: dict[str, set[str]] = defaultdict(set)
+    for dil_id, paths in dilemma_paths.items():
+        for path_id in paths:
+            for bid in path_beats_map.get(path_id, []):
+                beat_id_to_dilemmas[bid].add(dil_id)
+
+    beat_intersection_groups: defaultdict[str, set[str]] = defaultdict(set)
+    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="intersection"):
+        beat_intersection_groups[edge["from"]].add(edge["to"])
+
+    relationship_edges: list[tuple[str, str, str]] = []
+    for ordering in ("concurrent", "wraps", "serial"):
+        for edge in graph.get_edges(from_id=None, to_id=None, edge_type=ordering):
+            a = edge["from"]
+            b = edge["to"]
+            if a in dilemma_paths and b in dilemma_paths:
+                relationship_edges.append((a, b, ordering))
+
+    return _HintResolutionContext(
+        dilemma_paths=dilemma_paths,
+        path_beats_map=path_beats_map,
+        beat_id_to_dilemmas=beat_id_to_dilemmas,
+        beat_intersection_groups=beat_intersection_groups,
+        relationship_edges=relationship_edges,
+    )
+
+
 def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
     """Build a conflict graph for temporal hints and compute the minimum drop set.
 
@@ -2771,21 +2829,17 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
             conflicts=[], mandatory_drops=set(), swap_pairs=[], minimum_drop_set=set()
         )
 
-    dilemma_paths = build_dilemma_paths(graph)
-    if len(dilemma_paths) < 2:
+    ctx = _build_hint_resolution_context(graph)
+    if ctx is None:
         return HintConflictResult(
             conflicts=[], mandatory_drops=set(), swap_pairs=[], minimum_drop_set=set()
         )
 
-    path_beats_map: dict[str, list[str]] = defaultdict(list)
-    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to"):
-        path_beats_map[edge["to"]].append(edge["from"])
-
-    beat_id_to_dilemmas: dict[str, set[str]] = defaultdict(set)
-    for dil_id, paths in dilemma_paths.items():
-        for path_id in paths:
-            for bid in path_beats_map.get(path_id, []):
-                beat_id_to_dilemmas[bid].add(dil_id)
+    dilemma_paths = ctx.dilemma_paths
+    path_beats_map = ctx.path_beats_map
+    beat_id_to_dilemmas = ctx.beat_id_to_dilemmas
+    beat_intersection_groups = ctx.beat_intersection_groups
+    relationship_edges = ctx.relationship_edges
 
     # Determine canonical paths for heuristic scoring
     path_nodes = graph.get_nodes_by_type("path")
@@ -2793,21 +2847,7 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
         pid for pid, data in path_nodes.items() if data.get("is_canonical", False)
     }
 
-    # Build intersection-group index
-    beat_intersection_groups: defaultdict[str, set[str]] = defaultdict(set)
-    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="intersection"):
-        beat_intersection_groups[edge["from"]].add(edge["to"])
-
     beat_set = set(beat_nodes.keys())
-
-    # Collect relationship edges in processing order (same as interleave_cross_path_beats)
-    relationship_edges: list[tuple[str, str, str]] = []
-    for ordering in ("concurrent", "wraps", "serial"):
-        for edge in graph.get_edges(from_id=None, to_id=None, edge_type=ordering):
-            a = edge["from"]
-            b = edge["to"]
-            if a in dilemma_paths and b in dilemma_paths:
-                relationship_edges.append((a, b, ordering))
 
     # Helper: build a fresh base DAG (all non-hint edges, no hints applied)
     def _build_base_dag() -> tuple[set[tuple[str, str]], dict[str, set[str]]]:
@@ -2974,6 +3014,14 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
     # Phase 2: find mutual exclusion pairs among survivors
     # Two hints A and B are mutual exclusion if A cycles given B AND B cycles given A.
     # For simplicity and correctness we test all pairs in O(n^2).
+    #
+    # Note: This scan is pairwise (O(n²)). With three or more hints that are
+    # mutually exclusive (any two together cycle), the algorithm pairs only
+    # the first conflicting pair it finds, leaving later hints unpaired.
+    # After one of the pair is dropped, the survivor may still conflict with
+    # the unpaired hint. verify_hints_acyclic will then raise
+    # TemporalHintResolutionInvariantError — this is the expected loud-failure
+    # behaviour, not silent degradation.
     swap_pairs_result: list[tuple[str, str]] = []
     # Track which beats are already in a swap pair (to avoid duplicates)
     in_swap_pair: set[str] = set()
@@ -3007,10 +3055,11 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
     def _choose_default_drop(beat_a_id: str, beat_b_id: str) -> str:
         ha = hint_by_beat.get(beat_a_id)
         hb = hint_by_beat.get(beat_b_id)
-        if ha is None:
-            return beat_a_id
-        if hb is None:
-            return beat_b_id
+        if ha is None or hb is None:
+            raise ValueError(
+                f"Could not find hint for beat in swap pair: "
+                f"({beat_a_id!r}, {beat_b_id!r}). This is a bug in conflict detection."
+            )
         score_a = _drop_score(beat_a_id, ha)
         score_b = _drop_score(beat_b_id, hb)
         # Lower score → prefer to drop
@@ -3067,23 +3116,15 @@ def verify_hints_acyclic(
     if not beat_nodes:
         return []
 
-    dilemma_paths = build_dilemma_paths(graph)
-    if len(dilemma_paths) < 2:
+    ctx = _build_hint_resolution_context(graph)
+    if ctx is None:
         return []
 
-    path_beats_map: dict[str, list[str]] = defaultdict(list)
-    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="belongs_to"):
-        path_beats_map[edge["to"]].append(edge["from"])
-
-    beat_id_to_dilemmas: dict[str, set[str]] = defaultdict(set)
-    for dil_id, paths in dilemma_paths.items():
-        for path_id in paths:
-            for bid in path_beats_map.get(path_id, []):
-                beat_id_to_dilemmas[bid].add(dil_id)
-
-    beat_intersection_groups: defaultdict[str, set[str]] = defaultdict(set)
-    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="intersection"):
-        beat_intersection_groups[edge["from"]].add(edge["to"])
+    dilemma_paths = ctx.dilemma_paths
+    path_beats_map = ctx.path_beats_map
+    beat_id_to_dilemmas = ctx.beat_id_to_dilemmas
+    beat_intersection_groups = ctx.beat_intersection_groups
+    relationship_edges = ctx.relationship_edges
 
     beat_set = set(beat_nodes.keys())
 
@@ -3113,14 +3154,6 @@ def verify_hints_acyclic(
         existing.add((from_b, to_b))
         successors[to_b].add(from_b)
         return True
-
-    relationship_edges: list[tuple[str, str, str]] = []
-    for ordering in ("concurrent", "wraps", "serial"):
-        for edge in graph.get_edges(from_id=None, to_id=None, edge_type=ordering):
-            a = edge["from"]
-            b = edge["to"]
-            if a in dilemma_paths and b in dilemma_paths:
-                relationship_edges.append((a, b, ordering))
 
     still_cyclic: list[str] = []
 

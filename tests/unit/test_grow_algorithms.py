@@ -5141,8 +5141,8 @@ class TestBuildHintConflictGraph:
         )
         assert any(c.mandatory for c in result.conflicts)
 
-    def test_mutual_exclusion_produces_swap_pair(self) -> None:
-        """Two hints that each cycle against the base DAG produce conflicts.
+    def test_mandatory_drop_when_both_hints_conflict(self) -> None:
+        """When one hint cycles alone against the base DAG it is a mandatory drop.
 
         With the ``_make_two_dilemma_graph_with_relationship("concurrent")`` fixture:
         - dilemma IDs are ``artifact_quest`` and ``mentor_trust`` (``aq < mt`` alphabetically).
@@ -5253,12 +5253,12 @@ class TestBuildHintConflictGraph:
         assert len(result.minimum_drop_set) == 1
         assert result.minimum_drop_set.issubset({"beat::mt_intro", "beat::aq_intro"})
 
-    def test_cascade_scenario(self) -> None:
-        """Dropping H2 can expose a cycle in H1 that was not visible before (cascade).
+    def test_mandatory_solo_drop_three_dilemma_chain(self) -> None:
+        """A hint that cycles alone against the base DAG is a mandatory solo drop.
 
-        This is the core cascade-blindness bug fixed in #1140.  The conflict graph
-        approach detects cascades because it uses the base DAG (no hints) to test
-        each hint in isolation.
+        This tests the mandatory-drop detection path using a three-dilemma chain,
+        which is a common setup where the heuristic commit-ordering creates a
+        transitive chain that a long-range hint will violate.
 
         Construct: three dilemmas alpha < beta < gamma.
           Base DAG heuristic: alpha_commit ≺ beta_commit ≺ gamma_commit.
@@ -5320,6 +5320,69 @@ class TestBuildHintConflictGraph:
         assert "beat::alpha_intro" in result.mandatory_drops, (
             "alpha_intro must be a mandatory solo drop — its hint cycles against "
             "the base DAG heuristic chain."
+        )
+
+    def test_genuine_cascade_two_hints_only_conflict_together(self) -> None:
+        """Two hints are safe alone but form a swap pair together (genuine cascade scenario).
+
+        This directly demonstrates the cascade-blindness bug fixed in #1140.
+        The old greedy single-pass algorithm would test H1 first (safe alone,
+        keep it), then test H2 with H1 already in the DAG — finding a cycle
+        and dropping H2 as mandatory.  But H2 is only problematic *because*
+        H1 is there; the correct answer is a swap pair, not a mandatory drop.
+
+        The conflict-graph approach tests each hint against the *base DAG only*
+        (no other hints applied), so it correctly identifies this as a swap pair.
+
+        Setup (using the two-dilemma fixture, aq < mt alphabetically):
+          Base heuristic: aq_commit ≺ mt_commit.
+          H1 on mt_intro: before_introduce artifact_quest → mt_intro ≺ aq_intro.
+            Alone: base DAG has no path aq_intro → mt_intro, so no solo cycle.
+          H2 on aq_intro: before_introduce mentor_trust → aq_intro ≺ mt_intro.
+            Alone: base DAG has no path mt_intro → aq_intro, so no solo cycle.
+          Together: mt_intro ≺ aq_intro AND aq_intro ≺ mt_intro → cycle.
+
+        Expected: swap pair, neither is mandatory.
+        """
+        from questfoundry.graph.grow_algorithms import build_hint_conflict_graph
+
+        graph = _make_two_dilemma_graph_with_relationship("concurrent")
+        # H1: mt_intro before aq_intro
+        graph.update_node(
+            "beat::mt_intro",
+            temporal_hint={
+                "relative_to": "dilemma::artifact_quest",
+                "position": "before_introduce",
+            },
+        )
+        # H2: aq_intro before mt_intro
+        graph.update_node(
+            "beat::aq_intro",
+            temporal_hint={
+                "relative_to": "dilemma::mentor_trust",
+                "position": "before_introduce",
+            },
+        )
+
+        result = build_hint_conflict_graph(graph)
+
+        # Neither hint should be a mandatory solo drop
+        assert "beat::mt_intro" not in result.mandatory_drops, (
+            "mt_intro must not be a mandatory drop — it only cycles when aq_intro's "
+            "hint is also applied. The conflict-graph approach detects this correctly."
+        )
+        assert "beat::aq_intro" not in result.mandatory_drops, (
+            "aq_intro must not be a mandatory drop — it only cycles when mt_intro's "
+            "hint is also applied. The conflict-graph approach detects this correctly."
+        )
+        # They should form a swap pair
+        assert len(result.swap_pairs) >= 1, (
+            "Expected a swap pair (mt_intro, aq_intro); got no swap pairs. "
+            "The conflict-graph approach should detect mutual exclusion."
+        )
+        swap_set = {frozenset(p) for p in result.swap_pairs}
+        assert frozenset({"beat::mt_intro", "beat::aq_intro"}) in swap_set, (
+            f"Expected swap pair (mt_intro, aq_intro); got swap_pairs={result.swap_pairs}"
         )
 
     def test_verify_hints_acyclic_clean_set(self) -> None:
@@ -5401,12 +5464,21 @@ class TestBuildHintConflictGraph:
         )
 
         result = build_hint_conflict_graph(graph)
-        if result.swap_pairs:
-            # Find the swap conflict
-            for c in result.conflicts:
-                if not c.mandatory and {c.beat_a, c.beat_b} == {"beat::mt_intro", "beat::aq_intro"}:
-                    # aq_intro has after_introduce (weaker) — should be dropped
-                    assert c.default_drop == "beat::aq_intro", (
-                        f"Expected default_drop=beat::aq_intro (weaker introduce hint), "
-                        f"got {c.default_drop}"
-                    )
+        assert result.swap_pairs, "Expected a swap pair between mt_intro and aq_intro"
+        # Find and assert on the swap conflict
+        swap_conflict = next(
+            (
+                c
+                for c in result.conflicts
+                if not c.mandatory and {c.beat_a, c.beat_b} == {"beat::mt_intro", "beat::aq_intro"}
+            ),
+            None,
+        )
+        assert swap_conflict is not None, (
+            "No swap conflict found for (mt_intro, aq_intro) in result.conflicts"
+        )
+        # aq_intro has after_introduce (weaker) — should be dropped
+        assert swap_conflict.default_drop == "beat::aq_intro", (
+            f"Expected default_drop=beat::aq_intro (weaker introduce hint), "
+            f"got {swap_conflict.default_drop}"
+        )
