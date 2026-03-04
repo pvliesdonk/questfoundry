@@ -1,2 +1,34 @@
+coverage:
+  precision: 2
+  round: down
+  range: "60...90"
+
+  status:
+    project:
+      default:
+        target: 80%
+        threshold: 2%       # allow up to 2% drop before failing
+        if_no_uploads: error
+        if_not_found: success
+        if_ci_failed: error
+
+    patch:
+      default:
+        target: 80%         # new code must match project target to prevent degradation
+        threshold: 5%
+        if_no_uploads: error
+        if_not_found: success
+        if_ci_failed: error
+
 ignore:
   - "tests/**"
+  - "docs/**"
+  - "prompts/**"
+  - "src/questfoundry/__main__.py"
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true     # only comment if coverage changed
+  require_base: true
+  require_head: true
