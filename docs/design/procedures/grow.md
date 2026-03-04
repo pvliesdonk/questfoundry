@@ -131,9 +131,10 @@ If the non-canonical answer is not promoted to a path in SEED, that dilemma has 
 > detection). Running intersections on a clean beat DAG (no predecessor edges
 > yet) ensures the No-Conditional-Prerequisites Invariant always passes (#1124).
 > A new **`resolve_temporal_hints`** phase runs between intersections and
-> interleave: it detects cycles in temporal hint proposals and calls the LLM to
-> choose which hints to relax before interleave creates any edges. This
-> eliminates silent `interleave_cycle_skipped` drops in valid runs (#1123).
+> interleave: it detects cycles in temporal hint proposals deterministically
+> and calls the LLM only for swap pairs (hints that cycle together but not
+> alone). This eliminates silent `interleave_cycle_skipped` drops in valid runs
+> (#1123) by resolving all conflicts before interleave creates any edges.
 > Phase numbering is preserved for historical continuity; execution order is
 > defined in `_phase_order()`.
 > Actual order: `validate_dag → intersections → resolve_temporal_hints →
@@ -241,6 +242,66 @@ causes `passage_dag_cycles` failures in validation.
 - **Split lead-ins (#361):** Create path-specific copies of the shared beat
   so the path-specific version keeps the dependency while others are
   independent.  Risk: increases beat count and complexity.
+
+---
+
+### Phase 3b: Resolve Temporal Hints
+
+**Purpose:** Detect cycles in temporal hint proposals and resolve them deterministically (mandatory drops) or via LLM consultation (swap pairs) before interleave applies any cross-path ordering edges.
+
+**Input:** Beat graph with intersections applied, no predecessor edges yet (Phase 3 complete). Beats may carry `temporal_hint` fields (optional dict with `position` and `relative_to` keys).
+
+**Algorithm:**
+
+**Step 1 — Build base DAG:**
+Simulate all non-hint ordering edges without any temporal hints. This includes:
+- Serial relationships (last beats of A precede first beats of B)
+- Wraps relationships (A's intro precedes B's intro; B's final beats precede A's commits)
+- Heuristic commit-ordering edges (deterministic ordering of concurrent dilemmas by ID)
+
+This is the stable substrate against which all temporal hints will be tested.
+
+**Step 2 — Solo hint testing:**
+For each beat carrying a temporal hint, test the hint in isolation against the base DAG. If the hint would create a cycle alone (no interference from other hints), the hint is mandatory-drop — the dilemma ordering relationships take precedence over the temporal relationship.
+
+**Step 3 — Pairwise testing:**
+For surviving hints, test them in pairs. For each pair (A, B):
+- Test A's hint when B is absent: does A cycle?
+- Test B's hint when A is absent: does B cycle?
+- If both survive solo but both cycle together, they form a swap pair — a genuine narrative trade-off where exactly one must be dropped.
+
+**Step 4 — Minimum drop set (greedy heuristic):**
+Apply a greedy minimum feedback arc set heuristic to the conflict graph. For swap pairs identified in Step 3, determine a default drop candidate using:
+1. Hint strength: `before_commit` or `after_commit` > `before_introduce` or `after_introduce`
+2. Beat role: spine or anchor beats > branch-only beats (more narratively central)
+3. Alphabetical tiebreak on beat ID
+
+**Step 5 — LLM consultation (swap pairs only):**
+For each swap pair, present the LLM with a binary choice: "Drop exactly one of Beat A or Beat B's temporal hint. Which one should be sacrificed?" The LLM receives:
+- Both beat summaries and their temporal requests
+- The narrative consequence of each drop
+- Default recommendation from Step 4
+
+LLM returns `ConflictGroupResolution` per pair. Invalid responses (both, neither, neither valid beat ID) fall back to the mechanical default from Step 4.
+
+**Step 6 — Apply drops:**
+Strip `temporal_hint` (set to `None`) from all beats marked for dropping: mandatory drops from Step 2, plus LLM-selected drops from Step 5.
+
+**Output:** Beat graph with a consistent (acyclic) set of temporal hints. No subsequent edge creation will silently drop hints due to cycles.
+
+**LLM involvement:** Yes, for swap pairs only. Mandatory drops are deterministic (no LLM call).
+
+**Human Gate:** No (consumed programmatically by interleave phase).
+
+#### Why Mandatory vs. Swap Distinction?
+
+Hints that cycle against the base DAG alone represent a narrative impossibility: the dilemma ordering structure is fixed; temporal relationships requesting contradictory orderings cannot all be honored. No narrative choice is possible — one must be dropped.
+
+Hints that only cycle in combination with another hint represent a genuine creative trade-off. The LLM is better positioned than a deterministic tiebreaker to choose which temporal relationship matters more to the story's narrative arc. This aligns with the core philosophy: "LLM as collaborator under constraint."
+
+#### Temporal Hint Acyclicity Invariant
+
+After `resolve_temporal_hints` completes, the set of surviving temporal hints must be acyclic — i.e., applying all surviving hint edges to the base DAG produces no cycles. This is verified by simulating edge application. If the postcondition fails, `TemporalHintResolutionInvariantError` is raised. This is a hard pipeline failure; silent degradation (skipping cyclic hints at interleave time) is not acceptable.
 
 ---
 
