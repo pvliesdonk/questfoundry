@@ -11,7 +11,8 @@ during POLISH Phase 7 via ``run_passage_checks()``.
 
 from __future__ import annotations
 
-from collections import deque
+import re
+from collections import Counter, deque
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.context import get_primary_beat, normalize_scoped_id
@@ -400,8 +401,6 @@ def _check_choice_integrity(
         from_id = edge["from"]
         choices_by_source.setdefault(from_id, []).append(edge)
 
-    from collections import Counter
-
     for source_id, choices in choices_by_source.items():
         # Check for duplicate labels
         labels: list[str] = [c["label"] for c in choices if c.get("label")]
@@ -501,16 +500,13 @@ def _check_no_overlapping_requires(
         choices_by_passage.setdefault(from_id, []).append(requires)
 
     for passage_id, requires_lists in choices_by_passage.items():
-        # Compare all pairs
-        for i in range(len(requires_lists)):
-            for j in range(i + 1, len(requires_lists)):
-                a = set(requires_lists[i])
-                b = set(requires_lists[j])
-                if a and b and a & b:
-                    errors.append(
-                        f"Passage {passage_id} has two choices with overlapping requires: "
-                        f"{sorted(a & b)}"
-                    )
+        flag_counts = Counter(flag for c in requires_lists for flag in c)
+        overlapping_flags = {f for f, count in flag_counts.items() if count > 1}
+        if overlapping_flags:
+            errors.append(
+                f"Passage {passage_id} has choices with overlapping requires: "
+                f"{sorted(overlapping_flags)}"
+            )
 
 
 def _check_variant_requires_non_empty(
@@ -543,29 +539,19 @@ def _check_no_unresolved_splits(
     plan_node = graph.get_node("polish_plan::current") or {}
     warnings: list[str] = plan_node.get("warnings") or []
 
-    passage_nodes = graph.get_nodes_by_type("passage")
-    variant_passage_ids = {pid for pid, pdata in passage_nodes.items() if pdata.get("is_variant")}
-
     for warning in warnings:
         if "structural split recommended" not in warning:
             continue
         # Warning format: "Passage passage::X has N narratively relevant flags — structural split recommended"
         # Extract the passage ID from the warning text
-        parts = warning.split()
-        if len(parts) < 2:
+        match = re.search(r"Passage (\S+)", warning)
+        if not match:
             continue
-        warned_passage_id = parts[1]  # "Passage <id> has ..."
+        warned_passage_id = match.group(1)
 
-        # Check if any variant passage was created for this base passage
-        has_variant = any(
-            passage_nodes[vid].get("variant_for") == warned_passage_id
-            or passage_nodes[vid].get("base_passage_id") == warned_passage_id
-            for vid in variant_passage_ids
-        )
-        # Also check via variant_of edges
-        if not has_variant:
-            variant_of_edges = graph.get_edges(edge_type="variant_of", to_id=warned_passage_id)
-            has_variant = bool(variant_of_edges)
+        # Check via variant_of edges
+        variant_of_edges = graph.get_edges(edge_type="variant_of", to_id=warned_passage_id)
+        has_variant = bool(variant_of_edges)
 
         if not has_variant:
             errors.append(

@@ -494,3 +494,98 @@ class TestNoUnresolvedSplits:
 
         errors = validate_polish_output(graph)
         assert not any("structural split warning" in e for e in errors)
+
+
+class TestDivergencesHaveChoices:
+    """Tests for _check_divergences_have_choices."""
+
+    def test_divergence_beat_with_insufficient_choices_errors(self) -> None:
+        """A divergence beat whose passage has only 1 outgoing choice should error."""
+        graph = Graph.empty()
+
+        # Two paths
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
+
+        # Beats: divergence beat with two children on different paths
+        _make_beat(graph, "beat::div", "Divergence beat")
+        _make_beat(graph, "beat::a", "Path A beat")
+        _make_beat(graph, "beat::b", "Path B beat")
+
+        # belongs_to edges — children on different paths
+        graph.add_edge("belongs_to", "beat::div", "path::pa")
+        graph.add_edge("belongs_to", "beat::a", "path::pa")
+        graph.add_edge("belongs_to", "beat::b", "path::pb")
+
+        # next/branch edges making beat::div a divergence point
+        graph.add_edge("branch", "beat::div", "beat::a")
+        graph.add_edge("branch", "beat::div", "beat::b")
+
+        # Group all beats into passages
+        _create_passage_node(
+            graph,
+            PassageSpec(passage_id="passage::div", beat_ids=["beat::div"], summary="Div"),
+        )
+        _create_passage_node(
+            graph,
+            PassageSpec(passage_id="passage::a", beat_ids=["beat::a"], summary="A"),
+        )
+        _create_passage_node(
+            graph,
+            PassageSpec(passage_id="passage::b", beat_ids=["beat::b"], summary="B"),
+        )
+
+        # Only 1 outgoing choice from divergence passage — not enough
+        _create_choice_edge(
+            graph,
+            ChoiceSpec(from_passage="passage::div", to_passage="passage::a", label="Go A"),
+        )
+
+        errors = validate_polish_output(graph)
+        assert any(
+            "beat::div" in e and "divergence point" in e and "passage::div" in e for e in errors
+        )
+
+    def test_divergence_beat_with_sufficient_choices_passes(self) -> None:
+        """A divergence beat whose passage has 2+ outgoing choices should not error."""
+        graph = Graph.empty()
+
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
+
+        _make_beat(graph, "beat::div", "Divergence beat")
+        _make_beat(graph, "beat::a", "Path A beat")
+        _make_beat(graph, "beat::b", "Path B beat")
+
+        graph.add_edge("belongs_to", "beat::div", "path::pa")
+        graph.add_edge("belongs_to", "beat::a", "path::pa")
+        graph.add_edge("belongs_to", "beat::b", "path::pb")
+
+        graph.add_edge("branch", "beat::div", "beat::a")
+        graph.add_edge("branch", "beat::div", "beat::b")
+
+        _create_passage_node(
+            graph,
+            PassageSpec(passage_id="passage::div", beat_ids=["beat::div"], summary="Div"),
+        )
+        _create_passage_node(
+            graph,
+            PassageSpec(passage_id="passage::a", beat_ids=["beat::a"], summary="A"),
+        )
+        _create_passage_node(
+            graph,
+            PassageSpec(passage_id="passage::b", beat_ids=["beat::b"], summary="B"),
+        )
+
+        # 2 outgoing choices — sufficient
+        _create_choice_edge(
+            graph,
+            ChoiceSpec(from_passage="passage::div", to_passage="passage::a", label="Go A"),
+        )
+        _create_choice_edge(
+            graph,
+            ChoiceSpec(from_passage="passage::div", to_passage="passage::b", label="Go B"),
+        )
+
+        errors = validate_polish_output(graph)
+        assert not any("divergence point" in e for e in errors)
