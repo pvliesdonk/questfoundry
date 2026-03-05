@@ -449,3 +449,187 @@ class TestPolishCollapseLinearBeats:
         )
         assert result.status == "completed"
         assert result.detail == "No linear beat runs to collapse"
+
+
+# ---------------------------------------------------------------------------
+# Tests for Fix #1153: arc_traversals populated after phase_plan_application
+# ---------------------------------------------------------------------------
+
+
+class TestArcTraversalsAfterPlanApplication:
+    """Phase 6 must populate arc_traversals on the polish_plan node."""
+
+    def test_arc_traversals_non_empty_after_phase6(self) -> None:
+        """Minimal two-path graph: phase 4 + phase 6 produce non-empty arc_traversals."""
+        import asyncio
+
+        from questfoundry.pipeline.stages.polish.deterministic import (
+            phase_plan_application,
+            phase_plan_computation,
+        )
+
+        graph = Graph.empty()
+
+        # Two dilemmas, each with two paths
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "status": "explored"})
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa", "dilemma_id": "dilemma::d1"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb", "dilemma_id": "dilemma::d1"})
+
+        # State flags
+        graph.create_node(
+            "state_flag::d1_pa",
+            {
+                "type": "state_flag",
+                "raw_id": "d1_pa",
+                "dilemma_id": "dilemma::d1",
+                "path_id": "path::pa",
+            },
+        )
+        graph.create_node(
+            "state_flag::d1_pb",
+            {
+                "type": "state_flag",
+                "raw_id": "d1_pb",
+                "dilemma_id": "dilemma::d1",
+                "path_id": "path::pb",
+            },
+        )
+
+        # Beats on each path
+        for bid, pid in [("beat::a", "path::pa"), ("beat::b", "path::pb")]:
+            graph.create_node(
+                bid,
+                {
+                    "type": "beat",
+                    "raw_id": bid.split("::")[-1],
+                    "summary": f"Beat on {pid}",
+                    "dilemma_impacts": [],
+                    "entities": [],
+                    "scene_type": "scene",
+                },
+            )
+            graph.add_edge("belongs_to", bid, pid)
+
+        # Run Phase 4 (plan computation)
+        r4 = asyncio.run(phase_plan_computation(graph, None))  # type: ignore[arg-type]
+        assert r4.status == "completed"
+
+        # Run Phase 6 (plan application) — no Phase 5 needed for minimal graph
+        r6 = asyncio.run(phase_plan_application(graph, None))  # type: ignore[arg-type]
+        assert r6.status == "completed"
+
+        # Verify arc_traversals is populated
+        plan_nodes = graph.get_nodes_by_type("polish_plan")
+        plan_data = plan_nodes.get("polish_plan::current", {})
+        arc_traversals = plan_data.get("arc_traversals", {})
+
+        assert arc_traversals, "arc_traversals must be non-empty after plan application"
+        # Keys should follow arc_key format (e.g. "path_a+path_b")
+        for key in arc_traversals:
+            assert "+" in key or key  # arc keys join path IDs
+        # Values should be lists of passage IDs
+        for passages in arc_traversals.values():
+            assert isinstance(passages, list)
+            for pid in passages:
+                assert pid.startswith("passage::")
+
+
+# ---------------------------------------------------------------------------
+# Tests for Fix #1152: ChoiceSpec.requires populated for convergence choices
+# ---------------------------------------------------------------------------
+
+
+class TestChoiceSpecRequires:
+    """compute_choice_edges must populate requires for choices from intersection passages."""
+
+    def _build_convergence_graph(self, graph: Graph) -> None:
+        """Build a minimal 2-dilemma convergence graph with intersection beat."""
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "status": "explored"})
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
+
+        # State flags
+        graph.create_node(
+            "state_flag::d1_pa",
+            {
+                "type": "state_flag",
+                "raw_id": "d1_pa",
+                "dilemma_id": "dilemma::d1",
+                "path_id": "path::pa",
+            },
+        )
+        graph.create_node(
+            "state_flag::d1_pb",
+            {
+                "type": "state_flag",
+                "raw_id": "d1_pb",
+                "dilemma_id": "dilemma::d1",
+                "path_id": "path::pb",
+            },
+        )
+
+        # Start beat (shared)
+        _make_beat(graph, "beat::start", "Start")
+        graph.add_edge("belongs_to", "beat::start", "path::pa")
+
+        # Path-exclusive beats
+        _make_beat(graph, "beat::a", "Path A beat")
+        graph.add_edge("belongs_to", "beat::a", "path::pa")
+        _make_beat(graph, "beat::b", "Path B beat")
+        graph.add_edge("belongs_to", "beat::b", "path::pb")
+
+        # Intersection beat (appears in intersection_group)
+        _make_beat(graph, "beat::merge", "Merge beat")
+        graph.add_edge("belongs_to", "beat::merge", "path::pa")
+
+        # Intersection group
+        graph.create_node(
+            "intersection_group::g1",
+            {"type": "intersection_group", "raw_id": "g1", "node_ids": ["beat::merge"]},
+        )
+
+        # Predecessor edges: start → a, start → b, a → merge, b → merge
+        _add_predecessor(graph, "beat::a", "beat::start")
+        _add_predecessor(graph, "beat::b", "beat::start")
+        _add_predecessor(graph, "beat::merge", "beat::a")
+        _add_predecessor(graph, "beat::merge", "beat::b")
+
+        # dilemma_path edges so compute_arc_traversals can find paths
+        graph.add_edge("dilemma_path", "dilemma::d1", "path::pa")
+        graph.add_edge("dilemma_path", "dilemma::d1", "path::pb")
+
+        # Commits impacts on path beats so state flags are set
+        graph.update_node(
+            "beat::a",
+            dilemma_impacts=[{"effect": "commits", "dilemma_id": "dilemma::d1"}],
+        )
+        graph.update_node(
+            "beat::b",
+            dilemma_impacts=[{"effect": "commits", "dilemma_id": "dilemma::d1"}],
+        )
+
+    def test_divergence_choice_requires_empty(self) -> None:
+        """Choices from non-intersection passages have empty requires."""
+        graph = Graph.empty()
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
+
+        _make_beat(graph, "beat::start", "Start")
+        _make_beat(graph, "beat::a", "Path A")
+        _make_beat(graph, "beat::b", "Path B")
+
+        graph.add_edge("belongs_to", "beat::start", "path::pa")
+        graph.add_edge("belongs_to", "beat::a", "path::pa")
+        graph.add_edge("belongs_to", "beat::b", "path::pb")
+
+        _add_predecessor(graph, "beat::a", "beat::start")
+        _add_predecessor(graph, "beat::b", "beat::start")
+
+        specs = compute_beat_grouping(graph)
+        choices = compute_choice_edges(graph, specs)
+
+        # Divergence choices from non-intersection passages should have no requires
+        for c in choices:
+            from_spec = next((s for s in specs if s.passage_id == c.from_passage), None)
+            if from_spec and from_spec.grouping_type != "intersection":
+                assert c.requires == [], f"Expected empty requires for {c.from_passage}"

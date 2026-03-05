@@ -277,6 +277,7 @@ class _PolishLLMPhaseMixin:
                         "end_per_path": arc.end_per_path,
                     },
                 )
+                graph.add_edge("has_arc_metadata", entity_id, arc_node_id)
                 arcs_created += 1
 
         return PhaseResult(

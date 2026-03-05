@@ -508,11 +508,28 @@ def compute_choice_edges(
                         if dilemma_id and path_id:
                             grants.append(f"{dilemma_id}:{path_id}")
 
+            # Compute requires: for choices from intersection passages, populate
+            # the required state flags for the target passage.
+            requires: list[str] = []
+            passage_id_to_spec: dict[str, PassageSpec] = {s.passage_id: s for s in specs}
+            from_spec = passage_id_to_spec.get(from_passage)
+            if from_spec and from_spec.grouping_type == "intersection":
+                target_beat = sorted(path_children)[0]
+                try:
+                    flag_combos = compute_active_flags_at_beat(graph, target_beat)
+                    if len(flag_combos) == 1:
+                        combo = next(iter(flag_combos))
+                        if combo:  # non-empty
+                            requires = sorted(combo)
+                except ValueError:
+                    pass
+
             choices.append(
                 ChoiceSpec(
                     from_passage=from_passage,
                     to_passage=to_passage,
                     grants=grants,
+                    requires=requires,
                     label="",  # Populated by Phase 5
                 )
             )
@@ -638,62 +655,77 @@ async def phase_plan_application(
             detail="No polish plan found — Phases 4 and 5 must run first",
         )
 
-    passage_specs = [PassageSpec(**s) for s in plan_data.get("passage_specs", [])]
-    variant_specs = [VariantSpec(**s) for s in plan_data.get("variant_specs", [])]
-    residue_specs = [ResidueSpec(**s) for s in plan_data.get("residue_specs", [])]
-    choice_specs = [ChoiceSpec(**s) for s in plan_data.get("choice_specs", [])]
-    false_branch_specs = [FalseBranchSpec(**s) for s in plan_data.get("false_branch_specs", [])]
+    graph.savepoint("plan_application")
+    try:
+        passage_specs = [PassageSpec(**s) for s in plan_data.get("passage_specs", [])]
+        variant_specs = [VariantSpec(**s) for s in plan_data.get("variant_specs", [])]
+        residue_specs = [ResidueSpec(**s) for s in plan_data.get("residue_specs", [])]
+        choice_specs = [ChoiceSpec(**s) for s in plan_data.get("choice_specs", [])]
+        false_branch_specs = [FalseBranchSpec(**s) for s in plan_data.get("false_branch_specs", [])]
 
-    counts: dict[str, int] = {
-        "passages": 0,
-        "variants": 0,
-        "residue_beats": 0,
-        "residue_passages": 0,
-        "choices": 0,
-        "false_branches": 0,
-        "sidetrack_beats": 0,
-    }
+        counts: dict[str, int] = {
+            "passages": 0,
+            "variants": 0,
+            "residue_beats": 0,
+            "residue_passages": 0,
+            "choices": 0,
+            "false_branches": 0,
+            "sidetrack_beats": 0,
+        }
 
-    # 1. Create passage nodes with grouped_in edges
-    for spec in passage_specs:
-        _create_passage_node(graph, spec)
-        counts["passages"] += 1
+        # 1. Create passage nodes with grouped_in edges
+        for spec in passage_specs:
+            _create_passage_node(graph, spec)
+            counts["passages"] += 1
 
-    log.debug("phase6_passages_created", count=counts["passages"])
+        log.debug("phase6_passages_created", count=counts["passages"])
 
-    # 2. Create variant passages with variant_of edges
-    for vspec in variant_specs:
-        _create_variant_passage(graph, vspec)
-        counts["variants"] += 1
+        # 2. Create variant passages with variant_of edges
+        for vspec in variant_specs:
+            _create_variant_passage(graph, vspec)
+            counts["variants"] += 1
 
-    log.debug("phase6_variants_created", count=counts["variants"])
+        log.debug("phase6_variants_created", count=counts["variants"])
 
-    # 3-4. Create residue beat nodes and residue passages
-    for rspec in residue_specs:
-        _create_residue_beat_and_passage(graph, rspec)
-        counts["residue_beats"] += 1
-        counts["residue_passages"] += 1
+        # 3-4. Create residue beat nodes and residue passages
+        for rspec in residue_specs:
+            _create_residue_beat_and_passage(graph, rspec)
+            counts["residue_beats"] += 1
+            counts["residue_passages"] += 1
 
-    log.debug("phase6_residues_created", count=counts["residue_beats"])
+        log.debug("phase6_residues_created", count=counts["residue_beats"])
 
-    # 5. Create choice edges
-    for cspec in choice_specs:
-        _create_choice_edge(graph, cspec)
-        counts["choices"] += 1
+        # 5. Create choice edges
+        for cspec in choice_specs:
+            _create_choice_edge(graph, cspec)
+            counts["choices"] += 1
 
-    log.debug("phase6_choices_created", count=counts["choices"])
+        log.debug("phase6_choices_created", count=counts["choices"])
 
-    # 6-7. Create false branch passages and sidetrack beats
-    for fb_spec in false_branch_specs:
-        if fb_spec.branch_type == "skip":
-            continue
+        # 6-7. Create false branch passages and sidetrack beats
+        for fb_spec in false_branch_specs:
+            if fb_spec.branch_type == "skip":
+                continue
 
-        new_beats, new_choices = _apply_false_branch(graph, fb_spec)
-        counts["false_branches"] += 1
-        counts["sidetrack_beats"] += new_beats
-        counts["choices"] += new_choices
+            new_beats, new_choices = _apply_false_branch(graph, fb_spec)
+            counts["false_branches"] += 1
+            counts["sidetrack_beats"] += new_beats
+            counts["choices"] += new_choices
 
-    log.debug("phase6_false_branches_applied", count=counts["false_branches"])
+        log.debug("phase6_false_branches_applied", count=counts["false_branches"])
+
+        # Populate arc_traversals after all grouped_in edges exist
+        from questfoundry.graph.algorithms import compute_passage_traversals
+
+        arc_traversals = compute_passage_traversals(graph)
+        plan_dict = _load_plan_data(graph) or {}
+        plan_dict["arc_traversals"] = arc_traversals
+        graph.update_node("polish_plan::current", **dict(plan_dict))
+
+        graph.release("plan_application")
+    except Exception:
+        graph.rollback_to("plan_application")
+        raise
 
     detail = (
         f"{counts['passages']} passages, "

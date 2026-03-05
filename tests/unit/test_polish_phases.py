@@ -6,13 +6,18 @@ themselves. LLM integration is tested separately.
 
 from __future__ import annotations
 
+import asyncio
+from unittest.mock import MagicMock
+
 from questfoundry.graph.graph import Graph
+from questfoundry.models.polish import CharacterArcMetadata, Phase3Output
 from questfoundry.pipeline.stages.polish.llm_phases import (
     _check_consecutive_runs,
     _check_post_commit_sequel,
     _collect_entity_appearances,
     _detect_pacing_flags,
     _find_linear_sections,
+    _PolishLLMPhaseMixin,
     _topological_sort,
     _validate_reorder_constraints,
 )
@@ -367,3 +372,65 @@ class TestCollectEntityAppearances:
         graph = Graph.empty()
         result = _collect_entity_appearances({}, graph)
         assert result == {}
+
+
+# ---------------------------------------------------------------------------
+# Tests for Phase 3 has_arc_metadata edge (Fix #1154)
+# ---------------------------------------------------------------------------
+
+
+class _FakePolishLLMHost(_PolishLLMPhaseMixin):
+    """Minimal host that satisfies _PolishLLMHelperMixin by providing _polish_llm_call."""
+
+    def __init__(self, llm_result: object) -> None:
+        self._llm_result = llm_result
+
+    async def _polish_llm_call(
+        self,
+        model: object,  # noqa: ARG002
+        template_name: str,  # noqa: ARG002
+        context: str,  # noqa: ARG002
+        output_schema: object,  # noqa: ARG002
+    ) -> tuple[object, int, int]:
+        return (self._llm_result, 1, 100)
+
+
+class TestPhase3ArcMetadataEdge:
+    """Phase 3 must add has_arc_metadata edge from entity to arc node."""
+
+    def test_has_arc_metadata_edge_created(self) -> None:
+        """Phase 3 creates has_arc_metadata edge from entity to arc metadata node."""
+        graph = Graph.empty()
+
+        # Create entity node
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "name": "Hero"},
+        )
+
+        # Create two beats so entity qualifies as arc-worthy
+        _make_beat(graph, "beat::a", "First beat", entities=["entity::hero"])
+        _make_beat(graph, "beat::b", "Second beat", entities=["entity::hero"])
+        _add_predecessor(graph, "beat::b", "beat::a")
+
+        # Phase 3 output
+        arc_output = Phase3Output(
+            character_arcs=[
+                CharacterArcMetadata(
+                    entity_id="entity::hero",
+                    start="Nervous newcomer",
+                    end_per_path={"path::brave": "Confident hero"},
+                )
+            ]
+        )
+
+        host = _FakePolishLLMHost(arc_output)
+        result = asyncio.run(host._phase_3_character_arcs(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+
+        # Verify has_arc_metadata edge exists from entity to arc node
+        arc_node_id = "character_arc_metadata::hero"
+        edges = graph.get_edges(from_id="entity::hero", edge_type="has_arc_metadata")
+        assert len(edges) == 1
+        assert edges[0]["to"] == arc_node_id

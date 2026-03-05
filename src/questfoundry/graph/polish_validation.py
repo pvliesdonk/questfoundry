@@ -228,6 +228,7 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_variant_integrity(passage_nodes, graph, errors)
     _check_choice_integrity(graph, errors)
     _check_residue_ordering(graph, errors)
+    _check_arc_metadata_edges(graph, errors)
 
     return errors
 
@@ -415,6 +416,18 @@ def _check_residue_ordering(
     for passage_id, pdata in passage_nodes.items():
         if pdata.get("is_residue") and passage_id not in passages_with_precedes:
             errors.append(f"Residue passage {passage_id} has no precedes edge to a target passage")
+
+
+def _check_arc_metadata_edges(
+    graph: Graph,
+    errors: list[str],
+) -> None:
+    """Every character_arc_metadata node must have a has_arc_metadata edge from an entity."""
+    arc_nodes = graph.get_nodes_by_type("character_arc_metadata")
+    for arc_id in arc_nodes:
+        edges = graph.get_edges(edge_type="has_arc_metadata", to_id=arc_id)
+        if not edges:
+            errors.append(f"Arc metadata node {arc_id} has no has_arc_metadata edge from entity")
 
 
 # ---------------------------------------------------------------------------
