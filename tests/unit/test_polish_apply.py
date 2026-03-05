@@ -453,7 +453,7 @@ class TestPhase6Savepoint:
     """Tests for savepoint behaviour in phase_plan_application."""
 
     def test_dict_store_failure_raises_underlying_exception(self) -> None:
-        """With DictGraphStore, a failure raises the original exception (savepoints are no-ops)."""
+        """With DictGraphStore, a failure raises the original exception and graph state is rolled back."""
         graph = Graph.empty()
         _make_minimal_plan(graph)
 
@@ -487,6 +487,14 @@ class TestPhase6Savepoint:
 
         with pytest.raises(NodeExistsError):
             asyncio.run(phase_plan_application(graph, None))  # type: ignore[arg-type]
+
+        # After rollback, the pre-savepoint state is restored: the pre-existing passage
+        # remains, and no new passages were added by the failed phase application.
+        passage_nodes = graph.get_nodes_by_type("passage")
+        assert "passage::single_0" in passage_nodes, "Pre-savepoint passage must survive rollback"
+        assert len(passage_nodes) == 1, (
+            "No new passages should have been created by the failed phase"
+        )
 
     def test_sqlite_store_failure_leaves_zero_passage_nodes(self) -> None:
         """With SqliteGraphStore, failure at 3rd passage → zero passage nodes after failed call."""
@@ -527,3 +535,4 @@ class TestPhase6Savepoint:
         # but no new passages from the failed phase should exist
         assert "passage::single_0" not in passage_nodes
         assert "passage::single_1" not in passage_nodes
+        assert "passage::single_2" in passage_nodes, "Pre-savepoint passage must survive rollback"

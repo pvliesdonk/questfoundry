@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from questfoundry.graph.algorithms import compute_active_flags_at_beat
+from questfoundry.graph.algorithms import compute_active_flags_at_beat, compute_passage_traversals
 from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.polish import (
     ChoiceSpec,
@@ -514,7 +514,6 @@ def compute_choice_edges(
             passage_id_to_spec: dict[str, PassageSpec] = {s.passage_id: s for s in specs}
             from_spec = passage_id_to_spec.get(from_passage)
             if from_spec and from_spec.grouping_type == "intersection":
-                target_beat = sorted(path_children)[0]
                 try:
                     flag_combos = compute_active_flags_at_beat(graph, target_beat)
                     if len(flag_combos) == 1:
@@ -726,17 +725,15 @@ async def phase_plan_application(
         log.debug("phase6_false_branches_applied", count=counts["false_branches"])
 
         # Populate arc_traversals after all grouped_in edges exist
-        from questfoundry.graph.algorithms import compute_passage_traversals
-
         arc_traversals = compute_passage_traversals(graph)
-        plan_dict = _load_plan_data(graph) or {}
-        plan_dict["arc_traversals"] = arc_traversals
-        graph.update_node("polish_plan::current", **dict(plan_dict))
+        plan_data["arc_traversals"] = arc_traversals
+        graph.update_node("polish_plan::current", **plan_data)
 
-        graph.release("plan_application")
     except Exception:
         graph.rollback_to("plan_application")
         raise
+    finally:
+        graph.release("plan_application")
 
     detail = (
         f"{counts['passages']} passages, "
