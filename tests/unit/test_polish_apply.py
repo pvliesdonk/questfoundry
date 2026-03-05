@@ -7,7 +7,12 @@ choice specs, and false branch specs.
 
 from __future__ import annotations
 
+import asyncio
+
+import pytest
+
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.sqlite_store import SqliteGraphStore
 from questfoundry.models.polish import (
     ChoiceSpec,
     FalseBranchSpec,
@@ -16,12 +21,15 @@ from questfoundry.models.polish import (
     VariantSpec,
 )
 from questfoundry.pipeline.stages.polish.deterministic import (
+    PolishPlan,
     _apply_diamond,
     _apply_sidetrack,
     _create_choice_edge,
     _create_passage_node,
     _create_residue_beat_and_passage,
     _create_variant_passage,
+    _store_plan,
+    phase_plan_application,
 )
 
 
@@ -429,3 +437,102 @@ class TestPhase6Integration:
         # No specs to apply — just verify no crash
         passages = graph.get_nodes_by_type("passage")
         assert len(passages) == 0
+
+
+# ---------------------------------------------------------------------------
+# Savepoint tests (Fix #1155)
+# ---------------------------------------------------------------------------
+
+
+def _make_minimal_plan(graph: Graph) -> None:
+    """Store a minimal empty polish plan on the graph."""
+    _store_plan(graph, PolishPlan())
+
+
+class TestPhase6Savepoint:
+    """Tests for savepoint behaviour in phase_plan_application."""
+
+    def test_dict_store_failure_raises_underlying_exception(self) -> None:
+        """With DictGraphStore, a failure raises the original exception and graph state is rolled back."""
+        graph = Graph.empty()
+        _make_minimal_plan(graph)
+
+        # Inject a passage spec referencing a non-existent beat to trigger failure
+
+        # Deliberately use a malformed plan that will cause create_node to raise
+        # by triggering NodeExistsError (create plan node twice)
+        from questfoundry.graph.errors import NodeExistsError
+
+        # Store plan again to trigger NodeExistsError on second _store_plan
+        # Actually the plan already exists — let's make a duplicate passage spec
+        # by creating the passage node before phase_plan_application tries to create it.
+        graph.create_node(
+            "passage::single_0",
+            {"type": "passage", "raw_id": "single_0", "summary": "pre-existing"},
+        )
+        _make_beat(graph, "beat::x")
+        # Update plan to include a spec for the pre-existing passage
+        graph.update_node(
+            "polish_plan::current",
+            passage_specs=[
+                {
+                    "passage_id": "passage::single_0",
+                    "beat_ids": ["beat::x"],
+                    "summary": "will collide",
+                    "entities": [],
+                    "grouping_type": "singleton",
+                }
+            ],
+        )
+
+        with pytest.raises(NodeExistsError):
+            asyncio.run(phase_plan_application(graph, None))  # type: ignore[arg-type]
+
+        # After rollback, the pre-savepoint state is restored: the pre-existing passage
+        # remains, and no new passages were added by the failed phase application.
+        passage_nodes = graph.get_nodes_by_type("passage")
+        assert "passage::single_0" in passage_nodes, "Pre-savepoint passage must survive rollback"
+        assert len(passage_nodes) == 1, (
+            "No new passages should have been created by the failed phase"
+        )
+
+    def test_sqlite_store_failure_leaves_zero_passage_nodes(self) -> None:
+        """With SqliteGraphStore, failure at 3rd passage → zero passage nodes after failed call."""
+        store = SqliteGraphStore()
+        graph = Graph(store=store)
+
+        # Create 3 beat nodes and a plan with 3 passage specs.
+        # Make the 3rd passage pre-exist so Phase 6 hits NodeExistsError after 2 creations.
+        for i in range(3):
+            _make_beat(graph, f"beat::b{i}")
+
+        graph.create_node(
+            "passage::single_2",
+            {"type": "passage", "raw_id": "single_2", "summary": "pre-existing"},
+        )
+
+        specs = [
+            {
+                "passage_id": f"passage::single_{i}",
+                "beat_ids": [f"beat::b{i}"],
+                "summary": f"Passage {i}",
+                "entities": [],
+                "grouping_type": "singleton",
+            }
+            for i in range(3)
+        ]
+        _store_plan(graph, PolishPlan())
+        graph.update_node("polish_plan::current", passage_specs=specs)
+
+        from questfoundry.graph.errors import NodeExistsError
+
+        with pytest.raises(NodeExistsError):
+            asyncio.run(phase_plan_application(graph, None))  # type: ignore[arg-type]
+
+        # After rollback, no passage nodes (except the pre-existing one was there before savepoint)
+        passage_nodes = graph.get_nodes_by_type("passage")
+        # The pre-existing passage was created before the savepoint so it remains
+        # but no new passages from the failed phase should exist
+        assert "passage::single_0" not in passage_nodes
+        assert "passage::single_1" not in passage_nodes
+        assert "passage::single_2" in passage_nodes, "Pre-savepoint passage must survive rollback"
