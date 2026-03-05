@@ -229,6 +229,19 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_choice_integrity(graph, errors)
     _check_residue_ordering(graph, errors)
     _check_arc_metadata_edges(graph, errors)
+    _check_arc_completeness(graph, errors)
+    _check_divergences_have_choices(graph, beat_to_passages, errors)
+    _check_no_overlapping_requires(graph, errors)
+    _check_variant_requires_non_empty(passage_nodes, graph, errors)
+    _check_no_unresolved_splits(graph, errors)
+
+    endings_check = check_all_endings_reachable(graph)
+    if endings_check.severity == "fail" and "Cannot check" not in endings_check.message:
+        errors.append(endings_check.message)
+
+    gate_check = check_gate_satisfiability(graph)
+    if gate_check.severity == "fail":
+        errors.append(gate_check.message)
 
     return errors
 
@@ -244,7 +257,7 @@ def _check_beat_grouping(
         if len(passages) == 0:
             # Skip micro/residue/sidetrack beats — they may not exist yet at validation time
             role = beat_nodes[beat_id].get("role", "")
-            if role not in ("micro_beat", "residue_beat", "sidetrack_beat"):
+            if role not in ("micro_beat", "sidetrack_beat"):  # residue_beat no longer exempt
                 errors.append(f"Beat {beat_id} not grouped into any passage")
         elif len(passages) > 1:
             errors.append(f"Beat {beat_id} grouped into {len(passages)} passages: {passages}")
@@ -416,6 +429,160 @@ def _check_residue_ordering(
     for passage_id, pdata in passage_nodes.items():
         if pdata.get("is_residue") and passage_id not in passages_with_precedes:
             errors.append(f"Residue passage {passage_id} has no precedes edge to a target passage")
+
+
+def _check_arc_completeness(
+    graph: Graph,
+    errors: list[str],
+) -> None:
+    """Check arc_traversals in polish_plan for duplicate passage IDs and bad endings."""
+    plan_node = graph.get_node("polish_plan::current") or {}
+    arc_traversals: dict[str, list[str]] = plan_node.get("arc_traversals") or {}
+    for arc_key, passage_ids in arc_traversals.items():
+        if len(passage_ids) != len(set(passage_ids)):
+            errors.append(f"Arc {arc_key} has repeated passage IDs: {passage_ids}")
+        if passage_ids:
+            outgoing = graph.get_edges(edge_type="choice", from_id=passage_ids[-1])
+            if outgoing:
+                errors.append(
+                    f"Arc {arc_key} last passage {passage_ids[-1]} has outgoing choices — not an ending"
+                )
+
+
+def _check_divergences_have_choices(
+    graph: Graph,
+    beat_to_passages: dict[str, list[str]],
+    errors: list[str],
+) -> None:
+    """Beats with 2+ children on different paths must live in a passage with 2+ outgoing choices."""
+    # Find beats that have 2+ outgoing next/branch edges leading to beats on different paths
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beat_to_path: dict[str, str] = {}
+    for edge in belongs_to_edges:
+        beat_to_path[edge["from"]] = edge["to"]
+
+    next_edges = graph.get_edges(edge_type="next")
+    branch_edges = graph.get_edges(edge_type="branch")
+    children_by_beat: dict[str, list[str]] = {}
+    for edge in next_edges + branch_edges:
+        children_by_beat.setdefault(edge["from"], []).append(edge["to"])
+
+    # Build passage -> outgoing choice count
+    choice_edges = graph.get_edges(edge_type="choice")
+    passage_outgoing: dict[str, int] = {}
+    for edge in choice_edges:
+        passage_outgoing[edge["from"]] = passage_outgoing.get(edge["from"], 0) + 1
+
+    for beat_id, children in children_by_beat.items():
+        if len(children) < 2:
+            continue
+        # Check if children are on different paths
+        child_paths = {beat_to_path.get(c) for c in children}
+        child_paths.discard(None)
+        if len(child_paths) < 2:
+            continue
+        # This beat is a divergence point — its passage must have 2+ outgoing choices
+        passages = beat_to_passages.get(beat_id, [])
+        for passage_id in passages:
+            if passage_outgoing.get(passage_id, 0) < 2:
+                errors.append(
+                    f"Beat {beat_id} is a divergence point but its passage {passage_id} "
+                    f"has fewer than 2 outgoing choices"
+                )
+
+
+def _check_no_overlapping_requires(
+    graph: Graph,
+    errors: list[str],
+) -> None:
+    """For each passage, no two outgoing choices should have intersecting requires lists."""
+    choice_edges = graph.get_edges(edge_type="choice")
+
+    # Group by source passage
+    choices_by_passage: dict[str, list[list[str]]] = {}
+    for edge in choice_edges:
+        from_id = edge["from"]
+        requires: list[str] = edge.get("requires") or []
+        choices_by_passage.setdefault(from_id, []).append(requires)
+
+    for passage_id, requires_lists in choices_by_passage.items():
+        # Compare all pairs
+        for i in range(len(requires_lists)):
+            for j in range(i + 1, len(requires_lists)):
+                a = set(requires_lists[i])
+                b = set(requires_lists[j])
+                if a and b and a & b:
+                    errors.append(
+                        f"Passage {passage_id} has two choices with overlapping requires: "
+                        f"{sorted(a & b)}"
+                    )
+
+
+def _check_variant_requires_non_empty(
+    passage_nodes: dict[str, Any],
+    graph: Graph,
+    errors: list[str],
+) -> None:
+    """Every variant passage must have at least one outgoing choice with non-empty requires."""
+    choice_edges = graph.get_edges(edge_type="choice")
+
+    # Build passage -> list of requires lists for outgoing choices
+    outgoing_requires: dict[str, list[list[str]]] = {}
+    for edge in choice_edges:
+        from_id = edge["from"]
+        requires: list[str] = edge.get("requires") or []
+        outgoing_requires.setdefault(from_id, []).append(requires)
+
+    for passage_id, pdata in passage_nodes.items():
+        if not pdata.get("is_variant"):
+            continue
+        all_choices = outgoing_requires.get(passage_id, [])
+        # A variant with no outgoing choices is caught by _check_passage_reachability;
+        # here we check that at least one outgoing choice has a non-empty requires.
+        if all_choices and all(not r for r in all_choices):
+            errors.append(
+                f"Variant passage {passage_id} has outgoing choices but none have requires — "
+                f"variant cannot be routed"
+            )
+
+
+def _check_no_unresolved_splits(
+    graph: Graph,
+    errors: list[str],
+) -> None:
+    """Structural split warnings without a corresponding variant passage are errors."""
+    plan_node = graph.get_node("polish_plan::current") or {}
+    warnings: list[str] = plan_node.get("warnings") or []
+
+    passage_nodes = graph.get_nodes_by_type("passage")
+    variant_passage_ids = {pid for pid, pdata in passage_nodes.items() if pdata.get("is_variant")}
+
+    for warning in warnings:
+        if "structural split recommended" not in warning:
+            continue
+        # Warning format: "Passage passage::X has N narratively relevant flags — structural split recommended"
+        # Extract the passage ID from the warning text
+        parts = warning.split()
+        if len(parts) < 2:
+            continue
+        warned_passage_id = parts[1]  # "Passage <id> has ..."
+
+        # Check if any variant passage was created for this base passage
+        has_variant = any(
+            passage_nodes[vid].get("variant_for") == warned_passage_id
+            or passage_nodes[vid].get("base_passage_id") == warned_passage_id
+            for vid in variant_passage_ids
+        )
+        # Also check via variant_of edges
+        if not has_variant:
+            variant_of_edges = graph.get_edges(edge_type="variant_of", to_id=warned_passage_id)
+            has_variant = bool(variant_of_edges)
+
+        if not has_variant:
+            errors.append(
+                f"Passage {warned_passage_id} has a structural split warning but no variant "
+                f"passage was created — split was not resolved"
+            )
 
 
 def _check_arc_metadata_edges(
