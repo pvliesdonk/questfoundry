@@ -3101,6 +3101,16 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
     # Flatten surviving beats back into an edge list for simulation.
     # All edges for each surviving beat are included so that
     # _simulate_hints_sequential sees the full set of edges a beat would add.
+    #
+    # Known limitation: the simulation is edge-atomic, not beat-atomic.
+    # When a beat has N edges and edge 1 is safe but edge 2 cycles,
+    # _simulate_hints_sequential commits edge 1 before rejecting edge 2.
+    # Edge 1 then remains in the working DAG for that simulation pass and may
+    # cause a false conflict for a subsequent beat.  This is benign: each
+    # _sim_survivors call starts a fresh copy of the base DAG, so the false
+    # conflict disappears on the next MDS iteration after the beat is dropped.
+    # Strict beat-atomic semantics would require pre-checking all edges of a
+    # beat before committing any, but are not needed for correctness here.
     survivors: list[_HintEdge] = [edge for bid in surviving_beat_ids for edge in hints_by_beat[bid]]
 
     # Phase 2: greedy MDS loop — detect transitive multi-hint cycles.
@@ -3146,8 +3156,10 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
         rejected_edges = _simulate_hints_sequential(
             active, base_existing, base_succ, beat_set, beat_intersection_groups
         )
-        # Deduplicate by beat_id: one representative per rejected beat.
-        # A multi-edge beat may appear multiple times; return only the first.
+        # Deduplicate by beat_id: one representative _HintEdge per rejected beat.
+        # A multi-edge beat may appear multiple times (edge-atomic simulation commits
+        # edge 1 before rejecting edge 2, so edge 1 may cause a false conflict for
+        # a subsequent beat; MDS re-runs clean this up on the next iteration).
         seen: set[str] = set()
         unique_rejected: list[_HintEdge] = []
         for h in rejected_edges:
@@ -3369,12 +3381,8 @@ def verify_hints_acyclic(
     rejected = _simulate_hints_sequential(
         surviving_hint_edges, base_existing, base_succ, beat_set, beat_intersection_groups
     )
-    seen: set[str] = set()
-    result: list[str] = []
-    for h in rejected:
-        if h.beat_id not in seen:
-            seen.add(h.beat_id)
-            result.append(h.beat_id)
+    # dict.fromkeys preserves insertion order and deduplicates beat IDs in one pass.
+    result: list[str] = list(dict.fromkeys(h.beat_id for h in rejected))
     return result
 
 
