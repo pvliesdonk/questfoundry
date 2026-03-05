@@ -7052,3 +7052,179 @@ class TestBuildHintConflictGraph:
         assert still_cyclic == [], (
             f"verify_hints_acyclic must return [] after MDS; got {still_cyclic}"
         )
+
+    # ------------------------------------------------------------------ #
+    # Regression: multi-path hint dedup bug (#1149)                       #
+    # ------------------------------------------------------------------ #
+
+    def test_multi_path_hint_second_edge_cycle_detected(self) -> None:
+        """Regression test for #1149: beat_id dedup in build_hint_conflict_graph
+        dropped edges 2..N for hints targeting a multi-path dilemma.
+
+        Setup
+        -----
+        - Dilemma ``alpha`` (1 path): a_intro → a_commit
+        - Dilemma ``beta``  (2 paths):
+            - path1: b1_intro → b1_commit
+            - path2: b2_intro → b2_commit
+        - concurrent relationship: alpha ↔ beta
+        - Manual graph edge: ``predecessor(a_commit, b2_commit)``
+          (a_commit requires b2_commit → b2_commit ≺ a_commit)
+          This makes succ[b2_commit] = {a_commit} in the base DAG.
+
+        Hint on ``a_commit``: ``before_commit dilemma::beta``
+        generates TWO edges (one per path's commit beat):
+          Edge 1: predecessor(b1_commit, a_commit) — b1_commit ≺ a_commit
+                  Safe alone: b1_commit has no succ leading to a_commit.
+          Edge 2: predecessor(b2_commit, a_commit) — b2_commit ≺ a_commit
+                  Cyclic alone: base succ[b2_commit] = {a_commit}, so
+                  _would_create_cycle(b2_commit, a_commit) = True.
+
+        Old behaviour (bug): dedup kept only Edge 1 (safe) → hint passed.
+        New behaviour (fix): both edges evaluated → Edge 2 cycles → mandatory drop.
+        """
+        from questfoundry.graph.grow_algorithms import (
+            build_hint_conflict_graph,
+            verify_hints_acyclic,
+        )
+
+        graph = Graph.empty()
+
+        # Dilemmas
+        graph.create_node("dilemma::alpha", {"type": "dilemma", "raw_id": "alpha"})
+        graph.create_node("dilemma::beta", {"type": "dilemma", "raw_id": "beta"})
+
+        # alpha: 1 path with 2 beats
+        graph.create_node(
+            "path::alpha_path",
+            {
+                "type": "path",
+                "raw_id": "alpha_path",
+                "dilemma_id": "dilemma::alpha",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "beat::a_intro",
+            {
+                "type": "beat",
+                "raw_id": "a_intro",
+                "summary": "Alpha intro.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::alpha", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            "beat::a_commit",
+            {
+                "type": "beat",
+                "raw_id": "a_commit",
+                "summary": "Alpha commit.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::alpha", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::a_intro", "path::alpha_path")
+        graph.add_edge("belongs_to", "beat::a_commit", "path::alpha_path")
+        graph.add_edge("predecessor", "beat::a_commit", "beat::a_intro")
+
+        # beta: 2 paths
+        graph.create_node(
+            "path::beta_path1",
+            {
+                "type": "path",
+                "raw_id": "beta_path1",
+                "dilemma_id": "dilemma::beta",
+                "is_canonical": True,
+            },
+        )
+        graph.create_node(
+            "path::beta_path2",
+            {
+                "type": "path",
+                "raw_id": "beta_path2",
+                "dilemma_id": "dilemma::beta",
+                "is_canonical": False,
+            },
+        )
+        graph.create_node(
+            "beat::b1_intro",
+            {
+                "type": "beat",
+                "raw_id": "b1_intro",
+                "summary": "Beta path1 intro.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::beta", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            "beat::b1_commit",
+            {
+                "type": "beat",
+                "raw_id": "b1_commit",
+                "summary": "Beta path1 commit.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::beta", "effect": "commits"}],
+            },
+        )
+        graph.create_node(
+            "beat::b2_intro",
+            {
+                "type": "beat",
+                "raw_id": "b2_intro",
+                "summary": "Beta path2 intro.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::beta", "effect": "advances"}],
+            },
+        )
+        graph.create_node(
+            "beat::b2_commit",
+            {
+                "type": "beat",
+                "raw_id": "b2_commit",
+                "summary": "Beta path2 commit.",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::beta", "effect": "commits"}],
+            },
+        )
+        graph.add_edge("belongs_to", "beat::b1_intro", "path::beta_path1")
+        graph.add_edge("belongs_to", "beat::b1_commit", "path::beta_path1")
+        graph.add_edge("predecessor", "beat::b1_commit", "beat::b1_intro")
+
+        graph.add_edge("belongs_to", "beat::b2_intro", "path::beta_path2")
+        graph.add_edge("belongs_to", "beat::b2_commit", "path::beta_path2")
+        graph.add_edge("predecessor", "beat::b2_commit", "beat::b2_intro")
+
+        # Relationship: alpha concurrent with beta
+        graph.add_edge("concurrent", "dilemma::alpha", "dilemma::beta")
+
+        # The crucial setup edge: a_commit requires b2_commit (b2_commit ≺ a_commit).
+        # This makes b2_commit → a_commit in the base succ graph.
+        # The heuristic alpha_commit ≺ b2_commit would cycle against this and is
+        # therefore skipped by _build_hint_base_dag, leaving succ[b2_commit]={a_commit}.
+        graph.add_edge("predecessor", "beat::a_commit", "beat::b2_commit")
+
+        # Add the temporal hint on a_commit: "before_commit dilemma::beta"
+        # This targets the commit beats of both beta paths → 2 edges:
+        #   Edge 1: predecessor(b1_commit, a_commit) — b1_commit ≺ a_commit [SAFE]
+        #   Edge 2: predecessor(b2_commit, a_commit) — b2_commit ≺ a_commit [CYCLES]
+        graph.update_node(
+            "beat::a_commit",
+            temporal_hint={
+                "relative_to": "dilemma::beta",
+                "position": "before_commit",
+            },
+        )
+
+        result = build_hint_conflict_graph(graph)
+
+        assert "beat::a_commit" in result.mandatory_drops, (
+            "beat::a_commit must be a mandatory drop: its hint generates 2 edges "
+            "(one per beta path), and Edge 2 (b2_commit ≺ a_commit) cycles against "
+            "the base DAG (b2_commit already has a_commit as a successor). "
+            "The old code (dedup by beat_id) only tested Edge 1 (safe) and "
+            "incorrectly passed the hint."
+        )
+
+        # After applying the minimum drop set (dropping a_commit's hint),
+        # verify_hints_acyclic must confirm no cycles remain.
+        all_hint_beats = {"beat::a_commit"}
+        survivors = all_hint_beats - result.minimum_drop_set
+        still_cyclic = verify_hints_acyclic(graph, survivors)
+        assert still_cyclic == [], (
+            f"verify_hints_acyclic must return [] after MDS; got {still_cyclic}"
+        )

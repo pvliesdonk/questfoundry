@@ -3054,37 +3054,64 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
             conflicts=[], mandatory_drops=set(), swap_pairs=[], minimum_drop_set=set()
         )
 
-    # Deduplicate hint edges by beat_id — keep first occurrence per beat
-    seen_beat_ids: set[str] = set()
-    unique_hints: list[_HintEdge] = []
+    # Group ALL hint edges by beat_id.  A beat with a hint targeting a
+    # dilemma with N paths produces N edges.  Evaluation is per-beat-id:
+    # a beat's hint survives only if ALL its edges are acyclic (atomic
+    # semantics — the hint either applies fully or not at all).
+    hints_by_beat: dict[str, list[_HintEdge]] = {}
     for he in all_hint_edges:
-        if he.beat_id not in seen_beat_ids:
-            seen_beat_ids.add(he.beat_id)
-            unique_hints.append(he)
+        hints_by_beat.setdefault(he.beat_id, []).append(he)
+
+    # Keep one representative _HintEdge per beat for scoring/conflict APIs
+    # that need a single hint object.  All edges for a beat share the same
+    # position/strength (they come from the same temporal_hint field).
+    hint_by_beat: dict[str, _HintEdge] = {bid: edges[0] for bid, edges in hints_by_beat.items()}
 
     # base_existing and base_succ are already built above via _build_hint_base_dag()
 
-    def _cycles_alone(hint: _HintEdge) -> bool:
-        """Test whether a single hint cycles against the base DAG."""
-        from_b, to_b = hint.from_beat, hint.to_beat
-        if from_b == to_b or from_b not in beat_set or to_b not in beat_set:
-            return False
-        if (from_b, to_b) in base_existing:
-            return False
-        if beat_intersection_groups.get(from_b, set()).intersection(
-            beat_intersection_groups.get(to_b, set())
-        ):
-            return False
-        return _would_create_cycle(from_b, to_b, base_succ, beat_set)
+    def _beat_cycles_alone(beat_id: str) -> bool:
+        """Test whether ANY edge of a beat's hint cycles against the base DAG.
 
-    # Phase 1: identify mandatory solo drops
+        A beat is a mandatory drop if even one of its edges would create a cycle
+        against the base DAG in isolation (before considering other hints).
+        """
+        for edge in hints_by_beat[beat_id]:
+            from_b, to_b = edge.from_beat, edge.to_beat
+            if from_b == to_b or from_b not in beat_set or to_b not in beat_set:
+                continue
+            if (from_b, to_b) in base_existing:
+                continue
+            if beat_intersection_groups.get(from_b, set()).intersection(
+                beat_intersection_groups.get(to_b, set())
+            ):
+                continue
+            if _would_create_cycle(from_b, to_b, base_succ, beat_set):
+                return True
+        return False
+
+    # Phase 1: identify mandatory solo drops — beats where ANY edge cycles alone.
     mandatory_drop_ids: set[str] = set()
-    survivors: list[_HintEdge] = []
-    for hint in unique_hints:
-        if _cycles_alone(hint):
-            mandatory_drop_ids.add(hint.beat_id)
+    surviving_beat_ids: list[str] = []
+    for beat_id in hints_by_beat:
+        if _beat_cycles_alone(beat_id):
+            mandatory_drop_ids.add(beat_id)
         else:
-            survivors.append(hint)
+            surviving_beat_ids.append(beat_id)
+
+    # Flatten surviving beats back into an edge list for simulation.
+    # All edges for each surviving beat are included so that
+    # _simulate_hints_sequential sees the full set of edges a beat would add.
+    #
+    # Known limitation: the simulation is edge-atomic, not beat-atomic.
+    # When a beat has N edges and edge 1 is safe but edge 2 cycles,
+    # _simulate_hints_sequential commits edge 1 before rejecting edge 2.
+    # Edge 1 then remains in the working DAG for that simulation pass and may
+    # cause a false conflict for a subsequent beat.  This is benign: each
+    # _sim_survivors call starts a fresh copy of the base DAG, so the false
+    # conflict disappears on the next MDS iteration after the beat is dropped.
+    # Strict beat-atomic semantics would require pre-checking all edges of a
+    # beat before committing any, but are not needed for correctness here.
+    survivors: list[_HintEdge] = [edge for bid in surviving_beat_ids for edge in hints_by_beat[bid]]
 
     # Phase 2: greedy MDS loop — detect transitive multi-hint cycles.
     #
@@ -3093,7 +3120,6 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
     # all three together cycle).  The sequential simulation in
     # _simulate_hints_sequential uses the same base DAG as _build_base_dag(),
     # so detection and postcondition check (verify_hints_acyclic) are consistent.
-    hint_by_beat: dict[str, _HintEdge] = {h.beat_id: h for h in unique_hints}
 
     # Scoring heuristic — prefer dropping: introduce over commit; branch over canonical
     def _drop_score(beat_id: str, hint: _HintEdge) -> tuple[int, int, str]:
@@ -3119,14 +3145,28 @@ def build_hint_conflict_graph(graph: Graph) -> HintConflictResult:
     # Run the greedy MDS loop.  conflict_set starts as the hints rejected by
     # the sequential simulation of all survivors (those not already in
     # mandatory_drop_ids from Phase 1).
+    #
+    # _sim_survivors returns unique-by-beat_id rejected hints (one per beat)
+    # so the MDS loop operates on beats, not individual edges.
     swap_pairs_result: list[tuple[str, str]] = []
 
     def _sim_survivors(excluded_beat_ids: set[str]) -> list[_HintEdge]:
-        """Simulate survivors minus the excluded beats; return rejected hints."""
+        """Simulate survivors minus the excluded beats; return rejected hints (one per beat_id)."""
         active = [h for h in survivors if h.beat_id not in excluded_beat_ids]
-        return _simulate_hints_sequential(
+        rejected_edges = _simulate_hints_sequential(
             active, base_existing, base_succ, beat_set, beat_intersection_groups
         )
+        # Deduplicate by beat_id: one representative _HintEdge per rejected beat.
+        # A multi-edge beat may appear multiple times (edge-atomic simulation commits
+        # edge 1 before rejecting edge 2, so edge 1 may cause a false conflict for
+        # a subsequent beat; MDS re-runs clean this up on the next iteration).
+        seen: set[str] = set()
+        unique_rejected: list[_HintEdge] = []
+        for h in rejected_edges:
+            if h.beat_id not in seen:
+                seen.add(h.beat_id)
+                unique_rejected.append(h)
+        return unique_rejected
 
     greedy_excluded: set[str] = set()
     conflict_set = _sim_survivors(greedy_excluded)
@@ -3301,9 +3341,11 @@ def verify_hints_acyclic(
         path_beats_map,
     )
 
-    # Collect all surviving hint edges across all concurrent pairs
+    # Collect all surviving hint edges across all concurrent pairs.
+    # A beat targeting a dilemma with N paths produces N edges; keep ALL of
+    # them so the simulation tests the full set of edges each hint would add
+    # (matching the per-edge evaluation used by build_hint_conflict_graph).
     surviving_hint_edges: list[_HintEdge] = []
-    seen_beat_ids: set[str] = set()
     for dilemma_a, dilemma_b, ordering in relationship_edges:
         if ordering != "concurrent":
             continue
@@ -3330,17 +3372,18 @@ def verify_hints_acyclic(
         ):
             if hint_edge.beat_id not in surviving_beat_ids:
                 continue
-            # Deduplicate by beat_id (keep first occurrence, matching build_hint_conflict_graph)
-            if hint_edge.beat_id not in seen_beat_ids:
-                seen_beat_ids.add(hint_edge.beat_id)
-                surviving_hint_edges.append(hint_edge)
+            surviving_hint_edges.append(hint_edge)
 
     # Run the same sequential simulation as build_hint_conflict_graph uses.
-    # Rejected hints are still-cyclic.
+    # Rejected hints are still-cyclic.  Deduplicate by beat_id: a multi-edge
+    # beat may appear multiple times in the rejected list (one per rejected
+    # edge), but callers need one entry per beat.
     rejected = _simulate_hints_sequential(
         surviving_hint_edges, base_existing, base_succ, beat_set, beat_intersection_groups
     )
-    return [h.beat_id for h in rejected]
+    # dict.fromkeys preserves insertion order and deduplicates beat IDs in one pass.
+    result: list[str] = list(dict.fromkeys(h.beat_id for h in rejected))
+    return result
 
 
 def strip_temporal_hints_by_id(graph: Graph, beat_ids: set[str]) -> int:
