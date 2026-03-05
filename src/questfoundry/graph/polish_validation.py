@@ -235,13 +235,8 @@ def validate_polish_output(graph: Graph) -> list[str]:
     _check_variant_requires_non_empty(passage_nodes, graph, errors)
     _check_no_unresolved_splits(graph, errors)
 
-    endings_check = check_all_endings_reachable(graph)
-    if endings_check.severity == "fail" and "Cannot check" not in endings_check.message:
-        errors.append(endings_check.message)
-
-    gate_check = check_gate_satisfiability(graph)
-    if gate_check.severity == "fail":
-        errors.append(gate_check.message)
+    # TODO: check_all_endings_reachable and check_gate_satisfiability use the old
+    # choice_from/choice_to edge model and are DEAD — see issue #1165 for migration.
 
     return errors
 
@@ -520,29 +515,23 @@ def _check_no_overlapping_requires(
 
 def _check_variant_requires_non_empty(
     passage_nodes: dict[str, Any],
-    graph: Graph,
+    graph: Graph,  # noqa: ARG001
     errors: list[str],
 ) -> None:
-    """Every variant passage must have at least one outgoing choice with non-empty requires."""
-    choice_edges = graph.get_edges(edge_type="choice")
+    """Every variant passage must have a non-empty requires list on the node itself.
 
-    # Build passage -> list of requires lists for outgoing choices
-    outgoing_requires: dict[str, list[list[str]]] = {}
-    for edge in choice_edges:
-        from_id = edge["from"]
-        requires: list[str] = edge.get("requires") or []
-        outgoing_requires.setdefault(from_id, []).append(requires)
-
+    The ``requires`` field is stored directly on the variant passage node by
+    ``_create_variant_passage`` in polish/deterministic.py.  Outgoing choice
+    edges carry their own ``requires`` for gate routing, but the *passage-level*
+    requires controls when FILL should render that variant at all.
+    """
     for passage_id, pdata in passage_nodes.items():
         if not pdata.get("is_variant"):
             continue
-        all_choices = outgoing_requires.get(passage_id, [])
-        # A variant with no outgoing choices is caught by _check_passage_reachability;
-        # here we check that at least one outgoing choice has a non-empty requires.
-        if all_choices and all(not r for r in all_choices):
+        requires: list[str] = pdata.get("requires") or []
+        if not requires:
             errors.append(
-                f"Variant passage {passage_id} has outgoing choices but none have requires — "
-                f"variant cannot be routed"
+                f"Variant passage {passage_id} has empty requires — cannot gate player entry"
             )
 
 

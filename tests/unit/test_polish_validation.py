@@ -406,14 +406,15 @@ class TestVariantRequiresNonEmpty:
     """Tests for _check_variant_requires_non_empty."""
 
     def test_variant_with_empty_requires_errors(self) -> None:
-        """Variant passage with all outgoing choices having empty requires should error."""
+        """Variant passage with empty requires on the node itself should error."""
         graph = _build_valid_graph()
+        # requires=[] (empty) — node-level gate is missing
         _create_variant_passage(
             graph,
             VariantSpec(
                 base_passage_id="passage::start",
                 variant_id="passage::v1",
-                requires=["flagA"],
+                requires=[],
                 summary="Variant",
             ),
         )
@@ -421,14 +422,13 @@ class TestVariantRequiresNonEmpty:
         _create_passage_node(
             graph, PassageSpec(passage_id="passage::dest", beat_ids=["beat::dest"], summary="Dest")
         )
-        # Add outgoing choice from variant with NO requires
         graph.add_edge("choice", "passage::v1", "passage::dest")
 
         errors = validate_polish_output(graph)
-        assert any("passage::v1" in e and "cannot be routed" in e for e in errors)
+        assert any("passage::v1" in e and "cannot gate player entry" in e for e in errors)
 
     def test_variant_with_requires_passes(self) -> None:
-        """Variant passage where at least one choice has requires should pass."""
+        """Variant passage with non-empty requires on the node itself should pass."""
         graph = _build_valid_graph()
         _create_variant_passage(
             graph,
@@ -446,7 +446,7 @@ class TestVariantRequiresNonEmpty:
         graph.add_edge("choice", "passage::v1", "passage::dest", requires=["flagA"])
 
         errors = validate_polish_output(graph)
-        assert not any("cannot be routed" in e for e in errors)
+        assert not any("cannot gate player entry" in e for e in errors)
 
 
 class TestNoUnresolvedSplits:
