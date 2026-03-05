@@ -543,70 +543,74 @@ class TestChoiceSpecRequires:
     """compute_choice_edges must populate requires for choices from intersection passages."""
 
     def _build_convergence_graph(self, graph: Graph) -> None:
-        """Build a minimal 2-dilemma convergence graph with intersection beat."""
+        """Build a graph where an intersection beat diverges to two paths.
+
+        Structure:
+          start (pa) → merge (intersection, pa) → c (pc, commits d1) ──┐
+                                                → d (pd, commits d1) ──┴→ (end)
+
+        The intersection passage (containing beat::merge) diverges to paths pc
+        and pd. beat::c and beat::d are the first commit beats on their paths,
+        and merge itself has no commit ancestors — so compute_active_flags_at_beat
+        returns a single-combo result for each child, allowing requires to be set.
+        """
         graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "status": "explored"})
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
-        graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
-
-        # State flags
+        graph.create_node("path::pc", {"type": "path", "raw_id": "pc"})
+        graph.create_node("path::pd", {"type": "path", "raw_id": "pd"})
         graph.create_node(
-            "state_flag::d1_pa",
+            "state_flag::d1_pc",
             {
                 "type": "state_flag",
-                "raw_id": "d1_pa",
+                "raw_id": "d1_pc",
                 "dilemma_id": "dilemma::d1",
-                "path_id": "path::pa",
+                "path_id": "path::pc",
             },
         )
         graph.create_node(
-            "state_flag::d1_pb",
+            "state_flag::d1_pd",
             {
                 "type": "state_flag",
-                "raw_id": "d1_pb",
+                "raw_id": "d1_pd",
                 "dilemma_id": "dilemma::d1",
-                "path_id": "path::pb",
+                "path_id": "path::pd",
             },
         )
+        graph.add_edge("dilemma_path", "dilemma::d1", "path::pc")
+        graph.add_edge("dilemma_path", "dilemma::d1", "path::pd")
 
-        # Start beat (shared)
+        # Start beat on pa (no commits — clean ancestors for merge)
         _make_beat(graph, "beat::start", "Start")
         graph.add_edge("belongs_to", "beat::start", "path::pa")
 
-        # Path-exclusive beats
-        _make_beat(graph, "beat::a", "Path A beat")
-        graph.add_edge("belongs_to", "beat::a", "path::pa")
-        _make_beat(graph, "beat::b", "Path B beat")
-        graph.add_edge("belongs_to", "beat::b", "path::pb")
-
-        # Intersection beat (appears in intersection_group)
+        # Intersection beat (no commit ancestors)
         _make_beat(graph, "beat::merge", "Merge beat")
         graph.add_edge("belongs_to", "beat::merge", "path::pa")
-
-        # Intersection group
         graph.create_node(
             "intersection_group::g1",
             {"type": "intersection_group", "raw_id": "g1", "node_ids": ["beat::merge"]},
         )
 
-        # Predecessor edges: start → a, start → b, a → merge, b → merge
-        _add_predecessor(graph, "beat::a", "beat::start")
-        _add_predecessor(graph, "beat::b", "beat::start")
-        _add_predecessor(graph, "beat::merge", "beat::a")
-        _add_predecessor(graph, "beat::merge", "beat::b")
-
-        # dilemma_path edges so compute_arc_traversals can find paths
-        graph.add_edge("dilemma_path", "dilemma::d1", "path::pa")
-        graph.add_edge("dilemma_path", "dilemma::d1", "path::pb")
-
-        # Commits impacts on path beats so state flags are set
-        graph.update_node(
-            "beat::a",
+        # Post-intersection beats on two different paths — each commits to d1
+        _make_beat(
+            graph,
+            "beat::c",
+            "Path C beat",
             dilemma_impacts=[{"effect": "commits", "dilemma_id": "dilemma::d1"}],
         )
-        graph.update_node(
-            "beat::b",
+        graph.add_edge("belongs_to", "beat::c", "path::pc")
+        _make_beat(
+            graph,
+            "beat::d",
+            "Path D beat",
             dilemma_impacts=[{"effect": "commits", "dilemma_id": "dilemma::d1"}],
         )
+        graph.add_edge("belongs_to", "beat::d", "path::pd")
+
+        # Predecessor edges
+        _add_predecessor(graph, "beat::merge", "beat::start")
+        _add_predecessor(graph, "beat::c", "beat::merge")
+        _add_predecessor(graph, "beat::d", "beat::merge")
 
     def test_divergence_choice_requires_empty(self) -> None:
         """Choices from non-intersection passages have empty requires."""
@@ -633,3 +637,24 @@ class TestChoiceSpecRequires:
             from_spec = next((s for s in specs if s.passage_id == c.from_passage), None)
             if from_spec and from_spec.grouping_type != "intersection":
                 assert c.requires == [], f"Expected empty requires for {c.from_passage}"
+
+    def test_convergence_choice_has_requires(self) -> None:
+        """Choices from intersection passages have a non-empty requires list."""
+        graph = Graph.empty()
+        self._build_convergence_graph(graph)
+
+        specs = compute_beat_grouping(graph)
+        choices = compute_choice_edges(graph, specs)
+
+        passage_id_to_spec = {s.passage_id: s for s in specs}
+        intersection_choices = [
+            c
+            for c in choices
+            if c.from_passage in passage_id_to_spec
+            and passage_id_to_spec[c.from_passage].grouping_type == "intersection"
+        ]
+
+        assert intersection_choices, "Expected at least one choice from an intersection passage"
+        assert any(len(c.requires) > 0 for c in intersection_choices), (
+            "Expected at least one intersection choice to have a non-empty requires list"
+        )

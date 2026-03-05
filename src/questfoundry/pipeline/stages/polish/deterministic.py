@@ -521,8 +521,19 @@ def compute_choice_edges(
                         combo = next(iter(flag_combos))
                         if combo:  # non-empty
                             requires = sorted(combo)
-                except ValueError:
-                    pass
+                    elif len(flag_combos) > 1:
+                        log.warning(
+                            "choice_requires_multi_combo",
+                            from_passage=from_passage,
+                            to_passage=to_passage,
+                            combo_count=len(flag_combos),
+                        )
+                except ValueError as e:
+                    log.warning(
+                        "choice_requires_compute_failed",
+                        from_passage=from_passage,
+                        error=str(e),
+                    )
 
             choices.append(
                 ChoiceSpec(
