@@ -1284,5 +1284,5 @@ def _drain_pre_plan_warnings(graph: Graph, plan: PolishPlan) -> None:
     if warnings:
         plan.warnings.extend(warnings)
         log.debug("pre_plan_warnings_drained", count=len(warnings))
-    # Clear the accumulator so it does not affect subsequent runs
-    graph.update_node(_PRE_PLAN_WARNINGS_NODE, warnings=[])
+    # Delete the temporary node so it does not appear in graph snapshots
+    graph.delete_node(_PRE_PLAN_WARNINGS_NODE)
