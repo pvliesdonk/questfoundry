@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from questfoundry.graph.graph import Graph
 from questfoundry.models.polish import PassageSpec
+from questfoundry.pipeline.stages.polish._helpers import _PRE_PLAN_WARNINGS_NODE
 from questfoundry.pipeline.stages.polish.deterministic import (
     PolishPlan,
     _drain_pre_plan_warnings,
@@ -1053,14 +1054,13 @@ class TestPrePlanWarningAccumulator:
         assert plan.warnings == ["first warning", "second warning"]
 
     def test_upsert_empty_warnings_noop(self) -> None:
-        """_upsert_pre_plan_warnings with an empty list does not create a node."""
+        """_upsert_pre_plan_warnings with an empty list is a no-op — no node is created."""
         graph = Graph.empty()
         _upsert_pre_plan_warnings(graph, [])
 
-        # Node should be created but with empty warnings
+        assert graph.get_node(_PRE_PLAN_WARNINGS_NODE) is None
         plan = PolishPlan()
         _drain_pre_plan_warnings(graph, plan)
-        # Either the node was created with [] or not created — either way plan.warnings == []
         assert plan.warnings == []
 
 
@@ -1097,7 +1097,7 @@ class TestFindFalseBranchCandidatesBranchingAndDisconnected:
         candidates = find_false_branch_candidates(graph, specs)
         # The b1→b3→b4→b5 arm forms a 4-passage linear run
         all_ids = [pid for c in candidates for pid in c.passage_ids]
-        assert "passage::p1" in all_ids or any(len(c.passage_ids) >= 3 for c in candidates)
+        assert "passage::p1" in all_ids
         # p0 is a branching point — it should NOT appear alone as a linear run lead
         # (specifically p0 has 2 children so the walk breaks the run at p0)
         for c in candidates:

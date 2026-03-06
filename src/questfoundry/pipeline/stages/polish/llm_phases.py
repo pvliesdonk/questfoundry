@@ -642,6 +642,8 @@ def _upsert_pre_plan_warnings(graph: Graph, warnings: list[str]) -> None:
     (a free function) can drain these warnings into ``PolishPlan.warnings``
     without needing a reference to the ``PolishStage`` instance.
     """
+    if not warnings:
+        return
     existing = graph.get_node(_PRE_PLAN_WARNINGS_NODE)
     if existing is None:
         graph.create_node(
