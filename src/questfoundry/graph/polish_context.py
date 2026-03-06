@@ -23,6 +23,30 @@ if TYPE_CHECKING:
     from questfoundry.models.polish import AmbiguousFeasibilityCase
 
 
+# ---------------------------------------------------------------------------
+# Shared flag parsing helper
+# ---------------------------------------------------------------------------
+
+
+def _parse_flag_dilemma_id(flag: str) -> str:
+    """Extract the dilemma ID from a feasibility flag string.
+
+    Flag format is either:
+    - ``"{dilemma_id}:path::{path_raw}"`` (new format)
+    - ``"{dilemma_id}:{path_id}"`` (old short format)
+
+    Args:
+        flag: Raw flag string from an overlay ``when`` list.
+
+    Returns:
+        The dilemma ID portion, or empty string if not parseable.
+    """
+    colon_before_path = flag.find(":path::")
+    if colon_before_path != -1:
+        return flag[:colon_before_path]
+    return flag.split(":")[0] if ":" in flag else ""
+
+
 def format_linear_section_context(
     graph: Graph,
     section_id: str,
@@ -440,12 +464,7 @@ def format_ambiguous_feasibility_context(
 
         flag_lines: list[str] = []
         for i, flag in enumerate(case.flags):
-            # Flag format: "{dilemma_id}:{path_id}" e.g. "dilemma::d1:path::brave"
-            colon_before_path = flag.find(":path::")
-            if colon_before_path != -1:
-                dilemma_id = flag[:colon_before_path]
-            else:
-                dilemma_id = flag.split(":")[0] if ":" in flag else ""
+            dilemma_id = _parse_flag_dilemma_id(flag)
             dilemma_data = dilemma_nodes.get(dilemma_id, {})
             dilemma_name = dilemma_data.get("name", dilemma_id)
             weight = dilemma_data.get("residue_weight", "light")

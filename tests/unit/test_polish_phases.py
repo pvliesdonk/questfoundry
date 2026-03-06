@@ -544,6 +544,39 @@ class TestPhase5eAmbiguousFeasibility:
         assert residue_specs[0]["target_passage_id"] == "passage::ambig_0"
         assert residue_specs[0]["flag"] == "dilemma::heavy:path::ph"
 
+    def test_irrelevant_decision_updates_feasibility_annotations(self) -> None:
+        """LLM decision 'irrelevant' → flag recorded in feasibility_annotations, not variant/residue."""
+        from questfoundry.models.polish import FeasibilityDecisionItem, Phase5eOutput
+
+        graph = Graph.empty()
+        self._build_plan_with_ambiguous(graph)
+
+        llm_output = Phase5eOutput(
+            feasibility_decisions=[
+                FeasibilityDecisionItem(
+                    passage_id="passage::ambig_0",
+                    flag_index=0,
+                    decision="irrelevant",
+                )
+            ]
+        )
+
+        host = _FakePolishLLMHost(llm_output)
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+
+        plan_nodes = graph.get_nodes_by_type("polish_plan")
+        plan_data = plan_nodes.get("polish_plan::current", {})
+
+        # Flag recorded in feasibility_annotations for the passage
+        annotations = plan_data.get("feasibility_annotations", {})
+        assert "passage::ambig_0" in annotations
+        assert "dilemma::heavy:path::ph" in annotations["passage::ambig_0"]
+
+        # Nothing added to variant or residue specs
+        assert len(plan_data.get("variant_specs", [])) == 0
+
     def test_skipped_when_no_ambiguous_cases(self) -> None:
         """Phase 5e is skipped when ambiguous_specs is empty."""
         from questfoundry.models.polish import Phase5eOutput

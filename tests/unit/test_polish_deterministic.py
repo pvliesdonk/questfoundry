@@ -788,6 +788,8 @@ class TestAmbiguousFeasibilityDetection:
 
         self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
         self._make_commit_beat(graph, "beat::c2", "path::p2", "dilemma::d2")
+        # Chain: c2 → c1 → target so both flags are ancestors of beat::target
+        _add_predecessor(graph, "beat::c1", "beat::c2")
 
         _make_beat(graph, "beat::target", "Target", entities=["entity::hero"])
         graph.add_edge("belongs_to", "beat::target", "path::p1")
@@ -802,7 +804,7 @@ class TestAmbiguousFeasibilityDetection:
 
         result = compute_prose_feasibility(graph, [spec])
         assert len(result["ambiguous_specs"]) == 0
-        assert len(result["variant_specs"]) > 0
+        assert len(result["variant_specs"]) == 2  # one per heavy flag
         assert len(result["residue_specs"]) == 0
 
     def test_single_relevant_flag_always_deterministic(self) -> None:

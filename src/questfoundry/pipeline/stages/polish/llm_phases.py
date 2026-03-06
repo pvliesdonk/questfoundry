@@ -575,6 +575,7 @@ class _PolishLLMPhaseMixin:
             variant_specs=variant_specs,
             ambiguous_specs=[],  # Resolved — clear from plan
             passage_specs=passage_specs,
+            feasibility_annotations=plan_data.get("feasibility_annotations", {}),
         )
 
         detail = "; ".join(enrichment_parts) if enrichment_parts else "No enrichment needed"
@@ -602,6 +603,7 @@ def _update_plan_data(
     variant_specs: list[dict[str, Any]],
     ambiguous_specs: list[dict[str, Any]] | None = None,
     passage_specs: list[dict[str, Any]] | None = None,
+    feasibility_annotations: dict[str, list[str]] | None = None,
 ) -> None:
     """Update the plan node with enriched data from Phase 5."""
     updates: dict[str, Any] = {
@@ -614,6 +616,8 @@ def _update_plan_data(
         updates["ambiguous_specs"] = ambiguous_specs
     if passage_specs is not None:
         updates["passage_specs"] = passage_specs
+    if feasibility_annotations is not None:
+        updates["feasibility_annotations"] = feasibility_annotations
     graph.update_node("polish_plan::current", **updates)
 
 

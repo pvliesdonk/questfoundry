@@ -36,6 +36,30 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
+# Shared flag parsing helper
+# ---------------------------------------------------------------------------
+
+
+def _parse_flag_dilemma_id(flag: str) -> str:
+    """Extract the dilemma ID from a feasibility flag string.
+
+    Flag format is either:
+    - ``"{dilemma_id}:path::{path_raw}"`` (new format)
+    - ``"{dilemma_id}:{path_id}"`` (old short format)
+
+    Args:
+        flag: Raw flag string from an overlay ``when`` list.
+
+    Returns:
+        The dilemma ID portion, or empty string if not parseable.
+    """
+    colon_before_path = flag.find(":path::")
+    if colon_before_path != -1:
+        return flag[:colon_before_path]
+    return flag.split(":")[0] if ":" in flag else ""
+
+
+# ---------------------------------------------------------------------------
 # PolishPlan dataclass
 # ---------------------------------------------------------------------------
 
@@ -396,11 +420,7 @@ def compute_prose_feasibility(
             # Extract dilemma_id: find the colon that separates dilemma from path.
             # Both parts use "::" internally, so the separator is the ":" right
             # before "path::" (or the first ":" if the old short format is used).
-            colon_before_path = flag.find(":path::")
-            if colon_before_path != -1:
-                dilemma_id = flag[:colon_before_path]
-            else:
-                dilemma_id = flag.split(":")[0] if ":" in flag else ""
+            dilemma_id = _parse_flag_dilemma_id(flag)
             weight = dilemma_residue.get(dilemma_id, "light")
             if weight in ("heavy", "hard"):
                 heavy_flags.append(flag)
