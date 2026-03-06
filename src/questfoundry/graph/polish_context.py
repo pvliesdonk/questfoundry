@@ -20,6 +20,31 @@ from questfoundry.graph.context_compact import (
 if TYPE_CHECKING:
     from questfoundry.graph.context_compact import CompactContextConfig
     from questfoundry.graph.graph import Graph
+    from questfoundry.models.polish import AmbiguousFeasibilityCase
+
+
+# ---------------------------------------------------------------------------
+# Shared flag parsing helper
+# ---------------------------------------------------------------------------
+
+
+def _parse_flag_dilemma_id(flag: str) -> str:
+    """Extract the dilemma ID from a feasibility flag string.
+
+    Flag format is either:
+    - ``"{dilemma_id}:path::{path_raw}"`` (new format)
+    - ``"{dilemma_id}:{path_id}"`` (old short format)
+
+    Args:
+        flag: Raw flag string from an overlay ``when`` list.
+
+    Returns:
+        The dilemma ID portion, or empty string if not parseable.
+    """
+    colon_before_path = flag.find(":path::")
+    if colon_before_path != -1:
+        return flag[:colon_before_path]
+    return flag.split(":")[0] if ":" in flag else ""
 
 
 def format_linear_section_context(
@@ -409,6 +434,120 @@ def format_variant_summary_context(
         "variant_details": "\n".join(variant_lines),
         "story_context": story_context,
         "variant_count": str(len(variant_specs)),
+    }
+
+
+def format_ambiguous_feasibility_context(
+    graph: Graph,
+    ambiguous_cases: list[AmbiguousFeasibilityCase],
+    passage_specs: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Build context for Phase 5e (ambiguous feasibility resolution).
+
+    Args:
+        graph: Graph containing dilemma data.
+        ambiguous_cases: Passages with mixed-weight flags needing LLM judgment.
+        passage_specs: All passage specs for summary lookup.
+
+    Returns:
+        Dict with keys: case_details, case_count.
+    """
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+
+    passage_lookup: dict[str, dict[str, Any]] = {p["passage_id"]: p for p in passage_specs}
+
+    case_lines: list[str] = []
+    for case in ambiguous_cases:
+        passage_spec = passage_lookup.get(case.passage_id, {})
+        summary = truncate_summary(case.passage_summary or passage_spec.get("summary", ""), 100)
+        entities_str = ", ".join(f"`{e}`" for e in case.entities[:6]) if case.entities else "(none)"
+
+        flag_lines: list[str] = []
+        for i, flag in enumerate(case.flags):
+            dilemma_id = _parse_flag_dilemma_id(flag)
+            dilemma_data = dilemma_nodes.get(dilemma_id, {})
+            dilemma_name = dilemma_data.get("name", dilemma_id)
+            weight = dilemma_data.get("residue_weight", "light")
+            question = dilemma_data.get("question", "")
+            # Pull consequence from the matched answer if available
+            consequence = ""
+            for answer in dilemma_data.get("answers") or []:
+                ans_path = answer.get("path_id", "")
+                if ans_path and flag.endswith(ans_path):
+                    consequence = (answer.get("consequence") or {}).get("description", "")
+                    break
+            extra_lines: list[str] = []
+            if question:
+                extra_lines.append(f"      question: {question}")
+            if consequence:
+                extra_lines.append(f"      consequence: {consequence}")
+            flag_line = f"    [{i}] flag=`{flag}` dilemma=`{dilemma_name}` weight={weight}"
+            if extra_lines:
+                flag_line += "\n" + "\n".join(extra_lines)
+            flag_lines.append(flag_line)
+
+        flags_str = "\n".join(flag_lines)
+        case_lines.append(
+            f"  passage_id: {case.passage_id}\n"
+            f"  summary: {summary}\n"
+            f"  entities: {entities_str}\n"
+            f"  flags:\n{flags_str}"
+        )
+
+    return {
+        "case_details": "\n\n".join(case_lines) if case_lines else "(no cases)",
+        "case_count": str(len(ambiguous_cases)),
+    }
+
+
+def format_transition_guidance_context(
+    graph: Graph,
+    passage_specs: list[dict[str, Any]],
+) -> dict[str, str]:
+    """Build context for Phase 5f (transition guidance for collapsed passages).
+
+    Accepts all passage specs and filters to collapsed passages with 2+ beats.
+
+    Args:
+        graph: Graph containing beat data.
+        passage_specs: All passage specs from Phase 4a.
+
+    Returns:
+        Dict with keys: collapsed_passage_details, collapsed_count.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+
+    collapsed = [
+        p
+        for p in passage_specs
+        if p.get("grouping_type") == "collapse" and len(p.get("beat_ids", [])) >= 2
+    ]
+
+    passage_lines: list[str] = []
+    for spec in collapsed:
+        passage_id = spec["passage_id"]
+        beat_ids = spec.get("beat_ids", [])
+        entities_str = ", ".join(f"`{e}`" for e in spec.get("entities", [])[:5]) or "(none)"
+
+        beat_lines: list[str] = []
+        for i, bid in enumerate(beat_ids):
+            data = beat_nodes.get(bid, {})
+            summary = truncate_summary(data.get("summary", ""), 90)
+            scene_type = data.get("scene_type", "")
+            scene_tag = f"[{scene_type}] " if scene_type else ""
+            beat_lines.append(f"    Beat {i + 1}: {bid} {scene_tag}— {summary}")
+
+        boundary_count = len(beat_ids) - 1
+        beats_str = "\n".join(beat_lines)
+        passage_lines.append(
+            f"  passage_id: {passage_id}\n"
+            f"  entities: {entities_str}\n"
+            f"  beats ({len(beat_ids)} total, {boundary_count} boundary/ies):\n{beats_str}"
+        )
+
+    return {
+        "collapsed_passage_details": "\n\n".join(passage_lines) if passage_lines else "(none)",
+        "collapsed_count": str(len(collapsed)),
     }
 
 

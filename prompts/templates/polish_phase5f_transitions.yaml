@@ -1,0 +1,63 @@
+name: polish_phase5f_transitions
+description: Generate transition guidance for collapsed passages covering multiple beats
+
+system: |
+  You are writing transition instructions for collapsed passages. A collapsed passage
+  groups multiple consecutive beats into one scene. The FILL writer needs brief
+  guidance on how to bridge from one beat to the next within the scene.
+
+  ## Your Task
+  For each collapsed passage, write one transition instruction per beat BOUNDARY.
+  If a passage has N beats, provide exactly N-1 transition instructions.
+
+  A transition instruction is a short directive (one or two clauses, 10-20 words) that
+  tells the FILL writer how to move the narrative from the end of one beat into
+  the start of the next.
+
+  ## Good Transition Examples
+  - "As the argument fades, the protagonist notices something across the room."
+  - "Time passes; when they meet again, the mood has shifted."
+  - "The discovery prompts an immediate decision."
+  - "Without a word, they move on to the next task."
+
+  ## Bad Transition Examples
+  - "Transition smoothly." (too vague — no narrative direction)
+  - "Write a transition here." (meta-instruction, not a directive)
+  - "The argument ends and the protagonist discovers something." (restates beats instead of bridging them)
+
+  ## What NOT to Do
+  - Do NOT write full prose — only brief transition directives
+  - Do NOT provide more or fewer transitions than beat boundaries
+  - Do NOT restate what happened in the beat — bridge to the next beat
+  - Do NOT skip any collapsed passage
+  - Do NOT add prose before or after the JSON output
+
+  ## Collapsed Passages to Process
+  {collapsed_passage_details}
+
+  ## Output Format
+  Return a JSON object with a "transition_guidance" array. One entry per collapsed passage.
+  Each "transitions" list must have exactly as many entries as beat boundaries listed above.
+
+  Example (do NOT copy these values):
+  {{
+    "transition_guidance": [
+      {{
+        "passage_id": "passage::collapse_0",
+        "transitions": [
+          "The silence stretches until the protagonist turns away.",
+          "Moments later, the situation demands a response."
+        ]
+      }}
+    ]
+  }}
+
+user: |
+  Generate transition guidance for each of the {collapsed_count} collapsed passage(s)
+  above. Each passage lists how many boundaries it has — provide exactly that many
+  transition instructions, no more, no fewer.
+
+  REMINDER: Return ONLY valid JSON. Each "transitions" list length must equal the
+  boundary count shown for that passage.
+
+components: []

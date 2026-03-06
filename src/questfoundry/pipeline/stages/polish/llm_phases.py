@@ -13,16 +13,19 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.polish_context import (
+    format_ambiguous_feasibility_context,
     format_choice_label_context,
     format_entity_arc_context,
     format_false_branch_context,
     format_linear_section_context,
     format_pacing_context,
     format_residue_content_context,
+    format_transition_guidance_context,
     format_variant_summary_context,
 )
 from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.polish import (
+    AmbiguousFeasibilityCase,
     FalseBranchSpec,
     Phase1Output,
     Phase2Output,
@@ -31,6 +34,10 @@ from questfoundry.models.polish import (
     Phase5bOutput,
     Phase5cOutput,
     Phase5dOutput,
+    Phase5eOutput,
+    Phase5fOutput,
+    ResidueSpec,
+    VariantSpec,
 )
 from questfoundry.pipeline.stages.polish._helpers import log
 from questfoundry.pipeline.stages.polish.deterministic import _load_plan_data
@@ -433,6 +440,132 @@ class _PolishLLMPhaseMixin:
             enrichment_parts.append(f"{len(result_d.variant_summaries)} variant summaries")
             log.debug("phase5d_complete", summaries=len(result_d.variant_summaries))
 
+        # 5e: Resolve ambiguous feasibility cases
+        ambiguous_specs_raw = plan_data.get("ambiguous_specs", [])
+        if ambiguous_specs_raw:
+            ambiguous_cases = [AmbiguousFeasibilityCase(**a) for a in ambiguous_specs_raw]
+            context = format_ambiguous_feasibility_context(graph, ambiguous_cases, passage_specs)
+            result_e, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+                model=model,
+                template_name="polish_phase5e_feasibility",
+                context=context,
+                output_schema=Phase5eOutput,
+            )
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            # Build lookup for fast access
+            case_lookup: dict[str, AmbiguousFeasibilityCase] = {
+                c.passage_id: c for c in ambiguous_cases
+            }
+
+            resolved_count = 0
+            for decision in result_e.feasibility_decisions:
+                passage_id = decision.passage_id
+                flag_index = decision.flag_index
+                case = case_lookup.get(passage_id)
+                if case is None:
+                    log.warning("phase5e_unknown_passage", passage_id=passage_id)
+                    continue
+                if flag_index < 0 or flag_index >= len(case.flags):
+                    log.warning(
+                        "phase5e_invalid_flag_index",
+                        passage_id=passage_id,
+                        flag_index=flag_index,
+                        flags_count=len(case.flags),
+                    )
+                    continue
+
+                flag = case.flags[flag_index]
+                d = decision.decision
+
+                if d == "variant":
+                    variant_counter = len(variant_specs)
+                    variant_specs.append(
+                        VariantSpec(
+                            base_passage_id=passage_id,
+                            variant_id=f"passage::variant_{variant_counter}",
+                            requires=[flag],
+                            summary="",
+                        ).model_dump()
+                    )
+                elif d == "residue":
+                    path_id = flag.split(":")[-1] if ":" in flag else ""
+                    passage_raw = passage_id.split("::")[-1]
+                    residue_specs.append(
+                        ResidueSpec(
+                            target_passage_id=passage_id,
+                            residue_id=f"residue::{passage_raw}_{flag.replace(':', '_')}",
+                            flag=flag,
+                            path_id=path_id,
+                        ).model_dump()
+                    )
+                elif d == "irrelevant":
+                    # Append to feasibility_annotations
+                    ann_key = passage_id
+                    existing = plan_data.get("feasibility_annotations", {})
+                    existing.setdefault(ann_key, []).append(flag)
+                else:
+                    log.warning("phase5e_unknown_decision", decision=d, passage_id=passage_id)
+                    continue
+
+                resolved_count += 1
+
+            enrichment_parts.append(f"{resolved_count} ambiguous cases resolved")
+            log.debug("phase5e_complete", resolved=resolved_count)
+        else:
+            enrichment_parts.append("0 ambiguous cases resolved")
+            log.info("phase5e_skipped", status="skipped", detail="No ambiguous feasibility cases")
+
+        # 5f: Transition guidance for collapsed passages
+        collapsed_specs = [
+            p
+            for p in passage_specs
+            if p.get("grouping_type") == "collapse" and len(p.get("beat_ids", [])) >= 2
+        ]
+        if collapsed_specs:
+            context = format_transition_guidance_context(graph, passage_specs)
+            result_f, llm_calls, tokens = await self._polish_llm_call(  # type: ignore[attr-defined]
+                model=model,
+                template_name="polish_phase5f_transitions",
+                context=context,
+                output_schema=Phase5fOutput,
+            )
+            total_llm_calls += llm_calls
+            total_tokens += tokens
+
+            passage_lookup: dict[str, dict[str, Any]] = {p["passage_id"]: p for p in passage_specs}
+            guides_applied = 0
+            for item in result_f.transition_guidance:
+                spec = passage_lookup.get(item.passage_id)
+                if spec is None:
+                    log.warning(
+                        "phase5f_unknown_passage",
+                        passage_id=item.passage_id,
+                    )
+                    continue
+                expected = len(spec.get("beat_ids", [])) - 1
+                if len(item.transitions) != expected:
+                    log.warning(
+                        "phase5f_transition_count_mismatch",
+                        passage_id=item.passage_id,
+                        expected=expected,
+                        got=len(item.transitions),
+                    )
+                    continue
+                spec["transition_guidance"] = item.transitions
+                guides_applied += 1
+
+            enrichment_parts.append(f"{guides_applied} transition guides generated")
+            log.debug("phase5f_complete", guides=guides_applied)
+        else:
+            enrichment_parts.append("0 transition guides generated")
+            log.info(
+                "phase5f_skipped",
+                status="skipped",
+                detail="No collapsed passages with 2+ beats",
+            )
+
         # Store enriched plan back to graph
         _update_plan_data(
             graph,
@@ -440,6 +573,9 @@ class _PolishLLMPhaseMixin:
             residue_specs=residue_specs,
             false_branch_specs=false_branch_specs,
             variant_specs=variant_specs,
+            ambiguous_specs=[],  # Resolved — clear from plan
+            passage_specs=passage_specs,
+            feasibility_annotations=plan_data.get("feasibility_annotations", {}),
         )
 
         detail = "; ".join(enrichment_parts) if enrichment_parts else "No enrichment needed"
@@ -465,15 +601,24 @@ def _update_plan_data(
     residue_specs: list[dict[str, Any]],
     false_branch_specs: list[dict[str, Any]],
     variant_specs: list[dict[str, Any]],
+    ambiguous_specs: list[dict[str, Any]] | None = None,
+    passage_specs: list[dict[str, Any]] | None = None,
+    feasibility_annotations: dict[str, list[str]] | None = None,
 ) -> None:
     """Update the plan node with enriched data from Phase 5."""
-    graph.update_node(
-        "polish_plan::current",
-        choice_specs=choice_specs,
-        residue_specs=residue_specs,
-        false_branch_specs=false_branch_specs,
-        variant_specs=variant_specs,
-    )
+    updates: dict[str, Any] = {
+        "choice_specs": choice_specs,
+        "residue_specs": residue_specs,
+        "false_branch_specs": false_branch_specs,
+        "variant_specs": variant_specs,
+    }
+    if ambiguous_specs is not None:
+        updates["ambiguous_specs"] = ambiguous_specs
+    if passage_specs is not None:
+        updates["passage_specs"] = passage_specs
+    if feasibility_annotations is not None:
+        updates["feasibility_annotations"] = feasibility_annotations
+    graph.update_node("polish_plan::current", **updates)
 
 
 # ---------------------------------------------------------------------------

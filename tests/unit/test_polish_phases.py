@@ -434,3 +434,337 @@ class TestPhase3ArcMetadataEdge:
         edges = graph.get_edges(from_id="entity::hero", edge_type="has_arc_metadata")
         assert len(edges) == 1
         assert edges[0]["to"] == arc_node_id
+
+
+# ---------------------------------------------------------------------------
+# Tests for Issue #1157: Phase 5e — ambiguous feasibility resolution
+# ---------------------------------------------------------------------------
+
+
+class TestPhase5eAmbiguousFeasibility:
+    """Phase 5e must resolve ambiguous cases via LLM and apply decisions to plan."""
+
+    def _build_plan_with_ambiguous(self, graph: Graph) -> None:
+        """Build a minimal polish_plan node with one ambiguous feasibility case."""
+        from questfoundry.models.polish import AmbiguousFeasibilityCase, PassageSpec
+
+        passage = PassageSpec(
+            passage_id="passage::ambig_0",
+            beat_ids=["beat::a"],
+            summary="Ambiguous passage",
+            entities=["entity::hero"],
+            grouping_type="singleton",
+        )
+        ambiguous = AmbiguousFeasibilityCase(
+            passage_id="passage::ambig_0",
+            passage_summary="Ambiguous passage",
+            entities=["entity::hero"],
+            flags=["dilemma::heavy:path::ph"],
+        )
+
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 1,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 0,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [passage.model_dump()],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": [],
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [ambiguous.model_dump()],
+                "arc_traversals": {},
+            },
+        )
+
+    def test_variant_decision_adds_variant_spec(self) -> None:
+        """LLM decision 'variant' → new VariantSpec appended to plan."""
+        from questfoundry.models.polish import FeasibilityDecisionItem, Phase5eOutput
+
+        graph = Graph.empty()
+        self._build_plan_with_ambiguous(graph)
+
+        llm_output = Phase5eOutput(
+            feasibility_decisions=[
+                FeasibilityDecisionItem(
+                    passage_id="passage::ambig_0",
+                    flag_index=0,
+                    decision="variant",
+                )
+            ]
+        )
+
+        host = _FakePolishLLMHost(llm_output)
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+
+        # Plan node should have a variant_spec for the resolved case
+        plan_nodes = graph.get_nodes_by_type("polish_plan")
+        plan_data = plan_nodes.get("polish_plan::current", {})
+        variant_specs = plan_data.get("variant_specs", [])
+        assert len(variant_specs) == 1
+        assert variant_specs[0]["base_passage_id"] == "passage::ambig_0"
+        assert variant_specs[0]["requires"] == ["dilemma::heavy:path::ph"]
+
+    def test_residue_decision_adds_residue_spec(self) -> None:
+        """LLM decision 'residue' → new ResidueSpec appended to plan."""
+        from questfoundry.models.polish import FeasibilityDecisionItem, Phase5eOutput
+
+        graph = Graph.empty()
+        self._build_plan_with_ambiguous(graph)
+
+        llm_output = Phase5eOutput(
+            feasibility_decisions=[
+                FeasibilityDecisionItem(
+                    passage_id="passage::ambig_0",
+                    flag_index=0,
+                    decision="residue",
+                )
+            ]
+        )
+
+        host = _FakePolishLLMHost(llm_output)
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+
+        plan_nodes = graph.get_nodes_by_type("polish_plan")
+        plan_data = plan_nodes.get("polish_plan::current", {})
+        residue_specs = plan_data.get("residue_specs", [])
+        assert len(residue_specs) == 1
+        assert residue_specs[0]["target_passage_id"] == "passage::ambig_0"
+        assert residue_specs[0]["flag"] == "dilemma::heavy:path::ph"
+
+    def test_irrelevant_decision_updates_feasibility_annotations(self) -> None:
+        """LLM decision 'irrelevant' → flag recorded in feasibility_annotations, not variant/residue."""
+        from questfoundry.models.polish import FeasibilityDecisionItem, Phase5eOutput
+
+        graph = Graph.empty()
+        self._build_plan_with_ambiguous(graph)
+
+        llm_output = Phase5eOutput(
+            feasibility_decisions=[
+                FeasibilityDecisionItem(
+                    passage_id="passage::ambig_0",
+                    flag_index=0,
+                    decision="irrelevant",
+                )
+            ]
+        )
+
+        host = _FakePolishLLMHost(llm_output)
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+
+        plan_nodes = graph.get_nodes_by_type("polish_plan")
+        plan_data = plan_nodes.get("polish_plan::current", {})
+
+        # Flag recorded in feasibility_annotations for the passage
+        annotations = plan_data.get("feasibility_annotations", {})
+        assert "passage::ambig_0" in annotations
+        assert "dilemma::heavy:path::ph" in annotations["passage::ambig_0"]
+
+        # Nothing added to variant or residue specs
+        assert len(plan_data.get("variant_specs", [])) == 0
+
+    def test_skipped_when_no_ambiguous_cases(self) -> None:
+        """Phase 5e is skipped when ambiguous_specs is empty."""
+        from questfoundry.models.polish import Phase5eOutput
+
+        graph = Graph.empty()
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 0,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 0,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": [],
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [],
+                "arc_traversals": {},
+            },
+        )
+
+        host = _FakePolishLLMHost(Phase5eOutput())
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+        assert "0 ambiguous cases resolved" in result.detail
+
+
+# ---------------------------------------------------------------------------
+# Tests for Issue #1158: Phase 5f — transition guidance for collapsed passages
+# ---------------------------------------------------------------------------
+
+
+class TestPhase5fTransitionGuidance:
+    """Phase 5f must generate and apply transition guidance for collapsed passages."""
+
+    def _build_plan_with_collapsed(self, graph: Graph) -> None:
+        """Build a minimal polish_plan node with one collapsed passage (3 beats)."""
+        from questfoundry.models.polish import PassageSpec
+
+        passage = PassageSpec(
+            passage_id="passage::collapse_0",
+            beat_ids=["beat::a", "beat::b", "beat::c"],
+            summary="Three beats in one scene",
+            entities=["entity::hero"],
+            grouping_type="collapse",
+        )
+
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 1,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 0,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [passage.model_dump()],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": [],
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [],
+                "arc_traversals": {},
+            },
+        )
+
+        for bid in ["beat::a", "beat::b", "beat::c"]:
+            graph.create_node(
+                bid,
+                {
+                    "type": "beat",
+                    "raw_id": bid.split("::")[-1],
+                    "summary": f"Beat {bid}",
+                    "dilemma_impacts": [],
+                    "entities": [],
+                    "scene_type": "scene",
+                },
+            )
+
+    def test_transition_guidance_applied_to_passage_spec(self) -> None:
+        """LLM returns 2 transitions for 3-beat collapsed passage → spec updated."""
+        from questfoundry.models.polish import Phase5fOutput, TransitionGuidanceItem
+
+        graph = Graph.empty()
+        self._build_plan_with_collapsed(graph)
+
+        llm_output = Phase5fOutput(
+            transition_guidance=[
+                TransitionGuidanceItem(
+                    passage_id="passage::collapse_0",
+                    transitions=[
+                        "As the dust settles, a new threat emerges.",
+                        "Time passes; the hero steels their resolve.",
+                    ],
+                )
+            ]
+        )
+
+        host = _FakePolishLLMHost(llm_output)
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+        assert "transition guides generated" in result.detail
+
+        # Passage spec in plan should have transition_guidance
+        plan_nodes = graph.get_nodes_by_type("polish_plan")
+        plan_data = plan_nodes.get("polish_plan::current", {})
+        passage_specs = plan_data.get("passage_specs", [])
+        assert len(passage_specs) == 1
+        assert passage_specs[0]["transition_guidance"] == [
+            "As the dust settles, a new threat emerges.",
+            "Time passes; the hero steels their resolve.",
+        ]
+
+    def test_wrong_transition_count_skipped(self) -> None:
+        """If transitions count != beat_count - 1, the spec is skipped with a warning."""
+        from questfoundry.models.polish import Phase5fOutput, TransitionGuidanceItem
+
+        graph = Graph.empty()
+        self._build_plan_with_collapsed(graph)
+
+        # Wrong count: 3 beats → need 2 transitions, but LLM returns 3
+        llm_output = Phase5fOutput(
+            transition_guidance=[
+                TransitionGuidanceItem(
+                    passage_id="passage::collapse_0",
+                    transitions=["T1.", "T2.", "T3."],  # too many
+                )
+            ]
+        )
+
+        host = _FakePolishLLMHost(llm_output)
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+        # Guide not applied — count says 0
+        assert "0 transition guides generated" in result.detail
+
+    def test_skipped_when_no_collapsed_passages(self) -> None:
+        """Phase 5f is skipped when no collapsed passages with 2+ beats exist."""
+        from questfoundry.models.polish import PassageSpec, Phase5fOutput
+
+        graph = Graph.empty()
+
+        singleton = PassageSpec(
+            passage_id="passage::single_0",
+            beat_ids=["beat::x"],
+            summary="singleton",
+            entities=[],
+            grouping_type="singleton",
+        )
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 1,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 0,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [singleton.model_dump()],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": [],
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [],
+                "arc_traversals": {},
+            },
+        )
+
+        host = _FakePolishLLMHost(Phase5fOutput())
+        result = asyncio.run(host._phase_5_llm_enrichment(graph, MagicMock()))  # type: ignore[arg-type]
+
+        assert result.status == "completed"
+        assert "0 transition guides generated" in result.detail
