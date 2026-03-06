@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING, Any
 from questfoundry.graph.algorithms import compute_active_flags_at_beat, compute_passage_traversals
 from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.polish import (
+    AmbiguousFeasibilityCase,
     ChoiceSpec,
     FalseBranchCandidate,
     FalseBranchSpec,
@@ -54,6 +55,7 @@ class PolishPlan:
     false_branch_candidates: list[FalseBranchCandidate] = field(default_factory=list)
     false_branch_specs: list[FalseBranchSpec] = field(default_factory=list)  # Phase 5
     feasibility_annotations: dict[str, list[str]] = field(default_factory=dict)
+    ambiguous_specs: list[AmbiguousFeasibilityCase] = field(default_factory=list)  # Phase 5e
     arc_traversals: dict[str, list[str]] = field(default_factory=dict)
     warnings: list[str] = field(default_factory=list)
 
@@ -137,12 +139,14 @@ async def phase_plan_computation(
     plan.feasibility_annotations = feasibility["annotations"]
     plan.variant_specs = feasibility["variant_specs"]
     plan.residue_specs = feasibility["residue_specs"]
+    plan.ambiguous_specs = feasibility["ambiguous_specs"]
     plan.warnings.extend(feasibility.get("warnings", []))
     log.debug(
         "phase4b_complete",
         variants=len(plan.variant_specs),
         residues=len(plan.residue_specs),
         annotated=len(plan.feasibility_annotations),
+        ambiguous=len(plan.ambiguous_specs),
     )
 
     # 4c: Choice edge derivation
@@ -311,11 +315,12 @@ def compute_prose_feasibility(
     """Determine feasibility category for each passage.
 
     Returns:
-        Dict with keys: annotations, variant_specs, residue_specs, warnings.
+        Dict with keys: annotations, variant_specs, residue_specs, warnings, ambiguous_specs.
     """
     annotations: dict[str, list[str]] = {}
     variant_specs: list[VariantSpec] = []
     residue_specs: list[ResidueSpec] = []
+    ambiguous_specs: list[AmbiguousFeasibilityCase] = []
     warnings: list[str] = []
 
     # Build overlay data: flag → affected entities
@@ -383,18 +388,37 @@ def compute_prose_feasibility(
             )
             continue
 
-        # Check for heavy residue (→ variant) vs light (→ residue beat)
-        has_heavy = False
+        # Categorize flags by residue weight
+        heavy_flags: list[str] = []
+        light_flags: list[str] = []
         for flag in relevant_flags:
-            # Flag format: "dilemma_id:path_id" — extract dilemma
-            dilemma_id = flag.split(":")[0] if ":" in flag else ""
+            # Flag format: "{dilemma_id}:{path_id}" e.g. "dilemma::d1:path::brave"
+            # Extract dilemma_id: find the colon that separates dilemma from path.
+            # Both parts use "::" internally, so the separator is the ":" right
+            # before "path::" (or the first ":" if the old short format is used).
+            colon_before_path = flag.find(":path::")
+            if colon_before_path != -1:
+                dilemma_id = flag[:colon_before_path]
+            else:
+                dilemma_id = flag.split(":")[0] if ":" in flag else ""
             weight = dilemma_residue.get(dilemma_id, "light")
             if weight in ("heavy", "hard"):
-                has_heavy = True
-                break
+                heavy_flags.append(flag)
+            else:
+                light_flags.append(flag)
 
-        if has_heavy:
-            # Variant: create variant passages
+        # Ambiguous: 2+ relevant flags with MIXED weights (some heavy AND some light)
+        if len(relevant_flags) >= 2 and heavy_flags and light_flags:
+            ambiguous_specs.append(
+                AmbiguousFeasibilityCase(
+                    passage_id=spec.passage_id,
+                    passage_summary=spec.summary,
+                    entities=spec.entities,
+                    flags=relevant_flags,
+                )
+            )
+        elif heavy_flags:
+            # All relevant flags are heavy → deterministically variant
             for flag in relevant_flags:
                 variant_specs.append(
                     VariantSpec(
@@ -406,7 +430,7 @@ def compute_prose_feasibility(
                 )
                 variant_counter += 1
         else:
-            # Residue: create residue beats
+            # All relevant flags are light → deterministically residue
             for flag in relevant_flags:
                 path_id = flag.split(":")[-1] if ":" in flag else ""
                 residue_specs.append(
@@ -422,6 +446,7 @@ def compute_prose_feasibility(
         "annotations": annotations,
         "variant_specs": variant_specs,
         "residue_specs": residue_specs,
+        "ambiguous_specs": ambiguous_specs,
         "warnings": warnings,
     }
 
@@ -631,6 +656,7 @@ def _store_plan(graph: Graph, plan: PolishPlan) -> None:
             "choice_specs": [s.model_dump() for s in plan.choice_specs],
             "false_branch_candidates": [c.model_dump() for c in plan.false_branch_candidates],
             "feasibility_annotations": plan.feasibility_annotations,
+            "ambiguous_specs": [s.model_dump() for s in plan.ambiguous_specs],
             "arc_traversals": plan.arc_traversals,
         },
     )
@@ -773,6 +799,7 @@ def _create_passage_node(graph: Graph, spec: PassageSpec) -> None:
             "summary": spec.summary,
             "entities": spec.entities,
             "grouping_type": spec.grouping_type,
+            "transition_guidance": spec.transition_guidance,
         },
     )
 

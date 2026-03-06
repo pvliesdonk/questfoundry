@@ -658,3 +658,264 @@ class TestChoiceSpecRequires:
         assert any(len(c.requires) > 0 for c in intersection_choices), (
             "Expected at least one intersection choice to have a non-empty requires list"
         )
+
+
+# ---------------------------------------------------------------------------
+# Tests for Issue #1157: Ambiguous feasibility detection in Phase 4b
+# ---------------------------------------------------------------------------
+
+
+class TestAmbiguousFeasibilityDetection:
+    """Phase 4b must detect ambiguous cases (mixed residue weights) and store them."""
+
+    def _make_commit_beat(
+        self,
+        graph: Graph,
+        beat_id: str,
+        path_id: str,
+        dilemma_id: str,
+    ) -> None:
+        graph.create_node(
+            beat_id,
+            {
+                "type": "beat",
+                "raw_id": beat_id.split("::")[-1],
+                "summary": f"Commit on {path_id}",
+                "dilemma_impacts": [{"dilemma_id": dilemma_id, "effect": "commits"}],
+                "entities": [],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", beat_id, path_id)
+
+    def test_mixed_weights_produces_ambiguous_spec(self) -> None:
+        """Passage with one heavy flag and one light flag → ambiguous_specs, NOT in variant or residue."""
+        graph = Graph.empty()
+
+        # Two dilemmas — one heavy, one light
+        graph.create_node(
+            "dilemma::heavy",
+            {
+                "type": "dilemma",
+                "raw_id": "heavy",
+                "residue_weight": "heavy",
+            },
+        )
+        graph.create_node(
+            "dilemma::light",
+            {
+                "type": "dilemma",
+                "raw_id": "light",
+                "residue_weight": "light",
+            },
+        )
+
+        # Two paths
+        graph.create_node("path::ph", {"type": "path", "raw_id": "ph"})
+        graph.create_node("path::pl", {"type": "path", "raw_id": "pl"})
+
+        # Entity that appears in the passage
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": ["dilemma::heavy:path::ph"], "details": {"mood": "grim"}},
+                    {"when": ["dilemma::light:path::pl"], "details": {"mood": "relieved"}},
+                ],
+            },
+        )
+
+        # Commit beats (ancestors of the target passage).
+        # Both need to be in the ancestor chain so both flags are active at beat::target.
+        # Chain: commit_h → commit_l → target
+        self._make_commit_beat(graph, "beat::commit_h", "path::ph", "dilemma::heavy")
+        self._make_commit_beat(graph, "beat::commit_l", "path::pl", "dilemma::light")
+        _add_predecessor(graph, "beat::commit_l", "beat::commit_h")
+
+        # Target beat referencing entity::hero
+        _make_beat(
+            graph,
+            "beat::target",
+            "Target beat with hero",
+            entities=["entity::hero"],
+        )
+        graph.add_edge("belongs_to", "beat::target", "path::ph")
+        _add_predecessor(graph, "beat::target", "beat::commit_l")
+
+        spec = PassageSpec(
+            passage_id="passage::test_mixed",
+            beat_ids=["beat::target"],
+            summary="test",
+            entities=["entity::hero"],
+        )
+
+        result = compute_prose_feasibility(graph, [spec])
+
+        # Mixed weights → goes to ambiguous, NOT variant or residue
+        assert len(result["ambiguous_specs"]) == 1
+        assert result["ambiguous_specs"][0].passage_id == "passage::test_mixed"
+        assert len(result["variant_specs"]) == 0
+        assert len(result["residue_specs"]) == 0
+
+    def test_all_heavy_flags_not_ambiguous(self) -> None:
+        """2+ flags all heavy → deterministic variant, NOT ambiguous."""
+        graph = Graph.empty()
+
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "residue_weight": "heavy"},
+        )
+        graph.create_node(
+            "dilemma::d2",
+            {"type": "dilemma", "raw_id": "d2", "residue_weight": "hard"},
+        )
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
+
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": ["dilemma::d1:path::p1"], "details": {"mood": "dark"}},
+                    {"when": ["dilemma::d2:path::p2"], "details": {"mood": "grim"}},
+                ],
+            },
+        )
+
+        self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
+        self._make_commit_beat(graph, "beat::c2", "path::p2", "dilemma::d2")
+
+        _make_beat(graph, "beat::target", "Target", entities=["entity::hero"])
+        graph.add_edge("belongs_to", "beat::target", "path::p1")
+        _add_predecessor(graph, "beat::target", "beat::c1")
+
+        spec = PassageSpec(
+            passage_id="passage::all_heavy",
+            beat_ids=["beat::target"],
+            summary="heavy test",
+            entities=["entity::hero"],
+        )
+
+        result = compute_prose_feasibility(graph, [spec])
+        assert len(result["ambiguous_specs"]) == 0
+        assert len(result["variant_specs"]) > 0
+        assert len(result["residue_specs"]) == 0
+
+    def test_single_relevant_flag_always_deterministic(self) -> None:
+        """Exactly 1 relevant flag → never ambiguous (deterministic assignment)."""
+        graph = Graph.empty()
+
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "residue_weight": "heavy"},
+        )
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": ["dilemma::d1:path::p1"], "details": {"mood": "dark"}},
+                ],
+            },
+        )
+
+        self._make_commit_beat(graph, "beat::c1", "path::p1", "dilemma::d1")
+        _make_beat(graph, "beat::target", "Target", entities=["entity::hero"])
+        graph.add_edge("belongs_to", "beat::target", "path::p1")
+        _add_predecessor(graph, "beat::target", "beat::c1")
+
+        spec = PassageSpec(
+            passage_id="passage::single_flag",
+            beat_ids=["beat::target"],
+            summary="single flag test",
+            entities=["entity::hero"],
+        )
+
+        result = compute_prose_feasibility(graph, [spec])
+        assert len(result["ambiguous_specs"]) == 0
+        assert len(result["variant_specs"]) == 1  # heavy → variant
+
+
+# ---------------------------------------------------------------------------
+# Tests for Issue #1158: transition_guidance stored on passage node in Phase 6
+# ---------------------------------------------------------------------------
+
+
+class TestTransitionGuidanceInGraph:
+    """After Phase 6, passage nodes created from collapsed specs must have transition_guidance."""
+
+    def test_transition_guidance_stored_on_passage_node(self) -> None:
+        """Phase 6 stores transition_guidance from PassageSpec onto the passage graph node."""
+        import asyncio
+
+        from questfoundry.pipeline.stages.polish.deterministic import phase_plan_application
+
+        graph = Graph.empty()
+
+        # Build a minimal plan node directly (bypass phase 4) with a collapsed passage
+        # that has transition_guidance set (simulating what phase 5f would produce).
+        from questfoundry.models.polish import PassageSpec as _PassageSpec
+
+        spec = _PassageSpec(
+            passage_id="passage::collapse_0",
+            beat_ids=["beat::a", "beat::b", "beat::c"],
+            summary="Three beats collapsed",
+            entities=[],
+            grouping_type="collapse",
+            transition_guidance=["Move from action to reflection.", "Time passes quietly."],
+        )
+
+        graph.create_node(
+            "polish_plan::current",
+            {
+                "type": "polish_plan",
+                "raw_id": "current",
+                "passage_count": 1,
+                "variant_count": 0,
+                "residue_count": 0,
+                "choice_count": 0,
+                "candidate_count": 0,
+                "warnings": [],
+                "passage_specs": [spec.model_dump()],
+                "variant_specs": [],
+                "residue_specs": [],
+                "choice_specs": [],
+                "false_branch_candidates": [],
+                "false_branch_specs": [],
+                "feasibility_annotations": {},
+                "ambiguous_specs": [],
+                "arc_traversals": {},
+            },
+        )
+
+        # Create beat nodes so grouped_in edges don't fail
+        for bid in ["beat::a", "beat::b", "beat::c"]:
+            graph.create_node(
+                bid,
+                {
+                    "type": "beat",
+                    "raw_id": bid.split("::")[-1],
+                    "summary": f"Beat {bid}",
+                    "dilemma_impacts": [],
+                    "entities": [],
+                    "scene_type": "scene",
+                },
+            )
+
+        result = asyncio.run(phase_plan_application(graph, None))  # type: ignore[arg-type]
+        assert result.status == "completed"
+
+        passage_nodes = graph.get_nodes_by_type("passage")
+        passage = passage_nodes.get("passage::collapse_0")
+        assert passage is not None
+        assert passage.get("transition_guidance") == [
+            "Move from action to reflection.",
+            "Time passes quietly.",
+        ]

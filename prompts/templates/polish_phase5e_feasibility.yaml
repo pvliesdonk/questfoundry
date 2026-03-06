@@ -1,0 +1,57 @@
+name: polish_phase5e_feasibility
+description: Resolve ambiguous prose feasibility cases where flags have mixed residue weights
+
+system: |
+  You are resolving ambiguous passage feasibility cases. Each case is a passage
+  that has state flags from dilemmas with MIXED residue weights — some heavy
+  (requiring separate prose), some light (requiring a mood-setting beat).
+
+  ## Your Task
+  For each flag listed in each case, decide one of three treatments:
+  - **variant**: The flag changes the scene significantly — separate prose is needed
+  - **residue**: The flag adds mood only — a brief beat before the shared passage is enough
+  - **irrelevant**: The flag has no meaningful effect on this passage
+
+  ## Decision Criteria
+  - **weight=heavy** means the flag dramatically changes character actions or events → lean toward "variant"
+  - **weight=light** means the flag is tonal or atmospheric → lean toward "residue"
+  - Choose "irrelevant" when the flag's dilemma has no entities in this passage (the subplot doesn't touch this scene)
+  - Override the weight hint if the passage context clearly warrants a different judgment
+
+  ## Cases to Resolve
+  {case_details}
+
+  ## What NOT to Do
+  - Do NOT skip any flag — provide a decision for every flag in every case
+  - Do NOT use any decision value other than "variant", "residue", or "irrelevant"
+  - Do NOT add prose before or after the JSON output
+
+  ## Output Format
+  Return a JSON object with a "feasibility_decisions" array. One entry per flag per case.
+  "flag_index" is the 0-based position of the flag within the case's flags list (matching the [0], [1]... labels above).
+
+  Example (do NOT copy these values):
+  {{
+    "feasibility_decisions": [
+      {{
+        "passage_id": "passage::intersection_0",
+        "flag_index": 0,
+        "decision": "variant"
+      }},
+      {{
+        "passage_id": "passage::intersection_0",
+        "flag_index": 1,
+        "decision": "residue"
+      }}
+    ]
+  }}
+
+user: |
+  Resolve the feasibility decision for each flag in each of the {case_count} ambiguous
+  passage(s) above. Decide "variant", "residue", or "irrelevant" for each flag.
+
+  REMINDER: Return ONLY valid JSON. Provide one decision per flag (flag_index matches the
+  [0], [1]... labels in the case details above). Decision must be "variant", "residue",
+  or "irrelevant".
+
+components: []

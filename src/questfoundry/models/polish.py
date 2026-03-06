@@ -156,6 +156,10 @@ class PassageSpec(BaseModel):
         default="singleton",
         description="How beats were grouped: intersection, collapse, or singleton",
     )
+    transition_guidance: list[str] = Field(
+        default_factory=list,
+        description="Transition instructions between beats (N-1 for N beats; Phase 5f)",
+    )
 
 
 class VariantSpec(BaseModel):
@@ -304,6 +308,61 @@ class Phase5dOutput(BaseModel):
     """Output of Phase 5d: Variant Passage Summaries."""
 
     variant_summaries: list[VariantSummaryItem] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Phase 5e: Ambiguous Feasibility — LLM output schema
+# ---------------------------------------------------------------------------
+
+
+class AmbiguousFeasibilityCase(BaseModel):
+    """One passage with ambiguous feasibility flags for LLM review.
+
+    Ambiguous means 2+ relevant flags with mixed residue weights
+    (at least one heavy AND at least one light dilemma).
+    """
+
+    passage_id: str = Field(min_length=1)
+    passage_summary: str = Field(default="")
+    entities: list[str] = Field(default_factory=list)
+    flags: list[str] = Field(
+        min_length=1, description="Flag IDs that are ambiguous (mixed weights)"
+    )
+
+
+class FeasibilityDecisionItem(BaseModel):
+    """LLM decision for one flag in an ambiguous passage."""
+
+    passage_id: str = Field(min_length=1)
+    flag_index: int = Field(ge=0, description="Index into the case's flags list")
+    decision: str = Field(description='"variant" | "residue" | "irrelevant"')
+
+
+class Phase5eOutput(BaseModel):
+    """Output of Phase 5e: Ambiguous Feasibility Resolution."""
+
+    feasibility_decisions: list[FeasibilityDecisionItem] = Field(default_factory=list)
+
+
+# ---------------------------------------------------------------------------
+# Phase 5f: Transition Guidance — LLM output schema
+# ---------------------------------------------------------------------------
+
+
+class TransitionGuidanceItem(BaseModel):
+    """Transition guidance for a collapsed passage."""
+
+    passage_id: str = Field(min_length=1)
+    transitions: list[str] = Field(
+        min_length=1,
+        description="One transition instruction per beat boundary (N-1 for N beats)",
+    )
+
+
+class Phase5fOutput(BaseModel):
+    """Output of Phase 5f: Transition Guidance for Collapsed Passages."""
+
+    transition_guidance: list[TransitionGuidanceItem] = Field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
