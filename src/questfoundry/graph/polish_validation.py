@@ -157,13 +157,12 @@ def _check_arc_traversal_completeness(
         for beat_id in beat_sequence:
             beat_children = children_all.get(beat_id, [])
             children_in_arc = [c for c in beat_children if c in arc_beat_set]
-            children_outside_arc = [c for c in beat_children if c not in arc_beat_set]
 
             # A dead end: beat has successors globally but none within this arc
-            if children_outside_arc and not children_in_arc:
+            if not children_in_arc and beat_children:
                 errors.append(
                     f"Arc '{arc_key}' has dead-end beat {beat_id!r}: "
-                    f"beat has successors {children_outside_arc} outside the arc "
+                    f"beat has successors {beat_children} outside the arc "
                     f"but no successors within the arc's beat set"
                 )
 

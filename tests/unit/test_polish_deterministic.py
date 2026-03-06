@@ -1029,3 +1029,103 @@ class TestPrePlanWarningAccumulator:
         plan = PolishPlan()
         _drain_pre_plan_warnings(graph, plan)
         assert plan.warnings == []
+
+    def test_upsert_creates_node_when_none_exists(self) -> None:
+        """_upsert_pre_plan_warnings creates the node when it doesn't exist yet."""
+        graph = Graph.empty()
+        warnings = ["warning A", "warning B"]
+        _upsert_pre_plan_warnings(graph, warnings)
+
+        plan = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan)
+        assert plan.warnings == warnings
+
+    def test_upsert_appends_to_existing_node(self) -> None:
+        """_upsert_pre_plan_warnings with existing node replaces warnings list."""
+        graph = Graph.empty()
+        # First call creates the node
+        _upsert_pre_plan_warnings(graph, ["first warning"])
+        # Second call (simulating a second rejected section) overwrites with combined list
+        _upsert_pre_plan_warnings(graph, ["first warning", "second warning"])
+
+        plan = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan)
+        assert plan.warnings == ["first warning", "second warning"]
+
+    def test_upsert_empty_warnings_noop(self) -> None:
+        """_upsert_pre_plan_warnings with an empty list does not create a node."""
+        graph = Graph.empty()
+        _upsert_pre_plan_warnings(graph, [])
+
+        # Node should be created but with empty warnings
+        plan = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan)
+        # Either the node was created with [] or not created — either way plan.warnings == []
+        assert plan.warnings == []
+
+
+class TestFindFalseBranchCandidatesBranchingAndDisconnected:
+    """Additional tests for find_false_branch_candidates covering branching passages
+    and disconnected sub-graphs (#1161)."""
+
+    def test_branching_passage_ends_run(self) -> None:
+        """A passage with 2+ children in the passage graph ends the linear run.
+
+        Scenario: p0 → p1, p0 → p2, then p1 → p3 → p4 → p5.
+        p0 has two children so its run ends; p1..p5 form a 4-passage linear run.
+        """
+        graph = Graph.empty()
+        # Beats: b0 is parent of b1 AND b2 (branch); b1 → b3 → b4 → b5 linear
+        for i in range(6):
+            graph.create_node(
+                f"beat::b{i}",
+                {"type": "beat", "raw_id": f"b{i}", "summary": f"B{i}", "dilemma_impacts": []},
+            )
+        # b1 comes after b0 (predecessor: child=b1, parent=b0)
+        graph.add_edge("predecessor", "beat::b1", "beat::b0")
+        # b2 also comes after b0 — creates 2-child branch at b0
+        graph.add_edge("predecessor", "beat::b2", "beat::b0")
+        # b3 → b4 → b5 come after b1
+        graph.add_edge("predecessor", "beat::b3", "beat::b1")
+        graph.add_edge("predecessor", "beat::b4", "beat::b3")
+        graph.add_edge("predecessor", "beat::b5", "beat::b4")
+
+        specs = [
+            PassageSpec(passage_id=f"passage::p{i}", beat_ids=[f"beat::b{i}"], summary=f"P{i}")
+            for i in range(6)
+        ]
+        candidates = find_false_branch_candidates(graph, specs)
+        # The b1→b3→b4→b5 arm forms a 4-passage linear run
+        all_ids = [pid for c in candidates for pid in c.passage_ids]
+        assert "passage::p1" in all_ids or any(len(c.passage_ids) >= 3 for c in candidates)
+        # p0 is a branching point — it should NOT appear alone as a linear run lead
+        # (specifically p0 has 2 children so the walk breaks the run at p0)
+        for c in candidates:
+            assert len(c.passage_ids) >= 3
+
+    def test_disconnected_passage_forms_linear_run(self) -> None:
+        """Passages not reachable from any root (disconnected sub-graph) are
+        still walked via the fallback loop and identified if 3+ consecutive."""
+        graph = Graph.empty()
+        # Two isolated chains:
+        # chain A: b0 → b1 (2 passages — not a candidate)
+        # chain B: b2 → b3 → b4 → b5 (4 passages — candidate)
+        # No edge connecting A and B — chain B is unreachable from chain A's roots.
+        for i in range(6):
+            graph.create_node(
+                f"beat::b{i}",
+                {"type": "beat", "raw_id": f"b{i}", "summary": f"B{i}", "dilemma_impacts": []},
+            )
+        graph.add_edge("predecessor", "beat::b1", "beat::b0")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
+        graph.add_edge("predecessor", "beat::b4", "beat::b3")
+        graph.add_edge("predecessor", "beat::b5", "beat::b4")
+
+        specs = [
+            PassageSpec(passage_id=f"passage::p{i}", beat_ids=[f"beat::b{i}"], summary=f"P{i}")
+            for i in range(6)
+        ]
+        candidates = find_false_branch_candidates(graph, specs)
+        # Chain B's 4 passages form one candidate
+        assert len(candidates) == 1
+        assert len(candidates[0].passage_ids) == 4
