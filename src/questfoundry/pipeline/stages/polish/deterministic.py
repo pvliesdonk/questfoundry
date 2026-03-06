@@ -163,6 +163,10 @@ async def phase_plan_computation(
 
     # 4b: Prose feasibility audit
     feasibility = compute_prose_feasibility(graph, plan.passage_specs)
+
+    # 4b (overlay audit): Overlay composition check (Doc 3 §6)
+    _audit_overlay_composition(graph, plan.passage_specs, feasibility)
+
     plan.feasibility_annotations = feasibility["annotations"]
     plan.variant_specs = feasibility["variant_specs"]
     plan.residue_specs = feasibility["residue_specs"]
@@ -472,6 +476,101 @@ def compute_prose_feasibility(
         "ambiguous_specs": ambiguous_specs,
         "warnings": warnings,
     }
+
+
+# ---------------------------------------------------------------------------
+# 4b (overlay audit): Overlay Composition Check
+# ---------------------------------------------------------------------------
+
+
+def _audit_overlay_composition(
+    graph: Graph,
+    specs: list[PassageSpec],
+    feasibility: dict[str, Any],
+) -> None:
+    """Audit overlay composition for prose feasibility (Doc 3 §6).
+
+    For each passage, checks whether any entity present in its beats could
+    have 4 or more overlays simultaneously active under any single flag
+    combination that is reachable at that passage. If so, the passage is
+    flagged as ``structural_split`` in the feasibility warnings.
+
+    Overlays are designed to compose (stack), not conflict. The threshold is
+    purely a count limit: 2-3 simultaneously active overlays are manageable;
+    4+ makes coherent prose infeasible.
+
+    Mutates ``feasibility`` in-place: appends to ``feasibility["warnings"]``
+    for each passage that exceeds the overlay count threshold and is not
+    already flagged.
+
+    Args:
+        graph: Graph with entity and beat nodes.
+        specs: Passage specs from Phase 4a.
+        feasibility: Existing feasibility dict from ``compute_prose_feasibility``.
+            Modified in-place.
+    """
+    _OVERLAY_THRESHOLD = 4
+
+    # Pre-fetch entity overlay data once
+    entity_nodes = graph.get_nodes_by_type("entity")
+
+    # Build passage_id → set of already-flagged passages (structural_split in warnings)
+    # Phase 4b emits structural_split warnings with this format:
+    #   "Passage {passage_id} has N narratively relevant flags — structural split recommended"
+    already_split: set[str] = set()
+    for warning in feasibility.get("warnings", []):
+        # Extract passage_id from the warning string
+        if "structural split recommended" in warning and warning.startswith("Passage "):
+            parts = warning.split(" ", 2)
+            if len(parts) >= 2:
+                already_split.add(parts[1])
+
+    for spec in specs:
+        if spec.passage_id in already_split:
+            continue
+
+        # Collect all reachable flag combinations across all beats in this passage
+        all_flag_combos: set[frozenset[str]] = set()
+        for beat_id in spec.beat_ids:
+            try:
+                combos = compute_active_flags_at_beat(graph, beat_id)
+                all_flag_combos.update(combos)
+            except ValueError as e:
+                log.warning("overlay_audit_flag_error", beat_id=beat_id, error=str(e))
+                continue
+
+        if not all_flag_combos:
+            continue
+
+        # Check each entity present in this passage
+        passage_entities = spec.entities
+        flagged = False
+        for entity_id in passage_entities:
+            if flagged:
+                break
+            edata = entity_nodes.get(entity_id)
+            if edata is None:
+                continue
+            overlays = edata.get("overlays") or []
+            if not overlays:
+                continue
+
+            # For each reachable flag combination, count active overlays on this entity
+            for flag_combo in all_flag_combos:
+                active_count = 0
+                for overlay in overlays:
+                    when_flags = overlay.get("when") or []
+                    # Overlay is active when ALL its when-flags are in the combo
+                    if all(wf in flag_combo for wf in when_flags):
+                        active_count += 1
+                if active_count >= _OVERLAY_THRESHOLD:
+                    feasibility["warnings"].append(
+                        f"Passage {spec.passage_id} has {active_count} simultaneously active "
+                        f"overlays on entity {entity_id} — structural split recommended "
+                        f"(overlay composition limit exceeded)"
+                    )
+                    flagged = True
+                    break
 
 
 # ---------------------------------------------------------------------------

@@ -1129,3 +1129,269 @@ class TestFindFalseBranchCandidatesBranchingAndDisconnected:
         # Chain B's 4 passages form one candidate
         assert len(candidates) == 1
         assert len(candidates[0].passage_ids) == 4
+
+
+# ---------------------------------------------------------------------------
+# Tests for Issue #1162: Overlay composition audit in Phase 4 (after 4b)
+# ---------------------------------------------------------------------------
+
+
+class TestAuditOverlayComposition:
+    """_audit_overlay_composition must flag passages where any entity has 4+
+    simultaneously active overlays under any reachable flag combination."""
+
+    def _make_commit_beat(
+        self,
+        graph: Graph,
+        beat_id: str,
+        path_id: str,
+        dilemma_id: str,
+    ) -> None:
+        graph.create_node(
+            beat_id,
+            {
+                "type": "beat",
+                "raw_id": beat_id.split("::")[-1],
+                "summary": f"Commit on {path_id}",
+                "dilemma_impacts": [{"dilemma_id": dilemma_id, "effect": "commits"}],
+                "entities": [],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", beat_id, path_id)
+
+    def _build_graph_with_overlays(
+        self,
+        overlay_when_lists: list[list[str]],
+        commit_flags: list[tuple[str, str, str]],
+    ) -> tuple[Graph, PassageSpec]:
+        """Build a minimal graph with one entity having `len(overlay_when_lists)` overlays.
+
+        Args:
+            overlay_when_lists: Each element is the `when` list for one overlay.
+            commit_flags: List of (path_id, dilemma_id, beat_id) tuples for commit beats
+                that are ancestors of beat::target (chained in given order).
+
+        Returns:
+            (graph, spec) ready for _audit_overlay_composition.
+        """
+
+        graph = Graph.empty()
+
+        overlays = [
+            {"when": when, "details": {"key": f"val_{i}"}}
+            for i, when in enumerate(overlay_when_lists)
+        ]
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero", "overlays": overlays},
+        )
+
+        # Create paths + dilemmas
+        for path_id, dilemma_id, _ in commit_flags:
+            if path_id not in graph.get_nodes_by_type("path"):
+                graph.create_node(path_id, {"type": "path", "raw_id": path_id.split("::")[-1]})
+            if dilemma_id not in graph.get_nodes_by_type("dilemma"):
+                graph.create_node(
+                    dilemma_id, {"type": "dilemma", "raw_id": dilemma_id.split("::")[-1]}
+                )
+
+        # Create commit beats chained: last→...→first→target
+        prev_beat = None
+        for path_id, dilemma_id, beat_id in commit_flags:
+            graph.create_node(
+                beat_id,
+                {
+                    "type": "beat",
+                    "raw_id": beat_id.split("::")[-1],
+                    "summary": f"Commit on {path_id}",
+                    "dilemma_impacts": [{"dilemma_id": dilemma_id, "effect": "commits"}],
+                    "entities": [],
+                    "scene_type": "scene",
+                },
+            )
+            graph.add_edge("belongs_to", beat_id, path_id)
+            if prev_beat is not None:
+                graph.add_edge("predecessor", beat_id, prev_beat)
+            prev_beat = beat_id
+
+        # Target beat containing entity::hero
+        first_path = commit_flags[0][0] if commit_flags else "path::p1"
+        if first_path not in graph.get_nodes_by_type("path"):
+            graph.create_node(first_path, {"type": "path", "raw_id": first_path.split("::")[-1]})
+
+        graph.create_node(
+            "beat::target",
+            {
+                "type": "beat",
+                "raw_id": "target",
+                "summary": "Target beat",
+                "dilemma_impacts": [],
+                "entities": ["entity::hero"],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::target", first_path)
+        if prev_beat is not None:
+            graph.add_edge("predecessor", "beat::target", prev_beat)
+
+        spec = PassageSpec(
+            passage_id="passage::test",
+            beat_ids=["beat::target"],
+            summary="test passage",
+            entities=["entity::hero"],
+        )
+        return graph, spec
+
+    def test_four_overlays_all_coactive_flagged(self) -> None:
+        """Entity with 4 overlays whose when-flags can all be simultaneously active
+        → passage flagged as structural_split."""
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        # Four dilemmas, four paths, each overlay's when has exactly 1 flag
+        # All four flags will be ancestors of beat::target → all 4 active in 1 combo
+        commit_flags = [
+            ("path::pa", "dilemma::da", "beat::ca"),
+            ("path::pb", "dilemma::db", "beat::cb"),
+            ("path::pc", "dilemma::dc", "beat::cc"),
+            ("path::pd", "dilemma::dd", "beat::cd"),
+        ]
+        overlay_when_lists = [
+            ["dilemma::da:path::pa"],
+            ["dilemma::db:path::pb"],
+            ["dilemma::dc:path::pc"],
+            ["dilemma::dd:path::pd"],
+        ]
+        graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
+
+        feasibility: dict = {"warnings": []}
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        assert len(feasibility["warnings"]) == 1
+        assert "passage::test" in feasibility["warnings"][0]
+        assert "structural split recommended" in feasibility["warnings"][0]
+
+    def test_four_overlays_mutually_exclusive_not_flagged(self) -> None:
+        """Entity with 4 overlays but each requires a different path of the SAME dilemma
+        → at most 1 can be active at a time → passage NOT flagged."""
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        # One dilemma with four paths (mutually exclusive by belongs_to)
+        # Only one commit beat → only one flag active at a time
+        graph = Graph.empty()
+
+        # Single dilemma, single commit beat for path::pa
+        graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1"})
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
+        graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
+        graph.create_node("path::pc", {"type": "path", "raw_id": "pc"})
+        graph.create_node("path::pd", {"type": "path", "raw_id": "pd"})
+
+        # One commit beat on path::pa only
+        graph.create_node(
+            "beat::ca",
+            {
+                "type": "beat",
+                "raw_id": "ca",
+                "summary": "Commit a",
+                "dilemma_impacts": [{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+                "entities": [],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::ca", "path::pa")
+
+        # Target beat
+        graph.create_node(
+            "beat::target",
+            {
+                "type": "beat",
+                "raw_id": "target",
+                "summary": "Target",
+                "dilemma_impacts": [],
+                "entities": ["entity::hero"],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::target", "path::pa")
+        graph.add_edge("predecessor", "beat::target", "beat::ca")
+
+        # Entity with 4 overlays, each requiring a different path of dilemma::d1
+        # Since they're mutually exclusive (only 1 can be committed), at most 1 active at once
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": ["dilemma::d1:path::pa"], "details": {}},
+                    {"when": ["dilemma::d1:path::pb"], "details": {}},
+                    {"when": ["dilemma::d1:path::pc"], "details": {}},
+                    {"when": ["dilemma::d1:path::pd"], "details": {}},
+                ],
+            },
+        )
+
+        spec = PassageSpec(
+            passage_id="passage::test",
+            beat_ids=["beat::target"],
+            summary="test",
+            entities=["entity::hero"],
+        )
+
+        feasibility: dict = {"warnings": []}
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        # Only path::pa was committed → active flag combo is {dilemma::d1:path::pa}
+        # Only 1 overlay matches that combo → not flagged
+        assert feasibility["warnings"] == []
+
+    def test_three_overlays_coactive_not_flagged(self) -> None:
+        """Entity with exactly 3 simultaneously active overlays → NOT flagged (3 is manageable)."""
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        commit_flags = [
+            ("path::pa", "dilemma::da", "beat::ca"),
+            ("path::pb", "dilemma::db", "beat::cb"),
+            ("path::pc", "dilemma::dc", "beat::cc"),
+        ]
+        overlay_when_lists = [
+            ["dilemma::da:path::pa"],
+            ["dilemma::db:path::pb"],
+            ["dilemma::dc:path::pc"],
+        ]
+        graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
+
+        feasibility: dict = {"warnings": []}
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        assert feasibility["warnings"] == []
+
+    def test_already_structural_split_not_double_added(self) -> None:
+        """If a passage is already flagged as structural_split in warnings, it is not added again."""
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        commit_flags = [
+            ("path::pa", "dilemma::da", "beat::ca"),
+            ("path::pb", "dilemma::db", "beat::cb"),
+            ("path::pc", "dilemma::dc", "beat::cc"),
+            ("path::pd", "dilemma::dd", "beat::cd"),
+        ]
+        overlay_when_lists = [
+            ["dilemma::da:path::pa"],
+            ["dilemma::db:path::pb"],
+            ["dilemma::dc:path::pc"],
+            ["dilemma::dd:path::pd"],
+        ]
+        graph, spec = self._build_graph_with_overlays(overlay_when_lists, commit_flags)
+
+        # Pre-seed a structural_split warning for this passage (as Phase 4b would emit)
+        existing_warning = (
+            "Passage passage::test has 5 narratively relevant flags — structural split recommended"
+        )
+        feasibility: dict = {"warnings": [existing_warning]}
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        # Should still have exactly 1 warning (not double-added)
+        assert len(feasibility["warnings"]) == 1
+        assert feasibility["warnings"][0] == existing_warning
