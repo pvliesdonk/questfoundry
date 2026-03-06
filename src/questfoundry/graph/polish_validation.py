@@ -94,13 +94,13 @@ def validate_grow_output(graph: Graph) -> list[str]:
     # Build consequence → state_flag map via derived_from edges (Doc 3 Part 9).
     # state_flag nodes have no dilemma_id field; the association is:
     #   state_flag --derived_from--> consequence <--has_consequence-- path.dilemma_id
-    _cons_to_flag: set[str] = {
-        edge["to"] for edge in graph.get_edges(from_id=None, to_id=None, edge_type="derived_from")
+    _flagged_consequences: set[str] = {
+        edge["to"] for edge in graph.get_edges(edge_type="derived_from")
     }
     # Build consequence → dilemma lookup via has_consequence edges + path.dilemma_id
     _path_nodes = graph.get_nodes_by_type("path")
     _cons_to_dilemma: dict[str, str] = {}
-    for edge in graph.get_edges(from_id=None, to_id=None, edge_type="has_consequence"):
+    for edge in graph.get_edges(edge_type="has_consequence"):
         path_data = _path_nodes.get(edge["from"], {})
         raw_did = path_data.get("dilemma_id", "")
         if raw_did:
@@ -108,7 +108,7 @@ def validate_grow_output(graph: Graph) -> list[str]:
             _cons_to_dilemma[edge["to"]] = linked_did
 
     dilemmas_with_flags: set[str] = set()
-    for cons_id in _cons_to_flag:
+    for cons_id in _flagged_consequences:
         linked_dilemma = _cons_to_dilemma.get(cons_id)
         if linked_dilemma:
             dilemmas_with_flags.add(linked_dilemma)
