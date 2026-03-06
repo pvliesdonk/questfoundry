@@ -154,7 +154,7 @@ class _PolishLLMPhaseMixin:
         # Persist pre-plan warnings to graph so phase_plan_computation (a free
         # function without access to self) can drain them into PolishPlan.warnings.
         if warnings:
-            existing = graph.get_node("polish_meta::pre_plan_warnings")
+            existing = graph.get_node(_PRE_PLAN_WARNINGS_NODE)
             prior: list[str] = existing.get("warnings", []) if existing else []
             _upsert_pre_plan_warnings(graph, prior + warnings)
 
