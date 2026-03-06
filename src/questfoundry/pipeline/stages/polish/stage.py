@@ -20,6 +20,7 @@ from pathlib import Path  # noqa: TC003 - used at runtime
 from typing import TYPE_CHECKING, Any, ClassVar
 
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.invariants import assert_predecessor_dag_acyclic
 from questfoundry.graph.polish_validation import validate_grow_output
 from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.pipeline import PhaseResult
@@ -261,6 +262,12 @@ class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
             if result.status == "failed":
                 log.error("phase_failed", phase=phase_name, detail=result.detail)
                 raise PolishStageError(f"POLISH phase '{phase_name}' failed: {result.detail}")
+
+            # Detective invariant: predecessor DAG must remain acyclic after any
+            # phase that writes predecessor edges.
+            _PREDECESSOR_PHASES = frozenset({"beat_reordering", "pacing"})
+            if phase_name in _PREDECESSOR_PHASES:
+                assert_predecessor_dag_acyclic(graph, phase_name)
 
             decision = await self.gate.on_phase_complete("polish", phase_name, result)
             if decision == "reject":

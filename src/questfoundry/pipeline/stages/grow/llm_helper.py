@@ -247,8 +247,10 @@ class _LLMHelperMixin:
     ) -> GapInsertionReport:
         """Validate gap proposals and insert valid ones into the graph.
 
-        Checks path_id prefixing, beat ID existence, and ordering
-        before inserting each gap beat.
+        Checks path_id prefixing, beat ID existence, ordering, and cycle
+        safety before inserting each gap beat.  A cycle check is performed
+        before every insertion: if inserting the gap beat would close a cycle
+        in the predecessor DAG, the gap is skipped with a warning.
 
         Args:
             graph: Graph to insert beats into.
@@ -260,7 +262,10 @@ class _LLMHelperMixin:
         Returns:
             Report with counts of inserted and invalid gaps.
         """
+        from collections import defaultdict
+
         from questfoundry.graph.grow_algorithms import (
+            _would_create_cycle,
             get_path_beat_sequence,
             insert_gap_beat,
         )
@@ -272,6 +277,15 @@ class _LLMHelperMixin:
         valid_beat_set = (
             set(valid_beat_ids.keys()) if isinstance(valid_beat_ids, dict) else set(valid_beat_ids)
         )
+
+        # Build the successors dict (prerequisite → dependents) for cycle detection.
+        # predecessor(A, B) means B comes before A; successors[B] contains A.
+        # We keep this in sync after each successful insertion.
+        beat_set: set[str] = set(graph.get_nodes_by_type("beat").keys())
+        successors: dict[str, set[str]] = defaultdict(set)
+        for edge in graph.get_edges(from_id=None, to_id=None, edge_type="predecessor"):
+            # edge["from"] requires edge["to"] → edge["to"] is a prereq of edge["from"]
+            successors[edge["to"]].add(edge["from"])
 
         def _normalize_beat_id(beat_id: str | None) -> str | None:
             if not beat_id:
@@ -332,7 +346,30 @@ class _LLMHelperMixin:
                     report.beat_not_in_sequence += 1
                     continue
 
-            insert_gap_beat(
+            # Cycle prevention: if after_beat and before_beat are both given,
+            # check whether inserting the gap would create a cycle.
+            # The gap insertion adds predecessor(gap, after_beat) and
+            # predecessor(before_beat, gap).  A cycle forms if after_beat is
+            # already a transitive successor of before_beat — i.e. inserting
+            # gap closes a circle: before_beat → gap → after_beat → ... → before_beat.
+            # This is equivalent to asking: is after_beat reachable from
+            # before_beat via the current successors graph?
+            # _would_create_cycle(before_beat, after_beat, ...) returns True iff
+            # after_beat is reachable from before_beat, which is exactly that case.
+            if (
+                after_beat
+                and before_beat
+                and _would_create_cycle(before_beat, after_beat, successors, beat_set)
+            ):
+                log.warning(
+                    f"{phase_name}_gap_skipped_would_create_cycle",
+                    after_beat=after_beat,
+                    before_beat=before_beat,
+                    path_id=prefixed_pid,
+                )
+                continue
+
+            new_beat_id = insert_gap_beat(
                 graph,
                 path_id=prefixed_pid,
                 after_beat=after_beat,
@@ -342,4 +379,14 @@ class _LLMHelperMixin:
                 dilemma_impacts=[i.model_dump() for i in gap.dilemma_impacts],
             )
             report.inserted += 1
+
+            # Update successors and beat_set to reflect the newly inserted beat.
+            # predecessor(new_beat, after_beat) → after_beat is prereq of new_beat
+            # predecessor(before_beat, new_beat) → new_beat is prereq of before_beat
+            beat_set.add(new_beat_id)
+            if after_beat:
+                successors[after_beat].add(new_beat_id)
+            if before_beat:
+                successors[new_beat_id].add(before_beat)
+
         return report

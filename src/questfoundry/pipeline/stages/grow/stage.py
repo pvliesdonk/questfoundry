@@ -28,6 +28,7 @@ from questfoundry.graph.context_compact import (
     CompactContextConfig,
 )
 from questfoundry.graph.graph import Graph
+from questfoundry.graph.invariants import assert_predecessor_dag_acyclic
 from questfoundry.graph.mutations import GrowMutationError, GrowValidationError
 from questfoundry.graph.snapshots import save_snapshot
 from questfoundry.models.grow import GrowPhaseResult, GrowResult
@@ -318,6 +319,14 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
                         )
                     ]
                 )
+
+            # Detective invariant: predecessor DAG must remain acyclic after any
+            # phase that writes predecessor edges.
+            _PREDECESSOR_PHASES = frozenset(
+                {"interleave_beats", "narrative_gaps", "pacing_gaps", "atmospheric"}
+            )
+            if phase_name in _PREDECESSOR_PHASES:
+                assert_predecessor_dag_acyclic(graph, phase_name)
 
             decision = await self.gate.on_phase_complete("grow", phase_name, result)
             if decision == "reject":
