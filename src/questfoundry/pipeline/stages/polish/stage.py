@@ -85,7 +85,6 @@ class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
         self._provider_name: str | None = None
         self._serialize_model: BaseChatModel | None = None
         self._serialize_provider_name: str | None = None
-        self._phase_warnings: list[str] = []
 
     # Map from registry phase name → self method name.
     # LLM phases that need binding to ``self`` at call time.
@@ -201,7 +200,6 @@ class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
         self._provider_name = provider_name
         self._serialize_model = serialize_model
         self._serialize_provider_name = serialize_provider_name
-        self._phase_warnings = []
         log.info("stage_start", stage="polish")
 
         graph = Graph.load(resolved_path)

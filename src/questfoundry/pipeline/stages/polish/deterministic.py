@@ -26,7 +26,7 @@ from questfoundry.models.polish import (
     ResidueSpec,
     VariantSpec,
 )
-from questfoundry.pipeline.stages.polish._helpers import log
+from questfoundry.pipeline.stages.polish._helpers import _PRE_PLAN_WARNINGS_NODE, log
 from questfoundry.pipeline.stages.polish.registry import polish_phase
 
 if TYPE_CHECKING:
@@ -1261,8 +1261,6 @@ def _entities_compatible(
 # ---------------------------------------------------------------------------
 # Pre-plan warning accumulator (supports Issue #1159)
 # ---------------------------------------------------------------------------
-
-_PRE_PLAN_WARNINGS_NODE = "polish_meta::pre_plan_warnings"
 
 
 def _drain_pre_plan_warnings(graph: Graph, plan: PolishPlan) -> None:

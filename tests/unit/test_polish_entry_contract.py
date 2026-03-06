@@ -280,9 +280,9 @@ class TestArcTraversalCompleteness:
     def test_arc_with_dead_end_beat_fails(self) -> None:
         """Arc traversal with dead-end beat raises PolishEntryError (#1160).
 
-        Structure: path p has beats b0 → b1 → b2, but b1 also has a child b3
-        that belongs to a different (non-existent) path, so b1 is a dead end
-        within the arc.
+        Structure: path p has beats b0 → b1 → b2. Beat b2 has a child b_other
+        that belongs to a different path, making b2 a dead end within the arc
+        for path p (b2 has successors outside the arc but none inside).
         """
         graph = Graph.empty()
 

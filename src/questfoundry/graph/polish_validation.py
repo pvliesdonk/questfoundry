@@ -155,10 +155,9 @@ def _check_arc_traversal_completeness(
         arc_beat_set = set(beat_sequence)
 
         for beat_id in beat_sequence:
-            children_in_arc = [c for c in children_all.get(beat_id, []) if c in arc_beat_set]
-            children_outside_arc = [
-                c for c in children_all.get(beat_id, []) if c not in arc_beat_set
-            ]
+            beat_children = children_all.get(beat_id, [])
+            children_in_arc = [c for c in beat_children if c in arc_beat_set]
+            children_outside_arc = [c for c in beat_children if c not in arc_beat_set]
 
             # A dead end: beat has successors globally but none within this arc
             if children_outside_arc and not children_in_arc:

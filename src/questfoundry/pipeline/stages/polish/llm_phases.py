@@ -39,7 +39,7 @@ from questfoundry.models.polish import (
     ResidueSpec,
     VariantSpec,
 )
-from questfoundry.pipeline.stages.polish._helpers import log
+from questfoundry.pipeline.stages.polish._helpers import _PRE_PLAN_WARNINGS_NODE, log
 from questfoundry.pipeline.stages.polish.deterministic import _load_plan_data
 from questfoundry.pipeline.stages.polish.registry import polish_phase
 
@@ -124,7 +124,6 @@ class _PolishLLMPhaseMixin:
                     f"beat set mismatch (expected {len(beat_ids)}, got {len(matched.beat_ids)})"
                 )
                 warnings.append(msg)
-                self._phase_warnings.append(msg)  # type: ignore[attr-defined]
                 log.warning(
                     "phase1_set_mismatch",
                     section=section_id,
@@ -140,7 +139,6 @@ class _PolishLLMPhaseMixin:
                     f"hard constraint violation (commit before advance/reveal)"
                 )
                 warnings.append(msg)
-                self._phase_warnings.append(msg)  # type: ignore[attr-defined]
                 log.warning("phase1_constraint_violation", section=section_id)
                 continue
 
@@ -635,8 +633,6 @@ def _update_plan_data(
 # ---------------------------------------------------------------------------
 # Phase 1 helpers
 # ---------------------------------------------------------------------------
-
-_PRE_PLAN_WARNINGS_NODE = "polish_meta::pre_plan_warnings"
 
 
 def _upsert_pre_plan_warnings(graph: Graph, warnings: list[str]) -> None:
