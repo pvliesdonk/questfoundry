@@ -119,10 +119,12 @@ class _PolishLLMPhaseMixin:
 
             # Validate: must contain exactly the same beats
             if set(matched.beat_ids) != set(beat_ids):
-                warnings.append(
+                msg = (
                     f"Section {section_id}: reordering rejected — "
                     f"beat set mismatch (expected {len(beat_ids)}, got {len(matched.beat_ids)})"
                 )
+                warnings.append(msg)
+                self._phase_warnings.append(msg)  # type: ignore[attr-defined]
                 log.warning(
                     "phase1_set_mismatch",
                     section=section_id,
@@ -133,10 +135,12 @@ class _PolishLLMPhaseMixin:
 
             # Validate: commit beats must not precede their dilemma's advance/reveal beats
             if not _validate_reorder_constraints(graph, beat_ids, matched.beat_ids):
-                warnings.append(
+                msg = (
                     f"Section {section_id}: reordering rejected — "
                     f"hard constraint violation (commit before advance/reveal)"
                 )
+                warnings.append(msg)
+                self._phase_warnings.append(msg)  # type: ignore[attr-defined]
                 log.warning("phase1_constraint_violation", section=section_id)
                 continue
 
@@ -148,6 +152,13 @@ class _PolishLLMPhaseMixin:
                 section=section_id,
                 rationale=matched.rationale[:80],
             )
+
+        # Persist pre-plan warnings to graph so phase_plan_computation (a free
+        # function without access to self) can drain them into PolishPlan.warnings.
+        if warnings:
+            existing = graph.get_node("polish_meta::pre_plan_warnings")
+            prior: list[str] = existing.get("warnings", []) if existing else []
+            _upsert_pre_plan_warnings(graph, prior + warnings)
 
         detail = f"Reordered {reordered_count}/{len(sections)} sections"
         if warnings:
@@ -624,6 +635,29 @@ def _update_plan_data(
 # ---------------------------------------------------------------------------
 # Phase 1 helpers
 # ---------------------------------------------------------------------------
+
+_PRE_PLAN_WARNINGS_NODE = "polish_meta::pre_plan_warnings"
+
+
+def _upsert_pre_plan_warnings(graph: Graph, warnings: list[str]) -> None:
+    """Persist Phase 1 rejection warnings to a temporary graph node.
+
+    The node is created or updated so that ``phase_plan_computation``
+    (a free function) can drain these warnings into ``PolishPlan.warnings``
+    without needing a reference to the ``PolishStage`` instance.
+    """
+    existing = graph.get_node(_PRE_PLAN_WARNINGS_NODE)
+    if existing is None:
+        graph.create_node(
+            _PRE_PLAN_WARNINGS_NODE,
+            {
+                "type": "polish_meta",
+                "raw_id": "pre_plan_warnings",
+                "warnings": warnings,
+            },
+        )
+    else:
+        graph.update_node(_PRE_PLAN_WARNINGS_NODE, warnings=warnings)
 
 
 def _find_linear_sections(

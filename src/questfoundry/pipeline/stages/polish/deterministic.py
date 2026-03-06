@@ -154,6 +154,9 @@ async def phase_plan_computation(
     """
     plan = PolishPlan()
 
+    # Drain Phase 1 rejection warnings accumulated before plan existed
+    _drain_pre_plan_warnings(graph, plan)
+
     # 4a: Beat grouping
     plan.passage_specs = compute_beat_grouping(graph)
     log.debug("phase4a_complete", passages=len(plan.passage_specs))
@@ -598,52 +601,138 @@ def compute_choice_edges(
 
 
 def find_false_branch_candidates(
-    graph: Graph,  # noqa: ARG001
+    graph: Graph,
     specs: list[PassageSpec],
 ) -> list[FalseBranchCandidate]:
     """Find stretches of 3+ consecutive non-intersection passages.
 
+    Passage adjacency is determined by actual beat DAG relationships —
+    specifically, whether any beat in passage A is a predecessor of any
+    beat in passage B. This avoids the spec-list-order approximation that
+    fails when passages are inserted in non-topological order.
+
     Args:
-        graph: Graph (for future context enrichment).
+        graph: Graph with beat DAG (predecessor + belongs_to edges).
         specs: Passage specs from Phase 4a.
 
     Returns:
-        List of FalseBranchCandidate objects.
+        List of FalseBranchCandidate objects (linear runs of 3+ non-intersection
+        passages with no real choices between them in the passage graph).
     """
     if len(specs) < 3:
         return []
 
-    # Build passage adjacency from beat DAG relationships.
-    # Use the spec order as a linear approximation. A more
-    # sophisticated version would use the actual passage graph
-    # from choice_edges, but that creates a circular dependency with 4c.
-    candidates: list[FalseBranchCandidate] = []
-
-    # Scan specs in order, collecting linear runs of non-intersection passages.
-    # Intersection passages break runs because they span multiple paths.
-    linear_run: list[str] = []
+    # Build beat → passage mapping
+    beat_to_passage: dict[str, str] = {}
     for spec in specs:
-        if spec.grouping_type == "intersection":
-            # Intersection breaks the run — flush if 3+
-            if len(linear_run) >= 3:
-                candidates.append(
-                    FalseBranchCandidate(
-                        passage_ids=list(linear_run),
-                        context_summary=f"Linear stretch of {len(linear_run)} passages",
-                    )
-                )
-            linear_run = []
-        else:
-            linear_run.append(spec.passage_id)
+        for bid in spec.beat_ids:
+            beat_to_passage[bid] = spec.passage_id
 
-    # Flush final run
-    if len(linear_run) >= 3:
-        candidates.append(
-            FalseBranchCandidate(
-                passage_ids=list(linear_run),
-                context_summary=f"Linear stretch of {len(linear_run)} passages",
+    # Build passage adjacency from beat DAG:
+    # passage A → passage B if any beat in A has a predecessor edge into a beat in B
+    # (predecessor edge: from=child, to=parent → child comes after parent,
+    #  so children[parent].append(child) → passage of parent → passage of child)
+    beat_nodes = graph.get_nodes_by_type("beat")
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+
+    # children_of[parent_beat] = list of child beats
+    children_of: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+    for edge in predecessor_edges:
+        from_id = edge["from"]  # child (depends on parent)
+        to_id = edge["to"]  # parent
+        if from_id in beat_nodes and to_id in beat_nodes:
+            children_of[to_id].append(from_id)
+
+    # passage_children[pid] = set of passage IDs that follow pid in the passage graph
+    passage_children: dict[str, set[str]] = {spec.passage_id: set() for spec in specs}
+    for beat_id, child_list in children_of.items():
+        from_passage = beat_to_passage.get(beat_id)
+        if from_passage is None:
+            continue
+        for child_beat in child_list:
+            to_passage = beat_to_passage.get(child_beat)
+            if to_passage is not None and to_passage != from_passage:
+                passage_children[from_passage].add(to_passage)
+
+    # Build passage set for lookup and intersection index
+    passage_id_to_spec: dict[str, PassageSpec] = {s.passage_id: s for s in specs}
+
+    # Walk the passage graph via BFS from passages with no incoming adjacency,
+    # collecting linear runs of non-intersection passages.
+    # A "linear run" requires each passage to have exactly one successor in the
+    # passage graph (no real branching choices between them).
+
+    # Compute in-degree for each passage (within the passage adjacency graph)
+    passage_parents: dict[str, set[str]] = {s.passage_id: set() for s in specs}
+    for pid, children_set in passage_children.items():
+        for cid in children_set:
+            if cid in passage_parents:
+                passage_parents[cid].add(pid)
+
+    roots = [s.passage_id for s in specs if not passage_parents[s.passage_id]]
+
+    candidates: list[FalseBranchCandidate] = []
+    visited: set[str] = set()
+
+    def _walk_linear_run(start: str) -> None:
+        """Walk a linear run of non-intersection passages from start."""
+        run: list[str] = []
+        current = start
+
+        while current not in visited:
+            visited.add(current)
+            spec = passage_id_to_spec.get(current)
+            if spec is None:
+                break
+
+            if spec.grouping_type == "intersection":
+                # Intersection breaks any run — flush and reset
+                _flush_run(run, candidates)
+                run = []
+                # Continue traversal into intersection's children
+                for child in sorted(passage_children.get(current, set())):
+                    if child not in visited:
+                        _walk_linear_run(child)
+                return
+
+            children_set = passage_children.get(current, set())
+            run.append(current)
+
+            if len(children_set) == 1:
+                # Exactly one successor — stay in linear run
+                next_pid = next(iter(children_set))
+                if next_pid in visited:
+                    break
+                current = next_pid
+            else:
+                # Branching or terminal — end of run
+                _flush_run(run, candidates)
+                run = []
+                for child in sorted(children_set):
+                    if child not in visited:
+                        _walk_linear_run(child)
+                return
+
+        _flush_run(run, candidates)
+
+    def _flush_run(run: list[str], out: list[FalseBranchCandidate]) -> None:
+        if len(run) >= 3:
+            out.append(
+                FalseBranchCandidate(
+                    passage_ids=list(run),
+                    context_summary=f"Linear stretch of {len(run)} passages",
+                )
             )
-        )
+
+    for root in sorted(roots):
+        if root not in visited:
+            _walk_linear_run(root)
+
+    # Walk any remaining passages not reachable from roots
+    # (handles disconnected sub-graphs in the passage adjacency)
+    for spec in specs:
+        if spec.passage_id not in visited:
+            _walk_linear_run(spec.passage_id)
 
     return candidates
 
@@ -1167,3 +1256,33 @@ def _entities_compatible(
 
     new_entities = entities_b - entities_a
     return len(new_entities) <= max_new_entities
+
+
+# ---------------------------------------------------------------------------
+# Pre-plan warning accumulator (supports Issue #1159)
+# ---------------------------------------------------------------------------
+
+_PRE_PLAN_WARNINGS_NODE = "polish_meta::pre_plan_warnings"
+
+
+def _drain_pre_plan_warnings(graph: Graph, plan: PolishPlan) -> None:
+    """Drain Phase 1 rejection warnings into the plan, then clear the node.
+
+    Phase 1 is a bound method on ``PolishStage`` and runs before the plan
+    exists.  It persists rejection warnings to a temporary graph node.
+    This function reads those warnings, extends ``plan.warnings``, and
+    deletes the node so it does not appear in subsequent graph snapshots.
+
+    Args:
+        graph: Graph that may contain a ``polish_meta::pre_plan_warnings`` node.
+        plan: PolishPlan whose ``warnings`` list will be extended.
+    """
+    node = graph.get_node(_PRE_PLAN_WARNINGS_NODE)
+    if node is None:
+        return
+    warnings: list[str] = node.get("warnings", [])
+    if warnings:
+        plan.warnings.extend(warnings)
+        log.debug("pre_plan_warnings_drained", count=len(warnings))
+    # Clear the accumulator so it does not affect subsequent runs
+    graph.update_node(_PRE_PLAN_WARNINGS_NODE, warnings=[])
