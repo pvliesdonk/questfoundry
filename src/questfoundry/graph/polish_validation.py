@@ -15,6 +15,7 @@ import re
 from collections import Counter, deque
 from typing import TYPE_CHECKING, Any
 
+from questfoundry.graph.algorithms import compute_arc_traversals
 from questfoundry.graph.context import get_primary_beat, normalize_scoped_id
 from questfoundry.graph.grow_validation import (
     build_exempt_passages,
@@ -106,7 +107,10 @@ def validate_grow_output(graph: Graph) -> list[str]:
         if not dilemma_data.get("dilemma_role"):
             errors.append(f"Dilemma {dilemma_id} missing dilemma_role (hard/soft)")
 
-    # 6. Intersection groups reference beats from different paths only
+    # 6. Every computed arc traversal is complete (no dead ends)
+    _check_arc_traversal_completeness(graph, beat_nodes, errors)
+
+    # 7. Intersection groups reference beats from different paths only
     intersection_groups = graph.get_nodes_by_type("intersection_group")
     for group_id, group_data in intersection_groups.items():
         _check_intersection_group_paths(
@@ -114,6 +118,53 @@ def validate_grow_output(graph: Graph) -> list[str]:
         )
 
     return errors
+
+
+def _check_arc_traversal_completeness(
+    graph: Graph,
+    beat_nodes: dict[str, dict[str, Any]],
+    errors: list[str],
+) -> None:
+    """Verify every arc traversal terminates at a beat with no arc-internal successors.
+
+    A "dead end" is a beat in the middle of an arc that has successors in the
+    full beat DAG but none within the arc's own beat set. This indicates GROW
+    produced an incomplete arc where beats belonging to the arc's paths were
+    not connected forward.
+
+    Args:
+        graph: Graph containing the beat DAG.
+        beat_nodes: Dict of beat node ID → data (pre-fetched).
+        errors: Mutable list to append error strings to.
+    """
+    arc_traversals = compute_arc_traversals(graph)
+    if not arc_traversals:
+        return  # No dilemmas/paths — skip
+
+    # Build full children adjacency from predecessor edges
+    # predecessor edge: from=child, to=parent  →  children[parent].append(child)
+    predecessor_edges = graph.get_edges(edge_type="predecessor")
+    children_all: dict[str, list[str]] = {bid: [] for bid in beat_nodes}
+    for edge in predecessor_edges:
+        from_id = edge["from"]
+        to_id = edge["to"]
+        if from_id in beat_nodes and to_id in beat_nodes:
+            children_all[to_id].append(from_id)
+
+    for arc_key, beat_sequence in arc_traversals.items():
+        arc_beat_set = set(beat_sequence)
+
+        for beat_id in beat_sequence:
+            beat_children = children_all.get(beat_id, [])
+            children_in_arc = [c for c in beat_children if c in arc_beat_set]
+
+            # A dead end: beat has successors globally but none within this arc
+            if not children_in_arc and beat_children:
+                errors.append(
+                    f"Arc '{arc_key}' has dead-end beat {beat_id!r}: "
+                    f"beat has successors {beat_children} outside the arc "
+                    f"but no successors within the arc's beat set"
+                )
 
 
 def _check_predecessor_cycles(

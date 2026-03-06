@@ -8,13 +8,16 @@ from __future__ import annotations
 
 from questfoundry.graph.graph import Graph
 from questfoundry.models.polish import PassageSpec
+from questfoundry.pipeline.stages.polish._helpers import _PRE_PLAN_WARNINGS_NODE
 from questfoundry.pipeline.stages.polish.deterministic import (
     PolishPlan,
+    _drain_pre_plan_warnings,
     compute_beat_grouping,
     compute_choice_edges,
     compute_prose_feasibility,
     find_false_branch_candidates,
 )
+from questfoundry.pipeline.stages.polish.llm_phases import _upsert_pre_plan_warnings
 
 
 def _make_beat(graph: Graph, beat_id: str, summary: str, **kwargs: object) -> None:
@@ -330,14 +333,73 @@ class TestFindFalseBranchCandidates:
         assert len(candidates) == 0
 
     def test_linear_stretch_produces_candidate(self) -> None:
-        """3+ passages in a row → at least one candidate."""
+        """3+ passages in a row via beat DAG adjacency → at least one candidate."""
         graph = Graph.empty()
+        # Create beat nodes and predecessor edges forming a linear chain
+        for i in range(5):
+            graph.create_node(
+                f"beat::b{i}",
+                {"type": "beat", "raw_id": f"b{i}", "summary": f"B{i}", "dilemma_impacts": []},
+            )
+        for i in range(1, 5):
+            graph.add_edge("predecessor", f"beat::b{i}", f"beat::b{i - 1}")
         specs = [
-            PassageSpec(passage_id=f"p{i}", beat_ids=[f"b{i}"], summary=f"P{i}") for i in range(5)
+            PassageSpec(passage_id=f"passage::p{i}", beat_ids=[f"beat::b{i}"], summary=f"P{i}")
+            for i in range(5)
         ]
         candidates = find_false_branch_candidates(graph, specs)
         assert len(candidates) >= 1
         assert all(len(c.passage_ids) >= 3 for c in candidates)
+
+    def test_out_of_order_spec_but_adjacent_via_dag(self) -> None:
+        """Passages out-of-order in spec list but forming a linear chain via beat DAG
+        are correctly identified as false branch candidates (#1161)."""
+        graph = Graph.empty()
+        # Beats form a linear chain: b0 → b1 → b2 → b3
+        for i in range(4):
+            graph.create_node(
+                f"beat::b{i}",
+                {"type": "beat", "raw_id": f"b{i}", "summary": f"B{i}", "dilemma_impacts": []},
+            )
+        for i in range(1, 4):
+            graph.add_edge("predecessor", f"beat::b{i}", f"beat::b{i - 1}")
+
+        # Specs listed in reverse order — spec list order is NOT topological
+        specs = [
+            PassageSpec(passage_id="passage::p3", beat_ids=["beat::b3"], summary="P3"),
+            PassageSpec(passage_id="passage::p2", beat_ids=["beat::b2"], summary="P2"),
+            PassageSpec(passage_id="passage::p1", beat_ids=["beat::b1"], summary="P1"),
+            PassageSpec(passage_id="passage::p0", beat_ids=["beat::b0"], summary="P0"),
+        ]
+        candidates = find_false_branch_candidates(graph, specs)
+        # All four form a linear chain via beat DAG adjacency
+        assert len(candidates) == 1
+        assert len(candidates[0].passage_ids) == 4
+
+    def test_non_adjacent_passages_not_identified(self) -> None:
+        """Passages in spec order but NOT adjacent in the passage graph are
+        NOT identified as false branch candidates (#1161)."""
+        graph = Graph.empty()
+        # Two separate passages with no beat DAG connection between them
+        for i in range(4):
+            graph.create_node(
+                f"beat::b{i}",
+                {"type": "beat", "raw_id": f"b{i}", "summary": f"B{i}", "dilemma_impacts": []},
+            )
+        # b0 → b1 form one chain; b2 → b3 form another (no connection between)
+        graph.add_edge("predecessor", "beat::b1", "beat::b0")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
+
+        specs = [
+            PassageSpec(passage_id="passage::p0", beat_ids=["beat::b0"], summary="P0"),
+            PassageSpec(passage_id="passage::p1", beat_ids=["beat::b1"], summary="P1"),
+            # gap — no connection from b1 to b2
+            PassageSpec(passage_id="passage::p2", beat_ids=["beat::b2"], summary="P2"),
+            PassageSpec(passage_id="passage::p3", beat_ids=["beat::b3"], summary="P3"),
+        ]
+        candidates = find_false_branch_candidates(graph, specs)
+        # Each sub-chain has only 2 passages — neither qualifies as 3+
+        assert all(len(c.passage_ids) < 3 for c in candidates)
 
 
 class TestPolishPlan:
@@ -921,3 +983,149 @@ class TestTransitionGuidanceInGraph:
             "Move from action to reflection.",
             "Time passes quietly.",
         ]
+
+
+class TestPrePlanWarningAccumulator:
+    """Tests for Issue #1159: Phase 1 warnings accumulated before PolishPlan exists."""
+
+    def test_drain_pre_plan_warnings_drains_into_plan(self) -> None:
+        """Warnings written to graph by Phase 1 are drained into plan.warnings (#1159)."""
+        graph = Graph.empty()
+        warnings = [
+            "Section section_0: reordering rejected — beat set mismatch (expected 3, got 2)",
+            "Section section_1: reordering rejected — hard constraint violation (commit before advance/reveal)",
+        ]
+        _upsert_pre_plan_warnings(graph, warnings)
+
+        plan = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan)
+
+        assert plan.warnings == warnings
+
+    def test_drain_clears_accumulator(self) -> None:
+        """Draining pre-plan warnings clears the accumulator node (#1159)."""
+        graph = Graph.empty()
+        _upsert_pre_plan_warnings(graph, ["some warning"])
+
+        plan = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan)
+        assert len(plan.warnings) == 1
+
+        # Second drain should add nothing
+        plan2 = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan2)
+        assert len(plan2.warnings) == 0
+
+    def test_drain_no_warnings_node_is_noop(self) -> None:
+        """Draining when no pre-plan warnings node exists is a no-op (#1159)."""
+        graph = Graph.empty()
+        plan = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan)  # Should not raise
+        assert plan.warnings == []
+
+    def test_no_rejection_produces_empty_phase1_contribution(self) -> None:
+        """When Phase 1 produces no rejections, plan.warnings is empty (#1159)."""
+        graph = Graph.empty()
+        # Do not call _upsert_pre_plan_warnings — simulates no rejections
+        plan = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan)
+        assert plan.warnings == []
+
+    def test_upsert_creates_node_when_none_exists(self) -> None:
+        """_upsert_pre_plan_warnings creates the node when it doesn't exist yet."""
+        graph = Graph.empty()
+        warnings = ["warning A", "warning B"]
+        _upsert_pre_plan_warnings(graph, warnings)
+
+        plan = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan)
+        assert plan.warnings == warnings
+
+    def test_upsert_appends_to_existing_node(self) -> None:
+        """_upsert_pre_plan_warnings with existing node replaces warnings list."""
+        graph = Graph.empty()
+        # First call creates the node
+        _upsert_pre_plan_warnings(graph, ["first warning"])
+        # Second call (simulating a second rejected section) overwrites with combined list
+        _upsert_pre_plan_warnings(graph, ["first warning", "second warning"])
+
+        plan = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan)
+        assert plan.warnings == ["first warning", "second warning"]
+
+    def test_upsert_empty_warnings_noop(self) -> None:
+        """_upsert_pre_plan_warnings with an empty list is a no-op — no node is created."""
+        graph = Graph.empty()
+        _upsert_pre_plan_warnings(graph, [])
+
+        assert graph.get_node(_PRE_PLAN_WARNINGS_NODE) is None
+        plan = PolishPlan()
+        _drain_pre_plan_warnings(graph, plan)
+        assert plan.warnings == []
+
+
+class TestFindFalseBranchCandidatesBranchingAndDisconnected:
+    """Additional tests for find_false_branch_candidates covering branching passages
+    and disconnected sub-graphs (#1161)."""
+
+    def test_branching_passage_ends_run(self) -> None:
+        """A passage with 2+ children in the passage graph ends the linear run.
+
+        Scenario: p0 → p1, p0 → p2, then p1 → p3 → p4 → p5.
+        p0 has two children so its run ends; p1..p5 form a 4-passage linear run.
+        """
+        graph = Graph.empty()
+        # Beats: b0 is parent of b1 AND b2 (branch); b1 → b3 → b4 → b5 linear
+        for i in range(6):
+            graph.create_node(
+                f"beat::b{i}",
+                {"type": "beat", "raw_id": f"b{i}", "summary": f"B{i}", "dilemma_impacts": []},
+            )
+        # b1 comes after b0 (predecessor: child=b1, parent=b0)
+        graph.add_edge("predecessor", "beat::b1", "beat::b0")
+        # b2 also comes after b0 — creates 2-child branch at b0
+        graph.add_edge("predecessor", "beat::b2", "beat::b0")
+        # b3 → b4 → b5 come after b1
+        graph.add_edge("predecessor", "beat::b3", "beat::b1")
+        graph.add_edge("predecessor", "beat::b4", "beat::b3")
+        graph.add_edge("predecessor", "beat::b5", "beat::b4")
+
+        specs = [
+            PassageSpec(passage_id=f"passage::p{i}", beat_ids=[f"beat::b{i}"], summary=f"P{i}")
+            for i in range(6)
+        ]
+        candidates = find_false_branch_candidates(graph, specs)
+        # The b1→b3→b4→b5 arm forms a 4-passage linear run
+        all_ids = [pid for c in candidates for pid in c.passage_ids]
+        assert "passage::p1" in all_ids
+        # p0 is a branching point — it should NOT appear alone as a linear run lead
+        # (specifically p0 has 2 children so the walk breaks the run at p0)
+        for c in candidates:
+            assert len(c.passage_ids) >= 3
+
+    def test_disconnected_passage_forms_linear_run(self) -> None:
+        """Passages not reachable from any root (disconnected sub-graph) are
+        still walked via the fallback loop and identified if 3+ consecutive."""
+        graph = Graph.empty()
+        # Two isolated chains:
+        # chain A: b0 → b1 (2 passages — not a candidate)
+        # chain B: b2 → b3 → b4 → b5 (4 passages — candidate)
+        # No edge connecting A and B — chain B is unreachable from chain A's roots.
+        for i in range(6):
+            graph.create_node(
+                f"beat::b{i}",
+                {"type": "beat", "raw_id": f"b{i}", "summary": f"B{i}", "dilemma_impacts": []},
+            )
+        graph.add_edge("predecessor", "beat::b1", "beat::b0")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
+        graph.add_edge("predecessor", "beat::b4", "beat::b3")
+        graph.add_edge("predecessor", "beat::b5", "beat::b4")
+
+        specs = [
+            PassageSpec(passage_id=f"passage::p{i}", beat_ids=[f"beat::b{i}"], summary=f"P{i}")
+            for i in range(6)
+        ]
+        candidates = find_false_branch_candidates(graph, specs)
+        # Chain B's 4 passages form one candidate
+        assert len(candidates) == 1
+        assert len(candidates[0].passage_ids) == 4

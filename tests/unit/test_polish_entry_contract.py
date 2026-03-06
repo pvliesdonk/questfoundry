@@ -239,3 +239,101 @@ class TestValidateGrowOutput:
         # Should not have intersection-related errors
         intersection_errors = [e for e in errors if "intersection" in e.lower()]
         assert intersection_errors == []
+
+
+class TestArcTraversalCompleteness:
+    """Tests for Issue #1160: arc traversal completeness check in validate_grow_output."""
+
+    def _make_two_path_graph(self) -> Graph:
+        """Create a graph with two paths (two dilemmas) for arc traversal testing."""
+        graph = Graph.empty()
+
+        # Two dilemmas, each with two paths
+        for label in ("choice_a", "choice_b"):
+            graph.create_node(
+                f"dilemma::{label}",
+                {"type": "dilemma", "raw_id": label, "dilemma_role": "hard", "status": "explored"},
+            )
+            graph.create_node(
+                f"state_flag::{label}_flag",
+                {
+                    "type": "state_flag",
+                    "raw_id": f"{label}_flag",
+                    "dilemma_id": f"dilemma::{label}",
+                },
+            )
+
+        for path_label in ("brave", "cautious"):
+            graph.create_node(
+                f"path::{path_label}",
+                {"type": "path", "raw_id": path_label, "dilemma_id": "dilemma::choice_a"},
+            )
+
+        return graph
+
+    def test_complete_arc_traversal_passes(self) -> None:
+        """A well-formed graph with complete arc traversals passes validation (#1160)."""
+        graph = _make_valid_grow_graph()
+        errors = validate_grow_output(graph)
+        assert errors == [], f"Unexpected errors: {errors}"
+
+    def test_arc_with_dead_end_beat_fails(self) -> None:
+        """Arc traversal with dead-end beat raises PolishEntryError (#1160).
+
+        Structure: path p has beats b0 → b1 → b2. Beat b2 has a child b_other
+        that belongs to a different path, making b2 a dead end within the arc
+        for path p (b2 has successors outside the arc but none inside).
+        """
+        graph = Graph.empty()
+
+        graph.create_node(
+            "dilemma::d1",
+            {"type": "dilemma", "raw_id": "d1", "dilemma_role": "hard", "status": "explored"},
+        )
+        graph.create_node(
+            "state_flag::d1_flag",
+            {"type": "state_flag", "raw_id": "d1_flag", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "path::p_brave",
+            {"type": "path", "raw_id": "p_brave", "dilemma_id": "dilemma::d1"},
+        )
+        graph.create_node(
+            "path::p_cautious",
+            {"type": "path", "raw_id": "p_cautious", "dilemma_id": "dilemma::d1"},
+        )
+
+        # b0 and b1 belong to brave; b2 belongs to cautious
+        # predecessor chain: b2 → b1 → b0 (all belong to brave)
+        # BUT b1 has an extra child b_other that leads outside brave's arc
+        for bid in ("b0", "b1", "b2"):
+            graph.create_node(
+                f"beat::{bid}",
+                {"type": "beat", "raw_id": bid, "summary": f"Beat {bid}", "dilemma_impacts": []},
+            )
+        graph.create_node(
+            "beat::b_other",
+            {"type": "beat", "raw_id": "b_other", "summary": "Other", "dilemma_impacts": []},
+        )
+
+        # b0, b1, b2 all on brave path
+        graph.add_edge("belongs_to", "beat::b0", "path::p_brave")
+        graph.add_edge("belongs_to", "beat::b1", "path::p_brave")
+        graph.add_edge("belongs_to", "beat::b2", "path::p_brave")
+        # b_other on cautious path
+        graph.add_edge("belongs_to", "beat::b_other", "path::p_cautious")
+
+        # Chain: b1 → b0, b2 → b1, b_other → b1
+        # b1 has two children: b2 (in brave arc) and b_other (not in brave arc)
+        # This is fine. Let's construct a dead end:
+        # b0 → b1, b1 → b2, but b2 also → b_other (b2 has a child outside the arc)
+        graph.add_edge("predecessor", "beat::b1", "beat::b0")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b_other", "beat::b2")
+        # Now: arc for brave = [b0, b1, b2]; b2 has child b_other outside brave arc
+        # → b2 is a dead end within brave arc
+
+        errors = validate_grow_output(graph)
+        dead_end_errors = [e for e in errors if "dead-end" in e]
+        assert dead_end_errors, f"Expected dead-end error, got: {errors}"
+        assert "b2" in dead_end_errors[0] or "b_other" in dead_end_errors[0]
