@@ -1140,26 +1140,6 @@ class TestAuditOverlayComposition:
     """_audit_overlay_composition must flag passages where any entity has 4+
     simultaneously active overlays under any reachable flag combination."""
 
-    def _make_commit_beat(
-        self,
-        graph: Graph,
-        beat_id: str,
-        path_id: str,
-        dilemma_id: str,
-    ) -> None:
-        graph.create_node(
-            beat_id,
-            {
-                "type": "beat",
-                "raw_id": beat_id.split("::")[-1],
-                "summary": f"Commit on {path_id}",
-                "dilemma_impacts": [{"dilemma_id": dilemma_id, "effect": "commits"}],
-                "entities": [],
-                "scene_type": "scene",
-            },
-        )
-        graph.add_edge("belongs_to", beat_id, path_id)
-
     def _build_graph_with_overlays(
         self,
         overlay_when_lists: list[list[str]],
@@ -1395,3 +1375,243 @@ class TestAuditOverlayComposition:
         # Should still have exactly 1 warning (not double-added)
         assert len(feasibility["warnings"]) == 1
         assert feasibility["warnings"][0] == existing_warning
+
+    def test_unconditional_overlays_always_active(self) -> None:
+        """Overlays with empty ``when`` lists are always active regardless of flag combo.
+
+        4 unconditional overlays (when=[]) on an entity in a passage → flagged
+        as structural_split, even with no commit ancestors (empty flag combo).
+        """
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+
+        # Entity with 4 unconditional overlays (when: [])
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": [], "details": {"key": "a"}},
+                    {"when": [], "details": {"key": "b"}},
+                    {"when": [], "details": {"key": "c"}},
+                    {"when": [], "details": {"key": "d"}},
+                ],
+            },
+        )
+
+        # Single beat with no commit ancestors → empty flag combo
+        graph.create_node(
+            "beat::target",
+            {
+                "type": "beat",
+                "raw_id": "target",
+                "summary": "Target beat",
+                "dilemma_impacts": [],
+                "entities": ["entity::hero"],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::target", "path::p1")
+
+        spec = PassageSpec(
+            passage_id="passage::unconditional",
+            beat_ids=["beat::target"],
+            summary="unconditional overlay test",
+            entities=["entity::hero"],
+        )
+
+        feasibility: dict = {"warnings": []}
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        assert len(feasibility["warnings"]) == 1
+        assert "passage::unconditional" in feasibility["warnings"][0]
+        assert "structural split recommended" in feasibility["warnings"][0]
+
+    def test_entity_with_no_overlays_not_flagged(self) -> None:
+        """Passage where the entity has no overlays is NOT flagged.
+
+        Exercises the ``if not overlays: continue`` path.
+        """
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+
+        # Entity with no overlays at all
+        graph.create_node(
+            "entity::hero",
+            {"type": "entity", "raw_id": "hero"},  # no "overlays" key
+        )
+
+        graph.create_node(
+            "beat::target",
+            {
+                "type": "beat",
+                "raw_id": "target",
+                "summary": "Target beat",
+                "dilemma_impacts": [],
+                "entities": ["entity::hero"],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::target", "path::p1")
+
+        spec = PassageSpec(
+            passage_id="passage::no_overlays",
+            beat_ids=["beat::target"],
+            summary="no overlay test",
+            entities=["entity::hero"],
+        )
+
+        feasibility: dict = {"warnings": []}
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        assert feasibility["warnings"] == []
+
+    def test_entity_not_in_entity_nodes_skipped(self) -> None:
+        """Passage referencing an entity ID not in the graph is NOT flagged.
+
+        Exercises the ``if edata is None: continue`` path.
+        """
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+
+        # No entity node created for entity::ghost
+        graph.create_node(
+            "beat::target",
+            {
+                "type": "beat",
+                "raw_id": "target",
+                "summary": "Target beat",
+                "dilemma_impacts": [],
+                "entities": [],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::target", "path::p1")
+
+        # PassageSpec references entity::ghost which does not exist in the graph
+        spec = PassageSpec(
+            passage_id="passage::ghost_entity",
+            beat_ids=["beat::target"],
+            summary="ghost entity test",
+            entities=["entity::ghost"],
+        )
+
+        feasibility: dict = {"warnings": []}
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        assert feasibility["warnings"] == []
+
+    def test_compute_active_flags_raises_warning_and_skips(self) -> None:
+        """ValueError from compute_active_flags_at_beat → warning logged, beat skipped.
+
+        Exercises the ``except ValueError`` path by referencing a beat_id that
+        exists in the graph but is NOT a beat-type node. compute_active_flags_at_beat
+        raises ValueError for non-beat nodes.
+        """
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+
+        # Entity with 4 unconditional overlays (normally would trigger threshold)
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": [], "details": {"key": "a"}},
+                    {"when": [], "details": {"key": "b"}},
+                    {"when": [], "details": {"key": "c"}},
+                    {"when": [], "details": {"key": "d"}},
+                ],
+            },
+        )
+
+        # A node that is NOT a beat type — compute_active_flags_at_beat raises ValueError
+        graph.create_node(
+            "beat::not_really_a_beat",
+            {"type": "path", "raw_id": "not_really_a_beat"},  # wrong type
+        )
+
+        # A real beat so we have at least one valid combo (empty)
+        graph.create_node(
+            "beat::real",
+            {
+                "type": "beat",
+                "raw_id": "real",
+                "summary": "Real beat",
+                "dilemma_impacts": [],
+                "entities": ["entity::hero"],
+                "scene_type": "scene",
+            },
+        )
+        graph.add_edge("belongs_to", "beat::real", "path::p1")
+
+        spec = PassageSpec(
+            passage_id="passage::mixed_beats",
+            beat_ids=["beat::not_really_a_beat", "beat::real"],
+            summary="mixed beat types",
+            entities=["entity::hero"],
+        )
+
+        feasibility: dict = {"warnings": []}
+        # Should not raise; ValueError for the non-beat is caught and logged
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        # The real beat provides an empty flag combo → 4 unconditional overlays
+        # are all active → passage IS flagged (the ValueError path was exercised
+        # but the valid beat still produces a combo)
+        assert any("structural split" in w for w in feasibility["warnings"])
+
+    def test_passage_with_no_flag_combos_not_flagged(self) -> None:
+        """Passage where all beats raise ValueError → no flag combos → NOT flagged.
+
+        Exercises the ``if not all_flag_combos: continue`` path. When every
+        beat_id in the spec raises ValueError, all_flag_combos stays empty
+        and the passage is skipped entirely.
+        """
+        from questfoundry.pipeline.stages.polish.deterministic import _audit_overlay_composition
+
+        graph = Graph.empty()
+
+        # Entity with 4 unconditional overlays (would trigger threshold if evaluated)
+        graph.create_node(
+            "entity::hero",
+            {
+                "type": "entity",
+                "raw_id": "hero",
+                "overlays": [
+                    {"when": [], "details": {"key": "a"}},
+                    {"when": [], "details": {"key": "b"}},
+                    {"when": [], "details": {"key": "c"}},
+                    {"when": [], "details": {"key": "d"}},
+                ],
+            },
+        )
+
+        # Non-beat node in beat position → ValueError on every beat_id in spec
+        graph.create_node(
+            "beat::not_a_beat",
+            {"type": "path", "raw_id": "not_a_beat"},  # wrong type
+        )
+
+        spec = PassageSpec(
+            passage_id="passage::no_combos",
+            beat_ids=["beat::not_a_beat"],
+            summary="no combos test",
+            entities=["entity::hero"],
+        )
+
+        feasibility: dict = {"warnings": []}
+        _audit_overlay_composition(graph, [spec], feasibility)
+
+        # all_flag_combos is empty (all beats raised ValueError) → passage skipped
+        assert not any("structural split" in w for w in feasibility["warnings"])

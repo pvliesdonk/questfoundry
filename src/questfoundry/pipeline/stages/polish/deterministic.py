@@ -36,6 +36,15 @@ if TYPE_CHECKING:
 
 
 # ---------------------------------------------------------------------------
+# Module-level constants
+# ---------------------------------------------------------------------------
+
+# Maximum number of simultaneously active overlays on a single entity before
+# prose is considered infeasible. 2-3 active overlays are manageable; 4+ makes
+# coherent prose structurally unsound and triggers a structural_split warning.
+_OVERLAY_THRESHOLD = 4
+
+# ---------------------------------------------------------------------------
 # Shared flag parsing helper
 # ---------------------------------------------------------------------------
 
@@ -503,13 +512,16 @@ def _audit_overlay_composition(
     for each passage that exceeds the overlay count threshold and is not
     already flagged.
 
+    Note: Overlays with an empty ``when`` list are unconditional and always
+    counted as active, regardless of the current flag combination. An entity
+    with 4+ unconditional overlays will therefore always be flagged.
+
     Args:
         graph: Graph with entity and beat nodes.
         specs: Passage specs from Phase 4a.
         feasibility: Existing feasibility dict from ``compute_prose_feasibility``.
             Modified in-place.
     """
-    _OVERLAY_THRESHOLD = 4
 
     # Pre-fetch entity overlay data once
     entity_nodes = graph.get_nodes_by_type("entity")
