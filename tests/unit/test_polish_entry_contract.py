@@ -191,27 +191,42 @@ class TestValidateGrowOutput:
             {
                 "type": "intersection_group",
                 "raw_id": "ig1",
-                "node_ids": ["beat::intro", "beat::fight"],
+                "beat_ids": ["beat::intro", "beat::fight"],
             },
         )
 
         errors = validate_grow_output(graph)
         assert any("same path" in e.lower() for e in errors)
 
-    def test_intersection_group_empty_node_ids_fails(self) -> None:
-        """Intersection group with empty node_ids fails validation."""
+    def test_intersection_group_empty_beat_ids_fails(self) -> None:
+        """Intersection group with empty beat_ids fails validation."""
         graph = _make_valid_grow_graph()
         graph.create_node(
             "intersection_group::ig_empty",
             {
                 "type": "intersection_group",
                 "raw_id": "ig_empty",
-                "node_ids": [],
+                "beat_ids": [],
             },
         )
 
         errors = validate_grow_output(graph)
-        assert any("ig_empty" in e and "empty node_ids" in e for e in errors)
+        assert any("ig_empty" in e and "empty beat_ids" in e for e in errors)
+
+    def test_intersection_group_missing_beat_ids_fails(self) -> None:
+        """Intersection group with no beat_ids field (treats as empty) fails validation."""
+        graph = _make_valid_grow_graph()
+        graph.create_node(
+            "intersection_group::ig_missing",
+            {
+                "type": "intersection_group",
+                "raw_id": "ig_missing",
+                # beat_ids field intentionally absent
+            },
+        )
+
+        errors = validate_grow_output(graph)
+        assert any("ig_missing" in e and "empty beat_ids" in e for e in errors)
 
     def test_intersection_group_different_paths_passes(self) -> None:
         """Intersection group with beats from different paths passes."""
@@ -231,7 +246,7 @@ class TestValidateGrowOutput:
             {
                 "type": "intersection_group",
                 "raw_id": "ig1",
-                "node_ids": ["beat::intro", "beat::fight"],
+                "beat_ids": ["beat::intro", "beat::fight"],
             },
         )
 
