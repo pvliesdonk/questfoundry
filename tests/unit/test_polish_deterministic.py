@@ -93,7 +93,7 @@ class TestComputeBeatGrouping:
             {
                 "type": "intersection_group",
                 "raw_id": "ig1",
-                "node_ids": ["beat::a", "beat::b"],
+                "beat_ids": ["beat::a", "beat::b"],
             },
         )
 
@@ -101,6 +101,28 @@ class TestComputeBeatGrouping:
         intersection_specs = [s for s in specs if s.grouping_type == "intersection"]
         assert len(intersection_specs) == 1
         assert set(intersection_specs[0].beat_ids) == {"beat::a", "beat::b"}
+
+    def test_intersection_grouping_beat_ids_not_node_ids(self) -> None:
+        """Intersection group uses beat_ids field, not node_ids (regression for #1172)."""
+        graph = Graph.empty()
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
+        _make_beat(graph, "beat::a", "Path A beat")
+        _add_belongs_to(graph, "beat::a", "path::pa")
+
+        # Create intersection group with the WRONG field name (old bug)
+        graph.create_node(
+            "intersection_group::ig_wrong",
+            {
+                "type": "intersection_group",
+                "raw_id": "ig_wrong",
+                "node_ids": ["beat::a"],  # wrong field — producer uses beat_ids
+            },
+        )
+
+        specs = compute_beat_grouping(graph)
+        # With wrong field, intersection group yields no beats → no intersection passage
+        intersection_specs = [s for s in specs if s.grouping_type == "intersection"]
+        assert len(intersection_specs) == 0
 
     def test_different_paths_dont_collapse(self) -> None:
         """Sequential beats on different paths don't collapse."""
@@ -650,7 +672,7 @@ class TestChoiceSpecRequires:
         graph.add_edge("belongs_to", "beat::merge", "path::pa")
         graph.create_node(
             "intersection_group::g1",
-            {"type": "intersection_group", "raw_id": "g1", "node_ids": ["beat::merge"]},
+            {"type": "intersection_group", "raw_id": "g1", "beat_ids": ["beat::merge"]},
         )
 
         # Post-intersection beats on two different paths — each commits to d1

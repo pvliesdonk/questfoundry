@@ -259,8 +259,8 @@ def compute_beat_grouping(graph: Graph) -> list[PassageSpec]:
     # 1. Intersection grouping: beats from intersection groups
     intersection_groups = graph.get_nodes_by_type("intersection_group")
     for _group_id, group_data in sorted(intersection_groups.items()):
-        node_ids = group_data.get("node_ids", [])
-        beat_ids = [bid for bid in node_ids if bid in beat_nodes and bid not in grouped_beats]
+        raw_beat_ids = group_data.get("beat_ids", [])
+        beat_ids = [bid for bid in raw_beat_ids if bid in beat_nodes and bid not in grouped_beats]
         if not beat_ids:
             continue
 

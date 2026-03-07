@@ -215,14 +215,14 @@ def _check_intersection_group_paths(
     errors: list[str],
 ) -> None:
     """Check that an intersection group's beats come from different paths."""
-    # Intersection group nodes store beat IDs in node_ids field
-    node_ids = group_data.get("node_ids", [])
-    if not node_ids:
-        errors.append(f"Intersection group {group_id} has empty node_ids")
+    # Intersection group nodes store beat IDs in beat_ids field
+    beat_ids = group_data.get("beat_ids", [])
+    if not beat_ids:
+        errors.append(f"Intersection group {group_id} has empty beat_ids")
         return
 
     paths_seen: set[str] = set()
-    for beat_id in node_ids:
+    for beat_id in beat_ids:
         if beat_id not in beat_nodes:
             continue
         beat_paths = beats_with_path.get(beat_id, [])
