@@ -31,15 +31,27 @@ def _make_valid_grow_graph() -> Graph:
         },
     )
 
-    # Create path
+    # Create path (dilemma_id links path to its dilemma)
     graph.create_node(
         "path::brave",
         {
             "type": "path",
             "raw_id": "brave",
             "label": "The Brave Path",
+            "dilemma_id": "dilemma::courage_or_caution",
         },
     )
+
+    # Create consequence node (path outcome that state flags are derived from)
+    graph.create_node(
+        "consequence::brave_outcome",
+        {
+            "type": "consequence",
+            "raw_id": "brave_outcome",
+            "description": "The hero fights bravely",
+        },
+    )
+    graph.add_edge("has_consequence", "path::brave", "consequence::brave_outcome")
 
     # Create beats with required fields
     graph.create_node(
@@ -68,15 +80,17 @@ def _make_valid_grow_graph() -> Graph:
     # predecessor edge (fight comes after intro)
     graph.add_edge("predecessor", "beat::fight", "beat::intro")
 
-    # State flag for the dilemma
+    # State flag derived from the consequence (spec-conformant: no dilemma_id field)
     graph.create_node(
         "state_flag::courage_active",
         {
             "type": "state_flag",
             "raw_id": "courage_active",
-            "dilemma_id": "dilemma::courage_or_caution",
+            "derived_from": "consequence::brave_outcome",
+            "flag_type": "granted",
         },
     )
+    graph.add_edge("derived_from", "state_flag::courage_active", "consequence::brave_outcome")
 
     return graph
 
@@ -168,8 +182,8 @@ class TestValidateGrowOutput:
     def test_explored_dilemma_missing_state_flags(self) -> None:
         """Explored dilemma without state flags fails validation."""
         graph = _make_valid_grow_graph()
-        # Remove the state flag node
-        graph.delete_node("state_flag::courage_active")
+        # Remove the state flag node (cascade=True removes the derived_from edge too)
+        graph.delete_node("state_flag::courage_active", cascade=True)
 
         errors = validate_grow_output(graph)
         assert any("state flag" in e.lower() for e in errors)
@@ -228,6 +242,55 @@ class TestValidateGrowOutput:
         errors = validate_grow_output(graph)
         assert any("ig_missing" in e and "empty beat_ids" in e for e in errors)
 
+    def test_state_flag_found_via_edge_traversal(self) -> None:
+        """State flags are found by traversing derived_from edges, not dilemma_id field.
+
+        Verifies the fix for #1171: validation must traverse
+        state_flag --derived_from--> consequence <--has_consequence-- path.dilemma_id
+        rather than reading a (non-existent) dilemma_id field on state_flag nodes.
+        """
+        graph = _make_valid_grow_graph()
+        errors = validate_grow_output(graph)
+        # No state-flag related errors — edge traversal finds the flag
+        flag_errors = [e for e in errors if "state flag" in e.lower()]
+        assert flag_errors == [], f"Unexpected state-flag errors: {flag_errors}"
+
+    def test_explored_dilemma_no_consequence_chain_reported_missing(self) -> None:
+        """Explored dilemma with state_flag but no has_consequence edge is reported missing.
+
+        If the path→consequence→state_flag chain is broken (no has_consequence edge),
+        the dilemma should still be reported as having no state flags.
+        """
+        graph = _make_valid_grow_graph()
+        # Remove the has_consequence edge — breaks the traversal chain
+        graph.remove_edge("has_consequence", "path::brave", "consequence::brave_outcome")
+
+        errors = validate_grow_output(graph)
+        assert any("courage_or_caution" in e and "state flag" in e.lower() for e in errors), (
+            f"Expected missing state-flag error for courage_or_caution, got: {errors}"
+        )
+
+    def test_unexplored_dilemma_not_checked_for_state_flags(self) -> None:
+        """Dilemmas with status='unexplored' are not checked for state flags."""
+        graph = _make_valid_grow_graph()
+        # Add an unexplored dilemma with no state flags at all
+        graph.create_node(
+            "dilemma::dormant",
+            {
+                "type": "dilemma",
+                "raw_id": "dormant",
+                "dilemma_role": "soft",
+                "status": "unexplored",
+            },
+        )
+
+        errors = validate_grow_output(graph)
+        # No error about the unexplored dilemma missing state flags
+        flag_errors = [e for e in errors if "dormant" in e and "state flag" in e.lower()]
+        assert flag_errors == [], (
+            f"Unexplored dilemma should not trigger state-flag check: {flag_errors}"
+        )
+
     def test_intersection_group_different_paths_passes(self) -> None:
         """Intersection group with beats from different paths passes."""
         graph = _make_valid_grow_graph()
@@ -263,19 +326,36 @@ class TestArcTraversalCompleteness:
         """Create a graph with two paths (two dilemmas) for arc traversal testing."""
         graph = Graph.empty()
 
-        # Two dilemmas, each with two paths
+        # Two dilemmas, each with paths and consequences (spec-conformant)
         for label in ("choice_a", "choice_b"):
             graph.create_node(
                 f"dilemma::{label}",
                 {"type": "dilemma", "raw_id": label, "dilemma_role": "hard", "status": "explored"},
             )
             graph.create_node(
+                f"consequence::{label}_outcome",
+                {"type": "consequence", "raw_id": f"{label}_outcome"},
+            )
+            graph.create_node(
+                f"path::{label}_path",
+                {"type": "path", "raw_id": f"{label}_path", "dilemma_id": f"dilemma::{label}"},
+            )
+            graph.add_edge(
+                "has_consequence", f"path::{label}_path", f"consequence::{label}_outcome"
+            )
+            graph.create_node(
                 f"state_flag::{label}_flag",
                 {
                     "type": "state_flag",
                     "raw_id": f"{label}_flag",
-                    "dilemma_id": f"dilemma::{label}",
+                    "derived_from": f"consequence::{label}_outcome",
+                    "flag_type": "granted",
                 },
+            )
+            graph.add_edge(
+                "derived_from",
+                f"state_flag::{label}_flag",
+                f"consequence::{label}_outcome",
             )
 
         for path_label in ("brave", "cautious"):
@@ -306,8 +386,8 @@ class TestArcTraversalCompleteness:
             {"type": "dilemma", "raw_id": "d1", "dilemma_role": "hard", "status": "explored"},
         )
         graph.create_node(
-            "state_flag::d1_flag",
-            {"type": "state_flag", "raw_id": "d1_flag", "dilemma_id": "dilemma::d1"},
+            "consequence::d1_outcome",
+            {"type": "consequence", "raw_id": "d1_outcome"},
         )
         graph.create_node(
             "path::p_brave",
@@ -317,6 +397,17 @@ class TestArcTraversalCompleteness:
             "path::p_cautious",
             {"type": "path", "raw_id": "p_cautious", "dilemma_id": "dilemma::d1"},
         )
+        graph.add_edge("has_consequence", "path::p_brave", "consequence::d1_outcome")
+        graph.create_node(
+            "state_flag::d1_flag",
+            {
+                "type": "state_flag",
+                "raw_id": "d1_flag",
+                "derived_from": "consequence::d1_outcome",
+                "flag_type": "granted",
+            },
+        )
+        graph.add_edge("derived_from", "state_flag::d1_flag", "consequence::d1_outcome")
 
         # b0 and b1 belong to brave; b2 belongs to cautious
         # predecessor chain: b2 → b1 → b0 (all belong to brave)

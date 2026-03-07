@@ -85,18 +85,33 @@ def validate_grow_output(graph: Graph) -> list[str]:
 
     # 4. State flag nodes exist for explored dilemmas
     dilemma_nodes = graph.get_nodes_by_type("dilemma")
-    state_flag_nodes = graph.get_nodes_by_type("state_flag")
     explored_dilemmas = {
         did
         for did, ddata in dilemma_nodes.items()
         # GROW may omit status for dilemmas it fully explored; treat None as "explored".
         if ddata.get("status") in ("explored", None)
     }
+    # Build consequence → state_flag map via derived_from edges (Doc 3 Part 9).
+    # state_flag nodes have no dilemma_id field; the association is:
+    #   state_flag --derived_from--> consequence <--has_consequence-- path.dilemma_id
+    _flagged_consequences: set[str] = {
+        edge["to"] for edge in graph.get_edges(edge_type="derived_from")
+    }
+    # Build consequence → dilemma lookup via has_consequence edges + path.dilemma_id
+    _path_nodes = graph.get_nodes_by_type("path")
+    _cons_to_dilemma: dict[str, str] = {}
+    for edge in graph.get_edges(edge_type="has_consequence"):
+        path_data = _path_nodes.get(edge["from"], {})
+        raw_did = path_data.get("dilemma_id", "")
+        if raw_did:
+            linked_did = normalize_scoped_id(raw_did, "dilemma")
+            _cons_to_dilemma[edge["to"]] = linked_did
+
     dilemmas_with_flags: set[str] = set()
-    for _flag_id, flag_data in state_flag_nodes.items():
-        dilemma_ref = flag_data.get("dilemma_id") or flag_data.get("dilemma")
-        if dilemma_ref:
-            dilemmas_with_flags.add(dilemma_ref)
+    for cons_id in _flagged_consequences:
+        linked_dilemma = _cons_to_dilemma.get(cons_id)
+        if linked_dilemma:
+            dilemmas_with_flags.add(linked_dilemma)
 
     for dilemma_id in explored_dilemmas:
         if dilemma_id not in dilemmas_with_flags:
