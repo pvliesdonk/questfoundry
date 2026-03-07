@@ -48,6 +48,7 @@ class GapInsertionReport:
     invalid_before_beat: int = 0
     invalid_beat_order: int = 0
     beat_not_in_sequence: int = 0
+    anchor_wrong_path: int = 0
 
     @property
     def total_invalid(self) -> int:
@@ -57,6 +58,7 @@ class GapInsertionReport:
             + self.invalid_before_beat
             + self.invalid_beat_order
             + self.beat_not_in_sequence
+            + self.anchor_wrong_path
         )
 
 
@@ -339,6 +341,7 @@ class _LLMHelperMixin:
                         after_beat=after_beat,
                         path_id=prefixed_pid,
                     )
+                    report.anchor_wrong_path += 1
                     continue
             if before_beat:
                 before_paths = {
@@ -350,6 +353,7 @@ class _LLMHelperMixin:
                         before_beat=before_beat,
                         path_id=prefixed_pid,
                     )
+                    report.anchor_wrong_path += 1
                     continue
             # Validate ordering: after_beat must come before before_beat
             if after_beat and before_beat:

@@ -2594,6 +2594,7 @@ class TestValidateAndInsertGapsCrossPathAnchorRejection:
             )
 
         assert report.inserted == 0
+        assert report.anchor_wrong_path == 1
         # Verify no gap beats were created
         beat_nodes = graph.get_nodes_by_type("beat")
         gap_beats = [bid for bid in beat_nodes if "gap" in bid]
@@ -2635,3 +2636,47 @@ class TestValidateAndInsertGapsCrossPathAnchorRejection:
         beat_nodes = graph.get_nodes_by_type("beat")
         gap_beats = [bid for bid in beat_nodes if "gap" in bid]
         assert len(gap_beats) == 1
+
+    def test_before_beat_from_wrong_path_rejected(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Gap with before_beat from wrong path (no after_beat) is rejected.
+
+        beat::mentor_commits_alt belongs only to path::mentor_trust_alt.
+        A gap on path::mentor_trust_canonical with before_beat=mentor_commits_alt
+        and no after_beat should be rejected with gap_anchor_wrong_path warning.
+        """
+        import logging
+
+        from questfoundry.models.grow import GapProposal
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
+
+        graph = make_single_dilemma_graph()
+        stage = GrowStage()
+
+        gaps = [
+            GapProposal(
+                path_id="path::mentor_trust_canonical",
+                after_beat=None,
+                before_beat="beat::mentor_commits_alt",  # Belongs to alt path only
+                summary="Cross-path before_beat gap",
+                scene_type="sequel",
+            ),
+        ]
+        path_nodes = graph.get_nodes_by_type("path")
+        beat_ids = {
+            "beat::opening",
+            "beat::mentor_meet",
+            "beat::mentor_commits_canonical",
+            "beat::mentor_commits_alt",
+        }
+
+        with caplog.at_level(logging.WARNING):
+            report = stage._validate_and_insert_gaps(
+                graph, gaps, path_nodes, beat_ids, "test_phase"
+            )
+
+        assert report.inserted == 0
+        assert report.anchor_wrong_path == 1
+        beat_nodes = graph.get_nodes_by_type("beat")
+        gap_beats = [bid for bid in beat_nodes if "gap" in bid]
+        assert len(gap_beats) == 0
+        assert any("gap_anchor_wrong_path" in r.message for r in caplog.records)
