@@ -2547,3 +2547,91 @@ class TestValidateAndInsertGapsCyclePrevention:
         beat_nodes = graph.get_nodes_by_type("beat")
         gap_beats = [bid for bid in beat_nodes if "gap" in bid]
         assert len(gap_beats) == 1
+
+
+class TestValidateAndInsertGapsCrossPathAnchorRejection:
+    """Tests for cross-path anchor rejection in _validate_and_insert_gaps."""
+
+    def test_after_beat_from_wrong_path_rejected(self, caplog: pytest.LogCaptureFixture) -> None:
+        """Gap on path A with after_beat belonging only to path B is skipped.
+
+        Uses make_single_dilemma_graph which has two paths:
+        - path::mentor_trust_canonical: beats opening, mentor_meet, mentor_commits_canonical
+        - path::mentor_trust_alt: beats opening, mentor_meet, mentor_commits_alt
+
+        beat::mentor_commits_alt belongs only to path::mentor_trust_alt.
+        A gap on path::mentor_trust_canonical with after_beat=mentor_commits_alt
+        should be rejected with a gap_anchor_wrong_path warning.
+        """
+        import logging
+
+        from questfoundry.models.grow import GapProposal
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
+
+        graph = make_single_dilemma_graph()
+        stage = GrowStage()
+
+        gaps = [
+            GapProposal(
+                path_id="path::mentor_trust_canonical",
+                after_beat="beat::mentor_commits_alt",  # Belongs to alt path only
+                before_beat=None,
+                summary="Cross-path after_beat gap",
+                scene_type="sequel",
+            ),
+        ]
+        path_nodes = graph.get_nodes_by_type("path")
+        beat_ids = {
+            "beat::opening",
+            "beat::mentor_meet",
+            "beat::mentor_commits_canonical",
+            "beat::mentor_commits_alt",
+        }
+
+        with caplog.at_level(logging.WARNING):
+            report = stage._validate_and_insert_gaps(
+                graph, gaps, path_nodes, beat_ids, "test_phase"
+            )
+
+        assert report.inserted == 0
+        # Verify no gap beats were created
+        beat_nodes = graph.get_nodes_by_type("beat")
+        gap_beats = [bid for bid in beat_nodes if "gap" in bid]
+        assert len(gap_beats) == 0
+        # Verify structured warning was logged
+        assert any("gap_anchor_wrong_path" in r.message for r in caplog.records)
+
+    def test_correct_path_anchors_inserted(self) -> None:
+        """Gap with both anchors on the correct path is inserted normally.
+
+        beat::opening and beat::mentor_meet both belong to
+        path::mentor_trust_canonical, so the gap should be accepted.
+        """
+        from questfoundry.models.grow import GapProposal
+        from tests.fixtures.grow_fixtures import make_single_dilemma_graph
+
+        graph = make_single_dilemma_graph()
+        stage = GrowStage()
+
+        gaps = [
+            GapProposal(
+                path_id="path::mentor_trust_canonical",
+                after_beat="beat::opening",
+                before_beat="beat::mentor_meet",
+                summary="Both anchors on correct path",
+                scene_type="sequel",
+            ),
+        ]
+        path_nodes = graph.get_nodes_by_type("path")
+        beat_ids = {
+            "beat::opening",
+            "beat::mentor_meet",
+            "beat::mentor_commits_canonical",
+        }
+
+        report = stage._validate_and_insert_gaps(graph, gaps, path_nodes, beat_ids, "test_phase")
+
+        assert report.inserted == 1
+        beat_nodes = graph.get_nodes_by_type("beat")
+        gap_beats = [bid for bid in beat_nodes if "gap" in bid]
+        assert len(gap_beats) == 1
