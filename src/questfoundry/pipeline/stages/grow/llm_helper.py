@@ -48,6 +48,7 @@ class GapInsertionReport:
     invalid_before_beat: int = 0
     invalid_beat_order: int = 0
     beat_not_in_sequence: int = 0
+    anchor_wrong_path: int = 0
 
     @property
     def total_invalid(self) -> int:
@@ -57,6 +58,7 @@ class GapInsertionReport:
             + self.invalid_before_beat
             + self.invalid_beat_order
             + self.beat_not_in_sequence
+            + self.anchor_wrong_path
         )
 
 
@@ -327,6 +329,32 @@ class _LLMHelperMixin:
                 log.warning(f"{phase_name}_invalid_before_beat", beat_id=before_beat)
                 report.invalid_before_beat += 1
                 continue
+            # Validate path membership: anchors must belong to the gap's path.
+            # A beat belongs to a path if it has a belongs_to edge pointing to it.
+            if after_beat:
+                after_paths = {
+                    e["to"] for e in graph.get_edges(edge_type="belongs_to", from_id=after_beat)
+                }
+                if prefixed_pid not in after_paths:
+                    log.warning(
+                        f"{phase_name}_anchor_wrong_path",
+                        after_beat=after_beat,
+                        path_id=prefixed_pid,
+                    )
+                    report.anchor_wrong_path += 1
+                    continue
+            if before_beat:
+                before_paths = {
+                    e["to"] for e in graph.get_edges(edge_type="belongs_to", from_id=before_beat)
+                }
+                if prefixed_pid not in before_paths:
+                    log.warning(
+                        f"{phase_name}_anchor_wrong_path",
+                        before_beat=before_beat,
+                        path_id=prefixed_pid,
+                    )
+                    report.anchor_wrong_path += 1
+                    continue
             # Validate ordering: after_beat must come before before_beat
             if after_beat and before_beat:
                 sequence = get_path_beat_sequence(graph, prefixed_pid)
