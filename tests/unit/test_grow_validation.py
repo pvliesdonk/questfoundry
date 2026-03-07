@@ -24,6 +24,7 @@ from questfoundry.graph.grow_validation import (
     check_single_start,
     check_spine_arc_exists,
     run_all_checks,
+    run_grow_checks,
 )
 from questfoundry.pipeline.stages.grow.deterministic import phase_validation
 
@@ -828,6 +829,25 @@ class TestDilemmaRoleCompliance:
 
         results = check_dilemma_role_compliance(graph)
         assert all(r.severity == "pass" for r in results)
+
+
+class TestRunGrowChecks:
+    def test_run_grow_checks_beat_dag_cycle_fails_first(self) -> None:
+        """run_grow_checks returns a cycle-fail check before any other check when
+        the beat predecessor DAG contains a cycle."""
+        graph = Graph.empty()
+        # Two beats with a cycle: predecessor(A, B) + predecessor(B, A)
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        graph.add_edge("predecessor", "beat::a", "beat::b")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+
+        report = run_grow_checks(graph)
+        assert report.has_failures
+        assert len(report.checks) == 1
+        fail_check = report.checks[0]
+        assert fail_check.severity == "fail"
+        assert "cycle" in fail_check.message.lower()
 
 
 class TestRunAllChecks:
