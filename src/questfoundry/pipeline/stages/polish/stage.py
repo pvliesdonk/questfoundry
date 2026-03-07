@@ -54,6 +54,9 @@ if TYPE_CHECKING:
 # Type for async phase functions: (Graph, BaseChatModel) -> PhaseResult
 PhaseFunc = Callable[["Graph", "BaseChatModel"], Awaitable[PhaseResult]]
 
+# Phases that write predecessor edges — DAG acyclicity is asserted after each.
+_PREDECESSOR_PHASES: frozenset[str] = frozenset({"beat_reordering", "pacing"})
+
 
 class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
     """POLISH stage: transforms beat DAG into prose-ready passage graph.
@@ -265,7 +268,6 @@ class PolishStage(_PolishLLMHelperMixin, _PolishLLMPhaseMixin):
 
             # Detective invariant: predecessor DAG must remain acyclic after any
             # phase that writes predecessor edges.
-            _PREDECESSOR_PHASES = frozenset({"beat_reordering", "pacing"})
             if phase_name in _PREDECESSOR_PHASES:
                 assert_predecessor_dag_acyclic(graph, phase_name)
 

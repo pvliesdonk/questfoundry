@@ -362,7 +362,8 @@ class _LLMHelperMixin:
                 and _would_create_cycle(before_beat, after_beat, successors, beat_set)
             ):
                 log.warning(
-                    f"{phase_name}_gap_skipped_would_create_cycle",
+                    "gap_skipped_would_create_cycle",
+                    phase=phase_name,
                     after_beat=after_beat,
                     before_beat=before_beat,
                     path_id=prefixed_pid,

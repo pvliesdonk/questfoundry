@@ -69,6 +69,12 @@ if TYPE_CHECKING:
     )
 
 
+# Phases that write predecessor edges — DAG acyclicity is asserted after each.
+_PREDECESSOR_PHASES: frozenset[str] = frozenset(
+    {"interleave_beats", "narrative_gaps", "pacing_gaps", "atmospheric"}
+)
+
+
 class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
     """GROW stage: builds complete branching structure from SEED graph.
 
@@ -322,9 +328,6 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
 
             # Detective invariant: predecessor DAG must remain acyclic after any
             # phase that writes predecessor edges.
-            _PREDECESSOR_PHASES = frozenset(
-                {"interleave_beats", "narrative_gaps", "pacing_gaps", "atmospheric"}
-            )
             if phase_name in _PREDECESSOR_PHASES:
                 assert_predecessor_dag_acyclic(graph, phase_name)
 
