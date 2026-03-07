@@ -113,6 +113,7 @@ async def phase_intra_path_predecessors(
     - Idempotent: running twice produces the same edge set.
     - Skips paths with fewer than 2 exclusive beats (no chain to form).
     """
+    log.info("intra_path_predecessors_start")
     path_nodes = graph.get_nodes_by_type("path")
     if not path_nodes:
         return GrowPhaseResult(
@@ -174,11 +175,18 @@ async def phase_intra_path_predecessors(
                 existing_edges.add(forward)
                 edges_created += 1
 
+    log.info(
+        "intra_path_predecessors_complete",
+        edges_created=edges_created,
+        paths_processed=paths_processed,
+    )
     return GrowPhaseResult(
         phase="intra_path_predecessors",
         status="completed",
         detail=(
-            f"Created {edges_created} intra-path predecessor edges across {paths_processed} paths"
+            f"Created {edges_created} intra-path predecessor "
+            f"edge{'s' if edges_created != 1 else ''} "
+            f"across {paths_processed} path{'s' if paths_processed != 1 else ''}"
         ),
     )
 

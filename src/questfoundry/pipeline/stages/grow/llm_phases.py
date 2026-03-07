@@ -346,7 +346,7 @@ class _LLMPhaseMixin:
             tokens_used=total_tokens,
         )
 
-    @grow_phase(name="resolve_temporal_hints", depends_on=["intersections"], priority=2)
+    @grow_phase(name="resolve_temporal_hints", depends_on=["intra_path_predecessors"], priority=2)
     async def _phase_resolve_temporal_hints(
         self, graph: Graph, model: BaseChatModel
     ) -> GrowPhaseResult:
