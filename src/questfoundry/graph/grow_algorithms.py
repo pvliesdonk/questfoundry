@@ -3656,6 +3656,24 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                         for ca in sorted(commits_a):
                             _add_predecessor(ca, cb)
 
+            # Entry beats follow the same relative ordering as commit beats:
+            # whichever dilemma's commits go first also has its entry beats first.
+            # This ensures the beat DAG has a single root even when all dilemmas
+            # are concurrent (no serial/wraps edges) — fixing #1186.
+            first_beats_a = {seq[0] for seq in ordered_a if seq}
+            first_beats_b = {seq[0] for seq in ordered_b if seq}
+            if first_beats_a and first_beats_b:
+                if dilemma_a < dilemma_b:
+                    # A entry beats before B entry beats (consistent with A commits first)
+                    for fa in sorted(first_beats_a):
+                        for fb in sorted(first_beats_b):
+                            _add_predecessor(fb, fa)
+                else:
+                    # B entry beats before A entry beats (consistent with B commits first)
+                    for fb in sorted(first_beats_b):
+                        for fa in sorted(first_beats_a):
+                            _add_predecessor(fa, fb)
+
     log.info(
         "interleave_cross_path_beats_complete",
         edges_created=created,
