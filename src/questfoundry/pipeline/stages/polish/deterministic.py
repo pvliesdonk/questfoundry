@@ -590,6 +590,27 @@ def _audit_overlay_composition(
 # ---------------------------------------------------------------------------
 
 
+def _topo_first(candidates: list[str], children: dict[str, list[str]]) -> str:
+    """Return topologically earliest candidate from a list.
+
+    Uses children adjacency (beat → successors) to find the candidate
+    that no other candidate depends on (i.e., is not a successor of any other).
+    Falls back to sorted()[0] if no unique earliest exists.
+
+    Args:
+        candidates: Beat IDs to choose from.
+        children: Adjacency dict mapping beat → list of its successors.
+
+    Returns:
+        The topologically earliest beat ID.
+    """
+    for c in sorted(candidates):  # sorted for deterministic fallback
+        # c is earliest if it's not a successor of any other candidate
+        if not any(c in children.get(other, []) for other in candidates if other != c):
+            return c
+    return sorted(candidates)[0]
+
+
 def compute_choice_edges(
     graph: Graph,
     specs: list[PassageSpec],
@@ -627,7 +648,12 @@ def compute_choice_edges(
         for bid in spec.beat_ids:
             beat_to_passage[bid] = spec.passage_id
 
-    choices: list[ChoiceSpec] = []
+    # Keyed by (from_passage, to_passage) to deduplicate multiple beats in the
+    # same passage that independently diverge to the same target (#1185).
+    choices_map: dict[tuple[str, str], ChoiceSpec] = {}
+
+    # Build passage_id_to_spec once outside the loop (not per-divergence-point)
+    passage_id_to_spec: dict[str, PassageSpec] = {s.passage_id: s for s in specs}
 
     # Find divergence points: beats with children on different paths
     for bid in sorted(beat_nodes.keys()):
@@ -651,8 +677,11 @@ def compute_choice_edges(
             continue
 
         for path_id, path_children in sorted(child_paths.items()):
-            # Pick the first child (alphabetically) on each path for determinism
-            target_beat = sorted(path_children)[0]
+            # Pick the topologically earliest child on each path (#1187).
+            # Using sorted(path_children)[0] (alphabetical) can skip gap beats
+            # when a transitive predecessor edge also links the divergence beat
+            # directly to the beat after the gap.
+            target_beat = _topo_first(path_children, children)
             to_passage = beat_to_passage.get(target_beat, "")
             if not to_passage or to_passage == from_passage:
                 continue
@@ -670,7 +699,6 @@ def compute_choice_edges(
             # Compute requires: for choices from intersection passages, populate
             # the required state flags for the target passage.
             requires: list[str] = []
-            passage_id_to_spec: dict[str, PassageSpec] = {s.passage_id: s for s in specs}
             from_spec = passage_id_to_spec.get(from_passage)
             if from_spec and from_spec.grouping_type == "intersection":
                 try:
@@ -693,17 +721,28 @@ def compute_choice_edges(
                         error=str(e),
                     )
 
-            choices.append(
-                ChoiceSpec(
+            key = (from_passage, to_passage)
+            if key in choices_map:
+                # Merge grants from multiple beats in the same passage that
+                # independently diverge to the same target (#1185).
+                existing = choices_map[key]
+                choices_map[key] = ChoiceSpec(
+                    from_passage=from_passage,
+                    to_passage=to_passage,
+                    grants=sorted(set(existing.grants) | set(grants)),
+                    requires=existing.requires,  # keep first-seen requires
+                    label=existing.label,
+                )
+            else:
+                choices_map[key] = ChoiceSpec(
                     from_passage=from_passage,
                     to_passage=to_passage,
                     grants=grants,
                     requires=requires,
                     label="",  # Populated by Phase 5
                 )
-            )
 
-    return choices
+    return list(choices_map.values())
 
 
 # ---------------------------------------------------------------------------
