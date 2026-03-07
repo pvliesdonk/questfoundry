@@ -137,7 +137,7 @@ If the non-canonical answer is not promoted to a path in SEED, that dilemma has 
 > (#1123) by resolving all conflicts before interleave creates any edges.
 > Phase numbering is preserved for historical continuity; execution order is
 > defined in `_phase_order()`.
-> Actual order: `validate_dag → intersections → resolve_temporal_hints →
+> Actual order: `validate_dag → intersections → intra_path_predecessors → resolve_temporal_hints →
 > interleave_beats → scene_types → narrative_gaps → pacing_gaps → atmospheric →
 > path_arcs → entity_arcs → …`
 > See also: **No-Conditional-Prerequisites Invariant** under Phase 3.

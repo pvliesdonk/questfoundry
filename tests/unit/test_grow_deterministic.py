@@ -84,7 +84,7 @@ class TestPhaseIntraPathPredecessors:
 
     @pytest.mark.asyncio
     async def test_multiple_paths_each_get_chains(self) -> None:
-        """2 paths with 2 beats each → 2 predecessor edges per path (4 total)."""
+        """2 paths with 2 beats each → 1 predecessor edge per path (2 total)."""
         graph = Graph.empty()
 
         # Path A: 2 beats
@@ -129,6 +129,48 @@ class TestPhaseIntraPathPredecessors:
 
         assert result.status == "completed"
         edges = graph.get_edges(edge_type="predecessor")
+        assert len(edges) == 0
+
+    @pytest.mark.asyncio
+    async def test_shared_beat_excluded_from_chaining(self) -> None:
+        """A beat belonging to two paths is excluded from intra-path chaining.
+
+        beat::shared belongs to both path::a and path::b.  Only path-exclusive
+        beats (beat::a_only, beat::b_only) should be chained.  beat::shared
+        must not appear in any predecessor edge created by this phase.
+        """
+        graph = Graph.empty()
+
+        graph.create_node("path::a", {"type": "path", "raw_id": "a"})
+        graph.create_node("path::b", {"type": "path", "raw_id": "b"})
+        graph.create_node("beat::shared", {"type": "beat", "raw_id": "shared"})
+        graph.create_node("beat::a_only", {"type": "beat", "raw_id": "a_only"})
+        graph.create_node("beat::b_only", {"type": "beat", "raw_id": "b_only"})
+
+        # shared belongs to BOTH paths
+        graph.add_edge("belongs_to", "beat::shared", "path::a")
+        graph.add_edge("belongs_to", "beat::shared", "path::b")
+        # exclusive beats
+        graph.add_edge("belongs_to", "beat::a_only", "path::a")
+        graph.add_edge("belongs_to", "beat::b_only", "path::b")
+
+        result = await phase_intra_path_predecessors(graph, _make_mock_model())
+
+        assert result.status == "completed"
+
+        edges = graph.get_edges(edge_type="predecessor")
+        edge_pairs = {(e["from"], e["to"]) for e in edges}
+
+        # No edge should involve beat::shared (it is shared, not exclusive)
+        for from_id, to_id in edge_pairs:
+            assert from_id != "beat::shared", (
+                f"shared beat appeared as successor in edge {from_id}->{to_id}"
+            )
+            assert to_id != "beat::shared", (
+                f"shared beat appeared as predecessor in edge {from_id}->{to_id}"
+            )
+
+        # Each path has only 1 exclusive beat → no chain can be formed → 0 edges
         assert len(edges) == 0
 
     @pytest.mark.asyncio

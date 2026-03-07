@@ -66,9 +66,9 @@ async def phase_validate_dag(graph: Graph, model: BaseChatModel) -> GrowPhaseRes
 
 @grow_phase(
     name="intra_path_predecessors",
-    depends_on=["validate_dag"],
+    depends_on=["intersections"],
     is_deterministic=True,
-    priority=1,
+    priority=2,
 )
 async def phase_intra_path_predecessors(
     graph: Graph,
