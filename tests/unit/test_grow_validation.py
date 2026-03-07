@@ -24,6 +24,7 @@ from questfoundry.graph.grow_validation import (
     check_single_start,
     check_spine_arc_exists,
     run_all_checks,
+    run_grow_checks,
 )
 from questfoundry.pipeline.stages.grow.deterministic import phase_validation
 
@@ -840,8 +841,6 @@ class TestRunGrowChecks:
         graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
         graph.add_edge("predecessor", "beat::a", "beat::b")
         graph.add_edge("predecessor", "beat::b", "beat::a")
-
-        from questfoundry.graph.grow_validation import run_grow_checks
 
         report = run_grow_checks(graph)
         assert report.has_failures
