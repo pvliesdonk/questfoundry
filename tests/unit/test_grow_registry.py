@@ -216,11 +216,11 @@ class TestGrowPhaseDecorator:
 class TestGlobalRegistry:
     """Tests for the global registry populated by actual GROW phases."""
 
-    def test_global_registry_has_16_phases(self) -> None:
-        """All GROW phases are registered (16 after #1123 added resolve_temporal_hints)."""
+    def test_global_registry_has_17_phases(self) -> None:
+        """All GROW phases are registered (17 after #1180 added intra_path_predecessors)."""
         registry = get_registry()
-        assert len(registry) == 16, (
-            f"Expected 16 phases, got {len(registry)}: {registry.phase_names}"
+        assert len(registry) == 17, (
+            f"Expected 17 phases, got {len(registry)}: {registry.phase_names}"
         )
 
     def test_global_registry_validates(self) -> None:
@@ -230,14 +230,16 @@ class TestGlobalRegistry:
         assert errors == [], f"Registry validation errors: {errors}"
 
     def test_global_registry_execution_order_matches_expected(self) -> None:
-        """Execution order matches the post-#1123/#1124 phase structure (16 phases).
+        """Execution order matches the post-#1180 phase structure (17 phases).
 
         #1124: intersections moved before interleave_beats (clean DAG for compat check).
         #1123: resolve_temporal_hints inserted between intersections and interleave_beats.
+        #1180: intra_path_predecessors inserted between intersections and resolve_temporal_hints.
         """
         expected = [
             "validate_dag",
             "intersections",
+            "intra_path_predecessors",
             "resolve_temporal_hints",
             "interleave_beats",
             "scene_types",

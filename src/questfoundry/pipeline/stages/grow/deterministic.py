@@ -61,6 +61,128 @@ async def phase_validate_dag(graph: Graph, model: BaseChatModel) -> GrowPhaseRes
     return GrowPhaseResult(phase="validate_dag", status="completed")
 
 
+# --- Phase 1a: Intra-Path Predecessor Edges ---
+
+
+@grow_phase(
+    name="intra_path_predecessors",
+    depends_on=["validate_dag"],
+    is_deterministic=True,
+    priority=1,
+)
+async def phase_intra_path_predecessors(
+    graph: Graph,
+    model: BaseChatModel,  # noqa: ARG001
+) -> GrowPhaseResult:
+    """Phase 1a: Create predecessor edges between consecutive beats on the same path.
+
+    SEED creates beat nodes with ``belongs_to`` edges linking each beat to a
+    path, but does not create ``predecessor`` edges between consecutive beats
+    on the same path.  Beat ordering within a path therefore relies entirely
+    on alphabetical tie-breaking in ``topological_sort_beats``.
+
+    When ``interleave_cross_path_beats`` subsequently adds a cross-path
+    ``predecessor`` edge from a beat on path A to a beat on path B, that
+    cross-path edge may become the only explicit successor for the source
+    beat in arcs that select a different answer on the destination dilemma.
+    The source beat then has no in-arc successors and
+    ``_check_arc_traversal_completeness`` flags it as a dead-end.
+
+    This phase fixes that by creating explicit intra-path predecessor chains
+    **before** cross-path interleaving runs, so every beat has its in-path
+    successor as a structural predecessor child.
+
+    Only beats that are **exclusive to one path** participate in the chain.
+    Shared beats (belonging to multiple paths) already have or will receive
+    ordering from cross-path interleaving; adding alphabetical edges for them
+    risks creating cycles with those existing edges.
+
+    Preconditions:
+    - Beat DAG validated (Phase 1 passed).
+    - Path nodes exist with beats linked via ``belongs_to`` edges.
+
+    Postconditions:
+    - For each path, single-path-exclusive beats are sorted alphabetically
+      (canonical SEED naming: ``_beat_01``, ``_beat_02``, …) and chained:
+      ``predecessor(beat_n+1, beat_n)`` for every consecutive pair.
+    - Edges are only added, never removed; existing edges are not duplicated.
+    - No edge is added whose reverse already exists (prevents cycles).
+
+    Invariants:
+    - Deterministic: same graph always produces same edges.
+    - Idempotent: running twice produces the same edge set.
+    - Skips paths with fewer than 2 exclusive beats (no chain to form).
+    """
+    path_nodes = graph.get_nodes_by_type("path")
+    if not path_nodes:
+        return GrowPhaseResult(
+            phase="intra_path_predecessors",
+            status="completed",
+            detail="No path nodes found; nothing to do",
+        )
+
+    # Build path → beats mapping and beat → paths mapping from belongs_to edges.
+    # We only chain beats that are exclusive to a single path.  Shared beats
+    # (belonging to multiple paths) already have cross-path predecessor edges
+    # created by SEED or earlier phases; adding alphabetical intra-path edges
+    # for them risks creating cycles with those existing edges.
+    path_beats: dict[str, list[str]] = {path_id: [] for path_id in path_nodes}
+    beat_path_count: dict[str, int] = {}
+    belongs_to_edges = graph.get_edges(edge_type="belongs_to")
+    beat_nodes = graph.get_nodes_by_type("beat")
+    for edge in belongs_to_edges:
+        beat_id = edge["from"]
+        path_id = edge["to"]
+        if path_id in path_nodes and beat_id in beat_nodes:
+            path_beats[path_id].append(beat_id)
+            beat_path_count[beat_id] = beat_path_count.get(beat_id, 0) + 1
+
+    # Restrict each path's beat list to single-path-exclusive beats.
+    exclusive_path_beats: dict[str, list[str]] = {}
+    for path_id in path_nodes:
+        exclusive = [b for b in path_beats.get(path_id, []) if beat_path_count.get(b, 0) == 1]
+        exclusive_path_beats[path_id] = sorted(exclusive)
+
+    # Build existing predecessor edge set for idempotency check.
+    # We track both directions to avoid creating edges that conflict with
+    # (i.e., reverse) an existing predecessor relationship.
+    existing_edges: set[tuple[str, str]] = set()
+    for edge in graph.get_edges(edge_type="predecessor"):
+        existing_edges.add((edge["from"], edge["to"]))
+
+    edges_created = 0
+    paths_processed = 0
+
+    for path_id in sorted(path_nodes):
+        beats = exclusive_path_beats.get(path_id, [])
+        if len(beats) < 2:
+            continue
+
+        paths_processed += 1
+        for i in range(1, len(beats)):
+            successor = beats[i]
+            predecessor = beats[i - 1]
+            # predecessor(successor, predecessor): successor comes after predecessor.
+            # Skip if this exact edge already exists (idempotency).
+            # Also skip if the reverse edge exists — adding both directions would
+            # introduce a cycle (the reverse edge encodes a different ordering that
+            # SEED or an earlier phase already established).
+            forward = (successor, predecessor)
+            reverse = (predecessor, successor)
+            if forward not in existing_edges and reverse not in existing_edges:
+                graph.add_edge("predecessor", successor, predecessor)
+                existing_edges.add(forward)
+                edges_created += 1
+
+    return GrowPhaseResult(
+        phase="intra_path_predecessors",
+        status="completed",
+        detail=(
+            f"Created {edges_created} intra-path predecessor edges across {paths_processed} paths"
+        ),
+    )
+
+
 # --- Phase 1b: Interleave Cross-Path Beats ---
 
 
