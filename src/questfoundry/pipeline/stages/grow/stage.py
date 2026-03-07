@@ -42,6 +42,7 @@ from questfoundry.pipeline.stages.grow.deterministic import (  # noqa: F401 - re
     phase_convergence,
     phase_divergence,
     phase_enumerate_arcs,
+    phase_intra_path_predecessors,
     phase_state_flags,
     phase_validate_dag,
     phase_validation,
@@ -71,7 +72,7 @@ if TYPE_CHECKING:
 
 # Phases that write predecessor edges — DAG acyclicity is asserted after each.
 _PREDECESSOR_PHASES: frozenset[str] = frozenset(
-    {"interleave_beats", "narrative_gaps", "pacing_gaps", "atmospheric"}
+    {"intra_path_predecessors", "interleave_beats", "narrative_gaps", "pacing_gaps", "atmospheric"}
 )
 
 
@@ -143,6 +144,7 @@ class GrowStage(_LLMHelperMixin, _LLMPhaseMixin):
     # take effect.  Entries here are the names imported at module top level.
     _FREE_PHASES: ClassVar[dict[str, str]] = {
         "validate_dag": "phase_validate_dag",
+        "intra_path_predecessors": "phase_intra_path_predecessors",
         "enumerate_arcs": "phase_enumerate_arcs",
         "divergence": "phase_divergence",
         "convergence": "phase_convergence",
