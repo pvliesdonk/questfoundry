@@ -621,7 +621,27 @@ def run_grow_checks(graph: Graph) -> ValidationReport:
     """Run beat-DAG validation checks only (GROW Phase 10).
 
     Returns a ValidationReport containing structural beat-DAG checks.
+    The predecessor DAG cycle check runs first; if a cycle is found, the
+    report contains a single fail check and no further checks are run.
     """
+    from questfoundry.graph.invariants import (
+        PipelineInvariantError,
+        assert_predecessor_dag_acyclic,
+    )
+
+    try:
+        assert_predecessor_dag_acyclic(graph, "validation")
+    except PipelineInvariantError as exc:
+        return ValidationReport(
+            checks=[
+                ValidationCheck(
+                    name="predecessor_dag_acyclic",
+                    severity="fail",
+                    message=str(exc),
+                )
+            ]
+        )
+
     checks: list[ValidationCheck] = [
         check_single_start(graph),
         check_passage_dag_cycles(graph),

@@ -830,6 +830,27 @@ class TestDilemmaRoleCompliance:
         assert all(r.severity == "pass" for r in results)
 
 
+class TestRunGrowChecks:
+    def test_run_grow_checks_beat_dag_cycle_fails_first(self) -> None:
+        """run_grow_checks returns a cycle-fail check before any other check when
+        the beat predecessor DAG contains a cycle."""
+        graph = Graph.empty()
+        # Two beats with a cycle: predecessor(A, B) + predecessor(B, A)
+        graph.create_node("beat::a", {"type": "beat", "raw_id": "a"})
+        graph.create_node("beat::b", {"type": "beat", "raw_id": "b"})
+        graph.add_edge("predecessor", "beat::a", "beat::b")
+        graph.add_edge("predecessor", "beat::b", "beat::a")
+
+        from questfoundry.graph.grow_validation import run_grow_checks
+
+        report = run_grow_checks(graph)
+        assert report.has_failures
+        assert len(report.checks) == 1
+        fail_check = report.checks[0]
+        assert fail_check.severity == "fail"
+        assert "cycle" in fail_check.message.lower()
+
+
 class TestRunAllChecks:
     def test_run_all_checks_aggregates(self) -> None:
         """run_all_checks produces a report combining grow + passage checks."""
