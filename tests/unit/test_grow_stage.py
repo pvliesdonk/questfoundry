@@ -2561,7 +2561,7 @@ class TestValidateAndInsertGapsCrossPathAnchorRejection:
 
         beat::mentor_commits_alt belongs only to path::mentor_trust_alt.
         A gap on path::mentor_trust_canonical with after_beat=mentor_commits_alt
-        should be rejected with a gap_anchor_wrong_path warning.
+        should be rejected with a {phase_name}_anchor_wrong_path warning.
         """
         import logging
 
@@ -2600,7 +2600,7 @@ class TestValidateAndInsertGapsCrossPathAnchorRejection:
         gap_beats = [bid for bid in beat_nodes if "gap" in bid]
         assert len(gap_beats) == 0
         # Verify structured warning was logged
-        assert any("gap_anchor_wrong_path" in r.message for r in caplog.records)
+        assert any("test_phase_anchor_wrong_path" in r.message for r in caplog.records)
 
     def test_correct_path_anchors_inserted(self) -> None:
         """Gap with both anchors on the correct path is inserted normally.
@@ -2642,7 +2642,7 @@ class TestValidateAndInsertGapsCrossPathAnchorRejection:
 
         beat::mentor_commits_alt belongs only to path::mentor_trust_alt.
         A gap on path::mentor_trust_canonical with before_beat=mentor_commits_alt
-        and no after_beat should be rejected with gap_anchor_wrong_path warning.
+        and no after_beat should be rejected with {phase_name}_anchor_wrong_path warning.
         """
         import logging
 
@@ -2679,4 +2679,4 @@ class TestValidateAndInsertGapsCrossPathAnchorRejection:
         beat_nodes = graph.get_nodes_by_type("beat")
         gap_beats = [bid for bid in beat_nodes if "gap" in bid]
         assert len(gap_beats) == 0
-        assert any("gap_anchor_wrong_path" in r.message for r in caplog.records)
+        assert any("test_phase_anchor_wrong_path" in r.message for r in caplog.records)

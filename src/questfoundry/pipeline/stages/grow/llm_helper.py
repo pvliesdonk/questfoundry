@@ -337,7 +337,7 @@ class _LLMHelperMixin:
                 }
                 if prefixed_pid not in after_paths:
                     log.warning(
-                        "gap_anchor_wrong_path",
+                        f"{phase_name}_anchor_wrong_path",
                         after_beat=after_beat,
                         path_id=prefixed_pid,
                     )
@@ -349,7 +349,7 @@ class _LLMHelperMixin:
                 }
                 if prefixed_pid not in before_paths:
                     log.warning(
-                        "gap_anchor_wrong_path",
+                        f"{phase_name}_anchor_wrong_path",
                         before_beat=before_beat,
                         path_id=prefixed_pid,
                     )
