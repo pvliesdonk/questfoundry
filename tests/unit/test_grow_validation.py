@@ -1018,3 +1018,36 @@ class TestSingleRootBeat:
         result = check_single_root_beat(graph)
         assert result.severity == "pass"
         assert "beat::only" in result.message
+
+    def test_synthetic_roles_excluded(self) -> None:
+        """Synthetic beats (micro_beat, residue_beat, sidetrack_beat) are ignored."""
+        graph = Graph.empty()
+        # One real root beat
+        graph.create_node(
+            "beat::real_root",
+            {"type": "beat", "raw_id": "real_root", "summary": "Root."},
+        )
+        graph.create_node(
+            "beat::real_child",
+            {"type": "beat", "raw_id": "real_child", "summary": "Child."},
+        )
+        graph.add_edge("predecessor", "beat::real_child", "beat::real_root")
+
+        # Synthetic beats with no predecessor edges — would be extra roots
+        # if not excluded
+        for role in ("micro_beat", "residue_beat", "sidetrack_beat"):
+            graph.create_node(
+                f"beat::syn_{role}",
+                {
+                    "type": "beat",
+                    "raw_id": f"syn_{role}",
+                    "summary": f"Synthetic {role}.",
+                    "role": role,
+                },
+            )
+
+        result = check_single_root_beat(graph)
+        assert result.severity == "pass", (
+            f"Synthetic beats should be excluded, got: {result.message}"
+        )
+        assert "beat::real_root" in result.message
