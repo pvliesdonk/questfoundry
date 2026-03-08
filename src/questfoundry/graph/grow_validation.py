@@ -287,6 +287,16 @@ def check_single_root_beat(graph: Graph) -> ValidationCheck:
     A root beat is a beat with no prerequisites — it does not appear as
     ``from_id`` in any predecessor edge. The beat DAG must have exactly one
     root for POLISH to produce a single start passage.
+
+    Synthetic beat roles (micro_beat, residue_beat, sidetrack_beat) are
+    excluded since they are created by POLISH, not GROW.
+
+    Args:
+        graph: The story graph to validate.
+
+    Returns:
+        A ValidationCheck with severity "pass" if exactly one root beat
+        exists, or "fail" if zero or multiple roots are found.
     """
     beat_nodes = graph.get_nodes_by_type("beat")
     if not beat_nodes:
