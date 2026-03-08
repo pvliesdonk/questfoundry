@@ -2693,19 +2693,23 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
 
     # Order entry beats within the alphabetically first dilemma —
     # MUST match interleave_cross_path_beats (#1192).
-    sorted_dilemmas = sorted(dilemma_paths.keys())
-    if sorted_dilemmas:
-        first_dilemma = sorted_dilemmas[0]
-        first_paths = dilemma_paths[first_dilemma]
-        first_entry_beats: list[str] = []
-        for p in first_paths:
-            seq = _get_path_beats_ordered(graph, p, path_beats_map)
-            if seq:
-                first_entry_beats.append(seq[0])
-        if len(first_entry_beats) > 1:
-            first_entry_beats.sort()
-            for i in range(len(first_entry_beats) - 1):
-                _sim_add(first_entry_beats[i + 1], first_entry_beats[i])
+    # Note: the early-return above (len(dilemma_paths) < 2) means this block
+    # is only reached for multi-dilemma stories. For single-dilemma stories
+    # with multiple paths, interleave_cross_path_beats still applies
+    # intra-dilemma ordering, but those edges are non-hint heuristics that
+    # cannot directly conflict with temporal hints.
+    first_dilemma = sorted(dilemma_paths.keys())[0]
+    first_paths = dilemma_paths[first_dilemma]
+    first_entry_beats: list[str] = []
+    for p in first_paths:
+        seq = _get_path_beats_ordered(graph, p, path_beats_map)
+        if seq:
+            first_entry_beats.append(seq[0])
+    if len(first_entry_beats) > 1:
+        first_entry_beats.sort()
+        # Chain alphabetically: beat[0] is root, beat[i+1] requires beat[i]
+        for i in range(len(first_entry_beats) - 1):
+            _sim_add(first_entry_beats[i + 1], first_entry_beats[i])
 
     return conflicts
 
@@ -3716,20 +3720,18 @@ def interleave_cross_path_beats(graph: Graph) -> int:
 
     # Order entry beats within the alphabetically first dilemma to ensure
     # a single DAG root when that dilemma has multiple paths (#1192).
-    sorted_dilemmas = sorted(dilemma_paths.keys())
-    if sorted_dilemmas:
-        first_dilemma = sorted_dilemmas[0]
-        first_paths = dilemma_paths[first_dilemma]
-        first_entry_beats: list[str] = []
-        for p in first_paths:
-            seq = _get_path_beats_ordered(graph, p, path_beats_map)
-            if seq:
-                first_entry_beats.append(seq[0])
-        if len(first_entry_beats) > 1:
-            first_entry_beats.sort()
-            # Chain alphabetically: beat[0] is root, beat[i+1] requires beat[i]
-            for i in range(len(first_entry_beats) - 1):
-                _add_predecessor(first_entry_beats[i + 1], first_entry_beats[i])
+    first_dilemma = sorted(dilemma_paths.keys())[0]
+    first_paths = dilemma_paths[first_dilemma]
+    first_entry_beats: list[str] = []
+    for p in first_paths:
+        seq = _get_path_beats_ordered(graph, p, path_beats_map)
+        if seq:
+            first_entry_beats.append(seq[0])
+    if len(first_entry_beats) > 1:
+        first_entry_beats.sort()
+        # Chain alphabetically: beat[0] is root, beat[i+1] requires beat[i]
+        for i in range(len(first_entry_beats) - 1):
+            _add_predecessor(first_entry_beats[i + 1], first_entry_beats[i])
 
     log.info(
         "interleave_cross_path_beats_complete",
