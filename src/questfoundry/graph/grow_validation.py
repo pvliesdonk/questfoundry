@@ -308,11 +308,11 @@ def check_single_root_beat(graph: Graph) -> ValidationCheck:
     # Exclude synthetic beat roles that are created by POLISH, not GROW.
     # At GROW Phase 10 none exist, but run_all_checks() (used by qf inspect)
     # may run after POLISH when synthetic beats are present.
-    _synthetic_roles = {"micro_beat", "residue_beat", "sidetrack_beat"}
+    synthetic_roles = {"micro_beat", "residue_beat", "sidetrack_beat"}
     root_beats = sorted(
         bid
         for bid in beat_nodes
-        if bid not in beats_with_prereqs and beat_nodes[bid].get("role", "") not in _synthetic_roles
+        if bid not in beats_with_prereqs and beat_nodes[bid].get("role", "") not in synthetic_roles
     )
 
     if len(root_beats) == 1:
