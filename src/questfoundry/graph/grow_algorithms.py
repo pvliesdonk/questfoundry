@@ -2677,6 +2677,20 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
                     for dependent in sorted(dependent_commits):
                         _sim_add(dependent, prereq)
 
+            # Entry beats follow the same relative ordering as commit beats —
+            # MUST match interleave_cross_path_beats (#1186).
+            first_beats_a = {seq[0] for seq in ordered_a if seq}
+            first_beats_b = {seq[0] for seq in ordered_b if seq}
+            if first_beats_a and first_beats_b:
+                if dilemma_a < dilemma_b:
+                    for fa in sorted(first_beats_a):
+                        for fb in sorted(first_beats_b):
+                            _sim_add(fb, fa)
+                else:
+                    for fb in sorted(first_beats_b):
+                        for fa in sorted(first_beats_a):
+                            _sim_add(fa, fb)
+
     return conflicts
 
 
@@ -2866,11 +2880,17 @@ def _build_hint_base_dag(
 ) -> tuple[set[tuple[str, str]], dict[str, set[str]]]:
     """Build the base DAG for hint conflict detection/postcondition checking.
 
-    Pre-loads ALL non-hint edges (predecessor + serial + wraps + concurrent
-    commit-ordering) from ALL relationship pairs into the base DAG.  Hints are
+    Pre-loads non-hint heuristic edges (predecessor + serial + wraps + concurrent
+    commit-ordering) from all relationship pairs into the base DAG.  Hints are
     NOT included.  This is the shared DAG construction used by both
     ``build_hint_conflict_graph`` (detection) and ``verify_hints_acyclic``
     (postcondition), ensuring they produce consistent results.
+
+    Concurrent entry-beat ordering is intentionally absent from this base DAG.
+    Entry-beat ordering is a soft heuristic that must yield to hints rather than
+    block them.  Cycle-safety for accepted hints against entry-beat edges is
+    guaranteed by ``detect_temporal_hint_conflicts``, which simulates entry-beat
+    edges when testing each hint individually.
 
     Args:
         graph: The story graph.
@@ -2945,6 +2965,7 @@ def _build_hint_base_dag(
                 for prereq in sorted(prereq_commits):
                     for dependent in sorted(dependent_commits):
                         _sim(dependent, prereq)
+
     return existing, succ
 
 
@@ -3480,9 +3501,12 @@ def interleave_cross_path_beats(graph: Graph) -> int:
         return 0
 
     # Initialise the cycle-detection DAG from the same base as detection/postcondition.
-    # _build_hint_base_dag pre-loads ALL non-hint heuristic edges from ALL pairs so
-    # that a hint accepted by build_hint_conflict_graph cannot create a cycle here
-    # due to a narrower incremental DAG (#1147).
+    # _build_hint_base_dag pre-loads non-hint heuristic edges (serial, wraps, commit-ordering)
+    # so that a hint accepted by build_hint_conflict_graph cannot create a cycle here
+    # due to a narrower incremental DAG (#1147).  Entry-beat ordering is intentionally
+    # absent from _build_hint_base_dag — it is a soft heuristic that must yield to hints
+    # rather than block them.  detect_temporal_hint_conflicts simulates entry-beat edges
+    # when testing each hint, so accepted hints are already safe against that ordering.
     #
     # ``_base_edges`` contains real graph edges + simulated heuristic edges.
     # ``successors`` is derived from the full base and is used for cycle detection.
@@ -3655,6 +3679,24 @@ def interleave_cross_path_beats(graph: Graph) -> int:
                     for cb in sorted(commits_b):
                         for ca in sorted(commits_a):
                             _add_predecessor(ca, cb)
+
+            # Entry beats follow the same relative ordering as commit beats:
+            # whichever dilemma's commits go first also has its entry beats first.
+            # This ensures the beat DAG has a single root even when all dilemmas
+            # are concurrent (no serial/wraps edges) — fixing #1186.
+            first_beats_a = {seq[0] for seq in ordered_a if seq}
+            first_beats_b = {seq[0] for seq in ordered_b if seq}
+            if first_beats_a and first_beats_b:
+                if dilemma_a < dilemma_b:
+                    # A entry beats before B entry beats (consistent with A commits first)
+                    for fa in sorted(first_beats_a):
+                        for fb in sorted(first_beats_b):
+                            _add_predecessor(fb, fa)
+                else:
+                    # B entry beats before A entry beats (consistent with B commits first)
+                    for fb in sorted(first_beats_b):
+                        for fa in sorted(first_beats_a):
+                            _add_predecessor(fa, fb)
 
     log.info(
         "interleave_cross_path_beats_complete",

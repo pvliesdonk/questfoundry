@@ -4535,7 +4535,7 @@ class TestInterleavecrossPathBeats:
         )
         graph.update_node(
             "beat::aq_intro",
-            temporal_hint={"relative_to": "dilemma::mentor_trust", "position": "after_introduce"},
+            temporal_hint={"relative_to": "dilemma::mentor_trust", "position": "before_commit"},
         )
 
         # Both hints present before interleaving
@@ -4649,7 +4649,11 @@ class TestInterleavecrossPathBeats:
         This guards against the same-dilemma violation: a beat that references
         its own dilemma in a temporal hint would create a within-dilemma predecessor
         edge, which is illegal for intersections (conditional prerequisite invariant).
-        The hint must be discarded and no predecessor edge created.
+        The hint must be discarded and no intra-dilemma predecessor edge created.
+
+        Note: the entry-beat heuristic (#1186) legitimately creates a cross-dilemma
+        edge involving aq_intro (predecessor(mt_intro, aq_intro)) — that is correct
+        behaviour and is NOT what this test is guarding against.
         """
         graph = _make_two_dilemma_graph_with_relationship("concurrent")
 
@@ -4667,14 +4671,18 @@ class TestInterleavecrossPathBeats:
         interleave_cross_path_beats(graph)
         edges_after = {(e["from"], e["to"]) for e in graph.get_edges(edge_type="predecessor")}
 
-        # No new predecessor edges should reference aq_intro as a node added due
-        # to the same-dilemma hint (the hint must be dropped entirely)
+        # The hint (before_commit of artifact_quest on aq_intro) would produce an
+        # intra-dilemma edge: predecessor(aq_commit, aq_intro) = aq_commit requires
+        # aq_intro.  This already exists from the fixture, so no new intra-dilemma
+        # edge can appear — but even if the fixture changed, the hint must be skipped.
+        # Guard: no NEW edge between two artifact_quest beats was added.
+        artifact_quest_beats = {"beat::aq_intro", "beat::aq_commit"}
         new_edges = edges_after - edges_before
-        edges_from_aq_intro = {
-            (f, t) for f, t in new_edges if f == "beat::aq_intro" or t == "beat::aq_intro"
+        intra_aq_edges = {
+            (f, t) for f, t in new_edges if f in artifact_quest_beats and t in artifact_quest_beats
         }
-        assert edges_from_aq_intro == set(), (
-            f"Expected no predecessor edges created from same-dilemma hint, got {edges_from_aq_intro}"
+        assert intra_aq_edges == set(), (
+            f"Expected no new intra-dilemma edges from same-dilemma hint, got {intra_aq_edges}"
         )
 
     def test_skips_predecessor_between_same_intersection_beats(self) -> None:
@@ -4829,6 +4837,143 @@ class TestInterleavecrossPathBeats:
 
         assert count > 0, "Expected at least one cross-path predecessor edge"
         assert validate_beat_dag(graph) == [], "DAG must remain acyclic after interleave"
+
+    def test_concurrent_all_dilemmas_produces_single_root_beat(self) -> None:
+        """All-concurrent dilemmas must yield a single DAG root after interleaving (#1186).
+
+        When every dilemma relationship is 'concurrent' the commit-beat heuristic
+        alone leaves entry beats (_beat_01 equivalents) as independent DAG roots —
+        one per path — causing POLISH to fail with 'Multiple start passages'.
+
+        The fix adds entry-beat ordering in the same direction as commit-beat ordering
+        so the resulting DAG has exactly one root.
+
+        Graph: two dilemmas (a_alpha, b_beta), each with one path and three beats:
+          a_alpha: a_entry → a_mid → a_commit
+          b_beta:  b_entry → b_mid → b_commit
+        Dilemmas linked by a 'concurrent' edge (a_alpha → b_beta).
+        After interleave, exactly one beat must have no predecessor edges where it
+        appears as the 'from' side (i.e. no prerequisites).
+        """
+        graph = Graph.empty()
+
+        # Use alphabetically ordered dilemma IDs so the heuristic direction is
+        # deterministic: a_alpha < b_beta → a's commits/entries go first.
+        for dil in ("a_alpha", "b_beta"):
+            graph.create_node(f"dilemma::{dil}", {"type": "dilemma", "raw_id": dil})
+
+        for dil, path_id in (("a_alpha", "aa_path"), ("b_beta", "bb_path")):
+            graph.create_node(
+                f"path::{path_id}",
+                {
+                    "type": "path",
+                    "raw_id": path_id,
+                    "dilemma_id": f"dilemma::{dil}",
+                    "is_canonical": True,
+                },
+            )
+
+        # a_alpha beats: a_entry → a_mid → a_commit
+        for raw_id, effect, path_id in (
+            ("a_entry", "advances", "aa_path"),
+            ("a_mid", "advances", "aa_path"),
+            ("a_commit", "commits", "aa_path"),
+        ):
+            graph.create_node(
+                f"beat::{raw_id}",
+                {
+                    "type": "beat",
+                    "raw_id": raw_id,
+                    "summary": f"a_alpha {raw_id}.",
+                    "dilemma_impacts": [{"dilemma_id": "dilemma::a_alpha", "effect": effect}],
+                },
+            )
+            graph.add_edge("belongs_to", f"beat::{raw_id}", f"path::{path_id}")
+        # Within-path ordering (commit requires mid requires entry)
+        graph.add_edge("predecessor", "beat::a_mid", "beat::a_entry")
+        graph.add_edge("predecessor", "beat::a_commit", "beat::a_mid")
+
+        # b_beta beats: b_entry → b_mid → b_commit
+        for raw_id, effect, path_id in (
+            ("b_entry", "advances", "bb_path"),
+            ("b_mid", "advances", "bb_path"),
+            ("b_commit", "commits", "bb_path"),
+        ):
+            graph.create_node(
+                f"beat::{raw_id}",
+                {
+                    "type": "beat",
+                    "raw_id": raw_id,
+                    "summary": f"b_beta {raw_id}.",
+                    "dilemma_impacts": [{"dilemma_id": "dilemma::b_beta", "effect": effect}],
+                },
+            )
+            graph.add_edge("belongs_to", f"beat::{raw_id}", f"path::{path_id}")
+        graph.add_edge("predecessor", "beat::b_mid", "beat::b_entry")
+        graph.add_edge("predecessor", "beat::b_commit", "beat::b_mid")
+
+        # Concurrent relationship: a_alpha concurrent with b_beta
+        graph.add_edge("concurrent", "dilemma::a_alpha", "dilemma::b_beta")
+
+        # Pre-fix state: the intra-path predecessor edges above only chain the three
+        # beats within each dilemma.  Both a_entry and b_entry are DAG roots (they have
+        # no predecessor edges pointing at them).  The concurrent commit-beat heuristic
+        # links commit beats (a_commit ← b_commit) but leaves entry beats untouched,
+        # so without the fix len(root_beats) == 2 and this assertion would fail.
+        all_beat_ids = {
+            "beat::a_entry",
+            "beat::a_mid",
+            "beat::a_commit",
+            "beat::b_entry",
+            "beat::b_mid",
+            "beat::b_commit",
+        }
+
+        # Run interleave
+        count = interleave_cross_path_beats(graph)
+        assert count > 0, "Expected cross-path predecessor edges to be created"
+
+        # Find root beats: beats that appear as 'from' side of NO predecessor edge
+        # (i.e. they have no prerequisites themselves).
+        beats_with_prereqs: set[str] = {
+            edge["from"]
+            for edge in graph.get_edges(edge_type="predecessor")
+            if edge["from"] in all_beat_ids
+        }
+        root_beats = all_beat_ids - beats_with_prereqs
+
+        assert len(root_beats) == 1, (
+            f"Expected exactly 1 root beat, got {len(root_beats)}: {sorted(root_beats)}"
+        )
+
+        # All other beats must be reachable from the single root via predecessor edges.
+        # predecessor(from, to): 'from' requires 'to' as prerequisite.
+        # To traverse forward: from root, find beats where root is their prerequisite,
+        # i.e. edges where edge["to"] == root → edge["from"] comes after root.
+        root = next(iter(root_beats))
+        reachable: set[str] = {root}
+        frontier = {root}
+        while frontier:
+            next_frontier: set[str] = set()
+            for beat in frontier:
+                # Find beats that require 'beat' (i.e. come after it in narrative)
+                for edge in graph.get_edges(edge_type="predecessor"):
+                    if (
+                        edge["to"] == beat
+                        and edge["from"] in all_beat_ids
+                        and edge["from"] not in reachable
+                    ):
+                        reachable.add(edge["from"])
+                        next_frontier.add(edge["from"])
+            frontier = next_frontier
+
+        assert reachable == all_beat_ids, (
+            f"Not all beats reachable from root {root!r}. "
+            f"Unreachable: {sorted(all_beat_ids - reachable)}"
+        )
+
+        # DAG must remain acyclic
+        assert validate_beat_dag(graph) == [], "Beat DAG must remain acyclic after interleave"
 
 
 class TestDetectTemporalHintConflicts:
