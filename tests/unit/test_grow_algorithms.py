@@ -4975,6 +4975,118 @@ class TestInterleavecrossPathBeats:
         # DAG must remain acyclic
         assert validate_beat_dag(graph) == [], "Beat DAG must remain acyclic after interleave"
 
+    def test_concurrent_multi_path_dilemmas_produces_single_root_beat(self) -> None:
+        """Multi-path dilemmas must yield a single DAG root after interleaving (#1192).
+
+        Real projects have 2 paths per dilemma (one per explored answer).
+        With 1 path per dilemma, the cross-dilemma entry-beat ordering alone
+        produces a single root. With 2 paths, the first dilemma has 2 entry
+        beats that both become roots unless intra-dilemma ordering is applied.
+
+        Graph: two dilemmas (a_alpha, b_beta), each with TWO paths and three
+        beats per path:
+          a_alpha: a1_entry → a1_mid → a1_commit  (path aa_path1)
+                   a2_entry → a2_mid → a2_commit  (path aa_path2)
+          b_beta:  b1_entry → b1_mid → b1_commit  (path bb_path1)
+                   b2_entry → b2_mid → b2_commit  (path bb_path2)
+        Dilemmas linked by a 'concurrent' edge.
+        After interleave, exactly one beat must have no predecessor edges.
+        """
+        graph = Graph.empty()
+
+        for dil in ("a_alpha", "b_beta"):
+            graph.create_node(f"dilemma::{dil}", {"type": "dilemma", "raw_id": dil})
+
+        # Two paths per dilemma
+        for dil, paths in (
+            ("a_alpha", ("aa_path1", "aa_path2")),
+            ("b_beta", ("bb_path1", "bb_path2")),
+        ):
+            for path_id in paths:
+                graph.create_node(
+                    f"path::{path_id}",
+                    {
+                        "type": "path",
+                        "raw_id": path_id,
+                        "dilemma_id": f"dilemma::{dil}",
+                        "is_canonical": True,
+                    },
+                )
+
+        all_beat_ids: set[str] = set()
+
+        # Create beats for each path: entry → mid → commit
+        for dil, path_id, prefix in (
+            ("a_alpha", "aa_path1", "a1"),
+            ("a_alpha", "aa_path2", "a2"),
+            ("b_beta", "bb_path1", "b1"),
+            ("b_beta", "bb_path2", "b2"),
+        ):
+            for raw_id, effect in (
+                (f"{prefix}_entry", "advances"),
+                (f"{prefix}_mid", "advances"),
+                (f"{prefix}_commit", "commits"),
+            ):
+                graph.create_node(
+                    f"beat::{raw_id}",
+                    {
+                        "type": "beat",
+                        "raw_id": raw_id,
+                        "summary": f"{dil} {raw_id}.",
+                        "dilemma_impacts": [{"dilemma_id": f"dilemma::{dil}", "effect": effect}],
+                    },
+                )
+                graph.add_edge("belongs_to", f"beat::{raw_id}", f"path::{path_id}")
+                all_beat_ids.add(f"beat::{raw_id}")
+
+            # Intra-path predecessor chain: commit requires mid requires entry
+            graph.add_edge("predecessor", f"beat::{prefix}_mid", f"beat::{prefix}_entry")
+            graph.add_edge("predecessor", f"beat::{prefix}_commit", f"beat::{prefix}_mid")
+
+        # Concurrent relationship
+        graph.add_edge("concurrent", "dilemma::a_alpha", "dilemma::b_beta")
+
+        # Run interleave
+        count = interleave_cross_path_beats(graph)
+        assert count > 0, "Expected cross-path predecessor edges to be created"
+
+        # Find root beats: beats with no predecessor edge where they are 'from'
+        beats_with_prereqs: set[str] = {
+            edge["from"]
+            for edge in graph.get_edges(edge_type="predecessor")
+            if edge["from"] in all_beat_ids
+        }
+        root_beats = all_beat_ids - beats_with_prereqs
+
+        assert len(root_beats) == 1, (
+            f"Expected exactly 1 root beat, got {len(root_beats)}: {sorted(root_beats)}"
+        )
+
+        # All beats reachable from root
+        root = next(iter(root_beats))
+        reachable: set[str] = {root}
+        frontier = {root}
+        while frontier:
+            next_frontier: set[str] = set()
+            for beat in frontier:
+                for edge in graph.get_edges(edge_type="predecessor"):
+                    if (
+                        edge["to"] == beat
+                        and edge["from"] in all_beat_ids
+                        and edge["from"] not in reachable
+                    ):
+                        reachable.add(edge["from"])
+                        next_frontier.add(edge["from"])
+            frontier = next_frontier
+
+        assert reachable == all_beat_ids, (
+            f"Not all beats reachable from root {root!r}. "
+            f"Unreachable: {sorted(all_beat_ids - reachable)}"
+        )
+
+        # DAG must remain acyclic
+        assert validate_beat_dag(graph) == [], "Beat DAG must remain acyclic after interleave"
+
 
 class TestDetectTemporalHintConflicts:
     """Tests for detect_temporal_hint_conflicts (#1123)."""
