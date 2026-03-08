@@ -4915,8 +4915,11 @@ class TestInterleavecrossPathBeats:
         # Concurrent relationship: a_alpha concurrent with b_beta
         graph.add_edge("concurrent", "dilemma::a_alpha", "dilemma::b_beta")
 
-        # Before the fix there are 2 root beats (a_entry and b_entry) — verify
-        # the test would fail on unpatched code by checking this precondition.
+        # Pre-fix state: the intra-path predecessor edges above only chain the three
+        # beats within each dilemma.  Both a_entry and b_entry are DAG roots (they have
+        # no predecessor edges pointing at them).  The concurrent commit-beat heuristic
+        # links commit beats (a_commit ← b_commit) but leaves entry beats untouched,
+        # so without the fix len(root_beats) == 2 and this assertion would fail.
         all_beat_ids = {
             "beat::a_entry",
             "beat::a_mid",
