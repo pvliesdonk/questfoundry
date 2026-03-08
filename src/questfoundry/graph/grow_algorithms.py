@@ -3495,9 +3495,12 @@ def interleave_cross_path_beats(graph: Graph) -> int:
         return 0
 
     # Initialise the cycle-detection DAG from the same base as detection/postcondition.
-    # _build_hint_base_dag pre-loads ALL non-hint heuristic edges from ALL pairs so
-    # that a hint accepted by build_hint_conflict_graph cannot create a cycle here
-    # due to a narrower incremental DAG (#1147).
+    # _build_hint_base_dag pre-loads non-hint heuristic edges (serial, wraps, commit-ordering)
+    # so that a hint accepted by build_hint_conflict_graph cannot create a cycle here
+    # due to a narrower incremental DAG (#1147).  Entry-beat ordering is intentionally
+    # absent from _build_hint_base_dag — it is a soft heuristic that must yield to hints
+    # rather than block them.  detect_temporal_hint_conflicts simulates entry-beat edges
+    # when testing each hint, so accepted hints are already safe against that ordering.
     #
     # ``_base_edges`` contains real graph edges + simulated heuristic edges.
     # ``successors`` is derived from the full base and is used for cycle detection.
