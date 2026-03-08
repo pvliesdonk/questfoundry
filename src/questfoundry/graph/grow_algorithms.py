@@ -2960,19 +2960,6 @@ def _build_hint_base_dag(
                     for dependent in sorted(dependent_commits):
                         _sim(dependent, prereq)
 
-            # Entry beats follow the same relative ordering as commit beats —
-            # MUST match interleave_cross_path_beats (#1186).
-            first_beats_a = {seq[0] for seq in ordered_a if seq}
-            first_beats_b = {seq[0] for seq in ordered_b if seq}
-            if first_beats_a and first_beats_b:
-                if dilemma_a < dilemma_b:
-                    for fa in sorted(first_beats_a):
-                        for fb in sorted(first_beats_b):
-                            _sim(fb, fa)
-                else:
-                    for fb in sorted(first_beats_b):
-                        for fa in sorted(first_beats_a):
-                            _sim(fa, fb)
     return existing, succ
 
 
