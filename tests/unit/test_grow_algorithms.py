@@ -4535,7 +4535,7 @@ class TestInterleavecrossPathBeats:
         )
         graph.update_node(
             "beat::aq_intro",
-            temporal_hint={"relative_to": "dilemma::mentor_trust", "position": "after_introduce"},
+            temporal_hint={"relative_to": "dilemma::mentor_trust", "position": "before_commit"},
         )
 
         # Both hints present before interleaving
