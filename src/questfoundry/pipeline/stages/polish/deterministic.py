@@ -595,7 +595,6 @@ def _topo_first(candidates: list[str], children: dict[str, list[str]]) -> str:
 
     Uses children adjacency (beat → successors) to find the candidate
     that no other candidate depends on (i.e., is not a successor of any other).
-    Falls back to sorted()[0] if no unique earliest exists.
 
     Args:
         candidates: Beat IDs to choose from.
@@ -604,10 +603,12 @@ def _topo_first(candidates: list[str], children: dict[str, list[str]]) -> str:
     Returns:
         The topologically earliest beat ID.
     """
-    for c in sorted(candidates):  # sorted for deterministic fallback
+    for c in sorted(candidates):  # sorted for deterministic tie-break
         # c is earliest if it's not a successor of any other candidate
         if not any(c in children.get(other, []) for other in candidates if other != c):
             return c
+    # Safety fallback — only reachable if candidates form a cycle among
+    # themselves, which is an invariant violation (GROW guarantees acyclic DAG).
     return sorted(candidates)[0]
 
 
@@ -730,7 +731,8 @@ def compute_choice_edges(
                     from_passage=from_passage,
                     to_passage=to_passage,
                     grants=sorted(set(existing.grants) | set(grants)),
-                    requires=existing.requires,  # keep first-seen requires
+                    requires=existing.requires,  # keep first-seen: beats in the same
+                    # passage share identical upstream flag state for a given target
                     label=existing.label,
                 )
             else:
