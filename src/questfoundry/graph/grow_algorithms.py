@@ -2880,11 +2880,17 @@ def _build_hint_base_dag(
 ) -> tuple[set[tuple[str, str]], dict[str, set[str]]]:
     """Build the base DAG for hint conflict detection/postcondition checking.
 
-    Pre-loads ALL non-hint edges (predecessor + serial + wraps + concurrent
-    commit-ordering) from ALL relationship pairs into the base DAG.  Hints are
+    Pre-loads non-hint heuristic edges (predecessor + serial + wraps + concurrent
+    commit-ordering) from all relationship pairs into the base DAG.  Hints are
     NOT included.  This is the shared DAG construction used by both
     ``build_hint_conflict_graph`` (detection) and ``verify_hints_acyclic``
     (postcondition), ensuring they produce consistent results.
+
+    Concurrent entry-beat ordering is intentionally absent from this base DAG.
+    Entry-beat ordering is a soft heuristic that must yield to hints rather than
+    block them.  Cycle-safety for accepted hints against entry-beat edges is
+    guaranteed by ``detect_temporal_hint_conflicts``, which simulates entry-beat
+    edges when testing each hint individually.
 
     Args:
         graph: The story graph.
