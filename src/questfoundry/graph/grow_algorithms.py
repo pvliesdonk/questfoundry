@@ -2694,10 +2694,10 @@ def detect_temporal_hint_conflicts(graph: Graph) -> list[TemporalHintConflict]:
     # Order entry beats within the alphabetically first dilemma —
     # MUST match interleave_cross_path_beats (#1192).
     # Note: the early-return above (len(dilemma_paths) < 2) means this block
-    # is only reached for multi-dilemma stories. For single-dilemma stories
-    # with multiple paths, interleave_cross_path_beats still applies
-    # intra-dilemma ordering, but those edges are non-hint heuristics that
-    # cannot directly conflict with temporal hints.
+    # is only reached for multi-dilemma stories. interleave_cross_path_beats
+    # has the same guard, so single-dilemma stories skip intra-dilemma
+    # ordering in both functions. This is acceptable because single-dilemma
+    # stories are not a production scenario (every story has >= 2 dilemmas).
     first_dilemma = sorted(dilemma_paths.keys())[0]
     first_paths = dilemma_paths[first_dilemma]
     first_entry_beats: list[str] = []
