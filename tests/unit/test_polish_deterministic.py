@@ -341,6 +341,246 @@ class TestComputeChoiceEdges:
         assert len(choice_to_a[0].grants) > 0
 
 
+class TestChoiceEdgesIntersectionMultiBeat:
+    """Tests for #1185/#1188: intersection passages with multiple diverging beats.
+
+    Scenario: An intersection passage contains beats from multiple paths.
+    Two of those beats independently diverge to the same target passage.
+    Before the fix: two duplicate ChoiceSpec entries for that (from, to) pair.
+    After the fix: exactly one ChoiceSpec, with grants merged.
+    """
+
+    def test_deduplicates_same_target_from_multiple_beats(self) -> None:
+        """Two beats in the same intersection passage that both diverge to single_A
+        must produce exactly one ChoiceSpec(intersection_0 → single_A), not two."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
+        graph.create_node("path::p3", {"type": "path", "raw_id": "p3"})
+
+        # Three beats, one per path — all in the intersection passage
+        _make_beat(graph, "beat::b_p1", "P1 beat in intersection")
+        _make_beat(graph, "beat::b_p2", "P2 beat in intersection")
+        _make_beat(graph, "beat::b_p3", "P3 beat in intersection")
+        _add_belongs_to(graph, "beat::b_p1", "path::p1")
+        _add_belongs_to(graph, "beat::b_p2", "path::p2")
+        _add_belongs_to(graph, "beat::b_p3", "path::p3")
+
+        # Children: b_p1 diverges → child_A (p1) and child_C (p3)
+        #           b_p2 diverges → child_A (same p1 target!) and child_B (p2)
+        _make_beat(graph, "beat::child_A", "Child on p1")
+        _make_beat(graph, "beat::child_B", "Child on p2")
+        _make_beat(graph, "beat::child_C", "Child on p3")
+        _add_belongs_to(graph, "beat::child_A", "path::p1")
+        _add_belongs_to(graph, "beat::child_B", "path::p2")
+        _add_belongs_to(graph, "beat::child_C", "path::p3")
+
+        _add_predecessor(graph, "beat::child_A", "beat::b_p1")
+        _add_predecessor(graph, "beat::child_C", "beat::b_p1")
+        _add_predecessor(graph, "beat::child_A", "beat::b_p2")
+        _add_predecessor(graph, "beat::child_B", "beat::b_p2")
+
+        specs = [
+            PassageSpec(
+                passage_id="passage::intersection_0",
+                beat_ids=["beat::b_p1", "beat::b_p2", "beat::b_p3"],
+                summary="intersection",
+                grouping_type="intersection",
+            ),
+            PassageSpec(passage_id="passage::single_A", beat_ids=["beat::child_A"], summary="A"),
+            PassageSpec(passage_id="passage::single_B", beat_ids=["beat::child_B"], summary="B"),
+            PassageSpec(passage_id="passage::single_C", beat_ids=["beat::child_C"], summary="C"),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+
+        # Exactly one ChoiceSpec per unique (from_passage, to_passage) pair
+        from_to_pairs = [(c.from_passage, c.to_passage) for c in choices]
+        assert len(from_to_pairs) == len(set(from_to_pairs)), (
+            f"Duplicate (from, to) pairs: {from_to_pairs}"
+        )
+
+        # Exactly one choice from intersection_0 → single_A (not two)
+        to_A = [c for c in choices if c.to_passage == "passage::single_A"]
+        assert len(to_A) == 1, f"Expected 1 choice to single_A, got {len(to_A)}"
+
+        # All three target passages reachable from intersection_0
+        to_passages = {c.to_passage for c in choices if c.from_passage == "passage::intersection_0"}
+        assert to_passages == {"passage::single_A", "passage::single_B", "passage::single_C"}
+
+    def test_grants_merged_on_deduplication(self) -> None:
+        """When two beats in the same passage diverge to the same target passage
+        via different child beats (each with different dilemma_impacts), grants
+        from both children are merged (union) in the single deduplicated ChoiceSpec."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
+        graph.create_node("path::p3", {"type": "path", "raw_id": "p3"})
+
+        # Two divergence beats in the intersection passage
+        _make_beat(graph, "beat::b_p1", "P1 beat in intersection")
+        _make_beat(graph, "beat::b_p2", "P2 beat in intersection")
+        _add_belongs_to(graph, "beat::b_p1", "path::p1")
+        _add_belongs_to(graph, "beat::b_p2", "path::p2")
+
+        # b_p1 → child_X1 (p1, commits d1) and child_C (p3)
+        _make_beat(
+            graph,
+            "beat::child_X1",
+            "X1 on p1",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _make_beat(graph, "beat::child_C", "C on p3")
+        _add_belongs_to(graph, "beat::child_X1", "path::p1")
+        _add_belongs_to(graph, "beat::child_C", "path::p3")
+        _add_predecessor(graph, "beat::child_X1", "beat::b_p1")
+        _add_predecessor(graph, "beat::child_C", "beat::b_p1")
+
+        # b_p2 → child_X2 (p1, commits d2) and child_B (p2)
+        _make_beat(
+            graph,
+            "beat::child_X2",
+            "X2 on p1",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d2", "effect": "commits"}],
+        )
+        _make_beat(graph, "beat::child_B", "B on p2")
+        _add_belongs_to(graph, "beat::child_X2", "path::p1")
+        _add_belongs_to(graph, "beat::child_B", "path::p2")
+        _add_predecessor(graph, "beat::child_X2", "beat::b_p2")
+        _add_predecessor(graph, "beat::child_B", "beat::b_p2")
+
+        # Both child_X1 and child_X2 land in the SAME target passage (passage::X)
+        specs = [
+            PassageSpec(
+                passage_id="passage::inter",
+                beat_ids=["beat::b_p1", "beat::b_p2"],
+                summary="intersection",
+                grouping_type="intersection",
+            ),
+            PassageSpec(
+                passage_id="passage::X",
+                beat_ids=["beat::child_X1", "beat::child_X2"],
+                summary="X",
+            ),
+            PassageSpec(passage_id="passage::B", beat_ids=["beat::child_B"], summary="B"),
+            PassageSpec(passage_id="passage::C", beat_ids=["beat::child_C"], summary="C"),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+
+        # Exactly one choice to passage::X (deduplicated from two divergence beats)
+        to_X = [c for c in choices if c.to_passage == "passage::X"]
+        assert len(to_X) == 1
+
+        # Grants: b_p1 contributed d1:p1 (from child_X1); b_p2 contributed d2:p1 (from child_X2)
+        # Merged union should contain both
+        assert len(to_X[0].grants) == 2
+        assert set(to_X[0].grants) == {"dilemma::d1:path::p1", "dilemma::d2:path::p1"}
+
+
+class TestChoiceEdgesGapBeatChild:
+    """Tests for #1187/#1188: topological child selection avoids skipping gap beats.
+
+    Scenario: A divergence beat has both a gap beat and the gap's successor
+    as direct children on the same path (due to transitive interleave edges).
+    Before the fix: sorted()[0] picks the alphabetically first, which may be
+    the gap's successor, orphaning the gap beat's passage.
+    After the fix: _topo_first picks the topologically earliest (the gap beat).
+    """
+
+    def test_gap_beat_chosen_over_successor(self) -> None:
+        """Divergence beat with both gap and after_gap as direct children
+        on path p1 must target gap's passage, not after_gap's passage."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
+
+        # Divergence beat (shared / on p1)
+        _make_beat(graph, "beat::div", "Divergence")
+        _add_belongs_to(graph, "beat::div", "path::p1")
+
+        # Gap beat on p1 — the true next beat after div
+        _make_beat(graph, "beat::gap_1", "Gap beat")
+        _add_belongs_to(graph, "beat::gap_1", "path::p1")
+
+        # Beat after the gap on p1
+        _make_beat(graph, "beat::after_gap", "After gap")
+        _add_belongs_to(graph, "beat::after_gap", "path::p1")
+
+        # DAG: gap_1 → after_gap (gap_1 is predecessor of after_gap)
+        _add_predecessor(graph, "beat::after_gap", "beat::gap_1")
+
+        # div → gap_1 (real next beat)
+        _add_predecessor(graph, "beat::gap_1", "beat::div")
+
+        # div → after_gap directly (transitive edge from interleave — the bug scenario)
+        _add_predecessor(graph, "beat::after_gap", "beat::div")
+
+        # Beat on p2 to make div a real divergence point
+        _make_beat(graph, "beat::p2_child", "P2 child")
+        _add_belongs_to(graph, "beat::p2_child", "path::p2")
+        _add_predecessor(graph, "beat::p2_child", "beat::div")
+
+        specs = [
+            PassageSpec(passage_id="passage::div", beat_ids=["beat::div"], summary="div"),
+            PassageSpec(passage_id="passage::gap", beat_ids=["beat::gap_1"], summary="gap"),
+            PassageSpec(
+                passage_id="passage::after_gap", beat_ids=["beat::after_gap"], summary="after_gap"
+            ),
+            PassageSpec(passage_id="passage::p2", beat_ids=["beat::p2_child"], summary="p2"),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+
+        # The choice from div's passage on path p1 must target gap's passage,
+        # not after_gap's passage (gap_1 is topologically earlier than after_gap).
+        from_div = [c for c in choices if c.from_passage == "passage::div"]
+        to_passages = {c.to_passage for c in from_div}
+
+        # gap passage must be reachable
+        assert "passage::gap" in to_passages, (
+            f"Expected passage::gap to be a choice target, got: {to_passages}"
+        )
+
+        # after_gap passage should NOT be a direct choice from div (it's behind gap)
+        assert "passage::after_gap" not in to_passages, (
+            f"passage::after_gap should not be a direct choice target when gap is present, "
+            f"got: {to_passages}"
+        )
+
+    def test_linear_children_not_affected(self) -> None:
+        """When children are in a simple linear chain (no transitive shortcut),
+        the result is unchanged — the head of the chain is selected."""
+        graph = Graph.empty()
+        graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
+        graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
+
+        _make_beat(graph, "beat::div", "Divergence")
+        _add_belongs_to(graph, "beat::div", "path::p1")
+
+        # Only one direct child on p1 (no transitive shortcut)
+        _make_beat(graph, "beat::next", "Next on p1")
+        _add_belongs_to(graph, "beat::next", "path::p1")
+        _add_predecessor(graph, "beat::next", "beat::div")
+
+        _make_beat(graph, "beat::p2_child", "P2 child")
+        _add_belongs_to(graph, "beat::p2_child", "path::p2")
+        _add_predecessor(graph, "beat::p2_child", "beat::div")
+
+        specs = [
+            PassageSpec(passage_id="passage::div", beat_ids=["beat::div"], summary="div"),
+            PassageSpec(passage_id="passage::next", beat_ids=["beat::next"], summary="next"),
+            PassageSpec(passage_id="passage::p2", beat_ids=["beat::p2_child"], summary="p2"),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+        from_div = [c for c in choices if c.from_passage == "passage::div"]
+        to_passages = {c.to_passage for c in from_div}
+        assert "passage::next" in to_passages
+        assert "passage::p2" in to_passages
+        assert len(from_div) == 2
+
+
 class TestFindFalseBranchCandidates:
     """Tests for Phase 4d: false branch identification."""
 
