@@ -604,7 +604,10 @@ def _topo_first(candidates: list[str], children: dict[str, list[str]]) -> str:
         The topologically earliest beat ID.
     """
     for c in sorted(candidates):  # sorted for deterministic tie-break
-        # c is earliest if it's not a successor of any other candidate
+        # Only direct successors are checked — this is correct because GROW's
+        # interleave phase adds transitive edges as explicit direct predecessor
+        # edges, so a later beat is always a direct child of every earlier beat
+        # in the candidate set.
         if not any(c in children.get(other, []) for other in candidates if other != c):
             return c
     # Safety fallback — only reachable if candidates form a cycle among
