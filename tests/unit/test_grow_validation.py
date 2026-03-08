@@ -21,6 +21,7 @@ from questfoundry.graph.grow_validation import (
     check_dilemma_role_compliance,
     check_dilemmas_resolved,
     check_passage_dag_cycles,
+    check_single_root_beat,
     check_single_start,
     check_spine_arc_exists,
     run_all_checks,
@@ -945,3 +946,75 @@ class TestPhase10Integration:
         result = await phase_validation(graph, MagicMock())
         assert result.status == "completed"
         assert "passed" in result.detail
+
+
+class TestSingleRootBeat:
+    """Tests for check_single_root_beat."""
+
+    def test_single_root_beat_pass(self) -> None:
+        """Graph with one root beat passes."""
+        graph = Graph.empty()
+        # Create 3 beats chained: b1 -> b2 -> b3 (b1 is root)
+        for bid in ("b1", "b2", "b3"):
+            graph.create_node(
+                f"beat::{bid}",
+                {"type": "beat", "raw_id": bid, "summary": f"Beat {bid}."},
+            )
+        # predecessor(from=b2, to=b1) means b2 comes after b1
+        # predecessor(from=b3, to=b2) means b3 comes after b2
+        # b1 is never from_id → b1 is the single root
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
+        result = check_single_root_beat(graph)
+        assert result.severity == "pass"
+        assert "beat::b1" in result.message
+
+    def test_multiple_root_beats_fail(self) -> None:
+        """Graph with two root beats fails."""
+        graph = Graph.empty()
+        for bid in ("b1", "b2", "b3"):
+            graph.create_node(
+                f"beat::{bid}",
+                {"type": "beat", "raw_id": bid, "summary": f"Beat {bid}."},
+            )
+        # predecessor(from=b3, to=b2) means b3 requires b2 as prerequisite.
+        # b3 appears as from_id → b3 has prerequisites, not a root.
+        # b1 and b2 do NOT appear as from_id → both are roots.
+        graph.add_edge("predecessor", "beat::b3", "beat::b2")
+        result = check_single_root_beat(graph)
+        assert result.severity == "fail"
+        assert "beat::b1" in result.message
+        assert "beat::b2" in result.message
+
+    def test_zero_root_beats_fail(self) -> None:
+        """All beats have predecessors (cycle) — fails."""
+        graph = Graph.empty()
+        for bid in ("b1", "b2"):
+            graph.create_node(
+                f"beat::{bid}",
+                {"type": "beat", "raw_id": bid, "summary": f"Beat {bid}."},
+            )
+        # Cycle: b1 requires b2, b2 requires b1
+        graph.add_edge("predecessor", "beat::b1", "beat::b2")
+        graph.add_edge("predecessor", "beat::b2", "beat::b1")
+        result = check_single_root_beat(graph)
+        assert result.severity == "fail"
+        assert "No root beat" in result.message
+
+    def test_no_beats_pass(self) -> None:
+        """Empty graph passes vacuously."""
+        graph = Graph.empty()
+        result = check_single_root_beat(graph)
+        assert result.severity == "pass"
+        assert "No beats" in result.message
+
+    def test_single_beat_no_edges_pass(self) -> None:
+        """A single beat with no edges is a valid single root."""
+        graph = Graph.empty()
+        graph.create_node(
+            "beat::only",
+            {"type": "beat", "raw_id": "only", "summary": "Only beat."},
+        )
+        result = check_single_root_beat(graph)
+        assert result.severity == "pass"
+        assert "beat::only" in result.message

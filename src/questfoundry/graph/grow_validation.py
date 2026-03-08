@@ -33,6 +33,7 @@ __all__ = [
     "check_dilemma_role_compliance",
     "check_dilemmas_resolved",
     "check_passage_dag_cycles",
+    "check_single_root_beat",
     "check_single_start",
     "check_spine_arc_exists",
     "compute_linear_threshold",
@@ -278,6 +279,51 @@ def _build_beat_dilemma_map(graph: Graph) -> dict[str, set[str]]:
 # ---------------------------------------------------------------------------
 # Beat-DAG check functions (stay in GROW)
 # ---------------------------------------------------------------------------
+
+
+def check_single_root_beat(graph: Graph) -> ValidationCheck:
+    """Verify the beat DAG has exactly one root beat.
+
+    A root beat is a beat with no prerequisites — it does not appear as
+    ``from_id`` in any predecessor edge. The beat DAG must have exactly one
+    root for POLISH to produce a single start passage.
+    """
+    beat_nodes = graph.get_nodes_by_type("beat")
+    if not beat_nodes:
+        return ValidationCheck(
+            name="single_root_beat",
+            severity="pass",
+            message="No beats to check",
+        )
+
+    # Collect all beats that appear as from_id in predecessor edges.
+    # predecessor(from_id, to_id) means from_id requires to_id as a
+    # prerequisite — so from_id comes AFTER to_id in the narrative.
+    # A root beat is one that never appears as from_id (no prerequisites).
+    beats_with_prereqs: set[str] = set()
+    for edge in graph.get_edges(edge_type="predecessor"):
+        if edge["from"] in beat_nodes:
+            beats_with_prereqs.add(edge["from"])
+
+    root_beats = sorted(bid for bid in beat_nodes if bid not in beats_with_prereqs)
+
+    if len(root_beats) == 1:
+        return ValidationCheck(
+            name="single_root_beat",
+            severity="pass",
+            message=f"Single root beat: {root_beats[0]}",
+        )
+    if len(root_beats) == 0:
+        return ValidationCheck(
+            name="single_root_beat",
+            severity="fail",
+            message="No root beat found (all beats have predecessors — possible cycle)",
+        )
+    return ValidationCheck(
+        name="single_root_beat",
+        severity="fail",
+        message=f"Multiple root beats found ({len(root_beats)}): {', '.join(root_beats)}",
+    )
 
 
 def check_single_start(graph: Graph) -> ValidationCheck:
@@ -643,6 +689,7 @@ def run_grow_checks(graph: Graph) -> ValidationReport:
         )
 
     checks: list[ValidationCheck] = [
+        check_single_root_beat(graph),
         check_single_start(graph),
         check_passage_dag_cycles(graph),
         check_spine_arc_exists(graph),
