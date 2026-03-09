@@ -33,7 +33,7 @@ from questfoundry.pipeline.stages.fill import (
 def grow_graph(tmp_path: Path) -> Graph:
     """Create a minimal GROW-completed graph."""
     g = Graph.empty()
-    g.set_last_stage("grow")
+    g.set_last_stage("polish")
 
     # Minimal passage for counting
     g.create_node(
@@ -173,18 +173,18 @@ class TestFillStageExecute:
         g.save(tmp_path / "graph.db")
 
         stage = FillStage(project_path=tmp_path)
-        with pytest.raises(FillStageError, match="FILL requires completed GROW"):
+        with pytest.raises(FillStageError, match="FILL requires completed POLISH"):
             await stage.execute(mock_model, "")
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("last_stage", ["grow", "fill", "dress", "ship"])
+    @pytest.mark.parametrize("last_stage", ["polish", "fill", "dress", "ship"])
     async def test_accepts_grow_and_later_stages(
         self, mock_model: MagicMock, tmp_path: Path, last_stage: str
     ) -> None:
-        """FILL should accept re-runs when last_stage is grow or any later stage."""
-        # Create a GROW-completed graph as the pre-FILL snapshot
+        """FILL should accept re-runs when last_stage is polish or any later stage."""
+        # Create a POLISH-completed graph as the pre-FILL snapshot
         pre_fill = Graph.empty()
-        pre_fill.set_last_stage("grow")
+        pre_fill.set_last_stage("polish")
         pre_fill.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
 
         # Save the pre-FILL checkpoint (needed for re-runs from fill/dress/ship)
@@ -203,12 +203,12 @@ class TestFillStageExecute:
         g.save(tmp_path / "graph.db")
 
         stage = FillStage(project_path=tmp_path)
-        # Should not raise FillStageError about GROW requirement
+        # Should not raise FillStageError about POLISH requirement
         # (will proceed to phases — we just verify the gate passes)
         try:
             await stage.execute(mock_model, "")
         except FillStageError as e:
-            assert "FILL requires completed GROW" not in str(e)
+            assert "FILL requires completed POLISH" not in str(e)
 
     @pytest.mark.asyncio
     async def test_rerun_rewinds_fill_mutations(
@@ -217,7 +217,7 @@ class TestFillStageExecute:
         """Re-running FILL should rewind fill mutations, removing stale nodes."""
         # Main graph: simulate GROW completed, then FILL ran and created voice node
         g = Graph.empty()
-        g.set_last_stage("grow")
+        g.set_last_stage("polish")
         g.create_node("arc::spine", {"type": "arc", "raw_id": "spine", "arc_type": "spine"})
         g.save(tmp_path / "graph.db")
 
@@ -327,9 +327,9 @@ class TestFillStageExecute:
         # Should stop after first phase (voice) is rejected — only 1 LLM call
         assert llm_calls == 1
 
-        # Verify rollback was persisted — last_stage should remain "grow"
+        # Verify rollback was persisted — last_stage should remain "polish"
         saved = Graph.load(tmp_path)
-        assert saved.get_last_stage() == "grow"
+        assert saved.get_last_stage() == "polish"
 
     @pytest.mark.asyncio
     async def test_phase_failure_stops_execution(
@@ -347,9 +347,9 @@ class TestFillStageExecute:
         # Should stop after voice phase fails — 0 LLM calls (failed immediately)
         assert llm_calls == 0
 
-        # last_stage should remain "grow" (not promoted to "fill")
+        # last_stage should remain "polish" (not promoted to "fill")
         saved = Graph.load(tmp_path)
-        assert saved.get_last_stage() == "grow"
+        assert saved.get_last_stage() == "polish"
 
     @pytest.mark.asyncio
     async def test_progress_callback(
