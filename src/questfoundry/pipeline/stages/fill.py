@@ -387,12 +387,12 @@ class FillStage:
             graph.rewind_to_phase("fill", resume_from)
             log.info("resume_via_rewind", phase=resume_from, skipped=start_idx)
 
-        # Verify GROW has completed before running FILL
+        # Verify POLISH has completed before running FILL
         last_stage = graph.get_last_stage()
-        if last_stage not in ("grow", "fill", "dress", "ship"):
+        if last_stage not in ("polish", "fill", "dress", "ship"):
             raise FillStageError(
-                f"FILL requires completed GROW stage. Current last_stage: '{last_stage}'. "
-                f"Run GROW before FILL."
+                f"FILL requires completed POLISH stage. Current last_stage: '{last_stage}'. "
+                f"Run POLISH before FILL."
             )
 
         # Re-run management:
