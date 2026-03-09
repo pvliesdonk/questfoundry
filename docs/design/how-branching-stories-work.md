@@ -130,7 +130,7 @@ Each explored path needs a skeleton: a sequence of beats that carries the dilemm
 
 Each path's beats should form a coherent story on their own. If you read just one path's beats in order, they should make narrative sense — a beginning, a middle, and an end. GROW will interleave beats from different paths, but it shouldn't need to invent missing structural beats. If the scaffold is incomplete, GROW is forced to fill gaps that are really SEED's responsibility.
 
-A note about pre-commit beats: beats that come before a dilemma's commit are "experienced by every player" — both path A and path B players encounter them. But each pre-commit beat still **belongs to one path**. Path membership describes which dilemma storyline the beat serves, not which players encounter it. A beat on the mentor-trust path that introduces the mentor is encountered by all players (the dilemma hasn't committed yet), but it advances the trust storyline specifically. Its reachability from all starting points comes from the DAG topology — not from belonging to multiple paths.
+A note about pre-commit beats: beats that come before a dilemma's commit are experienced by every player — both path A and path B players encounter them. Pre-commit beats **belong to both paths** of the dilemma (two `belongs_to` edges). This reflects a structural fact: before the commit, no choice has been made, so the beat is part of both storylines. The commit beat is the first beat exclusive to one path — it is where the fork happens. Post-commit beats belong to exactly one path. This produces a Y-shaped DAG per dilemma: shared pre-commit beats → commit fork → two path-specific post-commit chains.
 
 ### Entity Flexibility
 
