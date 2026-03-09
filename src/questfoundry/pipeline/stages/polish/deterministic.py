@@ -769,7 +769,7 @@ def compute_choice_edges(
                         from_passage=from_passage,
                         to_passage=to_passage,
                         grants=sorted(set(existing.grants) | set(grants)),
-                        requires=existing.requires,
+                        requires=existing.requires,  # keep first-seen; beats in same passage share upstream flag state
                         label=existing.label,
                     )
                 else:

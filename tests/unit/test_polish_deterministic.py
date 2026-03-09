@@ -1242,9 +1242,9 @@ class TestChoiceSpecRequires:
         returns a single-combo result for each child, allowing requires to be set.
         """
         graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "status": "explored"})
-        graph.create_node("path::pa", {"type": "path", "raw_id": "pa", "dilemma_id": "d1"})
-        graph.create_node("path::pc", {"type": "path", "raw_id": "pc", "dilemma_id": "d1"})
-        graph.create_node("path::pd", {"type": "path", "raw_id": "pd", "dilemma_id": "d1"})
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa", "dilemma_id": "dilemma::d1"})
+        graph.create_node("path::pc", {"type": "path", "raw_id": "pc", "dilemma_id": "dilemma::d1"})
+        graph.create_node("path::pd", {"type": "path", "raw_id": "pd", "dilemma_id": "dilemma::d1"})
         graph.create_node(
             "state_flag::d1_pc",
             {
