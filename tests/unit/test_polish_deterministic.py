@@ -255,16 +255,34 @@ class TestComputeProseFeasibility:
         assert result["residue_specs"] == []
 
 
+def _setup_dilemma(graph: Graph, dilemma_id: str, path_ids: list[str]) -> None:
+    """Helper to create a dilemma node and set dilemma_id on path nodes.
+
+    Stores the prefixed dilemma_id (e.g. "dilemma::d1") on path nodes to
+    match production data shape from mutations.py:apply_seed_output().
+    """
+    graph.create_node(dilemma_id, {"type": "dilemma", "raw_id": dilemma_id.split("::")[-1]})
+    for pid in path_ids:
+        graph.update_node(pid, dilemma_id=dilemma_id)
+
+
 class TestComputeChoiceEdges:
     """Tests for Phase 4c: choice edge derivation."""
 
     def test_simple_divergence(self) -> None:
-        """Beat with children on different paths produces choices."""
+        """Commit beat with children on different same-dilemma paths produces choices."""
         graph = Graph.empty()
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
         graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::pa", "path::pb"])
 
-        _make_beat(graph, "beat::start", "Start", entities=["entity::hero"])
+        _make_beat(
+            graph,
+            "beat::start",
+            "Start",
+            entities=["entity::hero"],
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
         _make_beat(graph, "beat::a", "Path A", entities=["entity::hero"])
         _make_beat(graph, "beat::b", "Path B", entities=["entity::hero"])
 
@@ -311,8 +329,14 @@ class TestComputeChoiceEdges:
         graph = Graph.empty()
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
         graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::pa", "path::pb"])
 
-        _make_beat(graph, "beat::start", "Start")
+        _make_beat(
+            graph,
+            "beat::start",
+            "Start",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
         _make_beat(
             graph,
             "beat::commit_a",
@@ -351,16 +375,28 @@ class TestChoiceEdgesIntersectionMultiBeat:
     """
 
     def test_deduplicates_same_target_from_multiple_beats(self) -> None:
-        """Two beats in the same intersection passage that both diverge to single_A
-        must produce exactly one ChoiceSpec(intersection_0 → single_A), not two."""
+        """Two commit beats in the same intersection passage that both diverge to
+        single_A must produce exactly one ChoiceSpec(intersection_0 → single_A)."""
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
         graph.create_node("path::p3", {"type": "path", "raw_id": "p3"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::p1", "path::p2", "path::p3"])
 
-        # Three beats, one per path — all in the intersection passage
-        _make_beat(graph, "beat::b_p1", "P1 beat in intersection")
-        _make_beat(graph, "beat::b_p2", "P2 beat in intersection")
+        # Three beats, one per path — all in the intersection passage.
+        # b_p1 and b_p2 commit d1 (divergence beats); b_p3 does not commit.
+        _make_beat(
+            graph,
+            "beat::b_p1",
+            "P1 beat in intersection",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _make_beat(
+            graph,
+            "beat::b_p2",
+            "P2 beat in intersection",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
         _make_beat(graph, "beat::b_p3", "P3 beat in intersection")
         _add_belongs_to(graph, "beat::b_p1", "path::p1")
         _add_belongs_to(graph, "beat::b_p2", "path::p2")
@@ -409,17 +445,28 @@ class TestChoiceEdgesIntersectionMultiBeat:
         assert to_passages == {"passage::single_A", "passage::single_B", "passage::single_C"}
 
     def test_grants_merged_on_deduplication(self) -> None:
-        """When two beats in the same passage diverge to the same target passage
+        """When two commit beats in the same passage diverge to the same target
         via different child beats (each with different dilemma_impacts), grants
         from both children are merged (union) in the single deduplicated ChoiceSpec."""
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
         graph.create_node("path::p3", {"type": "path", "raw_id": "p3"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::p1", "path::p2", "path::p3"])
 
-        # Two divergence beats in the intersection passage
-        _make_beat(graph, "beat::b_p1", "P1 beat in intersection")
-        _make_beat(graph, "beat::b_p2", "P2 beat in intersection")
+        # Two divergence beats in the intersection passage — both commit d1
+        _make_beat(
+            graph,
+            "beat::b_p1",
+            "P1 beat in intersection",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _make_beat(
+            graph,
+            "beat::b_p2",
+            "P2 beat in intersection",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
         _add_belongs_to(graph, "beat::b_p1", "path::p1")
         _add_belongs_to(graph, "beat::b_p2", "path::p2")
 
@@ -494,9 +541,15 @@ class TestChoiceEdgesGapBeatChild:
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::p1", "path::p2"])
 
-        # Divergence beat (shared / on p1)
-        _make_beat(graph, "beat::div", "Divergence")
+        # Divergence beat (commit beat on p1)
+        _make_beat(
+            graph,
+            "beat::div",
+            "Divergence",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
         _add_belongs_to(graph, "beat::div", "path::p1")
 
         # Gap beat on p1 — the true next beat after div
@@ -554,8 +607,14 @@ class TestChoiceEdgesGapBeatChild:
         graph = Graph.empty()
         graph.create_node("path::p1", {"type": "path", "raw_id": "p1"})
         graph.create_node("path::p2", {"type": "path", "raw_id": "p2"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::p1", "path::p2"])
 
-        _make_beat(graph, "beat::div", "Divergence")
+        _make_beat(
+            graph,
+            "beat::div",
+            "Divergence",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
         _add_belongs_to(graph, "beat::div", "path::p1")
 
         # Only one direct child on p1 (no transitive shortcut)
@@ -579,6 +638,310 @@ class TestChoiceEdgesGapBeatChild:
         assert "passage::next" in to_passages
         assert "passage::p2" in to_passages
         assert len(from_div) == 2
+
+
+class TestChoiceEdgesMultiDilemma:
+    """Tests for #1197/#1198: multi-dilemma interleaved DAGs.
+
+    Real GROW output has multiple concurrent dilemmas with interleave
+    predecessor edges between their paths. These interleave edges are
+    temporal ordering, NOT player choices. compute_choice_edges() must
+    only create choices at commit beats for the committing dilemma's paths.
+    """
+
+    def test_non_commit_beat_with_cross_dilemma_children_produces_zero_choices(
+        self,
+    ) -> None:
+        """A non-commit beat on dilemma_1::path_a with interleave-ordered
+        children on dilemma_2::path_x and dilemma_3::path_y must produce
+        no choice edges — interleave ordering is not a player choice."""
+        graph = Graph.empty()
+        # Dilemma 1 with 2 paths
+        graph.create_node("path::d1_a", {"type": "path", "raw_id": "d1_a"})
+        graph.create_node("path::d1_b", {"type": "path", "raw_id": "d1_b"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::d1_a", "path::d1_b"])
+        # Dilemma 2 with 1 path
+        graph.create_node("path::d2_a", {"type": "path", "raw_id": "d2_a"})
+        _setup_dilemma(graph, "dilemma::d2", ["path::d2_a"])
+        # Dilemma 3 with 1 path
+        graph.create_node("path::d3_a", {"type": "path", "raw_id": "d3_a"})
+        _setup_dilemma(graph, "dilemma::d3", ["path::d3_a"])
+
+        # Non-commit beat on d1_a — has interleave children on other dilemmas
+        _make_beat(graph, "beat::advance", "Advance d1")
+        _add_belongs_to(graph, "beat::advance", "path::d1_a")
+
+        # Interleave-ordered children on different dilemmas
+        _make_beat(graph, "beat::d2_child", "D2 beat")
+        _add_belongs_to(graph, "beat::d2_child", "path::d2_a")
+        _make_beat(graph, "beat::d3_child", "D3 beat")
+        _add_belongs_to(graph, "beat::d3_child", "path::d3_a")
+        # Also a same-path child (linear continuation)
+        _make_beat(graph, "beat::d1_next", "D1 next")
+        _add_belongs_to(graph, "beat::d1_next", "path::d1_a")
+
+        _add_predecessor(graph, "beat::d2_child", "beat::advance")
+        _add_predecessor(graph, "beat::d3_child", "beat::advance")
+        _add_predecessor(graph, "beat::d1_next", "beat::advance")
+
+        specs = [
+            PassageSpec(passage_id="passage::adv", beat_ids=["beat::advance"], summary="adv"),
+            PassageSpec(passage_id="passage::d2", beat_ids=["beat::d2_child"], summary="d2"),
+            PassageSpec(passage_id="passage::d3", beat_ids=["beat::d3_child"], summary="d3"),
+            PassageSpec(passage_id="passage::d1n", beat_ids=["beat::d1_next"], summary="d1n"),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+        assert len(choices) == 0, (
+            f"Non-commit beat should produce zero choices, got {len(choices)}: "
+            f"{[(c.from_passage, c.to_passage) for c in choices]}"
+        )
+
+    def test_commit_beat_creates_choices_only_for_own_dilemma(self) -> None:
+        """A commit beat on dilemma_1::path_a with children on
+        dilemma_1::path_b (same dilemma) AND dilemma_2::path_x (different
+        dilemma) must produce exactly 1 choice edge (to path_b's passage)."""
+        graph = Graph.empty()
+        # Dilemma 1 with 2 paths
+        graph.create_node("path::d1_a", {"type": "path", "raw_id": "d1_a"})
+        graph.create_node("path::d1_b", {"type": "path", "raw_id": "d1_b"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::d1_a", "path::d1_b"])
+        # Dilemma 2 with 1 path
+        graph.create_node("path::d2_x", {"type": "path", "raw_id": "d2_x"})
+        _setup_dilemma(graph, "dilemma::d2", ["path::d2_x"])
+
+        # Commit beat on d1_a — commits dilemma d1
+        _make_beat(
+            graph,
+            "beat::commit_d1",
+            "Commit on d1",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _add_belongs_to(graph, "beat::commit_d1", "path::d1_a")
+
+        # Child on d1_b (same dilemma, different path → real choice)
+        _make_beat(graph, "beat::d1b_child", "D1 path B beat")
+        _add_belongs_to(graph, "beat::d1b_child", "path::d1_b")
+        _add_predecessor(graph, "beat::d1b_child", "beat::commit_d1")
+
+        # Child on d1_a (same path → no divergence for this path)
+        _make_beat(graph, "beat::d1a_next", "D1 path A next")
+        _add_belongs_to(graph, "beat::d1a_next", "path::d1_a")
+        _add_predecessor(graph, "beat::d1a_next", "beat::commit_d1")
+
+        # Child on d2_x (different dilemma → interleave, NOT a choice)
+        _make_beat(graph, "beat::d2x_child", "D2 interleave beat")
+        _add_belongs_to(graph, "beat::d2x_child", "path::d2_x")
+        _add_predecessor(graph, "beat::d2x_child", "beat::commit_d1")
+
+        specs = [
+            PassageSpec(
+                passage_id="passage::commit",
+                beat_ids=["beat::commit_d1"],
+                summary="commit",
+            ),
+            PassageSpec(
+                passage_id="passage::d1a_next",
+                beat_ids=["beat::d1a_next"],
+                summary="d1a_next",
+            ),
+            PassageSpec(
+                passage_id="passage::d1b",
+                beat_ids=["beat::d1b_child"],
+                summary="d1b",
+            ),
+            PassageSpec(
+                passage_id="passage::d2x",
+                beat_ids=["beat::d2x_child"],
+                summary="d2x",
+            ),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+
+        # Exactly 2 choices: commit → d1a_next (same dilemma, path a) and
+        # commit → d1b (same dilemma, path b). NOT commit → d2x.
+        assert len(choices) == 2, (
+            f"Expected 2 choices (d1 paths only), got {len(choices)}: "
+            f"{[(c.from_passage, c.to_passage) for c in choices]}"
+        )
+        to_passages = {c.to_passage for c in choices}
+        assert to_passages == {"passage::d1a_next", "passage::d1b"}, (
+            f"Expected choices to d1 paths only, got {to_passages}"
+        )
+
+    def test_intersection_with_commit_beat_from_one_dilemma(self) -> None:
+        """An intersection containing beats from 2 dilemmas where one beat
+        commits its dilemma: choices only for that dilemma's paths."""
+        graph = Graph.empty()
+        # Dilemma 1 with 2 paths
+        graph.create_node("path::d1_a", {"type": "path", "raw_id": "d1_a"})
+        graph.create_node("path::d1_b", {"type": "path", "raw_id": "d1_b"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::d1_a", "path::d1_b"])
+        # Dilemma 2 with 2 paths
+        graph.create_node("path::d2_x", {"type": "path", "raw_id": "d2_x"})
+        graph.create_node("path::d2_y", {"type": "path", "raw_id": "d2_y"})
+        _setup_dilemma(graph, "dilemma::d2", ["path::d2_x", "path::d2_y"])
+
+        # Intersection beat from d1_a — commits d1
+        _make_beat(
+            graph,
+            "beat::inter_d1",
+            "D1 intersection beat",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
+        _add_belongs_to(graph, "beat::inter_d1", "path::d1_a")
+
+        # Intersection beat from d2_x — does NOT commit
+        _make_beat(graph, "beat::inter_d2", "D2 intersection beat")
+        _add_belongs_to(graph, "beat::inter_d2", "path::d2_x")
+
+        # Children on d1's paths (real choices for d1)
+        _make_beat(graph, "beat::d1a_next", "D1A next")
+        _add_belongs_to(graph, "beat::d1a_next", "path::d1_a")
+        _add_predecessor(graph, "beat::d1a_next", "beat::inter_d1")
+
+        _make_beat(graph, "beat::d1b_next", "D1B next")
+        _add_belongs_to(graph, "beat::d1b_next", "path::d1_b")
+        _add_predecessor(graph, "beat::d1b_next", "beat::inter_d1")
+
+        # Children on d2's paths (interleave from inter_d1, NOT choices)
+        _make_beat(graph, "beat::d2x_next", "D2X next")
+        _add_belongs_to(graph, "beat::d2x_next", "path::d2_x")
+        _add_predecessor(graph, "beat::d2x_next", "beat::inter_d1")
+
+        _make_beat(graph, "beat::d2y_next", "D2Y next")
+        _add_belongs_to(graph, "beat::d2y_next", "path::d2_y")
+        _add_predecessor(graph, "beat::d2y_next", "beat::inter_d1")
+
+        specs = [
+            PassageSpec(
+                passage_id="passage::inter",
+                beat_ids=["beat::inter_d1", "beat::inter_d2"],
+                summary="intersection",
+                grouping_type="intersection",
+            ),
+            PassageSpec(
+                passage_id="passage::d1a",
+                beat_ids=["beat::d1a_next"],
+                summary="d1a",
+            ),
+            PassageSpec(
+                passage_id="passage::d1b",
+                beat_ids=["beat::d1b_next"],
+                summary="d1b",
+            ),
+            PassageSpec(
+                passage_id="passage::d2x",
+                beat_ids=["beat::d2x_next"],
+                summary="d2x",
+            ),
+            PassageSpec(
+                passage_id="passage::d2y",
+                beat_ids=["beat::d2y_next"],
+                summary="d2y",
+            ),
+        ]
+
+        choices = compute_choice_edges(graph, specs)
+
+        # Only 2 choices: inter → d1a and inter → d1b (d1's commit)
+        # NOT inter → d2x or inter → d2y (d2 has no commit here)
+        assert len(choices) == 2, (
+            f"Expected 2 choices (d1 commit only), got {len(choices)}: "
+            f"{[(c.from_passage, c.to_passage) for c in choices]}"
+        )
+        to_passages = {c.to_passage for c in choices}
+        assert to_passages == {"passage::d1a", "passage::d1b"}
+
+    def test_realistic_fanout_bounded(self) -> None:
+        """With 3 dilemmas (6 paths), interleave-style edges, and one commit
+        per dilemma: total choices ≈ 2 per dilemma = 6, not combinatorial."""
+        graph = Graph.empty()
+
+        # 3 dilemmas x 2 paths each
+        dilemmas = ["dilemma::d1", "dilemma::d2", "dilemma::d3"]
+        all_paths: dict[str, list[str]] = {}
+        for i, did in enumerate(dilemmas, 1):
+            pa = f"path::d{i}_a"
+            pb = f"path::d{i}_b"
+            graph.create_node(pa, {"type": "path", "raw_id": f"d{i}_a"})
+            graph.create_node(pb, {"type": "path", "raw_id": f"d{i}_b"})
+            _setup_dilemma(graph, did, [pa, pb])
+            all_paths[did] = [pa, pb]
+
+        # One commit beat per dilemma (on path_a), with children on both paths
+        specs_list: list[PassageSpec] = []
+        for i, did in enumerate(dilemmas, 1):
+            pa, pb = all_paths[did]
+            commit_id = f"beat::commit_d{i}"
+            _make_beat(
+                graph,
+                commit_id,
+                f"Commit D{i}",
+                dilemma_impacts=[{"dilemma_id": did, "effect": "commits"}],
+            )
+            _add_belongs_to(graph, commit_id, pa)
+
+            # Child on path_a (same path continuation)
+            ca = f"beat::d{i}_a_next"
+            _make_beat(graph, ca, f"D{i} A next")
+            _add_belongs_to(graph, ca, pa)
+            _add_predecessor(graph, ca, commit_id)
+
+            # Child on path_b (real choice)
+            cb = f"beat::d{i}_b_next"
+            _make_beat(graph, cb, f"D{i} B next")
+            _add_belongs_to(graph, cb, pb)
+            _add_predecessor(graph, cb, commit_id)
+
+            # Cross-dilemma interleave children (NOT choices)
+            for j, other_did in enumerate(dilemmas, 1):
+                if other_did == did:
+                    continue
+                for suffix in ["a", "b"]:
+                    other_path = f"path::d{j}_{suffix}"
+                    interleave_id = f"beat::interleave_d{i}_to_d{j}_{suffix}"
+                    _make_beat(graph, interleave_id, f"Interleave {i}→{j}{suffix}")
+                    _add_belongs_to(graph, interleave_id, other_path)
+                    _add_predecessor(graph, interleave_id, commit_id)
+
+            specs_list.append(
+                PassageSpec(
+                    passage_id=f"passage::commit_d{i}",
+                    beat_ids=[commit_id],
+                    summary=f"commit d{i}",
+                )
+            )
+            specs_list.append(
+                PassageSpec(passage_id=f"passage::d{i}_a", beat_ids=[ca], summary=f"d{i} a")
+            )
+            specs_list.append(
+                PassageSpec(passage_id=f"passage::d{i}_b", beat_ids=[cb], summary=f"d{i} b")
+            )
+
+        # Add passages for interleave beats
+        for i in range(1, 4):
+            for j in range(1, 4):
+                if i == j:
+                    continue
+                for suffix in ["a", "b"]:
+                    bid = f"beat::interleave_d{i}_to_d{j}_{suffix}"
+                    specs_list.append(
+                        PassageSpec(
+                            passage_id=f"passage::il_d{i}_d{j}_{suffix}",
+                            beat_ids=[bid],
+                            summary=f"il {i}→{j}{suffix}",
+                        )
+                    )
+
+        choices = compute_choice_edges(graph, specs_list)
+
+        # 3 dilemmas x 2 choices each = 6 total, NOT the combinatorial explosion
+        assert len(choices) == 6, (
+            f"Expected 6 choices (2 per dilemma), got {len(choices)}: "
+            f"{[(c.from_passage, c.to_passage) for c in choices]}"
+        )
 
 
 class TestFindFalseBranchCandidates:
@@ -867,11 +1230,11 @@ class TestChoiceSpecRequires:
     """compute_choice_edges must populate requires for choices from intersection passages."""
 
     def _build_convergence_graph(self, graph: Graph) -> None:
-        """Build a graph where an intersection beat diverges to two paths.
+        """Build a graph where an intersection commit beat diverges to two paths.
 
         Structure:
-          start (pa) → merge (intersection, pa) → c (pc, commits d1) ──┐
-                                                → d (pd, commits d1) ──┴→ (end)
+          start (pa) → merge (intersection, pa, commits d1) → c (pc, commits d1) ──┐
+                                                             → d (pd, commits d1) ──┴→ (end)
 
         The intersection passage (containing beat::merge) diverges to paths pc
         and pd. beat::c and beat::d are the first commit beats on their paths,
@@ -879,9 +1242,9 @@ class TestChoiceSpecRequires:
         returns a single-combo result for each child, allowing requires to be set.
         """
         graph.create_node("dilemma::d1", {"type": "dilemma", "raw_id": "d1", "status": "explored"})
-        graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
-        graph.create_node("path::pc", {"type": "path", "raw_id": "pc"})
-        graph.create_node("path::pd", {"type": "path", "raw_id": "pd"})
+        graph.create_node("path::pa", {"type": "path", "raw_id": "pa", "dilemma_id": "dilemma::d1"})
+        graph.create_node("path::pc", {"type": "path", "raw_id": "pc", "dilemma_id": "dilemma::d1"})
+        graph.create_node("path::pd", {"type": "path", "raw_id": "pd", "dilemma_id": "dilemma::d1"})
         graph.create_node(
             "state_flag::d1_pc",
             {
@@ -907,28 +1270,24 @@ class TestChoiceSpecRequires:
         _make_beat(graph, "beat::start", "Start")
         graph.add_edge("belongs_to", "beat::start", "path::pa")
 
-        # Intersection beat (no commit ancestors)
-        _make_beat(graph, "beat::merge", "Merge beat")
+        # Intersection beat — commits d1, creating the divergence point
+        _make_beat(
+            graph,
+            "beat::merge",
+            "Merge beat",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
         graph.add_edge("belongs_to", "beat::merge", "path::pa")
         graph.create_node(
             "intersection_group::g1",
             {"type": "intersection_group", "raw_id": "g1", "beat_ids": ["beat::merge"]},
         )
 
-        # Post-intersection beats on two different paths — each commits to d1
-        _make_beat(
-            graph,
-            "beat::c",
-            "Path C beat",
-            dilemma_impacts=[{"effect": "commits", "dilemma_id": "dilemma::d1"}],
-        )
+        # Post-intersection beats on two different paths — the commit already
+        # happened at merge; these are regular beats on d1's diverging paths.
+        _make_beat(graph, "beat::c", "Path C beat")
         graph.add_edge("belongs_to", "beat::c", "path::pc")
-        _make_beat(
-            graph,
-            "beat::d",
-            "Path D beat",
-            dilemma_impacts=[{"effect": "commits", "dilemma_id": "dilemma::d1"}],
-        )
+        _make_beat(graph, "beat::d", "Path D beat")
         graph.add_edge("belongs_to", "beat::d", "path::pd")
 
         # Predecessor edges
@@ -941,8 +1300,14 @@ class TestChoiceSpecRequires:
         graph = Graph.empty()
         graph.create_node("path::pa", {"type": "path", "raw_id": "pa"})
         graph.create_node("path::pb", {"type": "path", "raw_id": "pb"})
+        _setup_dilemma(graph, "dilemma::d1", ["path::pa", "path::pb"])
 
-        _make_beat(graph, "beat::start", "Start")
+        _make_beat(
+            graph,
+            "beat::start",
+            "Start",
+            dilemma_impacts=[{"dilemma_id": "dilemma::d1", "effect": "commits"}],
+        )
         _make_beat(graph, "beat::a", "Path A")
         _make_beat(graph, "beat::b", "Path B")
 

@@ -16,6 +16,7 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
 from questfoundry.graph.algorithms import compute_active_flags_at_beat, compute_passage_traversals
+from questfoundry.graph.context import normalize_scoped_id
 from questfoundry.models.pipeline import PhaseResult
 from questfoundry.models.polish import (
     AmbiguousFeasibilityCase,
@@ -652,6 +653,19 @@ def compute_choice_edges(
         for bid in spec.beat_ids:
             beat_to_passage[bid] = spec.passage_id
 
+    # Build path → dilemma mapping so we can restrict choices to same-dilemma
+    # divergences (#1197). Cross-dilemma predecessor edges (from interleave)
+    # are temporal ordering, not player choices.
+    path_to_dilemma: dict[str, str] = {}
+    path_nodes = graph.get_nodes_by_type("path")
+    dilemma_nodes = graph.get_nodes_by_type("dilemma")
+    for pid, pdata in path_nodes.items():
+        did = pdata.get("dilemma_id")
+        if did:
+            prefixed = normalize_scoped_id(did, "dilemma")
+            if prefixed in dilemma_nodes:
+                path_to_dilemma[pid] = prefixed
+
     # Keyed by (from_passage, to_passage) to deduplicate multiple beats in the
     # same passage that independently diverge to the same target (#1185).
     choices_map: dict[tuple[str, str], ChoiceSpec] = {}
@@ -659,93 +673,113 @@ def compute_choice_edges(
     # Build passage_id_to_spec once outside the loop (not per-divergence-point)
     passage_id_to_spec: dict[str, PassageSpec] = {s.passage_id: s for s in specs}
 
-    # Find divergence points: beats with children on different paths
+    # Find divergence points: commit beats with children on different paths
+    # of the SAME dilemma (#1197). Only commits create player choices — see
+    # docs/design/procedures/polish.md Phase 4c step 1.
     for bid in sorted(beat_nodes.keys()):
+        data = beat_nodes.get(bid, {})
+
+        # Extract dilemma IDs this beat commits — only commit beats diverge
+        committing_dilemmas: set[str] = set()
+        for impact in data.get("dilemma_impacts", []):
+            if impact.get("effect") == "commits":
+                did = impact.get("dilemma_id", "")
+                if did:
+                    committing_dilemmas.add(normalize_scoped_id(did, "dilemma"))
+        if not committing_dilemmas:
+            continue
+
         child_ids = children[bid]
         if len(child_ids) < 2:
             continue
 
-        # Check if children are on different paths
+        # Group children by path
         child_paths: dict[str, list[str]] = {}
         for cid in child_ids:
             path_id = beat_to_path.get(cid, "")
             child_paths.setdefault(path_id, []).append(cid)
 
         if len(child_paths) < 2:
-            # All children on same path — not a real divergence
             continue
 
-        # This is a divergence point
         from_passage = beat_to_passage.get(bid, "")
         if not from_passage:
             continue
 
-        for path_id, path_children in sorted(child_paths.items()):
-            # Pick the topologically earliest child on each path (#1187).
-            # Using sorted(path_children)[0] (alphabetical) can skip gap beats
-            # when a transitive predecessor edge also links the divergence beat
-            # directly to the beat after the gap.
-            target_beat = _topo_first(path_children, children)
-            to_passage = beat_to_passage.get(target_beat, "")
-            if not to_passage or to_passage == from_passage:
+        # For each committing dilemma, create choices only between that
+        # dilemma's paths. Children on other dilemmas' paths are interleave
+        # ordering, not player choices.
+        for committing_dilemma in sorted(committing_dilemmas):
+            dilemma_child_paths: dict[str, list[str]] = {}
+            for path_id, path_children in child_paths.items():
+                if path_to_dilemma.get(path_id) == committing_dilemma:
+                    dilemma_child_paths[path_id] = path_children
+
+            if len(dilemma_child_paths) < 2:
                 continue
 
-            # Compute grants: state flags activated by taking this path
-            grants: list[str] = []
-            for cid in path_children:
-                data = beat_nodes.get(cid, {})
-                for impact in data.get("dilemma_impacts", []):
-                    if impact.get("effect") == "commits":
-                        dilemma_id = impact.get("dilemma_id", "")
-                        if dilemma_id and path_id:
-                            grants.append(f"{dilemma_id}:{path_id}")
+            for path_id, path_children in sorted(dilemma_child_paths.items()):
+                # Pick the topologically earliest child on each path (#1187).
+                target_beat = _topo_first(path_children, children)
+                to_passage = beat_to_passage.get(target_beat, "")
+                if not to_passage or to_passage == from_passage:
+                    continue
 
-            # Compute requires: for choices from intersection passages, populate
-            # the required state flags for the target passage.
-            requires: list[str] = []
-            from_spec = passage_id_to_spec.get(from_passage)
-            if from_spec and from_spec.grouping_type == "intersection":
-                try:
-                    flag_combos = compute_active_flags_at_beat(graph, target_beat)
-                    if len(flag_combos) == 1:
-                        combo = next(iter(flag_combos))
-                        if combo:  # non-empty
-                            requires = sorted(combo)
-                    elif len(flag_combos) > 1:
+                # Compute grants: state flags activated by taking this path
+                grants: list[str] = []
+                for cid in path_children:
+                    cdata = beat_nodes.get(cid, {})
+                    for impact in cdata.get("dilemma_impacts", []):
+                        if impact.get("effect") == "commits":
+                            grant_did = impact.get("dilemma_id", "")
+                            if grant_did and path_id:
+                                grants.append(f"{grant_did}:{path_id}")
+
+                # Compute requires: for choices from intersection passages,
+                # populate the required state flags for the target passage.
+                requires: list[str] = []
+                from_spec = passage_id_to_spec.get(from_passage)
+                if from_spec and from_spec.grouping_type == "intersection":
+                    try:
+                        flag_combos = compute_active_flags_at_beat(graph, target_beat)
+                        if len(flag_combos) == 1:
+                            combo = next(iter(flag_combos))
+                            if combo:
+                                requires = sorted(combo)
+                        elif len(flag_combos) > 1:
+                            log.warning(
+                                "choice_requires_multi_combo",
+                                from_passage=from_passage,
+                                to_passage=to_passage,
+                                combo_count=len(flag_combos),
+                            )
+                    except ValueError as e:
                         log.warning(
-                            "choice_requires_multi_combo",
+                            "choice_requires_compute_failed",
                             from_passage=from_passage,
-                            to_passage=to_passage,
-                            combo_count=len(flag_combos),
+                            error=str(e),
                         )
-                except ValueError as e:
-                    log.warning(
-                        "choice_requires_compute_failed",
-                        from_passage=from_passage,
-                        error=str(e),
-                    )
 
-            key = (from_passage, to_passage)
-            if key in choices_map:
-                # Merge grants from multiple beats in the same passage that
-                # independently diverge to the same target (#1185).
-                existing = choices_map[key]
-                choices_map[key] = ChoiceSpec(
-                    from_passage=from_passage,
-                    to_passage=to_passage,
-                    grants=sorted(set(existing.grants) | set(grants)),
-                    requires=existing.requires,  # keep first-seen: beats in the same
-                    # passage share identical upstream flag state for a given target
-                    label=existing.label,
-                )
-            else:
-                choices_map[key] = ChoiceSpec(
-                    from_passage=from_passage,
-                    to_passage=to_passage,
-                    grants=grants,
-                    requires=requires,
-                    label="",  # Populated by Phase 5
-                )
+                key = (from_passage, to_passage)
+                if key in choices_map:
+                    # Merge grants from multiple beats in the same passage
+                    # that independently diverge to the same target (#1185).
+                    existing = choices_map[key]
+                    choices_map[key] = ChoiceSpec(
+                        from_passage=from_passage,
+                        to_passage=to_passage,
+                        grants=sorted(set(existing.grants) | set(grants)),
+                        requires=existing.requires,  # keep first-seen; beats in same passage share upstream flag state
+                        label=existing.label,
+                    )
+                else:
+                    choices_map[key] = ChoiceSpec(
+                        from_passage=from_passage,
+                        to_passage=to_passage,
+                        grants=grants,
+                        requires=requires,
+                        label="",  # Populated by Phase 5
+                    )
 
     return list(choices_map.values())
 
