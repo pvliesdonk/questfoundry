@@ -312,7 +312,7 @@ A beat that co-occurs with another path's beat does not become part of that path
 An intersection is represented as a grouping relationship between beats:
 
 - An **intersection group** links two or more beats from different paths that co-occur in one scene.
-- Each beat retains its original `belongs_to` edge to its own path.
+- Each beat retains its existing `belongs_to` edges (one for post-commit beats; two for same-dilemma pre-commit beats — see Part 8, "Path Membership ≠ Scene Participation").
 - The intersection group carries the resolved scene context: shared location, shared entities, and a rationale for why these beats work as one scene.
 
 The grouping tells POLISH: "when you create passages, these beats should become one passage (or part of one passage)." It tells FILL: "write one scene that advances dilemma A through beat X AND dilemma B through beat Y simultaneously."
